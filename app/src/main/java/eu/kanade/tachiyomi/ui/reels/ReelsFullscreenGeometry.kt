@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Software-fullscreen geometry for the reels feed (audit U02).
@@ -87,6 +88,62 @@ internal fun reelsPipAspectRatio(isLandscapeVideo: Boolean?): Pair<Int, Int>? = 
     false -> 9 to 16
     null -> null
 }
+
+/**
+ * PiP window shape for the measured video frame (audit C03).
+ *
+ * [left]/[top]/[right]/[bottom] are the displayed content bounds in window coordinates:
+ * crop mode fills the window, fit mode letterboxes the frame. The aspect comes from the
+ * real frame, not the portrait window, so a landscape reel does not get a 9:16 crop.
+ */
+internal data class ReelsPipGeometry(
+    val aspectWidth: Int,
+    val aspectHeight: Int,
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+)
+
+/**
+ * Aspect of the measured frame, reduced and clamped to the range the platform accepts for
+ * PiP windows (1:2.39..2.39:1); a ratio outside it gives no defined window shape.
+ */
+internal fun reelsPipVideoAspect(videoWidth: Int, videoHeight: Int): Pair<Int, Int>? {
+    if (videoWidth <= 0 || videoHeight <= 0) return null
+    if (videoWidth.toLong() * 100 > videoHeight.toLong() * 239) return 239 to 100
+    if (videoHeight.toLong() * 100 > videoWidth.toLong() * 239) return 100 to 239
+    val divisor = reelsGcd(videoWidth, videoHeight)
+    return videoWidth / divisor to videoHeight / divisor
+}
+
+/** Null until both the window and the video frame are measured. */
+internal fun reelsPipVideoGeometry(
+    windowWidth: Int,
+    windowHeight: Int,
+    videoWidth: Int,
+    videoHeight: Int,
+    crop: Boolean,
+): ReelsPipGeometry? {
+    if (windowWidth <= 0 || windowHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return null
+    val (aspectWidth, aspectHeight) = reelsPipVideoAspect(videoWidth, videoHeight) ?: return null
+    if (crop) {
+        return ReelsPipGeometry(aspectWidth, aspectHeight, 0, 0, windowWidth, windowHeight)
+    }
+    val videoRatio = videoWidth.toDouble() / videoHeight.toDouble()
+    val windowRatio = windowWidth.toDouble() / windowHeight.toDouble()
+    return if (videoRatio > windowRatio) {
+        val contentHeight = (windowWidth / videoRatio).roundToInt().coerceIn(1, windowHeight)
+        val top = (windowHeight - contentHeight) / 2
+        ReelsPipGeometry(aspectWidth, aspectHeight, 0, top, windowWidth, top + contentHeight)
+    } else {
+        val contentWidth = (windowHeight * videoRatio).roundToInt().coerceIn(1, windowWidth)
+        val left = (windowWidth - contentWidth) / 2
+        ReelsPipGeometry(aspectWidth, aspectHeight, left, 0, left + contentWidth, windowHeight)
+    }
+}
+
+private tailrec fun reelsGcd(a: Int, b: Int): Int = if (b == 0) a else reelsGcd(b, a % b)
 
 @Composable
 internal fun rememberReelsFullscreenSafePadding(rotationZ: Int): PaddingValues {

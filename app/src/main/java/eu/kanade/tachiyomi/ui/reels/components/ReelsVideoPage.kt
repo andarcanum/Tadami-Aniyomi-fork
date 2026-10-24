@@ -105,6 +105,9 @@ fun ReelsVideoPage(
     // Reports the media orientation to the host for the PiP aspect ratio; re-emitted when
     // the page becomes active so a preloaded report cannot be lost.
     onVideoLandscapeKnown: (Boolean) -> Unit = {},
+    // Measured frame dimensions for the PiP content rect/aspect (audit C03); re-emitted on
+    // activation like the orientation.
+    onVideoSizeKnown: (Int, Int) -> Unit = { _, _ -> },
     onLandscapeFullscreenChange: (Boolean) -> Unit = {},
     // Sticky landscape intent (see ReelsFeedScreen): while armed, a settled landscape
     // reel re-enters fullscreen automatically; a portrait reel only auto-exits.
@@ -189,6 +192,7 @@ fun ReelsVideoPage(
     // Real orientation of the media, reported by the player; null until known. Only
     // landscape reels get the fullscreen affordance.
     var isLandscapeVideo by remember(item) { mutableStateOf<Boolean?>(null) }
+    var videoSize by remember(item) { mutableStateOf<Pair<Int, Int>?>(null) }
     val rotateLandscape = isLandscapeFullscreen && softwareRotationDegrees != 0
     // Safe drawing insets are expressed in window coordinates; inside the rotated subtree
     // they must move to the content edge that actually faces the cutout.
@@ -240,6 +244,9 @@ fun ReelsVideoPage(
     // value for the PiP aspect ratio even though no player event will fire again.
     LaunchedEffect(isActive, isLandscapeVideo) {
         if (isActive) isLandscapeVideo?.let(onVideoLandscapeKnown)
+    }
+    LaunchedEffect(isActive, videoSize) {
+        if (isActive) videoSize?.let { (width, height) -> onVideoSizeKnown(width, height) }
     }
 
     // P06: watched time accumulates from monotonic deltas instead of whole-second ticks, so
@@ -472,6 +479,10 @@ fun ReelsVideoPage(
             onVideoLandscapeKnown = { landscape ->
                 isLandscapeVideo = landscape
                 onVideoLandscapeKnown(landscape)
+            },
+            onVideoSizeKnown = { width, height ->
+                videoSize = width to height
+                onVideoSizeKnown(width, height)
             },
             onPlaybackError = { msg -> onPlaybackError(msg) { retrySignal++ } },
             onBufferingChanged = { isBuffering = it },

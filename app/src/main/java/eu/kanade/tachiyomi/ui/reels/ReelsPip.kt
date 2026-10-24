@@ -34,20 +34,46 @@ object ReelsPip {
     }
 
     /**
-     * The window shape follows the active reel: a landscape video in a portrait PiP window
-     * is either cropped or rotated. The source rect stays the full screen hint.
+     * The window shape follows the measured video frame (audit C03): aspect comes from the
+     * real dimensions, and the source rect is the displayed content area (letterboxed in fit
+     * mode, the whole window in crop mode) instead of the full portrait window. Without a
+     * measured frame the old orientation fallback still applies; when even that is unknown
+     * the system default stands. A software-rotated subtree (landscape fullscreen) covers
+     * the window, so its content rect is the window itself.
      */
-    fun buildParams(activity: Activity, isLandscapeVideo: Boolean?): PictureInPictureParams {
-        val bounds = Rect(
-            0,
-            0,
-            activity.resources.displayMetrics.widthPixels,
-            activity.resources.displayMetrics.heightPixels,
-        )
+    fun buildParams(
+        activity: Activity,
+        videoWidth: Int,
+        videoHeight: Int,
+        cropMode: Boolean,
+        landscapeFallback: Boolean?,
+        rotated: Boolean,
+    ): PictureInPictureParams {
+        val decor = activity.window?.decorView
+        val windowWidth = decor?.width?.takeIf { it > 0 }
+            ?: activity.resources.displayMetrics.widthPixels
+        val windowHeight = decor?.height?.takeIf { it > 0 }
+            ?: activity.resources.displayMetrics.heightPixels
         val builder = PictureInPictureParams.Builder()
-            .setSourceRectHint(bounds)
-        reelsPipAspectRatio(isLandscapeVideo)?.let { (width, height) ->
-            builder.setAspectRatio(Rational(width, height))
+        val geometry = reelsPipVideoGeometry(
+            windowWidth = windowWidth,
+            windowHeight = windowHeight,
+            videoWidth = videoWidth,
+            videoHeight = videoHeight,
+            crop = cropMode,
+        )
+        if (geometry != null) {
+            builder.setAspectRatio(Rational(geometry.aspectWidth, geometry.aspectHeight))
+            val sourceRect = if (rotated) {
+                Rect(0, 0, windowWidth, windowHeight)
+            } else {
+                Rect(geometry.left, geometry.top, geometry.right, geometry.bottom)
+            }
+            builder.setSourceRectHint(sourceRect)
+        } else {
+            reelsPipAspectRatio(landscapeFallback)?.let { (width, height) ->
+                builder.setAspectRatio(Rational(width, height))
+            }
         }
         return builder.build()
     }
