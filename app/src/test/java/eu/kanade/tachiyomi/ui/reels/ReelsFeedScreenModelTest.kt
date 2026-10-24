@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeReelsFeedbackSource
@@ -29,6 +30,7 @@ import eu.kanade.tachiyomi.animesource.model.SearchSuggestionKind
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.model.Video
+import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
@@ -2607,7 +2609,7 @@ class ReelsFeedScreenModelTest {
 
     // ---- Contract v20: hosted web login ----
 
-    private class FakeWebLoginSource(
+    private open class FakeWebLoginSource(
         override val id: Long,
         override val name: String = "Web Login Feed $id",
     ) : AnimeFeedSource, AnimeFeedLoginSource, AnimeFeedWebLoginSource {
@@ -2648,6 +2650,33 @@ class ReelsFeedScreenModelTest {
             localStorage: Map<String, String>,
         ): Boolean {
             importedSessions += cookies to localStorage
+            if (!importResult) return false
+            storedEmail = "web@example.invalid"
+            return true
+        }
+    }
+
+    private class FakeScopedWebLoginSource(
+        id: Long,
+    ) : FakeWebLoginSource(id), AnimeFeedOriginScopedSessionSource {
+        val scopedSessions = mutableListOf<Pair<List<WebLoginCookie>, Map<String, String>>>()
+        val scopedRedirects = mutableListOf<Pair<String, List<WebLoginCookie>>>()
+
+        override suspend fun importWebSessionScoped(
+            cookies: List<WebLoginCookie>,
+            localStorage: Map<String, String>,
+        ): Boolean {
+            scopedSessions += cookies to localStorage
+            if (!importResult) return false
+            storedEmail = "web@example.invalid"
+            return true
+        }
+
+        override suspend fun importWebRedirectScoped(
+            url: String,
+            cookies: List<WebLoginCookie>,
+        ): Boolean {
+            scopedRedirects += url to cookies
             if (!importResult) return false
             storedEmail = "web@example.invalid"
             return true
@@ -2838,13 +2867,19 @@ class ReelsFeedScreenModelTest {
 
         // The first import arms the stage-2 upgrade (refreshable PKCE session) instead of
         // closing; the second one closes and snapshots the account.
-        model.tryImportWebSession(mapOf("sid" to "1"), mapOf("kinde" to """{"access_token":"t"}"""))
+        model.tryImportWebSession(
+            listOf(WebLoginCookie("https://example.invalid", "sid", "1")),
+            mapOf("kinde" to """{"access_token":"t"}"""),
+        )
         testDispatcher.scheduler.advanceUntilIdle()
         model.state.value.isWebLoginDialogOpen shouldBe true
         model.state.value.webLoginPendingClose shouldBe true
         model.state.value.webLoginStage2Attempt shouldBe 1
 
-        model.tryImportWebSession(mapOf("sid" to "1"), mapOf("kinde" to """{"access_token":"t"}"""))
+        model.tryImportWebSession(
+            listOf(WebLoginCookie("https://example.invalid", "sid", "1")),
+            mapOf("kinde" to """{"access_token":"t"}"""),
+        )
         testDispatcher.scheduler.advanceUntilIdle()
         model.state.value.isWebLoginDialogOpen shouldBe false
         model.state.value.loggedInAccount shouldBe "web@example.invalid"
@@ -2914,7 +2949,7 @@ class ReelsFeedScreenModelTest {
         model.isOwnWebLoginRedirect("https://example.invalid/?code=abc&state=own") shouldBe true
         model.isOwnWebLoginRedirect("https://example.invalid/?code=abc&state=other") shouldBe false
         model.openLoginFlow()
-        model.tryImportWebRedirect("https://example.invalid/?code=abc&state=own", emptyMap())
+        model.tryImportWebRedirect("https://example.invalid/?code=abc&state=own", emptyList())
         testDispatcher.scheduler.advanceUntilIdle()
 
         model.state.value.isWebLoginDialogOpen shouldBe false
@@ -2929,7 +2964,7 @@ class ReelsFeedScreenModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         model.openLoginFlow()
-        model.tryImportWebSessionStage2(emptyMap(), emptyMap())
+        model.tryImportWebSessionStage2(emptyList(), emptyMap())
         testDispatcher.scheduler.advanceUntilIdle()
 
         model.state.value.isWebLoginDialogOpen shouldBe true
@@ -2945,12 +2980,54 @@ class ReelsFeedScreenModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         model.openLoginFlow()
-        model.tryImportWebSession(emptyMap(), emptyMap())
+        model.tryImportWebSession(emptyList(), emptyMap())
         testDispatcher.scheduler.advanceUntilIdle()
 
         model.state.value.isWebLoginDialogOpen shouldBe true
         model.state.value.webLoginHint shouldBe true
         model.state.value.loggedInAccount shouldBe null
+    }
+
+    @Test
+    fun `origin-scoped source receives per-origin records for session and redirect`() =
+        runTest(testDispatcher) {
+            val source = FakeScopedWebLoginSource(2120)
+            val model = buildModel(sourceId = 2120, manager = sourceManagerOf(source))
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val records = listOf(
+                WebLoginCookie("https://web.example.invalid", "sid", "web"),
+                WebLoginCookie("https://api.example.invalid", "sid", "api"),
+            )
+            model.openLoginFlow()
+            model.tryImportWebSession(records, mapOf("k" to "v"))
+            model.tryImportWebRedirect("https://example.invalid/?code=abc", records)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            source.scopedSessions.shouldHaveSize(1)
+            source.scopedSessions.single().first shouldBe records
+            source.scopedRedirects.single().second shouldBe records
+            // The legacy name -> value API must not be called when the capability exists.
+            source.importedSessions.shouldHaveSize(0)
+        }
+
+    @Test
+    fun `legacy source still receives the last-wins name merge`() = runTest(testDispatcher) {
+        val source = FakeWebLoginSource(2121)
+        val model = buildModel(sourceId = 2121, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.openLoginFlow()
+        model.tryImportWebSession(
+            listOf(
+                WebLoginCookie("https://web.example.invalid", "sid", "web"),
+                WebLoginCookie("https://api.example.invalid", "sid", "api"),
+            ),
+            emptyMap(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.importedSessions.single().first shouldBe mapOf("sid" to "api")
     }
 
     @Test

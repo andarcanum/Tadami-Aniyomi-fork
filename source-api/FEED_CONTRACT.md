@@ -1,6 +1,7 @@
 # Reels Feed Contract
 
-**Current version: 23** (`extensionLib` 12.0–23.0 accepted by the host) ·
+**Current version: 24** (`extensionLib` 12.0–23.0 accepted by the host; v24 is a
+purely additive capability, so `LIB_VERSION_MAX` stays at 23.0) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
@@ -12,6 +13,8 @@ API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/anime
 [`FeedPage`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedPage.kt),
 [`ShortVideoItem`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ShortVideoItem.kt),
 [`AnimeFeedWebLoginSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedWebLoginSource.kt),
+[`AnimeFeedOriginScopedSessionSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedOriginScopedSessionSource.kt),
+[`WebLoginCookie`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/WebLoginCookie.kt),
 [`AnimeFeedBrowseSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedBrowseSource.kt),
 [`AnimeCategorizedSearchSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategorizedSearchSource.kt),
 [`FeedCategory`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedCategory.kt),
@@ -102,6 +105,29 @@ CookieManager dump taken at intercept time) so the SPA cannot consume the single
 back on the service domain and on the dialog's explicit "Done" action; `false` keeps the WebView
 open. Sources with this capability also implement `AnimeFeedLoginSource` for session state, and
 the host never shows them the password dialog.
+
+## Origin-scoped session import (v24 capability interface)
+
+`AnimeFeedOriginScopedSessionSource` is an optional refinement of `AnimeFeedWebLoginSource`
+for services that keep their session on more than one origin (web app + api host, or the same
+host on two ports). The legacy dump is one merged `name → value` map, so same-named cookies
+from different origins collapse there (last origin wins) and the source cannot tell which
+value belongs to which service. Sources implementing this capability receive
+`List<WebLoginCookie>` instead: each record carries `origin` (`scheme://host[:port]`, default
+ports folded, path/query never included) next to `name`/`value`.
+
+Host behavior: it checks `source is AnimeFeedOriginScopedSessionSource` at import time and
+calls `importWebSessionScoped(cookies, localStorage)` / `importWebRedirectScoped(url, cookies)`
+instead of the legacy methods. The dump origin set is the source's explicit
+`extraSessionCookieOrigins` (contract v22) when supplied; otherwise the host seeds the start
+origin plus its `api.` sibling (`www.` stripped) and grows the set with every page the WebView
+visits. A source that implements only this capability but not `AnimeFeedWebLoginSource` is
+never offered the web login; the unscoped methods must stay functional for hosts that predate
+v24, because those hosts will call them.
+
+Implementing the capability is additive: instanceof detection only, no `LIB_VERSION` bump,
+and every member is abstract (no default members on existing interfaces, see the v22 note in
+the evolution rules).
 
 ## Category browse (v20 capability interface)
 
@@ -286,6 +312,7 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 24 | Optional capability `AnimeFeedOriginScopedSessionSource` (`importWebSessionScoped` / `importWebRedirectScoped`) plus model `WebLoginCookie`: origin-scoped session import that preserves same-named cookies from multiple origins and non-default ports. Instanceof-detected, no default members; the legacy `Map<String, String>` methods remain the fallback for pre-v24 hosts. Additive: `LIB_VERSION_MAX` stays at 23.0. |
 | 23 | Optional capability `AnimeAlbumSearchSource.searchAlbums(query, page, cursor): FeedCategoryPage` — paginated album-oriented search for bunkr-like sources; the host renders album cards (open / save to collection / long-press content preview) instead of the flat video feed when present. Instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep their pre-v23 search; `LIB_VERSION_MAX` → 23.0 as the discipline stamp. |
 | 22 | Optional capability `AnimeFeedLoginInstrumentationSource` (source-supplied session instrumentation JS + extra dump origins + logout purge origins) and `AnimeFeedVideoResolverSource` (stable-id → playable URL re-resolution for favorites). Both instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 22.0 as the discipline stamp. |
 | 21 | Optional capability `AnimeCategoryFeedOrderSource` (`categoryFilters()` + four-arg `getCategoryFeed`): source-defined category-feed orders rendered by the host in NICHE mode. Instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 21.0 as the discipline stamp. |
