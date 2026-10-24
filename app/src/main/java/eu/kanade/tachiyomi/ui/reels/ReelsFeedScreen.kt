@@ -697,6 +697,20 @@ data class ReelsFeedScreen(
                     VerticalPager(
                         state = pagerState,
                         beyondViewportPageCount = 1,
+                        // Pages belong to the media identity, not the slot: after a feed reset
+                        // an index can point at an entirely different reel, and per-page state
+                        // (gesture captures, progress, speed) must not leak across. The offline
+                        // playlist merges favorites from several sources, so its key includes
+                        // the source — the same videoId may legitimately repeat there.
+                        key = { index ->
+                            val item = state.items.getOrNull(index)
+                            val offlineSourceId = state.offlineSourceIds.getOrNull(index)
+                            when {
+                                item == null -> index
+                                state.isOffline && offlineSourceId != null -> "$offlineSourceId:${item.id}"
+                                else -> item.id
+                            }
+                        },
                         // The pager lives outside the software rotation, so manual swipes in
                         // landscape fullscreen would land sideways; auto-advance still moves
                         // the feed programmatically (portrait reels exit fullscreen, see
@@ -767,6 +781,8 @@ data class ReelsFeedScreen(
                                     screenModel.togglePlayPause()
                                 },
                                 onToggleLike = { screenModel.toggleLike(item, page) },
+                                // Double-tap is idempotent: a second tap must not unlike.
+                                onLike = { screenModel.setLike(item, true, page) },
                                 onToggleMute = screenModel::toggleMute,
                                 onShare = { secondsPlayed ->
                                     // Prefer the watch page URL; raw CDN links can expire.

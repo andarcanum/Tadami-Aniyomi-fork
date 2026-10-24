@@ -8,8 +8,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -77,36 +79,34 @@ fun ReelsProgressBar(
             }
             .onSizeChanged { barWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = { offset ->
-                        onScrubStart()
-                        isDragging = true
-                        dragProgress = (offset.x / barWidthPx).coerceIn(0f, 1f)
-                        tryAwaitRelease()
-                        onSeek(dragProgress)
-                        isDragging = false
-                    },
-                )
-            }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        onScrubStart()
-                        isDragging = true
-                        dragProgress = (offset.x / barWidthPx).coerceIn(0f, 1f)
-                    },
-                    onDragEnd = {
-                        onSeek(dragProgress)
-                        isDragging = false
-                    },
-                    onDragCancel = {
-                        isDragging = false
-                    },
-                    onHorizontalDrag = { _, dragAmount ->
-                        val delta = dragAmount / barWidthPx
-                        dragProgress = (dragProgress + delta).coerceIn(0f, 1f)
-                    },
-                )
+                // One recognizer arbitrates tap-seek, horizontal scrub and the vertical pager:
+                // competing detectors used to commit a seek even after the scroll consumed the
+                // press (tryAwaitRelease() returned false and its result was ignored).
+                val gesture = ReelsScrubGesture(touchSlop = viewConfiguration.touchSlop)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // Own the down so the page-level tap does not also toggle playback; the
+                    // pager still tracks it and takes over once the movement turns vertical.
+                    down.consume()
+                    gesture.start(down.position.x, barWidthPx)
+                    isDragging = true
+                    dragProgress = gesture.progress
+                    onScrubStart()
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val delta = change.positionChange()
+                        val outcome = gesture.move(delta.x, delta.y, consumedByOther = change.isConsumed)
+                        if (outcome == ReelsScrubOutcome.Cancelled) break
+                        if (outcome == ReelsScrubOutcome.Owned) change.consume()
+                        dragProgress = gesture.progress
+                        isDragging = gesture.isActive
+                    }
+                    // Exactly one commit per gesture — and none when a competing gesture
+                    // (vertical scroll) took it over.
+                    gesture.end()?.let(onSeek)
+                    isDragging = false
+                }
             },
         contentAlignment = Alignment.BottomCenter,
     ) {
@@ -180,4 +180,66 @@ private fun formatSeconds(totalSeconds: Int): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%02d:%02d".format(Locale.getDefault(), minutes, seconds)
+}
+
+internal enum class ReelsScrubOutcome { Pending, Owned, Cancelled }
+
+/**
+ * Axis arbitration for the scrubber. A press seeks only when it ends on the bar (tap) or
+ * turns into a horizontal drag; a vertical move hands the gesture to the pager and must
+ * never commit the progress sampled at the down point.
+ */
+internal class ReelsScrubGesture(private val touchSlop: Float) {
+    private var widthPx = 1f
+    private var totalDx = 0f
+    private var totalDy = 0f
+    private var horizontal = false
+    private var cancelled = false
+
+    var isActive: Boolean = false
+        private set
+    var progress: Float = 0f
+        private set
+
+    fun start(x: Float, width: Float) {
+        widthPx = width.coerceAtLeast(1f)
+        progress = (x / widthPx).coerceIn(0f, 1f)
+        totalDx = 0f
+        totalDy = 0f
+        horizontal = false
+        cancelled = false
+        isActive = true
+    }
+
+    fun move(dx: Float, dy: Float, consumedByOther: Boolean): ReelsScrubOutcome {
+        if (!isActive) return ReelsScrubOutcome.Cancelled
+        if (consumedByOther) return cancel()
+        if (!horizontal) {
+            totalDx += dx
+            totalDy += dy
+            if (abs(totalDy) > touchSlop && abs(totalDy) > abs(totalDx)) return cancel()
+            if (abs(totalDx) <= touchSlop || abs(totalDx) < abs(totalDy)) {
+                return ReelsScrubOutcome.Pending
+            }
+            horizontal = true
+            // Include the travel accumulated before the axis was known.
+            progress = (progress + totalDx / widthPx).coerceIn(0f, 1f)
+            return ReelsScrubOutcome.Owned
+        }
+        progress = (progress + dx / widthPx).coerceIn(0f, 1f)
+        return ReelsScrubOutcome.Owned
+    }
+
+    /** Returns the fraction to commit, or null when the gesture was cancelled. */
+    fun end(): Float? {
+        if (!isActive || cancelled) return null
+        isActive = false
+        return progress
+    }
+
+    private fun cancel(): ReelsScrubOutcome {
+        cancelled = true
+        isActive = false
+        return ReelsScrubOutcome.Cancelled
+    }
 }
