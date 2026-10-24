@@ -2048,4 +2048,8 @@
     <string name="debug_workers_enqueued">Enqueued</string>
     <string name="debug_workers_finished">Finished</string>
     <string name="debug_workers_running">Running</string>
+    <string name="reels_album_unavailable">This source no longer provides albums</string>
+    <string name="reels_album_search_loaded">Loaded %1$d videos · more available</string>
+    <string name="reels_album_search_empty">No loaded video matches the search</string>
+    <string name="reels_album_search_load_more">Load more videos</string>
 </resources>

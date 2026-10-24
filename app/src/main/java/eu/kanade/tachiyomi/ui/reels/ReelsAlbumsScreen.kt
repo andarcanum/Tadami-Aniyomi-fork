@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -186,10 +187,53 @@ data class ReelsAlbumsScreen(
                                         }
                                     }
                                 }
+                                // F04: the catalog is paginated, so the sheet loads the next
+                                // page when its footer scrolls into view instead of pretending
+                                // the first page is the whole directory.
+                                if (state.catalogCanLoadMore || state.catalogPageError != null) {
+                                    item(key = "catalog-footer") {
+                                        CatalogFooter(
+                                            state = state,
+                                            onLoadMore = screenModel::loadCatalogMore,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    @Composable
+    private fun CatalogFooter(state: ReelsAlbumsScreenModel.State, onLoadMore: () -> Unit) {
+        LaunchedEffect(state.catalog.size, state.catalogCanLoadMore, state.catalogPageError) {
+            // Auto-load only while pages succeed; a failure parks the footer on the retry
+            // button so a broken source cannot spin requests.
+            if (state.catalogCanLoadMore && state.catalogPageError == null) onLoadMore()
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            when {
+                state.catalogPageError != null -> {
+                    Text(
+                        text = state.catalogPageError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TextButton(onClick = onLoadMore) {
+                        Text(stringResource(MR.strings.action_retry))
+                    }
+                }
+                state.isCatalogPageLoading -> CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                )
             }
         }
     }

@@ -192,6 +192,10 @@ class ReelsFeedScreenModel(
         // Bounded fan-out for the v22 resolver pass on playlist open (see resolveExpiredUrls).
         const val RESOLVE_URL_CONCURRENCY = 6
 
+        // F07: ceiling on the SILENT deep-link seek (a missing target must not drain an
+        // endless feed); manual pagination past the budget stays available.
+        const val RESUME_SEEK_MAX_PAGES = 10
+
         // Audit H6: word-boundary status match — a reel id or message that merely CONTAINS
         // "403"/"401" must not mount the bootstrap WebView.
         private val HTTP_SESSION_ERROR_REGEX = Regex("\\b(?:401|403)\\b")
@@ -260,6 +264,10 @@ class ReelsFeedScreenModel(
     // often it won't; then the normal position restore wins and the seek stays armed for
     // whenever the clip does show up).
     private var resumeNavPending = resumeVideoId != null
+
+    // Pages appended by the SILENT seek so far (main-confined). The budget bounds the
+    // background fan-out; reaching it leaves the already-loaded feed untouched.
+    private var resumeSeekPages = 0
 
     // sourceId per offline playlist SLOT (index-aligned with the items list): a videoId is only
     // unique PER SOURCE, so a videoId-keyed map would misattribute likes of same-id favorites
@@ -544,6 +552,7 @@ class ReelsFeedScreenModel(
                     albumSearchResults = persistentListOf(),
                     albumSearchNextPage = 1,
                     albumSearchNextCursor = null,
+                    albumSearchCursorMode = false,
                     albumSearchCanLoadMore = true,
                     previewAlbumId = null,
                     previewItems = persistentListOf(),
@@ -697,6 +706,7 @@ class ReelsFeedScreenModel(
                     albumSearchResults = persistentListOf(),
                     albumSearchNextPage = 1,
                     albumSearchNextCursor = null,
+                    albumSearchCursorMode = false,
                     albumSearchCanLoadMore = true,
                 )
             } else {
@@ -816,13 +826,16 @@ class ReelsFeedScreenModel(
                     } else {
                         incoming.filterNot { it.id in current.seenIds }
                     }
-                    // Sticky cursor mode (contract v17): the first non-null cursor locks the
-                    // whole generation into cursor mode.
-                    val newCursorMode = current.cursorMode || pageData.nextCursor != null
-                    // Cursor lost mid-feed while more pages are claimed is a protocol
-                    // violation: stop pagination, keep the feed usable.
-                    val cursorLost = newCursorMode && pageData.nextCursor == null && pageData.hasNextPage
-                    if (cursorLost) {
+                    // Sticky cursor mode (contract v17), shared with every other host surface:
+                    // the first non-null token locks the generation, and losing the token while
+                    // more pages are claimed is a protocol violation that stops pagination.
+                    val step = ReelsPagination(
+                        nextPage = current.nextPageIndex,
+                        nextCursor = current.nextCursor,
+                        cursorMode = current.cursorMode,
+                        canLoadMore = current.canLoadMore,
+                    ).advance(pageData.hasNextPage, pageData.nextCursor)
+                    if (step.cursorLost) {
                         logcat(LogPriority.WARN) {
                             "Feed ${current.currentSourceId} dropped its cursor mid-feed; stopping pagination (contract v17)."
                         }
@@ -835,10 +848,10 @@ class ReelsFeedScreenModel(
                             (current.seenIds + newItems.map { it.id }).toImmutableSet()
                         },
                         isLoading = false,
-                        canLoadMore = pageData.hasNextPage && !cursorLost,
-                        nextPageIndex = page + 1,
-                        nextCursor = pageData.nextCursor,
-                        cursorMode = newCursorMode,
+                        canLoadMore = step.pagination.canLoadMore,
+                        nextPageIndex = step.pagination.nextPage,
+                        nextCursor = step.pagination.nextCursor,
+                        cursorMode = step.pagination.cursorMode,
                         feedGeneration = if (reset || resumeTarget >= 0) {
                             current.feedGeneration + 1
                         } else {
@@ -864,14 +877,21 @@ class ReelsFeedScreenModel(
                 runway.onLoadFinished()
                 val itemsAfterAppend = state.value.items.size
                 val appended = if (reset) itemsAfterAppend else itemsAfterAppend - itemsBeforeAppend
-                // Deep-link seek continuation: the tapped clip was not on this page — silently
-                // append the next page until it surfaces (unbounded by design: deep albums put
-                // the clip dozens of pages in). Natural stops: end of feed, or a stall page
-                // that adds nothing new (protects against infinite loops on broken sources).
+                // Deep-link seek continuation: the tapped clip was not on this page — append
+                // the next page until it surfaces, bounded by RESUME_SEEK_MAX_PAGES so a
+                // missing target cannot drain an endless feed. Natural stops: end of feed,
+                // a stall page that adds nothing new, or the page budget.
                 if (resumeNavPending && state.value.canLoadMore) {
-                    if (seekStalled) {
+                    if (seekStalled || resumeSeekPages >= RESUME_SEEK_MAX_PAGES) {
+                        if (!seekStalled) {
+                            logcat(LogPriority.WARN) {
+                                "Deep-link target $resumeVideoId not found within " +
+                                    "$RESUME_SEEK_MAX_PAGES pages; stopping the silent seek."
+                            }
+                        }
                         resumeNavPending = false
                     } else {
+                        resumeSeekPages++
                         loadFeed(reset = false)
                     }
                 } else if (appended > 0 && lastPagerPage > pageAtLoadStart) {
@@ -984,19 +1004,47 @@ class ReelsFeedScreenModel(
     private suspend fun loadAlbumSearch(generation: Int, reset: Boolean, src: AnimeAlbumSearchSource, query: String) {
         try {
             val snapshot = state.value
-            val page = if (reset) 1 else snapshot.albumSearchNextPage
-            val cursor = if (reset) null else snapshot.albumSearchNextCursor
+            // Same sticky reducer as the video feed: the album stream owns its own cursor
+            // space, and a null token after the lock is a violation, not a page-int restart.
+            val pagination = if (reset) {
+                ReelsPagination()
+            } else {
+                ReelsPagination(
+                    nextPage = snapshot.albumSearchNextPage,
+                    nextCursor = snapshot.albumSearchNextCursor,
+                    cursorMode = snapshot.albumSearchCursorMode,
+                    canLoadMore = snapshot.albumSearchCanLoadMore,
+                )
+            }
+            val page = pagination.nextPage
+            val cursor = if (pagination.cursorMode) pagination.nextCursor else null
             val pageData = src.searchAlbums(query, page, cursor)
             currentCoroutineContext().ensureActive()
             if (loadGeneration.get() != generation) return
             rateLimitRetries = 0
             mutableState.update { current ->
+                // Re-check inside the CAS: a newer query/reset may have landed between the
+                // outer guard and this update; a stale album page must not touch its state.
+                if (loadGeneration.get() != generation) return@update current
+                val step = ReelsPagination(
+                    nextPage = current.albumSearchNextPage,
+                    nextCursor = current.albumSearchNextCursor,
+                    cursorMode = current.albumSearchCursorMode,
+                    canLoadMore = current.albumSearchCanLoadMore,
+                ).advance(pageData.hasNextPage, pageData.nextCursor)
+                if (step.cursorLost) {
+                    logcat(LogPriority.WARN) {
+                        "Album search for \"$query\" dropped its cursor mid-stream; stopping pagination (contract v17)."
+                    }
+                }
                 val base = if (reset) persistentListOf<FeedCategory>() else current.albumSearchResults
                 current.copy(
-                    albumSearchResults = (base + pageData.categories).toImmutableList(),
-                    albumSearchNextPage = page + 1,
-                    albumSearchNextCursor = pageData.nextCursor,
-                    albumSearchCanLoadMore = pageData.hasNextPage,
+                    // Duplicate ids would collide in the lazy-grid key space.
+                    albumSearchResults = (base + pageData.categories).distinctBy { it.id }.toImmutableList(),
+                    albumSearchNextPage = step.pagination.nextPage,
+                    albumSearchNextCursor = step.pagination.nextCursor,
+                    albumSearchCursorMode = step.pagination.cursorMode,
+                    albumSearchCanLoadMore = step.pagination.canLoadMore,
                     isLoading = false,
                     error = null,
                     errorRes = null,
@@ -1010,6 +1058,7 @@ class ReelsFeedScreenModel(
             if (loadGeneration.get() != generation) return
             maybeScheduleRateLimitRetry(t.localizedMessage.orEmpty(), reset)
             mutableState.update { current ->
+                if (loadGeneration.get() != generation) return@update current
                 current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
             }
         }
@@ -2739,6 +2788,9 @@ class ReelsFeedScreenModel(
         val albumSearchResults: ImmutableList<FeedCategory> = persistentListOf(),
         val albumSearchNextPage: Int = 1,
         val albumSearchNextCursor: String? = null,
+        // Sticky cursor lock of the album-search stream (contract v17): a null token after a
+        // token was seen is a violation, not a restart of the head page.
+        val albumSearchCursorMode: Boolean = false,
         val albumSearchCanLoadMore: Boolean = true,
         val savedAlbumIds: Set<String> = emptySet(),
         val previewAlbumId: String? = null,

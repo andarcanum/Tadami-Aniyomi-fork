@@ -1848,4 +1848,8 @@
     <string name="debug_workers_enqueued">В очереди</string>
     <string name="debug_workers_finished">Завершённые</string>
     <string name="debug_workers_running">Выполняются</string>
+    <string name="reels_album_unavailable">Источник больше не предоставляет альбомы</string>
+    <string name="reels_album_search_loaded">Загружено видео: %1$d · есть ещё</string>
+    <string name="reels_album_search_empty">Среди загруженных видео нет совпадений</string>
+    <string name="reels_album_search_load_more">Загрузить ещё видео</string>
 </resources>
