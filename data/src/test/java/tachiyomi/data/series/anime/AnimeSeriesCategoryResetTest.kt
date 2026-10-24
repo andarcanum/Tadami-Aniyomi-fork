@@ -6,6 +6,8 @@ import dataanime.Animes
 import dataanime.Episodes
 import dataanime.Reels_album_watched
 import dataanime.Reels_albums
+import dataanime.Reels_candidate
+import dataanime.Reels_consumption
 import dataanime.Reels_favorites
 import dataanime.Reels_follows
 import dataanime.Reels_hidden
@@ -69,6 +71,16 @@ class AnimeSeriesCategoryResetTest {
             ),
             reels_album_watchedAdapter = Reels_album_watched.Adapter(
                 marked_atAdapter = DateColumnAdapter,
+            ),
+            reels_consumptionAdapter = Reels_consumption.Adapter(
+                watched_qualified_atAdapter = DateColumnAdapter,
+                skipped_forward_atAdapter = DateColumnAdapter,
+                last_action_atAdapter = DateColumnAdapter,
+            ),
+            reels_candidateAdapter = Reels_candidate.Adapter(
+                discovered_atAdapter = DateColumnAdapter,
+                last_validated_atAdapter = DateColumnAdapter,
+                retry_afterAdapter = DateColumnAdapter,
             ),
         )
         try {

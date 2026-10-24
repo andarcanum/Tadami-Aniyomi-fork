@@ -151,6 +151,8 @@ import tachiyomi.data.items.chapter.ChapterRepositoryImpl
 import tachiyomi.data.items.episode.EpisodeRepositoryImpl
 import tachiyomi.data.items.novelchapter.NovelChapterRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsAlbumRepositoryImpl
+import tachiyomi.data.reels.anime.ReelsCandidateRepositoryImpl
+import tachiyomi.data.reels.anime.ReelsConsumptionRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFavoriteRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFollowRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsHiddenRepositoryImpl
@@ -301,6 +303,8 @@ import tachiyomi.domain.items.season.interactor.GetAnimeSeasonsByParentId
 import tachiyomi.domain.items.season.interactor.SetAnimeDefaultSeasonFlags
 import tachiyomi.domain.items.season.interactor.ShouldUpdateDbSeason
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
+import tachiyomi.domain.reels.anime.repository.ReelsCandidateRepository
+import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
@@ -705,6 +709,8 @@ class DomainModule : InjektModule {
         addSingletonFactory<ReelsWatchRepository> { ReelsWatchRepositoryImpl(get()) }
         addSingletonFactory<ReelsHiddenRepository> { ReelsHiddenRepositoryImpl(get()) }
         addSingletonFactory<ReelsAlbumRepository> { ReelsAlbumRepositoryImpl(get()) }
+        addSingletonFactory<ReelsConsumptionRepository> { ReelsConsumptionRepositoryImpl(get()) }
+        addSingletonFactory<ReelsCandidateRepository> { ReelsCandidateRepositoryImpl(get()) }
         addSingletonFactory<ReelsOfflineStore> { ReelsOfflineStoreImpl() }
         addFactory { GetEnabledAnimeSources(get(), get()) }
         addFactory { GetLanguagesWithAnimeSources(get(), get()) }

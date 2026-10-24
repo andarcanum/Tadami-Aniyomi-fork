@@ -1,0 +1,53 @@
+-- For You consumption history (host-side, contract-independent).
+--
+-- The summary keeps a qualified watch and a deliberate forward skip as separate facts:
+-- a later skip must never erase an earlier watch. Presence of either column removes the
+-- item from the automatic For You feed. Explicit "not interested" stays in reels_hidden.
+CREATE TABLE IF NOT EXISTS reels_consumption(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    watched_qualified_at INTEGER,
+    skipped_forward_at INTEGER,
+    last_action_at INTEGER NOT NULL,
+    last_surface TEXT,
+    policy_version INTEGER NOT NULL,
+    history_generation INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS reels_consumption_scope_index ON reels_consumption(account_scope_id, source_id);
+
+-- Durable candidate inbox: what the host actually received, independent of what it showed.
+-- Temporary media links are cache hints only; the row identity is the stable item key.
+CREATE TABLE IF NOT EXISTS reels_candidate(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    title TEXT,
+    author TEXT,
+    video_url TEXT NOT NULL,
+    video_url_hd TEXT,
+    poster_url TEXT,
+    poster_url_vertical TEXT,
+    web_url TEXT,
+    duration_sec REAL,
+    has_audio INTEGER NOT NULL DEFAULT 0,
+    created_at_epoch_sec INTEGER,
+    discovered_at INTEGER NOT NULL,
+    last_validated_at INTEGER,
+    availability TEXT NOT NULL DEFAULT 'available',
+    retry_after INTEGER,
+    resume_position_ms INTEGER,
+    metadata_schema_version INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS reels_candidate_scope_index ON reels_candidate(account_scope_id, source_id, discovered_at DESC);
+
+-- Per-account For You bookkeeping: history_generation fences async writers after a reset.
+CREATE TABLE IF NOT EXISTS reels_for_you_state(
+    account_scope_id TEXT NOT NULL PRIMARY KEY,
+    history_generation INTEGER NOT NULL DEFAULT 0,
+    policy_version INTEGER NOT NULL DEFAULT 1
+);

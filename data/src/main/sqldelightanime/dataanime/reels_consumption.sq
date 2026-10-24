@@ -1,0 +1,79 @@
+import java.util.Date;
+
+-- Durable For You interaction summary (host-side). One row per (account scope, source, item):
+-- a qualified watch and a deliberate forward skip are SEPARATE facts — a later skip never
+-- erases an earlier watch. Presence of either column excludes the item from the automatic
+-- For You feed; explicit "not interested" lives in reels_hidden and is never touched by a
+-- history reset.
+CREATE TABLE reels_consumption(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    watched_qualified_at INTEGER AS Date,
+    skipped_forward_at INTEGER AS Date,
+    last_action_at INTEGER AS Date NOT NULL,
+    last_surface TEXT,
+    policy_version INTEGER NOT NULL,
+    history_generation INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id, item_id)
+);
+
+CREATE INDEX reels_consumption_scope_index ON reels_consumption(account_scope_id, source_id);
+
+getByItem:
+SELECT *
+FROM reels_consumption
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id = :itemId;
+
+-- Batch anti-join for a whole page: never one query per item.
+consumedIds:
+SELECT item_id
+FROM reels_consumption
+WHERE account_scope_id = :scope
+  AND source_id = :sourceId
+  AND item_id IN :itemIds
+  AND (watched_qualified_at IS NOT NULL OR skipped_forward_at IS NOT NULL);
+
+countConsumed:
+SELECT COUNT(*)
+FROM reels_consumption
+WHERE account_scope_id = :scope
+  AND source_id = :sourceId
+  AND (watched_qualified_at IS NOT NULL OR skipped_forward_at IS NOT NULL);
+
+markWatched:
+INSERT INTO reels_consumption(
+    account_scope_id, source_id, item_id, watched_qualified_at, skipped_forward_at,
+    last_action_at, last_surface, policy_version, history_generation
+)
+VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)
+ON CONFLICT(account_scope_id, source_id, item_id)
+DO UPDATE SET
+    -- The FIRST qualified watch wins: replays must not rewrite the original timestamp.
+    watched_qualified_at = COALESCE(reels_consumption.watched_qualified_at, excluded.watched_qualified_at),
+    last_action_at = excluded.last_action_at,
+    last_surface = excluded.last_surface,
+    policy_version = excluded.policy_version,
+    history_generation = excluded.history_generation;
+
+markSkipped:
+INSERT INTO reels_consumption(
+    account_scope_id, source_id, item_id, watched_qualified_at, skipped_forward_at,
+    last_action_at, last_surface, policy_version, history_generation
+)
+VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)
+ON CONFLICT(account_scope_id, source_id, item_id)
+DO UPDATE SET
+    skipped_forward_at = COALESCE(reels_consumption.skipped_forward_at, excluded.skipped_forward_at),
+    last_action_at = excluded.last_action_at,
+    last_surface = excluded.last_surface,
+    policy_version = excluded.policy_version,
+    history_generation = excluded.history_generation;
+
+deleteForScope:
+DELETE FROM reels_consumption
+WHERE account_scope_id = :scope;
+
+deleteForSource:
+DELETE FROM reels_consumption
+WHERE account_scope_id = :scope AND source_id = :sourceId;

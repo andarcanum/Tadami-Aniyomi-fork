@@ -52,7 +52,17 @@ internal object AnimeExtensionLoader {
     private const val METADATA_TORRENT = "tachiyomi.animeextension.torrent"
     private const val METADATA_EXTENSION_LIB = "tachiyomix.extensionLib"
     const val LIB_VERSION_MIN = 12.0
-    const val LIB_VERSION_MAX = 23.0
+
+    /**
+     * Highest `tachiyomix.extensionLib` the host accepts.
+     *
+     * Raised to 26.0 by the reels feed-contract v26 capability
+     * (`AnimeFeedAccountIdentitySource`): a plugin that *implements* a new interface links
+     * against it, so an older host must refuse that plugin instead of failing to load its
+     * class. Raising the ceiling is non-breaking for every already-published plugin — their
+     * declared lib versions stay inside `12.0..26.0`.
+     */
+    const val LIB_VERSION_MAX = 26.0
 
     val SUPPORTED_LIB_VERSIONS: ClosedFloatingPointRange<Double> = LIB_VERSION_MIN..LIB_VERSION_MAX
 

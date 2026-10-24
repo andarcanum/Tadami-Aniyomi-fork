@@ -153,6 +153,11 @@ fun ReelsTopBar(
     // Reels-only incognito (product decision): the global switch does not apply to the feed.
     isReelsIncognito: Boolean = false,
     onToggleReelsIncognito: () -> Unit = {},
+    // For You consumption history: the switch is the "show watched" mode (OFF), and the reset
+    // action drops the summary without touching explicit hidden/blacklist entries.
+    isUnseenOnly: Boolean = true,
+    onToggleUnseenOnly: () -> Unit = {},
+    onResetForYouHistory: () -> Unit = {},
     // Device UX: reports the ⋮ settings block visibility so the screen can hold playback
     // and pin the chrome while it is open.
     onMoreMenuOpenChanged: (Boolean) -> Unit = {},
@@ -529,6 +534,15 @@ fun ReelsTopBar(
                             sleepTimerValue = sleepTimerValue,
                             isTouchLocked = isTouchLocked,
                             isReelsIncognito = isReelsIncognito,
+                            isUnseenOnly = isUnseenOnly,
+                            onToggleUnseenOnly = {
+                                onToggleUnseenOnly()
+                                openHub = HubMenu.NONE
+                            },
+                            onResetForYouHistory = {
+                                onResetForYouHistory()
+                                openHub = HubMenu.NONE
+                            },
                             onOpenHistory = {
                                 onOpenHistory()
                                 openHub = HubMenu.NONE
@@ -958,6 +972,7 @@ private fun ReelsMoreMenu(
     sleepTimerValue: String,
     isTouchLocked: Boolean,
     isReelsIncognito: Boolean,
+    isUnseenOnly: Boolean,
     onOpenHistory: () -> Unit,
     onOpenHidden: () -> Unit,
     onOpenAlbums: () -> Unit,
@@ -967,6 +982,8 @@ private fun ReelsMoreMenu(
     onOpenSleepDialog: () -> Unit,
     onToggleTouchLock: () -> Unit,
     onToggleReelsIncognito: () -> Unit,
+    onToggleUnseenOnly: () -> Unit,
+    onResetForYouHistory: () -> Unit,
     onClearOfflineStorage: () -> Unit,
     onToggleAutoAdvance: () -> Unit,
     onToggleCropMode: () -> Unit,
@@ -1080,6 +1097,35 @@ private fun ReelsMoreMenu(
                     onClick = onOpenFilter,
                 )
             }
+            MoreMenuSection(stringResource(MR.strings.reels_menu_section_for_you))
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        Icons.Filled.Check,
+                        null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                label = stringResource(MR.strings.reels_menu_unseen_only),
+                value = null,
+                checked = isUnseenOnly,
+                onClick = onToggleUnseenOnly,
+            )
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        Icons.Outlined.DeleteSweep,
+                        null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                label = stringResource(MR.strings.reels_menu_reset_history),
+                value = null,
+                checked = null,
+                onClick = onResetForYouHistory,
+            )
             MoreMenuSection(stringResource(MR.strings.reels_menu_section_playback))
             MoreMenuRow(
                 icon = {

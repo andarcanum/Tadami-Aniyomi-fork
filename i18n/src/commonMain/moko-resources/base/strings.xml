@@ -2052,4 +2052,11 @@
     <string name="reels_album_search_loaded">Loaded %1$d videos · more available</string>
     <string name="reels_album_search_empty">No loaded video matches the search</string>
     <string name="reels_album_search_load_more">Load more videos</string>
+    <string name="reels_menu_section_for_you">For You</string>
+    <string name="reels_menu_unseen_only">Only unwatched</string>
+    <string name="reels_menu_reset_history">Reset For You history</string>
+    <string name="reels_reset_history_confirm">Recommend watched and skipped reels again? Hidden reels and creators stay hidden.</string>
+    <string name="reels_feed_empty_unseen">No unwatched reels left</string>
+    <string name="reels_feed_empty_unseen_scanning">Still looking for unwatched reels</string>
+    <string name="reels_feed_show_watched">Show watched</string>
 </resources>

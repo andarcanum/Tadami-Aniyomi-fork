@@ -63,11 +63,15 @@ import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.reels.anime.model.ReelsAlbum
+import tachiyomi.domain.reels.anime.model.ReelsCandidate
+import tachiyomi.domain.reels.anime.model.ReelsConsumptionEntry
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.model.ReelsHiddenEntry
 import tachiyomi.domain.reels.anime.model.ReelsWatchEntry
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
+import tachiyomi.domain.reels.anime.repository.ReelsCandidateRepository
+import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
@@ -288,6 +292,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -403,6 +409,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -470,6 +478,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -520,6 +530,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -609,6 +621,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -676,6 +690,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -741,6 +757,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -924,6 +942,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -1216,6 +1236,10 @@ class ReelsFeedScreenModelTest {
         watchRepository: ReelsWatchRepository = FakeReelsWatchRepository(),
         hiddenRepository: ReelsHiddenRepository = FakeReelsHiddenRepository(),
         albumRepository: ReelsAlbumRepository = FakeAlbumRepository(),
+        consumptionRepository: ReelsConsumptionRepository = FakeReelsConsumptionRepository(),
+        candidateRepository: ReelsCandidateRepository = FakeReelsCandidateRepository(),
+        nowMs: () -> Long = { 0L },
+        wallClock: () -> Date = { Date(0) },
         offlineStore: ReelsOfflineStore = FakeReelsOfflineStore(),
         incognito: Boolean = false,
         offlinePlaylist: Boolean = false,
@@ -1252,9 +1276,135 @@ class ReelsFeedScreenModelTest {
         reelsWatchRepository = watchRepository,
         reelsHiddenRepository = hiddenRepository,
         reelsAlbumRepository = albumRepository,
+        reelsConsumptionRepository = consumptionRepository,
+        reelsCandidateRepository = candidateRepository,
+        nowMs = nowMs,
+        wallClock = wallClock,
         offlineStore = offlineStore,
         sessionSound = sessionSound,
     )
+
+    @Test
+    fun `for you delivers only unseen reels and the unwatched rest survives a restart`() = runTest(testDispatcher) {
+        val all = (0 until 20).map { "fy-$it" }
+        val alreadyWatched = all.take(10)
+        val unseen = all.drop(10)
+        val consumption = FakeReelsConsumptionRepository()
+        alreadyWatched.forEach { consumption.watched[901L to it] = Date(1_000L) }
+        val candidates = FakeReelsCandidateRepository()
+        val source = RecordingFeedSource(901L) { FeedPage(all.map(::videoItem), hasNextPage = false) }
+
+        val first = buildModel(
+            sourceId = 901L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+            candidateRepository = candidates,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        first.state.value.items.map { it.id } shouldBe unseen
+        first.state.value.unseenHidden shouldBe 10
+
+        // Process restart: the plugin's in-memory cursor/replay session is gone and the source
+        // answers an empty page. The durable inbox still holds the reels the user never reached,
+        // while the ten watched ones stay excluded.
+        val restarted = RecordingFeedSource(901L) { FeedPage(emptyList(), hasNextPage = false) }
+        val second = buildModel(
+            sourceId = 901L,
+            manager = sourceManagerOf(restarted),
+            consumptionRepository = consumption,
+            candidateRepository = candidates,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        second.state.value.items.map { it.id } shouldBe unseen
+        alreadyWatched.forEach { id -> second.state.value.items.map { it.id } shouldNotContain id }
+    }
+
+    @Test
+    fun `only a committed user forward swipe records a skip`() = runTest(testDispatcher) {
+        val items = (0 until 5).map { "sk-$it" }
+        val consumption = FakeReelsConsumptionRepository()
+        val source = RecordingFeedSource(902L) { FeedPage(items.map(::videoItem), hasNextPage = false) }
+        val model = buildModel(
+            sourceId = 902L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Initial settle / dataset change / restore are not user decisions.
+        model.onPageChanged(1, ReelsTransitionCause.PROGRAMMATIC)
+        testDispatcher.scheduler.advanceUntilIdle()
+        // Swiping back is navigation, not "never show me this again".
+        model.onPageChanged(0, ReelsTransitionCause.USER_BACKWARD)
+        testDispatcher.scheduler.advanceUntilIdle()
+        // The legacy positional API defaults to PROGRAMMATIC: no cause, no skip.
+        model.onPageChanged(2)
+        testDispatcher.scheduler.advanceUntilIdle()
+        consumption.skipped.isEmpty() shouldBe true
+
+        // A committed manual forward move away from the settled card is the skip.
+        model.onPageChanged(3, ReelsTransitionCause.USER_FORWARD)
+        testDispatcher.scheduler.advanceUntilIdle()
+        consumption.skipped.keys shouldBe setOf(902L to "sk-2")
+    }
+
+    @Test
+    fun `running out of refill budget is not end of feed`() = runTest(testDispatcher) {
+        val consumption = FakeReelsConsumptionRepository()
+        val source = RecordingFeedSource(903L) { page ->
+            val pageItems = (0 until 3).map { "old-$page-$it" }
+            // Every page the source can produce was already consumed: a deep history must not
+            // turn For You into a permanent empty screen.
+            pageItems.forEach { consumption.watched[903L to it] = Date(1_000L) }
+            FeedPage(pageItems.map(::videoItem), hasNextPage = true)
+        }
+        val model = buildModel(
+            sourceId = 903L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.items.shouldBeEmpty()
+        model.state.value.unseenScanStopped shouldBe true
+        // The budget ran out, the source did not: pagination stays open for a manual pull.
+        model.state.value.canLoadMore shouldBe true
+        source.requestedPages shouldBe (1..(ReelsForYou.UNSEEN_REFILL_MAX_PAGES + 1)).toList()
+    }
+
+    @Test
+    fun `a qualified watch is committed and a history reset brings the reel back`() = runTest(testDispatcher) {
+        val consumption = FakeReelsConsumptionRepository()
+        val source = RecordingFeedSource(904L) { FeedPage(listOf(videoItem("rw-1")), hasNextPage = false) }
+        var clock = 0L
+        val model = buildModel(
+            sourceId = 904L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+            nowMs = { clock },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val item = model.state.value.items.first()
+        model.onVisitStarted(item)
+        model.onFirstFramePresented(item.id)
+        repeat(6) {
+            clock += 1_000L
+            model.onPlaybackSample(item.id, clock, eligible = true)
+        }
+        testDispatcher.scheduler.advanceUntilIdle()
+        consumption.watched.keys shouldBe setOf(904L to "rw-1")
+
+        // The reset bumps the generation: the row it deleted must not be resurrected by a
+        // writer that was still in flight, and the reel is offered again.
+        model.resetForYouHistory()
+        testDispatcher.scheduler.advanceUntilIdle()
+        consumption.watched.isEmpty() shouldBe true
+        consumption.generation shouldBe 1L
+        model.state.value.items.map { it.id } shouldBe listOf("rw-1")
+    }
 
     @Test
     fun `feed position is persisted per source and restored on re-entry`() = runTest(testDispatcher) {
@@ -2042,6 +2192,8 @@ class ReelsFeedScreenModelTest {
             reelsWatchRepository = FakeReelsWatchRepository(),
             reelsHiddenRepository = FakeReelsHiddenRepository(),
             reelsAlbumRepository = FakeAlbumRepository(),
+            reelsConsumptionRepository = FakeReelsConsumptionRepository(),
+            reelsCandidateRepository = FakeReelsCandidateRepository(),
             offlineStore = FakeReelsOfflineStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
@@ -2255,6 +2407,98 @@ class ReelsFeedScreenModelTest {
         }
 
         override suspend fun deleteAll() = entries.clear()
+    }
+
+    private class FakeReelsConsumptionRepository : ReelsConsumptionRepository {
+        val watched = mutableMapOf<Pair<Long, String>, Date>()
+        val skipped = mutableMapOf<Pair<Long, String>, Date>()
+        var generation = 0L
+        var writes = 0
+
+        override suspend fun generation(scope: String): Long = generation
+
+        override suspend fun ensureScope(scope: String, policyVersion: Int): Long = generation
+
+        override suspend fun markWatched(
+            scope: String,
+            sourceId: Long,
+            itemId: String,
+            at: Date,
+            surface: String?,
+            policyVersion: Int,
+            generation: Long,
+        ): Boolean {
+            if (generation != this.generation) return false
+            writes++
+            watched.putIfAbsent(sourceId to itemId, at)
+            return true
+        }
+
+        override suspend fun markSkipped(
+            scope: String,
+            sourceId: Long,
+            itemId: String,
+            at: Date,
+            surface: String?,
+            policyVersion: Int,
+            generation: Long,
+        ): Boolean {
+            if (generation != this.generation) return false
+            writes++
+            skipped.putIfAbsent(sourceId to itemId, at)
+            return true
+        }
+
+        override suspend fun consumedIds(
+            scope: String,
+            sourceId: Long,
+            itemIds: Collection<String>,
+        ): Set<String> {
+            return itemIds.filter { (sourceId to it) in watched || (sourceId to it) in skipped }.toSet()
+        }
+
+        override suspend fun entry(scope: String, sourceId: Long, itemId: String): ReelsConsumptionEntry? = null
+
+        override suspend fun countConsumed(scope: String, sourceId: Long): Long {
+            return (watched.keys + skipped.keys).count { it.first == sourceId }.toLong()
+        }
+
+        override suspend fun resetHistory(scope: String, policyVersion: Int): Long {
+            watched.clear()
+            skipped.clear()
+            return ++generation
+        }
+    }
+
+    private class FakeReelsCandidateRepository : ReelsCandidateRepository {
+        val rows = mutableMapOf<Triple<String, Long, String>, ReelsCandidate>()
+
+        override suspend fun ingest(scope: String, sourceId: Long, candidates: List<ReelsCandidate>): Int {
+            candidates.forEach { rows[Triple(scope, sourceId, it.itemId)] = it }
+            return candidates.size
+        }
+
+        override suspend fun unconsumed(scope: String, sourceId: Long, limit: Int): List<ReelsCandidate> {
+            return rows.values
+                .filter { it.accountScopeId == scope && it.sourceId == sourceId }
+                .take(limit)
+        }
+
+        override suspend fun saveResumePosition(scope: String, sourceId: Long, itemId: String, positionMs: Long) {
+            val key = Triple(scope, sourceId, itemId)
+            rows[key]?.let { rows[key] = it.copy(resumePositionMs = positionMs) }
+        }
+
+        override suspend fun remove(scope: String, sourceId: Long, itemIds: Collection<String>) {
+            itemIds.forEach { rows.remove(Triple(scope, sourceId, it)) }
+        }
+
+        override suspend fun count(scope: String, sourceId: Long): Long =
+            rows.keys.count { it.first == scope && it.second == sourceId }.toLong()
+
+        override suspend fun clear(scope: String) {
+            rows.keys.filter { it.first == scope }.forEach { rows.remove(it) }
+        }
     }
 
     private class FakeReelsHiddenRepository : ReelsHiddenRepository {

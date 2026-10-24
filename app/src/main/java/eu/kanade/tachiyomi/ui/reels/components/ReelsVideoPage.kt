@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
-import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -70,8 +69,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedMediaKind
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
+import eu.kanade.tachiyomi.ui.reels.ReelsForYou
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
-import eu.kanade.tachiyomi.ui.reels.player.ReelsWatchClock
 import eu.kanade.tachiyomi.ui.reels.rememberReelsFullscreenSafePadding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -149,9 +148,17 @@ fun ReelsVideoPage(
     // Second parameter retries the current video (snackbar "Retry" action).
     onPlaybackError: (String, retry: () -> Unit) -> Unit = { _, _ -> },
     onScrubStart: () -> Unit = {},
-    // Reported once when the clip is left (swipe/completion): actual watched seconds, the full
-    // duration and the playback fraction — drives remote personalization and local history.
-    onViewReported: (secondsWatched: Float, duration: Float, positionFraction: Float) -> Unit = { _, _, _ -> },
+    // Watch qualification signals. The page only reports what the player/UI really did; the
+    // host's tracker decides whether a visit earned a qualified watch and commits it.
+    onVisitStarted: (ShortVideoItem) -> Unit = {},
+    onFirstFramePresented: (itemId: String) -> Unit = {},
+    onPlaybackSample: (itemId: String, positionMs: Long, eligible: Boolean) -> Unit = { _, _, _ -> },
+    // Reported once when the clip is left (swipe/completion/dispose): the real position, the
+    // playback fraction and the player-reported duration.
+    onVisitEnded: (ShortVideoItem, positionMs: Long, positionFraction: Float, durationSec: Float) -> Unit =
+        { _, _, _, _ -> },
+    // The host screen is in the foreground. Background playback never earns watch credit.
+    isForeground: Boolean = true,
     // B3.1 resume-seek: when set, the page seeks here once on its first activation.
     initialSeekFraction: Float? = null,
     // Called once when the resume seek above was applied (the model clears the stored target).
@@ -251,38 +258,52 @@ fun ReelsVideoPage(
 
     // P06: watched time accumulates from monotonic deltas instead of whole-second ticks, so
     // a 0.8 s watch, or a pause mid-tick, no longer loses its fraction.
-    val watchClock = remember(item.id) { ReelsWatchClock() }
+    // Watch qualification lives in the host tracker; the page only reports signals, so the
+    // same rules apply to every surface and the accumulator survives page rebinds.
     var wasActivated by remember(item.id) { mutableStateOf(false) }
-    var viewReported by remember(item.id) { mutableStateOf(false) }
-    val currentOnViewReported by rememberUpdatedState(onViewReported)
+    var visitEndReported by remember(item.id) { mutableStateOf(false) }
+    val currentOnVisitEnded by rememberUpdatedState(onVisitEnded)
     // Same eligibility as the feed's "actually playing": active page, play intent, a player
-    // that is really running, and no buffering. Each flip starts/stops the clock exactly.
-    val watchedEligible = isActive && isPlaying && actuallyPlaying && !isBuffering
-    LaunchedEffect(item.id, watchedEligible) {
-        val now = SystemClock.elapsedRealtime()
-        if (watchedEligible) watchClock.start(now) else watchClock.stop(now)
+    // that is really running, no buffering, and a foregrounded screen.
+    val watchedEligible = isActive && isPlaying && actuallyPlaying && !isBuffering && isForeground
+    val currentWatchedEligible by rememberUpdatedState(watchedEligible)
+
+    // The first presented frame starts the clock: READY/buffering alone never counts.
+    LaunchedEffect(item.id, actuallyPlaying) {
+        if (actuallyPlaying) onFirstFramePresented(item.id)
     }
-    // Consumption is baseline-based, so reporting on deactivation and on disposal cannot
-    // count the same interval twice or drop a partial second.
-    fun reportView() {
-        if (!wasActivated || viewReported) return
-        viewReported = true
-        val now = SystemClock.elapsedRealtime()
-        watchClock.stop(now)
-        currentOnViewReported(watchClock.consumeSeconds(now), durationSec, progressState.floatValue)
+
+    // Sparse sampler (4 Hz): monotonic deltas, no per-frame work and never a DB write.
+    LaunchedEffect(item.id, isActive) {
+        if (!isActive) return@LaunchedEffect
+        while (true) {
+            delay(ReelsForYou.SAMPLE_INTERVAL_MS)
+            val duration = durationSec.coerceAtLeast(0f)
+            val positionMs = (progressState.floatValue * duration * 1000f).toLong()
+            onPlaybackSample(item.id, positionMs, currentWatchedEligible)
+        }
+    }
+
+    fun reportVisitEnd() {
+        if (!wasActivated || visitEndReported) return
+        visitEndReported = true
+        val duration = durationSec.coerceAtLeast(0f)
+        val positionMs = (progressState.floatValue * duration * 1000f).toLong()
+        currentOnVisitEnded(item, positionMs, progressState.floatValue, duration)
     }
     LaunchedEffect(isActive) {
         if (isActive) {
             wasActivated = true
-            viewReported = false
+            visitEndReported = false
+            onVisitStarted(item)
         } else {
-            reportView()
+            reportVisitEnd()
         }
     }
     // Leaving the SCREEN (back / dispose) never runs the deactivation branch above: report the
-    // watched clip on dispose too, so the last reel doesn't escape the watch history / feedback.
+    // watched clip on dispose too, so the last reel doesn't escape the history / feedback.
     DisposableEffect(item.id) {
-        onDispose { reportView() }
+        onDispose { reportVisitEnd() }
     }
 
     // B3.1 resume-seek: apply the stored history position exactly once, on first activation.
