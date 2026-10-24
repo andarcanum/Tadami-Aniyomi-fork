@@ -110,6 +110,9 @@ fun ReelsPlayerView(
     // Fired from onVideoSizeChanged once real dimensions are known: true for
     // landscape reels (the only ones offered the landscape-fullscreen affordance).
     onVideoLandscapeKnown: (Boolean) -> Unit = {},
+    // Measured frame dimensions for the PiP window shape (audit C03); zero-sized/unknown
+    // frames never fire.
+    onVideoSizeKnown: (Int, Int) -> Unit = { _, _ -> },
     onPlaybackError: (String) -> Unit = {},
     onBufferingChanged: (Boolean) -> Unit = {},
     // Actual Player.isPlaying changes of this player (buffering, audio-focus loss, lifecycle
@@ -448,6 +451,7 @@ fun ReelsPlayerView(
                             videoHeight = videoSize.height
                             updateMatrix(textureViewRef, videoSize.width, videoSize.height, currentCropMode)
                             if (videoSize.width > 0 && videoSize.height > 0) {
+                                onVideoSizeKnown(videoSize.width, videoSize.height)
                                 onVideoLandscapeKnown(videoSize.width > videoSize.height)
                             }
                         }

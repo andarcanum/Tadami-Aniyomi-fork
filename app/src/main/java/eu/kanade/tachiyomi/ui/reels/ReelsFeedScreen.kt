@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reels
 
 import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -347,6 +348,11 @@ data class ReelsFeedScreen(
         val videoOrientations = remember { mutableStateMapOf<String, Boolean>() }
         var activeVideoLandscape by remember { mutableStateOf<Boolean?>(null) }
         val currentActiveVideoLandscape by rememberUpdatedState(activeVideoLandscape)
+        // Measured frame dimensions per item (audit C03): the PiP window shape comes from the
+        // actual video rect/aspect, not from the portrait feed window.
+        val videoSizes = remember { mutableStateMapOf<String, Pair<Int, Int>>() }
+        var activeVideoSize by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+        val currentActiveVideoSize by rememberUpdatedState(activeVideoSize)
         var chromeVisible by remember { mutableStateOf(true) }
         // Device UX: the ⋮ settings block holds playback and pins the chrome while open.
         var moreMenuOpen by remember { mutableStateOf(false) }
@@ -366,6 +372,10 @@ data class ReelsFeedScreen(
             windowIsLandscape = windowIsLandscape,
             inPictureInPicture = inPictureInPicture,
         )
+        // The HOME-gesture handler runs outside composition: these refs keep the PiP params
+        // and the chrome decision tied to the live frame, crop mode and rotation.
+        val currentCropMode by rememberUpdatedState(state.isCropMode)
+        val currentSoftwareRotation by rememberUpdatedState(softwareRotationDegrees)
         // U07: while software fullscreen is active, the window belongs to the video —
         // MainActivity's generic navigation-bar scrim must not paint over it.
         val fullscreenOwner = remember { Any() }
@@ -429,17 +439,27 @@ data class ReelsFeedScreen(
         // Declutter redesign: PiP enters via the HOME gesture, not a top-bar button. The feed
         // registers the entry handler while composed; MainActivity calls it from
         // onUserLeaveHint. Gates are evaluated at call time: feature toggle on, a reel is
-        // actually playing, and this is not the offline playlist screen variant.
+        // actually playing (player-reported), and this is not the offline playlist variant.
+        fun buildPipParams(activity: Activity): PictureInPictureParams = ReelsPip.buildParams(
+            activity = activity,
+            videoWidth = currentActiveVideoSize?.first ?: 0,
+            videoHeight = currentActiveVideoSize?.second ?: 0,
+            cropMode = currentCropMode,
+            landscapeFallback = currentActiveVideoLandscape,
+            rotated = currentSoftwareRotation != 0,
+        )
         DisposableEffect(screenModel) {
             val handler: () -> Boolean = {
                 val current = screenModel.state.value
                 val activity = context as? Activity
                 if (activity != null && current.isPipEnabled && current.isActuallyPlaying && !current.isOffline) {
-                    runCatching {
-                        activity.enterPictureInPictureMode(
-                            ReelsPip.buildParams(activity, currentActiveVideoLandscape),
-                        )
+                    val entered = runCatching {
+                        activity.enterPictureInPictureMode(buildPipParams(activity))
                     }.getOrDefault(false)
+                    // Hide the immersive chrome with the entry, before the system snapshots
+                    // the surface: the PiP window must show the reel, not the feed's top bar.
+                    if (entered) chromeVisible = false
+                    entered
                 } else {
                     false
                 }
@@ -453,6 +473,14 @@ data class ReelsFeedScreen(
                     ReelsPip.handler = null
                 }
             }
+        }
+
+        // Auto-advance keeps running in PiP: when the settled reel (or crop mode/rotation)
+        // changes, update the system window shape instead of leaving the old cover ratio.
+        LaunchedEffect(inPictureInPicture, activeVideoSize, state.isCropMode, softwareRotationDegrees) {
+            if (!inPictureInPicture) return@LaunchedEffect
+            val activity = context as? Activity ?: return@LaunchedEffect
+            runCatching { activity.setPictureInPictureParams(buildPipParams(activity)) }
         }
 
         // B1: a rate-limit verdict surfaces the wait; the model schedules the capped auto-retry.
@@ -604,12 +632,11 @@ data class ReelsFeedScreen(
                     )
 
                     // PiP shape follows the settled reel, including one whose player already
-                    // reported its orientation while the page was only preloaded.
+                    // reported its frame while the page was only preloaded.
                     LaunchedEffect(pagerState.settledPage, state.items) {
-                        activeVideoLandscape = state.items
-                            .getOrNull(pagerState.settledPage)
-                            ?.id
-                            ?.let(videoOrientations::get)
+                        val settledId = state.items.getOrNull(pagerState.settledPage)?.id
+                        activeVideoLandscape = settledId?.let(videoOrientations::get)
+                        activeVideoSize = settledId?.let(videoSizes::get)
                     }
 
                     // C-intermediate (audit): heads of the reels BEYOND the player preload window
@@ -789,6 +816,12 @@ data class ReelsFeedScreen(
                                     videoOrientations[item.id] = landscape
                                     if (page == pagerState.settledPage) {
                                         activeVideoLandscape = landscape
+                                    }
+                                },
+                                onVideoSizeKnown = { width, height ->
+                                    videoSizes[item.id] = width to height
+                                    if (page == pagerState.settledPage) {
+                                        activeVideoSize = width to height
                                     }
                                 },
                                 landscapeAutoRestore = landscapeAutoRestore,
@@ -977,8 +1010,8 @@ data class ReelsFeedScreen(
                         }
                     }
 
-                    // Next-page loading indicator
-                    if (state.isLoading && state.items.isNotEmpty()) {
+                    // Next-page loading indicator (the PiP frame shows only the reel).
+                    if (state.isLoading && state.items.isNotEmpty() && !inPictureInPicture) {
                         ReelsNextPageLoader(modifier = Modifier.align(Alignment.BottomCenter))
                     }
                 }
@@ -987,7 +1020,8 @@ data class ReelsFeedScreen(
             // "Tap to unmute" (approved variant A): visible while the session sound is
             // undecided; tapping unmutes (and decides), otherwise it auto-dismisses.
             AnimatedVisibility(
-                visible = state.showUnmuteHint && state.isMuted && !landscapeFullscreen,
+                visible = state.showUnmuteHint && state.isMuted && !landscapeFullscreen &&
+                    !inPictureInPicture,
                 enter = fadeIn() + scaleIn(initialScale = 0.85f),
                 exit = fadeOut() + scaleOut(targetScale = 0.85f),
                 modifier = Modifier
@@ -1026,9 +1060,9 @@ data class ReelsFeedScreen(
             }
 
             // Top Bar Overlay; auto-hidden in immersive mode, revealed on tap or when a
-            // search/filter/source sheet is open.
+            // search/filter/source sheet is open. The system-owned PiP frame never shows it.
             AnimatedVisibility(
-                visible = !landscapeFullscreen &&
+                visible = !landscapeFullscreen && !inPictureInPicture &&
                     (
                         chromeVisible || state.isSearchBarOpen || state.isFilterDialogOpen ||
                             state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen ||

@@ -69,6 +69,39 @@ class ReelsFullscreenGeometryTest {
         reelsPipAspectRatio(isLandscapeVideo = null) shouldBe null
     }
 
+    @Test
+    fun `pip aspect comes from the measured frame within platform limits`() {
+        reelsPipVideoAspect(1920, 1080) shouldBe (16 to 9)
+        reelsPipVideoAspect(1080, 1920) shouldBe (9 to 16)
+        reelsPipVideoAspect(1440, 1080) shouldBe (4 to 3)
+        // Beyond 2.39:1 / 1:2.39 the platform has no defined window shape: clamp to the edge.
+        reelsPipVideoAspect(2560, 720) shouldBe (239 to 100)
+        reelsPipVideoAspect(720, 2560) shouldBe (100 to 239)
+        reelsPipVideoAspect(0, 1080) shouldBe null
+        reelsPipVideoAspect(1920, 0) shouldBe null
+    }
+
+    @Test
+    fun `pip content rect follows the player resize mode`() {
+        // Crop fills the window; fit letterboxes the measured frame inside it.
+        reelsPipVideoGeometry(1080, 2400, 1080, 1920, crop = true) shouldBe
+            ReelsPipGeometry(9, 16, 0, 0, 1080, 2400)
+        reelsPipVideoGeometry(1080, 2400, 1080, 1920, crop = false) shouldBe
+            ReelsPipGeometry(9, 16, 0, 240, 1080, 2160)
+        reelsPipVideoGeometry(1080, 2400, 1920, 1080, crop = false) shouldBe
+            ReelsPipGeometry(16, 9, 0, 896, 1080, 1504)
+        reelsPipVideoGeometry(2400, 1080, 1080, 1920, crop = false) shouldBe
+            ReelsPipGeometry(9, 16, 896, 0, 1504, 1080)
+    }
+
+    @Test
+    fun `pip geometry stays absent until both frames are measured`() {
+        reelsPipVideoGeometry(0, 2400, 1920, 1080, crop = false) shouldBe null
+        reelsPipVideoGeometry(1080, 0, 1920, 1080, crop = false) shouldBe null
+        reelsPipVideoGeometry(1080, 2400, 0, 1080, crop = false) shouldBe null
+        reelsPipVideoGeometry(1080, 2400, 1920, 0, crop = true) shouldBe null
+    }
+
     private fun assertPadding(
         rotation: Int,
         left: androidx.compose.ui.unit.Dp,
