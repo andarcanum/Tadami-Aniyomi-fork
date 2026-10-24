@@ -21,7 +21,8 @@ import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 
 /**
- * Симуляция работы Discovery с РЕАЛЬНЫМ плагином TomiloLib (D:\lnreader\extensions-source\src\ru\tomilolib).
+ * Unit fixtures shaped after TomiloLib filters and prepared candidate metadata.
+ * These tests do not load the extension, execute its HTTP parser, or verify its details API dispatch.
  * Проверяет:
  * 1. Распознавание жанровых фильтров плагина через AppDiscoverySourceCatalog (с учётом RU/EN алиасов).
  * 2. Обязательный тег "Система": тайтлы корректно отображаются, выборка не пустая.

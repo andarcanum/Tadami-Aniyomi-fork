@@ -312,13 +312,13 @@ object TasteSignalRecorder {
         mediaType: DiscoveryMediaType,
         sourceId: Long,
         sourceUrl: String,
-    ): List<String> = runCatching {
+    ): List<String> = runCatchingUnlessCancelled {
         when (mediaType) {
             DiscoveryMediaType.MANGA -> {
                 val source = Injekt.get<tachiyomi.domain.source.manga.service.MangaSourceManager>().get(sourceId)
                 if (source != null && source !is StubMangaSource) {
                     val sManga = SManga.create().apply { url = sourceUrl }
-                    val details = source.getMangaDetails(sManga)
+                    val details = fetchDiscoveryMangaDetails(source, sManga)
                     parseGenres(details.genre)
                 } else {
                     emptyList()
