@@ -88,6 +88,12 @@ fun ReelsPlayerView(
     isPlaying: Boolean,
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
+    // Contract v25 media descriptor: true/false is the source's authoritative media kind;
+    // null keeps the legacy URL-extension inference below.
+    isStill: Boolean? = null,
+    // The page knows no stream can arrive (blank URL without a usable resolver): keep the
+    // poster but drop the loading spinner that would otherwise spin forever.
+    isMediaUnplayable: Boolean = false,
     seekToFraction: Float?,
     onProgressUpdate: (Float) -> Unit,
     onVideoCompleted: () -> Unit,
@@ -132,9 +138,11 @@ fun ReelsPlayerView(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            androidx.compose.material3.CircularProgressIndicator(
-                color = Color.White,
-            )
+            if (!isMediaUnplayable) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = Color.White,
+                )
+            }
         }
         return
     }
@@ -180,7 +188,8 @@ fun ReelsPlayerView(
 
     // Photo reels (mixed albums): ExoPlayer cannot decode stills — render the image and
     // drive the minimum-dwell progress/advance ourselves (device fix for photo albums).
-    if (isReelImageUrl(videoUrl)) {
+    // v25: a declared STILL kind covers opaque/extensionless photo URLs.
+    if (isStill ?: isReelImageUrl(videoUrl)) {
         val photoClock = remember(videoUrl) { ReelsWatchClock() }
         var photoCompleted by remember(videoUrl) { mutableStateOf(false) }
         // A still has no player: its playback state is the page intent gated by the same

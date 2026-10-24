@@ -10,7 +10,9 @@ data class ShortVideoItem(
     val id: String,
     val title: String? = null,
     val author: String? = null,
-    // Guaranteed playable URL: the lowest/only quality variant the source provides.
+    // Playable base URL: the lowest/only quality variant the source provides.
+    // Blank only for sources that opt into lazy signing via FeedMediaDescriptor (v25)
+    // and implement AnimeFeedVideoResolverSource; everyone else must return a URL here.
     // videoUrlHd is an optional higher-quality upgrade; never swap the two —
     // the player must always be able to fall back to videoUrl.
     val videoUrl: String,
