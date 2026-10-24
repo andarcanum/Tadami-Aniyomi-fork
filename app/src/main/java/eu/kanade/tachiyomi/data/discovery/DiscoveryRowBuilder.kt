@@ -59,6 +59,11 @@ data class DiscoveryBuildContext(
     /** Тайтлы ТЕКУЩЕЙ ленты (ручной рефреш): stale-добор их не возвращает — наполнение реально сменяется. */
     val currentFeedCleanTitles: Set<String> = emptySet(),
     val pageOffset: Int = 1,
+    /**
+     * Shared deadline and details allowance for this media run. Rows must not
+     * create their own budgets: TASTE and SOURCE consume the same one.
+     */
+    val verificationBudget: DiscoveryVerificationBudget? = null,
 ) {
     val candidatePolicy: DiscoveryCandidatePolicy
         get() {

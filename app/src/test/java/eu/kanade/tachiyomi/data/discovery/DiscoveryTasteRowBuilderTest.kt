@@ -283,6 +283,6 @@ class DiscoveryTasteRowBuilderTest {
             priorityGenres = setOf("Mecha"),
         )
         builder(trending, FakeCatalog()).build(ctx)
-        trending.lastQueriedGenres?.take(2) shouldBe listOf("Sci-Fi", "Mecha")
+        trending.lastQueriedGenres shouldBe listOf("Sci-Fi")
     }
 }

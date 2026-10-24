@@ -74,6 +74,12 @@ internal fun selectPluginRepresentative(
     ).firstOrNull()
 }
 
+/** Reserve for persistence and teardown when splitting the worker deadline. */
+private const val WORKER_BUDGET_MARGIN_MS = 10_000L
+
+/** Even with many media types, one run must keep enough time to be useful. */
+private const val MIN_MEDIA_BUDGET_MS = 20_000L
+
 /**
  * Оркестратор фонового обновления ленты «Для тебя»:
  * сиды → строители рядов → [DiscoveryCoordinator] → персист успешных рядов.
@@ -162,6 +168,7 @@ class DiscoveryRunner(
     suspend fun run(
         mediaTypes: List<DiscoveryMediaType> = DiscoveryMediaType.entries,
         isManualRefresh: Boolean = false,
+        totalBudgetMs: Long? = null,
     ): Map<DiscoveryMediaType, DiscoveryRunOutcome> {
         if (!preferences.discoveryEnabled().get()) {
             return mediaTypes.associateWith { mediaType ->
@@ -171,10 +178,20 @@ class DiscoveryRunner(
                 )
             }
         }
+        // Split the caller's deadline across media types instead of letting each
+        // type spend the full worker budget on its own.
+        val perMediaBudgetMs = totalBudgetMs?.let { total ->
+            ((total - WORKER_BUDGET_MARGIN_MS).coerceAtLeast(MIN_MEDIA_BUDGET_MS)) /
+                mediaTypes.size.coerceAtLeast(1)
+        }
         val outcomes = mutableMapOf<DiscoveryMediaType, DiscoveryRunOutcome>()
         for (mediaType in mediaTypes) {
             try {
-                val outcome = runFor(mediaType, isManualRefresh = isManualRefresh)
+                val outcome = runFor(
+                    mediaType,
+                    isManualRefresh = isManualRefresh,
+                    mediaBudgetMs = perMediaBudgetMs,
+                )
                 outcomes[mediaType] = outcome
             } catch (e: CancellationException) {
                 throw e
@@ -208,11 +225,15 @@ class DiscoveryRunner(
                     .getTracksByNovelId(entryId).map { it.title }
         }
 
-    private suspend fun runFor(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false): DiscoveryRunOutcome =
+    private suspend fun runFor(
+        mediaType: DiscoveryMediaType,
+        isManualRefresh: Boolean = false,
+        mediaBudgetMs: Long? = null,
+    ): DiscoveryRunOutcome =
         mediaRunLocks.getOrPut(mediaType) { Mutex() }
             .withLock {
                 try {
-                    runForLocked(mediaType, isManualRefresh)
+                    runForLocked(mediaType, isManualRefresh, mediaBudgetMs)
                 } finally {
                     DiscoveryProgressTracker.reset(mediaType)
                 }
@@ -221,6 +242,7 @@ class DiscoveryRunner(
     private suspend fun runForLocked(
         mediaType: DiscoveryMediaType,
         isManualRefresh: Boolean = false,
+        mediaBudgetMs: Long? = null,
     ): DiscoveryRunOutcome {
         DiscoveryProgressTracker.update(
             isRunning = true,
@@ -410,6 +432,11 @@ class DiscoveryRunner(
             .mapTo(HashSet()) { it.cleanTitle }
 
         val genreFilterSpec = preferences.genreFilterSpec()
+        // One budget for the whole media run: every row shares the deadline and
+        // the details allowance, so rows cannot multiply the worker cost.
+        val verificationBudget = DiscoveryVerificationBudget(
+            budgetMs = mediaBudgetMs ?: DiscoveryVerificationBudget.DEFAULT_MEDIA_BUDGET_MS,
+        )
         val context = DiscoveryBuildContext(
             mediaType = mediaType,
             seeds = seedsWithTracks,
@@ -441,6 +468,7 @@ class DiscoveryRunner(
                 emptySet()
             },
             pageOffset = pageOffset,
+            verificationBudget = verificationBudget,
         )
         logcat {
             "[Discovery] refresh media=$mediaType manual=$isManualRefresh " +
