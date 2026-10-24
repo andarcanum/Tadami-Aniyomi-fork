@@ -360,7 +360,15 @@ class ReelsFeedScreenModel(
                     }
                 } ?: storedPlayable
                 offlineSourceIds = localPlayable.map { it.sourceId }
-                val requestedIndex = localPlayable.indexOfFirst { it.videoId == initialVideoId }
+                // The tapped favorite is identified by BOTH its source and video id: the same
+                // videoId may exist in several sources of the merged playlist.
+                val requestedIndex = localPlayable.indexOfFirst {
+                    it.videoId == initialVideoId && it.sourceId == initialSourceId
+                }.takeIf { it >= 0 } ?: if (initialVideoId == null) {
+                    -1
+                } else {
+                    localPlayable.indexOfFirst { it.videoId == initialVideoId }
+                }
                 if (requestedIndex < 0) {
                     // The tapped video vanished between screens (unliked elsewhere / DB edit):
                     // start the playlist at the top instead of at an arbitrary position.
@@ -375,8 +383,11 @@ class ReelsFeedScreenModel(
                         items = localPlayable.map { fav -> fav.toShortVideoItem() }.toImmutableList(),
                         offlineSourceIds = offlineSourceIds.toImmutableList(),
                         offlineStored = stored.map { "${it.first}:${it.second}" }.toImmutableSet(),
+                        // Append/dedupe bookkeeping: the offline playlist never appends.
                         seenIds = localPlayable.map { it.videoId }.toImmutableSet(),
-                        likedIds = localPlayable.map { it.videoId }.toImmutableSet(),
+                        // Liked state is per (sourceId, videoId) here: a raw videoId would make
+                        // same-id favorites from two sources share one heart.
+                        likedIds = localPlayable.map { "${it.sourceId}:${it.videoId}" }.toImmutableSet(),
                         isLoading = false,
                         feedGeneration = 1,
                         targetPageIndex = startIndex,
@@ -1943,7 +1954,7 @@ class ReelsFeedScreenModel(
     }
 
     fun toggleLike(item: ShortVideoItem, itemIndex: Int = -1) {
-        setLike(item, liked = item.id !in state.value.likedIds, itemIndex = itemIndex)
+        setLike(item, liked = !state.value.isLiked(item.id, itemIndex), itemIndex = itemIndex)
     }
 
     /**
@@ -1954,7 +1965,8 @@ class ReelsFeedScreenModel(
      */
     fun setLike(item: ShortVideoItem, liked: Boolean, itemIndex: Int = -1) {
         val videoId = item.id
-        if (liked == (videoId in state.value.likedIds)) return
+        val likeKey = state.value.likeKey(videoId, itemIndex)
+        if (liked == (likeKey in state.value.likedIds)) return
         // The item comes from the caller (the page rendering it): re-finding it in state
         // would silently skip the insert when a feed refresh displaced the video between
         // the tap and the write. The write must survive screen disposal (NonCancellable).
@@ -1971,7 +1983,7 @@ class ReelsFeedScreenModel(
         val feedback = source as? AnimeReelsFeedbackSource
         decidedIds += videoId
         mutableState.update { state ->
-            val newLikes = if (liked) state.likedIds + videoId else state.likedIds - videoId
+            val newLikes = if (liked) state.likedIds + likeKey else state.likedIds - likeKey
             state.copy(likedIds = newLikes.toImmutableSet())
         }
         // Incognito blocks persisting a NEW like, but a removal must always reach the DB so a
@@ -2271,7 +2283,7 @@ class ReelsFeedScreenModel(
 
     // --- B3.3 offline copies ---
 
-    enum class OfflineCopyResult { SAVED, REMOVED, FAILED_QUOTA, FAILED_NETWORK }
+    enum class OfflineCopyResult { SAVED, REMOVED, FAILED_QUOTA, FAILED_NETWORK, FAILED_UNSUPPORTED }
 
     /**
      * Just-in-time stream signing (contract v22): sources may serve items with a blank
@@ -2322,13 +2334,19 @@ class ReelsFeedScreenModel(
         } else {
             item
         }
-        val result = runCatching { offlineStore.download(downloadItem, sourceId) }
-            .getOrDefault(ReelsOfflineStore.DownloadResult.NETWORK)
+        val result = try {
+            offlineStore.download(downloadItem, sourceId)
+        } catch (e: CancellationException) {
+            // A cancelled screen must not report the download as a network failure.
+            throw e
+        } catch (_: Exception) {
+            ReelsOfflineStore.DownloadResult.NETWORK
+        }
         if (result != ReelsOfflineStore.DownloadResult.SAVED) {
-            return if (result == ReelsOfflineStore.DownloadResult.QUOTA) {
-                OfflineCopyResult.FAILED_QUOTA
-            } else {
-                OfflineCopyResult.FAILED_NETWORK
+            return when (result) {
+                ReelsOfflineStore.DownloadResult.QUOTA -> OfflineCopyResult.FAILED_QUOTA
+                ReelsOfflineStore.DownloadResult.UNSUPPORTED -> OfflineCopyResult.FAILED_UNSUPPORTED
+                else -> OfflineCopyResult.FAILED_NETWORK
             }
         }
         val local = offlineStore.localUrl(sourceId, item.id)
@@ -2769,7 +2787,21 @@ class ReelsFeedScreenModel(
         val blockedTagsSaveFailed: Boolean = false,
         // Session-scoped "tap to unmute" pill: visible while the user has not decided sound.
         val showUnmuteHint: Boolean = false,
-    )
+    ) {
+        /**
+         * Like identity for the playlist slot: the offline playlist merges several sources,
+         * where a raw videoId is ambiguous; single-source feeds keep the plain id.
+         */
+        fun likeKey(videoId: String, itemIndex: Int): String =
+            if (isOffline && itemIndex >= 0) {
+                "${offlineSourceIds.getOrNull(itemIndex) ?: currentSourceId}:$videoId"
+            } else {
+                videoId
+            }
+
+        fun isLiked(videoId: String, itemIndex: Int): Boolean =
+            likeKey(videoId, itemIndex) in likedIds
+    }
 }
 
 /**

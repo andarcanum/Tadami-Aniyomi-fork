@@ -1794,6 +1794,7 @@
     <string name="reels_following_creators_unavailable">Недоступно авторов: %1$d из %2$d</string>
     <string name="reels_offline_failed_quota">Недостаточно места в оффлайн-хранилище</string>
     <string name="reels_offline_failed_network">Не удалось скачать (сеть или источник)</string>
+    <string name="reels_offline_failed_unsupported">Этот ролик отдаётся потоком HLS/DASH — сохранить его оффлайн нельзя</string>
     <string name="reels_feed_empty">Пока ничего нет</string>
     <string name="reels_history_delete">Удалить запись</string>
     <string name="reels_quality_hd_saver">HD (SD в мобильной сети)</string>
