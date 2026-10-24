@@ -558,7 +558,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
         genres = genres,
     )
 
-    private suspend fun withMangaGenreFilters(filters: FilterList, genres: List<String>): FilterList? {
+    internal suspend fun withMangaGenreFilters(filters: FilterList, genres: List<String>): FilterList? {
         val group = filters.filterIsInstance<Filter.Group<*>>()
             .firstOrNull { isGenreGroupName(it.name) }
             ?: return null

@@ -70,7 +70,7 @@ internal class DiscoveryGenreHydrator(
             }
             if (!scheduled.add(url)) continue
             if (budget.isExpired()) continue
-            if (pending.size >= maxDetailsPerCall || !budget.tryAcquireDetail()) continue
+            if (pending.size >= maxDetailsPerCall) continue
             pending += url to key
         }
 
@@ -82,8 +82,11 @@ internal class DiscoveryGenreHydrator(
                     if (cached != null && isFresh(cached)) {
                         return@withLock url to cached
                     }
-                    val entry = budget.detailPermits.withPermit {
-                        val timeout = minOf(detailTimeoutMs, budget.remainingMs().coerceAtLeast(1L))
+                    val entry: Entry? = budget.detailPermits.withPermit {
+                        val remaining = budget.remainingMs()
+                        // Charge only the real lookup, after coalescing and after waiting for IO capacity.
+                        if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
+                        val timeout = minOf(detailTimeoutMs, remaining)
                         try {
                             val observed = withTimeoutOrNull(timeout) { fetchDetails(url) }
                             when {
@@ -105,7 +108,7 @@ internal class DiscoveryGenreHydrator(
                             Entry(emptyList(), clock(), Kind.TRANSIENT)
                         }
                     }
-                    cache.put(key, entry)
+                    if (entry != null) cache.put(key, entry)
                     url to entry
                 }
             }

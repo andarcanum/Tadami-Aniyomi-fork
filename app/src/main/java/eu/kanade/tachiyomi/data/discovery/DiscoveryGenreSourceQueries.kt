@@ -200,7 +200,10 @@ private suspend fun collectSource(
         selected = policy.filterRowCandidates(unique, { it.genres })
         genreQueryLog.logcat {
             "[DiscoveryGenreQuery] source=$sourceId page=${page + offset} fetched=${pageResult.items.size} " +
-                "verified=${pageResult.verified} unattempted=${pageResult.unattempted} admitted=${selected.size}"
+                "verified=${pageResult.verified} unattempted=${pageResult.unattempted} " +
+                "unavailable=${pageResult.metadataUnavailable} failures=${pageResult.transientFailures} " +
+                "admitted=${selected.size} required=${policy.requiredGenres} " +
+                "sampleGenres=${unique.take(3).map { it.genres.take(8) }}"
         }
         if (selected.isNotEmpty()) break
     }

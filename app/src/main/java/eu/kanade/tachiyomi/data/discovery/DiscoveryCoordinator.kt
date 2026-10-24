@@ -97,6 +97,12 @@ class DiscoveryCoordinator(
                         context.shownCutoffMap,
                         context.currentFeedCleanTitles,
                     )
+                    logcat {
+                        "[DiscoverySelection] media=${context.mediaType} row=$pType raw=${candidates.size} " +
+                            "genre=${policyFiltered.size} selected=${selected.size} " +
+                            "excludedCurrent=${context.currentFeedCleanTitles.size} " +
+                            "excludedKnown=${excluded.size} seenAcrossRows=${seenSoFar.size}"
+                    }
                     selected.forEach {
                         seenSoFar += it.cleanTitle
                         seenSoFar += it.altCleanTitles

@@ -119,8 +119,11 @@ internal fun providerOptions(state: DiscoveryFeedUiState): List<String> =
 
 internal const val DISCOVERY_REFRESH_COOLDOWN_MS = DiscoveryPreferences.MANUAL_REFRESH_COOLDOWN_MS
 
-internal fun manualRefreshFlow(workManager: WorkManager, mediaType: DiscoveryMediaType): Flow<Boolean> =
-    workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.manualWorkTag(mediaType))
+/** Legacy name: user-visible refresh activity includes configuration work, but ownership stays separate. */
+internal fun manualRefreshFlow(workManager: WorkManager, mediaType: DiscoveryMediaType): Flow<Boolean> = combine(
+    workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.manualWorkTag(mediaType)),
+    workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.configurationWorkName(mediaType)),
+) { manual, configuration -> manual || configuration }.distinctUntilChanged()
 
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun manualRefreshWorkInfoFlow(
