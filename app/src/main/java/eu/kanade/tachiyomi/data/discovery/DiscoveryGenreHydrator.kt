@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Per-item outcome of a details lookup, reported separately from admission. */
 internal data class HydrationResult(
@@ -17,6 +18,10 @@ internal data class HydrationResult(
     val metadataUnavailable: Int,
     val transientFailures: Int,
     val unattempted: Int,
+    /** Cards that still need details: unattempted, addressable and not negatively cached. */
+    val pending: List<DiscoveryRowItem> = emptyList(),
+    /** Details requests actually charged during this call. */
+    val detailsUsed: Int = 0,
 )
 
 /**
@@ -52,11 +57,16 @@ internal class DiscoveryGenreHydrator(
         sourceId: Long,
         items: List<DiscoveryRowItem>,
         budget: DiscoveryVerificationBudget,
+        /** Remaining allowance of the whole source; one call never exceeds [maxDetailsPerCall]. */
+        maxDetails: Int = maxDetailsPerCall,
         fetchDetails: suspend (String) -> List<String>,
     ): HydrationResult = coroutineScope {
+        require(maxDetails >= 0) { "maxDetails must be >= 0" }
+        val batchLimit = minOf(maxDetails, maxDetailsPerCall)
         val outcomes = HashMap<String, Entry>()
         val pending = ArrayList<Pair<String, Key>>()
         val scheduled = HashSet<String>()
+        val charged = AtomicInteger()
 
         for (item in items) {
             if (item.genres.isNotEmpty()) continue
@@ -70,7 +80,7 @@ internal class DiscoveryGenreHydrator(
             }
             if (!scheduled.add(url)) continue
             if (budget.isExpired()) continue
-            if (pending.size >= maxDetailsPerCall) continue
+            if (pending.size >= batchLimit) continue
             pending += url to key
         }
 
@@ -86,6 +96,7 @@ internal class DiscoveryGenreHydrator(
                         val remaining = budget.remainingMs()
                         // Charge only the real lookup, after coalescing and after waiting for IO capacity.
                         if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
+                        charged.incrementAndGet()
                         val timeout = minOf(detailTimeoutMs, remaining)
                         try {
                             val observed = withTimeoutOrNull(timeout) { fetchDetails(url) }
@@ -150,12 +161,24 @@ internal class DiscoveryGenreHydrator(
                 }
             }
         }
+        // Pending keeps only cards that can still be retried in another batch:
+        // cache entries (resolved or negative) already settled their outcome.
+        val pendingItems = LinkedHashMap<String, DiscoveryRowItem>()
+        for (item in items) {
+            if (item.genres.isNotEmpty()) continue
+            val url = item.sourceUrl
+            if (url.isNullOrBlank()) continue
+            if (url in outcomes || url in fetched) continue
+            pendingItems.putIfAbsent(url, item)
+        }
         HydrationResult(
             items = resolvedItems,
             verified = verified,
             metadataUnavailable = metadataUnavailable,
             transientFailures = transientFailures,
             unattempted = unattempted,
+            pending = pendingItems.values.toList(),
+            detailsUsed = charged.get(),
         )
     }
 
@@ -168,3 +191,55 @@ internal class DiscoveryGenreHydrator(
         return clock() - entry.at in 0 until ttl
     }
 }
+
+/**
+ * Spends the source allowance in bounded details batches until it is exhausted
+ * or no card can be retried. Pending cards are fed back into the next batch, so
+ * a page larger than one batch is verified without re-fetching the page.
+ */
+internal suspend fun hydrateDiscoveryBatchUntilSettled(
+    items: List<DiscoveryRowItem>,
+    maxDetails: Int,
+    hydrateBatch: suspend (List<DiscoveryRowItem>, Int) -> HydrationResult,
+): DiscoveryGenrePage {
+    if (items.isEmpty()) return DiscoveryGenrePage(emptyList(), 0, 0, 0, 0)
+    val merged = LinkedHashMap<String, DiscoveryRowItem>()
+    items.forEach { merged.putIfAbsent(it.hydrationKey(), it) }
+    var current = items
+    var remaining = maxDetails.coerceAtLeast(0)
+    var verified = 0
+    var metadataUnavailable = 0
+    var transientFailures = 0
+    var detailsUsed = 0
+    var pending = emptyList<DiscoveryRowItem>()
+
+    while (true) {
+        val result = hydrateBatch(current, remaining)
+        detailsUsed += result.detailsUsed
+        remaining = (remaining - result.detailsUsed).coerceAtLeast(0)
+        verified += result.verified
+        metadataUnavailable += result.metadataUnavailable
+        transientFailures += result.transientFailures
+        result.items.forEach { resolved ->
+            if (resolved.genres.isNotEmpty()) merged[resolved.hydrationKey()] = resolved
+        }
+        pending = result.pending
+        if (result.detailsUsed == 0 || pending.isEmpty() || remaining == 0) break
+        current = pending
+    }
+
+    val allItems = items.map { merged[it.hydrationKey()] ?: it }
+    val unattempted = pending.size + items.count { it.genres.isEmpty() && it.sourceUrl.isNullOrBlank() }
+    return DiscoveryGenrePage(
+        items = allItems,
+        verified = verified,
+        unattempted = unattempted,
+        metadataUnavailable = metadataUnavailable,
+        transientFailures = transientFailures,
+        pending = pending,
+        detailsUsed = detailsUsed,
+    )
+}
+
+private fun DiscoveryRowItem.hydrationKey(): String =
+    sourceUrl?.takeIf(String::isNotBlank) ?: cleanTitle

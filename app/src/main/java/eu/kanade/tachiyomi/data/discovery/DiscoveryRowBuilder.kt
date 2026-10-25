@@ -58,6 +58,11 @@ data class DiscoveryBuildContext(
     val shownCutoffMap: Map<String, Long> = emptyMap(),
     /** Тайтлы ТЕКУЩЕЙ ленты (ручной рефреш): stale-добор их не возвращает — наполнение реально сменяется. */
     val currentFeedCleanTitles: Set<String> = emptySet(),
+    /**
+     * Already persisted compatible cards per row. A thin refresh merges them in
+     * first, so a partial source response cannot shrink the visible row.
+     */
+    val existingRowItems: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
     val pageOffset: Int = 1,
     /**
      * Shared deadline and details allowance for this media run. Rows must not

@@ -390,6 +390,24 @@ class DiscoveryRunner(
                         ((it.sourceId ?: 0L) <= 0L || it.sourceUrl.isNullOrBlank())
                     )
         }
+        val existingRowItems = currentSuggestions
+            .groupBy { it.rowType }
+            .mapValues { (_, items) ->
+                items.map { suggestion ->
+                    DiscoveryRowItem(
+                        title = suggestion.title,
+                        cleanTitle = suggestion.cleanTitle,
+                        coverUrl = suggestion.coverUrl,
+                        reason = suggestion.reason,
+                        seedTitle = suggestion.seedTitle,
+                        provider = suggestion.provider,
+                        score = suggestion.score,
+                        sourceId = suggestion.sourceId,
+                        sourceUrl = suggestion.sourceUrl,
+                        genres = suggestion.genres,
+                    )
+                }
+            }
         // Explicit opt-outs still apply when an incomplete replacement preserves the compatible cache.
         val cachedLike = cachedSuggestions.filter { it.rowType == DiscoveryRowType.LIKE }
         val currentLike = currentSuggestions.filter { it.rowType == DiscoveryRowType.LIKE }
@@ -478,6 +496,7 @@ class DiscoveryRunner(
             } else {
                 emptySet()
             },
+            existingRowItems = existingRowItems,
             pageOffset = pageOffset,
             verificationBudget = verificationBudget,
         )
@@ -593,6 +612,15 @@ class DiscoveryRunner(
                 },
             )
         }
+        val fillAudit = buildDiscoveryFillAudit(
+            mediaType = mediaType,
+            rawCandidates = feed.rawCandidates,
+            finalRows = feed.rows,
+            context = context,
+            detailsUsed = verificationBudget.detailsUsed,
+            detailsAllowance = verificationBudget.detailsAllowance,
+        )
+        logcat { fillAudit.logLine() }
         logcat {
             "[DiscoveryRunner] $mediaType done: rows=${feed.rows.mapValues { it.value.size }} failed=${feed.failedRows}"
         }

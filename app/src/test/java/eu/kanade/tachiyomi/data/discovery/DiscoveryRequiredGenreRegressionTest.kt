@@ -113,7 +113,8 @@ class DiscoveryRequiredGenreRegressionTest {
             if (id == 7L) page(listOf(item("Match", listOf("Fantasy")))) else page(emptyList())
         }
         val result = DiscoverySourceRowBuilder(catalog).build(context())
-        catalog.genreCalls.sorted() shouldBe (1L..10L).toList()
+        // Adaptive refill may ask a matched source for one more page.
+        catalog.genreCalls.distinct().sorted() shouldBe (1L..10L).toList()
         catalog.unfilteredCalls shouldBe 0
         result.map { it.title } shouldBe listOf("Match")
     }
@@ -124,7 +125,8 @@ class DiscoveryRequiredGenreRegressionTest {
             if (id == 7L) page(listOf(item("Match", listOf("Fantasy")))) else page(emptyList())
         }
         val result = DiscoveryTasteRowBuilder(noExternal(), catalog, { TrendSort.POPULARITY }, false).build(context())
-        catalog.genreCalls.sorted() shouldBe (1L..10L).toList()
+        // Adaptive refill may ask a matched source for one more page.
+        catalog.genreCalls.distinct().sorted() shouldBe (1L..10L).toList()
         result.map { it.title } shouldBe listOf("Match")
     }
 

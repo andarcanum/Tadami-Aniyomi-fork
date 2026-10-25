@@ -14,6 +14,8 @@ data class DiscoveryFeed(
     val failedRows: Set<DiscoveryRowType>,
     val degradedRows: Set<DiscoveryRowType> = emptySet(),
     val generatedAt: Long,
+    /** Builder output before coordinator filtering; diagnostics only. */
+    val rawCandidates: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
 )
 
 /**
@@ -128,6 +130,7 @@ class DiscoveryCoordinator(
             failedRows = failed,
             degradedRows = degraded,
             generatedAt = System.currentTimeMillis(),
+            rawCandidates = rawCandidates.toMap(),
         )
     }
 

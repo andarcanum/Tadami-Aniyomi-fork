@@ -29,6 +29,15 @@ class DiscoveryVerificationBudget(
     /** Shared concurrency limit for details requests across all rows. */
     val detailPermits = Semaphore(maxConcurrentDetails)
 
+    /** Full allowance of this budget, for diagnostics. */
+    val detailsAllowance: Int = maxDetails
+
+    val remainingDetails: Int
+        get() = detailsLeft.get().coerceAtLeast(0)
+
+    val detailsUsed: Int
+        get() = detailsAllowance - remainingDetails
+
     fun remainingMs(): Long = (deadlineAt - clock()).coerceAtLeast(0L)
 
     fun isExpired(): Boolean = remainingMs() == 0L

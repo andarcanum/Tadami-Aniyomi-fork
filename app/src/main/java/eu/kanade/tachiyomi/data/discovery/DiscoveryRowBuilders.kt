@@ -379,8 +379,13 @@ class DiscoveryTasteRowBuilder(
                 page = context.pageOffset,
                 releaseStatuses = context.releaseStatuses,
                 policy = policy,
-                timeoutMs = if (required) GENRE_SOURCE_TIMEOUT_MS else SOURCE_FETCH_TIMEOUT_MS,
+                timeoutMs = if (required) {
+                    genreSourceTimeoutMs(context.verificationBudget, toQuery.size, maxConcurrency = 4)
+                } else {
+                    SOURCE_FETCH_TIMEOUT_MS
+                },
                 hydrate = required,
+                targetItems = 50,
                 budget = context.verificationBudget,
             )
         } else {
@@ -439,7 +444,13 @@ class DiscoveryTasteRowBuilder(
         if (filteredCombined.isEmpty() && anyFailed) {
             throw IOException("taste sources failed without results")
         }
-        return filterGenreClustering(filteredCombined, maxPerGenre = 6).take(50)
+        val fresh = filterGenreClustering(filteredCombined, maxPerGenre = 6).take(50)
+        return mergeExistingRowItems(
+            existing = context.existingRowItems[DiscoveryRowType.TASTE].orEmpty(),
+            fresh = fresh,
+            policy = policy,
+            cap = 50,
+        )
     }
 }
 
@@ -479,8 +490,9 @@ class DiscoverySourceRowBuilder(
                 releaseStatuses = context.releaseStatuses,
                 policy = policy,
                 maxConcurrency = maxConcurrency,
-                timeoutMs = GENRE_SOURCE_TIMEOUT_MS,
+                timeoutMs = genreSourceTimeoutMs(context.verificationBudget, ordered.size, maxConcurrency),
                 hydrate = true,
+                targetItems = rowCap,
                 budget = context.verificationBudget,
             )
             isDegraded = results.any {
@@ -492,7 +504,13 @@ class DiscoverySourceRowBuilder(
             if (merged.isEmpty() && results.isNotEmpty() && !usefulVerification) {
                 throw IOException("required genre sources could not verify any metadata")
             }
-            return policy.filterRowCandidates(merged, { it.genres }).take(rowCap)
+            return mergeExistingRowItems(
+                existing = context.existingRowItems[DiscoveryRowType.SOURCE].orEmpty(),
+                fresh = policy.filterRowCandidates(merged, { it.genres }).take(rowCap),
+                policy = policy,
+                cap = rowCap,
+                sourceIds = ordered.toSet(),
+            )
         }
         val slotAllocations = allocateSourceSlots(ordered, context.sourceWeights, rowCap)
         val activeSources = ordered.filter { (slotAllocations[it] ?: 0) > 0 }
@@ -579,8 +597,50 @@ class DiscoverySourceRowBuilder(
             rowCap,
         ).distinctBy { it.cleanTitle }
         val filteredBackfill = context.candidatePolicy.filterRowCandidates(backfill, { it.genres })
-        return (filteredSelected + filteredBackfill).take(rowCap)
+        val fresh = (filteredSelected + filteredBackfill).take(rowCap)
+        return mergeExistingRowItems(
+            existing = context.existingRowItems[DiscoveryRowType.SOURCE].orEmpty(),
+            fresh = fresh,
+            policy = context.candidatePolicy,
+            cap = rowCap,
+            sourceIds = ordered.toSet(),
+        )
     }
+}
+
+/**
+ * Keeps compatible persisted cards in front of a thin refresh and appends only
+ * genuinely new cards. Duplicate titles are dropped, and the result respects
+ * the same cap as a fully fresh row.
+ */
+internal fun mergeExistingRowItems(
+    existing: List<DiscoveryRowItem>,
+    fresh: List<DiscoveryRowItem>,
+    policy: DiscoveryCandidatePolicy,
+    cap: Int,
+    sourceIds: Set<Long>? = null,
+): List<DiscoveryRowItem> {
+    if (cap <= 0) return emptyList()
+    val compatibleExisting = if (existing.isEmpty()) {
+        emptyList()
+    } else {
+        val eligible = if (sourceIds == null) {
+            existing
+        } else {
+            existing.filter { it.sourceId == null || it.sourceId in sourceIds }
+        }
+        policy.filterRowCandidates(eligible, { it.genres })
+    }
+    val seen = HashSet<String>()
+    val merged = ArrayList<DiscoveryRowItem>(cap)
+    for (item in compatibleExisting + fresh) {
+        val keys = listOf(item.cleanTitle) + item.altCleanTitles
+        if (keys.any { it in seen }) continue
+        seen += keys
+        merged += item
+        if (merged.size >= cap) break
+    }
+    return merged
 }
 
 /** Round-robin по частям (источникам): топ каждого источника виден сразу. */

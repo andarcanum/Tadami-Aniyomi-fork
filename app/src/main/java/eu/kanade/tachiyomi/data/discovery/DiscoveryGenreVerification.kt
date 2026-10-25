@@ -63,6 +63,16 @@ data class GenreVerificationSummary(
     }
 }
 
+/** Why a source stopped producing candidates during this pass. */
+enum class DiscoveryFillStopReason {
+    TARGET_REACHED,
+    SOURCE_EXHAUSTED,
+    PAGE_BUDGET_EXHAUSTED,
+    PASS_BUDGET_EXHAUSTED,
+    RETRY_AFTER,
+    UNKNOWN,
+}
+
 /** One catalogue page plus the hydration coverage it achieved. */
 data class DiscoveryGenrePage(
     val items: List<DiscoveryRowItem>,
@@ -70,6 +80,14 @@ data class DiscoveryGenrePage(
     val unattempted: Int,
     val metadataUnavailable: Int,
     val transientFailures: Int,
+    /** False only when the source itself reported the end of the catalogue. */
+    val hasNextPage: Boolean = true,
+    /** Cards that still need details after this page's allowance was spent. */
+    val pending: List<DiscoveryRowItem> = emptyList(),
+    /** Details requests actually charged to the shared budget by this page. */
+    val detailsUsed: Int = 0,
+    val page: Int = 1,
+    val queryKey: String = "",
 )
 
 /** Verification result for a single selected source. */
@@ -77,4 +95,10 @@ internal data class GenreSourceVerification(
     val sourceId: Long,
     val summary: GenreVerificationSummary,
     val failure: GenreSourceException? = null,
+    val stopReason: DiscoveryFillStopReason = DiscoveryFillStopReason.UNKNOWN,
+    val exhausted: Boolean = false,
+    val pending: Int = 0,
+    val detailsUsed: Int = 0,
+    val hasNextPage: Boolean = true,
+    val queryKey: String = "",
 )
