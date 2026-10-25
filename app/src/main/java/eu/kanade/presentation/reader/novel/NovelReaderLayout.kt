@@ -267,22 +267,28 @@ internal fun paginateTextIntoPageRanges(
     textAlign: ReaderTextAlign,
     firstLineIndentPx: Int? = null,
     density: Float = 1.0f,
+    measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<TextPageRange> {
     if (text.isBlank()) return emptyList()
 
     val safeWidth = widthPx.coerceAtLeast(1)
     val safeHeight = heightPx.coerceAtLeast(1)
 
-    val layout = buildReaderStaticLayout(
-        text = text,
-        widthPx = safeWidth,
-        textSizePx = textSizePx,
-        lineHeightMultiplier = lineHeightMultiplier,
-        typeface = typeface,
-        textAlign = textAlign,
-        firstLineIndentPx = firstLineIndentPx,
-        density = density,
-    ) ?: run {
+    val layout = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
+        null
+    } else {
+        buildReaderStaticLayout(
+            text = text,
+            widthPx = safeWidth,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = typeface,
+            textAlign = textAlign,
+            firstLineIndentPx = firstLineIndentPx,
+            density = density,
+        )
+    }
+    if (layout == null) {
         val safeTextSize = textSizePx.coerceAtLeast(1f)
         val approxCharsPerLine = (safeWidth / (safeTextSize * 0.55f)).toInt().coerceAtLeast(15)
         val approxLinesPerPage = (safeHeight / (safeTextSize * lineHeightMultiplier.coerceAtLeast(1f)))
@@ -326,18 +332,23 @@ internal fun paginateAnnotatedTextIntoPages(
     lineHeightMultiplier: Float,
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
+    measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<AnnotatedString> {
     if (text.text.isBlank()) return emptyList()
+    val measuredText: CharSequence = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
+        text.text
+    } else {
+        buildNovelPageReaderSpannableText(text)
+    }
     val ranges = paginateTextIntoPageRanges(
-        text = runCatching {
-            buildNovelPageReaderSpannableText(text).also { it.length }
-        }.getOrDefault(text.text),
+        text = measuredText,
         widthPx = widthPx,
         heightPx = heightPx,
         textSizePx = textSizePx,
         lineHeightMultiplier = lineHeightMultiplier,
         typeface = typeface,
         textAlign = textAlign,
+        measurement = measurement,
     )
     return ranges.map { range ->
         text.subSequence(TextRange(range.start, range.endExclusive))
@@ -352,6 +363,7 @@ internal fun paginateTextIntoPages(
     lineHeightMultiplier: Float,
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
+    measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<String> {
     return paginateTextIntoPageRanges(
         text = text,
@@ -361,6 +373,7 @@ internal fun paginateTextIntoPages(
         lineHeightMultiplier = lineHeightMultiplier,
         typeface = typeface,
         textAlign = textAlign,
+        measurement = measurement,
     ).map { range ->
         text.substring(range.start, range.endExclusive)
     }
@@ -389,6 +402,21 @@ internal data class ApproximateTextMetrics(
     val lineHeightPx: Int,
 )
 
+/**
+ * How pagination measures text height.
+ *
+ * [STATIC_LAYOUT] is the production path: real font metrics, the same spans the renderer draws,
+ * and no fallback. A failure to build the layout is a bug and must surface instead of silently
+ * paginating with different metrics than the TextView renders with.
+ *
+ * [APPROXIMATE] is a character-count estimate used by plain-JVM tests, where android.text.Layout
+ * is unavailable. Callers must opt into it explicitly so production cannot degrade silently.
+ */
+internal enum class ReaderTextMeasurement {
+    STATIC_LAYOUT,
+    APPROXIMATE,
+}
+
 private data class PageReaderBlockLayoutMetrics(
     val textSizePx: Float,
     val lineHeightMultiplier: Float,
@@ -403,47 +431,45 @@ internal fun buildReaderStaticLayout(
     textAlign: ReaderTextAlign,
     firstLineIndentPx: Int? = null,
     density: Float = 1.0f,
-): StaticLayout? {
-    return runCatching {
-        val layoutText = firstLineIndentPx
-            ?.takeIf { it > 0 }
-            ?.let { indentPx ->
-                SpannableStringBuilder(text).apply {
-                    setSpan(
-                        LeadingMarginSpan.Standard(indentPx, 0),
-                        0,
-                        length,
-                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                }
+): StaticLayout {
+    val layoutText = firstLineIndentPx
+        ?.takeIf { it > 0 }
+        ?.let { indentPx ->
+            SpannableStringBuilder(text).apply {
+                setSpan(
+                    LeadingMarginSpan.Standard(indentPx, 0),
+                    0,
+                    length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
             }
-            ?: text
-        val paint = TextPaint().apply {
-            isAntiAlias = true
-            this.textSize = textSizePx.coerceAtLeast(1f)
-            this.typeface = typeface
-            this.density = density
         }
-        val builder = StaticLayout.Builder.obtain(layoutText, 0, layoutText.length, paint, widthPx.coerceAtLeast(1))
-            .setAlignment(textAlign.toLayoutAlignment())
-            .setIncludePad(false)
-            .setLineSpacing(0f, lineHeightMultiplier.coerceAtLeast(1f))
-            .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
-            .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setJustificationMode(
-                if (textAlign == ReaderTextAlign.JUSTIFY) {
-                    Layout.JUSTIFICATION_MODE_INTER_WORD
-                } else {
-                    Layout.JUSTIFICATION_MODE_NONE
-                },
-            )
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            builder.setUseLineSpacingFromFallbacks(false)
-        }
-        builder.build()
-    }.getOrNull()
+        ?: text
+    val paint = TextPaint().apply {
+        isAntiAlias = true
+        this.textSize = textSizePx.coerceAtLeast(1f)
+        this.typeface = typeface
+        this.density = density
+    }
+    val builder = StaticLayout.Builder.obtain(layoutText, 0, layoutText.length, paint, widthPx.coerceAtLeast(1))
+        .setAlignment(textAlign.toLayoutAlignment())
+        .setIncludePad(false)
+        .setLineSpacing(0f, lineHeightMultiplier.coerceAtLeast(1f))
+        .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+        .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        builder.setJustificationMode(
+            if (textAlign == ReaderTextAlign.JUSTIFY) {
+                Layout.JUSTIFICATION_MODE_INTER_WORD
+            } else {
+                Layout.JUSTIFICATION_MODE_NONE
+            },
+        )
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        builder.setUseLineSpacingFromFallbacks(false)
+    }
+    return builder.build()
 }
 
 internal fun resolveStaticLayoutHeight(
@@ -853,6 +879,7 @@ internal fun paginatePlainPageBlocks(
     forceParagraphIndent: Boolean = false,
     chapterTitle: String? = null,
     density: Float = 1.0f,
+    measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<List<PlainPageSlice>> {
     val safeHeight = heightPx.coerceAtLeast(1)
     val pages = mutableListOf<List<PlainPageSlice>>()
@@ -919,20 +946,24 @@ internal fun paginatePlainPageBlocks(
                 .toInt()
                 .coerceAtLeast(1),
         )
-        val layout = buildReaderStaticLayout(
-            text = text,
-            widthPx = widthPx,
-            textSizePx = blockMetrics.textSizePx,
-            lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
-            typeface = if (isChapterTitle) {
-                android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
-            } else {
-                typeface
-            },
-            textAlign = textAlign,
-            firstLineIndentPx = firstLineIndentPx,
-            density = density,
-        )
+        val layout = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
+            null
+        } else {
+            buildReaderStaticLayout(
+                text = text,
+                widthPx = widthPx,
+                textSizePx = blockMetrics.textSizePx,
+                lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                typeface = if (isChapterTitle) {
+                    android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
+                } else {
+                    typeface
+                },
+                textAlign = textAlign,
+                firstLineIndentPx = firstLineIndentPx,
+                density = density,
+            )
+        }
         if (layout == null) {
             var start = 0
             var isFirstSliceOfBlock = true
@@ -1059,6 +1090,7 @@ internal fun paginatePlainPageBlocksWithImages(
     forceParagraphIndent: Boolean = false,
     chapterTitle: String? = null,
     density: Float = 1.0f,
+    measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<List<PlainPageSlice>> {
     if (imageBlocks.isEmpty()) {
         return paginatePlainPageBlocks(
@@ -1074,6 +1106,7 @@ internal fun paginatePlainPageBlocksWithImages(
             forceParagraphIndent = forceParagraphIndent,
             chapterTitle = chapterTitle,
             density = density,
+            measurement = measurement,
         )
     }
 
@@ -1096,6 +1129,7 @@ internal fun paginatePlainPageBlocksWithImages(
             forceParagraphIndent = forceParagraphIndent,
             chapterTitle = chapterTitle,
             density = density,
+            measurement = measurement,
         )
         pendingText.clear()
     }
@@ -1235,9 +1269,11 @@ internal fun paginateRichPageBlocks(
     typeface: android.graphics.Typeface?,
     chapterTitleTypeface: android.graphics.Typeface? = null,
     textAlign: ReaderTextAlign,
+    preserveSourceTextAlignInNative: Boolean = false,
     chapterTitle: String? = null,
     allowChapterTitleBlock: Boolean = true,
     density: Float = 1.0f,
+    measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<List<RichPageSlice.Text>> {
     val safeHeight = heightPx.coerceAtLeast(1)
     val pages = mutableListOf<List<RichPageSlice.Text>>()
@@ -1299,31 +1335,38 @@ internal fun paginateRichPageBlocks(
                 .toInt()
                 .coerceAtLeast(1),
         )
-        val spannableText = runCatching {
-            buildNovelPageReaderSpannableText(
-                text = blockText.text,
-                firstLineIndentPx = firstLineIndentPx,
-                forcedTypefaceStyle = if (isChapterTitle) {
-                    android.graphics.Typeface.BOLD
-                } else {
-                    android.graphics.Typeface.NORMAL
-                },
-            ).also { it.length }
-        }.getOrDefault(blockText.text.text)
-        val layout = buildReaderStaticLayout(
-            text = spannableText,
-            widthPx = widthPx,
-            textSizePx = blockMetrics.textSizePx,
-            lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
-            typeface = if (isChapterTitle) {
-                android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
-            } else {
-                typeface
-            },
-            textAlign = textAlign,
-            firstLineIndentPx = null,
-            density = density,
+        // Must match the alignment the text block renders with, block by block.
+        val blockTextAlign = resolveNativeReaderTextAlign(
+            globalTextAlign = textAlign,
+            preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
+            sourceTextAlign = blockText.sourceTextAlign,
         )
+        val layout = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
+            null
+        } else {
+            buildReaderStaticLayout(
+                text = buildNovelPageReaderSpannableText(
+                    text = blockText.text,
+                    firstLineIndentPx = firstLineIndentPx,
+                    forcedTypefaceStyle = if (isChapterTitle) {
+                        android.graphics.Typeface.BOLD
+                    } else {
+                        android.graphics.Typeface.NORMAL
+                    },
+                ),
+                widthPx = widthPx,
+                textSizePx = blockMetrics.textSizePx,
+                lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                typeface = if (isChapterTitle) {
+                    android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
+                } else {
+                    typeface
+                },
+                textAlign = blockTextAlign,
+                firstLineIndentPx = null,
+                density = density,
+            )
+        }
         if (layout == null) {
             var start = 0
             var isFirstSliceOfBlock = true
@@ -1436,9 +1479,11 @@ internal fun paginateMixedRichPageBlocks(
     typeface: android.graphics.Typeface?,
     chapterTitleTypeface: android.graphics.Typeface? = null,
     textAlign: ReaderTextAlign,
+    preserveSourceTextAlignInNative: Boolean = false,
     forceParagraphIndent: Boolean,
     chapterTitle: String? = null,
     density: Float = 1.0f,
+    measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): MixedRichPagePagination {
     val allBlockTexts = mutableListOf<RichPageBlockText>()
     val currentChunkTexts = mutableListOf<RichPageBlockText>()
@@ -1458,9 +1503,11 @@ internal fun paginateMixedRichPageBlocks(
             typeface = typeface,
             chapterTitleTypeface = chapterTitleTypeface,
             textAlign = textAlign,
+            preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
             chapterTitle = chapterTitle,
             allowChapterTitleBlock = currentChunkCanUseChapterTitle,
             density = density,
+            measurement = measurement,
         )
         currentChunkTexts.clear()
         currentChunkCanUseChapterTitle = false

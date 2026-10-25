@@ -28,13 +28,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
@@ -861,48 +858,6 @@ internal fun PageTurnPageRenderer(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize(),
     ) {
-        val density = LocalDensity.current
-        val pageSize = IntSize(
-            width = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1),
-            height = with(density) { maxHeight.roundToPx() }.coerceAtLeast(1),
-        )
-        val contentPaddingPx = with(density) { contentPadding.roundToPx() }
-        val statusBarTopPaddingPx = with(density) { statusBarTopPadding.roundToPx() }
-        val snapshotCache = remember(
-            pageSize,
-            transitionStyle,
-            readerSettings.fontFamily,
-            readerSettings.fontSize,
-            readerSettings.lineHeight,
-            readerSettings.margin,
-            readerSettings.textAlign,
-            readerSettings.forceBoldText,
-            readerSettings.forceItalicText,
-            readerSettings.textShadow,
-            readerSettings.textShadowColor,
-            readerSettings.textShadowBlur,
-            readerSettings.textShadowX,
-            readerSettings.textShadowY,
-            readerSettings.bionicReading,
-            textColor,
-            textBackground,
-            backgroundTexture,
-            nativeTextureStrengthPercent,
-            backgroundImageModel,
-            backgroundModeIdentity,
-            isBackgroundMode,
-            activeBackgroundTexture,
-            activeOledEdgeGradient,
-            isDarkTheme,
-            chapterTitleTextColor,
-            textTypeface,
-            chapterTitleTypeface,
-            safeContentPages,
-            rendererConfig.backPageColor,
-        ) {
-            NovelPageTurnSnapshotCache<ImageBitmap>(maxSize = 3)
-        }
-
         PageCurl(
             count = virtualPageCount,
             key = { it },
@@ -958,52 +913,7 @@ internal fun PageTurnPageRenderer(
             val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
             val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
             val pageSurfaceColor = if (isBackgroundMode) null else rendererConfig.backPageColor
-            val pageContentIdentity = boundaryPreview ?: spreadPages
-            val pageSnapshotKey = resolveNovelPageTurnSnapshotKey(
-                style = rendererConfig.style,
-                pageIndex = page,
-                pageCount = virtualPageCount,
-                pageContentHash = pageContentIdentity.hashCode(),
-                pageSize = pageSize,
-                fontFamilyKey = readerSettings.fontFamily,
-                chapterTitleFontFamilyKey = chapterTitleTypeface?.hashCode()?.toString().orEmpty(),
-                chapterTitleTextColor = chapterTitleTextColor,
-                fontSize = readerSettings.fontSize,
-                lineHeight = readerSettings.lineHeight,
-                margin = readerSettings.margin,
-                contentPaddingPx = contentPaddingPx,
-                statusBarTopPaddingPx = statusBarTopPaddingPx,
-                textAlign = if (boundaryPreview != null) {
-                    eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign.CENTER
-                } else {
-                    readerSettings.textAlign
-                },
-                textColor = textColor,
-                textBackground = textBackground,
-                pageSurfaceColor = pageSurfaceColor ?: Color.Transparent,
-                isBackgroundMode = isBackgroundMode,
-                backgroundImageIdentity = backgroundModeIdentity,
-                backgroundTextureName = pageTexture.name,
-                nativeTextureStrengthPercentEffective = pageTextureStrengthPercent,
-                oledEdgeGradient = if (isBackgroundMode) activeOledEdgeGradient else false,
-                isDarkTheme = isDarkTheme,
-                pageEdgeShadow = pageEdgeShadow,
-                pageEdgeShadowAlpha = pageEdgeShadowAlpha,
-                backgroundTexture = pageTexture,
-                nativeTextureStrengthPercent = pageTextureStrengthPercent,
-                forceBoldText = readerSettings.forceBoldText,
-                forceItalicText = readerSettings.forceItalicText,
-                textShadow = readerSettings.textShadow,
-                textShadowColor = readerSettings.textShadowColor,
-                textShadowBlur = readerSettings.textShadowBlur,
-                textShadowX = readerSettings.textShadowX,
-                textShadowY = readerSettings.textShadowY,
-                bionicReading = readerSettings.bionicReading,
-            )
             NovelPageTurnSnapshotRenderer(
-                snapshotKey = pageSnapshotKey,
-                snapshotCache = snapshotCache,
-                preferCachedBitmap = false,
                 modifier = Modifier.fillMaxSize(),
             ) {
                 NovelAtmosphereBackground(

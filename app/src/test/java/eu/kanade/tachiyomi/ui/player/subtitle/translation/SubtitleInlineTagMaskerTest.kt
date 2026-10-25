@@ -1,11 +1,17 @@
 package eu.kanade.tachiyomi.ui.player.subtitle.translation
 
+import eu.kanade.tachiyomi.test.assertIcuSafeRegexPattern
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SubtitleInlineTagMaskerTest {
+
+    @Test
+    fun `ass block regex keeps its braces escaped for the Android ICU engine`() {
+        assertIcuSafeRegexPattern(SubtitleInlineTagMasker.assBlock.pattern)
+    }
 
     @Test
     fun `masks and restores ass and html tags`() {

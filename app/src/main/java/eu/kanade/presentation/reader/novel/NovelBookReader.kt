@@ -263,6 +263,7 @@ internal fun NovelBookReader(
         val isSameSection = location.sectionIndex == engine.location.sectionIndex
         failure = null
         if (!isSameSection) loading = true
+        var acknowledgedLocation = location
         try {
             runNovelReaderOperation {
                 operationMutex.withLock {
@@ -275,9 +276,12 @@ internal fun NovelBookReader(
                             flow = latestFlow.value,
                         )
                     }
+                    // Reads back the clamped/acknowledged position; the raw request must not
+                    // become the baseline that later seeks are compared against.
+                    acknowledgedLocation = engine.location
                 }
             }.onSuccess {
-                openLocation[0] = location
+                openLocation[0] = acknowledgedLocation
                 lastAppliedSeekId[0] = request.id
                 if (!isSameSection) {
                     appliedFlow = latestFlow.value

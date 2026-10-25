@@ -1202,9 +1202,9 @@ internal fun NovelReaderContentHost(
         state.readerSettings.lineHeight,
         state.readerSettings.margin,
         state.readerSettings.textAlign,
+        state.readerSettings.preserveSourceTextAlignInNative,
         state.readerSettings.paragraphSpacing,
         state.readerSettings.forceParagraphIndent,
-        pageReaderLayoutTextAlign,
         composeTypeface,
         chapterTitleTypeface,
         pageViewportSize,
@@ -1267,7 +1267,8 @@ internal fun NovelReaderContentHost(
                 lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
                 typeface = composeTypeface,
                 chapterTitleTypeface = chapterTitleTypeface,
-                textAlign = pageReaderLayoutTextAlign,
+                textAlign = state.readerSettings.textAlign,
+                preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                 chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
                 density = density.density,
@@ -3153,6 +3154,7 @@ internal fun NovelReaderContentHost(
                                                         textShadowBlur = state.readerSettings.textShadowBlur,
                                                         textShadowX = state.readerSettings.textShadowX,
                                                         textShadowY = state.readerSettings.textShadowY,
+                                                        layoutMode = NovelPageReaderLayoutMode.SCROLL,
                                                         selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                                                         selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                                                         selectionAnchorChapterId = state.chapter.id,
@@ -3194,6 +3196,7 @@ internal fun NovelReaderContentHost(
                                                     textShadowBlur = state.readerSettings.textShadowBlur,
                                                     textShadowX = state.readerSettings.textShadowX,
                                                     textShadowY = state.readerSettings.textShadowY,
+                                                    layoutMode = NovelPageReaderLayoutMode.SCROLL,
                                                     selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                                                     selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                                                     selectionAnchorChapterId = state.chapter.id,
@@ -3555,6 +3558,7 @@ internal fun NovelReaderContentHost(
                                         )
                                     }
                                 }
+                                cancelReaderScrollRestore()
                                 loadDataWithBaseURL(baseUrl, initialFactoryWebViewHtml, "text/html", "utf-8", null)
                                 tag = webReaderDocumentTag
                             }
@@ -3978,6 +3982,7 @@ internal fun NovelReaderContentHost(
                                 appliedWebCssFingerprint = null
                                 webView.animate().cancel()
                                 webView.alpha = if (shouldHideWebViewUntilReveal && !seamlessInstantSwap) 0f else 1f
+                                webView.cancelReaderScrollRestore()
                                 webView.loadDataWithBaseURL(baseUrl, initialWebViewHtml, "text/html", "utf-8", null)
                                 webView.tag = webReaderDocumentTag
                             } else if (appliedWebCssFingerprint != styleFingerprint) {
@@ -4008,6 +4013,7 @@ internal fun NovelReaderContentHost(
                             }
                         },
                         onRelease = { webView ->
+                            webView.cancelReaderScrollRestore()
                             webView.clearFocus()
                         },
                     )

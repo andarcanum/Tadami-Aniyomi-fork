@@ -1176,6 +1176,7 @@ class NovelReaderUiVisibilityTest {
         }
 
         val pages = paginateTextIntoPages(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             text = text,
             widthPx = 720,
             heightPx = 480,
@@ -1229,6 +1230,7 @@ class NovelReaderUiVisibilityTest {
         val textBlocks = listOf("First paragraph", "Second paragraph")
 
         val compactPages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 600,
@@ -1243,6 +1245,7 @@ class NovelReaderUiVisibilityTest {
             }
         }
         val spacedPages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 64,
             widthPx = 600,
@@ -1278,6 +1281,7 @@ class NovelReaderUiVisibilityTest {
             paragraphSpacingDp = 32,
         ) { blocks, paragraphSpacingPx ->
             paginatePlainPageBlocks(
+                measurement = ReaderTextMeasurement.APPROXIMATE,
                 textBlocks = blocks.asPlainPageReaderBlocks(),
                 paragraphSpacingPx = paragraphSpacingPx,
                 widthPx = 260,
@@ -1296,6 +1300,7 @@ class NovelReaderUiVisibilityTest {
         assertTrue(pages.size > 1)
         val renderBlocks = buildPlainPageRenderBlocks(
             page = paginatePlainPageBlocks(
+                measurement = ReaderTextMeasurement.APPROXIMATE,
                 textBlocks = listOf("Long paragraph ".repeat(40).trim()).asPlainPageReaderBlocks(),
                 paragraphSpacingPx = 32,
                 widthPx = 260,
@@ -1323,6 +1328,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 32,
             widthPx = 260,
@@ -1366,6 +1372,7 @@ class NovelReaderUiVisibilityTest {
         }
 
         val compactPages = paginateRichPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 0,
             widthPx = 600,
@@ -1387,6 +1394,7 @@ class NovelReaderUiVisibilityTest {
             }
         }
         val spacedPages = paginateRichPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 64,
             widthPx = 600,
@@ -1424,6 +1432,7 @@ class NovelReaderUiVisibilityTest {
             ),
         )
         val pages = paginateRichPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 32,
             widthPx = 260,
@@ -1449,6 +1458,7 @@ class NovelReaderUiVisibilityTest {
         assertFalse(pages.drop(1).first().text.startsWith("\n"))
         val renderBlocks = buildRichPageRenderBlocks(
             page = paginateRichPageBlocks(
+                measurement = ReaderTextMeasurement.APPROXIMATE,
                 blockTexts = blockTexts,
                 paragraphSpacingPx = 32,
                 widthPx = 260,
@@ -1481,6 +1491,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginateRichPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 32,
             widthPx = 260,
@@ -1515,6 +1526,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 600,
@@ -1547,6 +1559,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginateRichPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 0,
             widthPx = 600,
@@ -1566,6 +1579,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `plain paged page assembly preserves paragraph boundaries`() {
         val page = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = listOf("First paragraph", "Second paragraph").asPlainPageReaderBlocks(),
             paragraphSpacingPx = 12,
             widthPx = 600,
@@ -1655,6 +1669,7 @@ class NovelReaderUiVisibilityTest {
     fun `paragraph indent makes pagination more conservative`() {
         val textBlocks = listOf("The quick brown fox jumps over the lazy dog ".repeat(3).trim())
         val compactPages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 220,
@@ -1666,6 +1681,7 @@ class NovelReaderUiVisibilityTest {
             forceParagraphIndent = false,
         )
         val indentedPages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 220,
@@ -1700,6 +1716,7 @@ class NovelReaderUiVisibilityTest {
         )
         val renderBlocks = buildRichPageRenderBlocks(
             page = paginateRichPageBlocks(
+                measurement = ReaderTextMeasurement.APPROXIMATE,
                 blockTexts = blockTexts,
                 paragraphSpacingPx = 12,
                 widthPx = 600,
@@ -1816,6 +1833,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginatePlainPageBlocksWithImages(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks,
             imageBlocks = imageBlocks,
             paragraphSpacingPx = 12,
@@ -1921,6 +1939,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pagination = paginateMixedRichPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             richBlocks = listOf(IndexedValue(0, heading), IndexedValue(1, image)),
             paragraphSpacingPx = 12,
             widthPx = 360,
@@ -4608,6 +4627,36 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `rich pagination text align matches the native block align`() {
+        assertEquals(
+            ReaderTextAlign.CENTER,
+            resolveNativeReaderTextAlign(
+                globalTextAlign = ReaderTextAlign.JUSTIFY,
+                preserveSourceTextAlignInNative = true,
+                sourceTextAlign = NovelRichBlockTextAlign.CENTER,
+            ),
+        )
+        assertEquals(
+            ReaderTextAlign.RIGHT,
+            resolveNativeReaderTextAlign(
+                globalTextAlign = ReaderTextAlign.SOURCE,
+                preserveSourceTextAlignInNative = true,
+                sourceTextAlign = NovelRichBlockTextAlign.RIGHT,
+            ),
+        )
+        // SOURCE without a block alignment falls back to the same deterministic LEFT the
+        // paginator uses, so measurement and rendering cannot disagree.
+        assertEquals(
+            ReaderTextAlign.LEFT,
+            resolveNativeReaderTextAlign(
+                globalTextAlign = ReaderTextAlign.SOURCE,
+                preserveSourceTextAlignInNative = true,
+                sourceTextAlign = null,
+            ),
+        )
+    }
+
+    @Test
     fun `page reader render align follows global alignment with source fallback`() {
         assertTrue(
             resolvePageReaderRenderTextAlign(
@@ -5453,6 +5502,7 @@ class NovelReaderUiVisibilityTest {
         val text = (1..120).joinToString(" ") { "word$it" }
 
         val pages = paginateTextIntoPages(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             text = text,
             widthPx = 240,
             heightPx = 120,
@@ -5462,6 +5512,7 @@ class NovelReaderUiVisibilityTest {
             textAlign = eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign.LEFT,
         )
         val pageRanges = paginateTextIntoPageRanges(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             text = text,
             widthPx = 240,
             heightPx = 120,
@@ -5488,6 +5539,7 @@ class NovelReaderUiVisibilityTest {
         )
 
         val pages = paginateAnnotatedTextIntoPages(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             text = annotated,
             widthPx = 240,
             heightPx = 120,

@@ -1,11 +1,17 @@
 package eu.kanade.tachiyomi.ui.player.subtitle.translation
 
+import eu.kanade.tachiyomi.test.assertIcuSafeRegexPattern
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class AiSubtitleTranslationProviderTest {
+    @Test
+    fun `protected ass tag regex keeps its braces escaped for the Android ICU engine`() {
+        assertIcuSafeRegexPattern(subtitleAssBlockRegex.pattern)
+    }
+
     @Test
     fun `parses indexed ai response and ignores prose`() {
         val raw = """

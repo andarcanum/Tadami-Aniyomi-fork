@@ -589,6 +589,10 @@ private fun mergeAdjacentRichSegments(segments: List<NovelRichTextSegment>): Lis
     return merged
 }
 
+// Android's ICU regex engine rejects a literal '}' that is not escaped (a PatternSyntaxException
+// at pattern compile time), unlike the desktop JVM used by unit tests. Both braces stay escaped.
+internal val richCssRuleBodyRegex = Regex("""\{([^{}]*)\}""")
+
 private fun detectUnsupportedRichFeatures(doc: Element): Boolean {
     if (doc.select("table, iframe, svg").isNotEmpty()) return true
 
@@ -602,9 +606,8 @@ private fun detectUnsupportedRichFeatures(doc: Element): Boolean {
             display in setOf("flex", "inline-flex", "grid", "inline-grid")
     }
     if (doc.select("[style]").any { hasUnsupportedLayout(it.attr("style")) }) return true
-    val ruleBodies = Regex("\\{([^{}]*)}")
     return doc.select("style").any { style ->
-        ruleBodies.findAll(style.data() + "\n" + style.wholeText()).any { match ->
+        richCssRuleBodyRegex.findAll(style.data() + "\n" + style.wholeText()).any { match ->
             hasUnsupportedLayout(match.groupValues[1])
         }
     }

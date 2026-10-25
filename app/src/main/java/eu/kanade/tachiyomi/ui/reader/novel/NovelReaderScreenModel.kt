@@ -2861,6 +2861,7 @@ internal fun sanitizeChapterHtmlForReader(rawHtml: String): String {
     document.select(
         "script, style, iframe, svg, canvas, object, embed, form, input, button, select, textarea, noscript, meta, link",
     ).remove()
+    restoreInlineTextBoundaries(document)
     document.select("*").forEach { element ->
         val attributesToRemove = element.attributes()
             .asList()

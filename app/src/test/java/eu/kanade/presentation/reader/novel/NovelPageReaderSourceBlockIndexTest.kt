@@ -9,6 +9,7 @@ class NovelPageReaderSourceBlockIndexTest {
     @Test
     fun `plain page pagination preserves original source block index`() {
         val pages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = listOf(
                 PlainPageReaderTextBlock(
                     sourceBlockIndex = 3,

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
+import eu.kanade.tachiyomi.test.assertIcuSafeRegexPattern
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -72,6 +73,24 @@ class NovelReaderParserHardeningTest {
             parseNovelRichContent(
                 "<style>.x { display: flex; }</style><div class='x'>A</div>",
             ).unsupportedFeaturesDetected,
+        )
+    }
+
+    @Test
+    fun `style rule regex keeps its braces escaped for the Android ICU engine`() {
+        // The desktop JVM used by unit tests accepts a bare '}' as a literal; Android's ICU engine
+        // throws PatternSyntaxException while compiling it, which broke every chapter load on device.
+        assertIcuSafeRegexPattern(richCssRuleBodyRegex.pattern)
+    }
+
+    @Test
+    fun `styled inline words keep the source spaces around them`() {
+        val html = "<p> <strong>Victoria,</strong> nineteen, Ivy League venom in human form. " +
+            "The twins, <strong>Danton</strong> and <strong>Delilah,</strong> eighteen, senior-year gods.</p>"
+        assertEquals(
+            "Victoria, nineteen, Ivy League venom in human form. " +
+                "The twins, Danton and Delilah, eighteen, senior-year gods.",
+            texts(html).single(),
         )
     }
 

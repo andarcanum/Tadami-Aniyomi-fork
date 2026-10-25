@@ -336,6 +336,13 @@ internal fun WebView.resolveCurrentWebViewProgressPercent(
 
 private val novelReaderScrollRestoreRequests = java.util.WeakHashMap<WebView, Any>()
 
+private const val NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS = 2_000L
+
+/** Invalidates any in-flight restore so its retries and completion cannot outlive this document. */
+internal fun WebView.cancelReaderScrollRestore() {
+    novelReaderScrollRestoreRequests.remove(this)
+}
+
 internal fun WebView.restoreWebViewScroll(
     progressPercent: Int,
     maxAttempts: Int = 14,
@@ -344,6 +351,7 @@ internal fun WebView.restoreWebViewScroll(
     val request = Any()
     novelReaderScrollRestoreRequests[this] = request
     val documentToken = SystemClock.elapsedRealtimeNanos().toString()
+    val deadlineUptimeMs = SystemClock.uptimeMillis() + NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS
     var finished = false
     var previousHeight = -1
     var stableSamples = 0
@@ -356,6 +364,12 @@ internal fun WebView.restoreWebViewScroll(
     }
     fun attemptRestore(attempt: Int) {
         if (!isCurrent() || finished) return
+        // The height can stay unstable forever on a still-loading page; the deadline guarantees
+        // the reveal callback runs instead of leaving the document hidden.
+        if (SystemClock.uptimeMillis() >= deadlineUptimeMs) {
+            finish(false)
+            return
+        }
         evaluateJavascript(
             "document.documentElement && document.documentElement.getAttribute('data-an-reader-restore-id')",
         ) { rawToken ->
@@ -383,6 +397,7 @@ internal fun WebView.restoreWebViewScroll(
             finish(height > 0 && (progressPercent <= 0 || totalScrollable > 0))
         }
     }
+    postDelayed({ finish(false) }, NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS)
     evaluateJavascript(
         """
         (function() {

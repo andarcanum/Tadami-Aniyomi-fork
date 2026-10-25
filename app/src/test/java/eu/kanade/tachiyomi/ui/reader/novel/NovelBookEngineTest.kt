@@ -154,6 +154,33 @@ class NovelBookEngineTest {
     }
 
     @Test
+    fun `goTo adopts the renderer-acknowledged location instead of the requested one`() = runTest {
+        val spine = testSpineOf(
+            chapters = listOf(NovelChapter.create().copy(id = 1L, name = "Chapter 1")),
+            charCounts = mapOf(1L to 100),
+        )
+        val relocatedLocations = mutableListOf<NovelBookLocation>()
+        val renderer = RecordingNovelBookEngineRenderer().apply {
+            relocateResult = NovelBookPageTurnResult.Moved(charOffset = 83)
+        }
+        val engine = NovelBookEngine(
+            loadDocument = { section -> documentFor(section) },
+            renderer = renderer,
+            onLocationChanged = relocatedLocations::add,
+        )
+        engine.open(
+            spine = spine,
+            location = NovelBookLocation(sectionIndex = 0, charOffset = 10),
+            flow = NovelBookEngineFlow.PAGINATED,
+        )
+
+        engine.goTo(NovelBookLocation(sectionIndex = 0, charOffset = 25))
+
+        engine.location shouldBe NovelBookLocation(sectionIndex = 0, charOffset = 83)
+        relocatedLocations.last() shouldBe NovelBookLocation(sectionIndex = 0, charOffset = 83)
+    }
+
+    @Test
     fun `reloading reopens the same section at the exact book location`() = runTest {
         val spine = testSpineOf(
             chapters = listOf(

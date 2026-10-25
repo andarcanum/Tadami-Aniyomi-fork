@@ -17,7 +17,7 @@ class NovelReaderSliceProgressTest {
     @Test
     fun `whitespace-only layout line advances the cursor`() {
         val text = "\n\nTail"
-        val layout = requireNotNull(buildReaderStaticLayout(text, 400, 24f, 1.2f, Typeface.DEFAULT, TextAlign.LEFT))
+        val layout = buildReaderStaticLayout(text, 400, 24f, 1.2f, Typeface.DEFAULT, TextAlign.LEFT)
         val lineHeight = layout.getLineBottom(0) - layout.getLineTop(0)
         val slice = resolveStaticLayoutSliceForHeight(text, layout, 0, lineHeight)
         assertNotNull(slice)
