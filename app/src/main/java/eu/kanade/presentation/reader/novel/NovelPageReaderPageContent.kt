@@ -183,6 +183,12 @@ internal fun buildNovelPageReaderSpanSpecs(
     return specs
 }
 
+private inline fun SpannableStringBuilder.safeSetSpan(what: Any, start: Int, end: Int, flags: Int) {
+    runCatching {
+        setSpan(what, start, end, flags)
+    }
+}
+
 internal fun buildNovelPageReaderSpannableText(
     text: AnnotatedString,
     firstLineIndentPx: Int? = null,
@@ -195,7 +201,7 @@ internal fun buildNovelPageReaderSpannableText(
         firstLineIndentPx = firstLineIndentPx,
     ).forEach { spec ->
         if (spec.leadingMarginPx != null) {
-            spannable.setSpan(
+            spannable.safeSetSpan(
                 LeadingMarginSpan.Standard(spec.leadingMarginPx, 0),
                 spec.start,
                 spec.end,
@@ -211,7 +217,7 @@ internal fun buildNovelPageReaderSpannableText(
             else -> Typeface.NORMAL
         }
         if (fontStyle != Typeface.NORMAL) {
-            spannable.setSpan(
+            spannable.safeSetSpan(
                 StyleSpan(fontStyle),
                 spec.start,
                 spec.end,
@@ -219,7 +225,7 @@ internal fun buildNovelPageReaderSpannableText(
             )
         }
         if (spec.underline) {
-            spannable.setSpan(
+            spannable.safeSetSpan(
                 UnderlineSpan(),
                 spec.start,
                 spec.end,
@@ -227,7 +233,7 @@ internal fun buildNovelPageReaderSpannableText(
             )
         }
         if (spec.strikeThrough) {
-            spannable.setSpan(
+            spannable.safeSetSpan(
                 StrikethroughSpan(),
                 spec.start,
                 spec.end,
@@ -235,7 +241,7 @@ internal fun buildNovelPageReaderSpannableText(
             )
         }
         spec.foregroundColor?.let { color ->
-            spannable.setSpan(
+            spannable.safeSetSpan(
                 ForegroundColorSpan(color.toArgb()),
                 spec.start,
                 spec.end,
@@ -243,7 +249,7 @@ internal fun buildNovelPageReaderSpannableText(
             )
         }
         spec.backgroundColor?.let { color ->
-            spannable.setSpan(
+            spannable.safeSetSpan(
                 BackgroundColorSpan(color.toArgb()),
                 spec.start,
                 spec.end,
@@ -259,7 +265,7 @@ internal fun buildNovelPageReaderSpannableText(
         val start = annotation.start.coerceIn(0, text.length)
         val end = annotation.end.coerceIn(start, text.length)
         if (start >= end) return@forEach
-        spannable.setSpan(
+        spannable.safeSetSpan(
             NovelPageReaderUrlClickableSpan(
                 url = annotation.item,
                 onUrlClick = onUrlClick,
@@ -270,7 +276,7 @@ internal fun buildNovelPageReaderSpannableText(
         )
     }
     if (forcedTypefaceStyle != Typeface.NORMAL && text.text.isNotEmpty()) {
-        spannable.setSpan(
+        spannable.safeSetSpan(
             StyleSpan(forcedTypefaceStyle),
             0,
             text.text.length,
@@ -309,6 +315,7 @@ internal data class NovelPageReaderTextViewMetrics(
     val typeface: Typeface?,
     val textAlign: ReaderTextAlign,
     val shadow: Shadow?,
+    val isPageMode: Boolean = false,
 )
 
 internal fun resolveNovelPageReaderTextViewMetrics(
@@ -317,6 +324,7 @@ internal fun resolveNovelPageReaderTextViewMetrics(
     typeface: Typeface?,
     textAlign: ReaderTextAlign,
     shadow: Shadow?,
+    isPageMode: Boolean = false,
 ): NovelPageReaderTextViewMetrics {
     return NovelPageReaderTextViewMetrics(
         textSizePx = textSizePx,
@@ -324,6 +332,7 @@ internal fun resolveNovelPageReaderTextViewMetrics(
         typeface = typeface,
         textAlign = textAlign,
         shadow = shadow,
+        isPageMode = isPageMode,
     )
 }
 
@@ -335,10 +344,20 @@ internal fun applyNovelPageReaderTextViewMetrics(
     textView.setLineSpacing(0f, metrics.lineSpacingMultiplier)
     textView.typeface = metrics.typeface
     textView.gravity = resolveNovelPageReaderTextGravity(metrics.textAlign)
-    textView.breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
-    textView.hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        textView.isFallbackLineSpacing = false
+    if (metrics.isPageMode) {
+        textView.breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
+        textView.hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            textView.isFallbackLineSpacing = false
+        }
+    } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            textView.breakStrategy = Layout.BREAK_STRATEGY_HIGH_QUALITY
+            textView.hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            textView.isFallbackLineSpacing = true
+        }
     }
     metrics.shadow?.let { resolvedShadow ->
         textView.setShadowLayer(
@@ -468,17 +487,28 @@ private class NovelPageReaderTextView constructor(
     }
 
     override fun clearFocus() {
-        if (isDetachingFromCompose() || isLayoutRequested) {
+        if (isDetachingFromCompose()) {
             return
         }
         super.clearFocus()
     }
 
     override fun focusSearch(direction: Int): View? {
-        if (isDetachingFromCompose() || isLayoutRequested) {
+        if (isDetachingFromCompose()) {
             return null
         }
         return super.focusSearch(direction)
+    }
+
+    override fun scrollTo(x: Int, y: Int) {
+        // NovelPageReaderTextView is always hosted within an external scrolling container
+        // (Compose LazyColumn or Page layout). Internal scrolling is strictly disabled
+        // so that touch drag gestures and ArrowKeyMovementMethod do not scroll content off-screen.
+        super.scrollTo(0, 0)
+    }
+
+    override fun computeScroll() {
+        // No-op: prevent internal scrollers or overscroll from shifting this view's canvas.
     }
 
     init {
@@ -1348,12 +1378,15 @@ internal fun NovelPageReaderTextBlock(
         textColor = blockTextColor,
         backgroundColor = textBackground,
     )
+    val isPageMode = selectionRenderer == null ||
+        selectionRenderer == NovelSelectedTextRenderer.PAGE_READER
     val blockTextViewMetrics = resolveNovelPageReaderTextViewMetrics(
         textSizePx = blockTextSizePx,
         lineSpacingMultiplier = blockLineSpacingMultiplier,
         typeface = blockTypeface,
         textAlign = textAlign,
         shadow = blockTextShadow,
+        isPageMode = isPageMode,
     )
     val selectionInteractionEnabled =
         touchHandlingEnabled &&

@@ -35,10 +35,11 @@ class NovelRichContentParserTest {
         result.blocks shouldHaveSize 1
         assertFalse(result.unsupportedFeaturesDetected)
         val paragraph = result.blocks.first() as NovelRichContentBlock.Paragraph
-        paragraph.segments.map { it.text.trim() }.filter { it.isNotEmpty() } shouldBe listOf("Bold", "Italic", "Link")
-        paragraph.segments[0].style.bold shouldBe true
-        paragraph.segments[1].style.italic shouldBe true
-        paragraph.segments[2].linkUrl shouldBe "https://example.com"
+        val meaningfulSegments = paragraph.segments.filter { it.text.isNotBlank() }
+        meaningfulSegments[0].style.bold shouldBe true
+        meaningfulSegments[1].style.italic shouldBe true
+        meaningfulSegments[2].linkUrl shouldBe "https://example.com"
+        paragraph.segments.joinToString(separator = "") { it.text } shouldBe "Bold Italic Link"
     }
 
     @Test

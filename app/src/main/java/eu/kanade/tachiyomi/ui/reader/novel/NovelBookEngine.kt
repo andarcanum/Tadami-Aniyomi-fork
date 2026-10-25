@@ -237,9 +237,10 @@ internal class NovelBookEngine(
             open(spine, clamped, flow)
         } else {
             val result = renderer.goTo(clamped)
-            if (result is NovelBookPageTurnResult.Moved) {
-                updateLocation(locationOf(result))
+            check(result is NovelBookPageTurnResult.Moved) {
+                "Book renderer did not apply the requested location"
             }
+            updateLocation(locationOf(result))
         }
     }
 

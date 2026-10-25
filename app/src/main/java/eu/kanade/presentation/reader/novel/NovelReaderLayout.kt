@@ -329,7 +329,9 @@ internal fun paginateAnnotatedTextIntoPages(
 ): List<AnnotatedString> {
     if (text.text.isBlank()) return emptyList()
     val ranges = paginateTextIntoPageRanges(
-        text = text.text,
+        text = runCatching {
+            buildNovelPageReaderSpannableText(text).also { it.length }
+        }.getOrDefault(text.text),
         widthPx = widthPx,
         heightPx = heightPx,
         textSizePx = textSizePx,
@@ -478,7 +480,10 @@ internal fun resolveStaticLayoutSliceForHeight(
     }
     val endLine = if (endLineExclusive > startLine) endLineExclusive - 1 else startLine
     val endOffset = layout.getLineEnd(endLine).coerceIn(startOffset, text.length)
-    val range = trimTextRange(text, startOffset, endOffset) ?: return null
+    // Empty/whitespace-only lines still consume layout lines. Returning null confuses them
+    // with "needs a new page": callers either stop early or retry the same line forever.
+    val range = trimTextRange(text, startOffset, endOffset)
+        ?: TextPageRange(startOffset, endOffset)
     return StaticLayoutSlice(
         range = range,
         nextStartLine = endLine + 1,
@@ -1294,8 +1299,19 @@ internal fun paginateRichPageBlocks(
                 .toInt()
                 .coerceAtLeast(1),
         )
+        val spannableText = runCatching {
+            buildNovelPageReaderSpannableText(
+                text = blockText.text,
+                firstLineIndentPx = firstLineIndentPx,
+                forcedTypefaceStyle = if (isChapterTitle) {
+                    android.graphics.Typeface.BOLD
+                } else {
+                    android.graphics.Typeface.NORMAL
+                },
+            ).also { it.length }
+        }.getOrDefault(blockText.text.text)
         val layout = buildReaderStaticLayout(
-            text = blockText.text.text,
+            text = spannableText,
             widthPx = widthPx,
             textSizePx = blockMetrics.textSizePx,
             lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
@@ -1305,7 +1321,7 @@ internal fun paginateRichPageBlocks(
                 typeface
             },
             textAlign = textAlign,
-            firstLineIndentPx = firstLineIndentPx,
+            firstLineIndentPx = null,
             density = density,
         )
         if (layout == null) {

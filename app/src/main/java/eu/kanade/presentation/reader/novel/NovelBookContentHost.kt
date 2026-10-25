@@ -231,7 +231,6 @@ internal fun NovelBookContentHost(
             lastAppliedSeekId = appliedSeekId[0],
             sectionFraction = state.bookMode.currentSectionFraction,
         ) ?: return@LaunchedEffect
-        appliedSeekId[0] = seekTarget.seekRequestId
         textListState.scrollToItem(seekTarget.itemIndex)
         val itemHeight = textListState.layoutInfo.visibleItemsInfo
             .firstOrNull { it.index == seekTarget.itemIndex }
@@ -239,6 +238,8 @@ internal fun NovelBookContentHost(
             ?: 0
         val offsetPx = (itemHeight * seekTarget.fraction).toInt()
         if (offsetPx > 0) textListState.scrollToItem(seekTarget.itemIndex, offsetPx)
+        // Cancellation during either scroll leaves the request eligible for the next effect.
+        appliedSeekId[0] = seekTarget.seekRequestId
         onSeekApplied(seekTarget.seekRequestId)
     }
     LaunchedEffect(useNativeBookScroll, nativeEntries) {

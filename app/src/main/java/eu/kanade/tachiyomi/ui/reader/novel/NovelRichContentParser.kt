@@ -13,29 +13,31 @@ internal fun parseNovelRichContent(rawHtml: String): NovelRichContentParseResult
     val context = parseBlockStyleContext(doc)
     val blocks = mutableListOf<NovelRichContentBlock>()
 
-    val blockRoots = body.children().ifEmpty {
-        doc.children().filterIsInstance<Element>()
+    // Walk elements and loose text together; separate passes reorder mixed HTML and can
+    // parse a text-only body twice through the document-wrapper fallback.
+    val pendingInline = mutableListOf<NovelRichTextSegment>()
+    fun flushInline() {
+        val segments = trimTrailingFormattingWhitespaceFromSegments(mergeAdjacentRichSegments(pendingInline))
+        if (hasRenderableParagraphContent(segments)) {
+            blocks += NovelRichContentBlock.Paragraph(segments)
+        }
+        pendingInline.clear()
     }
-
-    blockRoots.forEach { element ->
-        // Anchors are read and applied inside parseBlockElement, on any nesting level, so blocks
-        // inside section wrappers (an-book-section, nb-chapter) keep their (chapterId, blockIndex).
-        blocks += parseBlockElement(element, context)
-    }
-
-    // Capture text from direct TextNode children of body that sit outside block elements
-    // (e.g. text between <br> tags with no <p> wrapper, common in novelhall chapters).
-    // These are not returned by body.children() and would otherwise be lost.
-    val orphanTextSegments = body.childNodes()
-        .filterIsInstance<TextNode>()
-        .map { it.text().trim() }
-        .filter { it.isNotBlank() }
-        .map { NovelRichTextSegment(text = it) }
-    if (orphanTextSegments.isNotEmpty()) {
-        orphanTextSegments.forEach { segment ->
-            blocks += NovelRichContentBlock.Paragraph(listOf(segment))
+    body.childNodes().forEach { node ->
+        when (node) {
+            is TextNode -> parseInlineNode(node, NovelRichTextStyle(), null, pendingInline)
+            is Element -> {
+                val tag = node.tagName().lowercase(Locale.US)
+                if (tag in richInlineTextTags || tag == "br") {
+                    parseInlineNode(node, NovelRichTextStyle(), null, pendingInline)
+                } else {
+                    flushInline()
+                    blocks += parseBlockElement(node, context)
+                }
+            }
         }
     }
+    flushInline()
 
     if (blocks.isEmpty()) {
         val segments = parseInlineSegments(body)
@@ -329,8 +331,8 @@ private fun parseCssLengthAsEm(raw: String): Float? {
     val normalized = raw.trim().lowercase(Locale.US).replace("!important", "").trim()
     if (normalized.isBlank() || normalized == "0" || normalized == "0.0") return 0f
     return when {
-        normalized.endsWith("em") -> normalized.removeSuffix("em").trim().toFloatOrNull()
         normalized.endsWith("rem") -> normalized.removeSuffix("rem").trim().toFloatOrNull()
+        normalized.endsWith("em") -> normalized.removeSuffix("em").trim().toFloatOrNull()
         normalized.endsWith("px") -> normalized.removeSuffix("px").trim().toFloatOrNull()?.div(16f)
         normalized.endsWith("pt") -> normalized.removeSuffix("pt").trim().toFloatOrNull()?.div(12f)
         normalized.endsWith("%") -> normalized.removeSuffix("%").trim().toFloatOrNull()?.div(100f)
@@ -359,11 +361,12 @@ private fun parseBlockStyleContext(doc: Element): NovelRichParseContext {
         if (style.textAlign == null && style.firstLineIndentEm == null) return@forEach
 
         selectorsRaw.split(',')
-            .map { it.trim().lowercase(Locale.US) }
+            .map { it.trim() }
             .filter { it.isNotBlank() }
             .forEach { selector ->
                 parseTrailingBlockSelector(selector)?.let { parsed ->
                     selectors += NovelRichSelectorStyle(
+                        selector = selector,
                         tag = parsed.tag,
                         className = parsed.className,
                         style = style,
@@ -382,11 +385,11 @@ private fun resolveParagraphLikeStyleFromContext(
 ): NovelRichBlockStyle {
     if (tag !in paragraphLikeStyleTags) return NovelRichBlockStyle()
 
-    val elementClasses = element.classNames().map { it.lowercase(Locale.US) }.toSet()
     var resolved = NovelRichBlockStyle()
     context.selectors.forEach { selector ->
-        if (selector.tag != null && selector.tag != tag) return@forEach
-        if (selector.className != null && selector.className !in elementClasses) return@forEach
+        // Matching only the trailing tag/class leaks descendant rules into unrelated blocks.
+        val matches = runCatching { element.`is`(selector.selector) }.getOrDefault(false)
+        if (!matches) return@forEach
         resolved = resolved.merge(selector.style)
     }
     return resolved
@@ -445,7 +448,8 @@ private fun parseInlineNode(
     when (node) {
         is TextNode -> {
             val text = resolveTextNodeText(node)
-            if (text.isEmpty() || text.isBlank()) return
+            if (text.isEmpty()) return
+            // A standalone space between inline elements is a word separator, not an empty block.
             out += NovelRichTextSegment(
                 text = text,
                 style = inheritedStyle,
@@ -588,13 +592,21 @@ private fun mergeAdjacentRichSegments(segments: List<NovelRichTextSegment>): Lis
 private fun detectUnsupportedRichFeatures(doc: Element): Boolean {
     if (doc.select("table, iframe, svg").isNotEmpty()) return true
 
-    return doc.select("[style]").any { element ->
-        val inlineStyle = element.attr("style").lowercase(Locale.US)
-        inlineStyle.contains("position:") ||
-            inlineStyle.contains("display:flex") ||
-            inlineStyle.contains("display: grid") ||
-            inlineStyle.contains("display:grid") ||
-            inlineStyle.contains("float:")
+    fun hasUnsupportedLayout(css: String): Boolean {
+        val declarations = parseInlineCssMap(css).mapValues { (_, value) ->
+            value.lowercase(Locale.US).substringBefore("!important").trim()
+        }
+        val display = declarations["display"]
+        return declarations.containsKey("position") ||
+            declarations.containsKey("float") ||
+            display in setOf("flex", "inline-flex", "grid", "inline-grid")
+    }
+    if (doc.select("[style]").any { hasUnsupportedLayout(it.attr("style")) }) return true
+    val ruleBodies = Regex("\\{([^{}]*)}")
+    return doc.select("style").any { style ->
+        ruleBodies.findAll(style.data() + "\n" + style.wholeText()).any { match ->
+            hasUnsupportedLayout(match.groupValues[1])
+        }
     }
 }
 
@@ -767,6 +779,7 @@ private data class NovelRichParseContext(
 )
 
 private data class NovelRichSelectorStyle(
+    val selector: String,
     val tag: String?,
     val className: String?,
     val style: NovelRichBlockStyle,

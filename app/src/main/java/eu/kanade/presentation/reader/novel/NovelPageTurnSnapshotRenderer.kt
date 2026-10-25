@@ -1,22 +1,20 @@
 package eu.kanade.presentation.reader.novel
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
-import androidx.compose.ui.layout.ContentScale
 
+/**
+ * Keep the layer live until page renderers provide a resource/overlay readiness contract.
+ * A one-frame bitmap capture can permanently freeze unloaded images or stale interop content.
+ * Parameters are retained so existing single-page and spread callers remain source-compatible.
+ */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 internal fun NovelPageTurnSnapshotRenderer(
     snapshotKey: NovelPageTurnSnapshotKey,
@@ -25,38 +23,7 @@ internal fun NovelPageTurnSnapshotRenderer(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    if (!preferCachedBitmap) {
-        val graphicsLayer = rememberGraphicsLayer()
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .drawWithContent {
-                    graphicsLayer.record {
-                        this@drawWithContent.drawContent()
-                    }
-                    drawLayer(graphicsLayer)
-                },
-        ) {
-            content()
-        }
-        return
-    }
-
     val graphicsLayer = rememberGraphicsLayer()
-    var bitmap by remember(snapshotKey) {
-        mutableStateOf(snapshotCache[snapshotKey])
-    }
-
-    bitmap?.let { cachedBitmap ->
-        Image(
-            bitmap = cachedBitmap,
-            contentDescription = null,
-            modifier = modifier.fillMaxSize(),
-            contentScale = ContentScale.FillBounds,
-        )
-        return
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -68,14 +35,5 @@ internal fun NovelPageTurnSnapshotRenderer(
             },
     ) {
         content()
-    }
-
-    LaunchedEffect(snapshotKey) {
-        withFrameNanos { }
-        runCatching { graphicsLayer.toImageBitmap() }
-            .onSuccess { captured ->
-                bitmap = captured
-                snapshotCache.put(snapshotKey, captured)
-            }
     }
 }

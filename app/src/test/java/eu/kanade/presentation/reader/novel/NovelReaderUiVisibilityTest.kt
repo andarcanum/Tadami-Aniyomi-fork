@@ -1583,10 +1583,9 @@ class NovelReaderUiVisibilityTest {
         )
 
         assertEquals(listOf("First paragraph", "Second paragraph"), renderBlocks.map { it.text })
-        // Page budget 76px, used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) → leftover
-        // 6px justified into the single paragraph gap: spacing 12 + fill 6 = 18. The fill may
-        // never exceed the leftover or the rendered page clips its last line.
-        assertEquals(listOf(0, 18), renderBlocks.map { it.spacingBeforePx })
+        // Page budget 76px, used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) -> leftover
+        // 6px is retained by safetyBufferPx = 6 to prevent Compose clipping on the last line.
+        assertEquals(listOf(0, 12), renderBlocks.map { it.spacingBeforePx })
         assertEquals(listOf(2f, 2f), renderBlocks.map { it.firstLineIndentEm })
     }
 
@@ -1715,10 +1714,9 @@ class NovelReaderUiVisibilityTest {
         )
 
         assertEquals(listOf("Alpha link", "Second paragraph"), renderBlocks.map { it.text.text })
-        // Page budget 76px, used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) → leftover
-        // 6px justified into the single paragraph gap: spacing 12 + fill 6 = 18. The fill may
-        // never exceed the leftover or the rendered page clips its last line.
-        assertEquals(listOf(0, 18), renderBlocks.map { it.spacingBeforePx })
+        // Page budget 76px, used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) -> leftover
+        // 6px is retained by safetyBufferPx = 6 to prevent Compose clipping on the last line.
+        assertEquals(listOf(0, 12), renderBlocks.map { it.spacingBeforePx })
         assertTrue(
             renderBlocks.first().text.getStringAnnotations(
                 tag = "URL",
@@ -5371,6 +5369,7 @@ class NovelReaderUiVisibilityTest {
                     ),
                 ),
             ),
+            preserveSourceColors = true,
         )
 
         val span = annotated.spanStyles.single()
@@ -5395,6 +5394,7 @@ class NovelReaderUiVisibilityTest {
                     linkUrl = "https://example.org",
                 ),
             ),
+            preserveSourceColors = true,
         )
 
         val specs = buildNovelPageReaderSpanSpecs(

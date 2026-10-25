@@ -96,18 +96,15 @@ internal fun resolveNovelBookNativeSeekTarget(
     entries: List<NovelBookNativeEntry>,
     request: BookSeekRequest?,
     lastAppliedSeekId: Long,
-    sectionFraction: Float,
+    @Suppress("UNUSED_PARAMETER") sectionFraction: Float,
 ): NovelBookNativeSeekTarget? {
     if (request == null || request.id <= lastAppliedSeekId) return null
     val sectionBlocks = entries.filterIsInstance<NovelBookNativeEntry.Block>()
         .filter { it.sectionIndex == request.location.sectionIndex }
     if (sectionBlocks.isEmpty()) return null
     val sectionCharCount = sectionBlocks.first().sectionCharCount.coerceAtLeast(1)
-    val targetChar = if (request.location.charOffset > 0) {
-        request.location.charOffset
-    } else {
-        (sectionFraction.coerceIn(0f, 1f) * sectionCharCount).toInt()
-    }.coerceIn(0, sectionCharCount - 1)
+    // Zero is a valid explicit target (start of section), never an "unknown" sentinel.
+    val targetChar = request.location.charOffset.coerceIn(0, sectionCharCount - 1)
     val target = sectionBlocks.lastOrNull { it.charOffsetBefore <= targetChar } ?: sectionBlocks.first()
     val itemIndex = entries.indexOf(target)
     val within = ((targetChar - target.charOffsetBefore).toFloat() / target.blockCharCount.coerceAtLeast(1))

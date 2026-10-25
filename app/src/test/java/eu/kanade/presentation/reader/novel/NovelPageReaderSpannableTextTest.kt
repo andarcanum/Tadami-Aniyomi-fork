@@ -53,7 +53,7 @@ class NovelPageReaderSpannableTextTest {
     }
 
     @Test
-    fun `applyNovelPageReaderTextViewMetrics aligns break strategy, hyphenation and fallback line spacing`() {
+    fun `applyNovelPageReaderTextViewMetrics aligns break strategy and fallback spacing for page mode`() {
         val textView = TextView(ApplicationProvider.getApplicationContext())
         val metrics = resolveNovelPageReaderTextViewMetrics(
             textSizePx = 40f,
@@ -61,6 +61,7 @@ class NovelPageReaderSpannableTextTest {
             typeface = null,
             textAlign = eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign.JUSTIFY,
             shadow = null,
+            isPageMode = true,
         )
 
         applyNovelPageReaderTextViewMetrics(textView, metrics)
@@ -68,8 +69,30 @@ class NovelPageReaderSpannableTextTest {
         assertEquals(android.text.Layout.BREAK_STRATEGY_SIMPLE, textView.breakStrategy)
         assertEquals(android.text.Layout.HYPHENATION_FREQUENCY_NONE, textView.hyphenationFrequency)
         assertEquals(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD, textView.justificationMode)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             assertEquals(false, textView.isFallbackLineSpacing)
+        }
+    }
+
+    @Test
+    fun `applyNovelPageReaderTextViewMetrics preserves high quality break and fallback spacing for scroll mode`() {
+        val textView = TextView(ApplicationProvider.getApplicationContext())
+        val metrics = resolveNovelPageReaderTextViewMetrics(
+            textSizePx = 40f,
+            lineSpacingMultiplier = 1.2f,
+            typeface = null,
+            textAlign = eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign.JUSTIFY,
+            shadow = null,
+            isPageMode = false,
+        )
+
+        applyNovelPageReaderTextViewMetrics(textView, metrics)
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            assertEquals(android.text.Layout.BREAK_STRATEGY_HIGH_QUALITY, textView.breakStrategy)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            assertEquals(true, textView.isFallbackLineSpacing)
         }
     }
 }

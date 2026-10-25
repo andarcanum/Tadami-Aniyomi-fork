@@ -34,6 +34,7 @@ import android.graphics.Color as AndroidColor
 
 internal fun buildNovelRichAnnotatedString(
     segments: List<NovelRichTextSegment>,
+    preserveSourceColors: Boolean = false,
 ): AnnotatedString {
     if (segments.isEmpty()) return AnnotatedString("")
 
@@ -46,7 +47,14 @@ internal fun buildNovelRichAnnotatedString(
             cursor += segment.text.length
             val end = cursor
 
-            buildNovelRichSpanStyle(segment.style)?.let { addStyle(it, start, end) }
+            // Reader ink owns contrast by default, as it does in the WebView renderer.
+            // TTS and saved highlights are painted later and are deliberately unaffected.
+            val sourceStyle = if (preserveSourceColors) {
+                segment.style
+            } else {
+                segment.style.copy(colorCss = null, backgroundColorCss = null)
+            }
+            buildNovelRichSpanStyle(sourceStyle)?.let { addStyle(it, start, end) }
             segment.linkUrl?.takeIf { it.isNotBlank() }?.let { url ->
                 addStringAnnotation(tag = "URL", annotation = url, start = start, end = end)
             }

@@ -188,7 +188,7 @@ class NovelBookNativeWindowTest {
     }
 
     @Test
-    fun `a seek without a char offset falls back to the section fraction`() {
+    fun `a seek with zero char offset targets the section start regardless of fraction`() {
         val target = resolveNovelBookNativeSeekTarget(
             entries = entriesOf(3, 4, 5),
             request = seekRequestOf(id = 7L, sectionIndex = 5),
@@ -196,8 +196,7 @@ class NovelBookNativeWindowTest {
             sectionFraction = 0.5f,
         )
 
-        // Half of the section's 9 chars is char 4, inside its only block.
-        target shouldBe NovelBookNativeSeekTarget(seekRequestId = 7L, itemIndex = 2, fraction = 4f / 9f)
+        target shouldBe NovelBookNativeSeekTarget(seekRequestId = 7L, itemIndex = 2, fraction = 0f)
     }
 
     @Test
