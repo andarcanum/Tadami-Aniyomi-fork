@@ -69,6 +69,12 @@ data class DiscoveryBuildContext(
      * create their own budgets: TASTE and SOURCE consume the same one.
      */
     val verificationBudget: DiscoveryVerificationBudget? = null,
+    /**
+     * One required-genre source query shared by TASTE and SOURCE. Rows take
+     * disjoint slices of the same result: catalogue work is paid once and the
+     * coordinator's cross-row dedupe cannot empty SOURCE.
+     */
+    val sharedGenreQuery: SharedRequiredGenreQuery? = null,
 ) {
     val candidatePolicy: DiscoveryCandidatePolicy
         get() {

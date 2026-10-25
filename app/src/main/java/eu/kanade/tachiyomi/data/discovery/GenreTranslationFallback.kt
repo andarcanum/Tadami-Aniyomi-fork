@@ -18,6 +18,7 @@ class GenreTranslationFallback(
     private val translate: suspend (String) -> String?,
     private val maxTranslationsPerCall: Int = 12,
     private val translationTimeoutMs: Long = 1_000L,
+    private val synonyms: (String) -> List<String> = { emptyList() },
 ) {
     private val cache = DiscoveryLruCache<String, List<String>>(256)
 
@@ -38,6 +39,26 @@ class GenreTranslationFallback(
         val unresolved = wanted.filterNot { genre ->
             selected.any { GenreMatcher.matchesConstraint(genre, it) }
         }.toMutableSet()
+        if (unresolved.isEmpty()) return options.filter { it in selected }
+
+        // Known bilingual synonyms (e.g. milf ↔ милфы) are cheaper and safer than
+        // a network translation. One option per unresolved genre: translating a
+        // single genre into several checkboxes can AND-narrow a source to nothing.
+        for (genre in unresolved.toList()) {
+            val aliases = synonyms(genre)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.equals(genre, ignoreCase = true) }
+                .distinct()
+            if (aliases.isEmpty()) continue
+            val matched = options.firstOrNull { option ->
+                option !in selected && aliases.any { alias -> GenreMatcher.matchesConstraint(alias, option) }
+            } ?: continue
+            selected += matched
+            unresolved -= genre
+            unresolved.removeAll { candidate ->
+                selected.any { GenreMatcher.matchesConstraint(candidate, it) }
+            }
+        }
         if (unresolved.isEmpty()) return options.filter { it in selected }
 
         // Controlled soft fallback: only an unambiguous option is accepted.

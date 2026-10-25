@@ -62,6 +62,13 @@ class DiscoveryVerificationBudget(
         /** Fits three media types into the 120 s worker deadline with margin. */
         const val DEFAULT_MEDIA_BUDGET_MS = 36_000L
         const val DEFAULT_MAX_DETAILS = 48
+
+        /**
+         * Required-genre mode verifies whole catalogue pages from a few rich
+         * sources. The media deadline still bounds the run; this allowance is
+         * what lets a productive source reach its 20–30 card target.
+         */
+        const val DEFAULT_REQUIRED_MAX_DETAILS = 160
         const val DEFAULT_MAX_CONCURRENT_DETAILS = 4
     }
 }

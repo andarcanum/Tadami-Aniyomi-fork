@@ -19,6 +19,9 @@ import java.io.IOException
 
 internal const val SOURCE_FETCH_TIMEOUT_MS = 6_000L
 
+/** A provider with plenty of matching titles should fill a required row in one pass. */
+private const val MAX_REQUIRED_EXTERNAL_PAGES = 3
+
 /** Кандидаты LIKE-сида: resolver дополняет сырой тайтл оригиналом из описания и нормализованными вариантами. */
 internal fun likeSeedCandidateTitles(seed: DiscoverySeedInput): List<String> =
     (SuggestionTitleResolver.resolveCandidates(seed.title, seed.description) + seed.altTitles)
@@ -345,49 +348,67 @@ class DiscoveryTasteRowBuilder(
 
         var trendingItems = trendingResult?.getOrNull().orEmpty()
         var filteredTrending = policy.filterRowCandidates(trendingItems, { it.genres })
-        // Добор со 2-й страницы при строгом фильтре, если 1-я страница вернула результаты, но ни один не прошёл строгий фильтр
-        if (filteredTrending.isEmpty() && policy.isStrictRequired && trendingItems.isNotEmpty() && includeExternal) {
-            val page2Result = runCatchingUnlessCancelled {
-                trending.fetchByGenres(
-                    context.mediaType,
-                    genreNames,
-                    sortProvider(),
-                    page = context.pageOffset + 1,
-                    releaseStatuses = context.releaseStatuses,
-                )
-            }
-            val page2Items = page2Result.getOrNull().orEmpty()
-            if (page2Items.isNotEmpty()) {
-                trendingItems = (trendingItems + page2Items).distinctBy { it.cleanTitle }
+        // Rich provider, rich row: a strict required query keeps paging while the
+        // provider still exposes new matches. Fetching only page 2, and only when
+        // page 1 was fully rejected, was what turned a rich genre into slow 9→12
+        // accumulation across refreshes.
+        if (includeExternal && required && trendingResult?.isSuccess == true) {
+            var fetchedPages = 1
+            while (
+                filteredTrending.size < RICH_SOURCE_TARGET &&
+                fetchedPages < MAX_REQUIRED_EXTERNAL_PAGES
+            ) {
+                val nextResult = runCatchingUnlessCancelled {
+                    trending.fetchByGenres(
+                        context.mediaType,
+                        genreNames,
+                        sortProvider(),
+                        page = context.pageOffset + fetchedPages,
+                        releaseStatuses = context.releaseStatuses,
+                    )
+                }
+                val nextItems = nextResult.getOrNull().orEmpty()
+                if (nextItems.isEmpty()) break
+                val before = trendingItems.size
+                trendingItems = (trendingItems + nextItems).distinctBy { it.cleanTitle }
+                if (trendingItems.size == before) break
                 filteredTrending = policy.filterRowCandidates(trendingItems, { it.genres })
+                fetchedPages++
             }
         }
 
         val sourceIds = context.sourceIds.filter { it > 0 }
             .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
+        val shared = context.sharedGenreQuery
         val sourceResults = if (sourceIds.isNotEmpty()) {
-            val rotation = (context.pageOffset - 1).coerceAtLeast(0) % sourceIds.size
-            val ordered = sourceIds.drop(rotation) + sourceIds.take(rotation)
-            // Required mode pays for verification; the ordinary taste path keeps
-            // its previous cheap shape (six sources, no details hydration).
-            val toQuery = if (required) ordered else ordered.take(6)
-            queryDiscoveryGenreSources(
-                catalog = catalog,
-                media = context.mediaType,
-                sourceIds = toQuery,
-                genres = sourceGenreNames,
-                page = context.pageOffset,
-                releaseStatuses = context.releaseStatuses,
-                policy = policy,
-                timeoutMs = if (required) {
-                    genreSourceTimeoutMs(context.verificationBudget, toQuery.size, maxConcurrency = 4)
-                } else {
-                    SOURCE_FETCH_TIMEOUT_MS
-                },
-                hydrate = required,
-                targetItems = 50,
-                budget = context.verificationBudget,
-            )
+            if (required && shared != null) {
+                // SOURCE shares the same catalogue pass; TASTE takes the even
+                // slice and SOURCE the odd one, so neither row starves the other.
+                shared.results().map { it.sliceForRow(parity = 0) }
+            } else {
+                val rotation = (context.pageOffset - 1).coerceAtLeast(0) % sourceIds.size
+                val ordered = sourceIds.drop(rotation) + sourceIds.take(rotation)
+                // Required mode pays for verification; the ordinary taste path keeps
+                // its previous cheap shape (six sources, no details hydration).
+                val toQuery = if (required) ordered else ordered.take(6)
+                queryDiscoveryGenreSources(
+                    catalog = catalog,
+                    media = context.mediaType,
+                    sourceIds = toQuery,
+                    genres = sourceGenreNames,
+                    page = context.pageOffset,
+                    releaseStatuses = context.releaseStatuses,
+                    policy = policy,
+                    timeoutMs = if (required) {
+                        genreSourceTimeoutMs(context.verificationBudget, toQuery.size, maxConcurrency = 4)
+                    } else {
+                        SOURCE_FETCH_TIMEOUT_MS
+                    },
+                    hydrate = required,
+                    targetItems = 50,
+                    budget = context.verificationBudget,
+                )
+            }
         } else {
             emptyList()
         }
@@ -481,20 +502,27 @@ class DiscoverySourceRowBuilder(
         val ordered = ids.drop(rotation) + ids.take(rotation)
         val policy = context.candidatePolicy
         if (policy.requiredGenres.isNotEmpty()) {
-            val results = queryDiscoveryGenreSources(
-                catalog = catalog,
-                media = context.mediaType,
-                sourceIds = ordered,
-                genres = policy.requiredGenres.toList(),
-                page = context.pageOffset,
-                releaseStatuses = context.releaseStatuses,
-                policy = policy,
-                maxConcurrency = maxConcurrency,
-                timeoutMs = genreSourceTimeoutMs(context.verificationBudget, ordered.size, maxConcurrency),
-                hydrate = true,
-                targetItems = rowCap,
-                budget = context.verificationBudget,
-            )
+            val shared = context.sharedGenreQuery
+            val results = if (shared != null) {
+                // TASTE ran the same required query; take its odd slice instead
+                // of paying for a second catalogue pass only to be deduped away.
+                shared.results().map { it.sliceForRow(parity = 1) }
+            } else {
+                queryDiscoveryGenreSources(
+                    catalog = catalog,
+                    media = context.mediaType,
+                    sourceIds = ordered,
+                    genres = policy.requiredGenres.toList(),
+                    page = context.pageOffset,
+                    releaseStatuses = context.releaseStatuses,
+                    policy = policy,
+                    maxConcurrency = maxConcurrency,
+                    timeoutMs = genreSourceTimeoutMs(context.verificationBudget, ordered.size, maxConcurrency),
+                    hydrate = true,
+                    targetItems = rowCap,
+                    budget = context.verificationBudget,
+                )
+            }
             isDegraded = results.any {
                 it.failure != null || it.summary.outcome == GenreVerificationOutcome.INCOMPLETE
             }

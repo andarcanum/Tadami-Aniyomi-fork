@@ -12,10 +12,12 @@ class DiscoveryTasteRowBuilderTest {
 
     private class FakeTrending(
         private val genreItems: List<DiscoveryTrendingItem> = emptyList(),
+        private val pageItems: Map<Int, List<DiscoveryTrendingItem>> = emptyMap(),
         private val shouldFail: Boolean = false,
     ) : DiscoveryTrendingSource {
         var lastQueriedGenres: List<String>? = null
         var lastQueriedPage: Int? = null
+        val queriedPages = mutableListOf<Int>()
 
         override suspend fun fetch(
             mediaType: DiscoveryMediaType,
@@ -35,7 +37,8 @@ class DiscoveryTasteRowBuilderTest {
             lastQueriedGenres = genres
             lastQueriedPage = page
             if (shouldFail) throw IOException("trending boom")
-            return genreItems
+            queriedPages += page
+            return pageItems[page] ?: genreItems
         }
 
         override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? = null
@@ -284,5 +287,60 @@ class DiscoveryTasteRowBuilderTest {
         )
         builder(trending, FakeCatalog()).build(ctx)
         trending.lastQueriedGenres shouldBe listOf("Sci-Fi")
+    }
+
+    @Test
+    fun `strict required taste pages external provider until rich target`() = runTest {
+        val trending = FakeTrending(
+            pageItems = (1..3).associateWith { page ->
+                (1..10).map { index ->
+                    val title = "Page $page Item $index"
+                    DiscoveryTrendingItem(
+                        title,
+                        title.lowercase(),
+                        null,
+                        index.toLong(),
+                        null,
+                        genres = listOf("Milf"),
+                    )
+                }
+            },
+        )
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Milf"),
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val ctx = context(profile = emptyList()).copy(
+            requiredGenres = setOf("Milf"),
+            genreFilterSpec = spec,
+        )
+
+        val result = builder(trending, FakeCatalog()).build(ctx)
+
+        result.size shouldBe RICH_SOURCE_TARGET
+        trending.queriedPages shouldBe listOf(1, 2, 3)
+    }
+
+    @Test
+    fun `repeated external page stops required paging`() = runTest {
+        val repeated = (1..10).map { index ->
+            DiscoveryTrendingItem("Item $index", "item $index", null, index.toLong(), null, genres = listOf("Milf"))
+        }
+        val trending = FakeTrending(
+            pageItems = mapOf(1 to repeated, 2 to repeated, 3 to repeated),
+        )
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Milf"),
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val ctx = context(profile = emptyList()).copy(
+            requiredGenres = setOf("Milf"),
+            genreFilterSpec = spec,
+        )
+
+        val result = builder(trending, FakeCatalog()).build(ctx)
+
+        result.size shouldBe 10
+        trending.queriedPages shouldBe listOf(1, 2)
     }
 }

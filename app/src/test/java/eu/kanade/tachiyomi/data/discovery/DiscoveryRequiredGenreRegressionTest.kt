@@ -131,6 +131,40 @@ class DiscoveryRequiredGenreRegressionTest {
     }
 
     @Test
+    fun `taste and source share one required query and take disjoint slices`() = runTest {
+        var calls = 0
+        val sharedQuery = SharedRequiredGenreQuery {
+            calls++
+            listOf(
+                GenreSourceVerification(
+                    sourceId = 7L,
+                    summary = GenreVerificationSummary(
+                        items = (1..6).map { item("shared$it", listOf("Fantasy")) },
+                        verifiedCount = 6,
+                        unattemptedCount = 0,
+                        metadataUnavailableCount = 0,
+                        failedCount = 0,
+                    ),
+                    queryKey = "key",
+                ),
+            )
+        }
+        val catalog = Catalog { _, _ -> error("the shared query must be used") }
+        val sharedContext = context().copy(
+            sourceIds = listOf(7L),
+            sharedGenreQuery = sharedQuery,
+        )
+
+        val taste = DiscoveryTasteRowBuilder(noExternal(), catalog, { TrendSort.POPULARITY }, false)
+            .build(sharedContext)
+        val source = DiscoverySourceRowBuilder(catalog).build(sharedContext)
+
+        calls shouldBe 1
+        taste.map { it.title } shouldBe listOf("shared1", "shared3", "shared5")
+        source.map { it.title } shouldBe listOf("shared2", "shared4", "shared6")
+    }
+
+    @Test
     fun `taste without required keeps the previous fast six-source path`() = runTest {
         val catalog = Catalog { _, _ -> page(emptyList()) }
         val fastContext = context().copy(

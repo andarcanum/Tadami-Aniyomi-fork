@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -45,10 +46,16 @@ class DiscoveryAdaptiveRefillTest {
     )
 
     private class Catalog(
+        private val queryableIds: Set<Long>? = null,
+        private val hydrateAnswer: (suspend (List<DiscoveryRowItem>) -> DiscoveryGenrePage)? = null,
         private val answer: suspend (Long, Int) -> DiscoveryGenrePage,
     ) : DiscoverySourceCatalog {
         val allocations = mutableMapOf<Long, MutableList<Int>>()
         val pageCalls = mutableListOf<Pair<Long, Int>>()
+        val hydrateCalls = mutableListOf<List<DiscoveryRowItem>>()
+
+        override fun queryableSourceIds(mediaType: DiscoveryMediaType, sourceIds: List<Long>): List<Long> =
+            queryableIds?.let { queryable -> sourceIds.filter { it in queryable } } ?: sourceIds
 
         override suspend fun popular(
             mediaType: DiscoveryMediaType,
@@ -93,6 +100,23 @@ class DiscoveryAdaptiveRefillTest {
             allocations.getOrPut(sourceId) { mutableListOf() }.add(maxDetails)
             pageCalls += sourceId to page
             return answer(sourceId, page)
+        }
+
+        override suspend fun hydrateGenres(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            items: List<DiscoveryRowItem>,
+            budget: DiscoveryVerificationBudget?,
+            maxDetails: Int,
+        ): DiscoveryGenrePage {
+            hydrateCalls += items
+            return hydrateAnswer?.invoke(items) ?: super<DiscoverySourceCatalog>.hydrateGenres(
+                mediaType,
+                sourceId,
+                items,
+                budget,
+                maxDetails,
+            )
         }
     }
 
@@ -164,6 +188,160 @@ class DiscoveryAdaptiveRefillTest {
 
         summary.items.size shouldBe 8
         summary.items.map { it.title }.distinct().size shouldBe 8
+    }
+
+    @Test
+    fun `rich required source fills thirty cards across pages`() = runTest {
+        val catalog = Catalog { _, pageNumber ->
+            val start = (pageNumber - 1) * 10
+            page((1..10).map { item("card${start + it}", listOf("Fantasy")) })
+        }
+
+        val summary = query(catalog, targetItems = 50).single().summary
+
+        summary.items.size shouldBe RICH_SOURCE_TARGET
+        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2, 3)
+    }
+
+    @Test
+    fun `two empty required pages stop the source before the page cap`() = runTest {
+        val catalog = Catalog { _, _ -> page(emptyList()) }
+
+        val result = query(catalog, targetItems = 50).single()
+
+        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2)
+        result.stopReason shouldBe DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED
+        result.exhausted shouldBe false
+    }
+
+    @Test
+    fun `non-queryable source does not reserve details allowance`() = runTest {
+        val budget = DiscoveryVerificationBudget(maxDetails = 48)
+        val catalog = Catalog(queryableIds = setOf(1L)) { id, _ ->
+            if (id == 1L) page(listOf(item("Rich", listOf("Fantasy")))) else page(emptyList())
+        }
+
+        val results = query(catalog, sourceIds = listOf(1L, 2L), budget = budget)
+
+        results.map { it.sourceId } shouldBe listOf(1L)
+        catalog.allocations.keys shouldBe setOf(1L)
+        // One source gets the probe allowance on every page it opens; the probe
+        // is only widened to the whole pool in the refill wave.
+        catalog.allocations.getValue(1L) shouldBe listOf(6, 6, 6)
+        catalog.pageCalls.map { it.first }.distinct() shouldBe listOf(1L)
+    }
+
+    @Test
+    fun `productive source gets a refill beyond the equal probe`() = runTest {
+        val budget = DiscoveryVerificationBudget(maxDetails = 48)
+        val catalog = Catalog { id, pageNumber ->
+            if (id == 1L) {
+                page(listOf(item("card$pageNumber", listOf("Fantasy"))), detailsUsed = 10)
+            } else {
+                page(emptyList(), detailsUsed = 10)
+            }
+        }
+
+        val results = query(catalog, sourceIds = listOf(1L, 2L, 3L), budget = budget)
+
+        catalog.allocations.getValue(1L).first() shouldBe 6
+        catalog.allocations.getValue(2L) shouldBe listOf(6)
+        catalog.allocations.getValue(3L) shouldBe listOf(6)
+        // The refill wave opens with the whole pool; later pages spend what the
+        // fake page reports as used.
+        catalog.allocations.getValue(1L)[1] shouldBe 48
+        results.first().summary.items.size shouldBe 6
+        results.first().summary.items.map { it.title }.distinct().size shouldBe 6
+    }
+
+    @Test
+    fun `pending cards from page one are refilled before asking for another page`() = runTest {
+        val budget = DiscoveryVerificationBudget(maxDetails = 48)
+        val known = item("known", listOf("Fantasy"))
+        val pending = (1..3).map { item("pending$it") }
+        val catalog = Catalog(
+            hydrateAnswer = { items ->
+                page(
+                    items = items.map { it.copy(genres = listOf("Fantasy")) },
+                    detailsUsed = items.size,
+                )
+            },
+        ) { _, _ ->
+            page(
+                items = listOf(known),
+                hasNextPage = false,
+                pending = pending,
+                detailsUsed = 6,
+            )
+        }
+
+        val result = query(catalog, budget = budget).single()
+
+        catalog.pageCalls.map { it.second } shouldBe listOf(1)
+        catalog.hydrateCalls.single().map { it.title } shouldBe pending.map { it.title }
+        result.summary.items.map { it.title }.toSet() shouldBe
+            (listOf("known") + pending.map { it.title }).toSet()
+    }
+
+    @Test
+    fun `required source pages past the old six page cap`() = runTest {
+        val catalog = Catalog { _, pageNumber ->
+            page(listOf(item("card$pageNumber", listOf("Fantasy"))))
+        }
+
+        val result = query(catalog, targetItems = 50).single()
+
+        catalog.pageCalls.map { it.second } shouldBe (1..20).toList()
+        result.summary.items.size shouldBe 20
+    }
+
+    @Test
+    fun `shared query slices one source result into disjoint row halves`() {
+        val verification = GenreSourceVerification(
+            sourceId = 7L,
+            summary = GenreVerificationSummary(
+                items = (1..6).map { item("card$it", listOf("Fantasy")) },
+                verifiedCount = 6,
+                unattemptedCount = 0,
+                metadataUnavailableCount = 0,
+                failedCount = 0,
+            ),
+            queryKey = "key",
+        )
+
+        val taste = verification.sliceForRow(parity = 0).summary.items.map { it.title }
+        val source = verification.sliceForRow(parity = 1).summary.items.map { it.title }
+
+        taste shouldBe listOf("card1", "card3", "card5")
+        source shouldBe listOf("card2", "card4", "card6")
+        (taste + source).toSet() shouldBe (1..6).map { "card$it" }.toSet()
+    }
+
+    @Test
+    fun `shared required query runs the catalogue pass once for both rows`() = runTest {
+        var calls = 0
+        val shared = SharedRequiredGenreQuery {
+            calls++
+            listOf(
+                GenreSourceVerification(
+                    sourceId = 7L,
+                    summary = GenreVerificationSummary(
+                        items = listOf(item("card", listOf("Fantasy"))),
+                        verifiedCount = 1,
+                        unattemptedCount = 0,
+                        metadataUnavailableCount = 0,
+                        failedCount = 0,
+                    ),
+                ),
+            )
+        }
+
+        val first = async { shared.results() }
+        val second = async { shared.results() }
+        val results = listOf(first.await(), second.await())
+
+        calls shouldBe 1
+        results[0] shouldBe results[1]
     }
 
     @Test

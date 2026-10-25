@@ -463,10 +463,17 @@ class DiscoveryRunner(
         val genreFilterSpec = preferences.genreFilterSpec()
         // One budget for the whole media run: every row shares the deadline and
         // the details allowance, so rows cannot multiply the worker cost.
+        // Genre-selected mode verifies deep pages of a few rich sources, so it
+        // gets a larger allowance; the deadline remains the real guard.
         val verificationBudget = DiscoveryVerificationBudget(
             budgetMs = mediaBudgetMs ?: DiscoveryVerificationBudget.DEFAULT_MEDIA_BUDGET_MS,
+            maxDetails = if (genreFilterSpec.requiredGenres.isNotEmpty()) {
+                DiscoveryVerificationBudget.DEFAULT_REQUIRED_MAX_DETAILS
+            } else {
+                DiscoveryVerificationBudget.DEFAULT_MAX_DETAILS
+            },
         )
-        val context = DiscoveryBuildContext(
+        val baseContext = DiscoveryBuildContext(
             mediaType = mediaType,
             seeds = seedsWithTracks,
             feedbackSeeds = feedbackSeeds,
@@ -500,6 +507,52 @@ class DiscoveryRunner(
             pageOffset = pageOffset,
             verificationBudget = verificationBudget,
         )
+        // TASTE and SOURCE otherwise run the same required-genre catalogue pass
+        // twice and then the coordinator dedupes one of them away. Share the
+        // pass and give the rows disjoint slices instead.
+        val requiredGenres = genreFilterSpec.requiredGenres
+        val sharedGenreQuery = if (
+            requiredGenres.isNotEmpty() &&
+            preferences.rowTasteEnabled().get() &&
+            preferences.rowSourceEnabled().get()
+        ) {
+            val ids = participation.sourceIds.filter { it > 0L }
+                .ifEmpty { listOf(participation.primarySourceId).filter { it > 0L } }
+            if (ids.isEmpty()) {
+                null
+            } else {
+                val rotation = (pageOffset - 1).coerceAtLeast(0) % ids.size
+                val ordered = ids.drop(rotation) + ids.take(rotation)
+                SharedRequiredGenreQuery {
+                    queryDiscoveryGenreSources(
+                        catalog = sourceCatalog,
+                        media = mediaType,
+                        sourceIds = ordered,
+                        genres = requiredGenres.toList(),
+                        page = pageOffset,
+                        releaseStatuses = baseContext.releaseStatuses,
+                        policy = baseContext.candidatePolicy,
+                        maxConcurrency = 4,
+                        timeoutMs = genreSourceTimeoutMs(
+                            verificationBudget,
+                            ordered.size,
+                            maxConcurrency = 4,
+                        ),
+                        hydrate = true,
+                        targetItems = RICH_SOURCE_TARGET * 2,
+                        perSourceCap = RICH_SOURCE_TARGET * 2,
+                        budget = verificationBudget,
+                    )
+                }
+            }
+        } else {
+            null
+        }
+        val context = if (sharedGenreQuery != null) {
+            baseContext.copy(sharedGenreQuery = sharedGenreQuery)
+        } else {
+            baseContext
+        }
         logcat {
             "[Discovery] refresh media=$mediaType manual=$isManualRefresh " +
                 "configuration=$isConfigurationRefresh page=$pageOffset " +

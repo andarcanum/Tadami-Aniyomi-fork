@@ -106,6 +106,36 @@ interface DiscoverySourceCatalog {
         budget = budget,
     )
 
+    /**
+     * Hydrates cards already fetched from a source without asking for a page
+     * again. Used to settle the previous page's pending cards when a richer
+     * second wave gives the source more details allowance.
+     */
+    suspend fun hydrateGenres(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        items: List<DiscoveryRowItem>,
+        budget: DiscoveryVerificationBudget? = null,
+        maxDetails: Int = 0,
+    ): DiscoveryGenrePage = DiscoveryGenrePage(
+        items = items,
+        verified = items.count { it.genres.isNotEmpty() },
+        unattempted = items.count { it.genres.isEmpty() },
+        metadataUnavailable = 0,
+        transientFailures = 0,
+        pending = items.filter { it.genres.isEmpty() && !it.sourceUrl.isNullOrBlank() },
+        detailsUsed = 0,
+    )
+
+    /**
+     * Ids that can actually answer a catalogue query for [mediaType].
+     *
+     * Selected discovery ids may be stubs or installed only for another media
+     * type; those cannot yield cards and must not reserve a detail allowance.
+     * The default trusts the caller, keeping legacy implementations working.
+     */
+    fun queryableSourceIds(mediaType: DiscoveryMediaType, sourceIds: List<Long>): List<Long> = sourceIds
+
     suspend fun latest(
         mediaType: DiscoveryMediaType,
         sourceId: Long,
@@ -120,7 +150,10 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
 
     /** M2: перевод непонятых чекбоксов жанров — ленивый, кэш внутри фолбэка. */
     private val genreFallback by lazy {
-        GenreTranslationFallback(translate = { name -> MultilingualQueryHelper.translate(name) })
+        GenreTranslationFallback(
+            translate = { name -> MultilingualQueryHelper.translate(name) },
+            synonyms = { name -> MultilingualQueryHelper.getGenreTranslations(name) },
+        )
     }
 
     override suspend fun popular(
@@ -189,45 +222,93 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                 queryKey = queryKey,
             )
         }
-        val byUrl = items.associateBy { it.sourceUrl }
-        val settled = hydrateDiscoveryBatchUntilSettled(items, maxDetails) { batch, allowance ->
-            genreHydrator.hydrate(mediaType, sourceId, batch, budget, maxDetails = allowance) { url ->
-                val title = byUrl[url]?.title.orEmpty()
-                val observed = when (mediaType) {
-                    DiscoveryMediaType.MANGA -> {
-                        val source = Injekt.get<MangaSourceManager>().getOrStub(sourceId) as? CatalogueSource
-                        val entry = SManga.create().apply {
-                            this.url = url
-                            this.title = title
-                        }
-                        source?.let { fetchDiscoveryMangaDetails(it, entry) }?.genre
-                    }
-                    DiscoveryMediaType.ANIME -> {
-                        val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
-                        val entry = SAnime.create().apply {
-                            this.url = url
-                            this.title = title
-                        }
-                        source?.getAnimeDetails(entry)?.genre
-                    }
-                    DiscoveryMediaType.NOVEL -> {
-                        val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
-                        val entry = SNovel.create().apply {
-                            this.url = url
-                            this.title = title
-                        }
-                        source?.getNovelDetails(entry)?.genre
-                    }
-                }
-                parseGenres(observed)
-            }
-        }
+        val settled = hydrateItems(mediaType, sourceId, items, budget, maxDetails)
         return settled.copy(
             hasNextPage = fetched.hasNextPage,
             page = page,
             queryKey = queryKey,
         )
     }
+
+    override suspend fun hydrateGenres(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        items: List<DiscoveryRowItem>,
+        budget: DiscoveryVerificationBudget?,
+        maxDetails: Int,
+    ): DiscoveryGenrePage {
+        if (budget == null) {
+            return DiscoveryGenrePage(
+                items = items,
+                verified = items.count { it.genres.isNotEmpty() },
+                unattempted = items.count { it.genres.isEmpty() },
+                metadataUnavailable = 0,
+                transientFailures = 0,
+                pending = items.filter { it.genres.isEmpty() && !it.sourceUrl.isNullOrBlank() },
+                detailsUsed = 0,
+            )
+        }
+        return hydrateItems(mediaType, sourceId, items, budget, maxDetails)
+    }
+
+    private suspend fun hydrateItems(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        items: List<DiscoveryRowItem>,
+        budget: DiscoveryVerificationBudget,
+        maxDetails: Int,
+    ): DiscoveryGenrePage {
+        val byUrl = items.associateBy { it.sourceUrl }
+        return hydrateDiscoveryBatchUntilSettled(items, maxDetails) { batch, allowance ->
+            genreHydrator.hydrate(mediaType, sourceId, batch, budget, maxDetails = allowance) { url ->
+                fetchItemGenres(mediaType, sourceId, url, byUrl[url]?.title.orEmpty())
+            }
+        }
+    }
+
+    private suspend fun fetchItemGenres(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        url: String,
+        title: String,
+    ): List<String> {
+        val observed = when (mediaType) {
+            DiscoveryMediaType.MANGA -> {
+                val source = Injekt.get<MangaSourceManager>().getOrStub(sourceId) as? CatalogueSource
+                val entry = SManga.create().apply {
+                    this.url = url
+                    this.title = title
+                }
+                source?.let { fetchDiscoveryMangaDetails(it, entry) }?.genre
+            }
+            DiscoveryMediaType.ANIME -> {
+                val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
+                val entry = SAnime.create().apply {
+                    this.url = url
+                    this.title = title
+                }
+                source?.getAnimeDetails(entry)?.genre
+            }
+            DiscoveryMediaType.NOVEL -> {
+                val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
+                val entry = SNovel.create().apply {
+                    this.url = url
+                    this.title = title
+                }
+                source?.getNovelDetails(entry)?.genre
+            }
+        }
+        return parseGenres(observed)
+    }
+
+    override fun queryableSourceIds(mediaType: DiscoveryMediaType, sourceIds: List<Long>): List<Long> =
+        sourceIds.filter { id ->
+            when (mediaType) {
+                DiscoveryMediaType.MANGA -> Injekt.get<MangaSourceManager>().getOrStub(id) is CatalogueSource
+                DiscoveryMediaType.ANIME -> Injekt.get<AnimeSourceManager>().getOrStub(id) is AnimeCatalogueSource
+                DiscoveryMediaType.NOVEL -> Injekt.get<NovelSourceManager>().getOrStub(id) is NovelCatalogueSource
+            }
+        }
 
     override suspend fun latest(
         mediaType: DiscoveryMediaType,

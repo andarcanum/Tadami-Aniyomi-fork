@@ -37,6 +37,21 @@ class GenreTranslationFallbackTest {
     }
 
     @Test
+    fun `известный синоним матчит чекбокс без сетевого перевода`(): Unit = runBlocking {
+        val fb = GenreTranslationFallback(
+            translate = { error("synonym match must not translate") },
+            synonyms = { genre -> if (genre == "milf") listOf("милфы") else emptyList() },
+        )
+
+        val result = fb.selectSourceGenres(
+            userGenres = listOf("milf"),
+            sourceGenreNames = listOf("Романтика", "Милфы"),
+        )
+
+        result.shouldContainExactly("Милфы")
+    }
+
+    @Test
     fun `полностью сопоставленные жанры не запускают сетевой fallback`(): Unit = runBlocking {
         val calls = mutableListOf<String>()
         val fb = GenreTranslationFallback(translate = { name ->
