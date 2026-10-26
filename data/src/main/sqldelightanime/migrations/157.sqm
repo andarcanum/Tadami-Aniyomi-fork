@@ -1,0 +1,52 @@
+-- Reels Session Continuity (approved variant B)
+-- Lightweight session header and crash-safe ordered queue.
+
+CREATE TABLE IF NOT EXISTS reels_session(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    context_key TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    owner_nonce TEXT,
+    history_generation INTEGER NOT NULL,
+    checkpoint_sequence INTEGER NOT NULL DEFAULT 0,
+    active_item_id TEXT,
+    active_position_ms INTEGER NOT NULL DEFAULT 0,
+    active_completed INTEGER NOT NULL DEFAULT 0,
+    active_title TEXT,
+    active_author TEXT,
+    active_duration_sec REAL,
+    active_has_audio INTEGER NOT NULL DEFAULT 0,
+    active_tags_json TEXT NOT NULL DEFAULT '[]',
+    active_web_url TEXT,
+    active_created_at_epoch_sec INTEGER,
+    active_views_count INTEGER,
+    active_likes_count INTEGER,
+    active_is_author_verified INTEGER NOT NULL DEFAULT 0,
+    active_metadata_schema_version INTEGER NOT NULL DEFAULT 2,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id)
+);
+
+CREATE TABLE IF NOT EXISTS reels_session_queue(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id, session_id, item_id),
+    UNIQUE (account_scope_id, source_id, session_id, ordinal),
+    FOREIGN KEY (account_scope_id, source_id)
+      REFERENCES reels_session(account_scope_id, source_id) ON DELETE CASCADE
+);
+
+ALTER TABLE reels_candidate ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE reels_candidate ADD COLUMN views_count INTEGER;
+ALTER TABLE reels_candidate ADD COLUMN likes_count INTEGER;
+ALTER TABLE reels_candidate ADD COLUMN is_author_verified INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE reels_candidate ADD COLUMN captured_context_key TEXT;
+
+-- Migration sanitation: clear transport hints from legacy Telegram candidate rows
+-- (known Telegram source ID = 8529104719284712).
+UPDATE reels_candidate
+SET video_url = '', video_url_hd = NULL, poster_url = NULL, poster_url_vertical = NULL
+WHERE source_id = 8529104719284712;

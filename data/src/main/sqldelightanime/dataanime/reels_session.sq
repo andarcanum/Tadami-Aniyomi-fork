@@ -1,0 +1,117 @@
+CREATE TABLE reels_session(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    context_key TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    owner_nonce TEXT,
+    history_generation INTEGER NOT NULL,
+    checkpoint_sequence INTEGER NOT NULL DEFAULT 0,
+    active_item_id TEXT,
+    active_position_ms INTEGER NOT NULL DEFAULT 0,
+    active_completed INTEGER NOT NULL DEFAULT 0,
+    active_title TEXT,
+    active_author TEXT,
+    active_duration_sec REAL,
+    active_has_audio INTEGER NOT NULL DEFAULT 0,
+    active_tags_json TEXT NOT NULL DEFAULT '[]',
+    active_web_url TEXT,
+    active_created_at_epoch_sec INTEGER,
+    active_views_count INTEGER,
+    active_likes_count INTEGER,
+    active_is_author_verified INTEGER NOT NULL DEFAULT 0,
+    active_metadata_schema_version INTEGER NOT NULL DEFAULT 2,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id)
+);
+
+getSession:
+SELECT *
+FROM reels_session
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+claimSession:
+INSERT INTO reels_session(
+    account_scope_id, source_id, context_key, session_id, owner_nonce,
+    history_generation, checkpoint_sequence, active_item_id, active_position_ms,
+    active_completed, active_title, active_author, active_duration_sec,
+    active_has_audio, active_tags_json, active_web_url, active_created_at_epoch_sec,
+    active_views_count, active_likes_count, active_is_author_verified,
+    active_metadata_schema_version, updated_at_ms
+)
+VALUES (
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?,
+    ?, ?, ?, ?,
+    ?, ?, ?, ?,
+    ?, ?, ?,
+    ?, ?
+)
+ON CONFLICT(account_scope_id, source_id)
+DO UPDATE SET
+    context_key = excluded.context_key,
+    session_id = excluded.session_id,
+    owner_nonce = excluded.owner_nonce,
+    history_generation = excluded.history_generation,
+    checkpoint_sequence = excluded.checkpoint_sequence,
+    active_item_id = excluded.active_item_id,
+    active_position_ms = excluded.active_position_ms,
+    active_completed = excluded.active_completed,
+    active_title = excluded.active_title,
+    active_author = excluded.active_author,
+    active_duration_sec = excluded.active_duration_sec,
+    active_has_audio = excluded.active_has_audio,
+    active_tags_json = excluded.active_tags_json,
+    active_web_url = excluded.active_web_url,
+    active_created_at_epoch_sec = excluded.active_created_at_epoch_sec,
+    active_views_count = excluded.active_views_count,
+    active_likes_count = excluded.active_likes_count,
+    active_is_author_verified = excluded.active_is_author_verified,
+    active_metadata_schema_version = excluded.active_metadata_schema_version,
+    updated_at_ms = excluded.updated_at_ms;
+
+updateOwnerNonce:
+UPDATE reels_session
+SET owner_nonce = :ownerNonce, checkpoint_sequence = 0, updated_at_ms = :updatedAtMs
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+revokeOwner:
+UPDATE reels_session
+SET owner_nonce = NULL
+WHERE account_scope_id = :scope AND source_id = :sourceId AND owner_nonce = :ownerNonce;
+
+invalidate:
+UPDATE reels_session
+SET owner_nonce = NULL,
+    active_item_id = CASE WHEN :dropCheckpoint THEN NULL ELSE active_item_id END
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+checkpoint:
+UPDATE reels_session
+SET checkpoint_sequence = :sequence,
+    active_item_id = :itemId,
+    active_position_ms = :positionMs,
+    active_completed = :completed,
+    active_title = :title,
+    active_author = :author,
+    active_duration_sec = :durationSec,
+    active_has_audio = :hasAudio,
+    active_tags_json = :tagsJson,
+    active_web_url = :webUrl,
+    active_created_at_epoch_sec = :createdAtEpochSec,
+    active_views_count = :viewsCount,
+    active_likes_count = :likesCount,
+    active_is_author_verified = :isAuthorVerified,
+    active_metadata_schema_version = :metadataSchemaVersion,
+    updated_at_ms = :updatedAtMs
+WHERE account_scope_id = :scope
+  AND source_id = :sourceId
+  AND owner_nonce = :ownerNonce
+  AND checkpoint_sequence < :sequence;
+
+deleteForScope:
+DELETE FROM reels_session
+WHERE account_scope_id = :scope;
+
+deleteForSource:
+DELETE FROM reels_session
+WHERE account_scope_id = :scope AND source_id = :sourceId;

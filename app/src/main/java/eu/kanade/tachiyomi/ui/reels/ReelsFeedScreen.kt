@@ -243,7 +243,10 @@ data class ReelsFeedScreen(
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_RESUME -> isForeground = true
-                    Lifecycle.Event.ON_PAUSE -> isForeground = false
+                    Lifecycle.Event.ON_PAUSE -> {
+                        isForeground = false
+                        screenModel.onForegroundLost()
+                    }
                     else -> Unit
                 }
             }
@@ -1035,6 +1038,7 @@ data class ReelsFeedScreen(
                                     null
                                 },
                                 onVideoCompleted = {
+                                    screenModel.onVideoCompleted(item.id)
                                     // B2 sleep timer: "after this video" pauses the feed
                                     // (sticky) instead of auto-advancing to the next reel.
                                     if (!screenModel.consumeSleepAtVideoEnd()) {
@@ -1083,6 +1087,14 @@ data class ReelsFeedScreen(
                                     null
                                 },
                                 onInitialSeekConsumed = screenModel::onInitialSeekConsumed,
+                                initialSeekPositionMs = if (item.id == state.pendingSeekItemId) {
+                                    state.pendingSeekPositionMs
+                                } else {
+                                    null
+                                },
+                                onInitialSeekPositionConsumed = {
+                                    screenModel.onSeekPositionConsumed(item.id)
+                                },
                                 // Audit H3: the offline playlist mixes sources — the cache key prefix must be the
                                 // SLOT's sourceId, not the single tapped-favorite source; videoIds
                                 // are only unique per source, a shared prefix lets CacheDataSource

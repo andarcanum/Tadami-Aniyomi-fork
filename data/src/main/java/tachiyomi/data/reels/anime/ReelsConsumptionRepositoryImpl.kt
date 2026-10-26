@@ -125,6 +125,8 @@ class ReelsConsumptionRepositoryImpl(
         return try {
             handler.await(inTransaction = true) { db ->
                 db.reels_consumptionQueries.deleteForScope(scope)
+                db.reels_session_queueQueries.deleteForScope(scope)
+                db.reels_sessionQueries.deleteForScope(scope)
                 db.reels_for_you_stateQueries.bumpGeneration(scope, policyVersion.toLong())
                 db.reels_for_you_stateQueries.getGeneration(scope).executeAsOne()
             }

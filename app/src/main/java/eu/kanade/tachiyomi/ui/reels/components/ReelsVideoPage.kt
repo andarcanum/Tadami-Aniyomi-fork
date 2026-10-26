@@ -163,6 +163,9 @@ fun ReelsVideoPage(
     initialSeekFraction: Float? = null,
     // Called once when the resume seek above was applied (the model clears the stored target).
     onInitialSeekConsumed: () -> Unit = {},
+    // Absolute position seek in milliseconds (session continuity).
+    initialSeekPositionMs: Long? = null,
+    onInitialSeekPositionConsumed: () -> Unit = {},
     // Actual Player.isPlaying of THIS page's player (buffering, audio-focus/lifecycle pauses
     // and the media end stop it without changing the feed-level play intent); forwarded only
     // while active.
@@ -177,6 +180,7 @@ fun ReelsVideoPage(
     var durationSec by remember(item) { mutableFloatStateOf(item.durationSec ?: 0f) }
     var seekFraction by remember { mutableStateOf<Float?>(null) }
     var initialSeekApplied by remember(item.id) { mutableStateOf(false) }
+    var initialSeekPositionApplied by remember(item.id) { mutableStateOf(false) }
     var showHeartPop by remember { mutableStateOf(false) }
     var showHideDialog by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
@@ -492,6 +496,14 @@ fun ReelsVideoPage(
             cacheKey = cacheKey,
             videoDescription = listOfNotNull(item.author, item.title).joinToString(" — ").ifBlank { null },
             seekToFraction = seekFraction,
+            seekToPositionMs = if (isActive && !initialSeekPositionApplied) initialSeekPositionMs else null,
+            onSeekPositionConsumed = {
+                initialSeekPositionApplied = true
+                onInitialSeekPositionConsumed()
+            },
+            onRenderedFirstFrame = {
+                if (isActive) onFirstFramePresented(item.id)
+            },
             onProgressUpdate = { progressState.floatValue = it },
             onVideoCompleted = onVideoCompleted,
             // The player-reported duration is authoritative; the server value is only a

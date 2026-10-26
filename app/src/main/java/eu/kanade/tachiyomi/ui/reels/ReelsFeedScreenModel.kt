@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.animesource.AnimeFeedLoginInstrumentationSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedReplaySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
@@ -40,6 +41,8 @@ import eu.kanade.tachiyomi.animesource.model.FeedCategory
 import eu.kanade.tachiyomi.animesource.model.FeedError
 import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedPage
+import eu.kanade.tachiyomi.animesource.model.FeedReplayContext
+import eu.kanade.tachiyomi.animesource.model.FeedReplayItemResult
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
@@ -76,6 +79,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.reels.anime.model.ReelsAlbum
@@ -83,6 +88,7 @@ import tachiyomi.domain.reels.anime.model.ReelsCandidate
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.model.ReelsHiddenEntry
+import tachiyomi.domain.reels.anime.model.ReelsSessionKey
 import tachiyomi.domain.reels.anime.model.ReelsWatchEntry
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
 import tachiyomi.domain.reels.anime.repository.ReelsCandidateRepository
@@ -90,6 +96,7 @@ import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
+import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
@@ -157,6 +164,7 @@ class ReelsFeedScreenModel(
     private val reelsAlbumRepository: ReelsAlbumRepository = Injekt.get(),
     private val reelsConsumptionRepository: ReelsConsumptionRepository = Injekt.get(),
     private val reelsCandidateRepository: ReelsCandidateRepository = Injekt.get(),
+    private val reelsSessionRepository: ReelsSessionRepository? = null,
     // Injectable monotonic clock (the watch accumulator must never use wall time) and wall
     // clock (the durable summary stores real timestamps).
     private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
@@ -368,6 +376,70 @@ class ReelsFeedScreenModel(
     // Pages fetched by the unseen refill loop in the current feed generation (bounded).
     private var unseenRefillPages = 0
 
+    @Volatile
+    private var replayKey: ReelsSessionKey? = null
+    private var remoteTailJob: Job? = null
+
+    @Volatile
+    private var observedReplayKey: ReelsSessionKey? = null
+
+    private val sessionContinuity by lazy {
+        ReelsSessionContinuity(
+            scope = screenModelScope,
+            ioDispatcher = ioDispatcher,
+            repository = reelsSessionRepository ?: Injekt.get(),
+            nowMs = nowMs,
+            wallClock = wallClock,
+            isCurrentKey = { key ->
+                replayKey == key && state.value.currentSourceId == key.sourceId &&
+                    !isIncognito(key.sourceId) && filtersUnseen(state.value.searchQuery)
+            },
+            isObservedKey = { key -> observedReplayKey == key && state.value.currentSourceId == key.sourceId },
+            onContextInvalidated = { key, changed ->
+                screenModelScope.launch(Dispatchers.Main.immediate) {
+                    if (observedReplayKey != key || state.value.currentSourceId != key.sourceId) return@launch
+                    replayKey = null
+                    remoteTailJob?.cancel()
+                    loadJob?.cancel()
+                    loadGeneration.incrementAndGet()
+                    mutableState.update {
+                        it.copy(
+                            items = persistentListOf(),
+                            seenIds = persistentSetOf(),
+                            isPlaying = false,
+                            canLoadMore = false,
+                            replayLocalHasMore = false,
+                            isLoading = false,
+                            pendingSeekItemId = null,
+                            pendingSeekPositionMs = null,
+                        )
+                    }
+                    if (changed != null) source?.let { buildFiltersAndStartFeed(it, key.sourceId) }
+                }
+            },
+        )
+    }
+
+    private fun isReplaySurface(): Boolean = source is AnimeFeedReplaySource &&
+        filtersUnseen(state.value.searchQuery) && !isIncognito(state.value.currentSourceId)
+
+    private fun invalidateReplay(dropCheckpoint: Boolean = false) {
+        if (observedReplayKey == null && replayKey == null) return
+        observedReplayKey = null
+        replayKey = null
+        remoteTailJob?.cancel()
+        remoteTailJob = null
+        val handle = sessionContinuity.detach()
+        if (handle != null) {
+            screenModelScope.launch(ioDispatcher) {
+                (reelsSessionRepository ?: Injekt.get()).invalidate(handle, dropCheckpoint)
+            }
+        }
+        mutableState.update {
+            it.copy(replayLocalHasMore = false, pendingSeekItemId = null, pendingSeekPositionMs = null)
+        }
+    }
+
     private fun accountScopeFor(sourceId: Long): String {
         // A capability lookup on plugin bytecode: never let a broken extension break history.
         val identity = runCatching {
@@ -418,6 +490,7 @@ class ReelsFeedScreenModel(
     fun onVisitStarted(item: ShortVideoItem) {
         if (state.value.isOffline) return
         interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
+        if (isReplaySurface()) sessionContinuity.visitStarted(item, persistEligible = true)
     }
 
     /** The player presented its first frame for this visit: time may start counting. */
@@ -435,8 +508,24 @@ class ReelsFeedScreenModel(
      */
     fun onPlaybackSample(itemId: String, positionMs: Long, eligible: Boolean) {
         if (state.value.isOffline) return
+        if (isReplaySurface()) sessionContinuity.sample(itemId, positionMs, foreground = eligible)
         val event = interactionTracker.onSample(itemId, nowMs(), positionMs, eligible) ?: return
         commitWatched(event.itemId)
+    }
+
+    /** Foreground loss: persist the latest position of the active visit before it can be lost. */
+    fun onForegroundLost() {
+        if (isReplaySurface()) sessionContinuity.flushActiveVisit()
+    }
+
+    fun onVideoCompleted(itemId: String) {
+        if (isReplaySurface()) sessionContinuity.videoCompleted(itemId)
+    }
+
+    fun onSeekPositionConsumed(itemId: String) {
+        if (state.value.pendingSeekItemId == itemId) {
+            mutableState.update { it.copy(pendingSeekItemId = null, pendingSeekPositionMs = null) }
+        }
     }
 
     /**
@@ -444,6 +533,7 @@ class ReelsFeedScreenModel(
      * row; the consumption summary itself was already committed when it qualified.
      */
     fun onVisitEnded(item: ShortVideoItem, positionMs: Long, positionFraction: Float, durationSec: Float) {
+        if (isReplaySurface()) sessionContinuity.positionBoundary(item.id, positionMs)
         val snapshot = interactionTracker.endVisit(item.id, nowMs(), positionMs)
         if (snapshot == null) return
         // Remote personalization (opt-in capability) reports the REAL foreground playback the
@@ -543,6 +633,7 @@ class ReelsFeedScreenModel(
      * table and survive by design.
      */
     fun resetForYouHistory() {
+        invalidateReplay(dropCheckpoint = true)
         val sourceId = state.value.currentSourceId
         watchedCommitted.clear()
         skippedCommitted.clear()
@@ -552,6 +643,28 @@ class ReelsFeedScreenModel(
             forYouScope = scope
             forYouGeneration = generation
             withContext(Dispatchers.Main.immediate) { loadFeed(reset = true) }
+        }
+    }
+
+    private suspend fun persistForYouPage(scope: String, sourceId: Long, items: List<ShortVideoItem>) {
+        if (items.isEmpty() || isIncognito(sourceId)) return
+        val now = wallClock()
+        val candidates = items.map { it.toCandidate(scope, sourceId, now) }
+        if (isReplaySurface() && sessionContinuity.activeHandle?.key?.accountScopeId == scope) {
+            val contextKey = sessionContinuity.activeHandle?.key?.contextKey
+            sessionContinuity.persistPage(
+                candidates.map {
+                    it.copy(
+                        videoUrl = "",
+                        videoUrlHd = null,
+                        posterUrl = "",
+                        posterUrlVertical = null,
+                        capturedContextKey = contextKey,
+                    )
+                },
+            )
+        } else {
+            reelsCandidateRepository.ingest(scope, sourceId, candidates)
         }
     }
 
@@ -576,6 +689,8 @@ class ReelsFeedScreenModel(
             retryAfter = null,
             resumePositionMs = null,
             metadataSchemaVersion = ReelsForYou.METADATA_SCHEMA_VERSION,
+            tagsJson = Json.encodeToString(tags),
+            viewsCount = viewsCount, likesCount = likesCount, isAuthorVerified = isAuthorVerified,
         )
     }
 
@@ -590,6 +705,8 @@ class ReelsFeedScreenModel(
             posterUrlVertical = posterUrlVertical,
             durationSec = durationSec?.toFloat(),
             hasAudio = hasAudio,
+            tags = runCatching { Json.decodeFromString<List<String>>(tagsJson) }.getOrDefault(emptyList()),
+            viewsCount = viewsCount, likesCount = likesCount, isAuthorVerified = isAuthorVerified,
             webUrl = webUrl,
             createdAtEpochSec = createdAtEpochSec,
         )
@@ -739,6 +856,7 @@ class ReelsFeedScreenModel(
 
     fun switchSource(newSourceId: Long) {
         if (state.value.isOffline) return
+        invalidateReplay()
         val previousSourceId = state.value.currentSourceId
         val rawSource = sourceManager.get(newSourceId)
         if (rawSource is AnimeFeedSource) {
@@ -857,9 +975,7 @@ class ReelsFeedScreenModel(
                     // Login state is per source: snapshot the persisted session (non-suspend,
                     // so safe on the main thread) and drop the previous source's account.
                     isLoginCapable = loginCapable,
-                    loggedInAccount = (rawSource as? AnimeFeedLoginSource)
-                        ?.takeIf { it.isLoggedIn() }
-                        ?.loggedInAccount(),
+                    loggedInAccount = null,
                     isLoggingIn = false,
                     loginError = null,
                     loginRejected = false,
@@ -929,8 +1045,15 @@ class ReelsFeedScreenModel(
      * behind [AnimeFeedSource.getFilterList] must not run there), then starts the first feed
      * generation back on the main dispatcher. Skipped when the user already switched away.
      */
-    private fun buildFiltersAndStartFeed(rawSource: AnimeFeedSource, sourceId: Long) {
-        screenModelScope.launch(ioDispatcher) {
+    private fun buildFiltersAndStartFeed(rawSource: AnimeFeedSource, sourceId: Long, resetReplay: Boolean = false) {
+        invalidateReplay()
+        loadJob?.cancel()
+        val entryGeneration = loadGeneration.incrementAndGet()
+        loadJob = screenModelScope.launch(ioDispatcher) {
+            val account = (rawSource as? AnimeFeedLoginSource)
+                ?.takeIf { it.isLoggedIn() }
+                ?.loggedInAccount()
+
             val filters = when (mode) {
                 FeedMode.GLOBAL -> rawSource.getFilterList()
                 FeedMode.NICHE -> (rawSource as? AnimeCategoryFeedOrderSource)?.categoryFilters()
@@ -940,16 +1063,212 @@ class ReelsFeedScreenModel(
             if (mode == FeedMode.GLOBAL) {
                 restoreFilters(filters, sourcePreferences.lastReelsFilter(sourceId).get())
             }
+
+            var restoredSession: RestoredReelsSession? = null
+            if (mode == FeedMode.GLOBAL && rawSource is AnimeFeedReplaySource &&
+                filtersUnseen(state.value.searchQuery) && !isIncognito(sourceId)
+            ) {
+                val replayContext = rawSource.prepareReplay()
+                if (replayContext != null) {
+                    val frozen = ReelsSessionContext.freezeFilters(rawSource, filters)
+                    val contextKey = ReelsSessionContext.computeContextKey(
+                        sourceId = sourceId,
+                        route = "main",
+                        query = "",
+                        unseenOnly = filtersUnseen(""),
+                        filterFingerprint = frozen.fingerprint,
+                        continuityKey = replayContext.continuityKey,
+                    )
+                    val (accountScope, historyGen) = ensureForYouScope(sourceId)
+                    val key = ReelsSessionKey(
+                        accountScopeId = accountScope,
+                        sourceId = sourceId,
+                        contextKey = contextKey,
+                    )
+                    ensureActive()
+                    if (loadGeneration.get() != entryGeneration ||
+                        state.value.currentSourceId != sourceId
+                    ) {
+                        return@launch
+                    }
+                    observedReplayKey = key
+                    replayKey = key
+                    restoredSession = sessionContinuity.restore(
+                        source = rawSource,
+                        key = key,
+                        context = replayContext,
+                        filters = frozen.filters,
+                        historyGeneration = historyGen,
+                        reset = resetReplay,
+                    )
+                }
+            }
+
             withContext(Dispatchers.Main.immediate) {
-                if (state.value.currentSourceId != sourceId) return@withContext
-                mutableState.update { it.copy(filters = filters) }
-                loadFeed(reset = true)
+                if (state.value.currentSourceId != sourceId ||
+                    loadGeneration.get() != entryGeneration
+                ) {
+                    return@withContext
+                }
+                mutableState.update {
+                    it.copy(
+                        filters = filters,
+                        loggedInAccount = account,
+                    )
+                }
+                if (restoredSession != null && restoredSession.initialItems.isNotEmpty()) {
+                    applyRestoredSession(restoredSession)
+                } else {
+                    loadFeedInternal(reset = true)
+                }
             }
         }
     }
 
+    private fun applyRestoredSession(restored: RestoredReelsSession) {
+        val initialItems = restored.initialItems
+        val seekTargetIndex = if (restored.seekItemId != null) {
+            initialItems.indexOfFirst { it.id == restored.seekItemId }.coerceAtLeast(0)
+        } else {
+            0
+        }
+
+        mutableState.update { current ->
+            current.copy(
+                items = initialItems.toImmutableList(),
+                seenIds = initialItems.map { it.id }.toImmutableSet(),
+                isLoading = false,
+                canLoadMore = true,
+                feedGeneration = current.feedGeneration + 1,
+                targetPageIndex = seekTargetIndex,
+                activeIndex = seekTargetIndex,
+                pendingSeekItemId = restored.seekItemId,
+                pendingSeekPositionMs = restored.seekPositionMs,
+                replayLocalHasMore = restored.localHasMore,
+            )
+        }
+
+        initialItems.getOrNull(seekTargetIndex)?.let {
+            sessionContinuity.visitStarted(it, persistEligible = true)
+        }
+
+        val preparedKey = replayKey
+        remoteTailJob?.cancel()
+        remoteTailJob = screenModelScope.launch(ioDispatcher) {
+            delay(1000L)
+            if (preparedKey != null && replayKey == preparedKey) loadRemoteTail(reset = true)
+        }
+    }
+
+    private fun loadRemoteTail(reset: Boolean) {
+        if (state.value.isOffline || !isReplaySurface()) return
+        val requestedKey = replayKey ?: return
+        val src = source ?: return
+        val snapshot = state.value
+        val sourceIdAtStart = snapshot.currentSourceId
+        val filters = sessionContinuity.frozenFilters() ?: return
+        val page = if (reset) 1 else snapshot.nextPageIndex
+        val cursor = if (reset) null else (if (snapshot.cursorMode) snapshot.nextCursor else null)
+
+        remoteTailJob = screenModelScope.launch(ioDispatcher) {
+            try {
+                val pageData = src.getFeed(page, cursor, filters)
+                ensureActive()
+                if (replayKey != requestedKey || !isReplaySurface()) return@launch
+
+                val rawIncoming = pageData.videos.distinctBy { it.id }.filterHidden()
+                val (scope, _) = ensureForYouScope(sourceIdAtStart)
+                val consumed = reelsConsumptionRepository.consumedIds(scope, sourceIdAtStart, rawIncoming.map { it.id })
+                val incoming = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+
+                if (incoming.isNotEmpty()) {
+                    persistForYouPage(scope, sourceIdAtStart, incoming)
+                }
+
+                val step = ReelsPagination(
+                    nextPage = page,
+                    nextCursor = cursor,
+                    cursorMode = snapshot.cursorMode,
+                    canLoadMore = snapshot.canLoadMore,
+                ).advance(pageData.hasNextPage, pageData.nextCursor)
+
+                withContext(Dispatchers.Main.immediate) {
+                    if (state.value.currentSourceId != sourceIdAtStart || replayKey != requestedKey) return@withContext
+                    mutableState.update { current ->
+                        current.copy(
+                            canLoadMore = step.pagination.canLoadMore,
+                            nextPageIndex = step.pagination.nextPage,
+                            nextCursor = step.pagination.nextCursor,
+                            cursorMode = step.pagination.cursorMode,
+                            replayLocalHasMore = current.replayLocalHasMore || incoming.isNotEmpty(),
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                // Cancelled
+            } catch (t: Throwable) {
+                logcat(LogPriority.WARN, t) { "Background tail load failed for source $sourceIdAtStart" }
+            }
+        }
+    }
+
+    private fun loadLocalReplayWindow(): Boolean {
+        val snapshot = state.value
+        if (!isReplaySurface() || !snapshot.replayLocalHasMore || snapshot.isLoading) return false
+        val generation = loadGeneration.incrementAndGet()
+        loadJob?.cancel()
+        mutableState.update { it.copy(isLoading = true) }
+        loadJob = screenModelScope.launch(ioDispatcher) {
+            try {
+                val window = sessionContinuity.loadNextWindow()
+                ensureActive()
+                withContext(Dispatchers.Main.immediate) {
+                    if (loadGeneration.get() != generation ||
+                        state.value.currentSourceId != snapshot.currentSourceId
+                    ) {
+                        return@withContext
+                    }
+                    mutableState.update { current ->
+                        val added = window.entries.map { it.candidate.toShortVideoItem() }.filterHidden()
+                            .filterNot { it.id in current.seenIds }
+                        current.copy(
+                            items = (current.items + added).toImmutableList(),
+                            seenIds = (current.seenIds + added.map { it.id }).toImmutableSet(),
+                            replayLocalHasMore = window.hasMore,
+                            isLoading = false,
+                            pageError = null,
+                        )
+                    }
+                    if (window.entries.isEmpty() && window.hasMore) loadLocalReplayWindow()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                if (loadGeneration.get() == generation) {
+                    mutableState.update {
+                        it.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
+                    }
+                }
+            }
+        }
+        return true
+    }
+
     fun loadFeed(reset: Boolean = false) {
+        if (reset) {
+            val replaySource = source
+            if (replaySource != null && isReplaySurface()) {
+                buildFiltersAndStartFeed(replaySource, state.value.currentSourceId, resetReplay = true)
+                return
+            }
+            invalidateReplay()
+        }
+        loadFeedInternal(reset)
+    }
+
+    private fun loadFeedInternal(reset: Boolean = false) {
         if (state.value.isOffline) return
+        if (!reset && loadLocalReplayWindow()) return
         val src = source ?: return
         if (!reset && state.value.isLoading) return
         // Album-search pagination lives on its own cursor/cap flag (report fix): the feed's
@@ -997,7 +1316,7 @@ class ReelsFeedScreenModel(
         // must not read snapshot state after its input sections were reset by a newer load.
         val snapshot = state.value
         val query = snapshot.searchQuery
-        val filters = snapshot.filters
+        val filters = if (replayKey != null) sessionContinuity.frozenFilters() ?: snapshot.filters else snapshot.filters
         val page = snapshot.nextPageIndex
         val sourceIdAtStart = snapshot.currentSourceId
         // Decided once per request: a preference flip mid-flight must not half-filter a page.
@@ -1118,12 +1437,7 @@ class ReelsFeedScreenModel(
                 // Durable inbox: persisted BEFORE the UI publish, so a crash between the two
                 // still leaves the received candidates recoverable after reopening.
                 if (forYou != null && incoming.isNotEmpty()) {
-                    val now = wallClock()
-                    reelsCandidateRepository.ingest(
-                        forYou.first,
-                        sourceIdAtStart,
-                        incoming.map { it.toCandidate(forYou.first, sourceIdAtStart, now) },
-                    )
+                    persistForYouPage(forYou.first, sourceIdAtStart, incoming)
                 }
                 // Restart/rescan recovery: the durable unseen backlog seeds a fresh generation,
                 // so reels the user never reached survive a lost plugin cursor. Fresh items
@@ -1306,7 +1620,11 @@ class ReelsFeedScreenModel(
     private fun maybeLoadMoreForRunway() {
         val current = state.value
         if (mode == FeedMode.FOLLOWING) return
-        if (current.isOffline || current.isLoading || !current.canLoadMore || current.items.isEmpty()) return
+        if (current.isOffline || current.isLoading || (!current.canLoadMore && !current.replayLocalHasMore) ||
+            current.items.isEmpty()
+        ) {
+            return
+        }
         // Album search paginates on its own cursor/cap flag; the reels runway does not apply.
         if (current.albumSearchCapable && current.searchQuery.isNotBlank()) return
 
@@ -1315,7 +1633,7 @@ class ReelsFeedScreenModel(
             page = page,
             total = current.items.size,
             isLoading = current.isLoading,
-            canLoadMore = current.canLoadMore,
+            canLoadMore = current.canLoadMore || current.replayLocalHasMore,
         )
         if (!decision.shouldLoad) return
 
@@ -2350,6 +2668,7 @@ class ReelsFeedScreenModel(
      * write gates react through the preference's change flow / live reads.
      */
     fun toggleReelsIncognito() {
+        invalidateReplay()
         val next = !sourcePreferences.reelsIncognitoMode().get()
         sourcePreferences.reelsIncognitoMode().set(next)
     }
@@ -2798,6 +3117,27 @@ class ReelsFeedScreenModel(
         sourceId: Long? = null,
     ): String? {
         val owner = sourceId?.let(sourceManager::get) ?: source
+        if (owner === source && isReplaySurface() && replayKey != null) {
+            val key = replayKey
+            val result = sessionContinuity.resolveItem(item.id)
+            if (replayKey != key) return null
+            if (result is FeedReplayItemResult.Available && result.item.id == item.id) {
+                val fresh = result.item
+                withContext(Dispatchers.Main.immediate) {
+                    if (replayKey == key) {
+                        mutableState.update { current ->
+                            current.copy(
+                                items = current.items.map { old ->
+                                    if (old.id == item.id && old.videoUrl.isBlank()) fresh else old
+                                }.toImmutableList(),
+                            )
+                        }
+                    }
+                }
+                return if (hd) fresh.videoUrlHd?.takeIf { it.isNotBlank() } ?: fresh.videoUrl else fresh.videoUrl
+            }
+            return null
+        }
         val resolver = owner as? AnimeFeedVideoResolverSource ?: return null
         val hdFallback = mediaDescriptor(item, sourceId)?.hdFallback ?: true
         return try {
@@ -3286,6 +3626,7 @@ class ReelsFeedScreenModel(
         // Sticky per generation: locked true on the first response with a non-null cursor.
         val cursorMode: Boolean = false,
         val canLoadMore: Boolean = true,
+        val replayLocalHasMore: Boolean = false,
         val isMuted: Boolean = false,
         val isHdQuality: Boolean = true,
         // Force SD while on metered (non-Wi-Fi) networks; applied when a page activates.
@@ -3301,6 +3642,8 @@ class ReelsFeedScreenModel(
         // B3.1 resume-seek: when set, the matching clip seeks to [resumeFraction] once.
         val resumeVideoId: String? = null,
         val resumeFraction: Float? = null,
+        val pendingSeekItemId: String? = null,
+        val pendingSeekPositionMs: Long? = null,
         val isPlaying: Boolean = true,
         // Sticky user pause: set by an explicit pause tap, survives swipes (auto-advance must
         // not undo a deliberate pause) and is cleared only by an explicit resume tap.

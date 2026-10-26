@@ -95,6 +95,9 @@ fun ReelsPlayerView(
     // poster but drop the loading spinner that would otherwise spin forever.
     isMediaUnplayable: Boolean = false,
     seekToFraction: Float?,
+    seekToPositionMs: Long? = null,
+    onSeekPositionConsumed: () -> Unit = {},
+    onRenderedFirstFrame: () -> Unit = {},
     onProgressUpdate: (Float) -> Unit,
     onVideoCompleted: () -> Unit,
     // Increment to re-prepare the current media from 0 after a playback error (retry action).
@@ -278,6 +281,7 @@ fun ReelsPlayerView(
     // parked here and applied by the listener at STATE_READY — otherwise the B3.1 resume
     // seek is silently dropped on a directly activated (non-preloaded) clip.
     var pendingSeekFraction by remember { mutableFloatStateOf(-1f) }
+    var pendingSeekPositionMs by remember { mutableLongStateOf(-1L) }
     // The media URL the current player instance was built for, so a URL change (quality
     // toggle) is handled explicitly inside the lifecycle effect instead of via the
     // DisposableEffect disposal order.
@@ -413,8 +417,12 @@ fun ReelsPlayerView(
                                         seekTo(restorePositionMs)
                                         restorePositionMs = 0L
                                     }
-                                    // Apply a seek parked while the player was cold (resume-seek).
-                                    if (pendingSeekFraction >= 0f && duration > 0) {
+                                    // Apply a seek parked while the player was cold (resume-seek or absolute seek).
+                                    if (pendingSeekPositionMs >= 0L && duration > 0) {
+                                        seekTo(pendingSeekPositionMs.coerceIn(0L, duration))
+                                        pendingSeekPositionMs = -1L
+                                        onSeekPositionConsumed()
+                                    } else if (pendingSeekFraction >= 0f && duration > 0) {
                                         seekTo((pendingSeekFraction * duration).toLong())
                                         pendingSeekFraction = -1f
                                     }
@@ -461,6 +469,7 @@ fun ReelsPlayerView(
                             // The dwell clock measures visible playback: a player can already
                             // be playing while the first frame is still being decoded.
                             if (owner.isPlaying) dwellClock.start(SystemClock.elapsedRealtime())
+                            onRenderedFirstFrame()
                         }
 
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -559,6 +568,19 @@ fun ReelsPlayerView(
                     p.seekTo((frac.coerceIn(0f, 1f) * p.duration).toLong())
                 } else {
                     pendingSeekFraction = frac.coerceIn(0f, 1f)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(seekToPositionMs) {
+        seekToPositionMs?.let { ms ->
+            player?.let { p ->
+                if (p.playbackState == Player.STATE_READY && p.duration > 0) {
+                    p.seekTo(ms.coerceIn(0L, p.duration))
+                    onSeekPositionConsumed()
+                } else {
+                    pendingSeekPositionMs = ms
                 }
             }
         }

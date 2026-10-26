@@ -7,6 +7,7 @@ import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.domain.reels.anime.model.ReelsCandidate
+import tachiyomi.domain.reels.anime.model.ReelsInboxCapacityException
 import tachiyomi.domain.reels.anime.repository.ReelsCandidateRepository
 
 /**
@@ -30,34 +31,14 @@ class ReelsCandidateRepositoryImpl(
         if (candidates.isEmpty()) return 0
         return try {
             handler.await(inTransaction = true) { db ->
-                val queries = db.reels_candidateQueries
-                val known = queries
-                    .existingIds(scope, sourceId, candidates.map { it.itemId })
-                    .executeAsList()
-                    .toHashSet()
-                var room = (MAX_CANDIDATES_PER_SOURCE - queries.countForSource(scope, sourceId).executeAsOne())
-                    .coerceAtLeast(0L)
-                var written = 0
-                var skipped = 0
-                for (candidate in candidates) {
-                    val isNew = candidate.itemId !in known
-                    if (isNew && room <= 0L) {
-                        skipped++
-                        continue
-                    }
-                    if (isNew) room--
-                    upsert(queries, candidate)
-                    written++
-                }
-                if (skipped > 0) {
-                    logcat(LogPriority.WARN) {
-                        "Reels inbox for source $sourceId is at its $MAX_CANDIDATES_PER_SOURCE-row cap; " +
-                            "$skipped new candidate(s) not stored (backpressure, nothing evicted)."
-                    }
-                }
-                written
+                ReelsCandidateWriter.writeCandidates(db, scope, sourceId, candidates)
             }
         } catch (e: CancellationException) {
+            throw e
+        } catch (e: ReelsInboxCapacityException) {
+            logcat(LogPriority.WARN) {
+                "Reels inbox for source $sourceId reached capacity; rejecting ingest."
+            }
             throw e
         } catch (e: SQLiteException) {
             logcat(LogPriority.ERROR, throwable = e) { "Failed to ingest reels candidates for source $sourceId" }
@@ -70,7 +51,7 @@ class ReelsCandidateRepositoryImpl(
         return try {
             handler.awaitList { db ->
                 db.reels_candidateQueries.unconsumed(scope, sourceId, limit.toLong())
-            }.map(::mapCandidate)
+            }.map(ReelsCandidateWriter::mapCandidate)
         } catch (e: CancellationException) {
             throw e
         } catch (e: SQLiteException) {
@@ -125,61 +106,5 @@ class ReelsCandidateRepositoryImpl(
         } catch (e: SQLiteException) {
             logcat(LogPriority.ERROR, throwable = e) { "Failed to clear the reels inbox for $scope" }
         }
-    }
-
-    private fun upsert(queries: dataanime.Reels_candidateQueries, candidate: ReelsCandidate) {
-        queries.upsert(
-            account_scope_id = candidate.accountScopeId,
-            source_id = candidate.sourceId,
-            item_id = candidate.itemId,
-            title = candidate.title,
-            author = candidate.author,
-            video_url = candidate.videoUrl,
-            video_url_hd = candidate.videoUrlHd,
-            poster_url = candidate.posterUrl,
-            poster_url_vertical = candidate.posterUrlVertical,
-            web_url = candidate.webUrl,
-            duration_sec = candidate.durationSec,
-            has_audio = candidate.hasAudio,
-            created_at_epoch_sec = candidate.createdAtEpochSec,
-            discovered_at = candidate.discoveredAt,
-            last_validated_at = candidate.lastValidatedAt ?: candidate.discoveredAt,
-            availability = candidate.availability,
-            retry_after = candidate.retryAfter,
-            resume_position_ms = candidate.resumePositionMs,
-            metadata_schema_version = candidate.metadataSchemaVersion.toLong(),
-        )
-    }
-
-    private fun mapCandidate(row: Reels_candidate): ReelsCandidate {
-        return ReelsCandidate(
-            accountScopeId = row.account_scope_id,
-            sourceId = row.source_id,
-            itemId = row.item_id,
-            title = row.title,
-            author = row.author,
-            videoUrl = row.video_url,
-            videoUrlHd = row.video_url_hd,
-            posterUrl = row.poster_url,
-            posterUrlVertical = row.poster_url_vertical,
-            webUrl = row.web_url,
-            durationSec = row.duration_sec,
-            hasAudio = row.has_audio,
-            createdAtEpochSec = row.created_at_epoch_sec,
-            discoveredAt = row.discovered_at,
-            lastValidatedAt = row.last_validated_at,
-            availability = row.availability,
-            retryAfter = row.retry_after,
-            resumePositionMs = row.resume_position_ms,
-            metadataSchemaVersion = row.metadata_schema_version.toInt(),
-        )
-    }
-
-    private companion object {
-        /**
-         * Per (account, source) inbox ceiling. Generous: it only exists so a pathological
-         * source cannot grow the DB without bound; reaching it stops ingest, never evicts.
-         */
-        const val MAX_CANDIDATES_PER_SOURCE = 2_000L
     }
 }

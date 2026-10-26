@@ -156,6 +156,7 @@ import tachiyomi.data.reels.anime.ReelsConsumptionRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFavoriteRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFollowRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsHiddenRepositoryImpl
+import tachiyomi.data.reels.anime.ReelsSessionRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsWatchRepositoryImpl
 import tachiyomi.data.release.ReleaseServiceImpl
 import tachiyomi.data.series.anime.AnimeSeriesRepositoryImpl
@@ -308,6 +309,7 @@ import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
+import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.service.AppUpdatePreferences
@@ -711,6 +713,7 @@ class DomainModule : InjektModule {
         addSingletonFactory<ReelsAlbumRepository> { ReelsAlbumRepositoryImpl(get()) }
         addSingletonFactory<ReelsConsumptionRepository> { ReelsConsumptionRepositoryImpl(get()) }
         addSingletonFactory<ReelsCandidateRepository> { ReelsCandidateRepositoryImpl(get()) }
+        addSingletonFactory<ReelsSessionRepository> { ReelsSessionRepositoryImpl(get()) }
         addSingletonFactory<ReelsOfflineStore> { ReelsOfflineStoreImpl() }
         addFactory { GetEnabledAnimeSources(get(), get()) }
         addFactory { GetLanguagesWithAnimeSources(get(), get()) }

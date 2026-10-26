@@ -2059,4 +2059,6 @@
     <string name="reels_feed_empty_unseen">No unwatched reels left</string>
     <string name="reels_feed_empty_unseen_scanning">Still looking for unwatched reels</string>
     <string name="reels_feed_show_watched">Show watched</string>
+    <string name="reels_session_restore_pending">Preparing saved videos…</string>
+    <string name="reels_session_buffer_full">Saved feed buffer is full. Watch or skip remaining videos to continue loading.</string>
 </resources>

@@ -26,6 +26,11 @@ CREATE TABLE reels_candidate(
     retry_after INTEGER AS Date,
     resume_position_ms INTEGER,
     metadata_schema_version INTEGER NOT NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    views_count INTEGER,
+    likes_count INTEGER,
+    is_author_verified INTEGER AS Boolean NOT NULL DEFAULT 0,
+    captured_context_key TEXT,
     PRIMARY KEY (account_scope_id, source_id, item_id)
 );
 
@@ -70,9 +75,9 @@ INSERT INTO reels_candidate(
     account_scope_id, source_id, item_id, title, author, video_url, video_url_hd,
     poster_url, poster_url_vertical, web_url, duration_sec, has_audio, created_at_epoch_sec,
     discovered_at, last_validated_at, availability, retry_after, resume_position_ms,
-    metadata_schema_version
+    metadata_schema_version, tags_json, views_count, likes_count, is_author_verified, captured_context_key
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(account_scope_id, source_id, item_id)
 DO UPDATE SET
     -- Fresh metadata replaces the stored copy, but the FIRST discovery time and the
@@ -90,12 +95,39 @@ DO UPDATE SET
     last_validated_at = excluded.last_validated_at,
     availability = excluded.availability,
     retry_after = excluded.retry_after,
-    metadata_schema_version = excluded.metadata_schema_version;
+    metadata_schema_version = excluded.metadata_schema_version,
+    tags_json = excluded.tags_json,
+    views_count = excluded.views_count,
+    likes_count = excluded.likes_count,
+    is_author_verified = excluded.is_author_verified,
+    captured_context_key = excluded.captured_context_key;
 
 saveResumePosition:
 UPDATE reels_candidate
 SET resume_position_ms = :positionMs
 WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id = :itemId;
+
+updateAvailability:
+UPDATE reels_candidate
+SET availability = :availability, retry_after = :retryAfter
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id = :itemId;
+
+clearTransportHintsForScope:
+UPDATE reels_candidate
+SET video_url = '', video_url_hd = NULL, poster_url = NULL, poster_url_vertical = NULL
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+pruneConsumedRemnants:
+DELETE FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN (
+    SELECT c.item_id FROM reels_candidate AS c
+    JOIN reels_consumption AS k
+      ON k.account_scope_id = c.account_scope_id
+     AND k.source_id = c.source_id
+     AND k.item_id = c.item_id
+    WHERE c.account_scope_id = :scope AND c.source_id = :sourceId
+      AND (k.watched_qualified_at IS NOT NULL OR k.skipped_forward_at IS NOT NULL)
+);
 
 remove:
 DELETE FROM reels_candidate

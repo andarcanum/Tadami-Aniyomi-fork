@@ -25,11 +25,16 @@ data class ReelsCandidate(
     val hasAudio: Boolean,
     val createdAtEpochSec: Long?,
     val discoveredAt: Date,
-    val lastValidatedAt: Date?,
-    val availability: String,
-    val retryAfter: Date?,
-    val resumePositionMs: Long?,
-    val metadataSchemaVersion: Int,
+    val lastValidatedAt: Date? = null,
+    val availability: String = AVAILABILITY_AVAILABLE,
+    val retryAfter: Date? = null,
+    val resumePositionMs: Long? = null,
+    val metadataSchemaVersion: Int = 1,
+    val tagsJson: String = "[]",
+    val viewsCount: Long? = null,
+    val likesCount: Long? = null,
+    val isAuthorVerified: Boolean = false,
+    val capturedContextKey: String? = null,
 ) {
     companion object {
         /** Confirmed playable/known item. */

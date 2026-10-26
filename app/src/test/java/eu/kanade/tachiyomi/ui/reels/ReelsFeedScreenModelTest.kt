@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedReplaySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
@@ -28,6 +29,8 @@ import eu.kanade.tachiyomi.animesource.model.FeedCategoryPage
 import eu.kanade.tachiyomi.animesource.model.FeedError
 import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedPage
+import eu.kanade.tachiyomi.animesource.model.FeedReplayContext
+import eu.kanade.tachiyomi.animesource.model.FeedReplayItemResult
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestion
@@ -62,12 +65,15 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.domain.reels.anime.model.ReelsActiveCheckpoint
 import tachiyomi.domain.reels.anime.model.ReelsAlbum
 import tachiyomi.domain.reels.anime.model.ReelsCandidate
 import tachiyomi.domain.reels.anime.model.ReelsConsumptionEntry
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.model.ReelsHiddenEntry
+import tachiyomi.domain.reels.anime.model.ReelsQueuedCandidate
+import tachiyomi.domain.reels.anime.model.ReelsSessionKey
 import tachiyomi.domain.reels.anime.model.ReelsWatchEntry
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
 import tachiyomi.domain.reels.anime.repository.ReelsCandidateRepository
@@ -75,6 +81,7 @@ import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
+import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
@@ -1238,6 +1245,7 @@ class ReelsFeedScreenModelTest {
         albumRepository: ReelsAlbumRepository = FakeAlbumRepository(),
         consumptionRepository: ReelsConsumptionRepository = FakeReelsConsumptionRepository(),
         candidateRepository: ReelsCandidateRepository = FakeReelsCandidateRepository(),
+        sessionRepository: ReelsSessionRepository = FakeReelsSessionRepository(),
         nowMs: () -> Long = { 0L },
         wallClock: () -> Date = { Date(0) },
         offlineStore: ReelsOfflineStore = FakeReelsOfflineStore(),
@@ -1278,6 +1286,7 @@ class ReelsFeedScreenModelTest {
         reelsAlbumRepository = albumRepository,
         reelsConsumptionRepository = consumptionRepository,
         reelsCandidateRepository = candidateRepository,
+        reelsSessionRepository = sessionRepository,
         nowMs = nowMs,
         wallClock = wallClock,
         offlineStore = offlineStore,
@@ -3798,5 +3807,322 @@ class ReelsFeedScreenModelTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun `first replay page uses history namespace and persists the ordered queue`() = runTest(testDispatcher) {
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id = 951L
+            override val name = "Replay"
+            override val lang = "all"
+            override val replayContextChanges = kotlinx.coroutines.flow.emptyFlow<FeedReplayContext?>()
+            override fun accountScopeId() = "12"
+            override suspend fun prepareReplay() = FeedReplayContext("12", "backend")
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(videoItem(itemId))
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList) =
+                FeedPage(listOf(videoItem("first"), videoItem("second")), false)
+        }
+        val sessions = FakeReelsSessionRepository()
+        val model = buildModel(sourceId = 951L, manager = sourceManagerOf(source), sessionRepository = sessions)
+        testScheduler.advanceUntilIdle()
+        sessions.currentHandle?.key?.accountScopeId shouldBe "acc:951:12"
+        sessions.queued.map { it.candidate.itemId } shouldBe listOf("first", "second")
+        model.state.value.items.map { it.id } shouldBe listOf("first", "second")
+    }
+
+    @Test
+    fun `obsolete replay background response cannot overwrite the all-items cursor`() = runTest(testDispatcher) {
+        val held = CompletableDeferred<FeedPage>()
+        var requests = 0
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id = 956L
+            override val name = "Replay"
+            override val lang = "all"
+            override val replayContextChanges = kotlinx.coroutines.flow.emptyFlow<FeedReplayContext?>()
+            override fun accountScopeId() = "12"
+            override suspend fun prepareReplay() = FeedReplayContext("12", "backend")
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(videoItem(itemId))
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                if (requests++ == 0) held.await() else FeedPage(listOf(videoItem("all-items")), false)
+        }
+        val sessions = FakeReelsSessionRepository()
+        val key = ReelsSessionKey(
+            "acc:956:12",
+            956L,
+            ReelsSessionContext.computeContextKey(
+                sourceId = 956L,
+                filterFingerprint = "",
+                continuityKey = "backend",
+            ),
+        )
+        val handle = sessions.open(key, "old", 0L, false)
+        sessions.appendPage(
+            handle,
+            listOf(
+                ReelsCandidate(
+                    key.accountScopeId, 956L, "saved", "Title", "Author", "", null,
+                    "", null, null, 60.0, true, null, Date(0L),
+                ),
+            ),
+        )
+        val model = buildModel(sourceId = 956L, manager = sourceManagerOf(source), sessionRepository = sessions)
+        testScheduler.advanceTimeBy(1_100L)
+        testScheduler.runCurrent()
+        model.setUnseenOnly(false)
+        testScheduler.runCurrent()
+        held.complete(FeedPage(listOf(videoItem("stale")), true, "stale-cursor"))
+        testScheduler.runCurrent()
+        model.state.value.nextCursor shouldBe null
+        model.state.value.items.map { it.id } shouldBe listOf("all-items")
+    }
+
+    @Test
+    fun `saved future item resolves full replay media without the v22 capability`() = runTest(testDispatcher) {
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id = 955L
+            override val name = "Replay"
+            override val lang = "all"
+            override val replayContextChanges = kotlinx.coroutines.flow.emptyFlow<FeedReplayContext?>()
+            override fun accountScopeId() = "12"
+            override suspend fun prepareReplay() = FeedReplayContext("12", "backend")
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(
+                videoItem(itemId).copy(
+                    videoUrl = "http://127.0.0.1:8888/stream/$itemId",
+                    posterUrl = "http://127.0.0.1:8888/thumb/$itemId",
+                ),
+            )
+            override suspend fun getFeed(
+                page: Int,
+                cursor: String?,
+                filters: AnimeFilterList,
+            ) = FeedPage(emptyList(), false)
+        }
+        val sessions = FakeReelsSessionRepository()
+        val key = ReelsSessionKey(
+            "acc:955:12",
+            955L,
+            ReelsSessionContext.computeContextKey(
+                sourceId = 955L,
+                filterFingerprint = "",
+                continuityKey = "backend",
+            ),
+        )
+        val handle = sessions.open(key, "old", 0L, false)
+        sessions.appendPage(
+            handle,
+            (1..6).map {
+                ReelsCandidate(
+                    key.accountScopeId, 955L, "saved-$it", "Title", "Author", "", null,
+                    "", null, null, 60.0, true, null, Date(0L),
+                )
+            },
+        )
+        val model = buildModel(sourceId = 955L, manager = sourceManagerOf(source), sessionRepository = sessions)
+        testScheduler.runCurrent()
+        val activeBefore = model.state.value.items.first()
+        val future = model.state.value.items[5]
+        model.resolvePlaybackUrl(future, false) shouldBe "http://127.0.0.1:8888/stream/saved-6"
+        model.state.value.items[5].posterUrl shouldBe "http://127.0.0.1:8888/thumb/saved-6"
+        (model.state.value.items.first() === activeBefore) shouldBe true
+    }
+
+    @Test
+    fun `turning unseen only off revokes the old replay owner`() = runTest(testDispatcher) {
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id = 954L
+            override val name = "Replay"
+            override val lang = "all"
+            override val replayContextChanges = kotlinx.coroutines.flow.emptyFlow<FeedReplayContext?>()
+            override fun accountScopeId() = "12"
+            override suspend fun prepareReplay() = FeedReplayContext("12", "backend")
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(videoItem(itemId))
+            override suspend fun getFeed(
+                page: Int,
+                cursor: String?,
+                filters: AnimeFilterList,
+            ) = FeedPage(listOf(videoItem("old")), false)
+        }
+        val sessions = FakeReelsSessionRepository()
+        val model = buildModel(sourceId = 954L, manager = sourceManagerOf(source), sessionRepository = sessions)
+        testScheduler.advanceUntilIdle()
+        sessions.currentHandle shouldNotBe null
+        model.setUnseenOnly(false)
+        testScheduler.advanceUntilIdle()
+        sessions.currentHandle shouldBe null
+    }
+
+    @Test
+    fun `invalidated source context hides the private feed and stops playback`() = runTest(testDispatcher) {
+        val contexts = MutableStateFlow<FeedReplayContext?>(FeedReplayContext("12", "backend"))
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id = 953L
+            override val name = "Replay"
+            override val lang = "all"
+            override val replayContextChanges = contexts
+            override fun accountScopeId() = contexts.value?.accountId
+            override suspend fun prepareReplay() = contexts.value
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(videoItem(itemId))
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList) =
+                FeedPage(listOf(videoItem("private")), false)
+        }
+        val sessions = FakeReelsSessionRepository()
+        val model = buildModel(sourceId = 953L, manager = sourceManagerOf(source), sessionRepository = sessions)
+        testScheduler.runCurrent()
+        model.state.value.items.map { it.id } shouldBe listOf("private")
+        contexts.value = null
+        testScheduler.runCurrent()
+        model.state.value.items shouldBe emptyList()
+        model.state.value.isPlaying shouldBe false
+        sessions.currentHandle shouldBe null
+    }
+
+    @Test
+    fun `remote EOF does not hide local windows or let fresh videos overtake old tail`() = runTest(testDispatcher) {
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id = 952L
+            override val name = "Replay"
+            override val lang = "all"
+            override val replayContextChanges = kotlinx.coroutines.flow.emptyFlow<FeedReplayContext?>()
+            override fun accountScopeId() = "12"
+            override suspend fun prepareReplay() = FeedReplayContext("12", "backend")
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(videoItem(itemId))
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList) =
+                FeedPage((81..90).map { videoItem("clip-$it") }, false)
+        }
+        val sessions = FakeReelsSessionRepository()
+        val key = ReelsSessionKey(
+            "acc:952:12",
+            952L,
+            ReelsSessionContext.computeContextKey(
+                sourceId = 952L,
+                filterFingerprint = "",
+                continuityKey = "backend",
+            ),
+        )
+        val handle = sessions.open(key, "old-owner", 0L, reset = false)
+        sessions.appendPage(
+            handle,
+            (1..80).map {
+                ReelsCandidate(
+                    key.accountScopeId, 952L, "clip-$it", "Title", "Author", "", null,
+                    "", null, null, 60.0, true, null, Date(0L),
+                )
+            },
+        )
+        val model = buildModel(sourceId = 952L, manager = sourceManagerOf(source), sessionRepository = sessions)
+        testScheduler.advanceUntilIdle()
+        model.state.value.items.map { it.id } shouldBe (1..40).map { "clip-$it" }
+        model.loadNextPageIfNeeded(39)
+        testScheduler.advanceUntilIdle()
+        model.state.value.items.map { it.id } shouldBe (1..80).map { "clip-$it" }
+        model.loadNextPageIfNeeded(79)
+        testScheduler.advanceUntilIdle()
+        model.state.value.items.map { it.id } shouldBe (1..90).map { "clip-$it" }
+    }
+
+    @Test
+    fun `replay capable source publishes restored session even when initial remote getFeed is suspended`() = runTest(
+        testDispatcher,
+    ) {
+        val heldDeferred = CompletableDeferred<FeedPage>()
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id: Long = 950L
+            override val name: String = "Telegram"
+            override val lang: String = "all"
+            override val isFeedSource: Boolean = true
+            override val supportsTags: Boolean = true
+            override val replayContextChanges: kotlinx.coroutines.flow.Flow<FeedReplayContext?> =
+                kotlinx.coroutines.flow.emptyFlow()
+            override fun accountScopeId(): String = "12345"
+            override suspend fun prepareReplay(): FeedReplayContext = FeedReplayContext("12345", "tg_v27")
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(videoItem(itemId))
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                heldDeferred.await()
+        }
+
+        val sessionRepo = FakeReelsSessionRepository()
+        val key = ReelsSessionKey(
+            "12345",
+            950L,
+            ReelsSessionContext.computeContextKey(
+                sourceId = 950L,
+                filterFingerprint = "",
+                continuityKey = "tg_v27",
+            ),
+        )
+        val activeItem = ReelsCandidate(
+            accountScopeId = "12345",
+            sourceId = 950L,
+            itemId = "saved-1",
+            discoveredAt = Date(0),
+            resumePositionMs = 37200L,
+            videoUrl = "",
+            videoUrlHd = null,
+            posterUrl = "",
+            posterUrlVertical = null,
+            title = "Saved 1",
+            author = "Author",
+            durationSec = 60.0,
+            hasAudio = true,
+            tagsJson = "[]",
+            webUrl = "",
+            createdAtEpochSec = 0,
+            availability = "available",
+            retryAfter = null,
+            viewsCount = 0,
+            likesCount = 0,
+            isAuthorVerified = false,
+            capturedContextKey = null,
+        )
+        sessionRepo.open(key, "owner", 1L, reset = false)
+        sessionRepo.activeCheckpoint = ReelsActiveCheckpoint(
+            item = activeItem,
+            positionMs = 37200L,
+            completed = false,
+            sequence = 1L,
+        )
+        sessionRepo.queued.add(ReelsQueuedCandidate(1L, activeItem))
+        sessionRepo.queued.add(ReelsQueuedCandidate(2L, activeItem.copy(itemId = "saved-2", title = "Saved 2")))
+
+        val model = buildModel(
+            sourceId = 950L,
+            manager = sourceManagerOf(source),
+            sessionRepository = sessionRepo,
+        )
+
+        testScheduler.advanceTimeBy(500)
+
+        // Restored items are published immediately despite remote getFeed being held
+        model.state.value.items.map { it.id } shouldBe listOf("saved-1", "saved-2")
+        model.state.value.pendingSeekItemId shouldBe "saved-1"
+        model.state.value.pendingSeekPositionMs shouldBe 37200L
     }
 }

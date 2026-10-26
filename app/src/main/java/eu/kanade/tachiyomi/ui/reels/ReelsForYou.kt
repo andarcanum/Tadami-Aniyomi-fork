@@ -30,7 +30,7 @@ object ReelsForYou {
     const val USER_NAV_WINDOW_MS = 1_500L
 
     /** Candidate metadata schema stamp for [tachiyomi.domain.reels.anime.model.ReelsCandidate]. */
-    const val METADATA_SCHEMA_VERSION = 1
+    const val METADATA_SCHEMA_VERSION = 2
 
     /** How many durable unseen candidates seed a freshly opened feed. */
     const val BACKLOG_SEED_LIMIT = 40

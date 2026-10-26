@@ -1852,4 +1852,6 @@
     <string name="reels_album_search_loaded">Загружено видео: %1$d · есть ещё</string>
     <string name="reels_album_search_empty">Среди загруженных видео нет совпадений</string>
     <string name="reels_album_search_load_more">Загрузить ещё видео</string>
+    <string name="reels_session_restore_pending">Подготовка сохранённых видео…</string>
+    <string name="reels_session_buffer_full">Буфер сохранения заполнен. Просмотрите или пропустите оставшиеся видео, чтобы продолжить загрузку.</string>
 </resources>
