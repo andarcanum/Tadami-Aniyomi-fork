@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.math.roundToInt
 
 /**
  * The scrollable surface the book renderer actually shows.
@@ -47,6 +48,14 @@ internal interface NovelBookScrollSurface {
     fun evaluate(script: String, onResult: (String?) -> Unit = {}) = onResult(null)
 
     /**
+     * Re-syncs the document's continuous auto-scroll speed.
+     *
+     * Returns true when the surface owns in-document movement (i.e. scrolled WebView) and
+     * accepts the continuous speed. Surfaces that return false rely on discrete [scrollBy] frames.
+     */
+    fun syncAutoScrollSpeed(physicalPixelsPerSecond: Float): Boolean = false
+
+    /**
      * Stops any continuous in-document scrolling the surface started.
      *
      * The scrolled WebView book runs auto-scroll as a requestAnimationFrame loop inside its
@@ -80,16 +89,26 @@ internal data class NovelBookAutoScrollSyncReport(
  * Re-syncs the document's continuous auto-scroll loop with the chrome.
  *
  * Auto-scroll runs as a requestAnimationFrame loop inside the document, so the chrome only has to
- * tell it the per-frame pixel speed and read back whether the loop is still moving and whether the
- * document has room. The previous script scrolled once per frame from Kotlin, which was an
- * `evaluateJavascript` round trip on every animation frame.
+ * tell it the continuous css speed and pixel quantum, and read back whether the loop is still moving
+ * and whether the document has room.
  */
-internal fun buildBookAutoScrollSyncJavascript(pxPerFrame: Int): String {
+internal fun buildBookAutoScrollSyncJavascript(
+    cssPixelsPerSecond: Float,
+    cssPixelsPerPhysicalPixel: Float = 1f,
+): String {
+    val rate = if (cssPixelsPerSecond.isFinite() && cssPixelsPerSecond > 0f) cssPixelsPerSecond else 0f
+    val quantum = if (cssPixelsPerPhysicalPixel.isFinite() &&
+        cssPixelsPerPhysicalPixel > 0f
+    ) {
+        cssPixelsPerPhysicalPixel
+    } else {
+        1f
+    }
     return listOf(
         "(function() {",
         "  var engine = window.__anBookEngine;",
         "  if (engine && typeof engine.setAutoScroll === 'function') {",
-        "    engine.setAutoScroll($pxPerFrame);",
+        "    engine.setAutoScroll($rate, $quantum);",
         "    var running = typeof engine.autoScrollActive === 'function' ? engine.autoScrollActive() : false;",
         "    var forward = typeof engine.canScrollForward === 'function' ? engine.canScrollForward() : true;",
         "    return JSON.stringify({ running: running, forward: forward });",
@@ -97,6 +116,35 @@ internal fun buildBookAutoScrollSyncJavascript(pxPerFrame: Int): String {
         "  return JSON.stringify({ running: false, forward: false });",
         "})()",
     ).joinToString("\n")
+}
+
+internal fun buildBookScrollByJavascript(cssDistance: Float): String {
+    val distance = if (cssDistance.isFinite()) cssDistance else 0f
+    return listOf(
+        "(function() {",
+        "  var engine = window.__anBookEngine;",
+        "  if (engine && typeof engine.scrollBy === 'function') {",
+        "    return engine.scrollBy($distance);",
+        "  }",
+        "  return 0;",
+        "})()",
+    ).joinToString("\n")
+}
+
+internal fun resolveBookAutoScrollHasSectionsLeft(
+    sectionCount: Int,
+    currentSectionIndex: Int,
+    renderedSectionIndices: List<Int>,
+    preparingSectionIndices: List<Int>,
+    failedSectionIndices: List<Int>,
+    isReady: Boolean,
+): Boolean {
+    if (!isReady || sectionCount <= 0) return true
+    if (failedSectionIndices.isNotEmpty()) return true
+    val maxRendered = renderedSectionIndices.maxOrNull() ?: currentSectionIndex
+    val isLastSectionResident = maxRendered >= sectionCount - 1
+    val isPreparing = preparingSectionIndices.isNotEmpty()
+    return !isLastSectionResident || isPreparing
 }
 
 /**
@@ -153,6 +201,7 @@ internal class ViewNovelBookScrollSurface(
     private val view: View,
     private val paginated: () -> Boolean,
     private val onStep: (Boolean) -> Unit,
+    private val clockMs: () -> Long = { SystemClock.uptimeMillis() },
 ) : NovelBookScrollSurface {
 
     @Volatile
@@ -170,9 +219,12 @@ internal class ViewNovelBookScrollSurface(
     @Volatile
     private var jsLoopRunning = false
 
-    /** Pixels per frame the JS loop was last asked for; a changed speed forces a re-sync. */
+    /** Last physical rate (px/s) the JS loop was asked for. */
     @Volatile
-    private var requestedPxPerFrame = 0
+    private var lastRequestedPhysicalRate = 0f
+
+    @Volatile
+    private var stopGeneration = 0
 
     /** Last time the JS loop was re-synced, bounding how stale [jsLoopRunning] can get. */
     @Volatile
@@ -185,39 +237,67 @@ internal class ViewNovelBookScrollSurface(
     // hardcoded `true` that made the end of the book unreachable for auto-scroll.
     override fun canScrollForward(): Boolean = paginated() || engineCanScrollForward
 
+    override fun syncAutoScrollSpeed(physicalPixelsPerSecond: Float): Boolean {
+        if (paginated()) return false
+        val webView = view as? android.webkit.WebView ?: return false
+        val rate = physicalPixelsPerSecond.coerceAtLeast(0f)
+        val density = view.resources.displayMetrics.density.takeIf { it > 0f && it.isFinite() } ?: 1f
+        val cssPixelsPerPhysicalPixel = 1f / density
+        val cssPixelsPerSecond = rate / density
+        val now = clockMs()
+        val rateChanged = kotlin.math.abs(rate - lastRequestedPhysicalRate) > 0.01f
+
+        if (rate <= 0f) {
+            lastRequestedPhysicalRate = 0f
+            stopGeneration++
+            webView.evaluateJavascript(buildBookAutoScrollSyncJavascript(0f, cssPixelsPerPhysicalPixel), null)
+            jsLoopRunning = false
+            return true
+        }
+
+        if (jsLoopRunning && !rateChanged && now - lastSyncMillis < AUTO_SCROLL_SYNC_INTERVAL_MILLIS) {
+            return true
+        }
+
+        if (isScrollPending) return true
+        isScrollPending = true
+        lastRequestedPhysicalRate = rate
+        lastSyncMillis = now
+        val currentGeneration = stopGeneration
+        webView.evaluateJavascript(
+            buildBookAutoScrollSyncJavascript(cssPixelsPerSecond, cssPixelsPerPhysicalPixel),
+        ) { result ->
+            isScrollPending = false
+            if (currentGeneration == stopGeneration) {
+                parseBookAutoScrollSyncReport(result)?.let { report ->
+                    jsLoopRunning = report.loopRunning
+                    engineCanScrollForward = report.canScrollForward
+                    lastConsumedPx = if (report.canScrollForward) (rate * 0.016f).toInt().coerceAtLeast(1) else 0
+                }
+            }
+        }
+        return true
+    }
+
     override fun scrollBy(distancePx: Int): Int {
         if (paginated() || distancePx == 0) return 0
         val webView = view as? android.webkit.WebView ?: return 0
-        val now = SystemClock.uptimeMillis()
-        val speedChanged = distancePx != requestedPxPerFrame
-        // While the document's own rAF loop already advances the viewport at this speed, the
-        // per-frame evaluateJavascript round trip is skipped: the loop runs inside the renderer,
-        // so the chrome only re-syncs when the requested speed changes or on the sync cadence.
-        if (jsLoopRunning && !speedChanged && now - lastSyncMillis < AUTO_SCROLL_SYNC_INTERVAL_MILLIS) {
-            return distancePx
+        val density = view.resources.displayMetrics.density.takeIf { it > 0f && it.isFinite() } ?: 1f
+        val cssDistance = distancePx / density
+        webView.evaluateJavascript(buildBookScrollByJavascript(cssDistance)) { result ->
+            val consumedCss = result?.trim('"', ' ')?.toDoubleOrNull() ?: 0.0
+            lastConsumedPx = (consumedCss * density).roundToInt()
         }
-        if (isScrollPending) return lastConsumedPx
-        isScrollPending = true
-        requestedPxPerFrame = distancePx
-        lastSyncMillis = now
-        webView.evaluateJavascript(buildBookAutoScrollSyncJavascript(distancePx)) { result ->
-            isScrollPending = false
-            parseBookAutoScrollSyncReport(result)?.let { report ->
-                jsLoopRunning = report.loopRunning
-                engineCanScrollForward = report.canScrollForward
-                // A stopped loop at the document end reports no room; that read is what ends
-                // auto-scroll instead of looping forever at the bottom of the book.
-                lastConsumedPx = if (report.canScrollForward) distancePx else 0
-            }
-        }
-        return lastConsumedPx
+        return lastConsumedPx.takeIf { it != 0 } ?: distancePx
     }
 
     override fun stopAutoScroll() {
         val webView = view as? android.webkit.WebView ?: return
+        stopGeneration++
         jsLoopRunning = false
-        requestedPxPerFrame = 0
-        webView.evaluateJavascript(buildBookAutoScrollSyncJavascript(0), null)
+        lastRequestedPhysicalRate = 0f
+        val density = view.resources.displayMetrics.density.takeIf { it > 0f && it.isFinite() } ?: 1f
+        webView.evaluateJavascript(buildBookAutoScrollSyncJavascript(0f, 1f / density), null)
     }
 
     override fun step(forward: Boolean) = onStep(forward)

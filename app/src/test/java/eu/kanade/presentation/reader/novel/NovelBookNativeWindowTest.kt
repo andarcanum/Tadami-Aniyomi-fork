@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.BookLocator
 import eu.kanade.tachiyomi.ui.reader.novel.BookSeekReason
 import eu.kanade.tachiyomi.ui.reader.novel.BookSeekRequest
 import eu.kanade.tachiyomi.ui.reader.novel.NovelBookLocation
+import eu.kanade.tachiyomi.ui.reader.novel.NovelBookSourceRange
 import eu.kanade.tachiyomi.ui.reader.novel.NovelBookWindowState
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
@@ -278,5 +279,124 @@ class NovelBookNativeWindowTest {
 
         // Halfway through the 6-char second block = char 7 of 10.
         location shouldBe NovelBookViewLocation(sectionIndex = 5, sectionFraction = 0.7f)
+    }
+
+    @Test
+    fun `tracer RED fixture - source range from data attributes`() {
+        val html = """<p data-an-b="5:1" data-o="10" data-l="10">ABCDE</p>"""
+        val blocks = parseNovelBookNativeSection(html)
+        val entry = buildNovelBookNativeEntries(
+            listOf(NovelBookNativeSection(sectionIndex = 0, blocks = blocks)),
+            emptyList(),
+        ).filterIsInstance<NovelBookNativeEntry.Block>().single()
+        entry.charOffsetBefore shouldBe 10
+        entry.blockCharCount shouldBe 10
+        entry.sectionCharCount shouldBe 20
+    }
+
+    @Test
+    fun `N-output fixture - canonical PRE source span shared across displayed rows`() {
+        val html = """<pre data-an-b="5:1" data-o="0" data-l="6">AA
+
+BB</pre>"""
+        val blocks = parseNovelBookNativeSection(html)
+        val entries = buildNovelBookNativeEntries(
+            listOf(NovelBookNativeSection(sectionIndex = 0, blocks = blocks)),
+            emptyList(),
+        ).filterIsInstance<NovelBookNativeEntry.Block>()
+
+        entries.size shouldBe 2
+        entries[0].charOffsetBefore shouldBe 0
+        entries[0].blockCharCount shouldBe 3
+        entries[1].charOffsetBefore shouldBe 3
+        entries[1].blockCharCount shouldBe 3
+        entries[0].sectionCharCount shouldBe 6
+        entries[1].sectionCharCount shouldBe 6
+        (entries[0].blockCharCount + entries[1].blockCharCount) shouldBe 6
+    }
+
+    @Test
+    fun `mixed text and image group has zero span for image without altering total`() {
+        val html = """<p data-an-b="5:1" data-o="0" data-l="10">Hello<img src="https://example.com/a.png" />World</p>"""
+        val blocks = parseNovelBookNativeSection(html)
+        val entries = buildNovelBookNativeEntries(
+            listOf(NovelBookNativeSection(sectionIndex = 0, blocks = blocks)),
+            emptyList(),
+        ).filterIsInstance<NovelBookNativeEntry.Block>()
+
+        entries.size shouldBe 3
+        entries[0].blockCharCount shouldBe 5
+        entries[1].blockCharCount shouldBe 0
+        entries[2].blockCharCount shouldBe 5
+        entries.sumOf { it.blockCharCount } shouldBe 10
+        entries.first().sectionCharCount shouldBe 10
+    }
+
+    @Test
+    fun `GAP fixture - seek into hidden title gap targets following paragraph and preserves anchor blockIndex`() {
+        val html = """
+            <h2 class="nb-title" data-an-b="5:0" data-o="100" data-l="10">Title B</h2>
+            <p data-an-b="5:1" data-o="110" data-l="40">Paragraph B</p>
+        """.trimIndent()
+        val blocks = parseNovelBookNativeSection(html, showChapterHeadings = false)
+        blocks.size shouldBe 1
+        blocks.single().anchor?.blockIndex shouldBe 1
+
+        val sectionA = NovelBookNativeSection<NovelRichContentBlock>(
+            sectionIndex = 0,
+            blocks = listOf(
+                NovelRichContentBlock.Paragraph(
+                    segments = listOf(NovelRichTextSegment("A".repeat(100))),
+                    bookRange = NovelBookSourceRange(0, 100),
+                ),
+            ),
+            canonicalCharStart = 0,
+            canonicalCharCount = 100,
+        )
+        val sectionB = NovelBookNativeSection(
+            sectionIndex = 1,
+            blocks = blocks,
+            canonicalCharStart = 0,
+            canonicalCharCount = 150,
+        )
+        val entries = buildNovelBookNativeEntries(listOf(sectionA, sectionB), emptyList())
+
+        val target = resolveNovelBookNativeSeekTarget(
+            entries = entries,
+            request = seekRequestOf(id = 10L, sectionIndex = 1, charOffset = 100),
+            lastAppliedSeekId = 0L,
+            sectionFraction = 0f,
+        )
+        target shouldBe NovelBookNativeSeekTarget(seekRequestId = 10L, itemIndex = 1, fraction = 0f)
+
+        val relocateItem = NovelBookNativeViewportItem(
+            sectionIndex = 1,
+            charOffsetBefore = 110,
+            blockCharCount = 40,
+            sectionCharCount = 150,
+            offsetPx = -50,
+            heightPx = 100,
+        )
+        val location = resolveNovelBookNativeRelocate(listOf(relocateItem))
+        location shouldBe NovelBookViewLocation(sectionIndex = 1, sectionFraction = 130f / 150f)
+    }
+
+    @Test
+    fun `nonzero section base 90 maps source block start 100 to local 10`() {
+        val block = NovelRichContentBlock.Paragraph(
+            segments = listOf(NovelRichTextSegment("Text")),
+            bookRange = NovelBookSourceRange(100, 20),
+        )
+        val section = NovelBookNativeSection(
+            sectionIndex = 1,
+            blocks = listOf(block),
+            canonicalCharStart = 90,
+            canonicalCharCount = 50,
+        )
+        val entries = buildNovelBookNativeEntries(listOf(section), emptyList())
+        val entry = entries.filterIsInstance<NovelBookNativeEntry.Block>().single()
+        entry.charOffsetBefore shouldBe 10
+        entry.blockCharCount shouldBe 20
+        entry.sectionCharCount shouldBe 50
     }
 }

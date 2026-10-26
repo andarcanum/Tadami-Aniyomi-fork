@@ -684,6 +684,7 @@
     <string name="novel_reader_show_page_chapter_title_summary">Display chapter titles in Page mode</string>
     <string name="novel_reader_two_page_landscape">Two-page landscape</string>
     <string name="novel_reader_two_page_landscape_summary">Show two pages side by side in Page mode when the device is landscape and wide enough</string>
+    <string name="novel_reader_spread_unavailable_in_book_mode_summary">Two-page spread is not yet available in book mode</string>
     <string name="novel_reader_spread_cutout_guard">Reserve space for the camera cutout</string>
     <string name="novel_reader_spread_cutout_guard_summary">Keep spread columns clear of the display cutout at the screen edges. Turn off if there is no cutout or you want to use the full width</string>
     <string name="novel_reader_page_transition_style">Page transition style</string>

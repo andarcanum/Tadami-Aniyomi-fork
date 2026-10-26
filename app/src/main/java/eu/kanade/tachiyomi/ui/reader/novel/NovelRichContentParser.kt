@@ -115,6 +115,14 @@ private fun parseBlockElement(
     // for the spoken text. An element that expands into several blocks is addressed by the index of
     // its first one, so later blocks shift by their offset.
     val anchor = NovelBlockAnchor.parse(element.attr(NovelBlockAnchor.DOM_ATTRIBUTE))
+    val charStart = element.attr("data-o").toIntOrNull()
+    val charLength = element.attr("data-l").toIntOrNull()
+    val bookRange = if (charStart != null && charLength != null && charStart >= 0 && charLength > 0) {
+        NovelBookSourceRange(charStart, charLength)
+    } else {
+        null
+    }
+    val isTitle = element.hasClass("nb-title")
     val tag = element.tagName().lowercase(Locale.US)
     val parsed = when (tag) {
         "p", "div", "article", "section", "main" -> {
@@ -132,6 +140,7 @@ private fun parseBlockElement(
                         level = level,
                         segments = segments,
                         textAlign = parseBlockTextAlign(element.attr("style")),
+                        isBookChapterHeading = isTitle,
                     ),
                 )
             }
@@ -165,10 +174,28 @@ private fun parseBlockElement(
             }
         }
     }
-    return if (anchor == null) {
+    val withRange = if (bookRange == null) {
         parsed
     } else {
-        parsed.mapIndexed { offset, block ->
+        parsed.map { block ->
+            if (block.bookRange == null) block.withBookRange(bookRange) else block
+        }
+    }
+    val withHeadingFlag = if (!isTitle) {
+        withRange
+    } else {
+        withRange.map { block ->
+            if (block is NovelRichContentBlock.Heading && !block.isBookChapterHeading) {
+                block.copy(isBookChapterHeading = true)
+            } else {
+                block
+            }
+        }
+    }
+    return if (anchor == null) {
+        withHeadingFlag
+    } else {
+        withHeadingFlag.mapIndexed { offset, block ->
             block.withAnchor(anchor.copy(blockIndex = anchor.blockIndex + offset))
         }
     }

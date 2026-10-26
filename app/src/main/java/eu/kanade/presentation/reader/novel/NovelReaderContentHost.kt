@@ -468,12 +468,17 @@ internal fun NovelReaderContentHost(
     val hasSourceOverride by hasSourceOverrideFlow.androidxCollectAsState(
         initial = readerPreferences.getSourceOverride(sourceId) != null,
     )
-    var pageViewportSize by remember(state.chapter.id) { mutableStateOf(IntSize.Zero) }
-    var hasCompletedInitialReaderLayout by remember(state.chapter.id) { mutableStateOf(false) }
-    val autoScrollHandoff = remember(state.chapter.id) {
+    val documentOwnerKey: Any = if (isBookMode) {
+        "book-${state.novel.id}"
+    } else {
+        state.chapter.id
+    }
+    var pageViewportSize by remember(documentOwnerKey) { mutableStateOf(IntSize.Zero) }
+    var hasCompletedInitialReaderLayout by remember(documentOwnerKey) { mutableStateOf(false) }
+    val autoScrollHandoff = remember(documentOwnerKey) {
         onConsumeAutoScrollHandoff(state.chapter.id)
     }
-    var autoScrollEnabled by remember(state.chapter.id, autoScrollHandoff) {
+    var autoScrollEnabled by remember(documentOwnerKey, autoScrollHandoff) {
         mutableStateOf(
             resolveInitialAutoScrollEnabled(
                 savedPreferenceEnabled = state.readerSettings.autoScroll,
@@ -481,18 +486,18 @@ internal fun NovelReaderContentHost(
             ),
         )
     }
-    var autoScrollSpeed by remember(state.chapter.id, state.readerSettings.autoScrollInterval, autoScrollHandoff) {
+    var autoScrollSpeed by remember(documentOwnerKey, state.readerSettings.autoScrollInterval, autoScrollHandoff) {
         mutableIntStateOf(
             autoScrollHandoff?.speed ?: intervalToAutoScrollSpeed(state.readerSettings.autoScrollInterval),
         )
     }
-    var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
-    var autoScrollWasUsed by remember(state.chapter.id) { mutableStateOf(false) }
-    var touchCooldownUntilNanos by remember(state.chapter.id) { mutableLongStateOf(0L) }
-    var speedFactor by remember(state.chapter.id) { mutableFloatStateOf(1f) }
-    var autoScrollEndStableFrames by remember(state.chapter.id) { mutableIntStateOf(0) }
-    var autoScrollEndDwellActive by remember(state.chapter.id) { mutableStateOf(false) }
-    var autoScrollEndDwellRemainingSeconds by remember(state.chapter.id) { mutableIntStateOf(0) }
+    var autoScrollExpanded by remember(documentOwnerKey) { mutableStateOf(false) }
+    var autoScrollWasUsed by remember(documentOwnerKey) { mutableStateOf(false) }
+    var touchCooldownUntilNanos by remember(documentOwnerKey) { mutableLongStateOf(0L) }
+    var speedFactor by remember(documentOwnerKey) { mutableFloatStateOf(1f) }
+    var autoScrollEndStableFrames by remember(documentOwnerKey) { mutableIntStateOf(0) }
+    var autoScrollEndDwellActive by remember(documentOwnerKey) { mutableStateOf(false) }
+    var autoScrollEndDwellRemainingSeconds by remember(documentOwnerKey) { mutableIntStateOf(0) }
     var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var showGoogleDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var activeImageActionsUrl by remember(state.chapter.id) { mutableStateOf<String?>(null) }
@@ -1467,6 +1472,7 @@ internal fun NovelReaderContentHost(
         state.readerSettings.pageReader,
         state.readerSettings.richNativeRendererExperimental,
         state.readerSettings.bionicReading,
+        state.readerSettings.preferWebViewRenderer,
         state.readerSettings.customCSS,
         state.readerSettings.customJS,
         state.richContentUnsupportedFeaturesDetected,
@@ -1475,6 +1481,7 @@ internal fun NovelReaderContentHost(
             pageReaderEnabled = state.readerSettings.pageReader,
             richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
             bionicReadingEnabled = state.readerSettings.bionicReading,
+            preferWebViewRenderer = state.readerSettings.preferWebViewRenderer,
             customStylesPresent = state.readerSettings.customCSS.isNotBlank() ||
                 state.readerSettings.customJS.isNotBlank(),
             richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
@@ -2218,6 +2225,7 @@ internal fun NovelReaderContentHost(
     val latestTapZoneActions by rememberUpdatedState(
         parseNovelReaderTapZoneActions(state.readerSettings.tapZoneActions),
     )
+    val latestBookModeState by rememberUpdatedState(state.bookMode)
     val latestReaderShortTapHandler by rememberUpdatedState<(Float, Float, Float, Float) -> Unit> {
             tapX,
             tapY,
@@ -2297,9 +2305,9 @@ internal fun NovelReaderContentHost(
         showReaderUi,
         showWebView,
         webViewInstance,
-        state.nextChapterId,
+        if (isBookMode) Unit else state.nextChapterId,
         state.readerSettings.autoScrollChapterEndBehavior,
-        pageReaderItemsCount,
+        if (isBookMode) Unit else pageReaderItemsCount,
         autoScrollContentReady,
         autoScrollHasRenderableItems,
         hasCompletedInitialReaderLayout,
@@ -2322,10 +2330,14 @@ internal fun NovelReaderContentHost(
                     BookSurfaceAutoScrollTarget(
                         surface = surface,
                         hasSectionsLeft = {
-                            // Over a compiled book the spine sections are blocks, not chapters, so
-                            // "sections left" would report true far past the real end; whole-book
-                            // progress is the honest "is there still text below" signal.
-                            state.bookMode.bookProgressFraction < 1f
+                            resolveBookAutoScrollHasSectionsLeft(
+                                sectionCount = latestBookModeState.sectionCount,
+                                currentSectionIndex = latestBookModeState.currentSectionIndex,
+                                renderedSectionIndices = latestBookModeState.renderedSectionIndices,
+                                preparingSectionIndices = latestBookModeState.preparingSectionIndices,
+                                failedSectionIndices = latestBookModeState.failedSectionIndices,
+                                isReady = latestBookModeState.isReady,
+                            )
                         },
                     )
                 }
@@ -2361,6 +2373,7 @@ internal fun NovelReaderContentHost(
         while (isActive && autoScrollEnabled) {
             if (showReaderUi) {
                 autoScrollController.pause()
+                target?.syncAutoScrollSpeed(0f)
                 // Pausing must stop the in-document loop too: it would otherwise keep advancing the
                 // viewport while the reader UI is visible and the chrome is not asking for frames.
                 bookContentHandle.surface?.stopAutoScroll()
@@ -2392,6 +2405,7 @@ internal fun NovelReaderContentHost(
                     delta = AUTO_SCROLL_SPEED_FACTOR_DELTA,
                 )
             ) {
+                target.syncAutoScrollSpeed(0f)
                 delay(100)
                 continue
             }
@@ -2419,6 +2433,27 @@ internal fun NovelReaderContentHost(
                     hasCompletedInitialReaderLayout &&
                     autoScrollHasRenderableItems
                 ) {
+                    handleAutoScrollStableChapterEndAfterDwell()
+                }
+                continue
+            }
+
+            val basePhysicalRate = autoScrollPixelsPerSecond(autoScrollSpeed)
+            val physicalRate = basePhysicalRate * speedFactor
+            if (target.syncAutoScrollSpeed(physicalRate)) {
+                autoScrollController.resetFrameState()
+                delay(16)
+                val canForward = target.canScrollForward()
+                val frameResult = autoScrollController.onScrolled(
+                    canScrollForward = canForward,
+                    scrollConsumedPx = if (canForward) 1f else 0f,
+                    isContentReady = autoScrollContentReady,
+                    hasCompletedInitialLayout = hasCompletedInitialReaderLayout,
+                    hasRenderableItems = autoScrollHasRenderableItems,
+                )
+                autoScrollEndStableFrames = autoScrollController.stableEndFrames
+                if (frameResult == NovelAutoScrollFrameResult.ReachedEnd) {
+                    target.syncAutoScrollSpeed(0f)
                     handleAutoScrollStableChapterEndAfterDwell()
                 }
                 continue

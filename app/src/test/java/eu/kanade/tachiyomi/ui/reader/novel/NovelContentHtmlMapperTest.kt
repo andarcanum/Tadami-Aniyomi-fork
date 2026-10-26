@@ -58,4 +58,24 @@ class NovelContentHtmlMapperTest {
         translated shouldContain "loose"
         translated shouldContain "<p>TB</p>"
     }
+
+    @Test
+    fun `translation overlay preserves data-o data-l data-an-b and nb-title`() {
+        val template = """<h2 class="nb-title" data-an-b="5:0" data-o="0" data-l="10">Original Title</h2>""" +
+            """<p data-an-b="5:1" data-o="10" data-l="20">Original Text</p>"""
+        val translated = NovelContentHtmlMapper.buildTranslatedHtmlFromTemplate(
+            templateHtml = template,
+            translatedByIndex = mapOf(0 to "Translated Title", 1 to "Translated Text"),
+        )
+        translated.shouldNotBeNull()
+        translated shouldContain "class=\"nb-title\""
+        translated shouldContain "data-an-b=\"5:0\""
+        translated shouldContain "data-o=\"0\""
+        translated shouldContain "data-l=\"10\""
+        translated shouldContain "Translated Title"
+        translated shouldContain "data-an-b=\"5:1\""
+        translated shouldContain "data-o=\"10\""
+        translated shouldContain "data-l=\"20\""
+        translated shouldContain "Translated Text"
+    }
 }

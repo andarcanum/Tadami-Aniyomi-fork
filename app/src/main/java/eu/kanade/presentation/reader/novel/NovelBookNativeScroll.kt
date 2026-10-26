@@ -17,11 +17,13 @@ import kotlin.math.abs
  *
  * The section payload is generic so this layer can be unit tested without a parser or Compose.
  */
-internal data class NovelBookNativeSection<T>(
+internal data class NovelBookNativeSection<out T>(
     val sectionIndex: Int,
     val blocks: List<T>,
     /** Content revision this section was built from, see [NovelBookWindowState.sectionRevisions]. */
     val revision: Long = 0L,
+    val canonicalCharStart: Int = 0,
+    val canonicalCharCount: Int? = null,
 )
 
 /** Drops the sections that left the window, keeping the rest in spine order. */
@@ -105,10 +107,34 @@ internal fun resolveNovelBookNativeSeekTarget(
     val sectionCharCount = sectionBlocks.first().sectionCharCount.coerceAtLeast(1)
     // Zero is a valid explicit target (start of section), never an "unknown" sentinel.
     val targetChar = request.location.charOffset.coerceIn(0, sectionCharCount - 1)
-    val target = sectionBlocks.lastOrNull { it.charOffsetBefore <= targetChar } ?: sectionBlocks.first()
+
+    val containing = sectionBlocks.firstOrNull { block ->
+        block.blockCharCount > 0 &&
+            targetChar >= block.charOffsetBefore &&
+            targetChar < block.charOffsetBefore + block.blockCharCount
+    }
+
+    val (target, within) = if (containing != null) {
+        val frac = ((targetChar - containing.charOffsetBefore).toFloat() / containing.blockCharCount.toFloat())
+            .coerceIn(0f, 1f)
+        containing to frac
+    } else {
+        val nextVisible = sectionBlocks.firstOrNull { it.charOffsetBefore >= targetChar }
+        if (nextVisible != null) {
+            nextVisible to 0f
+        } else {
+            val last = sectionBlocks.last()
+            val frac = if (last.blockCharCount <= 0) {
+                0f
+            } else {
+                ((targetChar - last.charOffsetBefore).toFloat() / last.blockCharCount.toFloat())
+                    .coerceIn(0f, 1f)
+            }
+            last to frac
+        }
+    }
+
     val itemIndex = entries.indexOf(target)
-    val within = ((targetChar - target.charOffsetBefore).toFloat() / target.blockCharCount.coerceAtLeast(1))
-        .coerceIn(0f, 1f)
     return NovelBookNativeSeekTarget(
         seekRequestId = request.id,
         itemIndex = itemIndex,
@@ -169,24 +195,167 @@ internal fun buildNovelBookNativeEntries(
     return entries.sortedBy { it.sectionIndex }
 }
 
+private data class IndexedBlock(
+    val blockIndex: Int,
+    val block: NovelRichContentBlock,
+)
+
+private fun blockTextWeight(block: NovelRichContentBlock): Int = when (block) {
+    is NovelRichContentBlock.Paragraph -> block.segments.sumOf { it.text.length }
+    is NovelRichContentBlock.Heading -> block.segments.sumOf { it.text.length }
+    is NovelRichContentBlock.BlockQuote -> block.segments.sumOf { it.text.length }
+    else -> 0
+}
+
 /** One list row per block, with the char offsets the position math is built on. */
 private fun novelBookBlockEntries(
     section: NovelBookNativeSection<NovelRichContentBlock>,
 ): List<NovelBookNativeEntry> {
-    val sectionCharCount = section.blocks.sumOf { novelBookBlockCharCount(it) }
-    var offsetBefore = 0
-    return section.blocks.mapIndexed { blockIndex, block ->
-        val blockCharCount = novelBookBlockCharCount(block)
-        NovelBookNativeEntry.Block(
-            sectionIndex = section.sectionIndex,
-            blockIndex = blockIndex,
-            block = block,
-            charOffsetBefore = offsetBefore,
-            blockCharCount = blockCharCount,
-            sectionCharCount = sectionCharCount,
-            sectionBlockCount = section.blocks.size,
-        ).also { offsetBefore += blockCharCount }
+    if (section.blocks.isEmpty()) return emptyList()
+
+    val hasMetadata = section.blocks.any { it.bookRange != null }
+    if (!hasMetadata) {
+        val sectionCharCount = section.canonicalCharCount ?: section.blocks.sumOf { novelBookBlockCharCount(it) }
+        var offsetBefore = 0
+        return section.blocks.mapIndexed { blockIndex, block ->
+            val blockCharCount = novelBookBlockCharCount(block)
+            NovelBookNativeEntry.Block(
+                sectionIndex = section.sectionIndex,
+                blockIndex = blockIndex,
+                block = block,
+                charOffsetBefore = offsetBefore,
+                blockCharCount = blockCharCount,
+                sectionCharCount = sectionCharCount,
+                sectionBlockCount = section.blocks.size,
+            ).also { offsetBefore += blockCharCount }
+        }
     }
+
+    val maxSourceEnd = section.blocks.mapNotNull { it.bookRange?.let { r -> r.charStart + r.charLength } }.maxOrNull()
+        ?: section.canonicalCharStart
+    val sectionCharCount = section.canonicalCharCount
+        ?: (maxSourceEnd - section.canonicalCharStart).coerceAtLeast(1)
+
+    val groups = mutableListOf<MutableList<IndexedBlock>>()
+    var currentGroup = mutableListOf<IndexedBlock>()
+    for ((index, block) in section.blocks.withIndex()) {
+        if (currentGroup.isEmpty()) {
+            currentGroup.add(IndexedBlock(index, block))
+        } else {
+            val prevRange = currentGroup.last().block.bookRange
+            if (prevRange != null && prevRange == block.bookRange) {
+                currentGroup.add(IndexedBlock(index, block))
+            } else {
+                groups.add(currentGroup)
+                currentGroup = mutableListOf(IndexedBlock(index, block))
+            }
+        }
+    }
+    if (currentGroup.isNotEmpty()) {
+        groups.add(currentGroup)
+    }
+
+    val entries = ArrayList<NovelBookNativeEntry.Block>(section.blocks.size)
+    var lastEnd = 0
+    for (group in groups) {
+        val range = group.first().block.bookRange
+        if (range == null) {
+            for (item in group) {
+                val blockCharCount = novelBookBlockCharCount(item.block)
+                entries.add(
+                    NovelBookNativeEntry.Block(
+                        sectionIndex = section.sectionIndex,
+                        blockIndex = item.blockIndex,
+                        block = item.block,
+                        charOffsetBefore = lastEnd,
+                        blockCharCount = blockCharCount,
+                        sectionCharCount = sectionCharCount,
+                        sectionBlockCount = section.blocks.size,
+                    ),
+                )
+                lastEnd += blockCharCount
+            }
+            continue
+        }
+
+        val parentStart = (range.charStart - section.canonicalCharStart).coerceAtLeast(0)
+        val parentLength = range.charLength
+        val parentEnd = parentStart + parentLength
+        lastEnd = parentEnd
+
+        val totalTextWeight = group.sumOf { blockTextWeight(it.block) }
+        if (totalTextWeight > 0) {
+            var cumulativeWeight = 0
+            for ((i, item) in group.withIndex()) {
+                val weight = blockTextWeight(item.block)
+                val startFraction = cumulativeWeight.toDouble() / totalTextWeight.toDouble()
+                cumulativeWeight += weight
+                val endFraction = cumulativeWeight.toDouble() / totalTextWeight.toDouble()
+
+                val blockStart = if (i == 0) {
+                    parentStart
+                } else {
+                    parentStart + Math.round(startFraction * parentLength).toInt()
+                }
+                val blockEnd = if (i == group.size - 1) {
+                    parentEnd
+                } else {
+                    parentStart + Math.round(endFraction * parentLength).toInt()
+                }
+                val blockCharCount = if (weight == 0) 0 else (blockEnd - blockStart).coerceAtLeast(0)
+
+                entries.add(
+                    NovelBookNativeEntry.Block(
+                        sectionIndex = section.sectionIndex,
+                        blockIndex = item.blockIndex,
+                        block = item.block,
+                        charOffsetBefore = blockStart,
+                        blockCharCount = blockCharCount,
+                        sectionCharCount = sectionCharCount,
+                        sectionBlockCount = section.blocks.size,
+                    ),
+                )
+            }
+        } else {
+            if (group.size == 1) {
+                val item = group.single()
+                entries.add(
+                    NovelBookNativeEntry.Block(
+                        sectionIndex = section.sectionIndex,
+                        blockIndex = item.blockIndex,
+                        block = item.block,
+                        charOffsetBefore = parentStart,
+                        blockCharCount = parentLength,
+                        sectionCharCount = sectionCharCount,
+                        sectionBlockCount = section.blocks.size,
+                    ),
+                )
+            } else {
+                for ((i, item) in group.withIndex()) {
+                    val start = parentStart + (i * parentLength) / group.size
+                    val end = if (i ==
+                        group.size - 1
+                    ) {
+                        parentEnd
+                    } else {
+                        parentStart + ((i + 1) * parentLength) / group.size
+                    }
+                    entries.add(
+                        NovelBookNativeEntry.Block(
+                            sectionIndex = section.sectionIndex,
+                            blockIndex = item.blockIndex,
+                            block = item.block,
+                            charOffsetBefore = start,
+                            blockCharCount = (end - start).coerceAtLeast(0),
+                            sectionCharCount = sectionCharCount,
+                            sectionBlockCount = section.blocks.size,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+    return entries
 }
 
 /** Text length a block contributes to the position math; non-text blocks weigh one char. */
@@ -203,8 +372,17 @@ private fun novelBookBlockCharCount(block: NovelRichContentBlock): Int = when (b
  * The section HTML is exactly what the WebView renderer mounts in its document, so both renderers
  * show the same content and the same chapter headings.
  */
-internal fun parseNovelBookNativeSection(html: String): List<NovelRichContentBlock> =
-    parseNovelRichContent(html).blocks
+internal fun parseNovelBookNativeSection(
+    html: String,
+    showChapterHeadings: Boolean = true,
+): List<NovelRichContentBlock> {
+    val blocks = parseNovelRichContent(html).blocks
+    return if (showChapterHeadings) {
+        blocks
+    } else {
+        blocks.filterNot { it is NovelRichContentBlock.Heading && it.isBookChapterHeading }
+    }
+}
 
 /** A block as the native list currently lays it out, in viewport coordinates. */
 internal data class NovelBookNativeViewportItem(
@@ -238,7 +416,7 @@ internal fun resolveNovelBookNativeRelocate(
         ((-current.offsetPx).toFloat() / current.heightPx.toFloat()).coerceIn(0f, 1f)
     }
     val sectionSpan = current.sectionCharCount.coerceAtLeast(1)
-    val charInSection = current.charOffsetBefore + withinBlock * current.blockCharCount.coerceAtLeast(1)
-    val fraction = (charInSection / sectionSpan).coerceIn(0f, 1f)
+    val charInSection = current.charOffsetBefore + withinBlock * current.blockCharCount
+    val fraction = (charInSection / sectionSpan.toFloat()).coerceIn(0f, 1f)
     return NovelBookViewLocation(sectionIndex = current.sectionIndex, sectionFraction = fraction)
 }

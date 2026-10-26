@@ -160,4 +160,41 @@ class NovelBookViewTest {
         native.reason shouldBe NovelBookRendererReason.NONE
         native.isSilentFallback shouldBe false
     }
+
+    @Test
+    fun `prefer webview renderer truth table and precedence`() {
+        val userWebView = resolveNovelBookRendererDecision(
+            pageReaderEnabled = false,
+            richNativeRendererExperimentalEnabled = true,
+            bionicReadingEnabled = false,
+            richContentUnsupportedFeaturesDetected = false,
+            nativeBookRendererAvailable = true,
+            preferWebViewRenderer = true,
+        )
+        userWebView.renderer shouldBe NovelBookRenderer.WEBVIEW_SCROLLED
+        userWebView.reason shouldBe NovelBookRendererReason.USER_WEBVIEW
+        userWebView.isSilentFallback shouldBe false
+
+        val pagedUserWebView = resolveNovelBookRendererDecision(
+            pageReaderEnabled = true,
+            richNativeRendererExperimentalEnabled = true,
+            bionicReadingEnabled = false,
+            richContentUnsupportedFeaturesDetected = false,
+            nativeBookRendererAvailable = true,
+            preferWebViewRenderer = true,
+        )
+        pagedUserWebView.renderer shouldBe NovelBookRenderer.WEBVIEW_PAGINATED
+        pagedUserWebView.reason shouldBe NovelBookRendererReason.PAGE_MODE
+
+        val native = resolveNovelBookRendererDecision(
+            pageReaderEnabled = false,
+            richNativeRendererExperimentalEnabled = true,
+            bionicReadingEnabled = false,
+            richContentUnsupportedFeaturesDetected = false,
+            nativeBookRendererAvailable = true,
+            preferWebViewRenderer = false,
+        )
+        native.renderer shouldBe NovelBookRenderer.RICH_NATIVE_SCROLLED
+        native.reason shouldBe NovelBookRendererReason.NONE
+    }
 }

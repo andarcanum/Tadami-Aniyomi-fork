@@ -191,6 +191,10 @@ internal fun autoScrollScrollStepPx(speed: Int): Float {
     return 0.5f + (clamped - 1) * (4.5f / 99f)
 }
 
+internal fun autoScrollPixelsPerSecond(speed: Int): Float {
+    return autoScrollScrollStepPx(speed) * (1_000_000_000f / 16_000_000f)
+}
+
 internal fun autoScrollFrameStepPx(
     speed: Int,
     frameDeltaNanos: Long,

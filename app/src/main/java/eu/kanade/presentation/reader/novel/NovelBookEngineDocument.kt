@@ -1058,35 +1058,80 @@ internal fun buildNovelBookEngineDocumentHtml(
             // UI is visible, and cancelled coroutines have no chance to say goodbye).
             const AUTO_SCROLL_KEEPALIVE_MILLIS = 1000;
             let autoScrollFrame = 0;
-            let autoScrollPxPerFrame = 0;
+            let autoScrollRateCss = 0;
+            let autoScrollQuantumCss = 1;
             let autoScrollLastSync = 0;
-            const autoScrollStep = function() {
+            let autoScrollLastFrameTime = 0;
+            let autoScrollCarryCss = 0;
+            const monotonicNow = function() {
+              if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+                return performance.now();
+              }
+              return Date.now();
+            };
+            const autoScrollStep = function(timestamp) {
               autoScrollFrame = 0;
-              if (autoScrollPxPerFrame <= 0 || isPaginated) return;
-              if (Date.now() - autoScrollLastSync > AUTO_SCROLL_KEEPALIVE_MILLIS) {
-                autoScrollPxPerFrame = 0;
+              if (autoScrollRateCss <= 0 || isPaginated || !viewport) {
+                autoScrollRateCss = 0;
+                autoScrollCarryCss = 0;
+                autoScrollLastFrameTime = 0;
+                return;
+              }
+              const now = (typeof timestamp === 'number' && !isNaN(timestamp) && timestamp > 0)
+                ? timestamp
+                : monotonicNow();
+              if (now - autoScrollLastSync > AUTO_SCROLL_KEEPALIVE_MILLIS) {
+                autoScrollRateCss = 0;
+                autoScrollCarryCss = 0;
+                autoScrollLastFrameTime = 0;
                 return;
               }
               const maximum = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
-              if (viewport.scrollTop >= maximum - 1) {
-                autoScrollPxPerFrame = 0;
+              if (viewport.scrollTop >= maximum - 0.5) {
+                autoScrollRateCss = 0;
+                autoScrollCarryCss = 0;
+                autoScrollLastFrameTime = 0;
                 return;
               }
-              viewport.scrollTop = Math.min(maximum, viewport.scrollTop + autoScrollPxPerFrame);
+              const prevTime = autoScrollLastFrameTime > 0 ? autoScrollLastFrameTime : now;
+              const dt = Math.max(0, Math.min(now - prevTime, 250));
+              autoScrollLastFrameTime = now;
+              autoScrollCarryCss += (autoScrollRateCss * dt) / 1000;
+              const quantum = autoScrollQuantumCss > 0 ? autoScrollQuantumCss : 1;
+              const requestedCss = Math.max(0, Math.floor(autoScrollCarryCss / quantum)) * quantum;
+              if (requestedCss > 0) {
+                const before = viewport.scrollTop;
+                viewport.scrollTop = Math.min(maximum, before + requestedCss);
+                const actualConsumedCss = Math.max(0, viewport.scrollTop - before);
+                autoScrollCarryCss = Math.max(0, autoScrollCarryCss - actualConsumedCss);
+              }
+              if (viewport.scrollTop >= maximum - 0.5) {
+                autoScrollRateCss = 0;
+                autoScrollCarryCss = 0;
+                autoScrollLastFrameTime = 0;
+                return;
+              }
               autoScrollFrame = requestAnimationFrame(autoScrollStep);
             };
-            const setAutoScroll = function(pxPerFrame) {
-              const speed = Math.max(0, Math.round(Number(pxPerFrame) || 0));
-              autoScrollPxPerFrame = speed;
-              autoScrollLastSync = Date.now();
-              if (speed <= 0) {
+            const setAutoScroll = function(rateCss, quantumCss) {
+              const rate = Math.max(0, Number(rateCss) || 0);
+              const quantum = Number(quantumCss) > 0 ? Number(quantumCss) : 1;
+              const now = monotonicNow();
+              autoScrollRateCss = rate;
+              autoScrollQuantumCss = quantum;
+              autoScrollLastSync = now;
+              if (rate <= 0) {
                 if (autoScrollFrame !== 0) {
                   window.cancelAnimationFrame(autoScrollFrame);
                   autoScrollFrame = 0;
                 }
+                autoScrollCarryCss = 0;
+                autoScrollLastFrameTime = 0;
                 return;
               }
               if (autoScrollFrame === 0) {
+                autoScrollLastFrameTime = now;
+                autoScrollCarryCss = 0;
                 autoScrollFrame = requestAnimationFrame(autoScrollStep);
               }
             };
@@ -1135,7 +1180,7 @@ internal fun buildNovelBookEngineDocumentHtml(
               canScrollForward: function() {
                 if (!viewport) return false;
                 if (isPaginated) return currentPage() < pageCount() - 1;
-                return viewport.scrollTop < (viewport.scrollHeight - viewport.clientHeight - 1);
+                return viewport.scrollTop < (viewport.scrollHeight - viewport.clientHeight - 0.5);
               },
               scrollBy: function(px) {
                 if (isPaginated || !viewport || !px) return 0;
@@ -1145,10 +1190,10 @@ internal fun buildNovelBookEngineDocumentHtml(
                 // The scroll event listener coalesces the stitch check and the position report
                 // into one rAF, so this stays cheap even when called every frame.
                 pushBookFrameWork();
-                return Math.round(viewport.scrollTop - before);
+                return (viewport.scrollTop - before);
               },
               setAutoScroll: setAutoScroll,
-              autoScrollActive: function() { return autoScrollPxPerFrame > 0; },
+              autoScrollActive: function() { return autoScrollRateCss > 0; },
               // Applies reader styles to the open document.
               //
               // Changing a setting used to rebuild the whole document, which threw away the

@@ -62,7 +62,7 @@ data class PendingProgressPersistence(
             lastPageRead = other.lastPageRead,
             emitReadEvent = emitReadEvent || other.emitReadEvent,
             emitNovelCompleted = emitNovelCompleted || other.emitNovelCompleted,
-            sessionReadDurationMs = maxOf(sessionReadDurationMs, other.sessionReadDurationMs),
+            sessionReadDurationMs = sessionReadDurationMs + other.sessionReadDurationMs,
         )
     }
 }
@@ -100,10 +100,12 @@ internal class NovelProgressPersistenceController(
     private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val novelDownloadManager: eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager? = null,
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
 
-    private var chapterReadStartTimeMs: Long = System.currentTimeMillis()
-    private var pendingHistoryReadDurationMs: Long = 0L
+    private var chapterReadStartTimeMs: Long = clockMs()
+    private val historyDurationLock = Any()
+    private val pendingHistoryDurationByChapterId = mutableMapOf<Long, Long>()
     private val progressPersistenceMutex = Mutex()
     private val pendingProgressPersistenceByChapterId = linkedMapOf<Long, PendingProgressPersistence>()
     private var progressPersistenceJob: Job? = null
@@ -117,13 +119,38 @@ internal class NovelProgressPersistenceController(
 
     /** Restarts the session read timer (chapter anchor moved or a new chapter was loaded). */
     fun resetSessionReadTimer() {
-        chapterReadStartTimeMs = System.currentTimeMillis()
+        chapterReadStartTimeMs = clockMs()
     }
 
-    /** Milliseconds elapsed since the session read timer was last reset. */
-    fun sessionReadDurationMs(): Long = System.currentTimeMillis() - chapterReadStartTimeMs
+    /** Consumes and returns milliseconds elapsed since the session read timer was last reset or captured. */
+    fun takeSessionReadDurationMs(): Long {
+        val now = clockMs()
+        val delta = (now - chapterReadStartTimeMs).coerceAtLeast(0L)
+        chapterReadStartTimeMs = now
+        val currentNovel = host.progressCurrentNovel()
+        if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
+            return 0L
+        }
+        return delta
+    }
+
+    /** Synchronously accepts read duration into the chapter's history bucket. */
+    fun queueHistoryReadDuration(chapterId: Long, durationMs: Long) {
+        if (durationMs <= 0L) return
+        val currentNovel = host.progressCurrentNovel()
+        if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
+            return
+        }
+        synchronized(historyDurationLock) {
+            val current = pendingHistoryDurationByChapterId.getOrDefault(chapterId, 0L)
+            pendingHistoryDurationByChapterId[chapterId] = current + durationMs
+        }
+    }
 
     fun enqueueProgressPersistence(update: PendingProgressPersistence) {
+        if (update.sessionReadDurationMs > 0L) {
+            queueHistoryReadDuration(update.chapterId, update.sessionReadDurationMs)
+        }
         progressPersistenceScheduled = true
         // NonCancellable must wrap the block via withContext — passing it to launch() is
         // deprecated and breaks structured concurrency (will become an error).
@@ -174,13 +201,26 @@ internal class NovelProgressPersistenceController(
     }
 
     suspend fun persistCurrentChapterExitState() {
-        val chapterId = host.progressCurrentChapterId() ?: return
-        val finalReadDurationMs = (System.currentTimeMillis() - chapterReadStartTimeMs).coerceAtLeast(0L)
-        awaitPendingProgressPersistence()
-        flushPendingHistorySnapshot(
-            chapterId = chapterId,
-            additionalReadDurationMs = finalReadDurationMs,
-        )
+        withContext(NonCancellable) {
+            val chapterId = host.progressCurrentChapterId()
+            if (chapterId != null) {
+                val finalReadDurationMs = takeSessionReadDurationMs()
+                if (finalReadDurationMs > 0L) {
+                    queueHistoryReadDuration(chapterId, finalReadDurationMs)
+                }
+            }
+            awaitPendingProgressPersistence()
+            val residual = synchronized(historyDurationLock) {
+                val copy = HashMap(pendingHistoryDurationByChapterId)
+                pendingHistoryDurationByChapterId.clear()
+                copy
+            }
+            residual.forEach { (chapId, duration) ->
+                if (duration > 0L) {
+                    saveHistorySnapshot(chapId, duration)
+                }
+            }
+        }
     }
 
     /**
@@ -258,12 +298,9 @@ internal class NovelProgressPersistenceController(
                 )
             }
 
-            val now = System.currentTimeMillis()
-            pendingHistoryReadDurationMs += nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
             if (nextUpdate.emitReadEvent) {
                 flushPendingHistorySnapshot(nextUpdate.chapterId)
             }
-            chapterReadStartTimeMs = now
         }
     }
 
@@ -312,10 +349,22 @@ internal class NovelProgressPersistenceController(
         chapterId: Long,
         additionalReadDurationMs: Long = 0L,
     ) {
-        val readDurationMs = (pendingHistoryReadDurationMs + additionalReadDurationMs).coerceAtLeast(0L)
-        if (readDurationMs <= 0L) return
-        pendingHistoryReadDurationMs = 0L
-        saveHistorySnapshot(chapterId, readDurationMs)
+        val currentNovel = host.progressCurrentNovel()
+        if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
+            synchronized(historyDurationLock) {
+                pendingHistoryDurationByChapterId.remove(chapterId)
+            }
+            return
+        }
+        val durationToFlush: Long = synchronized(historyDurationLock) {
+            if (additionalReadDurationMs > 0L) {
+                val current = pendingHistoryDurationByChapterId.getOrDefault(chapterId, 0L)
+                pendingHistoryDurationByChapterId[chapterId] = current + additionalReadDurationMs
+            }
+            pendingHistoryDurationByChapterId.remove(chapterId) ?: 0L
+        }
+        if (durationToFlush <= 0L) return
+        saveHistorySnapshot(chapterId, durationToFlush)
     }
 
     /**
@@ -352,6 +401,9 @@ internal class NovelProgressPersistenceController(
         progressPersistenceJob?.cancel()
         pendingProgressPersistenceByChapterId.clear()
         progressPersistenceScheduled = false
+        synchronized(historyDurationLock) {
+            pendingHistoryDurationByChapterId.clear()
+        }
     }
 
     companion object {

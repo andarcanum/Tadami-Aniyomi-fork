@@ -114,6 +114,21 @@ internal fun areChapterSwipeControlsEnabled(
     return !pageReaderEnabled
 }
 
+internal data class SpreadSettingsAvailability(
+    val spreadEnabled: Boolean,
+    val cutoutGuardEnabled: Boolean,
+)
+
+internal fun resolveSpreadSettingsAvailability(
+    bookModeEnabled: Boolean,
+): SpreadSettingsAvailability {
+    val enabled = !bookModeEnabled
+    return SpreadSettingsAvailability(
+        spreadEnabled = enabled,
+        cutoutGuardEnabled = enabled,
+    )
+}
+
 internal fun shouldDismissReaderSettingsDialogAfterFamilyChange(
     family: NovelReaderSettingsFamily,
 ): Boolean {

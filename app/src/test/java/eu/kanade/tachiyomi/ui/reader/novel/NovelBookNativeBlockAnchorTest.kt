@@ -73,6 +73,46 @@ class NovelBookNativeBlockAnchorTest {
         clipped.toAnchoredRichContentBlocks().map { it.anchor } shouldBe listOf(NovelBlockAnchor(7L, 2))
     }
 
+    @Test
+    fun `all native block kinds preserve source range and title flag`() {
+        val blocks = listOf(
+            heading(chapterId = 7L, charStart = 0),
+            paragraph(chapterId = 7L, charStart = 10, text = "first"),
+            image(chapterId = 7L, charStart = 20),
+            rule(chapterId = 7L, charStart = 21),
+            NovelBookNativeBlock(
+                chapterId = 7L,
+                charStart = 22,
+                charLength = 15,
+                kind = NovelBookNativeBlockKind.QUOTE,
+                segments = listOf(NovelBookNativeSegment(t = "quoted speech")),
+            ),
+        )
+
+        val rendered = blocks.toRichContentBlocks()
+
+        rendered[0].bookRange shouldBe NovelBookSourceRange(0, 10)
+        (rendered[0] as NovelRichContentBlock.Heading).isBookChapterHeading shouldBe true
+
+        rendered[1].bookRange shouldBe NovelBookSourceRange(10, 5)
+        rendered[2].bookRange shouldBe NovelBookSourceRange(20, 1)
+        rendered[3].bookRange shouldBe NovelBookSourceRange(21, 1)
+        rendered[4].bookRange shouldBe NovelBookSourceRange(22, 15)
+    }
+
+    @Test
+    fun `blocks without valid source range remain legacy without bookRange`() {
+        val block = NovelBookNativeBlock(
+            chapterId = 7L,
+            charStart = 0,
+            charLength = 0,
+            kind = NovelBookNativeBlockKind.PARAGRAPH,
+            segments = listOf(NovelBookNativeSegment(t = "no range")),
+        )
+        val rendered = listOf(block).toRichContentBlocks().single()
+        rendered.bookRange shouldBe null
+    }
+
     private fun heading(chapterId: Long, charStart: Int) = NovelBookNativeBlock(
         chapterId = chapterId,
         charStart = charStart,
