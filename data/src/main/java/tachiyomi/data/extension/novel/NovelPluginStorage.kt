@@ -68,22 +68,35 @@ class NovelPluginStorage(
 
     fun readPluginScript(pluginId: String): ByteArray? {
         val file = pluginScriptFile(pluginId)
-        return if (file.exists()) {
-            file.readBytes()
-        } else {
+        if (!file.exists()) {
             logcat(LogPriority.WARN) { "Novel plugin script missing id=$pluginId file=${file.absolutePath}" }
-            null
+            return null
         }
+        return readScriptBytes(file, pluginId)
     }
 
     fun readCustomJs(pluginId: String): ByteArray? {
         val file = customJsFile(pluginId)
-        return if (file.exists()) file.readBytes() else null
+        if (!file.exists()) return null
+        return readScriptBytes(file, pluginId)
     }
 
     fun readCustomCss(pluginId: String): ByteArray? {
         val file = customCssFile(pluginId)
-        return if (file.exists()) file.readBytes() else null
+        if (!file.exists()) return null
+        return readScriptBytes(file, pluginId)
+    }
+
+    private fun readScriptBytes(file: File, pluginId: String): ByteArray? {
+        // A concurrent uninstall/update can delete the file between exists() and readBytes();
+        // treat the read failure as a missing script instead of crashing the caller.
+        return runCatching { file.readBytes() }
+            .onFailure {
+                logcat(LogPriority.WARN) {
+                    "Novel plugin script read failed id=$pluginId file=${file.absolutePath}: $it"
+                }
+            }
+            .getOrNull()
     }
 
     private fun pluginScriptFile(pluginId: String): File {

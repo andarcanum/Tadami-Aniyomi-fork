@@ -94,6 +94,7 @@ internal class MangaHomeHubScreenModel(
     private val getEnabledMangaSources: GetEnabledMangaSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: MangaSourceManager by injectLazy()
+    private val mangaExtensionManager: MangaExtensionManager by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
     private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
 
@@ -364,8 +365,6 @@ internal class MangaHomeHubScreenModel(
             ),
         )
     }
-
-    private val mangaExtensionManager: MangaExtensionManager by injectLazy()
 
     fun getLastUsedMangaSourceId(): Long = sourcePreferences.lastUsedMangaSource().get()
 

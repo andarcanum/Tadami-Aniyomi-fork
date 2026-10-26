@@ -100,6 +100,29 @@ class DefaultNovelExtensionManagerTest {
     }
 
     @Test
+    fun `applyInstalledSnapshots skips plugin whose source creation fails`() = runTest {
+        val repo = FakePluginRepository().apply {
+            upsert(installedPlugin(id = "broken"))
+            upsert(installedPlugin(id = "working"))
+        }
+
+        val manager = DefaultNovelExtensionManager(
+            repo,
+            FakePluginApi(emptyList()),
+            FakePluginInstaller(repo),
+            object : NovelPluginSourceFactory {
+                override fun create(plugin: NovelPlugin.Installed): NovelSource {
+                    if (plugin.id == "broken") throw IllegalStateException("script vanished")
+                    return FakeSource(NovelPluginId.toSourceId(plugin.id), plugin.name, plugin.lang)
+                }
+            },
+        )
+
+        val sources = manager.installedSourcesFlow.first { it.isNotEmpty() }
+        sources.map { it.id } shouldBe listOf(NovelPluginId.toSourceId("working"))
+    }
+
+    @Test
     fun `refreshAvailablePlugins updates updates flow`() = runTest {
         val repo = FakePluginRepository().apply {
             upsert(
@@ -296,6 +319,22 @@ class DefaultNovelExtensionManagerTest {
 
         capabilities shouldBe null
     }
+
+    private fun installedPlugin(id: String): NovelPlugin.Installed = NovelPlugin.Installed(
+        id = id,
+        name = id,
+        site = "https://$id.example",
+        lang = "en",
+        versionCode = 1,
+        versionName = "1.0.0",
+        url = "https://$id.example/plugin.js",
+        iconUrl = null,
+        customJs = null,
+        customCss = null,
+        hasSettings = false,
+        sha256 = "deadbeef",
+        repoUrl = "https://repo.$id.example",
+    )
 
     private class FakePluginApi(
         private val plugins: List<NovelPlugin.Available>,

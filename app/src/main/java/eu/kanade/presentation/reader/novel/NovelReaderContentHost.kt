@@ -2326,7 +2326,10 @@ internal fun NovelReaderContentHost(
             handleVolumeKey(event)
         }
         view.isFocusableInTouchMode = true
-        view.requestFocus()
+        // A synchronous focus request here runs a focus search during composition apply,
+        // force-remeasuring Lazy subcompositions while the outer composition still has pending
+        // modifications — crashing with ComposeRuntimeError. Defer it to the next main-loop pass.
+        view.post { view.requestFocus() }
         view.setOnKeyListener { _, _, event -> handleVolumeKey(event) }
         ViewCompat.addOnUnhandledKeyEventListener(view, listener)
         onDispose {

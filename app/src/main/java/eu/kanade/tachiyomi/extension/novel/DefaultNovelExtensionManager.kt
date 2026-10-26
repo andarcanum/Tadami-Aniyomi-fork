@@ -418,7 +418,15 @@ class DefaultNovelExtensionManager(
         installedSources.value =
             normalizedJs
                 .filter { showNsfwSources || !it.isNsfw }
-                .mapNotNull { plugin -> sourceFactory.create(plugin) } +
+                .mapNotNull { plugin ->
+                    // The DB collector running this has no exception handler; one broken plugin
+                    // (e.g. script file vanished mid-uninstall) must not crash extension loading.
+                    runCatching { sourceFactory.create(plugin) }
+                        .onFailure {
+                            logcat(LogPriority.WARN) { "Failed to create novel source for plugin id=${plugin.id}: $it" }
+                        }
+                        .getOrNull()
+                } +
             installedKotlinExtensionsSnapshot
                 .filter { it.plugin is NovelPlugin.Installed && (showNsfwSources || !it.plugin.isNsfw) }
                 .flatMap { it.sources }

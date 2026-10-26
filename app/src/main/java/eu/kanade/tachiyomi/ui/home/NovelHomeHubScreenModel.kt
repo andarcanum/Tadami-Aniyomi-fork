@@ -110,6 +110,7 @@ internal class NovelHomeHubScreenModel(
     private val getEnabledNovelSources: GetEnabledNovelSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: NovelSourceManager by injectLazy()
+    private val novelExtensionManager: eu.kanade.tachiyomi.extension.novel.NovelExtensionManager by injectLazy()
     private val localNovelSourceFileSystem: LocalNovelSourceFileSystem by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
     private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
@@ -479,8 +480,6 @@ internal class NovelHomeHubScreenModel(
             ),
         )
     }
-
-    private val novelExtensionManager: eu.kanade.tachiyomi.extension.novel.NovelExtensionManager by injectLazy()
 
     fun getLastUsedNovelSourceId(): Long = sourcePreferences.lastUsedNovelSource().get()
 
