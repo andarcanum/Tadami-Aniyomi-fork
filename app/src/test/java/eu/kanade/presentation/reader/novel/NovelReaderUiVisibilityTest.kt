@@ -1229,12 +1229,14 @@ class NovelReaderUiVisibilityTest {
     fun `paged plain renderer uses exact paragraph spacing when packing pages`() {
         val textBlocks = listOf("First paragraph", "Second paragraph")
 
+        // heightPx = 100 carries a spare line: the paginator reserves one body line for
+        // measure/render parity, so the test budget must be one line taller.
         val compactPages = paginatePlainPageBlocks(
             measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 600,
-            heightPx = 76,
+            heightPx = 100,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1249,7 +1251,7 @@ class NovelReaderUiVisibilityTest {
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 64,
             widthPx = 600,
-            heightPx = 76,
+            heightPx = 100,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1371,12 +1373,14 @@ class NovelReaderUiVisibilityTest {
             buildRichPageReaderBlockText(block = block)
         }
 
+        // heightPx = 100 carries a spare line: the paginator reserves one body line for
+        // measure/render parity, so the test budget must be one line taller.
         val compactPages = paginateRichPageBlocks(
             measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 0,
             widthPx = 600,
-            heightPx = 76,
+            heightPx = 100,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1398,7 +1402,7 @@ class NovelReaderUiVisibilityTest {
             blockTexts = blockTexts,
             paragraphSpacingPx = 64,
             widthPx = 600,
-            heightPx = 76,
+            heightPx = 100,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1525,12 +1529,13 @@ class NovelReaderUiVisibilityTest {
             "First line\nSecond line",
         )
 
+        // heightPx = 84 carries a spare line for the paginator's measure-parity reserve.
         val pages = paginatePlainPageBlocks(
             measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 600,
-            heightPx = 60,
+            heightPx = 84,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1558,12 +1563,13 @@ class NovelReaderUiVisibilityTest {
             ),
         )
 
+        // heightPx = 84 carries a spare line for the paginator's measure-parity reserve.
         val pages = paginateRichPageBlocks(
             measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 0,
             widthPx = 600,
-            heightPx = 60,
+            heightPx = 84,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1583,7 +1589,7 @@ class NovelReaderUiVisibilityTest {
             textBlocks = listOf("First paragraph", "Second paragraph").asPlainPageReaderBlocks(),
             paragraphSpacingPx = 12,
             widthPx = 600,
-            heightPx = 76,
+            heightPx = 100,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1597,8 +1603,9 @@ class NovelReaderUiVisibilityTest {
         )
 
         assertEquals(listOf("First paragraph", "Second paragraph"), renderBlocks.map { it.text })
-        // Page budget 76px, used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) -> leftover
-        // 6px is retained by safetyBufferPx = 6 to prevent Compose clipping on the last line.
+        // Page budget 100px -> safe height 76 after the paginator's one-line measure-parity
+        // reserve; used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) -> leftover 6px is
+        // retained by safetyBufferPx = 6 to prevent Compose clipping on the last line.
         assertEquals(listOf(0, 12), renderBlocks.map { it.spacingBeforePx })
         assertEquals(listOf(2f, 2f), renderBlocks.map { it.firstLineIndentEm })
     }
@@ -1720,7 +1727,7 @@ class NovelReaderUiVisibilityTest {
                 blockTexts = blockTexts,
                 paragraphSpacingPx = 12,
                 widthPx = 600,
-                heightPx = 76,
+                heightPx = 100,
                 textSizePx = 20f,
                 lineHeightMultiplier = 1.2f,
                 typeface = null,
@@ -1731,8 +1738,9 @@ class NovelReaderUiVisibilityTest {
         )
 
         assertEquals(listOf("Alpha link", "Second paragraph"), renderBlocks.map { it.text.text })
-        // Page budget 76px, used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) -> leftover
-        // 6px is retained by safetyBufferPx = 6 to prevent Compose clipping on the last line.
+        // Page budget 100px -> safe height 76 after the paginator's one-line measure-parity
+        // reserve; used 70px (2 lines of 24 + glyph pads 2*5 + spacing 12) -> leftover 6px is
+        // retained by safetyBufferPx = 6 to prevent Compose clipping on the last line.
         assertEquals(listOf(0, 12), renderBlocks.map { it.spacingBeforePx })
         assertTrue(
             renderBlocks.first().text.getStringAnnotations(

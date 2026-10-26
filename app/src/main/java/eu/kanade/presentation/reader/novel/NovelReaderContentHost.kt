@@ -2,6 +2,7 @@ package eu.kanade.presentation.reader.novel
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -118,6 +119,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import coil3.compose.AsyncImage
+import com.tadami.aurora.BuildConfig
 import eu.kanade.domain.easteregg.lattice.LatticeCarrier
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
@@ -1109,6 +1111,9 @@ internal fun NovelReaderContentHost(
         state.readerSettings.textAlign,
         state.readerSettings.paragraphSpacing,
         state.readerSettings.forceParagraphIndent,
+        state.readerSettings.bionicReading,
+        state.readerSettings.forceBoldText,
+        state.readerSettings.forceItalicText,
         pageReaderLayoutTextAlign,
         composeTypeface,
         chapterTitleTypeface,
@@ -1174,6 +1179,33 @@ internal fun NovelReaderContentHost(
                 cutoutLeftPx = spreadCutoutLeftPx,
                 cutoutRightPx = spreadCutoutRightPx,
             )
+            // Debug-only pagination-input snapshot: the fullscreen/inset state this budget was
+            // computed from. Correlates with the per-page and per-view logs on device.
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    PLAIN_PAGE_PAGINATION_LOG_TAG,
+                    buildString {
+                        append("input")
+                        append(" full=").append(isReaderFullScreen)
+                        append(" viewport=").append(screenWidthPx).append('x').append(screenHeightPx)
+                        append(" width=").append(spreadColumnWidthPx)
+                        append(" spread=").append(novelSpreadColumns)
+                        append(" top=").append(topPaddingPx)
+                        append(" bottom=").append(bottomPaddingPx)
+                        append(" bookInset=").append(bookBottomInsetPx)
+                        append(" fitSafety=").append(pageFitSafetyPx)
+                        append(" navbar=").append(pageReaderNavigationBarHeightPx)
+                        append(" cutoutBottom=").append(pageReaderCutoutBottomPx)
+                        append(" budget=").append((screenHeightPx - verticalPaddingPx).coerceAtLeast(1))
+                        append(" textSizePx=").append(with(density) { state.readerSettings.fontSize.sp.toPx() })
+                        append(" density=").append(density.density)
+                        append(" fontScale=").append(density.fontScale)
+                        append(" bionic=").append(state.readerSettings.bionicReading)
+                        append(" forceBold=").append(state.readerSettings.forceBoldText)
+                        append(" forceItalic=").append(state.readerSettings.forceItalicText)
+                    },
+                )
+            }
             paginatePlainPageBlocksWithImages(
                 textBlocks = pageReaderTextBlocks,
                 imageBlocks = pageReaderImageBlocks,
@@ -1187,6 +1219,11 @@ internal fun NovelReaderContentHost(
                 textAlign = pageReaderLayoutTextAlign,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                 chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
+                bionicReadingEnabled = state.readerSettings.bionicReading,
+                forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
+                    forceBoldText = state.readerSettings.forceBoldText,
+                    forceItalicText = state.readerSettings.forceItalicText,
+                ),
                 density = density.density,
             )
         }
@@ -1210,6 +1247,8 @@ internal fun NovelReaderContentHost(
         state.readerSettings.preserveSourceTextAlignInNative,
         state.readerSettings.paragraphSpacing,
         state.readerSettings.forceParagraphIndent,
+        state.readerSettings.forceBoldText,
+        state.readerSettings.forceItalicText,
         composeTypeface,
         chapterTitleTypeface,
         pageViewportSize,
@@ -1276,6 +1315,10 @@ internal fun NovelReaderContentHost(
                 preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                 chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
+                forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
+                    forceBoldText = state.readerSettings.forceBoldText,
+                    forceItalicText = state.readerSettings.forceItalicText,
+                ),
                 density = density.density,
             )
         }

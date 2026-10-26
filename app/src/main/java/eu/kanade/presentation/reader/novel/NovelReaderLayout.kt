@@ -1,11 +1,14 @@
 package eu.kanade.presentation.reader.novel
 
 import android.os.Build
+import android.text.DynamicLayout
 import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import android.text.style.LeadingMarginSpan
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -14,6 +17,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import kotlin.math.ceil
@@ -276,12 +280,31 @@ internal fun paginateTextIntoPageRanges(
     if (text.isBlank()) return emptyList()
 
     val safeWidth = widthPx.coerceAtLeast(1)
-    val safeHeight = heightPx.coerceAtLeast(1)
+    // Render-side measurement can disagree with pagination by one line on marginal blocks:
+    // measured live on vivo V2338A, the same slice measured 3 lines in one pagination run and
+    // 2 in the next, and a rendered TextView wrapped a whole line taller than the identical
+    // DynamicLayout measurement. Reserving one body line keeps such a flip from clipping the
+    // page's last block; justify-fill still spends the leftover visually.
+    val measureParityReservePx = (
+        textSizePx.coerceAtLeast(1f) * lineHeightMultiplier.coerceAtLeast(1f)
+        )
+        .toInt()
+        .coerceAtLeast(1)
+    val safeHeight = (heightPx - measureParityReservePx).coerceAtLeast(1)
 
     val layout = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
         null
     } else {
-        buildReaderStaticLayout(
+        buildReaderDynamicLayout(
+            text = text,
+            widthPx = safeWidth,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = typeface,
+            textAlign = textAlign,
+            firstLineIndentPx = firstLineIndentPx,
+            density = density,
+        ) ?: buildReaderStaticLayout(
             text = text,
             widthPx = safeWidth,
             textSizePx = textSizePx,
@@ -409,8 +432,9 @@ internal data class ApproximateTextMetrics(
 /**
  * How pagination measures text height.
  *
- * [STATIC_LAYOUT] is the production path: real font metrics, the same spans the renderer draws,
- * and no fallback. A failure to build the layout is a bug and must surface instead of silently
+ * [STATIC_LAYOUT] is the production path: the same layout engine the render TextView uses
+ * (DynamicLayout on P+ with a StaticLayout fallback), real font metrics, and the same spans the
+ * renderer draws. A failure to build both layouts is a bug and must surface instead of silently
  * paginating with different metrics than the TextView renders with.
  *
  * [APPROXIMATE] is a character-count estimate used by plain-JVM tests, where android.text.Layout
@@ -436,19 +460,7 @@ internal fun buildReaderStaticLayout(
     firstLineIndentPx: Int? = null,
     density: Float = 1.0f,
 ): StaticLayout {
-    val layoutText = firstLineIndentPx
-        ?.takeIf { it > 0 }
-        ?.let { indentPx ->
-            SpannableStringBuilder(text).apply {
-                setSpan(
-                    LeadingMarginSpan.Standard(indentPx, 0),
-                    0,
-                    length,
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
-        }
-        ?: text
+    val layoutText = wrapReaderTextWithFirstLineIndent(text, firstLineIndentPx)
     val paint = TextPaint().apply {
         isAntiAlias = true
         this.textSize = textSizePx.coerceAtLeast(1f)
@@ -470,17 +482,130 @@ internal fun buildReaderStaticLayout(
             },
         )
     }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    // Page mode renders every slice through a TextView configured by
+    // applyNovelPageReaderTextViewMetrics; the two must set the same break strategy,
+    // hyphenation and fallback spacing policy (both fallback APIs exist since API 28,
+    // where the TextView side defaults to enabled and this builder to disabled) or the
+    // pagination and the rendered lines diverge.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         builder.setUseLineSpacingFromFallbacks(false)
     }
     return builder.build()
 }
 
+private fun wrapReaderTextWithFirstLineIndent(
+    text: CharSequence,
+    firstLineIndentPx: Int?,
+): CharSequence {
+    return firstLineIndentPx
+        ?.takeIf { it > 0 }
+        ?.let { indentPx ->
+            SpannableStringBuilder(text).apply {
+                setSpan(
+                    LeadingMarginSpan.Standard(indentPx, 0),
+                    0,
+                    length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        }
+        ?: text
+}
+
+/**
+ * Builds the layout with the same engine and parameters the page-mode TextView builds its own
+ * with. TextView lays spannable text out via DynamicLayout, and on some vendor builds (measured
+ * on vivo V2338A / Android 16) its line breaking diverges from an identically configured
+ * StaticLayout by one line on marginal blocks — a divergence the page budget cannot absorb once
+ * justify-fill spends the leftover. Pagination must measure with the render engine, not a
+ * look-alike. Returns null where DynamicLayout is unavailable (API < P) or fails to build
+ * (plain-JVM unit tests); callers fall back to [buildReaderStaticLayout].
+ */
+internal fun buildReaderDynamicLayout(
+    text: CharSequence,
+    widthPx: Int,
+    textSizePx: Float,
+    lineHeightMultiplier: Float,
+    typeface: android.graphics.Typeface?,
+    textAlign: ReaderTextAlign,
+    firstLineIndentPx: Int? = null,
+    density: Float = 1.0f,
+): Layout? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+    return runCatching {
+        val layoutText = wrapReaderTextWithFirstLineIndent(text, firstLineIndentPx)
+        val paint = TextPaint().apply {
+            isAntiAlias = true
+            this.textSize = textSizePx.coerceAtLeast(1f)
+            this.typeface = typeface
+            this.density = density
+        }
+        DynamicLayout.Builder.obtain(layoutText, paint, widthPx.coerceAtLeast(1))
+            .setAlignment(textAlign.toLayoutAlignment())
+            .setLineSpacing(0f, lineHeightMultiplier.coerceAtLeast(1f))
+            .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+            .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+            // The render TextView is created with includeFontPadding = false (see the
+            // NovelPageReaderTextBlock factory); measurement must mirror it or every slice
+            // predicts a few pixels taller than the TextView draws.
+            .setIncludePad(false)
+            .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_LTR)
+            .setJustificationMode(
+                if (textAlign == ReaderTextAlign.JUSTIFY) {
+                    Layout.JUSTIFICATION_MODE_INTER_WORD
+                } else {
+                    Layout.JUSTIFICATION_MODE_NONE
+                },
+            )
+            // Mirrors applyNovelPageReaderTextViewMetrics page mode: fallback spacing off. The
+            // TextView side is P-guarded, this builder only exists since P.
+            .setUseLineSpacingFromFallbacks(false)
+            .build()
+    }.getOrNull()
+}
+
 internal fun resolveStaticLayoutHeight(
-    layout: StaticLayout,
+    layout: Layout,
 ): Int {
     if (layout.lineCount <= 0) return 0
     return layout.getLineBottom(layout.lineCount - 1) - layout.getLineTop(0)
+}
+
+/**
+ * Measures a page slice as its own layout built the way the page-mode TextView builds its own
+ * (DynamicLayout on P+, StaticLayout fallback), instead of reading line boxes off the whole-block
+ * layout the candidate was cut from. Styled slices must be passed pre-styled in [sliceText]: the
+ * spannable the render path builds (leading margin, bionic bold, forced typeface) is the source
+ * of truth for metrics.
+ */
+internal fun measurePlainPageSliceStandaloneHeight(
+    sliceText: CharSequence,
+    widthPx: Int,
+    textSizePx: Float,
+    lineHeightMultiplier: Float,
+    typeface: android.graphics.Typeface?,
+    textAlign: ReaderTextAlign,
+    density: Float = 1.0f,
+): Int {
+    if (sliceText.isEmpty()) return 0
+    val layout = buildReaderDynamicLayout(
+        text = sliceText,
+        widthPx = widthPx,
+        textSizePx = textSizePx,
+        lineHeightMultiplier = lineHeightMultiplier,
+        typeface = typeface,
+        textAlign = textAlign,
+        density = density,
+    ) ?: buildReaderStaticLayout(
+        text = sliceText,
+        widthPx = widthPx,
+        textSizePx = textSizePx,
+        lineHeightMultiplier = lineHeightMultiplier,
+        typeface = typeface,
+        textAlign = textAlign,
+        density = density,
+    )
+    return resolveStaticLayoutHeight(layout)
 }
 
 /**
@@ -490,7 +615,7 @@ internal fun resolveStaticLayoutHeight(
  */
 internal fun resolveStaticLayoutSliceForHeight(
     text: CharSequence,
-    layout: StaticLayout,
+    layout: Layout,
     startLine: Int,
     availableHeight: Int,
     allowOversizedFirstLine: Boolean = true,
@@ -654,6 +779,13 @@ internal sealed interface PlainPageSlice {
         override val blockIndex: Int,
         val range: TextPageRange,
         override val spacingBeforePx: Int = 0,
+        /**
+         * Standalone StaticLayout height (px) predicted for the exact CharSequence this slice
+         * renders — the number the page budget was spent against. Debug logs compare it with the
+         * DynamicLayout height the TextView actually produces; 0 means "not measured" (legacy
+         * callers / oversized-fallback with no standalone pass).
+         */
+        val measuredHeightPx: Int = 0,
     ) : PlainPageSlice
 
     /**
@@ -680,6 +812,8 @@ internal sealed interface RichPageSlice {
         val blockIndex: Int,
         val range: TextPageRange,
         val spacingBeforePx: Int = 0,
+        /** Standalone StaticLayout height (px) predicted for this slice; see PlainPageSlice.Text. */
+        val measuredHeightPx: Int = 0,
     ) : RichPageSlice
 
     data class Image(
@@ -698,6 +832,7 @@ internal data class PlainPageRenderBlock(
     val spacingBeforePx: Int,
     val firstLineIndentEm: Float?,
     val isChapterTitle: Boolean = false,
+    val measuredHeightPx: Int = 0,
 )
 
 internal data class RichPageBlockText(
@@ -716,6 +851,7 @@ internal data class RichPageRenderBlock(
     val firstLineIndentEm: Float?,
     val sourceTextAlign: NovelRichBlockTextAlign? = null,
     val isChapterTitle: Boolean = false,
+    val measuredHeightPx: Int = 0,
 )
 
 private fun resolveRichPageBlockIndex(
@@ -738,6 +874,7 @@ internal sealed interface NovelPageContentBlock {
         override val spacingBeforePx: Int,
         override val firstLineIndentEm: Float?,
         override val isChapterTitle: Boolean = false,
+        val measuredHeightPx: Int = 0,
     ) : NovelPageContentBlock
 
     data class Rich(
@@ -749,6 +886,7 @@ internal sealed interface NovelPageContentBlock {
         override val firstLineIndentEm: Float?,
         val sourceTextAlign: NovelRichBlockTextAlign? = null,
         override val isChapterTitle: Boolean = false,
+        val measuredHeightPx: Int = 0,
     ) : NovelPageContentBlock
 
     data class Image(
@@ -870,6 +1008,8 @@ internal fun resolveNovelPageReaderJustifyFillPx(
     }
 }
 
+internal const val PLAIN_PAGE_PAGINATION_LOG_TAG = "NovelPageReaderPagination"
+
 internal fun paginatePlainPageBlocks(
     textBlocks: List<PlainPageReaderTextBlock>,
     paragraphSpacingPx: Int,
@@ -882,10 +1022,22 @@ internal fun paginatePlainPageBlocks(
     textAlign: ReaderTextAlign,
     forceParagraphIndent: Boolean = false,
     chapterTitle: String? = null,
+    bionicReadingEnabled: Boolean = false,
+    forcedTypefaceStyle: Int = android.graphics.Typeface.NORMAL,
     density: Float = 1.0f,
     measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<List<PlainPageSlice>> {
-    val safeHeight = heightPx.coerceAtLeast(1)
+    // Render-side measurement can disagree with pagination by one line on marginal blocks:
+    // measured live on vivo V2338A, the same slice measured 3 lines in one pagination run and
+    // 2 in the next, and a rendered TextView wrapped a whole line taller than the identical
+    // DynamicLayout measurement. Reserving one body line keeps such a flip from clipping the
+    // page's last block; justify-fill still spends the leftover visually.
+    val measureParityReservePx = (
+        textSizePx.coerceAtLeast(1f) * lineHeightMultiplier.coerceAtLeast(1f)
+        )
+        .toInt()
+        .coerceAtLeast(1)
+    val safeHeight = (heightPx - measureParityReservePx).coerceAtLeast(1)
     val pages = mutableListOf<List<PlainPageSlice>>()
     var currentPage = mutableListOf<PlainPageSlice>()
     var remainingHeight = safeHeight
@@ -908,6 +1060,33 @@ internal fun paginatePlainPageBlocks(
                     slice is PlainPageSlice.Text -> slice.copy(spacingBeforePx = slice.spacingBeforePx + fillPx)
                     slice is PlainPageSlice.Image -> slice.copy(spacingBeforePx = slice.spacingBeforePx + fillPx)
                     else -> slice
+                }
+            }
+            // Debug-only budget snapshot: safe/leftover plus each slice's spacing and predicted
+            // height. Correlates with the NovelPageReaderTextView view-state log on device.
+            // runCatching: android.util.Log is unmocked in plain JVM unit tests and must not
+            // break them — diagnostics are best-effort by design.
+            if (BuildConfig.DEBUG) {
+                runCatching {
+                    val flushedPage = pages.last()
+                    Log.d(
+                        PLAIN_PAGE_PAGINATION_LOG_TAG,
+                        buildString {
+                            append("page=").append(pages.size - 1)
+                            append(" safe=").append(safeHeight)
+                            append(" leftover=").append(remainingHeight)
+                            flushedPage.forEach { slice ->
+                                append(" [b=").append(slice.blockIndex)
+                                append(",sp=").append(slice.spacingBeforePx)
+                                if (slice is PlainPageSlice.Text) {
+                                    append(",s=").append(slice.range.start)
+                                    append(",l=").append(slice.range.endExclusive - slice.range.start)
+                                    append(",h=").append(slice.measuredHeightPx)
+                                }
+                                append(']')
+                            }
+                        },
+                    )
                 }
             }
             currentPage = mutableListOf()
@@ -950,21 +1129,49 @@ internal fun paginatePlainPageBlocks(
                 .toInt()
                 .coerceAtLeast(1),
         )
+        val blockTypeface = if (isChapterTitle) {
+            android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
+        } else {
+            typeface
+        }
+        // The render path lays out every slice through buildNovelPageReaderSpannableText, which
+        // applies bionic SemiBold and forced-typeface StyleSpans; measuring raw text would wrap
+        // narrower lines than the TextView actually draws. The LeadingMarginSpan sits on the whole
+        // block text, so a slice inherits it only when it starts at offset 0 — the same rule
+        // buildPlainPageRenderBlocks uses for firstLineIndentEm.
+        val measuredBlockText: CharSequence = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
+            text
+        } else {
+            buildNovelPageReaderSpannableText(
+                text = if (bionicReadingEnabled) toBionicText(text) else AnnotatedString(text),
+                firstLineIndentPx = firstLineIndentPx,
+                forcedTypefaceStyle = if (isChapterTitle) {
+                    combineTypefaceStyles(android.graphics.Typeface.BOLD, forcedTypefaceStyle)
+                } else {
+                    forcedTypefaceStyle
+                },
+            )
+        }
         val layout = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
             null
         } else {
-            buildReaderStaticLayout(
-                text = text,
+            buildReaderDynamicLayout(
+                text = measuredBlockText,
                 widthPx = widthPx,
                 textSizePx = blockMetrics.textSizePx,
                 lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
-                typeface = if (isChapterTitle) {
-                    android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
-                } else {
-                    typeface
-                },
+                typeface = blockTypeface,
                 textAlign = textAlign,
-                firstLineIndentPx = firstLineIndentPx,
+                firstLineIndentPx = null,
+                density = density,
+            ) ?: buildReaderStaticLayout(
+                text = measuredBlockText,
+                widthPx = widthPx,
+                textSizePx = blockMetrics.textSizePx,
+                lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                typeface = blockTypeface,
+                textAlign = textAlign,
+                firstLineIndentPx = null,
                 density = density,
             )
         }
@@ -1003,6 +1210,7 @@ internal fun paginatePlainPageBlocks(
                     blockIndex = blockIndex,
                     range = range,
                     spacingBeforePx = spacingBefore,
+                    measuredHeightPx = sliceHeight,
                 )
                 remainingHeight -= spacingBefore + sliceHeight + glyphPadPx
                 start = range.endExclusive
@@ -1033,26 +1241,82 @@ internal fun paginatePlainPageBlocks(
                 continue
             }
 
-            val slice = resolveStaticLayoutSliceForHeight(
+            val availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0)
+            val candidate = resolveStaticLayoutSliceForHeight(
                 text = text,
                 layout = layout,
                 startLine = startLine,
-                availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0),
+                availableHeight = availableHeight,
                 allowOversizedFirstLine = currentPage.isEmpty(),
             )
 
-            if (slice == null) {
+            if (candidate == null) {
                 flushPage()
                 continue
             }
 
-            currentPage += PlainPageSlice.Text(
-                blockIndex = blockIndex,
-                range = slice.range,
-                spacingBeforePx = spacingBefore,
-            )
-            remainingHeight -= spacingBefore + slice.heightPx + glyphPadPx
-            startLine = slice.nextStartLine
+            // The candidate height is line geometry of the whole-block layout, but the rendered
+            // slice is laid out as its own paragraph and can wrap differently. Re-measure the exact
+            // CharSequence the TextView will draw and walk the end boundary back until the
+            // standalone layout fits: the page budget is spent on rendered blocks, not on source
+            // line boxes.
+            val startOffset = layout.getLineStart(startLine)
+            var acceptedRange: TextPageRange? = null
+            var acceptedHeightPx = 0
+            var acceptedNextStartLine = candidate.nextStartLine
+            var endLine = candidate.nextStartLine - 1
+            var lastRange: TextPageRange? = null
+            var lastHeightPx = 0
+            while (endLine >= startLine) {
+                val rawEnd = layout.getLineEnd(endLine).coerceIn(startOffset, text.length)
+                val range = trimTextRange(text, startOffset, rawEnd)
+                    ?: TextPageRange(startOffset, rawEnd)
+                val measured = measurePlainPageSliceStandaloneHeight(
+                    sliceText = measuredBlockText.subSequence(range.start, range.endExclusive),
+                    widthPx = widthPx,
+                    textSizePx = blockMetrics.textSizePx,
+                    lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                    typeface = blockTypeface,
+                    textAlign = textAlign,
+                    density = density,
+                )
+                lastRange = range
+                lastHeightPx = measured
+                if (measured <= availableHeight) {
+                    acceptedRange = range
+                    acceptedHeightPx = measured
+                    acceptedNextStartLine = endLine + 1
+                    break
+                }
+                endLine--
+            }
+
+            val sliceHeightPx = if (acceptedRange != null) acceptedHeightPx else lastHeightPx
+            val slice = if (acceptedRange != null) {
+                PlainPageSlice.Text(
+                    blockIndex = blockIndex,
+                    range = acceptedRange,
+                    spacingBeforePx = spacingBefore,
+                    measuredHeightPx = sliceHeightPx,
+                )
+            } else if (currentPage.isEmpty()) {
+                // Nothing fits an empty page: accept the smallest (single-line) candidate so the
+                // algorithm keeps moving — the rendered TextView clips the oversized line instead
+                // of losing the text. Mirrors the pre-verification oversized-first-line policy.
+                PlainPageSlice.Text(
+                    blockIndex = blockIndex,
+                    range = lastRange ?: candidate.range,
+                    spacingBeforePx = spacingBefore,
+                    measuredHeightPx = sliceHeightPx,
+                )
+            } else {
+                flushPage()
+                continue
+            }
+
+            currentPage += slice
+            remainingHeight -= spacingBefore + sliceHeightPx + glyphPadPx
+            startLine = if (acceptedRange != null) acceptedNextStartLine else startLine + 1
             isFirstSliceOfBlock = false
 
             if (remainingHeight <= 0) {
@@ -1093,6 +1357,8 @@ internal fun paginatePlainPageBlocksWithImages(
     textAlign: ReaderTextAlign,
     forceParagraphIndent: Boolean = false,
     chapterTitle: String? = null,
+    bionicReadingEnabled: Boolean = false,
+    forcedTypefaceStyle: Int = android.graphics.Typeface.NORMAL,
     density: Float = 1.0f,
     measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<List<PlainPageSlice>> {
@@ -1109,6 +1375,8 @@ internal fun paginatePlainPageBlocksWithImages(
             textAlign = textAlign,
             forceParagraphIndent = forceParagraphIndent,
             chapterTitle = chapterTitle,
+            bionicReadingEnabled = bionicReadingEnabled,
+            forcedTypefaceStyle = forcedTypefaceStyle,
             density = density,
             measurement = measurement,
         )
@@ -1132,6 +1400,8 @@ internal fun paginatePlainPageBlocksWithImages(
             textAlign = textAlign,
             forceParagraphIndent = forceParagraphIndent,
             chapterTitle = chapterTitle,
+            bionicReadingEnabled = bionicReadingEnabled,
+            forcedTypefaceStyle = forcedTypefaceStyle,
             density = density,
             measurement = measurement,
         )
@@ -1275,11 +1545,22 @@ internal fun paginateRichPageBlocks(
     textAlign: ReaderTextAlign,
     preserveSourceTextAlignInNative: Boolean = false,
     chapterTitle: String? = null,
+    forcedTypefaceStyle: Int = android.graphics.Typeface.NORMAL,
     allowChapterTitleBlock: Boolean = true,
     density: Float = 1.0f,
     measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): List<List<RichPageSlice.Text>> {
-    val safeHeight = heightPx.coerceAtLeast(1)
+    // Render-side measurement can disagree with pagination by one line on marginal blocks:
+    // measured live on vivo V2338A, the same slice measured 3 lines in one pagination run and
+    // 2 in the next, and a rendered TextView wrapped a whole line taller than the identical
+    // DynamicLayout measurement. Reserving one body line keeps such a flip from clipping the
+    // page's last block; justify-fill still spends the leftover visually.
+    val measureParityReservePx = (
+        textSizePx.coerceAtLeast(1f) * lineHeightMultiplier.coerceAtLeast(1f)
+        )
+        .toInt()
+        .coerceAtLeast(1)
+    val safeHeight = (heightPx - measureParityReservePx).coerceAtLeast(1)
     val pages = mutableListOf<List<RichPageSlice.Text>>()
     var currentPage = mutableListOf<RichPageSlice.Text>()
     var remainingHeight = safeHeight
@@ -1300,6 +1581,28 @@ internal fun paginateRichPageBlocks(
                     slice.copy(spacingBeforePx = slice.spacingBeforePx + justifyFillPx[index])
                 } else {
                     slice
+                }
+            }
+            // Debug-only budget snapshot; see paginatePlainPageBlocks for the field meanings.
+            if (BuildConfig.DEBUG) {
+                runCatching {
+                    val flushedPage = pages.last()
+                    Log.d(
+                        PLAIN_PAGE_PAGINATION_LOG_TAG,
+                        buildString {
+                            append("richPage=").append(pages.size - 1)
+                            append(" safe=").append(safeHeight)
+                            append(" leftover=").append(remainingHeight)
+                            flushedPage.forEach { slice ->
+                                append(" [b=").append(slice.blockIndex)
+                                append(",sp=").append(slice.spacingBeforePx)
+                                append(",s=").append(slice.range.start)
+                                append(",l=").append(slice.range.endExclusive - slice.range.start)
+                                append(",h=").append(slice.measuredHeightPx)
+                                append(']')
+                            }
+                        },
+                    )
                 }
             }
             currentPage = mutableListOf()
@@ -1345,27 +1648,42 @@ internal fun paginateRichPageBlocks(
             preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
             sourceTextAlign = blockText.sourceTextAlign,
         )
+        // The render path combines the block style with the user's forced bold/italic (see
+        // NovelPageReaderTextBlock's update); measuring without it wraps narrower lines than the
+        // TextView draws and packs pages the render overflows.
+        val blockForcedStyle = if (isChapterTitle) {
+            combineTypefaceStyles(android.graphics.Typeface.BOLD, forcedTypefaceStyle)
+        } else {
+            forcedTypefaceStyle
+        }
+        val blockTypeface = if (isChapterTitle) {
+            android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
+        } else {
+            typeface
+        }
         val layout = if (measurement == ReaderTextMeasurement.APPROXIMATE) {
             null
         } else {
-            buildReaderStaticLayout(
-                text = buildNovelPageReaderSpannableText(
-                    text = blockText.text,
-                    firstLineIndentPx = firstLineIndentPx,
-                    forcedTypefaceStyle = if (isChapterTitle) {
-                        android.graphics.Typeface.BOLD
-                    } else {
-                        android.graphics.Typeface.NORMAL
-                    },
-                ),
+            val measuredBlockText = buildNovelPageReaderSpannableText(
+                text = blockText.text,
+                firstLineIndentPx = firstLineIndentPx,
+                forcedTypefaceStyle = blockForcedStyle,
+            )
+            buildReaderDynamicLayout(
+                text = measuredBlockText,
                 widthPx = widthPx,
                 textSizePx = blockMetrics.textSizePx,
                 lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
-                typeface = if (isChapterTitle) {
-                    android.graphics.Typeface.create(chapterTitleTypeface ?: typeface, android.graphics.Typeface.BOLD)
-                } else {
-                    typeface
-                },
+                typeface = blockTypeface,
+                textAlign = blockTextAlign,
+                firstLineIndentPx = null,
+                density = density,
+            ) ?: buildReaderStaticLayout(
+                text = measuredBlockText,
+                widthPx = widthPx,
+                textSizePx = blockMetrics.textSizePx,
+                lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                typeface = blockTypeface,
                 textAlign = blockTextAlign,
                 firstLineIndentPx = null,
                 density = density,
@@ -1406,6 +1724,7 @@ internal fun paginateRichPageBlocks(
                     blockIndex = blockIndex,
                     range = range,
                     spacingBeforePx = spacingBefore,
+                    measuredHeightPx = sliceHeight,
                 )
                 remainingHeight -= spacingBefore + sliceHeight + glyphPadPx
                 start = range.endExclusive
@@ -1436,26 +1755,87 @@ internal fun paginateRichPageBlocks(
                 continue
             }
 
-            val slice = resolveStaticLayoutSliceForHeight(
+            val availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0)
+            val candidate = resolveStaticLayoutSliceForHeight(
                 text = blockText.text.text,
                 layout = layout,
                 startLine = startLine,
-                availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0),
+                availableHeight = availableHeight,
                 allowOversizedFirstLine = currentPage.isEmpty(),
             )
 
-            if (slice == null) {
+            if (candidate == null) {
                 flushPage()
                 continue
             }
 
-            currentPage += RichPageSlice.Text(
-                blockIndex = blockIndex,
-                range = slice.range,
-                spacingBeforePx = spacingBefore,
-            )
-            remainingHeight -= spacingBefore + slice.heightPx + glyphPadPx
-            startLine = slice.nextStartLine
+            // The candidate height is line geometry of the whole-block layout, but the rendered
+            // slice is laid out as its own paragraph and can wrap differently. Re-measure the exact
+            // CharSequence the TextView will draw and walk the end boundary back until the
+            // standalone layout fits — same policy as the plain paginator.
+            val blockPlain = blockText.text.text
+            val startOffset = layout.getLineStart(startLine)
+            val sliceIndentPx = if (startOffset == 0 && !isChapterTitle) firstLineIndentPx else null
+            var acceptedRange: TextPageRange? = null
+            var acceptedHeightPx = 0
+            var acceptedNextStartLine = candidate.nextStartLine
+            var endLine = candidate.nextStartLine - 1
+            var lastRange: TextPageRange? = null
+            var lastHeightPx = 0
+            while (endLine >= startLine) {
+                val rawEnd = layout.getLineEnd(endLine).coerceIn(startOffset, blockPlain.length)
+                val range = trimTextRange(blockPlain, startOffset, rawEnd)
+                    ?: TextPageRange(startOffset, rawEnd)
+                val measured = measurePlainPageSliceStandaloneHeight(
+                    sliceText = buildNovelPageReaderSpannableText(
+                        text = blockText.text.subSequence(range.start, range.endExclusive),
+                        firstLineIndentPx = sliceIndentPx,
+                        forcedTypefaceStyle = blockForcedStyle,
+                    ),
+                    widthPx = widthPx,
+                    textSizePx = blockMetrics.textSizePx,
+                    lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                    typeface = blockTypeface,
+                    textAlign = blockTextAlign,
+                    density = density,
+                )
+                lastRange = range
+                lastHeightPx = measured
+                if (measured <= availableHeight) {
+                    acceptedRange = range
+                    acceptedHeightPx = measured
+                    acceptedNextStartLine = endLine + 1
+                    break
+                }
+                endLine--
+            }
+
+            val sliceHeightPx = if (acceptedRange != null) acceptedHeightPx else lastHeightPx
+            val richSlice = if (acceptedRange != null) {
+                RichPageSlice.Text(
+                    blockIndex = blockIndex,
+                    range = acceptedRange,
+                    spacingBeforePx = spacingBefore,
+                    measuredHeightPx = sliceHeightPx,
+                )
+            } else if (currentPage.isEmpty()) {
+                // Nothing fits an empty page: accept the smallest (single-line) candidate so the
+                // algorithm keeps moving — the rendered TextView clips the oversized line instead
+                // of losing the text. Mirrors the plain paginator's oversized-first-line policy.
+                RichPageSlice.Text(
+                    blockIndex = blockIndex,
+                    range = lastRange ?: candidate.range,
+                    spacingBeforePx = spacingBefore,
+                    measuredHeightPx = sliceHeightPx,
+                )
+            } else {
+                flushPage()
+                continue
+            }
+
+            currentPage += richSlice
+            remainingHeight -= spacingBefore + sliceHeightPx + glyphPadPx
+            startLine = if (acceptedRange != null) acceptedNextStartLine else startLine + 1
             isFirstSliceOfBlock = false
 
             if (remainingHeight <= 0) {
@@ -1486,6 +1866,7 @@ internal fun paginateMixedRichPageBlocks(
     preserveSourceTextAlignInNative: Boolean = false,
     forceParagraphIndent: Boolean,
     chapterTitle: String? = null,
+    forcedTypefaceStyle: Int = android.graphics.Typeface.NORMAL,
     density: Float = 1.0f,
     measurement: ReaderTextMeasurement = ReaderTextMeasurement.STATIC_LAYOUT,
 ): MixedRichPagePagination {
@@ -1509,6 +1890,7 @@ internal fun paginateMixedRichPageBlocks(
             textAlign = textAlign,
             preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
             chapterTitle = chapterTitle,
+            forcedTypefaceStyle = forcedTypefaceStyle,
             allowChapterTitleBlock = currentChunkCanUseChapterTitle,
             density = density,
             measurement = measurement,
@@ -1619,6 +2001,7 @@ internal fun buildPlainPageRenderBlocks(
                 slice.blockIndex == 0 &&
                 slice.range.start == 0 &&
                 isNativeChapterTitleText(fullBlockText, chapterTitle),
+            measuredHeightPx = slice.measuredHeightPx,
         )
     }
 }
@@ -1653,6 +2036,7 @@ internal fun buildRichPageRenderBlocks(
             firstLineIndentEm = if (slice.range.start == 0 && !isChapterTitle) blockText.firstLineIndentEm else null,
             sourceTextAlign = blockText.sourceTextAlign,
             isChapterTitle = isChapterTitle,
+            measuredHeightPx = slice.measuredHeightPx,
         )
     }
 }
@@ -1678,6 +2062,7 @@ private fun buildMixedRichPageContentBlocks(
             firstLineIndentEm = block.firstLineIndentEm,
             sourceTextAlign = block.sourceTextAlign,
             isChapterTitle = block.isChapterTitle,
+            measuredHeightPx = block.measuredHeightPx,
         )
     }.iterator()
 
@@ -1777,6 +2162,7 @@ private fun buildPlainPageContentBlocks(
                     spacingBeforePx = block.spacingBeforePx,
                     firstLineIndentEm = block.firstLineIndentEm,
                     isChapterTitle = block.isChapterTitle,
+                    measuredHeightPx = block.measuredHeightPx,
                 )
             } else {
                 null

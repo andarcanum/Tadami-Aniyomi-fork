@@ -12,6 +12,8 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.icu.text.BreakIterator
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.Layout
 import android.text.Selection
@@ -354,7 +356,10 @@ internal fun applyNovelPageReaderTextViewMetrics(
     if (metrics.isPageMode) {
         textView.breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
         textView.hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Page mode must match buildReaderStaticLayout: fallback spacing there is disabled since
+        // API 28 (the TextView API's own introduction level), not only since Q, or the paginator
+        // and the rendered TextView would measure different line heights on Android 9.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             textView.isFallbackLineSpacing = false
         }
     } else {
@@ -383,7 +388,7 @@ internal fun applyNovelPageReaderTextViewMetrics(
     }
 }
 
-private fun combineTypefaceStyles(
+internal fun combineTypefaceStyles(
     first: Int,
     second: Int,
 ): Int {
@@ -468,6 +473,8 @@ private fun logNovelPageReaderTextViewState(
         append(" layout=").append(layout?.javaClass?.simpleName ?: "null")
             .append('(').append(layout?.width ?: -1).append('x').append(layout?.height ?: -1)
             .append(',').append(layout?.lineCount ?: -1).append(" lines)")
+        append(" predicted=").append(textView.predictedContentHeightPx)
+        append(" delta=").append((layout?.height ?: -1) - textView.predictedContentHeightPx)
         append(" size=").append(textView.width).append('x').append(textView.height)
         append(" pad=")
             .append(textView.totalPaddingLeft).append(',')
@@ -513,6 +520,13 @@ internal class NovelPageReaderTextView constructor(
     private var selectionPromotedByLongPress = false
     private var selectionInteractionEnabled = selectionInteractionEnabled
     var renderedTextSignature: Int? = null
+
+    /**
+     * Standalone StaticLayout height (px) the paginator predicted for this view's text, or 0 when
+     * unknown (scroll mode, rich blocks). Debug diagnostics compare it with the produced layout
+     * height to tell pagination/render divergence from a squeezed container.
+     */
+    var predictedContentHeightPx: Int = 0
     private val selectionPromotionRunnable = Runnable {
         selectionPromotionScheduled = false
         if (
@@ -923,18 +937,14 @@ internal class NovelPageReaderTextView constructor(
         val currentText = text?.toString().orEmpty()
         if (selStart < 0 || selEnd < 0 || selStart == selEnd || currentText.isBlank()) {
             localSelection = null
-            if (!isExecutingAction) {
-                onSelectedTextSelectionChanged(null)
-            }
+            publishSelectionCleared()
             isExecutingAction = false
             return
         }
 
         val layout = layout ?: run {
             localSelection = null
-            if (!isExecutingAction) {
-                onSelectedTextSelectionChanged(null)
-            }
+            publishSelectionCleared()
             isExecutingAction = false
             return
         }
@@ -942,9 +952,7 @@ internal class NovelPageReaderTextView constructor(
         val end = maxOf(selStart, selEnd).coerceIn(start, currentText.length)
         if (start >= end) {
             localSelection = null
-            if (!isExecutingAction) {
-                onSelectedTextSelectionChanged(null)
-            }
+            publishSelectionCleared()
             isExecutingAction = false
             return
         }
@@ -955,9 +963,7 @@ internal class NovelPageReaderTextView constructor(
         selectionPath.computeBounds(bounds, true)
         if (bounds.isEmpty) {
             localSelection = null
-            if (!isExecutingAction) {
-                onSelectedTextSelectionChanged(null)
-            }
+            publishSelectionCleared()
             isExecutingAction = false
             return
         }
@@ -966,9 +972,7 @@ internal class NovelPageReaderTextView constructor(
         val selectedText = currentText.substring(start, end)
         if (selectedText.isBlank()) {
             localSelection = null
-            if (!isExecutingAction) {
-                onSelectedTextSelectionChanged(null)
-            }
+            publishSelectionCleared()
             isExecutingAction = false
             return
         }
@@ -996,6 +1000,25 @@ internal class NovelPageReaderTextView constructor(
             selectionAnchor = selectionAnchor,
         )
         isExecutingAction = false
+    }
+
+    /**
+     * Publishes "selection ended" to the shared state. TextView lifecycle (text reset on update,
+     * detach, focus churn) fires [onSelectionChanged] outside composition — including during
+     * layout and draw passes — and the screenModel write is collected on Main.immediate, so a
+     * synchronous call re-enters composition mid-placement and crashes with "LayoutNode should
+     * be attached to an owner" (measured on Android 16 when toggling fullscreen). Deferred to
+     * the next main-loop turn; the main looper is used instead of this view's handler because a
+     * detached view must still clear the shared selection state. The active-selection guard
+     * keeps a deferred clear from wiping a selection made in the meantime.
+     */
+    private fun publishSelectionCleared() {
+        if (isExecutingAction) return
+        Handler(Looper.getMainLooper()).post {
+            if (localSelection == null && !isExecutingAction) {
+                onSelectedTextSelectionChanged(null)
+            }
+        }
     }
 
     private fun hasActiveSelection(): Boolean {
@@ -1251,6 +1274,7 @@ internal fun NovelPageReaderPageContent(
                                     } else {
                                         Typeface.NORMAL
                                     },
+                                    predictedContentHeightPx = block.measuredHeightPx,
                                     layoutMode = NovelPageReaderLayoutMode.PAGE,
                                     selectionRenderer = selectionRenderer,
                                     selectionSessionIdProvider = selectionSessionIdProvider,
@@ -1302,6 +1326,7 @@ internal fun NovelPageReaderPageContent(
                                     } else {
                                         Typeface.NORMAL
                                     },
+                                    predictedContentHeightPx = block.measuredHeightPx,
                                     layoutMode = NovelPageReaderLayoutMode.PAGE,
                                     selectionRenderer = selectionRenderer,
                                     selectionSessionIdProvider = selectionSessionIdProvider,
@@ -1428,6 +1453,7 @@ internal fun NovelPageReaderTextBlock(
     lineHeightMultiplier: Float = if (isChapterTitle) PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER else 1f,
     textColorOverride: Color? = null,
     baseTypefaceStyle: Int = Typeface.NORMAL,
+    predictedContentHeightPx: Int = 0,
     layoutMode: NovelPageReaderLayoutMode,
     selectionRenderer: NovelSelectedTextRenderer? = null,
     selectionSessionIdProvider: () -> Long = { 0L },
@@ -1516,6 +1542,7 @@ internal fun NovelPageReaderTextBlock(
             textView.selectionAnchorChapterId = selectionAnchorChapterId
             textView.selectionAnchorBlockIndex = selectionAnchorBlockIndex
             textView.selectionAnchorTextStartInBlock = selectionAnchorTextStartInBlock
+            textView.predictedContentHeightPx = predictedContentHeightPx
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
             val glyphPadBottom = resolvePageReaderGlyphOverflowPaddingPx(blockTextSizePx)

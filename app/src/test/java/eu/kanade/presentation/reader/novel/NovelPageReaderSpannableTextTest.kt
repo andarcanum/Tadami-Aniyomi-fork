@@ -111,7 +111,7 @@ class NovelPageReaderSpannableTextTest {
         assertEquals(android.text.Layout.BREAK_STRATEGY_SIMPLE, textView.breakStrategy)
         assertEquals(android.text.Layout.HYPHENATION_FREQUENCY_NONE, textView.hyphenationFrequency)
         assertEquals(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD, textView.justificationMode)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             assertEquals(false, textView.isFallbackLineSpacing)
         }
     }
