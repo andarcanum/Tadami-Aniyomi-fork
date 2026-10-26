@@ -1,7 +1,7 @@
 # Reels Feed Contract
 
-**Current version: 26** (`extensionLib` 12.0–26.0 accepted by the host; v24 and v25 are
-purely additive and stay below the v26 ceiling) ·
+**Current version: 27** (`extensionLib` 12.0–27.0 accepted by the host; v24–v26 are
+purely additive and stay below the v27 ceiling) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
@@ -27,7 +27,18 @@ API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/anime
 [`SearchSuggestion`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/SearchSuggestion.kt),
 [`SearchSuggestions`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/SearchSuggestions.kt),
 [`AnimeCategoryFeedOrderSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategoryFeedOrderSource.kt),
-[`AnimeFeedAccountIdentitySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedAccountIdentitySource.kt)
+[`AnimeCategorySubscriptionSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategorySubscriptionSource.kt),
+[`AnimeContentPreferencesSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeContentPreferencesSource.kt),
+[`AnimeBlockedTagsSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeBlockedTagsSource.kt),
+[`AnimeFeedLoginInstrumentationSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedLoginInstrumentationSource.kt),
+[`AnimeFeedVideoResolverSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedVideoResolverSource.kt),
+[`AnimeAlbumSearchSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeAlbumSearchSource.kt),
+[`AnimeSearchHintsSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeSearchHintsSource.kt),
+[`AnimeFeedAccountIdentitySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedAccountIdentitySource.kt),
+[`AnimeFeedReplaySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedReplaySource.kt),
+[`FeedReplayContext`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayContext.kt),
+[`FeedReplayItemResult`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayItemResult.kt),
+[`ContentPreferenceOption`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ContentPreferenceOption.kt)
 
 This document is the standalone reference for authors of short-video feed
 (“Reels”) extensions. The Kotlin contracts live in `:source-api`; this file
@@ -227,9 +238,79 @@ interface AnimeFeedAccountIdentitySource {
   default members on existing interfaces, and pre-v26 hosts never ask.
 - **`extensionLib` 26.0 for implementers.** A plugin that *implements* the interface links
   against it, so an older host would fail to load its class. Such a plugin must declare
-  `tachiyomix.extensionLib = 26.0`, which is why the host's `LIB_VERSION_MAX` is now 26.0.
-  Raising the ceiling is non-breaking: every already-published plugin declares a version inside
-  `12.0..26.0` and keeps loading.
+  `tachiyomix.extensionLib = 26.0`, which is why the host's `LIB_VERSION_MAX` was raised to
+  26.0 in that release. Raising the ceiling is non-breaking: every already-published plugin
+  declares a version inside the supported range and keeps loading.
+
+## Session continuity and replay (v27 capability interface)
+
+`AnimeFeedReplaySource` is an optional capability that lets a source participate in the host's
+persistent Reels queue. It extends `AnimeFeedAccountIdentitySource`, so the v26
+`accountScopeId()` is still the account key, and adds three members:
+
+```kotlin
+interface AnimeFeedReplaySource : AnimeFeedAccountIdentitySource {
+    val replayContextChanges: Flow<FeedReplayContext?>   // cold; null = signed out / invalidated
+    suspend fun prepareReplay(): FeedReplayContext?
+    suspend fun resolveReplayItem(
+        itemId: String,
+        expectedContext: FeedReplayContext,
+        filters: AnimeFilterList,
+    ): FeedReplayItemResult
+}
+```
+
+`FeedReplayContext(accountId, continuityKey)` proves that a saved queue still belongs to the
+backend session the user is on right now:
+
+- `accountId` must equal the source's `accountScopeId()` answer (Telegram: TDLib `me.id`).
+- `continuityKey` is a stable, source-owned identifier for the backend session/configuration.
+  It **must not** contain process ports, tokens, signed URLs, timestamps or epochs — the host
+  only fingerprints a persisted queue with it. Change it when a source setting materially
+  changes which items the backend can serve (Telegram hashes its feed preferences), so a stale
+  queue is not restored under a different configuration.
+
+Host behavior (For You feed, unseen filter on, incognito off, source implements the capability):
+
+1. `prepareReplay()` runs on IO when the feed opens. `null` means "no proven identity": the
+   host keeps the ordinary network-first feed and persists nothing under a guessed key.
+2. A non-null context restores the persisted queue without waiting for a fresh feed page: the
+   host opens the saved session and eagerly rehydrates the active checkpoint plus a bounded
+   window (at most six resolves); the remaining restored cards keep their stored metadata and
+   resolve lazily when they become active. A `Deferred` answer never drops the resume target.
+   The remote tail is fetched only after the restored window is shown.
+3. While the session is live the host collects `replayContextChanges`. Any change, including
+   `null`, invalidates the restored queue view; a new non-null context starts a fresh
+   generation. The flow must be cold, must not perform native/network work on the collecting
+   thread and may emit duplicates — the host compares by value.
+4. `resolveReplayItem` rehydrates one saved candidate. It must echo the requested `itemId`,
+   be safe to call repeatedly, and re-check the live context before answering (return
+   `ContextChanged` when it no longer matches `expectedContext`). It runs on IO; bound each
+   native/network step with a timeout and stay cancellation-cooperative.
+
+`FeedReplayItemResult` tells the host what to do with the saved card:
+
+| Result | Host action |
+|---|---|
+| `Available(item)` | Replace the stored card with the fresh URLs. `item.id` must equal the requested `itemId`; a mismatch is treated as `Deferred`. |
+| `FilteredOut` | Skip the card while rebuilding the restored window; it is excluded by the source's current filters. |
+| `Unavailable` | Mark the candidate unavailable and skip it while rebuilding the restored window. This is not a view and does not touch the watched summary. |
+| `Deferred(retryAtEpochMillis)` | Keep the stored metadata card and retry when it becomes active; the candidate stays pending. Never conflate it with EOF or removal. |
+| `ContextChanged` | Discard the answer; when the context flow reports a new context, the feed restarts under it. |
+
+A thrown exception is logged and handled as `Deferred(null)`, so an item stays recoverable —
+but an authoritative removal must be returned as `Unavailable`, not thrown.
+
+Rules for the source:
+
+- The replay path is **host-owned**: the source never persists its own seen/history state and
+  never pre-filters saved items. It only rehydrates an item id (or gives one of the terminal
+  verdicts above). Filtering by "watched" remains the host's job.
+- Stored URLs are cache hints at most. The host treats `resolveReplayItem` as the authority
+  for playable URLs and re-resolves before playback; never require a persisted secret or a
+  process-local token to resolve an item.
+- All members are abstract. Implementing the capability requires `extensionLib` 27.0;
+  `LIB_VERSION_MAX` is 27.0, and older plugins inside `12.0..27.0` keep loading.
 
 ## Delivery is not consumption (what a feed source must NOT infer)
 
