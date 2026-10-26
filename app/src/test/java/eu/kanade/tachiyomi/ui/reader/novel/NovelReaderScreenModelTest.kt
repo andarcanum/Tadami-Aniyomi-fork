@@ -951,6 +951,68 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `update content keeps runtime resolved tts engine when preference is blank`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Original paragraph</p>",
+                ),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(ttsEnabled = true),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val ttsController = getPrivateField<NovelTtsController>(screenModel, "ttsController")
+            // In JVM tests the engine init never completes, so the runtime stays parked after
+            // publishing the loading state; waiting for it makes the seeding below race-free.
+            withTimeout(1_000) {
+                while (!ttsController.snapshot().isLoadingVoices) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            // Model the resolved runtime state (TTS enabled, engine auto-selected, locale picked)
+            // that the controller publishes while TTS is active.
+            ttsController.setTtsUiStateFromReader(
+                state.ttsUiState.copy(
+                    enabled = true,
+                    selectedEnginePackage = "com.google.android.tts",
+                    selectedLocaleTag = "en-GB",
+                ),
+            )
+
+            invokePrivateUpdateContent(
+                target = screenModel,
+                settings = state.readerSettings.copy(ttsEnabled = true),
+            )
+
+            val updated = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            updated.ttsUiState.enabled shouldBe true
+            updated.ttsUiState.selectedEnginePackage shouldBe "com.google.android.tts"
+            updated.ttsUiState.selectedLocaleTag shouldBe "en-GB"
+        }
+    }
+
+    @Test
     fun `disable tts updates preference and reader state`() {
         runBlocking {
             val novelReaderPreferences = createNovelReaderPreferences(

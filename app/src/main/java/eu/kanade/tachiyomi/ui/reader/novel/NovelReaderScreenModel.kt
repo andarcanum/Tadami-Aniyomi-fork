@@ -1681,14 +1681,19 @@ class NovelReaderScreenModel(
                 translationPhase = translationState.translationPhase,
                 isRateLimited = translationState.googleRateLimited,
             ),
-            ttsUiState = ttsController.snapshot().copy(
-                enabled = settings.ttsEnabled,
-                selectedEnginePackage = settings.ttsEnginePackage,
-                selectedVoiceId = settings.ttsVoiceId,
-                selectedLocaleTag = settings.ttsLocaleTag,
-                speechRate = settings.ttsSpeechRate,
-                pitch = settings.ttsPitch,
-            ),
+            ttsUiState = run {
+                val ttsSnapshot = ttsController.snapshot()
+                // Blank settings mean "not explicitly chosen": keep the runtime-resolved
+                // engine/voice/locale so a rebuild does not drop the TTS caption identity.
+                ttsSnapshot.copy(
+                    enabled = settings.ttsEnabled,
+                    selectedEnginePackage = settings.ttsEnginePackage.ifBlank { ttsSnapshot.selectedEnginePackage },
+                    selectedVoiceId = settings.ttsVoiceId.ifBlank { ttsSnapshot.selectedVoiceId },
+                    selectedLocaleTag = settings.ttsLocaleTag.ifBlank { ttsSnapshot.selectedLocaleTag },
+                    speechRate = settings.ttsSpeechRate,
+                    pitch = settings.ttsPitch,
+                )
+            },
             aiProviders = State.ReaderAiProvidersState(
                 geminiModelEntries = aiProvidersState.geminiModelEntries,
                 isGeminiModelsLoading = aiProvidersState.isGeminiModelsLoading,
