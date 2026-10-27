@@ -247,6 +247,33 @@ class ReelsForYouStorageTest {
         fixture.close()
     }
 
+    @Test
+    fun `fallback-scope history moves into the account scope and the copy wins nothing`() = runBlocking {
+        val fixture = Fixture()
+        val repo = ReelsConsumptionRepositoryImpl(fixture.handler)
+        val fallback = "src:$SOURCE"
+        val generation = repo.ensureScope(fallback, 1)
+
+        repo.markWatched(fallback, SOURCE, "a", Date(1_000), "foryou", 1, generation)
+        repo.markSkipped(fallback, SOURCE, "b", Date(2_000), "foryou", 1, generation)
+        // Same item already known under the real scope: the copy must not overwrite it.
+        repo.markWatched(SCOPE, SOURCE, "b", Date(500), "foryou", 1, generation)
+
+        repo.mergeScope(fallback, SCOPE, SOURCE)
+
+        repo.entry(SCOPE, SOURCE, "a")?.watchedQualifiedAt shouldBe Date(1_000)
+        repo.entry(SCOPE, SOURCE, "b")?.watchedQualifiedAt shouldBe Date(500)
+        repo.entry(SCOPE, SOURCE, "b")?.skippedForwardAt shouldBe null
+        repo.entry(fallback, SOURCE, "a") shouldBe null
+        repo.countConsumed(fallback, SOURCE) shouldBe 0L
+
+        // A second run is a no-op instead of a duplicate or a resurrection.
+        repo.mergeScope(fallback, SCOPE, SOURCE)
+        repo.countConsumed(SCOPE, SOURCE) shouldBe 2L
+
+        fixture.close()
+    }
+
     private companion object {
         const val SCOPE = "acc:101:tg-42"
         const val SOURCE = 101L

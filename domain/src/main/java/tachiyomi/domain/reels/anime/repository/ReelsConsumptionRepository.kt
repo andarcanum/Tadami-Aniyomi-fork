@@ -52,6 +52,16 @@ interface ReelsConsumptionRepository {
     suspend fun countConsumed(scope: String, sourceId: Long): Long
 
     /**
+     * Moves the summary rows of [fromScope] into [toScope] for one source.
+     *
+     * Needed when a source could not prove its account identity on the first generation (the
+     * history was written under the fallback scope) and the real identity appeared later:
+     * without the move, everything watched before that moment becomes invisible and returns
+     * to the feed. Existing target rows win; the source rows are dropped afterwards.
+     */
+    suspend fun mergeScope(fromScope: String, toScope: String, sourceId: Long)
+
+    /**
      * Transactionally deletes the scope's consumption rows and bumps its history generation.
      * Explicit hidden/blacklist entries live elsewhere and are deliberately untouched.
      *

@@ -768,13 +768,12 @@ data class ReelsFeedScreen(
                             .collect { page ->
                                 val from = previous
                                 previous = page
-                                val userRecent = SystemClock.elapsedRealtime() - lastUserNavAtMs.get() <
-                                    ReelsForYou.USER_NAV_WINDOW_MS
-                                val cause = when {
-                                    page > from && userRecent -> ReelsTransitionCause.USER_FORWARD
-                                    page < from && userRecent -> ReelsTransitionCause.USER_BACKWARD
-                                    else -> ReelsTransitionCause.PROGRAMMATIC
-                                }
+                                val cause = ReelsForYou.resolveTransitionCause(
+                                    fromPage = from,
+                                    toPage = page,
+                                    nowMs = SystemClock.elapsedRealtime(),
+                                    lastUserNavAtMs = lastUserNavAtMs.get(),
+                                )
                                 screenModel.onPageChanged(page, cause)
                             }
                     }
@@ -839,11 +838,13 @@ data class ReelsFeedScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .pointerInput(pagerState) {
-                                // Observe-only: reports a completed drag that actually changed
-                                // the page. A cancelled drag snaps back to the same page and is
-                                // deliberately ignored (FY04: no skip).
+                                // Observe-only: reports a completed vertical drag. The page is
+                                // NOT required to have moved yet: a fling releases the finger
+                                // while the pager is still on the origin page, and that release
+                                // is exactly the "the user decided" signal the skip path needs.
+                                // A drag that snaps back never changes settledPage, so it still
+                                // records nothing (FY04: no skip).
                                 awaitEachGesture {
-                                    val startPage = pagerState.currentPage
                                     val down = awaitFirstDown(
                                         requireUnconsumed = false,
                                         pass = PointerEventPass.Initial,
@@ -852,9 +853,7 @@ data class ReelsFeedScreen(
                                     drag(down.id) { change ->
                                         if (abs(change.positionChange().y) > 0f) dragged = true
                                     }
-                                    if (dragged && pagerState.currentPage != startPage) {
-                                        lastUserNavAtMs.set(SystemClock.elapsedRealtime())
-                                    }
+                                    if (dragged) lastUserNavAtMs.set(SystemClock.elapsedRealtime())
                                 }
                             }
                             .pointerInput(feedSwipeEnabled, swipeThresholdPx) {

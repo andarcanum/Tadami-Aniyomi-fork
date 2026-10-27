@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCategorySubscriptionSource
 import eu.kanade.tachiyomi.animesource.AnimeContentPreferencesSource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedAccountIdentitySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
@@ -1360,6 +1361,68 @@ class ReelsFeedScreenModelTest {
     }
 
     @Test
+    fun `a fling records every card it flew over, not only the origin`() = runTest(testDispatcher) {
+        val items = (0 until 10).map { "fly-$it" }
+        val consumption = FakeReelsConsumptionRepository()
+        val source = RecordingFeedSource(905L) { FeedPage(items.map(::videoItem), hasNextPage = false) }
+        val model = buildModel(
+            sourceId = 905L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // One settled-page change that crosses four cards: the user rejected all of them.
+        model.onPageChanged(4, ReelsTransitionCause.USER_FORWARD)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        consumption.skipped.keys shouldBe setOf(
+            905L to "fly-0",
+            905L to "fly-1",
+            905L to "fly-2",
+            905L to "fly-3",
+        )
+    }
+
+    @Test
+    fun `history written before the account identity is known follows the account`() = runTest(testDispatcher) {
+        val consumption = FakeReelsConsumptionRepository()
+        var identity: String? = null
+        val source = object : AnimeFeedSource, AnimeFeedAccountIdentitySource {
+            override val id = 906L
+            override val name = "Identity"
+            override val lang = "all"
+            override fun accountScopeId(): String? = identity
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(listOf(videoItem("id-a"), videoItem("id-b")), hasNextPage = false)
+        }
+        val model = buildModel(
+            sourceId = 906L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.items.map { it.id } shouldBe listOf("id-a", "id-b")
+
+        // The source cannot prove its account yet (cold start): the skip lands in the
+        // fallback scope.
+        model.onPageChanged(1, ReelsTransitionCause.USER_FORWARD)
+        testDispatcher.scheduler.advanceUntilIdle()
+        consumption.skipped.keys shouldBe setOf(906L to "id-a")
+        consumption.scopes[906L to "id-a"] shouldBe "src:906"
+
+        // The account becomes known. The history must move with it — otherwise the reel the
+        // user just swiped past comes back under a different scope key.
+        identity = "777"
+        model.loadFeed(reset = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        consumption.merges shouldBe 1
+        consumption.scopes[906L to "id-a"] shouldBe "acc:906:777"
+        model.state.value.items.map { it.id } shouldNotContain "id-a"
+    }
+
+    @Test
     fun `running out of refill budget is not end of feed`() = runTest(testDispatcher) {
         val consumption = FakeReelsConsumptionRepository()
         val source = RecordingFeedSource(903L) { page ->
@@ -2421,8 +2484,13 @@ class ReelsFeedScreenModelTest {
     private class FakeReelsConsumptionRepository : ReelsConsumptionRepository {
         val watched = mutableMapOf<Pair<Long, String>, Date>()
         val skipped = mutableMapOf<Pair<Long, String>, Date>()
+
+        // Scope each row was written under: the feed's identity can change mid-session, and
+        // the model must move (or keep) history deliberately instead of losing it.
+        val scopes = mutableMapOf<Pair<Long, String>, String>()
         var generation = 0L
         var writes = 0
+        var merges = 0
 
         override suspend fun generation(scope: String): Long = generation
 
@@ -2440,6 +2508,7 @@ class ReelsFeedScreenModelTest {
             if (generation != this.generation) return false
             writes++
             watched.putIfAbsent(sourceId to itemId, at)
+            scopes.putIfAbsent(sourceId to itemId, scope)
             return true
         }
 
@@ -2455,6 +2524,7 @@ class ReelsFeedScreenModelTest {
             if (generation != this.generation) return false
             writes++
             skipped.putIfAbsent(sourceId to itemId, at)
+            scopes.putIfAbsent(sourceId to itemId, scope)
             return true
         }
 
@@ -2463,7 +2533,11 @@ class ReelsFeedScreenModelTest {
             sourceId: Long,
             itemIds: Collection<String>,
         ): Set<String> {
-            return itemIds.filter { (sourceId to it) in watched || (sourceId to it) in skipped }.toSet()
+            return itemIds.filter { id ->
+                val key = sourceId to id
+                // A row seeded directly by a test has no scope and matches any of them.
+                (key in watched || key in skipped) && (scopes[key]?.let { it == scope } ?: true)
+            }.toSet()
         }
 
         override suspend fun entry(scope: String, sourceId: Long, itemId: String): ReelsConsumptionEntry? = null
@@ -2472,9 +2546,17 @@ class ReelsFeedScreenModelTest {
             return (watched.keys + skipped.keys).count { it.first == sourceId }.toLong()
         }
 
+        override suspend fun mergeScope(fromScope: String, toScope: String, sourceId: Long) {
+            merges++
+            scopes.entries
+                .filter { it.value == fromScope && it.key.first == sourceId }
+                .forEach { it.setValue(toScope) }
+        }
+
         override suspend fun resetHistory(scope: String, policyVersion: Int): Long {
             watched.clear()
             skipped.clear()
+            scopes.clear()
             return ++generation
         }
     }

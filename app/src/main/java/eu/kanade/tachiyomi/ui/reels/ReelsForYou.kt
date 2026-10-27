@@ -54,6 +54,34 @@ object ReelsForYou {
         val stable = identity?.trim()?.takeIf { it.isNotEmpty() }
         return if (stable != null) "acc:$sourceId:$stable" else "src:$sourceId"
     }
+
+    /** `src:<sourceId>` — the scope used while the source cannot prove an account identity. */
+    fun fallbackScope(sourceId: Long): String = "src:$sourceId"
+
+    /**
+     * Classifies a settled-page change.
+     *
+     * [lastUserNavAtMs] is stamped by the pager's gesture observer when a real drag ENDED —
+     * not when the page moved. A fling releases the finger while `currentPage` is still the
+     * origin page, so "did the page change during the drag?" answers nothing about intent.
+     */
+    fun resolveTransitionCause(
+        fromPage: Int,
+        toPage: Int,
+        nowMs: Long,
+        lastUserNavAtMs: Long,
+    ): ReelsTransitionCause {
+        // 0 = no gesture was ever recorded. Without this guard a startup restore that settles
+        // within the first window of `elapsedRealtime` would look like a fresh swipe and mark
+        // the restored cards as skipped.
+        val sinceNav = nowMs - lastUserNavAtMs
+        val userRecent = lastUserNavAtMs > 0L && sinceNav in 0 until USER_NAV_WINDOW_MS
+        return when {
+            toPage > fromPage && userRecent -> ReelsTransitionCause.USER_FORWARD
+            toPage < fromPage && userRecent -> ReelsTransitionCause.USER_BACKWARD
+            else -> ReelsTransitionCause.PROGRAMMATIC
+        }
+    }
 }
 
 /**

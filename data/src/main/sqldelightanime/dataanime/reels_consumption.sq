@@ -77,3 +77,16 @@ WHERE account_scope_id = :scope;
 deleteForSource:
 DELETE FROM reels_consumption
 WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+-- Moves a fallback-scope history into the real account scope. The rows are copied verbatim
+-- (a watch stays a watch, a skip stays a skip) and an existing target row wins, so a repeated
+-- run can never overwrite a newer fact with an older copy.
+copyFromScope:
+INSERT OR IGNORE INTO reels_consumption(
+    account_scope_id, source_id, item_id, watched_qualified_at, skipped_forward_at,
+    last_action_at, last_surface, policy_version, history_generation
+)
+SELECT :targetScope, source_id, item_id, watched_qualified_at, skipped_forward_at,
+       last_action_at, last_surface, policy_version, history_generation
+FROM reels_consumption
+WHERE account_scope_id = :sourceScope AND source_id = :sourceId;

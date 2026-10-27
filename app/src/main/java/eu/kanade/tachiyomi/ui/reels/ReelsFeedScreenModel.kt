@@ -440,22 +440,55 @@ class ReelsFeedScreenModel(
         }
     }
 
+    // Pinned account scope per source. The identity can arrive AFTER the first feed request
+    // (TDLib is still authorizing), and a scope that silently follows it would strand every
+    // watched/skipped row written a second earlier under the fallback scope — exactly the
+    // reels that then come back. The first PROVEN identity wins for this model's lifetime.
+    private var pinnedScope: Pair<Long, String>? = null
+
     private fun accountScopeFor(sourceId: Long): String {
+        // A proven identity, once seen, outranks a later `null` (TDLib restarting, a web
+        // session losing its uid): dropping back to the fallback scope would hide the
+        // history that is already stored under the account.
+        pinnedScope?.let { (pinnedSourceId, scope) -> if (pinnedSourceId == sourceId) return scope }
         // A capability lookup on plugin bytecode: never let a broken extension break history.
         val identity = runCatching {
             (sourceManager.get(sourceId) as? AnimeFeedAccountIdentitySource)?.accountScopeId()
         }.getOrNull()
-        return ReelsForYou.accountScope(sourceId, identity)
+        val proven = identity?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return ReelsForYou.accountScope(sourceId, null)
+        val scope = ReelsForYou.accountScope(sourceId, proven)
+        pinnedScope = sourceId to scope
+        return scope
     }
 
     /** Scope + history generation of the current account, cached until the scope changes. */
     private suspend fun ensureForYouScope(sourceId: Long): Pair<String, Long> {
         val scope = accountScopeFor(sourceId)
         if (forYouScope == scope) return scope to forYouGeneration
+        adoptFallbackHistory(sourceId, scope)
         val generation = reelsConsumptionRepository.ensureScope(scope, ReelsForYou.POLICY_VERSION)
         forYouScope = scope
         forYouGeneration = generation
         return scope to generation
+    }
+
+    /**
+     * The first generation of a cold start may run before the source can prove an account
+     * identity, so its history lands in the fallback `src:` scope. When the real identity
+     * appears, that history has to follow the user instead of vanishing: one transactional
+     * copy into the account scope, then the fallback rows are dropped.
+     *
+     * Idempotent and cheap after the first run (the source scope is empty by then), so it is
+     * safe to attempt on every scope resolution.
+     */
+    private suspend fun adoptFallbackHistory(sourceId: Long, scope: String) {
+        val fallback = ReelsForYou.fallbackScope(sourceId)
+        if (scope == fallback) return
+        val previous = forYouScope
+        if (previous != null && previous != fallback) return
+        runCatching { reelsConsumptionRepository.mergeScope(fallback, scope, sourceId) }
+            .onFailure { logcat(LogPriority.WARN, it) { "Reels history merge $fallback -> $scope failed" } }
     }
 
     /** Diagnostic surface stored with the summary; never used to decide filtering. */
@@ -2902,8 +2935,9 @@ class ReelsFeedScreenModel(
                 )
             }
             // A login can change the underlying account: the For You scope must be re-resolved
-            // instead of reusing the previous account's generation.
+            // instead of reusing the previous account's generation (or its pinned identity).
             forYouScope = null
+            pinnedScope = null
             watchedCommitted.clear()
             skippedCommitted.clear()
             if (ok) loadFeed(reset = true)
@@ -2928,6 +2962,7 @@ class ReelsFeedScreenModel(
             // Logout fences the account scope: the next load re-resolves it, so the previous
             // account's history is never reused for a different session.
             forYouScope = null
+            pinnedScope = null
             watchedCommitted.clear()
             skippedCommitted.clear()
             loadFeed(reset = true)
@@ -3461,11 +3496,17 @@ class ReelsFeedScreenModel(
         val previousItem = state.value.items.getOrNull(previousIndex)
         // A skip exists only for a COMMITTED MANUAL forward move away from the card that was
         // actually settled. Cancelled drags never reach this collector (settledPage does not
-        // change), auto-advance/restore/error-fallback arrive as PROGRAMMATIC, a backward move
-        // is USER_BACKWARD, and a fast fling reports the origin page only — the pages it flew
-        // over never became committed visits.
+        // change), auto-advance/restore/error-fallback arrive as PROGRAMMATIC and a backward
+        // move is USER_BACKWARD.
+        //
+        // EVERY card the user moved past is a skip, not only the origin: a fling settles one
+        // page further but means "I did not want any of these". Recording only the origin left
+        // the flown-over reels unconsumed, so they came back in the next generation.
         if (cause == ReelsTransitionCause.USER_FORWARD && index > previousIndex && previousItem != null) {
-            commitSkipped(previousItem.id)
+            val items = state.value.items
+            for (position in previousIndex until minOf(index, items.size)) {
+                items.getOrNull(position)?.let { commitSkipped(it.id) }
+            }
         }
         mutableState.update {
             it.copy(

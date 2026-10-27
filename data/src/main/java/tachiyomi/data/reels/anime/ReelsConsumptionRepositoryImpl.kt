@@ -121,6 +121,24 @@ class ReelsConsumptionRepositoryImpl(
         }
     }
 
+    override suspend fun mergeScope(fromScope: String, toScope: String, sourceId: Long) {
+        if (fromScope == toScope) return
+        try {
+            handler.await(inTransaction = true) { db ->
+                db.reels_consumptionQueries.copyFromScope(
+                    targetScope = toScope,
+                    sourceScope = fromScope,
+                    sourceId = sourceId,
+                )
+                db.reels_consumptionQueries.deleteForSource(fromScope, sourceId)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SQLiteException) {
+            logcat(LogPriority.ERROR, throwable = e) { "Failed to merge reels history $fromScope -> $toScope" }
+        }
+    }
+
     override suspend fun resetHistory(scope: String, policyVersion: Int): Long {
         return try {
             handler.await(inTransaction = true) { db ->
