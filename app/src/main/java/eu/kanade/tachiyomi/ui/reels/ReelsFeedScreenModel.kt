@@ -1133,7 +1133,30 @@ class ReelsFeedScreenModel(
                         filters = frozen.filters,
                         historyGeneration = historyGen,
                         reset = resetReplay,
-                    )
+                    )?.let { restored ->
+                        // Last line of defence before the queue becomes visible content.
+                        // The stored window already anti-joins the consumption summary, but
+                        // the summary can move (a scope merge, a write that landed after the
+                        // read) — and a restored reel the user already watched or swiped past
+                        // must never be drawn again. Cheap: one batch query per restore.
+                        val ids = restored.initialItems.map { it.id }
+                        val consumed = if (ids.isEmpty()) {
+                            emptySet()
+                        } else {
+                            reelsConsumptionRepository.consumedIds(accountScope, sourceId, ids)
+                        }
+                        if (consumed.isEmpty()) {
+                            restored
+                        } else {
+                            val kept = restored.initialItems.filterNot { it.id in consumed }
+                            val seekId = restored.seekItemId?.takeIf { it !in consumed }
+                            restored.copy(
+                                initialItems = kept,
+                                seekItemId = seekId,
+                                seekPositionMs = if (seekId == null) null else restored.seekPositionMs,
+                            )
+                        }
+                    }
                 }
             }
 

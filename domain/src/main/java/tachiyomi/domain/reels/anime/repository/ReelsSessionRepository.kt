@@ -22,7 +22,9 @@ interface ReelsSessionRepository {
 
     /**
      * Retrieves the active checkpoint for the session if valid.
-     * Excludes skipped, hidden or completed items, but permits qualified-watch-only current items.
+     * Excludes consumed (watched or skipped) and hidden items: a clip that was already
+     * consumed has nothing to resume, and letting it lead the restored feed made every
+     * cold start open on the same reel.
      */
     suspend fun active(handle: ReelsSessionHandle): ReelsActiveCheckpoint?
 

@@ -3917,6 +3917,73 @@ class ReelsFeedScreenModelTest {
     }
 
     @Test
+    fun `a restored queue never republishes clips the user already consumed`() = runTest(testDispatcher) {
+        val source = object : AnimeFeedSource, AnimeFeedReplaySource {
+            override val id = 957L
+            override val name = "Replay"
+            override val lang = "all"
+            override val replayContextChanges = kotlinx.coroutines.flow.emptyFlow<FeedReplayContext?>()
+            override fun accountScopeId() = "12"
+            override suspend fun prepareReplay() = FeedReplayContext("12", "backend")
+            override suspend fun resolveReplayItem(
+                itemId: String,
+                expectedContext: FeedReplayContext,
+                filters: AnimeFilterList,
+            ): FeedReplayItemResult = FeedReplayItemResult.Available(videoItem(itemId))
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList) =
+                FeedPage(emptyList(), false)
+        }
+        val consumption = FakeReelsConsumptionRepository()
+        val sessions = FakeReelsSessionRepository()
+        val key = ReelsSessionKey(
+            "acc:957:12",
+            957L,
+            ReelsSessionContext.computeContextKey(
+                sourceId = 957L,
+                filterFingerprint = "",
+                continuityKey = "backend",
+            ),
+        )
+        val handle = sessions.open(key, "old-owner", 0L, reset = false)
+        sessions.appendPage(
+            handle,
+            listOf("seen-1", "seen-2", "fresh-1", "fresh-2").map {
+                ReelsCandidate(
+                    accountScopeId = key.accountScopeId,
+                    sourceId = 957L,
+                    itemId = it,
+                    title = "Title",
+                    author = "Author",
+                    videoUrl = "",
+                    videoUrlHd = null,
+                    posterUrl = null,
+                    posterUrlVertical = null,
+                    webUrl = null,
+                    durationSec = 60.0,
+                    hasAudio = true,
+                    createdAtEpochSec = null,
+                    discoveredAt = Date(0L),
+                )
+            },
+        )
+        // The summary knows two of them were already watched and swiped past.
+        consumption.watched[957L to "seen-1"] = Date(1_000L)
+        consumption.skipped[957L to "seen-2"] = Date(1_000L)
+
+        val model = buildModel(
+            sourceId = 957L,
+            manager = sourceManagerOf(source),
+            sessionRepository = sessions,
+            consumptionRepository = consumption,
+        )
+        testScheduler.advanceUntilIdle()
+
+        // The queue still holds them, but the published feed must not.
+        sessions.queued.map { it.candidate.itemId } shouldBe listOf("seen-1", "seen-2", "fresh-1", "fresh-2")
+        model.state.value.items.map { it.id } shouldBe listOf("fresh-1", "fresh-2")
+    }
+
+    @Test
     fun `obsolete replay background response cannot overwrite the all-items cursor`() = runTest(testDispatcher) {
         val held = CompletableDeferred<FeedPage>()
         var requests = 0

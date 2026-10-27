@@ -106,14 +106,20 @@ class ReelsSessionRepositoryImpl(
                 return@await null
             }
 
-            // Exclude if skipped forward in consumption
+            // Exclude if the clip was already consumed in ANY way.
+            //
+            // A qualified watch used to be an exception here ("resume the clip you were
+            // watching"). In practice that resurrected the SAME reel as the first card of
+            // every cold start: leaving the feed mid-clip after the 5 s threshold wrote a
+            // watch, no skip, and the checkpoint kept leading the restored feed forever.
+            // A consumed clip has nothing left to resume, so it is dropped.
             val consumption = db.reels_consumptionQueries.getByItem(
                 handle.key.accountScopeId,
                 handle.key.sourceId,
                 activeItemId,
             )
                 .executeAsOneOrNull()
-            if (consumption?.skipped_forward_at != null) {
+            if (consumption?.watched_qualified_at != null || consumption?.skipped_forward_at != null) {
                 return@await null
             }
 

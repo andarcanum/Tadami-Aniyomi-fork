@@ -209,6 +209,43 @@ class ReelsSessionStorageTest {
     }
 
     @Test
+    fun `a watched checkpoint does not lead the restored feed`() = runBlocking {
+        val dbFile = File(tempDir, "session_test_watched_checkpoint.db")
+        val (driver, handler) = createDb(dbFile)
+        AnimeDatabase.Schema.create(driver)
+        val repo = ReelsSessionRepositoryImpl(handler)
+
+        val key = ReelsSessionKey(accountScopeId = "tg_123", sourceId = 8529104719284712L, contextKey = "ctx_v1")
+        val handle = repo.open(key, ownerNonce = "nonce_1", historyGeneration = 1L, reset = false)
+
+        val itemA = candidate("tg_123", 8529104719284712L, "clip_A")
+        repo.appendPage(handle, listOf(itemA))
+        repo.checkpoint(
+            handle,
+            ReelsActiveCheckpoint(item = itemA, positionMs = 6_000L, completed = false, sequence = 1L),
+        ) shouldBe true
+
+        // Left the feed mid-clip AFTER the watch threshold: a qualified watch, no skip.
+        handler.await { db ->
+            db.reels_consumptionQueries.markWatched(
+                account_scope_id = "tg_123",
+                source_id = 8529104719284712L,
+                item_id = "clip_A",
+                watched_qualified_at = Date(2_000L),
+                last_action_at = Date(2_000L),
+                last_surface = "foryou",
+                policy_version = 1L,
+                history_generation = 1L,
+            )
+        }
+
+        // Nothing left to resume: the checkpoint must not resurrect the reel as card #1.
+        repo.active(handle) shouldBe null
+
+        driver.close()
+    }
+
+    @Test
     fun `skipped or completed or hidden active item is excluded`() = runBlocking {
         val dbFile = File(tempDir, "session_test_3.db")
         val (driver, handler) = createDb(dbFile)
