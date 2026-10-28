@@ -6,59 +6,81 @@ import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelBookState
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelHighlight
-import eu.kanade.tachiyomi.data.backup.models.backupNovelChapterMapper
+import tachiyomi.data.book.novel.NovelBookStateRepositoryImpl
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.book.novel.interactor.GetNovelBookState
-import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
 import tachiyomi.domain.entries.novel.model.Novel
-import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class NovelBackupCreator(
     private val handler: NovelDatabaseHandler = Injekt.get(),
-    private val categoryRepository: NovelCategoryRepository = Injekt.get(),
-    private val historyRepository: NovelHistoryRepository = Injekt.get(),
     private val getNovelBookState: GetNovelBookState = Injekt.get(),
 ) {
 
     suspend operator fun invoke(novels: List<Novel>, options: BackupOptions): List<BackupNovel> {
-        return novels.map {
-            backupNovel(it, options)
+        if (novels.isEmpty()) return emptyList()
+        val scopeIds = novels.mapTo(hashSetOf()) { it.id }
+
+        val excludedByNovel = handler.awaitList { db ->
+            db.novel_excluded_scanlatorsQueries.getAll()
         }
-    }
+            .filter { it.novel_id in scopeIds }
+            .groupBy({ it.novel_id }, { it.scanlator })
 
-    private suspend fun backupNovel(novel: Novel, options: BackupOptions): BackupNovel {
-        val novelObject = novel.toBackupNovel()
-
-        novelObject.excludedScanlators = handler.awaitList { db ->
-            db.novel_excluded_scanlatorsQueries.getExcludedScanlatorsByNovelId(novel.id)
-        }
-
-        if (options.chapters) {
+        val chapterRows = if (!options.chapters) {
+            emptyList()
+        } else {
             handler.awaitList { db ->
-                db.novel_chaptersQueries.getChaptersByNovelId(
-                    novelId = novel.id,
-                    applyScanlatorFilter = 0, // false
-                    mapper = backupNovelChapterMapper,
-                )
+                db.novel_chaptersQueries.getAllChaptersForBackup(novelChapterRowMapper)
             }
-                .takeUnless(List<BackupChapter>::isEmpty)
-                ?.let { novelObject.chapters = it }
+        }
+        // Single-pass grouping for the chapters table: filter().groupBy() would allocate an
+        // intermediate list of every row.
+        val chaptersByNovel = LinkedHashMap<Long, MutableList<BackupChapter>>()
+        chapterRows.forEach { row ->
+            if (row.novelId in scopeIds) {
+                chaptersByNovel.getOrPut(row.novelId) { ArrayList() }.add(row.backup)
+            }
+        }
+        // One fetch serves both the payload and bookState lastChapterUrl lookups.
+        val chapterUrlById = chapterRows.associate { it.chapterId to it.backup.url }
 
-            val chapterUrlsById = handler.awaitList { db ->
-                db.novel_chaptersQueries.getChaptersByNovelId(
-                    novelId = novel.id,
-                    applyScanlatorFilter = 0,
-                )
-            }.associateBy({ it._id }, { it.url })
-            val highlights = handler.awaitList { db ->
-                db.novel_highlightsQueries.getForNovel(novel.id)
-            }
-            highlights.takeUnless { it.isEmpty() }?.let { rows ->
-                novelObject.highlights = rows.map { row ->
+        val highlightsByNovel = if (!options.chapters) {
+            emptyMap()
+        } else {
+            handler.awaitList { db -> db.novel_highlightsQueries.getAllHighlightsWithChapterUrl() }
+                .filter { it.novel_id in scopeIds }
+                .groupBy { it.novel_id }
+        }
+
+        val categoryOrdersByNovel = if (!options.categories) {
+            emptyMap()
+        } else {
+            handler.awaitList { db -> db.novel_categoriesQueries.getAllNovelCategoryOrders() }
+                .filter { it.novel_id in scopeIds }
+                .groupBy({ it.novel_id }, { it.`order` })
+        }
+
+        val historyByNovel = if (!options.history) {
+            emptyMap()
+        } else {
+            handler.awaitList { db -> db.novel_historyQueries.getAllHistoryWithChapter() }
+                .filter { it.novel_id in scopeIds }
+                .groupBy { it.novel_id }
+        }
+
+        // novel_books.novel_id is the primary key: a novel has at most one book state.
+        val bookStateByNovel = getNovelBookState.awaitAll().associateBy { it.novelId }
+
+        return novels.map { novel ->
+            novel.toBackupNovel().apply {
+                excludedScanlators = excludedByNovel[novel.id].orEmpty()
+                chaptersByNovel[novel.id]?.takeUnless(List<BackupChapter>::isEmpty)
+                    ?.let { chapters = it }
+                highlightsByNovel[novel.id]?.map { row ->
                     BackupNovelHighlight(
-                        chapterUrl = chapterUrlsById[row.chapter_id].orEmpty(),
+                        chapterUrl = row.chapter_url.orEmpty(),
                         blockIndex = row.block_index.toInt(),
                         charStart = row.char_start.toInt(),
                         charEndExclusive = row.char_end_exclusive.toInt(),
@@ -70,58 +92,112 @@ class NovelBackupCreator(
                         pageIndex = row.page_index.toInt(),
                         pageCount = row.page_count.toInt(),
                     )
+                }?.takeUnless(List<BackupNovelHighlight>::isEmpty)
+                    ?.let { highlights = it }
+                categoryOrdersByNovel[novel.id]?.takeUnless(List<Long>::isEmpty)
+                    ?.let { categories = it }
+                historyByNovel[novel.id]?.map {
+                    BackupHistory(it.url, it.last_read?.time ?: 0L, it.time_read)
+                }?.takeUnless(List<BackupHistory>::isEmpty)
+                    ?.let { history = it }
+                // Book state is NOT gated by the chapters option (unchanged behavior); it is
+                // exported on every backup. lastChapterUrl prefers the in-memory chapter map
+                // and falls back to a per-novel lookup for chapters outside the fetched scope.
+                bookStateByNovel[novel.id]?.let { state ->
+                    bookState = BackupNovelBookState(
+                        enabled = state.enabled,
+                        bookVersion = state.bookVersion,
+                        sourceId = state.sourceId,
+                        chapterSetHash = state.chapterSetHash,
+                        totalChars = state.totalChars,
+                        chapterCount = state.chapterCount,
+                        charOffset = state.charOffset,
+                        lastChapterUrl = state.lastChapterId?.let { chapterUrlById[it] }
+                            ?: state.lastChapterId?.let { chapterId ->
+                                runCatching {
+                                    handler.awaitOne { db ->
+                                        db.novel_chaptersQueries.getChapterById(chapterId)
+                                    }.url
+                                }.getOrNull()
+                            },
+                        complete = state.complete,
+                        builtAt = state.builtAt,
+                        updatedAt = state.updatedAt,
+                        blockIndex = state.blockIndex,
+                        chapterCharOffset = state.chapterCharOffset,
+                        progressMigrated = state.progressMigrated,
+                    )
                 }
             }
         }
-
-        if (options.categories) {
-            val categoriesForNovel = categoryRepository.getCategoriesByNovelId(novel.id)
-            if (categoriesForNovel.isNotEmpty()) {
-                novelObject.categories = categoriesForNovel.map { it.order }
-            }
-        }
-
-        if (options.history) {
-            val historyByNovelId = historyRepository.getHistoryByNovelId(novel.id)
-            if (historyByNovelId.isNotEmpty()) {
-                val history = historyByNovelId.map { history ->
-                    val chapter = handler.awaitOne { db -> db.novel_chaptersQueries.getChapterById(history.chapterId) }
-                    BackupHistory(chapter.url, history.readAt?.time ?: 0L, history.readDuration)
-                }
-                if (history.isNotEmpty()) {
-                    novelObject.history = history
-                }
-            }
-        }
-
-        // The compiled book artifact is derived data and stays out of the backup; only its state and
-        // reading offset are stored, with the last chapter kept as a URL so it survives new ids.
-        getNovelBookState.await(novel.id)?.let { bookState ->
-            val lastChapterUrl = bookState.lastChapterId?.let { chapterId ->
-                runCatching {
-                    handler.awaitOne { db -> db.novel_chaptersQueries.getChapterById(chapterId) }.url
-                }.getOrNull()
-            }
-            novelObject.bookState = BackupNovelBookState(
-                enabled = bookState.enabled,
-                bookVersion = bookState.bookVersion,
-                sourceId = bookState.sourceId,
-                chapterSetHash = bookState.chapterSetHash,
-                totalChars = bookState.totalChars,
-                chapterCount = bookState.chapterCount,
-                charOffset = bookState.charOffset,
-                lastChapterUrl = lastChapterUrl,
-                complete = bookState.complete,
-                builtAt = bookState.builtAt,
-                updatedAt = bookState.updatedAt,
-                blockIndex = bookState.blockIndex,
-                chapterCharOffset = bookState.chapterCharOffset,
-                progressMigrated = bookState.progressMigrated,
-            )
-        }
-
-        return novelObject
     }
+}
+
+private data class NovelChapterRow(
+    val novelId: Long,
+    val chapterId: Long,
+    val backup: BackupChapter,
+)
+
+// Batched variant for getAllChaptersForBackup: novel_id (column 2) and the chapter _id
+// (column 1) are bound so one query feeds the chapter payload, the highlight chapter URLs
+// and the bookState lastChapterUrl lookup.
+private val novelChapterRowMapper: (
+    Long,
+    Long,
+    String,
+    String,
+    String?,
+    Boolean,
+    Boolean,
+    Long,
+    Double,
+    Long,
+    Long,
+    Long,
+    String?,
+    Long,
+    Long,
+    Long,
+    kotlinx.serialization.json.JsonObject,
+) -> NovelChapterRow = {
+        _id: Long,
+        novelId: Long,
+        url: String,
+        name: String,
+        scanlator: String?,
+        read: Boolean,
+        bookmark: Boolean,
+        lastPageRead: Long,
+        chapterNumber: Double,
+        source_order: Long,
+        dateFetch: Long,
+        dateUpload: Long,
+        dateUploadRaw: String?,
+        lastModifiedAt: Long,
+        version: Long,
+        _: Long,
+        _: kotlinx.serialization.json.JsonObject,
+    ->
+    NovelChapterRow(
+        novelId = novelId,
+        chapterId = _id,
+        backup = BackupChapter(
+            url = url,
+            name = name,
+            chapterNumber = chapterNumber.toFloat(),
+            scanlator = scanlator,
+            read = read,
+            bookmark = bookmark,
+            lastPageRead = lastPageRead,
+            dateFetch = dateFetch,
+            dateUpload = dateUpload,
+            dateUploadRaw = dateUploadRaw,
+            sourceOrder = source_order,
+            lastModifiedAt = lastModifiedAt,
+            version = version,
+        ),
+    )
 }
 
 private fun Novel.toBackupNovel() =

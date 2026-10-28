@@ -140,6 +140,43 @@ val backupChapterMapper = {
     )
 }
 
+// Batched variant for getAllChaptersForBackup: manga_id (column 2) is bound so the
+// creator can group all chapters in one query instead of one query per manga.
+val backupChapterWithMangaIdMapper = {
+        _: Long,
+        mangaId: Long,
+        url: String,
+        name: String,
+        scanlator: String?,
+        read: Boolean,
+        bookmark: Boolean,
+        lastPageRead: Long,
+        chapterNumber: Double,
+        source_order: Long,
+        dateFetch: Long,
+        dateUpload: Long,
+        lastModifiedAt: Long,
+        version: Long,
+        _: Long,
+        memo: JsonObject,
+    ->
+    mangaId to BackupChapter(
+        url = url,
+        name = name,
+        chapterNumber = chapterNumber.toFloat(),
+        scanlator = scanlator,
+        read = read,
+        bookmark = bookmark,
+        lastPageRead = lastPageRead,
+        dateFetch = dateFetch,
+        dateUpload = dateUpload,
+        sourceOrder = source_order,
+        lastModifiedAt = lastModifiedAt,
+        version = version,
+        memoJson = toBackupMemoJson(memo),
+    )
+}
+
 // E-L-16 helpers: the domain memo is a JsonObject; the proto carries its JSON text (null when
 // empty) so native backups survive restore round-trips without touching the sister-app formats.
 internal fun toBackupMemoJson(memo: JsonObject?): String? =

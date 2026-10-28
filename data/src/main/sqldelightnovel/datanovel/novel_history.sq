@@ -88,3 +88,13 @@ SELECT COUNT(*)
 FROM novel_history H
 INNER JOIN novel_chapters C ON H.chapter_id = C._id
 WHERE C.novel_id = :novelId;
+
+getAllHistoryWithChapter:
+SELECT
+C.novel_id,
+C.url,
+H.last_read,
+H.time_read
+FROM novel_history H
+JOIN novel_chapters C
+ON H.chapter_id = C._id;

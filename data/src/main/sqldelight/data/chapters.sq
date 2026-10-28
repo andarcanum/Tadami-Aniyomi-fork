@@ -142,3 +142,7 @@ SELECT last_insert_rowid();
 getChapterCountByMangaId:
 SELECT COUNT(*) FROM chapters
 WHERE manga_id = :mangaId;
+
+getAllChaptersForBackup:
+SELECT C.*
+FROM chapters C;

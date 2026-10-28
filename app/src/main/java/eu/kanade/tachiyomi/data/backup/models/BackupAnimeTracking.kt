@@ -86,3 +86,38 @@ val backupAnimeTrackMapper = {
         private = private,
     )
 }
+
+// Batched variant for getAnimeTracks over the whole table: anime_id (column 2) is bound so the
+// creator can group all tracks in one query instead of one query per anime.
+val backupAnimeTrackWithAnimeIdMapper = {
+        _: Long,
+        animeId: Long,
+        syncId: Long,
+        mediaId: Long,
+        libraryId: Long?,
+        title: String,
+        lastEpisodeSeen: Double,
+        totalEpisodes: Long,
+        status: Long,
+        score: Double,
+        remoteUrl: String,
+        startDate: Long,
+        finishDate: Long,
+        private: Boolean,
+    ->
+    animeId to BackupAnimeTracking(
+        syncId = syncId.toInt(),
+        mediaId = mediaId,
+        // forced not null so its compatible with 1.x backup system
+        libraryId = libraryId ?: 0,
+        title = title,
+        lastEpisodeSeen = lastEpisodeSeen.toFloat(),
+        totalEpisodes = totalEpisodes.toInt(),
+        score = score.toFloat(),
+        status = status.toInt(),
+        startedWatchingDate = startDate,
+        finishedWatchingDate = finishDate,
+        trackingUrl = remoteUrl,
+        private = private,
+    )
+}
