@@ -169,24 +169,30 @@ class ReelsSessionContinuity(
             }
         }
 
-        // 2. Fetch first local window
-        val window = repository.window(handle, afterOrdinal = 0L, limit = 40)
+        // 2. Fetch first local window (skipping forward past consumed entries if needed)
+        var window = repository.window(handle, afterOrdinal = 0L, limit = 40)
         lastOrdinal = window.nextOrdinal
 
-        // Rehydrate items in window. Eager network attempts are bounded; the rest keep their
-        // stored metadata and resolve just-in-time when they become active.
-        for (candidate in window.entries.map { it.candidate }) {
-            if (candidate.itemId == seekItemId) continue // Already added from active
-            if (eagerAttempts >= MAX_EAGER_RESTORE_RESOLVES) {
-                items.add(candidate.toShortVideoItem())
-                continue
+        while (true) {
+            // Rehydrate items in window. Eager network attempts are bounded; the rest keep their
+            // stored metadata and resolve just-in-time when they become active.
+            for (candidate in window.entries.map { it.candidate }) {
+                if (candidate.itemId == seekItemId) continue // Already added from active
+                if (eagerAttempts >= MAX_EAGER_RESTORE_RESOLVES) {
+                    items.add(candidate.toShortVideoItem())
+                    continue
+                }
+                eagerAttempts++
+                when (val res = resolveItem(candidate.itemId)) {
+                    is FeedReplayItemResult.Available -> items.add(res.item)
+                    is FeedReplayItemResult.Deferred -> items.add(candidate.toShortVideoItem())
+                    else -> Unit
+                }
             }
-            eagerAttempts++
-            when (val res = resolveItem(candidate.itemId)) {
-                is FeedReplayItemResult.Available -> items.add(res.item)
-                is FeedReplayItemResult.Deferred -> items.add(candidate.toShortVideoItem())
-                else -> Unit
-            }
+
+            if (items.isNotEmpty() || !window.hasMore) break
+            window = repository.window(handle, afterOrdinal = lastOrdinal, limit = 40)
+            lastOrdinal = window.nextOrdinal
         }
 
         if (items.isEmpty() && !window.hasMore) {
