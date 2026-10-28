@@ -177,6 +177,7 @@ fun ReelsTopBar(
     showContentPrefsAccountRow: Boolean = false,
     // Blocked-tags entry (contract v20): enabled only while logged in.
     showBlockedTagsAccountRow: Boolean = false,
+    showLoginAccountRow: Boolean = true,
     onLoginRequest: () -> Unit = {},
     onLogout: () -> Unit = {},
     onOpenCustomFeeds: () -> Unit = {},
@@ -471,6 +472,7 @@ fun ReelsTopBar(
                                 showNichesRow = showNichesAccountRow,
                                 showContentPrefsRow = showContentPrefsAccountRow,
                                 showBlockedTagsRow = showBlockedTagsAccountRow,
+                                showLoginRow = showLoginAccountRow,
                                 onLoginRequest = onLoginRequest,
                                 onLogout = { confirmLogout = true },
                                 onOpenCustomFeeds = onOpenCustomFeeds,
@@ -1398,6 +1400,7 @@ private fun ReelsAccountMenu(
     showNichesRow: Boolean,
     showContentPrefsRow: Boolean,
     showBlockedTagsRow: Boolean,
+    showLoginRow: Boolean = true,
     onLoginRequest: () -> Unit,
     onLogout: () -> Unit,
     onOpenCustomFeeds: () -> Unit,
@@ -1492,28 +1495,30 @@ private fun ReelsAccountMenu(
                     onDismiss()
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .height(1.dp)
-                    .background(Color.White.copy(alpha = 0.1f)),
-            )
-            if (isLoggedIn) {
-                HubMenuRow(
-                    icon = { HubMenuIcon(Icons.Filled.Person) },
-                    label = stringResource(MR.strings.reels_logout),
-                ) {
-                    onLogout()
-                    onDismiss()
-                }
-            } else {
-                HubMenuRow(
-                    icon = { HubMenuIcon(Icons.Filled.Person) },
-                    label = stringResource(MR.strings.reels_login),
-                ) {
-                    onLoginRequest()
-                    onDismiss()
+            if (showLoginRow || isLoggedIn) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .height(1.dp)
+                        .background(Color.White.copy(alpha = 0.1f)),
+                )
+                if (isLoggedIn) {
+                    HubMenuRow(
+                        icon = { HubMenuIcon(Icons.Filled.Person) },
+                        label = stringResource(MR.strings.reels_logout),
+                    ) {
+                        onLogout()
+                        onDismiss()
+                    }
+                } else {
+                    HubMenuRow(
+                        icon = { HubMenuIcon(Icons.Filled.Person) },
+                        label = stringResource(MR.strings.reels_login),
+                    ) {
+                        onLoginRequest()
+                        onDismiss()
+                    }
                 }
             }
         }

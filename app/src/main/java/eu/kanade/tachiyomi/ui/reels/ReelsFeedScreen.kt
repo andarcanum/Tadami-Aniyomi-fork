@@ -1227,11 +1227,18 @@ data class ReelsFeedScreen(
                     onSuggestionsRequest = screenModel::requestSearchSuggestions,
                     // Favorites stays a direct circle; personal content groups into the account hub.
                     // Source switching lives on the title badge only — one affordance per action.
-                    // Account hub (V1): login state, custom feeds, Following, login/logout.
-                    showAccount = state.isLoginCapable && !state.isOffline &&
-                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    // Account hub (V1): login state, custom feeds, Following, login/logout, Niches.
+                    showAccount = (
+                        state.isLoginCapable ||
+                            state.isBrowseCapable ||
+                            state.isCreatorCapable ||
+                            state.isCustomFeedCapable ||
+                            state.isContentPreferencesCapable ||
+                            state.isBlockedTagsCapable
+                        ) && !state.isOffline && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
                     isLoggedIn = state.loggedInAccount != null,
                     loggedInAccount = state.loggedInAccount,
+                    showLoginAccountRow = state.isLoginCapable,
                     showCustomFeedsAccountRow = state.isCustomFeedCapable,
                     showFollowsAccountRow = state.isCreatorCapable,
                     showNichesAccountRow = state.isBrowseCapable &&
