@@ -110,6 +110,8 @@ import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.DayActivity
 import tachiyomi.i18n.MR
@@ -955,7 +957,13 @@ object HomeHubTab : Tab {
         val context = LocalContext.current
         LaunchedEffect(headerState.isLoading) {
             if (!headerState.isLoading && !hasReportedDrawn) {
-                (context as? ComponentActivity)?.reportFullyDrawn()
+                try {
+                    (context as? ComponentActivity)?.reportFullyDrawn()
+                } catch (e: Exception) {
+                    // Metrics-only call; some OEM ROMs (e.g. Samsung Android 9) throw
+                    // SecurityException from its internal broadcast — must not crash the app.
+                    logcat(LogPriority.WARN, e) { "reportFullyDrawn failed" }
+                }
                 hasReportedDrawn = true
             }
         }
