@@ -14,12 +14,12 @@ object ReelsForYou {
     const val POLICY_VERSION = 1
 
     /** Real foreground playback needed to count as watched. */
-    const val WATCH_THRESHOLD_MS = 5_000L
+    const val WATCH_THRESHOLD_MS = 1_000L
 
     /** Unique media coverage needed for clips shorter than the time threshold. */
     const val COVERAGE_THRESHOLD = 0.8f
 
-    /** Watch-accumulator sampling period. 4 Hz is enough for a 5 s threshold, no per-frame work. */
+    /** Watch-accumulator sampling period. 4 Hz is enough for a 1 s threshold, no per-frame work. */
     const val SAMPLE_INTERVAL_MS = 250L
 
     /**
@@ -27,7 +27,7 @@ object ReelsForYou {
      * fling/snap animation without letting a stale gesture turn a later auto-advance into a
      * skip.
      */
-    const val USER_NAV_WINDOW_MS = 1_500L
+    const val USER_NAV_WINDOW_MS = 3_000L
 
     /** Candidate metadata schema stamp for [tachiyomi.domain.reels.anime.model.ReelsCandidate]. */
     const val METADATA_SCHEMA_VERSION = 2

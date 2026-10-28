@@ -563,7 +563,7 @@ class ReelsFeedScreenModel(
 
     /**
      * The active card left the screen. Persists the resume position and the legacy history
-     * row; the consumption summary itself was already committed when it qualified.
+     * row; guarantees consumption is committed if not already done.
      */
     fun onVisitEnded(item: ShortVideoItem, positionMs: Long, positionFraction: Float, durationSec: Float) {
         if (isReplaySurface()) sessionContinuity.positionBoundary(item.id, positionMs)
@@ -574,9 +574,18 @@ class ReelsFeedScreenModel(
         reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec)
         recordWatchHistory(item, positionFraction, durationSec)
         if (state.value.isOffline) return
-        if (positionMs <= 0L) return
         val sourceId = state.value.currentSourceId
         if (isIncognito(sourceId)) return
+
+        // Guarantee consumption on visit end: if real playback reached the threshold count as watched,
+        // otherwise count as skipped (e.g. swiped away or screen closed before threshold).
+        if (snapshot.qualified || snapshot.watchedMs >= ReelsForYou.WATCH_THRESHOLD_MS) {
+            commitWatched(item.id)
+        } else {
+            commitSkipped(item.id)
+        }
+
+        if (positionMs <= 0L) return
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             val (scope, _) = ensureForYouScope(sourceId)
             reelsCandidateRepository.saveResumePosition(scope, sourceId, item.id, positionMs)
@@ -627,6 +636,7 @@ class ReelsFeedScreenModel(
         if (state.value.isOffline) return
         val sourceId = state.value.currentSourceId
         if (isIncognito(sourceId)) return
+        if (watchedCommitted.contains(itemId)) return
         if (!skippedCommitted.add(itemId)) return
         val surface = currentSurface().key
         screenModelScope.launch(NonCancellable + ioDispatcher) {
