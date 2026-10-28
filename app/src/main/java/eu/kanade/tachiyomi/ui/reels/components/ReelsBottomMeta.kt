@@ -92,6 +92,9 @@ fun ReelsBottomMeta(
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                // Weighted children measure last: a long name yields width to the badge
+                // instead of squeezing it into a one-letter-per-line vertical strip.
+                modifier = Modifier.weight(1f, fill = false),
             )
             if (item.isAuthorVerified) {
                 Icon(
@@ -122,6 +125,7 @@ fun ReelsBottomMeta(
                         color = Color.White.copy(alpha = 0.8f),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
                     )
                 }
             }
