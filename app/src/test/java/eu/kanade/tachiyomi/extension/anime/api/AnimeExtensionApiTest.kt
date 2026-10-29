@@ -142,7 +142,7 @@ class AnimeExtensionApiTest {
                 badgeLabel = "Beta Store",
             )
             coEvery { storeRepository.getAll() } returns listOf(alphaStore, betaStore)
-            coEvery { storeFetcher.fetchExtensions(any()) } returns ExtensionStoreFetchResult(
+            coEvery { storeFetcher.fetchExtensions(any(), any()) } returns ExtensionStoreFetchResult(
                 extensions = listOf(
                     availableExtension(alphaStore, versionCode = 10),
                     availableExtension(betaStore, versionCode = 11),
@@ -249,7 +249,7 @@ class AnimeExtensionApiTest {
         val storeFetcher = mockk<ExtensionStoreFetcher>()
         val store = legacyStore(baseUrl = "https://alpha.example", badgeLabel = "Alpha Store")
         coEvery { storeRepository.getAll() } returns listOf(store)
-        coEvery { storeFetcher.fetchExtensions(any()) } returns ExtensionStoreFetchResult(
+        coEvery { storeFetcher.fetchExtensions(any(), any()) } returns ExtensionStoreFetchResult(
             extensions = listOf(
                 availableExtension(store, versionCode = 20).copy(pkgName = "pkg.example-123456789"),
             ),

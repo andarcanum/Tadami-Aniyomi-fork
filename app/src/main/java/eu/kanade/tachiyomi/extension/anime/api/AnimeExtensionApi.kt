@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.extension.anime.model.selectAnimeReinstallCandidates
 import eu.kanade.tachiyomi.extension.anime.toInstalledAnimeExtensionPkgName
 import mihon.data.extension.mapper.toAnimeExtensionAvailable
 import mihon.data.extension.repository.ExtensionStoreFetcher
+import mihon.data.extension.service.ExtensionStoreMedia
 import mihon.domain.extensionrepo.anime.interactor.UpdateAnimeExtensionRepo
 import mihon.domain.extensionstore.anime.repository.AnimeExtensionStoreRepository
 import mihon.domain.extensionstore.model.legacyBaseUrl
@@ -53,7 +54,7 @@ internal class AnimeExtensionApi(
 
     suspend fun findExtensions(): FetchedExtensions {
         return withIOContext {
-            val result = storeFetcher.fetchExtensions(storeRepository.getAll())
+            val result = storeFetcher.fetchExtensions(storeRepository.getAll(), ExtensionStoreMedia.ANIME)
             FetchedExtensions(
                 extensions = result.extensions.mapNotNull { it.toAnimeExtensionAvailable() },
                 failedRepoUrls = result.failedStores.map { it.legacyBaseUrl() }.toSet(),
