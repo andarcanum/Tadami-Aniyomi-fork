@@ -98,6 +98,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -193,18 +194,21 @@ data class ReelsFeedScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
+        val activity = context as? Activity
         val coroutineScope = rememberCoroutineScope()
-        // Reels are a portrait-first experience. Nested feeds overlap during Voyager transitions
-        // (the incoming screen composes BEFORE the outgoing disposes), so the lock is a shared
-        // holder count: the original orientation is restored only after the LAST feed leaves.
+        // Reels are a portrait-first experience; landscape is an explicit shared choice for
+        // the whole feed chain. Nested feeds overlap during Voyager transitions (the incoming
+        // screen composes BEFORE the outgoing disposes), so the lock is a shared holder count.
         DisposableEffect(Unit) {
-            val activity = context as? Activity
             if (activity != null) {
                 ReelsOrientationLock.acquire(activity)
             }
             onDispose {
                 if (activity != null) {
-                    ReelsOrientationLock.release(activity)
+                    ReelsOrientationLock.release(
+                        activity,
+                        keepIntent = navigator.items.any { it is ReelsFeedScreen },
+                    )
                 }
             }
         }
@@ -368,15 +372,15 @@ data class ReelsFeedScreen(
         } else {
             state.isHdQuality
         }
-        // U02: software fullscreen rotates the page subtree instead of requesting an
-        // orientation. A window that is already landscape (split-screen/tablet/foldable)
-        // or a system-owned PiP frame must not rotate at all.
+        // U02: the page never rotates its own subtree; the window orientation is owned by
+        // ReelsOrientationLock. Layout follows the actual window constraints.
         val windowConfiguration = LocalConfiguration.current
         val windowIsLandscape = reelsWindowIsLandscape(
             windowConfiguration.screenWidthDp,
             windowConfiguration.screenHeightDp,
         )
         val inPictureInPicture = ReelsPip.isInPictureInPictureMode
+        val landscape = ReelsOrientationLock.landscape
         // The active reel's orientation drives the PiP aspect ratio. Values are kept per
         // item: a preloaded neighbor may report before it settles into the active page.
         val videoOrientations = remember { mutableStateMapOf<String, Boolean>() }
@@ -387,66 +391,31 @@ data class ReelsFeedScreen(
         val videoSizes = remember { mutableStateMapOf<String, Pair<Int, Int>>() }
         var activeVideoSize by remember { mutableStateOf<Pair<Int, Int>?>(null) }
         val currentActiveVideoSize by rememberUpdatedState(activeVideoSize)
-        var chromeVisible by remember { mutableStateOf(true) }
+        // Immersive chrome and the open settings block survive a configuration recreation:
+        // the settings hold pins playback, and losing it would silently resume the reel.
+        var chromeVisible by rememberSaveable { mutableStateOf(true) }
         // Device UX: the ⋮ settings block holds playback and pins the chrome while open.
-        var moreMenuOpen by remember { mutableStateOf(false) }
-        // Landscape fullscreen (software-rotated overlay, see ReelsVideoPage): entered from
-        // the expand button on landscape reels, left via the button or system back. The intent
-        // is sticky: an auto-exit on a portrait reel keeps it armed so the next landscape reel
-        // re-enters fullscreen on its own; a manual exit disarms it.
-        var landscapeFullscreen by remember { mutableStateOf(false) }
-        var landscapeAutoRestore by remember { mutableStateOf(false) }
-        // U02: the portrait lock pins Display.rotation, so the physical hold side comes from
-        // gravity. The sensor is registered only while the rotated frame is actually used.
-        val landscapeRotation = rememberReelsLandscapeRotation(
-            enabled = landscapeFullscreen && !windowIsLandscape && !inPictureInPicture,
-        )
-        val softwareRotationDegrees = reelsSoftwareRotationDegrees(
-            landscapeRotation = landscapeRotation,
-            windowIsLandscape = windowIsLandscape,
-            inPictureInPicture = inPictureInPicture,
-        )
-        // The HOME-gesture handler runs outside composition: these refs keep the PiP params
-        // and the chrome decision tied to the live frame, crop mode and rotation.
+        var moreMenuOpen by rememberSaveable { mutableStateOf(false) }
+        // The HOME-gesture handler runs outside composition: this ref keeps the PiP params
+        // tied to the live crop mode.
         val currentCropMode by rememberUpdatedState(state.isCropMode)
-        val currentSoftwareRotation by rememberUpdatedState(softwareRotationDegrees)
-        // U07: while software fullscreen is active, the window belongs to the video —
-        // MainActivity's generic navigation-bar scrim must not paint over it.
-        val fullscreenOwner = remember { Any() }
-        DisposableEffect(fullscreenOwner) {
-            onDispose { ReelsFullscreen.release(fullscreenOwner) }
-        }
-        BackHandler(enabled = landscapeFullscreen) {
-            landscapeFullscreen = false
-            landscapeAutoRestore = false
+        // Back first leaves the landscape mode; the next Back performs normal navigation.
+        BackHandler(enabled = landscape) {
+            if (activity != null) {
+                ReelsOrientationLock.setLandscape(activity, false)
+            }
         }
         // Back closes the open search bar before leaving the feed (popup sheets and dialogs
         // own their dismiss handling already).
-        BackHandler(enabled = !landscapeFullscreen && state.isSearchBarOpen) {
+        BackHandler(enabled = !landscape && state.isSearchBarOpen) {
             screenModel.toggleSearchBar(false)
         }
         // Report fix: with an active search result (album cards or filtered feed), back
         // cancels the search and restores the previous feed instead of leaving Reels.
         BackHandler(
-            enabled = !landscapeFullscreen && !state.isSearchBarOpen && state.searchQuery.isNotBlank(),
+            enabled = !landscape && !state.isSearchBarOpen && state.searchQuery.isNotBlank(),
         ) {
             screenModel.clearSearch()
-        }
-
-        // Hide the system bars while the rotated video owns the screen; restore on exit
-        // and on screen disposal so the rest of the app is unaffected.
-        DisposableEffect(landscapeFullscreen, fullscreenOwner) {
-            ReelsFullscreen.set(fullscreenOwner, landscapeFullscreen)
-            val window = (context as? Activity)?.window
-            val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
-            if (landscapeFullscreen && controller != null) {
-                controller.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-            }
-            onDispose {
-                controller?.show(WindowInsetsCompat.Type.systemBars())
-            }
         }
 
         // A reel that is actually playing keeps the screen awake (auto-advance must not fall
@@ -480,7 +449,6 @@ data class ReelsFeedScreen(
             videoHeight = currentActiveVideoSize?.second ?: 0,
             cropMode = currentCropMode,
             landscapeFallback = currentActiveVideoLandscape,
-            rotated = currentSoftwareRotation != 0,
         )
         DisposableEffect(screenModel) {
             val handler: () -> Boolean = {
@@ -511,7 +479,7 @@ data class ReelsFeedScreen(
 
         // Auto-advance keeps running in PiP: when the settled reel (or crop mode/rotation)
         // changes, update the system window shape instead of leaving the old cover ratio.
-        LaunchedEffect(inPictureInPicture, activeVideoSize, state.isCropMode, softwareRotationDegrees) {
+        LaunchedEffect(inPictureInPicture, activeVideoSize, state.isCropMode) {
             if (!inPictureInPicture) return@LaunchedEffect
             val activity = context as? Activity ?: return@LaunchedEffect
             runCatching { activity.setPictureInPictureParams(buildPipParams(activity)) }
@@ -803,12 +771,11 @@ data class ReelsFeedScreen(
 
                     // Horizontal swipe switches feeds: left on the global feed opens this
                     // source's Following feed, right on Following pops back. The vertical
-                    // pager owns the orthogonal axis; landscape fullscreen ignores swipes.
-                    val feedSwipeEnabled = !landscapeFullscreen &&
-                        (
-                            followingFeed ||
-                                (state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL && state.isCreatorCapable)
-                            )
+                    // pager owns the orthogonal axis.
+                    val feedSwipeEnabled = (
+                        followingFeed ||
+                            (state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL && state.isCreatorCapable)
+                        )
                     val swipeThresholdPx = with(LocalDensity.current) { 110.dp.toPx() }
                     var horizontalDragPx by remember { mutableFloatStateOf(0f) }
 
@@ -834,7 +801,7 @@ data class ReelsFeedScreen(
                         // landscape fullscreen would land sideways; auto-advance still moves
                         // the feed programmatically (portrait reels exit fullscreen, see
                         // ReelsVideoPage).
-                        userScrollEnabled = !landscapeFullscreen && !touchLocked,
+                        userScrollEnabled = !touchLocked,
                         modifier = Modifier
                             .fillMaxSize()
                             .pointerInput(pagerState) {
@@ -901,9 +868,14 @@ data class ReelsFeedScreen(
                                 isHdQuality = effectiveHd,
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
-                                chromeVisible = chromeVisible && page == pagerState.settledPage && !landscapeFullscreen,
-                                isLandscapeFullscreen = landscapeFullscreen,
-                                softwareRotationDegrees = softwareRotationDegrees,
+                                chromeVisible = chromeVisible && page == pagerState.settledPage,
+                                isLandscape = windowIsLandscape,
+                                landscape = landscape,
+                                onToggleLandscape = {
+                                    if (activity != null) {
+                                        ReelsOrientationLock.setLandscape(activity, !landscape)
+                                    }
+                                },
                                 isInPictureInPicture = inPictureInPicture,
                                 onVideoLandscapeKnown = { landscape ->
                                     videoOrientations[item.id] = landscape
@@ -917,12 +889,6 @@ data class ReelsFeedScreen(
                                         activeVideoSize = width to height
                                     }
                                 },
-                                landscapeAutoRestore = landscapeAutoRestore,
-                                onLandscapeFullscreenChange = { enter ->
-                                    landscapeFullscreen = enter
-                                    landscapeAutoRestore = enter
-                                },
-                                onLandscapeAutoExit = { landscapeFullscreen = false },
                                 onTogglePlayPause = {
                                     chromeVisible = true
                                     screenModel.togglePlayPause()
@@ -1076,6 +1042,7 @@ data class ReelsFeedScreen(
                                 onFirstFramePresented = screenModel::onFirstFramePresented,
                                 onPlaybackSample = screenModel::onPlaybackSample,
                                 onVisitEnded = screenModel::onVisitEnded,
+                                onVisitSuspendedForConfiguration = screenModel::onVisitSuspendedForConfiguration,
                                 isForeground = isForeground,
                                 onPlayingStateChanged = screenModel::setPlaybackRunning,
                                 initialSeekFraction = if (item.id ==
@@ -1108,6 +1075,64 @@ data class ReelsFeedScreen(
                                 },
                                 mediaDescriptor = mediaDescriptor,
                                 isLastPage = page == state.items.lastIndex,
+                                isTouchLocked = touchLocked,
+                                onToggleTouchLock = { touchLocked = !touchLocked },
+                                sourceName = when {
+                                    state.isOffline -> stringResource(MR.strings.reels_favorites_title)
+                                    state.mode == ReelsFeedScreenModel.FeedMode.FOLLOWING ->
+                                        stringResource(MR.strings.reels_following_feed)
+                                    state.mode == ReelsFeedScreenModel.FeedMode.CREATOR ->
+                                        "@${state.creator.orEmpty()}"
+                                    state.mode == ReelsFeedScreenModel.FeedMode.CUSTOM ->
+                                        state.customFeedName.orEmpty()
+                                    state.mode == ReelsFeedScreenModel.FeedMode.NICHE ->
+                                        state.nicheName.orEmpty()
+                                    else -> state.sourceName
+                                },
+                                playlistItems = state.items,
+                                playlistIndex = page,
+                                onSelectPlaylistItem = { target ->
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(target)
+                                    }
+                                },
+                                onToggleCropMode = screenModel::toggleCropMode,
+                                onToggleQuality = screenModel::toggleQuality,
+                                onToggleAutoAdvance = screenModel::toggleAutoAdvance,
+                                preloadWifiOnly = state.preloadWifiOnly,
+                                onTogglePreloadWifiOnly = screenModel::togglePreloadWifiOnly,
+                                dataSaverEnabled = state.dataSaverMetered,
+                                onToggleDataSaver = screenModel::toggleDataSaver,
+                                sleepTimerValue = sleepTimerValue,
+                                onCycleSleepTimer = {
+                                    screenModel.setSleepTimer(
+                                        when {
+                                            state.sleepTimerRemainingSec == 0 && !state.sleepAtVideoEnd ->
+                                                ReelsFeedScreenModel.SleepTimerOption.END_OF_VIDEO
+                                            state.sleepAtVideoEnd ->
+                                                ReelsFeedScreenModel.SleepTimerOption.M15
+                                            state.sleepTimerRemainingSec in 1..(15 * 60) ->
+                                                ReelsFeedScreenModel.SleepTimerOption.M30
+                                            state.sleepTimerRemainingSec in (15 * 60 + 1)..(30 * 60) ->
+                                                ReelsFeedScreenModel.SleepTimerOption.M60
+                                            else ->
+                                                ReelsFeedScreenModel.SleepTimerOption.OFF
+                                        },
+                                    )
+                                },
+                                offlineUsedText = Formatter.formatFileSize(context, offlineUsedBytes),
+                                onClearVideoCache = { confirmClearOffline = true },
+                                isIncognito = isIncognito,
+                                onToggleIncognito = screenModel::toggleReelsIncognito,
+                                onClearOffline = { confirmClearOffline = true },
+                                onBack = {
+                                    if (landscape && activity != null) {
+                                        ReelsOrientationLock.setLandscape(activity, false)
+                                    } else {
+                                        navigator.pop()
+                                    }
+                                },
+                                onToggleChrome = { chromeVisible = !chromeVisible },
                                 headers = state.sourceHeaders,
                             )
                         }
@@ -1123,7 +1148,7 @@ data class ReelsFeedScreen(
             // "Tap to unmute" (approved variant A): visible while the session sound is
             // undecided; tapping unmutes (and decides), otherwise it auto-dismisses.
             AnimatedVisibility(
-                visible = state.showUnmuteHint && state.isMuted && !landscapeFullscreen &&
+                visible = state.showUnmuteHint && state.isMuted &&
                     !inPictureInPicture,
                 enter = fadeIn() + scaleIn(initialScale = 0.85f),
                 exit = fadeOut() + scaleOut(targetScale = 0.85f),
@@ -1165,11 +1190,12 @@ data class ReelsFeedScreen(
             // Top Bar Overlay; auto-hidden in immersive mode, revealed on tap or when a
             // search/filter/source sheet is open. The system-owned PiP frame never shows it.
             AnimatedVisibility(
-                visible = !landscapeFullscreen && !inPictureInPicture &&
+                visible = !inPictureInPicture &&
                     (
-                        chromeVisible || state.isSearchBarOpen || state.isFilterDialogOpen ||
+                        (!windowIsLandscape && (chromeVisible || moreMenuOpen)) ||
+                            state.isSearchBarOpen || state.isFilterDialogOpen ||
                             state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen ||
-                            state.isWebLoginDialogOpen || moreMenuOpen
+                            state.isWebLoginDialogOpen
                         ),
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
@@ -1560,11 +1586,12 @@ data class ReelsFeedScreen(
             )
 
             // B3 touch lock: a full-screen input shield ABOVE every control. Taps/gestures die
-            // here (the pager swipe is additionally disabled); a long-press unlocks.
+            // here (the pager swipe is additionally disabled); a long-press or pill tap unlocks.
             if (touchLocked) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f))
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onTap = { },
@@ -1574,17 +1601,27 @@ data class ReelsFeedScreen(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0xFF141822).copy(alpha = 0.88f))
+                            .border(1.dp, AuroraTheme.colors.accent.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
+                            .clickable { touchLocked = false }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Lock,
                             contentDescription = stringResource(MR.strings.reels_touch_lock),
-                            tint = Color.White.copy(alpha = 0.85f),
-                            modifier = Modifier.size(34.dp),
+                            tint = AuroraTheme.colors.accent,
+                            modifier = Modifier.size(20.dp),
                         )
                         Text(
                             text = stringResource(MR.strings.reels_touch_lock_hint),
-                            color = Color.White.copy(alpha = 0.85f),
-                            modifier = Modifier.padding(top = 8.dp),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
                 }

@@ -99,6 +99,7 @@ fun ReelsPlayerView(
     onSeekPositionConsumed: () -> Unit = {},
     onRenderedFirstFrame: () -> Unit = {},
     onProgressUpdate: (Float) -> Unit,
+    onBufferUpdate: (Float) -> Unit = {},
     onVideoCompleted: () -> Unit,
     // Increment to re-prepare the current media from 0 after a playback error (retry action).
     retrySignal: Int = 0,
@@ -661,6 +662,7 @@ fun ReelsPlayerView(
                 val duration = p.duration
                 if (duration > 0) {
                     onProgressUpdate((p.currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
+                    onBufferUpdate((p.bufferedPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
                 } else if (isFirstFrameRendered) {
                     // No media duration: run the bar over the same playback dwell window.
                     val dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime())

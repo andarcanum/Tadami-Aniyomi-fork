@@ -22,6 +22,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,8 +56,16 @@ fun ReelsBottomMeta(
     // creator's page (contract v18).
     onAuthorClick: (() -> Unit)? = null,
     onCreatorClick: ((String) -> Unit)? = null,
+    showFollowAction: Boolean = false,
+    isFollowingCreator: Boolean = false,
+    onToggleFollowCreator: () -> Unit = {},
+    isHdQuality: Boolean = true,
+    isOfflineStored: Boolean = false,
+    onMetaStatsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    var isCaptionExpanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -104,6 +116,42 @@ fun ReelsBottomMeta(
                     modifier = Modifier.size(16.dp),
                 )
             }
+            if (showFollowAction) {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (isFollowingCreator) {
+                                AuroraTheme.colors.accent.copy(
+                                    alpha = 0.2f,
+                                )
+                            } else {
+                                Color.White.copy(alpha = 0.16f)
+                            },
+                            RoundedCornerShape(999.dp),
+                        )
+                        .border(
+                            1.dp,
+                            if (isFollowingCreator) {
+                                AuroraTheme.colors.accent.copy(
+                                    alpha = 0.6f,
+                                )
+                            } else {
+                                Color.White.copy(alpha = 0.25f)
+                            },
+                            RoundedCornerShape(999.dp),
+                        )
+                        .clickable(onClick = onToggleFollowCreator)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isFollowingCreator) "Вы подписаны" else "+ Подписаться",
+                        color = if (isFollowingCreator) AuroraTheme.colors.accent else Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
             // "No sound" badge for silent clips
             if (!item.hasAudio) {
                 Row(
@@ -131,7 +179,7 @@ fun ReelsBottomMeta(
             }
         }
 
-        // Title / Description
+        // Title / Description (with expand/collapse on tap)
         if (!item.title.isNullOrBlank() && item.title != item.author) {
             val titleText = item.title.orEmpty()
             if (onCreatorClick != null && MENTION_REGEX.containsMatchIn(titleText)) {
@@ -166,35 +214,75 @@ fun ReelsBottomMeta(
                     text = annotatedTitle,
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 13.sp,
-                    maxLines = 2,
+                    maxLines = if (isCaptionExpanded) 12 else 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.clickable { isCaptionExpanded = !isCaptionExpanded },
                 )
             } else {
                 Text(
                     text = titleText,
                     color = Color.White.copy(alpha = 0.85f),
                     fontSize = 13.sp,
-                    maxLines = 2,
+                    maxLines = if (isCaptionExpanded) 12 else 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.clickable { isCaptionExpanded = !isCaptionExpanded },
                 )
             }
         }
 
-        // Metrics row (views / likes)
-        if (item.viewsCount != null || item.likesCount != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item.viewsCount?.let { views ->
-                    MetricItem(icon = Icons.Filled.PlayArrow, value = formatCompactCount(views))
-                }
-                item.likesCount?.let { likes ->
-                    MetricItem(icon = Icons.Filled.Favorite, value = formatCompactCount(likes))
-                }
+        // Tadami meta-stats row (views count, quality badge, offline indicator matching Prototype v2)
+        Row(
+            modifier = Modifier.then(
+                if (onMetaStatsClick != null) {
+                    Modifier.clickable(onClick = onMetaStatsClick)
+                } else {
+                    Modifier
+                },
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item.viewsCount?.let { views ->
+                MetricItem(
+                    icon = Icons.Filled.PlayArrow,
+                    value = "${formatCompactCount(views)} просмотров",
+                )
+                Text(
+                    text = "•",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
+            // 1080p HD / 480p SD pill
+            Box(
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            ) {
+                Text(
+                    text = if (isHdQuality) "1080p HD" else "480p SD",
+                    color = if (isHdQuality) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.8f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                text = "•",
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            // Offline state badge
+            Text(
+                text = if (isOfflineStored) "✓ Скачано" else "Офлайн",
+                color = if (isOfflineStored) Color(0xFF34D399) else AuroraTheme.colors.accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
 
         // Tag Chips

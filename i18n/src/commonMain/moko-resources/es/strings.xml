@@ -1877,7 +1877,9 @@
     <string name="reels_custom_feed_search_tags">Buscar etiquetas</string>
     <string name="reels_custom_feed_save">Guardar</string>
     <string name="reels_custom_feed_save_failed">No se ha podido guardar</string>
-    <string name="reels_hide_menu">No me interesa</string>
+    <string name="reels_hide_menu">Más</string>
+    <string name="reels_hide_dialog_title">Ajustes de recomendaciones</string>
+    <string name="reels_clear_display">Pantalla limpia</string>
     <string name="reels_hide_video">Ocultar este Reel</string>
     <string name="reels_hide_author">Ocultar a este creador</string>
     <string name="reels_hidden_snackbar">Oculto en la lista de vídeos</string>

@@ -1973,7 +1973,9 @@
     <string name="reels_custom_feed_search_tags">Search tags</string>
     <string name="reels_custom_feed_save">Save</string>
     <string name="reels_custom_feed_save_failed">Save failed</string>
-    <string name="reels_hide_menu">Not interested</string>
+    <string name="reels_hide_menu">More</string>
+    <string name="reels_hide_dialog_title">Recommendation settings</string>
+    <string name="reels_clear_display">Clear display</string>
     <string name="reels_hide_video">Hide this reel</string>
     <string name="reels_hide_author">Hide this creator</string>
     <string name="reels_hidden_snackbar">Hidden from the feed</string>

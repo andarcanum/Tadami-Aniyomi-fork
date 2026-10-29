@@ -75,6 +75,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -219,7 +220,9 @@ fun ReelsTopBar(
             onSuggestionsRequest(textInput)
         }
     }
-    var openHub by remember { mutableStateOf(HubMenu.NONE) }
+    // Survives a configuration recreation: an open settings block must not close itself
+    // and release the playback hold on rotation.
+    var openHub by rememberSaveable { mutableStateOf(HubMenu.NONE) }
     // Device UX: the screen holds playback and pins the chrome while the settings block is
     // open, and resumes both when it closes.
     LaunchedEffect(openHub) { onMoreMenuOpenChanged(openHub == HubMenu.MORE) }

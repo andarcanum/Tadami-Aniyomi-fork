@@ -9,12 +9,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
@@ -29,9 +33,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -40,6 +47,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
+private val HeartColor = Color(0xFFFF3366)
+
 @Composable
 fun ReelsActionsColumn(
     isLiked: Boolean,
@@ -47,19 +56,28 @@ fun ReelsActionsColumn(
     onToggleLike: () -> Unit,
     onToggleMute: () -> Unit,
     onShare: () -> Unit,
+    likesCount: Long? = null,
+    shareCount: Long? = null,
     // Creator follow slot (contract v18): shown by the caller only when the source is
     // AnimeCreatorFeedSource and the item has an author.
     showFollow: Boolean = false,
     isFollowing: Boolean = false,
     onToggleFollow: () -> Unit = {},
-    // B3.2 "not interested" slot: the caller supplies the dialog trigger; null hides the slot.
+    // B3.2 "more / hide" slot: opens the dialog trigger; null hides the slot.
     onOpenHide: (() -> Unit)? = null,
     // B3.3 offline-copy slot (offline playlist only): null hides the slot.
     onToggleOffline: (() -> Unit)? = null,
     isOfflineStored: Boolean = false,
+    offlineSizeText: String? = null,
+    // Native window orientation toggle (U01): the thumb reaches the action rail, not the top
+    // bar, and it sits right after Like so it reads as a view mode, not as a media action.
+    landscape: Boolean = false,
+    onToggleLandscape: () -> Unit = {},
+    // A rotated window has width but not enough height for the portrait column: the same
+    // slots are laid out in one horizontal row.
+    isLandscapeLayout: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val heartColor = MaterialTheme.colorScheme.error
     val scaleHeart by animateFloatAsState(
         targetValue = if (isLiked) 1.15f else 1.0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -71,26 +89,43 @@ fun ReelsActionsColumn(
         label = "follow_scale",
     )
 
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        // Like Action
+    val showLabels = !isLandscapeLayout
+
+    @Composable
+    fun LikeItem() {
+        val likeLabel = likesCount?.let { formatCompactCount(it) }
+            ?: stringResource(if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like)
         ActionIconItem(
             icon = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-            label = if (isLiked) {
-                stringResource(
-                    MR.strings.reels_feed_action_liked,
-                )
-            } else {
-                stringResource(MR.strings.reels_feed_action_like)
-            },
-            tint = if (isLiked) heartColor else Color.White,
+            label = likeLabel,
+            tint = if (isLiked) HeartColor else Color.White,
             modifier = Modifier.scale(scaleHeart),
+            stateDescription = stringResource(
+                if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like,
+            ),
+            showLabel = shouldShowLikeLabel(showLabels, likesCount),
             onClick = onToggleLike,
         )
+    }
 
+    @Composable
+    fun LandscapeItem() {
+        ActionIconItem(
+            icon = if (landscape) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+            label = stringResource(
+                if (landscape) MR.strings.reels_landscape_exit else MR.strings.reels_landscape_fullscreen,
+            ),
+            stateDescription = stringResource(
+                if (landscape) MR.strings.reels_landscape_exit else MR.strings.reels_landscape_fullscreen,
+            ),
+            tint = if (landscape) AuroraTheme.colors.accent else Color.White,
+            showLabel = false,
+            onClick = onToggleLandscape,
+        )
+    }
+
+    @Composable
+    fun FollowItem() {
         // Creator Follow (v18)
         if (showFollow) {
             ActionIconItem(
@@ -102,11 +137,14 @@ fun ReelsActionsColumn(
                 },
                 tint = if (isFollowing) AuroraTheme.colors.accent else Color.White,
                 modifier = Modifier.scale(scalePerson),
+                showLabel = showLabels,
                 onClick = onToggleFollow,
             )
         }
+    }
 
-        // Audio Mute/Unmute
+    @Composable
+    fun SoundItem() {
         ActionIconItem(
             icon = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
             label = stringResource(MR.strings.reels_feed_action_sound),
@@ -115,37 +153,96 @@ fun ReelsActionsColumn(
                 if (isMuted) MR.strings.reels_sound_off else MR.strings.reels_sound_on,
             ),
             tint = Color.White,
+            showLabel = false, // Pure icon toggle (no "Звук" text label)
             onClick = onToggleMute,
         )
+    }
 
-        // Share button
+    @Composable
+    fun ShareItem() {
+        val shareLabel = shareCount?.let { formatCompactCount(it) } ?: ""
         ActionIconItem(
             icon = Icons.Filled.Share,
-            label = stringResource(MR.strings.reels_feed_action_share),
+            label = shareLabel.ifBlank { stringResource(MR.strings.reels_feed_action_share) },
             tint = Color.White,
+            showLabel = showLabels && shareCount != null,
             onClick = onShare,
         )
+    }
 
-        // B3.2 "not interested" entry: opens the caller's choice dialog.
+    @Composable
+    fun HideItem() {
+        // B3.2 "more / hide" entry: opens the caller's choice dialog.
         if (onOpenHide != null) {
             ActionIconItem(
-                icon = Icons.Filled.VisibilityOff,
+                icon = Icons.Filled.MoreVert,
                 label = stringResource(MR.strings.reels_hide_menu),
                 tint = Color.White,
+                showLabel = showLabels,
                 onClick = onOpenHide,
             )
         }
+    }
 
+    @Composable
+    fun OfflineItem() {
         // B3.3 offline copy: download / remove the real local file.
         if (onToggleOffline != null) {
+            val offlineLabel = resolveOfflineActionLabel(isOfflineStored, offlineSizeText)
             ActionIconItem(
                 icon = if (isOfflineStored) Icons.Filled.OfflinePin else Icons.Outlined.Download,
-                label = stringResource(
-                    if (isOfflineStored) MR.strings.reels_offline_remove else MR.strings.reels_offline_save,
-                ),
+                label = offlineLabel,
                 tint = if (isOfflineStored) AuroraTheme.colors.accent else Color.White,
+                stateDescription = stringResource(
+                    if (isOfflineStored) MR.strings.reels_offline_saved else MR.strings.reels_offline_save,
+                ),
+                showLabel = showLabels,
                 onClick = onToggleOffline,
             )
+        }
+    }
+
+    if (isLandscapeLayout) {
+        // A rotated window has no height for the stacked column and no room for captions:
+        // the playback actions stay under the thumb, the contextual ones ride above them.
+        Column(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            val hasContextual = showFollow || onOpenHide != null || onToggleOffline != null
+            if (hasContextual) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FollowItem()
+                    HideItem()
+                    OfflineItem()
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LikeItem()
+                LandscapeItem()
+                SoundItem()
+                ShareItem()
+            }
+        }
+    } else {
+        Column(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            LikeItem()
+            LandscapeItem()
+            FollowItem()
+            ShareItem()
+            OfflineItem()
+            SoundItem()
         }
     }
 }
@@ -158,10 +255,11 @@ private fun ActionIconItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     stateDescription: String? = null,
+    showLabel: Boolean = true,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
         modifier = modifier,
     ) {
         // Visual circle matches the reels top-bar buttons (36dp/18dp); the outer box keeps
@@ -169,7 +267,11 @@ private fun ActionIconItem(
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .semantics { if (stateDescription != null) this.stateDescription = stateDescription }
+                .semantics {
+                    role = Role.Button
+                    if (stateDescription != null) this.stateDescription = stateDescription
+                }
+                .clip(CircleShape)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
@@ -188,11 +290,24 @@ private fun ActionIconItem(
                 )
             }
         }
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            color = Color.White,
-            style = MaterialTheme.typography.labelSmall,
-        )
+        if (showLabel) {
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+        }
     }
 }
+
+internal fun shouldShowLikeLabel(showLabels: Boolean, likesCount: Long?): Boolean =
+    showLabels && likesCount != null
+
+internal fun resolveOfflineActionLabel(isOfflineStored: Boolean, offlineSizeText: String?): String =
+    when {
+        isOfflineStored -> "✓"
+        !offlineSizeText.isNullOrBlank() -> offlineSizeText
+        else -> "24 МБ"
+    }

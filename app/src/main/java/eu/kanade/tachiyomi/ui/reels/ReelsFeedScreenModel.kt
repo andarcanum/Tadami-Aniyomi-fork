@@ -522,8 +522,21 @@ class ReelsFeedScreenModel(
     /** A page became the active card: a fresh visit starts, the previous one is dropped. */
     fun onVisitStarted(item: ShortVideoItem) {
         if (state.value.isOffline) return
+        // A configuration recreation re-activates the same clip while its visit is still
+        // open: resuming must not restart the accumulation or duplicate the continuity entry.
+        if (interactionTracker.snapshot(item.id) != null) return
         interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
         if (isReplaySurface()) sessionContinuity.visitStarted(item, persistEligible = true)
+    }
+
+    /**
+     * The player is being rebuilt by a configuration recreation, not by the user leaving
+     * the clip: park the position for a one-shot resume and keep the visit open, so no
+     * watched/skipped/history event is invented for a rotation.
+     */
+    fun onVisitSuspendedForConfiguration(itemId: String, positionMs: Long) {
+        if (state.value.isOffline || positionMs <= 0L) return
+        mutableState.update { it.copy(pendingSeekItemId = itemId, pendingSeekPositionMs = positionMs) }
     }
 
     /** The player presented its first frame for this visit: time may start counting. */
