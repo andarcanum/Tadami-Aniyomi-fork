@@ -418,6 +418,45 @@ data class ReelsFeedScreen(
             screenModel.clearSearch()
         }
 
+        // Immersive status bar (device report): the status icons follow the feed chrome —
+        // hidden with it (transient reveal by swipe still works) and restored with the top
+        // bar or any blocking sheet. PiP owns its own window chrome.
+        val systemChromeVisible = reelsSystemChromeVisible(
+            chromeVisible = chromeVisible,
+            moreMenuOpen = moreMenuOpen,
+            isSearchBarOpen = state.isSearchBarOpen,
+            isFilterDialogOpen = state.isFilterDialogOpen,
+            isSourcePickerOpen = state.isSourcePickerOpen,
+            isLoginDialogOpen = state.isLoginDialogOpen,
+            isCustomFeedsOpen = state.isCustomFeedsOpen,
+            isWebLoginDialogOpen = state.isWebLoginDialogOpen,
+        ) && !inPictureInPicture
+        DisposableEffect(systemChromeVisible) {
+            val window = (context as? Activity)?.window
+            if (window != null) {
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                if (systemChromeVisible) {
+                    controller.show(WindowInsetsCompat.Type.statusBars())
+                } else {
+                    controller.systemBarsBehavior =
+                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    controller.hide(WindowInsetsCompat.Type.statusBars())
+                }
+            }
+            onDispose { }
+        }
+        // Leaving the reels surface restores the status bar; a feed→feed hand-off must not
+        // fight the incoming screen (same owner check as the keep-screen-on flag below).
+        DisposableEffect(Unit) {
+            onDispose {
+                val window = (context as? Activity)?.window
+                if (window != null && navigator.lastItem !is ReelsFeedScreen) {
+                    WindowCompat.getInsetsController(window, window.decorView)
+                        .show(WindowInsetsCompat.Type.statusBars())
+                }
+            }
+        }
+
         // A reel that is actually playing keeps the screen awake (auto-advance must not fall
         // asleep mid-feed). The gate uses the player-reported state, not the play intent:
         // an audio-focus pause or a background transition must release the flag; a paused
@@ -1955,3 +1994,21 @@ internal fun reelsChromeShouldAutoHide(
     hasError: Boolean,
     isLoading: Boolean,
 ): Boolean = visible && actuallyPlaying && hasItems && !hasError && !isLoading
+
+/**
+ * Status bar policy (device report): the system status icons follow the feed chrome. The
+ * chrome counts as visible while the top bar is up or any blocking surface (settings block,
+ * search bar, source/account sheets and dialogs) is presented over the feed — those need
+ * the bar for a sane visual frame.
+ */
+internal fun reelsSystemChromeVisible(
+    chromeVisible: Boolean,
+    moreMenuOpen: Boolean,
+    isSearchBarOpen: Boolean,
+    isFilterDialogOpen: Boolean,
+    isSourcePickerOpen: Boolean,
+    isLoginDialogOpen: Boolean,
+    isCustomFeedsOpen: Boolean,
+    isWebLoginDialogOpen: Boolean,
+): Boolean = chromeVisible || moreMenuOpen || isSearchBarOpen || isFilterDialogOpen ||
+    isSourcePickerOpen || isLoginDialogOpen || isCustomFeedsOpen || isWebLoginDialogOpen

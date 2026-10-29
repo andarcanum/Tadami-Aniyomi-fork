@@ -62,7 +62,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -214,6 +216,9 @@ fun ReelsVideoPage(
     var drawerOpen by remember { mutableStateOf(false) }
     var drawerTab by remember { mutableIntStateOf(0) }
     var seekNoticeText by remember { mutableStateOf<String?>(null) }
+    // Measured height of the portrait caption block: the action rail's bottom sits at the
+    // author-name horizon (the block's top edge) so no icon drops into the description.
+    var portraitMetaHeightPx by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(seekNoticeText) {
         if (seekNoticeText != null) {
@@ -469,13 +474,12 @@ fun ReelsVideoPage(
                         playbackSpeed = 2f
                     },
                     onTap = {
-                        if (isLandscape) {
-                            onToggleChrome()
-                        } else if (!chromeVisible) {
-                            onToggleChrome()
-                        } else {
-                            currentOnTogglePlayPause()
-                        }
+                        // Device report: a reveal-only tap made pause unreachable — with the
+                        // 3s auto-hide it was buried behind a second, timed tap (landscape
+                        // had no pause path at all). Tap now reveals the chrome AND toggles
+                        // playback in both orientations; clean viewing stays on the eye
+                        // button (hides the chrome without pausing).
+                        currentOnTogglePlayPause()
                     },
                     onDoubleTap = { offset ->
                         // Left / right thirds seek ±10s, center double-tap likes.
@@ -719,10 +723,6 @@ fun ReelsVideoPage(
                                 drawerOpen = true
                             },
                             onClearDisplay = onToggleChrome,
-                            onOpenSettings = {
-                                drawerTab = 0
-                                drawerOpen = true
-                            },
                         )
                     }
 
@@ -772,8 +772,6 @@ fun ReelsVideoPage(
                             showFollowAction = showFollowAction,
                             isFollowingCreator = isFollowingCreator,
                             onToggleFollowCreator = onToggleFollowCreator,
-                            isHdQuality = isHdQuality,
-                            isOfflineStored = isOfflineStored,
                             onMetaStatsClick = {
                                 drawerTab = 0
                                 drawerOpen = true
@@ -856,7 +854,12 @@ fun ReelsVideoPage(
                         )
                     }
                 } else {
-                    // Portrait Right Action Bar
+                    // Portrait Right Action Bar — raised so its bottom sits at the
+                    // author-name horizon (top edge of the caption block): the stack
+                    // clears the description instead of interleaving with it.
+                    val density = LocalDensity.current
+                    val actionsBottomPadding =
+                        24.dp + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
                     AnimatedVisibility(
                         visible = chromeVisible,
                         enter = fadeIn() + slideInHorizontally { it },
@@ -865,7 +868,6 @@ fun ReelsVideoPage(
                     ) {
                         ReelsActionsColumn(
                             isLiked = isLiked,
-                            likesCount = item.likesCount,
                             isMuted = isMuted,
                             onToggleLike = {
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -891,7 +893,7 @@ fun ReelsVideoPage(
                             landscape = landscape,
                             onToggleLandscape = onToggleLandscape,
                             isLandscapeLayout = false,
-                            modifier = Modifier.padding(end = 8.dp, bottom = 48.dp),
+                            modifier = Modifier.padding(end = 8.dp, bottom = actionsBottomPadding),
                         )
                     }
 
@@ -910,13 +912,13 @@ fun ReelsVideoPage(
                             showFollowAction = showFollowAction,
                             isFollowingCreator = isFollowingCreator,
                             onToggleFollowCreator = onToggleFollowCreator,
-                            isHdQuality = isHdQuality,
-                            isOfflineStored = isOfflineStored,
-                            modifier = Modifier.padding(
-                                start = 16.dp,
-                                end = 76.dp,
-                                bottom = 24.dp,
-                            ),
+                            modifier = Modifier
+                                .padding(
+                                    start = 16.dp,
+                                    end = 76.dp,
+                                    bottom = 24.dp,
+                                )
+                                .onSizeChanged { portraitMetaHeightPx = it.height },
                         )
                     }
 

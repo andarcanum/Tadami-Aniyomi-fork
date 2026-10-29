@@ -119,16 +119,4 @@ class ReelsLandscapeComponentsTest {
 
         (clearanceFromTopBar >= 30f) shouldBe true
     }
-
-    @Test
-    fun `like label visibility in ReelsActionsColumn only shows when likesCount is non-null`() {
-        // Portrait mode (showLabels = true)
-        shouldShowLikeLabel(showLabels = true, likesCount = null) shouldBe false
-        shouldShowLikeLabel(showLabels = true, likesCount = 0L) shouldBe true
-        shouldShowLikeLabel(showLabels = true, likesCount = 1200L) shouldBe true
-
-        // Landscape layout mode (showLabels = false)
-        shouldShowLikeLabel(showLabels = false, likesCount = null) shouldBe false
-        shouldShowLikeLabel(showLabels = false, likesCount = 1200L) shouldBe false
-    }
 }

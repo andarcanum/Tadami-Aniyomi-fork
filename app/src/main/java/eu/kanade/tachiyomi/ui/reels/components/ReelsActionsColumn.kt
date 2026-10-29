@@ -56,8 +56,6 @@ fun ReelsActionsColumn(
     onToggleLike: () -> Unit,
     onToggleMute: () -> Unit,
     onShare: () -> Unit,
-    likesCount: Long? = null,
-    shareCount: Long? = null,
     // Creator follow slot (contract v18): shown by the caller only when the source is
     // AnimeCreatorFeedSource and the item has an author.
     showFollow: Boolean = false,
@@ -93,17 +91,15 @@ fun ReelsActionsColumn(
 
     @Composable
     fun LikeItem() {
-        val likeLabel = likesCount?.let { formatCompactCount(it) }
-            ?: stringResource(if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like)
         ActionIconItem(
             icon = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-            label = likeLabel,
+            label = if (isLiked) "unlike" else "like",
             tint = if (isLiked) HeartColor else Color.White,
             modifier = Modifier.scale(scaleHeart),
             stateDescription = stringResource(
                 if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like,
             ),
-            showLabel = shouldShowLikeLabel(showLabels, likesCount),
+            showLabel = showLabels,
             onClick = onToggleLike,
         )
     }
@@ -112,14 +108,12 @@ fun ReelsActionsColumn(
     fun LandscapeItem() {
         ActionIconItem(
             icon = if (landscape) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-            label = stringResource(
-                if (landscape) MR.strings.reels_landscape_exit else MR.strings.reels_landscape_fullscreen,
-            ),
+            label = "full",
             stateDescription = stringResource(
                 if (landscape) MR.strings.reels_landscape_exit else MR.strings.reels_landscape_fullscreen,
             ),
             tint = if (landscape) AuroraTheme.colors.accent else Color.White,
-            showLabel = false,
+            showLabel = showLabels,
             onClick = onToggleLandscape,
         )
     }
@@ -147,25 +141,24 @@ fun ReelsActionsColumn(
     fun SoundItem() {
         ActionIconItem(
             icon = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-            label = stringResource(MR.strings.reels_feed_action_sound),
+            label = if (isMuted) "unmute" else "mute",
             // TalkBack needs the CURRENT state, not only a static label.
             stateDescription = stringResource(
                 if (isMuted) MR.strings.reels_sound_off else MR.strings.reels_sound_on,
             ),
             tint = Color.White,
-            showLabel = false, // Pure icon toggle (no "Звук" text label)
+            showLabel = showLabels,
             onClick = onToggleMute,
         )
     }
 
     @Composable
     fun ShareItem() {
-        val shareLabel = shareCount?.let { formatCompactCount(it) } ?: ""
         ActionIconItem(
             icon = Icons.Filled.Share,
-            label = shareLabel.ifBlank { stringResource(MR.strings.reels_feed_action_share) },
+            label = "share",
             tint = Color.White,
-            showLabel = showLabels && shareCount != null,
+            showLabel = showLabels,
             onClick = onShare,
         )
     }
@@ -301,9 +294,6 @@ private fun ActionIconItem(
         }
     }
 }
-
-internal fun shouldShowLikeLabel(showLabels: Boolean, likesCount: Long?): Boolean =
-    showLabels && likesCount != null
 
 internal fun resolveOfflineActionLabel(isOfflineStored: Boolean, offlineSizeText: String?): String =
     when {

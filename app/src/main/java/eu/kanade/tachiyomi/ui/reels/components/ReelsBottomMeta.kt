@@ -59,8 +59,6 @@ fun ReelsBottomMeta(
     showFollowAction: Boolean = false,
     isFollowingCreator: Boolean = false,
     onToggleFollowCreator: () -> Unit = {},
-    isHdQuality: Boolean = true,
-    isOfflineStored: Boolean = false,
     onMetaStatsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -232,57 +230,25 @@ fun ReelsBottomMeta(
             }
         }
 
-        // Tadami meta-stats row (views count, quality badge, offline indicator matching Prototype v2)
-        Row(
-            modifier = Modifier.then(
-                if (onMetaStatsClick != null) {
-                    Modifier.clickable(onClick = onMetaStatsClick)
-                } else {
-                    Modifier
-                },
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            item.viewsCount?.let { views ->
+        // Views count only. The quality/offline pills were dropped (device report): the HD
+        // pill always claimed 1080p regardless of the real stream, and the offline state is
+        // already reflected by the download action slot.
+        item.viewsCount?.let { views ->
+            Row(
+                modifier = Modifier.then(
+                    if (onMetaStatsClick != null) {
+                        Modifier.clickable(onClick = onMetaStatsClick)
+                    } else {
+                        Modifier
+                    },
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 MetricItem(
                     icon = Icons.Filled.PlayArrow,
                     value = "${formatCompactCount(views)} просмотров",
                 )
-                Text(
-                    text = "•",
-                    color = Color.White.copy(alpha = 0.4f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                )
             }
-            // 1080p HD / 480p SD pill
-            Box(
-                modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 5.dp, vertical = 1.dp),
-            ) {
-                Text(
-                    text = if (isHdQuality) "1080p HD" else "480p SD",
-                    color = if (isHdQuality) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.8f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Text(
-                text = "•",
-                color = Color.White.copy(alpha = 0.4f),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            // Offline state badge
-            Text(
-                text = if (isOfflineStored) "✓ Скачано" else "Офлайн",
-                color = if (isOfflineStored) Color(0xFF34D399) else AuroraTheme.colors.accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-            )
         }
 
         // Tag Chips

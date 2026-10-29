@@ -1,16 +1,10 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -28,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DataSaverOn
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.HighQuality
@@ -40,7 +32,6 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,9 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,16 +53,15 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.kanade.presentation.components.AuroraCapsuleTabs
-import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import kotlin.math.roundToInt
 
 /**
- * Aurora Frost Drawer for native landscape reels (Prototype v2).
- *
- * Slide-over side panel (340dp width) with AuroraTabRow (Player, Network & Offline, Playlist),
- * dark glass background (0xFF0E0C13), rim light brush, and 28dp left corners.
+ * Settings window for native landscape reels (Prototype v2): a centered Aurora frost dialog
+ * (system blur + dim, rim-light edge, header close button) with capsule tabs — Player,
+ * Network & Offline, Playlist.
  */
 @Composable
 fun ReelsAuroraFrostDrawer(
@@ -105,145 +92,71 @@ fun ReelsAuroraFrostDrawer(
     onClearVideoCache: () -> Unit = {},
     onSelectClip: (Int) -> Unit = {},
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     if (!isOpen) return
 
-    val colors = AuroraTheme.colors
     var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
     val tabTitles = listOf("Плеер", "Офлайн & Сеть", "Плейлист")
     val speeds = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-    val drawerShape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
 
-    Box(
-        modifier = modifier.fillMaxSize(),
+    // Centered frost window (AGENTS canon for settings modals) instead of the side
+    // slide-over: the full-screen black scrim read as a dead black block over the video.
+    // Tabs 0/1 scroll internally and the playlist is a LazyColumn, so the dialog content
+    // must stay a bounded, non-scrolling area (innerScroll would hand it infinite height).
+    AuroraFrostDialog(
+        onDismiss = onDismiss,
+        title = when (selectedTab) {
+            0 -> "Параметры плеера"
+            1 -> "Офлайн & Сеть Tadami"
+            else -> "Плейлист источника"
+        },
+        innerScroll = false,
     ) {
-        // Scrim backdrop
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.55f))
-                .clickable(onClick = onDismiss),
+        AuroraCapsuleTabs(
+            titles = tabTitles,
+            selectedIndex = selectedTab,
+            onSelect = { selectedTab = it },
+            modifier = Modifier.fillMaxWidth(),
         )
 
-        // Slide-Over Drawer
-        AnimatedVisibility(
-            visible = isOpen,
-            enter = slideInHorizontally { it } + fadeIn(),
-            exit = slideOutHorizontally { it } + fadeOut(),
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(340.dp)
-                    .clip(drawerShape)
-                    .background(
-                        if (colors.isAmoled) {
-                            Color(
-                                0xFF08070C,
-                            ).copy(alpha = 0.96f)
-                        } else {
-                            Color(0xFF0E0C13).copy(alpha = 0.94f)
-                        },
-                        drawerShape,
-                    )
-                    .border(1.dp, auroraMenuRimLightBrush(colors), drawerShape)
-                    .clickable(enabled = false) {}, // Prevent dismiss click from passing through
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    // Header: Title & Close Button
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = when (selectedTab) {
-                                0 -> "Параметры плеера"
-                                1 -> "Офлайн & Сеть Tadami"
-                                else -> "Плейлист источника"
-                            },
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.08f), CircleShape)
-                                .clickable(onClick = onDismiss),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "Закрыть",
-                                tint = Color.White.copy(alpha = 0.7f),
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    }
+        Spacer(Modifier.height(8.dp))
 
-                    // AuroraTabRow (Capsule selector)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    ) {
-                        AuroraCapsuleTabs(
-                            titles = tabTitles,
-                            selectedIndex = selectedTab,
-                            onSelect = { selectedTab = it },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // Tab Contents
-                    when (selectedTab) {
-                        0 -> PlayerTabContent(
-                            isHdQuality = isHdQuality,
-                            onToggleQuality = onToggleQuality,
-                            isCropMode = isCropMode,
-                            onToggleCropMode = onToggleCropMode,
-                            playbackSpeed = playbackSpeed,
-                            speeds = speeds,
-                            onSetPlaybackSpeed = onSetPlaybackSpeed,
-                            isAutoAdvance = isAutoAdvance,
-                            onToggleAutoAdvance = onToggleAutoAdvance,
-                            sleepTimerValue = sleepTimerValue,
-                            onCycleSleepTimer = onCycleSleepTimer,
-                            isIncognito = isIncognito,
-                            onToggleIncognito = onToggleIncognito,
-                        )
-                        1 -> NetworkOfflineTabContent(
-                            currentItem = currentItem,
-                            isOfflineStored = isOfflineStored,
-                            onToggleOfflineCurrent = onToggleOfflineCurrent,
-                            preloadWifiOnly = preloadWifiOnly,
-                            onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
-                            dataSaverEnabled = dataSaverEnabled,
-                            onToggleDataSaver = onToggleDataSaver,
-                            offlineUsedText = offlineUsedText,
-                            onClearVideoCache = onClearVideoCache,
-                        )
-                        2 -> PlaylistTabContent(
-                            items = playlistItems,
-                            currentIndex = currentPlaylistIndex,
-                            onSelectClip = {
-                                onSelectClip(it)
-                                onDismiss()
-                            },
-                        )
-                    }
-                }
-            }
+        // Tab Contents
+        when (selectedTab) {
+            0 -> PlayerTabContent(
+                isHdQuality = isHdQuality,
+                onToggleQuality = onToggleQuality,
+                isCropMode = isCropMode,
+                onToggleCropMode = onToggleCropMode,
+                playbackSpeed = playbackSpeed,
+                speeds = speeds,
+                onSetPlaybackSpeed = onSetPlaybackSpeed,
+                isAutoAdvance = isAutoAdvance,
+                onToggleAutoAdvance = onToggleAutoAdvance,
+                sleepTimerValue = sleepTimerValue,
+                onCycleSleepTimer = onCycleSleepTimer,
+                isIncognito = isIncognito,
+                onToggleIncognito = onToggleIncognito,
+            )
+            1 -> NetworkOfflineTabContent(
+                currentItem = currentItem,
+                isOfflineStored = isOfflineStored,
+                onToggleOfflineCurrent = onToggleOfflineCurrent,
+                preloadWifiOnly = preloadWifiOnly,
+                onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
+                dataSaverEnabled = dataSaverEnabled,
+                onToggleDataSaver = onToggleDataSaver,
+                offlineUsedText = offlineUsedText,
+                onClearVideoCache = onClearVideoCache,
+            )
+            2 -> PlaylistTabContent(
+                items = playlistItems,
+                currentIndex = currentPlaylistIndex,
+                onSelectClip = {
+                    onSelectClip(it)
+                    onDismiss()
+                },
+            )
         }
     }
 }
@@ -648,12 +561,14 @@ private fun PlaylistTabContent(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    val views = clip.viewsCount?.let { "${formatCompactCount(it)} просмотров" } ?: "1080p HD"
-                    Text(
-                        text = "👁 $views",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 10.5.sp,
-                    )
+                    val views = clip.viewsCount?.let { formatCompactCount(it) }
+                    if (views != null) {
+                        Text(
+                            text = "👁 $views просмотров",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 10.5.sp,
+                        )
+                    }
                 }
             }
         }

@@ -69,4 +69,70 @@ class ReelsChromeAutoHideTest {
         ) shouldBe
             false
     }
+
+    @Test
+    fun `status bar follows the feed chrome`() {
+        // Clean fullscreen playback: no chrome, no status icons.
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = false,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe false
+
+        // Top bar up (revealed by tap or before the auto-hide): icons are back.
+        reelsSystemChromeVisible(
+            chromeVisible = true,
+            moreMenuOpen = false,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `status bar stays while a blocking surface covers the feed`() {
+        // ⋮ settings block holds the chrome open.
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = true,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
+
+        // Search bar with the input field.
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = false,
+            isSearchBarOpen = true,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
+
+        // Any open sheet (source picker as the representative case).
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = false,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = true,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
+    }
 }

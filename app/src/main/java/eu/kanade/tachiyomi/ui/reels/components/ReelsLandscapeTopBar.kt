@@ -15,7 +15,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,8 +36,9 @@ import tachiyomi.presentation.core.i18n.stringResource
 /**
  * Top Navigation Bar for native landscape reels (Prototype v2).
  *
- * Left: Back button + Source pill (opens playlist).
- * Right: Clear display toggle, Settings button (opens Aurora Frost Drawer).
+ * Left: Back button, Source pill (opens the settings/playlist drawer) and Clear display
+ * toggle — the quick controls sit right after the plugin name. No separate settings button:
+ * the source pill already opens the drawer (device report: duplicate entry points).
  */
 @Composable
 fun ReelsLandscapeTopBar(
@@ -46,7 +46,6 @@ fun ReelsLandscapeTopBar(
     onBackClick: () -> Unit,
     onOpenPlaylist: () -> Unit,
     onClearDisplay: () -> Unit,
-    onOpenSettings: () -> Unit,
     playbackSpeed: Float = 1f,
     isCropMode: Boolean = false,
     onCycleSpeed: () -> Unit = {},
@@ -129,14 +128,9 @@ fun ReelsLandscapeTopBar(
                     )
                 }
             }
-        }
 
-        // Right Group: Clear Display, Settings
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            // Clear Display (Whisper / Clean Viewing Mode)
+            // Clear Display (Whisper / Clean Viewing Mode): hides the chrome WITHOUT
+            // pausing — the only path to a clean screen now that tap pauses playback.
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -156,32 +150,6 @@ fun ReelsLandscapeTopBar(
                     Icon(
                         imageVector = Icons.Filled.VisibilityOff,
                         contentDescription = stringResource(MR.strings.reels_clear_display),
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-
-            // Settings Button (Opens Aurora Frost Drawer)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .semantics { role = Role.Button }
-                    .clip(CircleShape)
-                    .clickable(onClick = onOpenSettings),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF0F141E).copy(alpha = 0.72f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = stringResource(MR.strings.action_settings),
                         tint = Color.White,
                         modifier = Modifier.size(18.dp),
                     )
