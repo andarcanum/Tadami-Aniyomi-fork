@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.ConfigurationCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -280,99 +282,89 @@ fun CouncilCodeLockDialog(
 
     BackHandler { onDismiss() }
 
-    // Текст со скриншота с разметкой
+    val isSpanish = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]?.language == "es"
     val isRussian = remember(title) { title.contains(Regex("[а-яА-Я]")) }
-    val labelCodeAssembly = if (isRussian) "СБОРКА КОДА · ${seq.size}/$n" else "CODE ASSEMBLY · ${seq.size}/$n"
-    val labelReset = if (isRussian) "✕ СБРОС" else "✕ RESET"
-    val cardSubLabel = if (isRussian) "СОВЕТ" else "COUNCIL"
-    val fullBriefingText = remember(isRussian) {
-        if (isRussian) {
-            "СИСТЕМНОЕ УПРАВЛЕНИЕ ЗАБЛОКИРОВАНО СОВЕТОМ.\n" +
-                "нажмите монолит, чтобы открыть слово · нажмите ещё раз, чтобы добавить его в код.\n" +
-                "соберите подсказку из 12 слов в правильном порядке, чтобы снять блокировку."
-        } else {
-            "SYSTEM CONTROL LOCKED BY THE COUNCIL.\n" +
-                "tap a monolith to reveal a word · tap again to add it to the code.\n" +
-                "assemble the 12-word hint in the correct order to bypass the lock."
+
+    fun councilText(russian: String, english: String, spanish: String): String {
+        return when {
+            isSpanish -> spanish
+            isRussian -> russian
+            else -> english
         }
     }
 
-    // Механическая скрембл-печать (на базе готового rememberScrambleReveal из GlitchStack)
+    val labelCodeAssembly = councilText(
+        "СБОРКА КОДА",
+        "CODE ASSEMBLY",
+        "MONTAJE DEL CÓDIGO",
+    ) + " · ${seq.size}/$n"
+    val labelReset = councilText("✕ СБРОС", "✕ RESET", "✕ REINICIAR")
+    val cardSubLabel = councilText("СОВЕТ", "COUNCIL", "CONSEJO")
+
+    val briefingLine1 = councilText(
+        "СИСТЕМНОЕ УПРАВЛЕНИЕ ЗАБЛОКИРОВАНО СОВЕТОМ.\n",
+        "SYSTEM CONTROL LOCKED BY THE COUNCIL.\n",
+        "EL CONSEJO HA BLOQUEADO EL CONTROL DEL SISTEMA.\n",
+    )
+    val briefingLine2 = councilText(
+        "нажмите монолит, чтобы открыть слово · нажмите ещё раз, чтобы добавить его в код.\n",
+        "tap a monolith to reveal a word · tap again to add it to the code.\n",
+        "toca un monolito para revelar una palabra · vuelve a tocarlo para añadirla al código.\n",
+    )
+    val briefingLine3Start = councilText("соберите ", "assemble the ", "ordena la ")
+    val briefingHighlight = councilText(
+        "подсказку из 12 слов",
+        "12-word hint",
+        "pista de 12 palabras",
+    )
+    val briefingLine3End = councilText(
+        " в правильном порядке, чтобы снять блокировку.",
+        " in the correct order to bypass the lock.",
+        " en el orden correcto para desbloquear el sistema.",
+    )
+    val fullBriefingText =
+        briefingLine1 + briefingLine2 + briefingLine3Start + briefingHighlight + briefingLine3End
+
     val displayedBriefing = rememberScrambleReveal(fullBriefingText, charDelayMs = 38, scramblePerChar = 2)
 
-    val annotatedBriefing = remember(displayedBriefing, isRussian, accent) {
+    val annotatedBriefing = remember(
+        displayedBriefing,
+        briefingLine1,
+        briefingLine2,
+        briefingLine3Start,
+        briefingHighlight,
+        accent,
+    ) {
         androidx.compose.ui.text.buildAnnotatedString {
-            val len = displayedBriefing.length
-            if (isRussian) {
-                val l1 = "СИСТЕМНОЕ УПРАВЛЕНИЕ ЗАБЛОКИРОВАНО СОВЕТОМ.\n"
-                val l2 = "нажмите монолит, чтобы открыть слово · нажмите ещё раз, чтобы добавить его в код.\n"
-                val l3Start = "соберите "
-                val l3Highlight = "подсказку из 12 слов"
+            val range1 = 0 until briefingLine1.length
+            val highlightStart = briefingLine1.length + briefingLine2.length + briefingLine3Start.length
+            val highlightRange = highlightStart until (highlightStart + briefingHighlight.length)
 
-                val range1 = 0 until l1.length
-                val range2 = l1.length until (l1.length + l2.length)
-                val range3Start = (l1.length + l2.length) until (l1.length + l2.length + l3Start.length)
-                val range3Highlight =
-                    (l1.length + l2.length + l3Start.length) until
-                        (l1.length + l2.length + l3Start.length + l3Highlight.length)
-
-                for (i in 0 until len) {
-                    val char = displayedBriefing[i]
-                    val style = when (i) {
-                        in range1 -> androidx.compose.ui.text.SpanStyle(
-                            color = CouncilAmberHi,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        in range2 -> androidx.compose.ui.text.SpanStyle(color = CouncilAmberHi.copy(alpha = 0.85f))
-                        in range3Start -> androidx.compose.ui.text.SpanStyle(color = CouncilAmberHi.copy(alpha = 0.85f))
-                        in range3Highlight -> androidx.compose.ui.text.SpanStyle(
-                            color = accent,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        else -> androidx.compose.ui.text.SpanStyle(color = CouncilAmberHi.copy(alpha = 0.85f))
-                    }
-                    withStyle(style) {
-                        append(char)
-                    }
+            for (i in displayedBriefing.indices) {
+                val style = when (i) {
+                    in range1 -> androidx.compose.ui.text.SpanStyle(
+                        color = CouncilAmberHi,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    in highlightRange -> androidx.compose.ui.text.SpanStyle(
+                        color = accent,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    else -> androidx.compose.ui.text.SpanStyle(color = CouncilAmberHi.copy(alpha = 0.85f))
                 }
-            } else {
-                val l1 = "SYSTEM CONTROL LOCKED BY THE COUNCIL.\n"
-                val l2 = "tap a monolith to reveal a word · tap again to add it to the code.\n"
-                val l3Start = "assemble the "
-                val l3Highlight = "12-word hint"
-
-                val range1 = 0 until l1.length
-                val range2 = l1.length until (l1.length + l2.length)
-                val range3Start = (l1.length + l2.length) until (l1.length + l2.length + l3Start.length)
-                val range3Highlight =
-                    (l1.length + l2.length + l3Start.length) until
-                        (l1.length + l2.length + l3Start.length + l3Highlight.length)
-
-                for (i in 0 until len) {
-                    val char = displayedBriefing[i]
-                    val style = when (i) {
-                        in range1 -> androidx.compose.ui.text.SpanStyle(
-                            color = CouncilAmberHi,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        in range2 -> androidx.compose.ui.text.SpanStyle(color = CouncilAmberHi.copy(alpha = 0.85f))
-                        in range3Start -> androidx.compose.ui.text.SpanStyle(color = CouncilAmberHi.copy(alpha = 0.85f))
-                        in range3Highlight -> androidx.compose.ui.text.SpanStyle(
-                            color = accent,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        else -> androidx.compose.ui.text.SpanStyle(color = CouncilAmberHi.copy(alpha = 0.85f))
-                    }
-                    withStyle(style) {
-                        append(char)
-                    }
+                withStyle(style) {
+                    append(displayedBriefing[i])
                 }
             }
         }
     }
 
-    val headerTitle = if (isRussian) "[ КОД СОВЕТА · ВОССТАНОВЛЕНИЕ ]" else "[ COUNCIL CODE · RESTORATION ]"
-    val leftTag = if (isRussian) "⬢ ЯДРО" else "⬢ CORE"
+    val headerTitle = councilText(
+        "[ КОД СОВЕТА · ВОССТАНОВЛЕНИЕ ]",
+        "[ COUNCIL CODE · RESTORATION ]",
+        "[ CÓDIGO DEL CONSEJO · RESTAURACIÓN ]",
+    )
+    val leftTag = councilText("⬢ ЯДРО", "⬢ CORE", "⬢ NÚCLEO")
 
     // Раздельные независимые таймеры глитчей для элементов
     var leftTagGlitch by remember { mutableStateOf(false) }
@@ -622,27 +614,27 @@ fun CouncilCodeLockDialog(
 
                 val (statusText, statusColor) = when {
                     locked -> {
-                        val text = if (isRussian) {
-                            "▶ КОД ПРИНЯТ · БЛОКИРОВКА СНЯТА"
-                        } else {
-                            "▶ CODE ACCEPTED · LOCK BYPASSED"
-                        }
+                        val text = councilText(
+                            "▶ КОД ПРИНЯТ · БЛОКИРОВКА СНЯТА",
+                            "▶ CODE ACCEPTED · LOCK BYPASSED",
+                            "▶ CÓDIGO ACEPTADO · SISTEMA DESBLOQUEADO",
+                        )
                         text to green
                     }
                     errorFlash -> {
-                        val text = if (isRussian) {
-                            "▲ НЕВЕРНЫЙ ПОРЯДОК · СВЕРЬТЕ СМЫСЛ"
-                        } else {
-                            "▲ INVALID ORDER · CHECK MEANING"
-                        }
+                        val text = councilText(
+                            "▲ НЕВЕРНЫЙ ПОРЯДОК · СВЕРЬТЕ СМЫСЛ",
+                            "▲ INVALID ORDER · CHECK MEANING",
+                            "▲ ORDEN INCORRECTO · REVISA EL SENTIDO",
+                        )
                         text to GlitchPalette.HazardRed
                     }
                     else -> {
-                        val text = if (isRussian) {
-                            "ОЖИДАНИЕ ВВОДА… (${seq.size}/$n)"
-                        } else {
-                            "AWAITING INPUT… (${seq.size}/$n)"
-                        }
+                        val text = councilText(
+                            "ОЖИДАНИЕ ВВОДА… (${seq.size}/$n)",
+                            "AWAITING INPUT… (${seq.size}/$n)",
+                            "ESPERANDO ENTRADA… (${seq.size}/$n)",
+                        )
                         text to Color(0xFF6A6A6A)
                     }
                 }

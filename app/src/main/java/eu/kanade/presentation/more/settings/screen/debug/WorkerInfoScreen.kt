@@ -58,6 +58,7 @@ class WorkerInfoScreen : Screen() {
     @Composable
     override fun Content() {
         val context = LocalContext.current
+        val localizedTitle = stringResource(MR.strings.debug_worker_info_title)
         val navigator = LocalNavigator.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
         val lazyListState = rememberLazyListState()
@@ -68,7 +69,7 @@ class WorkerInfoScreen : Screen() {
         val running by screenModel.running.collectAsStateWithLifecycle()
 
         SettingsScaffold(
-            title = TITLE,
+            title = localizedTitle,
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
             topBarCanScroll = { lazyListState.canScroll() },
@@ -80,7 +81,7 @@ class WorkerInfoScreen : Screen() {
                             icon = Icons.Default.ContentCopy,
                             onClick = {
                                 context.copyToClipboard(
-                                    TITLE,
+                                    localizedTitle,
                                     enqueued + finished + running,
                                 )
                             },
@@ -94,13 +95,13 @@ class WorkerInfoScreen : Screen() {
                 contentPadding = contentPadding + PaddingValues(horizontal = 16.dp),
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
             ) {
-                item { SectionTitle(title = "Enqueued") }
+                item { SectionTitle(title = stringResource(MR.strings.debug_workers_enqueued)) }
                 item { SectionText(text = enqueued) }
 
-                item { SectionTitle(title = "Finished") }
+                item { SectionTitle(title = stringResource(MR.strings.debug_workers_finished)) }
                 item { SectionText(text = finished) }
 
-                item { SectionTitle(title = "Running") }
+                item { SectionTitle(title = stringResource(MR.strings.debug_workers_running)) }
                 item { SectionText(text = running) }
             }
         }

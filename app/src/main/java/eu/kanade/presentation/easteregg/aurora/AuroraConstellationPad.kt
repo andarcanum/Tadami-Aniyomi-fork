@@ -94,7 +94,7 @@ fun AuroraConstellationPad(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = if (en) "CONSTELLATION" else "СОЗВЕЗДИЕ",
+                text = AuroraLocalization.translate(if (en) "CONSTELLATION" else "СОЗВЕЗДИЕ").orEmpty(),
                 color = Color(0xFF8FD6FF),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -102,9 +102,15 @@ fun AuroraConstellationPad(
             )
             Text(
                 text = when {
-                    broken -> if (en) "the thread is thin — slower" else "нить тонка — медленнее"
-                    tapMode -> if (en) "touch the stars, one by one" else "коснись звёзд, одной за другой"
-                    else -> if (en) "join the stars with one thread" else "соедини звёзды одной нитью"
+                    broken -> AuroraLocalization.translate(
+                        if (en) "the thread is thin — slower" else "нить тонка — медленнее",
+                    ).orEmpty()
+                    tapMode -> AuroraLocalization.translate(
+                        if (en) "touch the stars, one by one" else "коснись звёзд, одной за другой",
+                    ).orEmpty()
+                    else -> AuroraLocalization.translate(
+                        if (en) "join the stars with one thread" else "соедини звёзды одной нитью",
+                    ).orEmpty()
                 },
                 color = if (broken) Color(0xFFFFB56B) else Color(0x99B8D8FF),
                 fontSize = 13.sp,
@@ -139,7 +145,7 @@ fun AuroraConstellationPad(
                 ) {
                     TextButton(onClick = { path.clear() }) {
                         Text(
-                            text = if (en) "Anew" else "Заново",
+                            text = AuroraLocalization.translate(if (en) "Anew" else "Заново").orEmpty(),
                             color = Color(0x99B8D8FF),
                         )
                     }
@@ -155,7 +161,7 @@ fun AuroraConstellationPad(
                         enabled = path.size >= 3,
                     ) {
                         Text(
-                            text = if (en) "Seal" else "Запечатать",
+                            text = AuroraLocalization.translate(if (en) "Seal" else "Запечатать").orEmpty(),
                             color = if (path.size >= 3) ShinkaiPalette.SkyCyan else Color(0x5539536F),
                         )
                     }
@@ -172,9 +178,9 @@ fun AuroraConstellationPad(
             ) {
                 Text(
                     text = if (tapMode) {
-                        if (en) "weave with a thread" else "вести нитью"
+                        AuroraLocalization.translate(if (en) "weave with a thread" else "вести нитью").orEmpty()
                     } else {
-                        if (en) "touch one by one" else "касаться по одной"
+                        AuroraLocalization.translate(if (en) "touch one by one" else "касаться по одной").orEmpty()
                     },
                     color = Color(0x66B8D8FF),
                     fontSize = 12.sp,

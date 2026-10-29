@@ -1643,7 +1643,9 @@ internal fun GeminiTranslationDialog(
                                         ),
                                     ) {
                                         Text(
-                                            text = "$privateProviderLabel: отправка идёт одним запросом на главу. При ошибке включается fallback (batch=40, concurrency=1).",
+                                            text = stringResource(
+                                                AYMR.strings.novel_reader_private_bridge_request_summary,
+                                            ).format(privateProviderLabel),
                                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2488,7 +2490,11 @@ internal fun GeminiTranslationDialog(
                                             ) {
                                                 Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(16.dp))
                                                 Spacer(Modifier.size(4.dp))
-                                                Text("Копировать")
+                                                Text(
+                                                    text = stringResource(
+                                                        AYMR.strings.novel_reader_dictionary_history_action_copy,
+                                                    ),
+                                                )
                                             }
                                             TextButton(onClick = onClearLogs) {
                                                 Icon(Icons.Filled.Delete, null, modifier = Modifier.size(16.dp))

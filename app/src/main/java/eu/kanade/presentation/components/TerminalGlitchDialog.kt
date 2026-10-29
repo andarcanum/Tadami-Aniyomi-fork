@@ -46,11 +46,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.ConfigurationCompat
 import eu.kanade.domain.ui.UserProfilePreferences
 import kotlinx.coroutines.launch
 import uy.kohesive.injekt.Injekt
@@ -83,14 +85,21 @@ fun TerminalGlitchDialog(
 ) {
     val time by rememberGlitchTime()
     val userProfilePreferences = remember { Injekt.get<UserProfilePreferences>() }
+    val isSpanish = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]?.language == "es"
     val isRussian = remember(title) { title.contains(Regex("[а-яА-Я]")) }
-    val observerName = remember(userProfilePreferences) {
+    val observerName = remember(userProfilePreferences, isSpanish, isRussian) {
         val raw = userProfilePreferences.name().get()
         val cleaned = raw.filter { it.isLetterOrDigit() || it.isWhitespace() || it == '-' || it == '_' }.trim()
         if (cleaned.isNotEmpty()) {
             cleaned
         } else {
-            if (isRussian) "Странник" else "Wanderer"
+            if (isSpanish) {
+                "Viajero"
+            } else if (isRussian) {
+                "Странник"
+            } else {
+                "Wanderer"
+            }
         }
     }
 
@@ -401,12 +410,22 @@ private fun BrinkTerminalDialogContent(
     time: Float,
     observerName: String,
 ) {
+    val isSpanish = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]?.language == "es"
     val isRussian = remember(title) { title.contains(Regex("[а-яА-Я]")) }
     val cleanTitle = remember(title) { title.replace("[", "").replace("]", "").trim() }
     val titleParts = remember(cleanTitle) { cleanTitle.split(Regex("\\s*:\\s*")) }
 
-    val lines = remember(isRussian, observerName) {
-        if (isRussian) {
+    val lines = remember(isSpanish, isRussian, observerName) {
+        if (isSpanish) {
+            listOf(
+                "> escaneando el núcleo de la realidad...",
+                "> integridad: 00%",
+                "> observador detectado: $observerName",
+                "> salida de emergencia... no encontrada",
+                "> protocolo SECTOR ROJO listo",
+                "> esperando autorización del operador_",
+            )
+        } else if (isRussian) {
             listOf(
                 "> сканирую ядро реальности...",
                 "> целостность: 00%",
@@ -427,13 +446,18 @@ private fun BrinkTerminalDialogContent(
         }
     }
 
-    val descText = remember(isRussian) {
-        if (isRussian) {
+    val descText = remember(isSpanish, isRussian) {
+        if (isSpanish) {
+            "el proceso es irreversible. el vacío no devuelve lo que se ha llevado."
+        } else if (isRussian) {
             "процесс необратим. пустота не возвращает то, что забрала."
         } else {
             "the process is irreversible. the void does not return what it took."
         }
     }
+
+    val headerTarget = if (isSpanish) "// NÚCLEO EXPUESTO   REC " else "// KERNEL EXPOSED   REC "
+    val integrityTarget = if (isSpanish) "INTEGRIDAD DE LA REALIDAD" else "REALITY INTEGRITY"
 
     var headerText by remember { mutableStateOf("") }
     var showTag by remember { mutableStateOf(false) }
@@ -474,7 +498,7 @@ private fun BrinkTerminalDialogContent(
         }
 
         // 1. Type Header
-        typeText("// KERNEL EXPOSED   REC ", delayMs = 45L, scramblePerChar = 2) { headerText = it }
+        typeText(headerTarget, delayMs = 45L, scramblePerChar = 2) { headerText = it }
         kotlinx.coroutines.delay(350)
 
         // 2. Show Tag
@@ -482,7 +506,7 @@ private fun BrinkTerminalDialogContent(
         kotlinx.coroutines.delay(350)
 
         // 3. Type Integrity Label
-        typeText("REALITY INTEGRITY", delayMs = 45L, scramblePerChar = 2) { integrityLabel = it }
+        typeText(integrityTarget, delayMs = 45L, scramblePerChar = 2) { integrityLabel = it }
         kotlinx.coroutines.delay(200)
 
         // 4. Type Integrity Bar
@@ -588,7 +612,7 @@ private fun BrinkTerminalDialogContent(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
                     )
-                    if (headerText == "// KERNEL EXPOSED   REC ") {
+                    if (headerText == headerTarget) {
                         Text(
                             text = "●",
                             color = if (blinkOn > 0.5f) accent else Color.Transparent,
@@ -609,7 +633,7 @@ private fun BrinkTerminalDialogContent(
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 ) {
                     Text(
-                        text = "POINT OF NO RETURN",
+                        text = if (isSpanish) "PUNTO DE NO RETORNO" else "POINT OF NO RETURN",
                         color = Color.Black,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
@@ -658,9 +682,13 @@ private fun BrinkTerminalDialogContent(
                                 logLine.contains("00%") ||
                                     logLine.contains("не найден") ||
                                     logLine.contains("not found") ||
+                                    (isSpanish && logLine.contains("no encontrada")) ||
                                     logLine.contains("наблюдатель") ||
-                                    logLine.contains("observer") -> GlitchPalette.HazardRed
-                                logLine.contains("готов") || logLine.contains("ready") -> GlitchPalette.Phosphor
+                                    logLine.contains("observer") ||
+                                    (isSpanish && logLine.contains("observador")) -> GlitchPalette.HazardRed
+                                logLine.contains("готов") ||
+                                    logLine.contains("ready") ||
+                                    (isSpanish && logLine.contains("listo")) -> GlitchPalette.Phosphor
                                 else -> Color(0xFFCDBDBE)
                             },
                             fontSize = 12.sp,

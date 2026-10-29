@@ -58,12 +58,12 @@ class TranslationNotificationManager(
             } else {
                 addAction(
                     android.R.drawable.ic_media_pause,
-                    "Пауза",
+                    context.stringResource(MR.strings.action_pause),
                     pauseBatchIntent(batchToken),
                 )
                 addAction(
                     android.R.drawable.ic_menu_close_clear_cancel,
-                    "Отмена очереди",
+                    context.stringResource(MR.strings.notification_translation_batch_cancel),
                     cancelBatchIntent(batchToken),
                 )
             }
@@ -74,7 +74,7 @@ class TranslationNotificationManager(
 
     fun showBatchPaused(state: TranslationBatchState) {
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("Очередь перевода на паузе")
+            setContentTitle(context.stringResource(MR.strings.notification_translation_batch_paused_title))
             setContentText(buildBatchPausedText(state))
             setSmallIcon(android.R.drawable.ic_media_pause)
             setProgress(0, 0, false)
@@ -86,12 +86,12 @@ class TranslationNotificationManager(
             }
             addAction(
                 android.R.drawable.ic_media_play,
-                "Продолжить",
+                context.stringResource(MR.strings.action_resume),
                 resumeBatchIntent(state.batchToken),
             )
             addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Отмена очереди",
+                context.stringResource(MR.strings.notification_translation_batch_cancel),
                 cancelBatchIntent(state.batchToken),
             )
         }
@@ -101,7 +101,7 @@ class TranslationNotificationManager(
 
     fun showBatchComplete(state: TranslationBatchState) {
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("Очередь перевода завершена")
+            setContentTitle(context.stringResource(MR.strings.notification_translation_batch_complete_title))
             setContentText(buildBatchCompleteText(state))
             setSmallIcon(android.R.drawable.ic_menu_edit)
             setProgress(0, 0, false)
@@ -311,18 +311,35 @@ class TranslationNotificationManager(
     }
 
     private fun buildBatchSummaryText(state: TranslationBatchState): String {
-        return "Переведено: ${state.completed}, пропущено: ${state.skipped}, ошибок: ${state.failed}"
+        return context.stringResource(
+            MR.strings.notification_translation_batch_summary,
+            state.completed,
+            state.skipped,
+            state.failed,
+        )
     }
 
     private fun buildBatchPausedText(state: TranslationBatchState): String {
-        return "${buildBatchSummaryText(state)} Текущая глава завершится, затем очередь остановится."
+        return context.stringResource(
+            MR.strings.notification_translation_batch_paused_summary,
+            buildBatchSummaryText(state),
+        )
     }
 
     private fun buildBatchCompleteText(state: TranslationBatchState): String {
         return if (state.failed > 0) {
-            "Очередь завершена с ошибками. Переведено: ${state.completed}, пропущено: ${state.skipped}, ошибок: ${state.failed}"
+            context.stringResource(
+                MR.strings.notification_translation_batch_complete_errors,
+                state.completed,
+                state.skipped,
+                state.failed,
+            )
         } else {
-            "Очередь завершена. Переведено: ${state.completed}, пропущено: ${state.skipped}"
+            context.stringResource(
+                MR.strings.notification_translation_batch_complete_success,
+                state.completed,
+                state.skipped,
+            )
         }
     }
 }

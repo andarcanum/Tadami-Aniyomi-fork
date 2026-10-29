@@ -36,6 +36,7 @@ class BackupSchemaScreen : Screen() {
     @Composable
     override fun Content() {
         val context = LocalContext.current
+        val localizedTitle = stringResource(MR.strings.debug_backup_schema_title)
         val navigator = LocalNavigator.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
         val scrollState = rememberScrollState()
@@ -47,7 +48,7 @@ class BackupSchemaScreen : Screen() {
         }
 
         SettingsScaffold(
-            title = TITLE,
+            title = localizedTitle,
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
             topBarCanScroll = { scrollState.canScroll() },
@@ -58,7 +59,7 @@ class BackupSchemaScreen : Screen() {
                             title = stringResource(MR.strings.action_copy_to_clipboard),
                             icon = Icons.Default.ContentCopy,
                             onClick = {
-                                context.copyToClipboard(TITLE, schema)
+                                context.copyToClipboard(localizedTitle, schema)
                             },
                         ),
                     ),

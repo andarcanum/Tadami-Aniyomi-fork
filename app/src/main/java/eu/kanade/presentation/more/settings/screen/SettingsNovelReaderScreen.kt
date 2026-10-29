@@ -1648,17 +1648,20 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
 
+        val dictionaryDisplayLocale = androidx.core.os.ConfigurationCompat.getLocales(
+            androidx.compose.ui.platform.LocalConfiguration.current,
+        )[0] ?: java.util.Locale.getDefault()
         val dictionaryLanguages = kotlinx.collections.immutable.persistentMapOf(
-            "en" to "English",
-            "ru" to "Русский",
-            "ja" to "日本語 (Japanese)",
-            "zh" to "中文 (Chinese)",
-            "ko" to "한국어 (Korean)",
-            "es" to "Español (Spanish)",
-            "fr" to "Français (French)",
-            "de" to "Deutsch (German)",
-            "it" to "Italiano (Italian)",
-            "pt" to "Português (Portuguese)",
+            "en" to java.util.Locale.forLanguageTag("en").getDisplayLanguage(dictionaryDisplayLocale),
+            "ru" to java.util.Locale.forLanguageTag("ru").getDisplayLanguage(dictionaryDisplayLocale),
+            "ja" to java.util.Locale.forLanguageTag("ja").getDisplayLanguage(dictionaryDisplayLocale),
+            "zh" to java.util.Locale.forLanguageTag("zh").getDisplayLanguage(dictionaryDisplayLocale),
+            "ko" to java.util.Locale.forLanguageTag("ko").getDisplayLanguage(dictionaryDisplayLocale),
+            "es" to java.util.Locale.forLanguageTag("es").getDisplayLanguage(dictionaryDisplayLocale),
+            "fr" to java.util.Locale.forLanguageTag("fr").getDisplayLanguage(dictionaryDisplayLocale),
+            "de" to java.util.Locale.forLanguageTag("de").getDisplayLanguage(dictionaryDisplayLocale),
+            "it" to java.util.Locale.forLanguageTag("it").getDisplayLanguage(dictionaryDisplayLocale),
+            "pt" to java.util.Locale.forLanguageTag("pt").getDisplayLanguage(dictionaryDisplayLocale),
         )
 
         var installedRevision by rememberSaveable { mutableIntStateOf(0) }
@@ -1838,17 +1841,20 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
     @Composable
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val dictionaryDisplayLocale = androidx.core.os.ConfigurationCompat.getLocales(
+            androidx.compose.ui.platform.LocalConfiguration.current,
+        )[0] ?: java.util.Locale.getDefault()
         val dictionaryLanguages = kotlinx.collections.immutable.persistentMapOf(
-            "en" to "English",
-            "ru" to "Русский",
-            "ja" to "日本語 (Japanese)",
-            "zh" to "中文 (Chinese)",
-            "ko" to "한국어 (Korean)",
-            "es" to "Español (Spanish)",
-            "fr" to "Français (French)",
-            "de" to "Deutsch (German)",
-            "it" to "Italiano (Italian)",
-            "pt" to "Português (Portuguese)",
+            "en" to java.util.Locale.forLanguageTag("en").getDisplayLanguage(dictionaryDisplayLocale),
+            "ru" to java.util.Locale.forLanguageTag("ru").getDisplayLanguage(dictionaryDisplayLocale),
+            "ja" to java.util.Locale.forLanguageTag("ja").getDisplayLanguage(dictionaryDisplayLocale),
+            "zh" to java.util.Locale.forLanguageTag("zh").getDisplayLanguage(dictionaryDisplayLocale),
+            "ko" to java.util.Locale.forLanguageTag("ko").getDisplayLanguage(dictionaryDisplayLocale),
+            "es" to java.util.Locale.forLanguageTag("es").getDisplayLanguage(dictionaryDisplayLocale),
+            "fr" to java.util.Locale.forLanguageTag("fr").getDisplayLanguage(dictionaryDisplayLocale),
+            "de" to java.util.Locale.forLanguageTag("de").getDisplayLanguage(dictionaryDisplayLocale),
+            "it" to java.util.Locale.forLanguageTag("it").getDisplayLanguage(dictionaryDisplayLocale),
+            "pt" to java.util.Locale.forLanguageTag("pt").getDisplayLanguage(dictionaryDisplayLocale),
         )
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.TextPreference(

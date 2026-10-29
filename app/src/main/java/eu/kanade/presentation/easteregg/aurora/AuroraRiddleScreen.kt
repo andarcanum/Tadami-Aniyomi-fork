@@ -217,7 +217,9 @@ fun AuroraRiddleScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = if (AuroraLocalization.isEnglish()) "AURORA ECHO" else "ЭХО АВРОРЫ",
+                    text = AuroraLocalization.translate(
+                        if (AuroraLocalization.isEnglish()) "AURORA ECHO" else "ЭХО АВРОРЫ",
+                    ).orEmpty(),
                     color = Color(0xFF8FD6FF),
                     fontSize = 10.sp,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,

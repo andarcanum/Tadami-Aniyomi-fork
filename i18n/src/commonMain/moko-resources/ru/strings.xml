@@ -1817,4 +1817,27 @@
     <string name="reels_album_remove_album">Убрать альбом из коллекции</string>
     <string name="reels_album_open">Открыть альбом</string>
     <string name="reels_album_play_as_feed">Смотреть как ленту (Reels)</string>
+
+    <!-- Translation queue notifications -->
+    <string name="notification_translation_batch_cancel">Отмена очереди</string>
+    <string name="notification_translation_batch_paused_title">Очередь перевода на паузе</string>
+    <string name="notification_translation_batch_complete_title">Очередь перевода завершена</string>
+    <string name="notification_translation_batch_summary">Переведено: %1$d, пропущено: %2$d, ошибок: %3$d</string>
+    <string name="notification_translation_batch_paused_summary">%1$s Текущая глава завершится, затем очередь остановится.</string>
+    <string name="notification_translation_batch_complete_errors">Очередь завершена с ошибками. Переведено: %1$d, пропущено: %2$d, ошибок: %3$d</string>
+    <string name="notification_translation_batch_complete_success">Очередь завершена. Переведено: %1$d, пропущено: %2$d</string>
+
+    <!-- Donation option tags -->
+    <string name="donation_tag_russia">РФ</string>
+    <string name="donation_tag_cis">СНГ</string>
+    <string name="donation_tag_sbp">СБП</string>
+    <string name="donation_tag_card">Карта</string>
+    <string name="donation_tag_crypto">Криптовалюта</string>
+
+    <!-- Auxiliary debug screens -->
+    <string name="debug_worker_info_title">Информация о фоновых задачах</string>
+    <string name="debug_backup_schema_title">Схема файла резервной копии</string>
+    <string name="debug_workers_enqueued">В очереди</string>
+    <string name="debug_workers_finished">Завершённые</string>
+    <string name="debug_workers_running">Выполняются</string>
 </resources>

@@ -593,7 +593,15 @@ private fun DonationOptionCardContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 option.tags.forEach { tag ->
-                    TagCapsule(tag, brandColor, auroraColors)
+                    val localizedTag = when (tag) {
+                        "РФ" -> stringResource(MR.strings.donation_tag_russia)
+                        "СНГ" -> stringResource(MR.strings.donation_tag_cis)
+                        "СБП" -> stringResource(MR.strings.donation_tag_sbp)
+                        "Карта" -> stringResource(MR.strings.donation_tag_card)
+                        "Crypto" -> stringResource(MR.strings.donation_tag_crypto)
+                        else -> tag
+                    }
+                    TagCapsule(localizedTag, brandColor, auroraColors)
                 }
             }
         }

@@ -35,12 +35,14 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.ConfigurationCompat
 import eu.kanade.domain.ui.UserProfilePreferences
 import kotlinx.coroutines.delay
 import tachiyomi.i18n.aniyomi.AYMR
@@ -141,18 +143,103 @@ private fun buildCodeBitmap(lines: List<String>): Bitmap {
 @Composable
 internal fun rememberCodeShader(): BitmapShader {
     val userProfilePreferences = remember { Injekt.get<UserProfilePreferences>() }
+    val isSpanish = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]?.language == "es"
     val isRussian = remember { java.util.Locale.getDefault().language == "ru" }
-    val observerName = remember(userProfilePreferences) {
+    val observerName = remember(userProfilePreferences, isSpanish, isRussian) {
         val raw = userProfilePreferences.name().get()
         val cleaned = raw.filter { it.isLetterOrDigit() || it.isWhitespace() || it == '-' || it == '_' }.trim()
         if (cleaned.isNotEmpty()) {
             cleaned
         } else {
-            if (isRussian) "Странник" else "Wanderer"
+            if (isSpanish) {
+                "Viajero"
+            } else if (isRussian) {
+                "Странник"
+            } else {
+                "Wanderer"
+            }
         }
     }
-    val lines = remember(isRussian, observerName) {
-        if (isRussian) {
+    val lines = remember(isSpanish, isRussian, observerName) {
+        if (isSpanish) {
+            listOf(
+                "fun observe(reader: You): Void {",
+                "  reality.integrity -= swipe.force",
+                "  // no debías llegar hasta aquí",
+                "  kernel.expose(sector = RED)",
+                "  if (integrity <= 0) collapse()",
+                "  val truth = pages.removeAll()",
+                "  echo(\"alguien observa en la oscuridad\")",
+                "  while (breathing) { fear++ }",
+                "  0xDEAD.void.pull(you)",
+                "  return Void(you)",
+                "}",
+                "SIGNAL// el vacío recuerda tu nombre",
+                "trace: observer=$observerName pid=0x7F",
+                "malloc(soul) -> null",
+                "assert(exit == null)",
+                "system.mercy = false",
+                "[warn] las paredes de la realidad son más delgadas",
+                "render(abyss, depth=INF)",
+                "no.turning.back = true",
+                "0101 0056 004F 0049 0044",
+                "the.red.sector.awaits()",
+                "> HOLA. TE VEMOS.",
+                "commit --amend reality",
+                "kill -9 humanity",
+                "// EXCEPCIÓN: REALITY_CORRUPTED",
+                "void.consume(you)",
+                "while(observer.present) { hide() }",
+                "[critical] fuga de memoria en la conciencia",
+                "ERROR: 0x00000000 (NULL_EXISTENCE)",
+                "val echo = void.listen(frequency = 0Hz)",
+                "system.integrity = 0.000",
+                "// no parpadees",
+                "override fun exists(): Boolean = false",
+                "val abyss = depth.toInt()",
+                "defragment(reality_core)",
+                "// gritan en la pila",
+                "killProcess(humanity_thread)",
+                "// el libro te está leyendo",
+                "openGate(RED_SECTOR)",
+                "// error en la línea 0: desbordamiento del vacío",
+                "val eye = observer.look()",
+                "delete(memory.lastChapter)",
+                "// el lector ha sido consumido",
+                "val signal = listenTo(abyss)",
+                "while(true) { suffer() }",
+                "// pánico del núcleo: soul.notFound",
+                "reality.status = STATUS_COLLAPSED",
+                "system.shutdown(immediate = true)",
+                "// ¿quién está detrás de la pantalla?",
+                "val path = \"/dev/null/reality\"",
+                "// rastro: $observerName estuvo aquí",
+                "val key = decrypt(red_sector)",
+                "// advertencia: nivel de verdad crítico",
+                "val echo = \"oscuridad\"",
+                "// malloc falló: el alma se quedó sin memoria",
+                "reality.fracture(point = swipe)",
+                "// el final está cerca",
+                "val observers = listAll()",
+                "// se perdió la conexión con el universo",
+                "val gate = Gate(0x7F)",
+                "// error: page.content = NULL",
+                "val heartbeat = 0 // muerto",
+                "// observan desde los márgenes",
+                "val abyssScale = infinite",
+                "// la pantalla sangra",
+                "val blood = drips.count()",
+                "// reality.integrity = 0%",
+                "val sector = RED_SECTOR",
+                "// punto terminal alcanzado",
+                "val observer = observerName",
+                "// el vacío llama",
+                "val exitCode = 0xDEAD",
+                "// error: observer.active = true",
+                "val soul = soulInstance",
+                "// la realidad es una ilusión",
+            )
+        } else if (isRussian) {
             listOf(
                 "fun observe(reader: You): Void {",
                 "  reality.integrity -= swipe.force",
@@ -434,6 +521,7 @@ fun MeltdownFractureOverlay(
     modifier: Modifier = Modifier,
 ) {
     if (swipe <= 0) return
+    val isSpanish = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]?.language == "es"
     val time by rememberGlitchTime()
     val codeShader = rememberCodeShader()
     val holeData = remember { buildShatterHoleData() }
@@ -466,7 +554,7 @@ fun MeltdownFractureOverlay(
         val pct = ((1f - progress.value) * 100f).toInt()
         val filled = ((1f - progress.value) * 16f).toInt()
         Text(
-            text = "REALITY INTEGRITY",
+            text = if (isSpanish) "INTEGRIDAD DE LA REALIDAD" else "REALITY INTEGRITY",
             color = GlitchPalette.Phosphor,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,

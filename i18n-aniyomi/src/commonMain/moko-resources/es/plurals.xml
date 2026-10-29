@@ -35,4 +35,73 @@
         <item quantity="many">Episodios %1$s y %2$d más</item>
         <item quantity="other">Episodios %1$s y %2$d más</item>
     </plurals>
+    <plurals name="novel_quotes_count_books">
+        <item quantity="one">%d libro</item>
+        <item quantity="other">%d libros</item>
+    </plurals>
+    <plurals name="novel_quotes_count_quotes">
+        <item quantity="one">%d cita</item>
+        <item quantity="other">%d citas</item>
+    </plurals>
+
+    <!-- Plurales adicionales en espanol -->
+    <plurals name="anime_num_entries">
+        <item quantity="one">%d entrada</item>
+        <item quantity="other">%d entradas</item>
+    </plurals>
+
+    <plurals name="anime_num_seasons">
+        <item quantity="one">%d temporada</item>
+        <item quantity="other">%d temporadas</item>
+    </plurals>
+
+    <plurals name="hoster_video_count">
+        <item quantity="one">%d vídeo</item>
+        <item quantity="other">%d vídeos</item>
+    </plurals>
+
+    <plurals name="manga_series_num_chapters">
+        <item quantity="one">%d capítulo</item>
+        <item quantity="other">%d capítulos</item>
+    </plurals>
+
+    <plurals name="manga_series_num_titles">
+        <item quantity="one">%d título</item>
+        <item quantity="other">%d títulos</item>
+    </plurals>
+
+    <plurals name="missing_items">
+        <item quantity="one">Falta %1$s elemento</item>
+        <item quantity="other">Faltan %1$s elementos</item>
+    </plurals>
+
+    <plurals name="relative_time_hours">
+        <item quantity="one">Hace 1 hora</item>
+        <item quantity="other">Hace %1$d horas</item>
+    </plurals>
+
+    <plurals name="relative_time_minutes">
+        <item quantity="one">Hace 1 minuto</item>
+        <item quantity="other">Hace %1$d minutos</item>
+    </plurals>
+
+    <plurals name="series_num_chapters">
+        <item quantity="one">%d capítulo</item>
+        <item quantity="other">%d capítulos</item>
+    </plurals>
+
+    <plurals name="series_num_titles">
+        <item quantity="one">%d título</item>
+        <item quantity="other">%d títulos</item>
+    </plurals>
+
+    <plurals name="upcoming_relative_time_hours">
+        <item quantity="one">Dentro de 1 hora</item>
+        <item quantity="other">Dentro de %1$d horas</item>
+    </plurals>
+
+    <plurals name="upcoming_relative_time_minutes">
+        <item quantity="one">Dentro de 1 minuto</item>
+        <item quantity="other">Dentro de %1$d minutos</item>
+    </plurals>
 </resources>

@@ -175,6 +175,7 @@ fun NovelHighlightsPanel(
 /** Центрированная шапка: современный заголовок + подпись источника «❦ из <новелла> ❦». */
 @Composable
 private fun SheetHead(novelTitle: String, isDark: Boolean) {
+    val sourcePrefix = stringResource(AYMR.strings.novel_highlight_source_prefix)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -193,7 +194,11 @@ private fun SheetHead(novelTitle: String, isDark: Boolean) {
         )
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(color = ParchmentGold.copy(alpha = 0.85f))) { append("❦ из ") }
+                withStyle(SpanStyle(color = ParchmentGold.copy(alpha = 0.85f))) {
+                    append("❦ ")
+                    append(sourcePrefix)
+                    append(" ")
+                }
                 withStyle(SpanStyle(color = ParchmentGold, fontWeight = FontWeight.Bold)) { append(novelTitle) }
                 withStyle(SpanStyle(color = ParchmentGold.copy(alpha = 0.85f))) { append(" ❦") }
             },

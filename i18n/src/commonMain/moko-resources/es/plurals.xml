@@ -95,4 +95,15 @@
         <item quantity="many">%1$s páginas</item>
         <item quantity="other">%1$s páginas</item>
     </plurals>
+
+    <!-- Plurales adicionales en espanol -->
+    <plurals name="reader_finale_chapters">
+        <item quantity="one">%1$d capítulo</item>
+        <item quantity="other">%1$d capítulos</item>
+    </plurals>
+
+    <plurals name="reader_finale_days_on_shelf">
+        <item quantity="one">en tu biblioteca desde hace %1$d día</item>
+        <item quantity="other">en tu biblioteca desde hace %1$d días</item>
+    </plurals>
 </resources>

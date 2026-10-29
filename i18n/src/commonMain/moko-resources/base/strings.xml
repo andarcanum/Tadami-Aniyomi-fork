@@ -2015,4 +2015,27 @@
     <string name="reels_album_remove_album">Remove album from collection</string>
     <string name="reels_album_open">Open album</string>
     <string name="reels_album_play_as_feed">Play as reels feed</string>
+
+    <!-- Translation queue notifications -->
+    <string name="notification_translation_batch_cancel">Cancel queue</string>
+    <string name="notification_translation_batch_paused_title">Translation queue paused</string>
+    <string name="notification_translation_batch_complete_title">Translation queue complete</string>
+    <string name="notification_translation_batch_summary">Translated: %1$d, skipped: %2$d, errors: %3$d</string>
+    <string name="notification_translation_batch_paused_summary">%1$s The current chapter will finish, then the queue will stop.</string>
+    <string name="notification_translation_batch_complete_errors">Queue finished with errors. Translated: %1$d, skipped: %2$d, errors: %3$d</string>
+    <string name="notification_translation_batch_complete_success">Queue finished. Translated: %1$d, skipped: %2$d</string>
+
+    <!-- Donation option tags -->
+    <string name="donation_tag_russia">Russia</string>
+    <string name="donation_tag_cis">CIS</string>
+    <string name="donation_tag_sbp">SBP</string>
+    <string name="donation_tag_card">Card</string>
+    <string name="donation_tag_crypto">Crypto</string>
+
+    <!-- Auxiliary debug screens -->
+    <string name="debug_worker_info_title">Worker info</string>
+    <string name="debug_backup_schema_title">Backup file schema</string>
+    <string name="debug_workers_enqueued">Enqueued</string>
+    <string name="debug_workers_finished">Finished</string>
+    <string name="debug_workers_running">Running</string>
 </resources>

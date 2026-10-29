@@ -3212,4 +3212,34 @@
     <string name="home_open_catalog">Open catalogue</string>
     <string name="home_catalog_button">Catalogue</string>
     <string name="home_search_cancel">Cancel</string>
+
+    <!-- Reader dialog and highlight localization -->
+    <string name="novel_reader_private_bridge_request_summary">%1$s: the chapter is sent in a single request. On error, a fallback is used (batch=40, concurrency=1).</string>
+    <string name="novel_highlight_source_prefix">from</string>
+
+    <!-- Playback preferences dialog -->
+    <string name="playback_preferences_title">Playback Preferences</string>
+    <string name="playback_quality_best_available">Best Available</string>
+
+    <string name="aurora_stats_no_score">No score</string>
+
+    <!-- Debug information screen -->
+    <string name="debug_info_app">App info</string>
+    <string name="debug_info_version">Version</string>
+    <string name="debug_info_build_time">Build time</string>
+    <string name="debug_info_webview_version">WebView version</string>
+    <string name="debug_info_profile_status">Profile compilation status</string>
+    <string name="debug_info_model">Model</string>
+    <string name="debug_info_oneui_version">OneUI version</string>
+    <string name="debug_info_miui_version">MIUI version</string>
+    <string name="debug_info_android_version">Android version</string>
+    <string name="debug_info_device">Device info</string>
+    <string name="debug_info_profile_not_installed">No profile installed</string>
+    <string name="debug_info_profile_compiled">Compiled</string>
+    <string name="debug_info_profile_non_matching">Compiled non-matching</string>
+    <string name="debug_info_profile_error">Error %1$d</string>
+    <string name="debug_info_profile_unsupported">Not supported</string>
+    <string name="debug_info_profile_pending">Pending compilation</string>
+    <string name="debug_info_profile_not_embedded">No profile embedded</string>
+    <string name="debug_info_profile_unknown">Unknown code %1$d</string>
 </resources>

@@ -622,7 +622,7 @@ private fun StatsSectionCard(
                                 )
                             }
                             Text(
-                                text = items.getOrNull(1)?.label ?: "Read",
+                                text = items.getOrNull(1)?.label ?: stringResource(MR.strings.label_read_chapters),
                                 color = colors.textSecondary,
                                 fontSize = 11.sp,
                             )
@@ -649,7 +649,7 @@ private fun StatsSectionCard(
                                 )
                             }
                             Text(
-                                text = items.getOrNull(2)?.label ?: "Downloaded",
+                                text = items.getOrNull(2)?.label ?: stringResource(AYMR.strings.aurora_downloaded),
                                 color = colors.textSecondary,
                                 fontSize = 10.sp,
                             )
@@ -663,7 +663,7 @@ private fun StatsSectionCard(
                         downloadedFraction = downloadedFraction,
                         watchedColor = progressColor,
                         downloadedColor = downloadColor,
-                        label = items.getOrNull(1)?.label ?: "Read",
+                        label = items.getOrNull(1)?.label ?: stringResource(MR.strings.label_read_chapters),
                     )
                 }
             }
@@ -690,7 +690,7 @@ private fun StatsSectionCard(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = items.getOrNull(0)?.label ?: "Tracked Titles",
+                                text = items.getOrNull(0)?.label ?: stringResource(AYMR.strings.aurora_tracked_titles),
                                 color = colors.textSecondary,
                                 fontSize = 11.sp,
                             )
@@ -703,7 +703,7 @@ private fun StatsSectionCard(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = items.getOrNull(2)?.label ?: "Trackers Used",
+                                text = items.getOrNull(2)?.label ?: stringResource(AYMR.strings.aurora_trackers_used),
                                 color = colors.textSecondary,
                                 fontSize = 11.sp,
                             )
@@ -711,9 +711,8 @@ private fun StatsSectionCard(
                     }
 
                     val isNoScore = meanScore == "N/A" || meanScore.isBlank()
-                    val locale = Locale.getDefault().language
                     val scoreText = if (isNoScore) {
-                        if (locale == "ru") "Без оценки" else "No score"
+                        stringResource(AYMR.strings.aurora_stats_no_score)
                     } else {
                         meanScore
                     }

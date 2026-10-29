@@ -35,6 +35,7 @@ import eu.kanade.tachiyomi.ui.entries.anime.AvailablePlaybackDubbings
 import eu.kanade.tachiyomi.ui.player.PlaybackPlayerPreference
 import eu.kanade.tachiyomi.ui.player.PlaybackSelectionPreferences
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -118,12 +119,12 @@ fun DubbingSelectionDialog(
         ) {
             Text(
                 modifier = Modifier.padding(bottom = 16.dp, top = 8.dp),
-                text = "Playback Preferences",
+                text = stringResource(AYMR.strings.playback_preferences_title),
                 style = MaterialTheme.typography.headlineMedium,
             )
 
             Text(
-                text = "Player",
+                text = stringResource(AYMR.strings.label_player),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
@@ -131,7 +132,7 @@ fun DubbingSelectionDialog(
             playerOptions.forEach { player ->
                 DubbingRadioItem(
                     text = when (player) {
-                        PlaybackPlayerPreference.AUTO -> "Auto"
+                        PlaybackPlayerPreference.AUTO -> stringResource(MR.strings.label_auto)
                         PlaybackPlayerPreference.CDN -> "CDN"
                         PlaybackPlayerPreference.KODIK -> "Kodik"
                         PlaybackPlayerPreference.PARLORATE -> "Parlorate"
@@ -152,7 +153,7 @@ fun DubbingSelectionDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Dubbing",
+                            text = stringResource(MR.strings.label_dubbing),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
@@ -185,7 +186,7 @@ fun DubbingSelectionDialog(
 
                     Column(modifier = Modifier.weight(0.6f)) {
                         Text(
-                            text = "Quality",
+                            text = stringResource(MR.strings.reels_quality),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
@@ -194,7 +195,13 @@ fun DubbingSelectionDialog(
                         ) {
                             items(qualityOptions) { quality ->
                                 DubbingRadioItem(
-                                    text = if (quality == "best") "Best Available" else quality,
+                                    text = if (quality ==
+                                        "best"
+                                    ) {
+                                        stringResource(AYMR.strings.playback_quality_best_available)
+                                    } else {
+                                        quality
+                                    },
                                     selected = selectedQuality == quality,
                                     onClick = {
                                         when (effectivePlayer) {
@@ -221,7 +228,7 @@ fun DubbingSelectionDialog(
                         .verticalScroll(rememberScrollState()),
                 ) {
                     Text(
-                        text = "Dubbing",
+                        text = stringResource(MR.strings.label_dubbing),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
@@ -249,14 +256,20 @@ fun DubbingSelectionDialog(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                     Text(
-                        text = "Quality",
+                        text = stringResource(MR.strings.reels_quality),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
 
                     qualityOptions.forEach { quality ->
                         DubbingRadioItem(
-                            text = if (quality == "best") "Best Available" else quality,
+                            text = if (quality ==
+                                "best"
+                            ) {
+                                stringResource(AYMR.strings.playback_quality_best_available)
+                            } else {
+                                quality
+                            },
                             selected = selectedQuality == quality,
                             onClick = {
                                 when (effectivePlayer) {

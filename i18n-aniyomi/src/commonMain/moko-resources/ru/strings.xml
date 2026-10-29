@@ -3251,5 +3251,35 @@
     <string name="novel_reader_dictionary_target_language">Язык поиска в словаре</string>
     <string name="novel_reader_dictionary_source">Источник: %1$s</string>
     <string name="novel_reader_dictionary_fallback_language">Результаты для %1$s</string>
+
+    <!-- Reader dialog and highlight localization -->
+    <string name="novel_reader_private_bridge_request_summary">%1$s: отправка идёт одним запросом на главу. При ошибке включается fallback (batch=40, concurrency=1).</string>
+    <string name="novel_highlight_source_prefix">из</string>
+
+    <!-- Playback preferences dialog -->
+    <string name="playback_preferences_title">Настройки воспроизведения</string>
+    <string name="playback_quality_best_available">Лучшее доступное</string>
+
+    <string name="aurora_stats_no_score">Без оценки</string>
+
+    <!-- Debug information screen -->
+    <string name="debug_info_app">Информация о приложении</string>
+    <string name="debug_info_version">Версия</string>
+    <string name="debug_info_build_time">Дата сборки</string>
+    <string name="debug_info_webview_version">Версия WebView</string>
+    <string name="debug_info_profile_status">Статус компиляции профиля</string>
+    <string name="debug_info_model">Модель</string>
+    <string name="debug_info_oneui_version">Версия One UI</string>
+    <string name="debug_info_miui_version">Версия MIUI</string>
+    <string name="debug_info_android_version">Версия Android</string>
+    <string name="debug_info_device">Информация об устройстве</string>
+    <string name="debug_info_profile_not_installed">Профиль не установлен</string>
+    <string name="debug_info_profile_compiled">Скомпилировано</string>
+    <string name="debug_info_profile_non_matching">Скомпилировано с несовпадающим профилем</string>
+    <string name="debug_info_profile_error">Ошибка %1$d</string>
+    <string name="debug_info_profile_unsupported">Не поддерживается</string>
+    <string name="debug_info_profile_pending">Ожидает компиляции</string>
+    <string name="debug_info_profile_not_embedded">Встроенный профиль отсутствует</string>
+    <string name="debug_info_profile_unknown">Неизвестный код %1$d</string>
 </resources>
 

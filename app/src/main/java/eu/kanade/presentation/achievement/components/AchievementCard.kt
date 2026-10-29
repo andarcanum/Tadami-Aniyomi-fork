@@ -399,7 +399,7 @@ private fun ThinNeonProgressBar(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "PROGRESS",
+                text = stringResource(AYMR.strings.achievement_progress_label),
                 color = colors.textSecondary.copy(alpha = 0.4f),
                 fontSize = 8.sp,
                 fontWeight = FontWeight.SemiBold,
