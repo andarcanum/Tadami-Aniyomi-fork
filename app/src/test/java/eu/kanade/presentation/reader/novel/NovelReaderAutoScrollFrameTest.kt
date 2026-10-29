@@ -72,4 +72,12 @@ class NovelReaderAutoScrollFrameTest {
         advance.stepPx shouldBe 0
         advance.shouldSkipFrame shouldBe true
     }
+
+    @Test
+    fun `auto scroll pixels per second matches exact native 16ms scale rates`() {
+        autoScrollPixelsPerSecond(1) shouldBe 31.25f
+        val speed37 = autoScrollPixelsPerSecond(37)
+        (speed37 > 133.52f && speed37 < 133.53f) shouldBe true
+        autoScrollPixelsPerSecond(100) shouldBe 312.5f
+    }
 }

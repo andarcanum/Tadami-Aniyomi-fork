@@ -1325,6 +1325,9 @@
     <string name="exception_http">HTTP %d, check website in WebView</string>
     <string name="exception_offline">No Internet connection</string>
     <string name="exception_unknown_host">Couldn\'t reach %s</string>
+    <string name="exception_network">Couldn\'t connect to the source. Check your Internet connection and try again.</string>
+    <string name="exception_timeout">The source didn\'t respond in time. Try again later.</string>
+    <string name="exception_source_error">Couldn\'t load data from the source. Try again later.</string>
 
     <!-- Novel reader - AI Translation -->
     <string name="reader_translation_running">Translation running</string>
@@ -1908,6 +1911,10 @@
     <string name="reels_editor_tags_failed">Failed to load tags</string>
     <string name="reels_sound_on">Sound on</string>
     <string name="reels_sound_off">Sound off</string>
+    <string name="reels_a11y_seek_back">Back 10 seconds</string>
+    <string name="reels_a11y_seek_forward">Forward 10 seconds</string>
+    <string name="reels_a11y_speed_2x">Play at 2× speed</string>
+    <string name="reels_a11y_speed_normal">Play at normal speed</string>
     <string name="reels_manage_follows">Manage subscriptions</string>
     <string name="reels_history_title">Recent</string>
     <string name="reels_history_empty">Nothing watched yet</string>
@@ -1947,6 +1954,8 @@
     <string name="reels_web_login_not_yet">Session not detected yet — finish signing in, then press Done</string>
     <string name="reels_niches">Niches</string>
     <string name="reels_niches_empty">No niches</string>
+    <string name="reels_niches_search">Search channels or @username</string>
+    <string name="reels_niches_search_empty">Nothing found</string>
     <string name="reels_search_tab_niches">Niches</string>
     <string name="reels_search_tab_creators">Creators</string>
     <string name="reels_search_tab_tags">Tags</string>
@@ -1985,6 +1994,7 @@
     <string name="reels_following_creators_unavailable">Creators unavailable: %1$d of %2$d</string>
     <string name="reels_offline_failed_quota">Not enough offline storage space</string>
     <string name="reels_offline_failed_network">Download failed (network or source)</string>
+    <string name="reels_offline_failed_unsupported">This reel streams as HLS/DASH and cannot be saved offline</string>
     <string name="reels_feed_empty">Nothing here yet</string>
     <string name="reels_history_delete">Delete entry</string>
     <string name="reels_quality_hd_saver">HD (SD on mobile data)</string>
@@ -2038,4 +2048,17 @@
     <string name="debug_workers_enqueued">Enqueued</string>
     <string name="debug_workers_finished">Finished</string>
     <string name="debug_workers_running">Running</string>
+    <string name="reels_album_unavailable">This source no longer provides albums</string>
+    <string name="reels_album_search_loaded">Loaded %1$d videos · more available</string>
+    <string name="reels_album_search_empty">No loaded video matches the search</string>
+    <string name="reels_album_search_load_more">Load more videos</string>
+    <string name="reels_menu_section_for_you">For You</string>
+    <string name="reels_menu_unseen_only">Only unwatched</string>
+    <string name="reels_menu_reset_history">Reset For You history</string>
+    <string name="reels_reset_history_confirm">Recommend watched and skipped reels again? Hidden reels and creators stay hidden.</string>
+    <string name="reels_feed_empty_unseen">No unwatched reels left</string>
+    <string name="reels_feed_empty_unseen_scanning">Still looking for unwatched reels</string>
+    <string name="reels_feed_show_watched">Show watched</string>
+    <string name="reels_session_restore_pending">Preparing saved videos…</string>
+    <string name="reels_session_buffer_full">Saved feed buffer is full. Watch or skip remaining videos to continue loading.</string>
 </resources>

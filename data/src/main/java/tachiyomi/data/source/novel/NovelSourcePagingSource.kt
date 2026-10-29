@@ -111,8 +111,8 @@ abstract class NovelSourcePagingSource(
 
 private fun SNovel.toDomainNovel(sourceId: Long): Novel {
     return Novel.create().copy(
-        url = url,
-        title = title,
+        url = url.trim(),
+        title = title.trim(),
         author = author,
         description = description?.trim(),
         genre = genre?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() },

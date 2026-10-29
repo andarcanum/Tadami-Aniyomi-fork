@@ -35,10 +35,11 @@ class NovelRichContentParserTest {
         result.blocks shouldHaveSize 1
         assertFalse(result.unsupportedFeaturesDetected)
         val paragraph = result.blocks.first() as NovelRichContentBlock.Paragraph
-        paragraph.segments.map { it.text.trim() }.filter { it.isNotEmpty() } shouldBe listOf("Bold", "Italic", "Link")
-        paragraph.segments[0].style.bold shouldBe true
-        paragraph.segments[1].style.italic shouldBe true
-        paragraph.segments[2].linkUrl shouldBe "https://example.com"
+        val meaningfulSegments = paragraph.segments.filter { it.text.isNotBlank() }
+        meaningfulSegments[0].style.bold shouldBe true
+        meaningfulSegments[1].style.italic shouldBe true
+        meaningfulSegments[2].linkUrl shouldBe "https://example.com"
+        paragraph.segments.joinToString(separator = "") { it.text } shouldBe "Bold Italic Link"
     }
 
     @Test
@@ -417,5 +418,50 @@ class NovelRichContentParserTest {
         val result = parseNovelRichContent(html)
 
         assertTrue(result.unsupportedFeaturesDetected)
+    }
+
+    @Test
+    fun `parser reads data-o data-l and nb-title`() {
+        val html = """
+            <h2 class="nb-title" data-an-b="1:0" data-o="0" data-l="10">Title</h2>
+            <p data-an-b="1:1" data-o="10" data-l="20">Paragraph</p>
+            <blockquote data-an-b="1:2" data-o="30" data-l="15">Quote</blockquote>
+            <hr data-an-b="1:3" data-o="45" data-l="1" />
+            <img src="https://example.com/img.png" data-an-b="1:4" data-o="46" data-l="1" />
+        """.trimIndent()
+
+        val blocks = parseNovelRichContent(html).blocks
+        blocks shouldHaveSize 5
+
+        val heading = blocks[0] as NovelRichContentBlock.Heading
+        heading.isBookChapterHeading shouldBe true
+        heading.bookRange shouldBe NovelBookSourceRange(0, 10)
+
+        val paragraph = blocks[1] as NovelRichContentBlock.Paragraph
+        paragraph.bookRange shouldBe NovelBookSourceRange(10, 20)
+
+        val quote = blocks[2] as NovelRichContentBlock.BlockQuote
+        quote.bookRange shouldBe NovelBookSourceRange(30, 15)
+
+        val hr = blocks[3] as NovelRichContentBlock.HorizontalRule
+        hr.bookRange shouldBe NovelBookSourceRange(45, 1)
+
+        val img = blocks[4] as NovelRichContentBlock.Image
+        img.bookRange shouldBe NovelBookSourceRange(46, 1)
+    }
+
+    @Test
+    fun `parser leaves bookRange null for ordinary markup without data attributes`() {
+        val html = """
+            <h2>Ordinary Title</h2>
+            <p>Ordinary Paragraph</p>
+        """.trimIndent()
+
+        val blocks = parseNovelRichContent(html).blocks
+        blocks shouldHaveSize 2
+        val heading = blocks[0] as NovelRichContentBlock.Heading
+        heading.isBookChapterHeading shouldBe false
+        heading.bookRange shouldBe null
+        blocks[1].bookRange shouldBe null
     }
 }

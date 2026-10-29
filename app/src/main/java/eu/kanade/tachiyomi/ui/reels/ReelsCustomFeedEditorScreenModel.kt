@@ -16,10 +16,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+private const val SAVE_TIMEOUT_MS = 60_000L
 
 /**
  * State for the custom-feed editor (contract v19). Create mode when [feedId] is null; edit
@@ -32,7 +35,11 @@ class ReelsCustomFeedEditorScreenModel(
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : StateScreenModel<ReelsCustomFeedEditorScreenModel.State>(
-    State(name = initialName.orEmpty()),
+    State(
+        name = initialName.orEmpty(),
+        // Create mode has no detail to load; edit mode is only editable once it arrives.
+        isDetailLoaded = feedId == null,
+    ),
 ) {
 
     private val source: AnimeCustomFeedSource?
@@ -43,11 +50,13 @@ class ReelsCustomFeedEditorScreenModel(
     }
 
     private fun load() {
+        mutableState.update { it.copy(isLoading = true, error = null, errorRes = null) }
         val src = source
         if (src == null) {
             mutableState.update {
                 it.copy(
                     isLoading = false,
+                    isDetailLoaded = false,
                     error = null,
                     errorRes = MR.strings.reels_source_missing_custom_feeds,
                 )
@@ -63,6 +72,9 @@ class ReelsCustomFeedEditorScreenModel(
             mutableState.update { current ->
                 current.copy(
                     isLoading = false,
+                    // An edit form without its detail does not know the existing tags; it
+                    // must not be saved as if the incomplete state were the user's intent.
+                    isDetailLoaded = if (detailFailed) false else detail != null || feedId == null,
                     allTags = tags.orEmpty().toImmutableList(),
                     selectedTags = detail?.tags?.toImmutableSet() ?: current.selectedTags,
                     name = detail?.name ?: current.name,
@@ -78,6 +90,11 @@ class ReelsCustomFeedEditorScreenModel(
         }
     }
 
+    fun retryLoad() {
+        if (state.value.isLoading) return
+        load()
+    }
+
     fun setName(value: String) = mutableState.update { it.copy(name = value) }
 
     fun toggleTag(tag: String) = mutableState.update { current ->
@@ -90,15 +107,18 @@ class ReelsCustomFeedEditorScreenModel(
     fun save() {
         val src = source ?: return
         val name = state.value.name.trim()
-        if (state.value.isSaving || name.isEmpty()) return
+        if (state.value.isSaving || !state.value.isDetailLoaded || name.isEmpty()) return
         val tags = state.value.selectedTags.toList()
         mutableState.update { it.copy(isSaving = true, error = null, errorRes = null) }
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val ok = if (feedId != null) {
-                runCatching { src.updateCustomFeed(feedId, name, tags) }.getOrDefault(false)
-            } else {
-                runCatching { src.createCustomFeed(name, tags) }.isSuccess
-            }
+            // A source call that never returns must not pin the editor in isSaving forever.
+            val ok = withTimeoutOrNull(SAVE_TIMEOUT_MS) {
+                if (feedId != null) {
+                    runCatching { src.updateCustomFeed(feedId, name, tags) }.getOrDefault(false)
+                } else {
+                    runCatching { src.createCustomFeed(name, tags) }.isSuccess
+                }
+            } ?: false
             mutableState.update { current ->
                 if (ok) {
                     current.copy(isSaving = false, isSaved = true)
@@ -117,6 +137,9 @@ class ReelsCustomFeedEditorScreenModel(
         val isLoading: Boolean = true,
         val isSaving: Boolean = false,
         val isSaved: Boolean = false,
+        // Edit mode: false until getCustomFeedDetail succeeds. Saving an incomplete form
+        // would send an empty tag list as if it were the user's chosen replacement.
+        val isDetailLoaded: Boolean = false,
         // Raw transport failure text (if any); blank values render nothing.
         val error: String? = null,
         // Static, localizable failure chosen by the model.

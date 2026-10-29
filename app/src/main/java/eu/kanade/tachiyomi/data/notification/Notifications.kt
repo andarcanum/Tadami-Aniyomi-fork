@@ -106,6 +106,20 @@ object Notifications {
     const val ID_ANILIST_IMPORT_COMPLETE = -806
 
     /**
+     * Notification id used by Discovery feed update.
+     */
+    const val ID_DISCOVERY_PROGRESS_ANIME = -711
+    const val ID_DISCOVERY_PROGRESS_MANGA = -712
+    const val ID_DISCOVERY_PROGRESS_NOVEL = -713
+
+    fun discoveryProgressId(mediaType: tachiyomi.domain.discovery.model.DiscoveryMediaType): Int =
+        when (mediaType) {
+            tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME -> ID_DISCOVERY_PROGRESS_ANIME
+            tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA -> ID_DISCOVERY_PROGRESS_MANGA
+            tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL -> ID_DISCOVERY_PROGRESS_NOVEL
+        }
+
+    /**
      * Notification channel used for Incognito Mode
      */
     const val CHANNEL_INCOGNITO_MODE = "incognito_mode_channel"

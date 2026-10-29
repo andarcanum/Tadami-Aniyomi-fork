@@ -12,7 +12,10 @@ data class DiscoveryFeed(
     val mediaType: DiscoveryMediaType,
     val rows: Map<DiscoveryRowType, List<DiscoveryRowItem>>,
     val failedRows: Set<DiscoveryRowType>,
+    val degradedRows: Set<DiscoveryRowType> = emptySet(),
     val generatedAt: Long,
+    /** Builder output before coordinator filtering; diagnostics only. */
+    val rawCandidates: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
 )
 
 /**
@@ -32,8 +35,9 @@ class DiscoveryCoordinator(
         context: DiscoveryBuildContext,
         onRowAvailable: suspend (DiscoveryRowType, List<DiscoveryRowItem>) -> Unit,
     ): DiscoveryFeed = supervisorScope {
-        val channel = Channel<Pair<DiscoveryRowType, List<DiscoveryRowItem>?>>(Channel.UNLIMITED)
+        val channel = Channel<Triple<DiscoveryRowType, List<DiscoveryRowItem>?, Boolean>>(Channel.UNLIMITED)
         val failed = mutableSetOf<DiscoveryRowType>()
+        val degraded = mutableSetOf<DiscoveryRowType>()
         val excluded = context.libraryCleanTitles + context.historyCleanTitles + context.hiddenCleanTitles
         val rawCandidates = mutableMapOf<DiscoveryRowType, List<DiscoveryRowItem>>()
         val finalRows = mutableMapOf<DiscoveryRowType, List<DiscoveryRowItem>>()
@@ -48,15 +52,33 @@ class DiscoveryCoordinator(
                     logcat { "[DiscoveryCoordinator] row ${builder.rowType} FAILED: ${e.message}" }
                     null
                 }
-                channel.send(builder.rowType to items)
+                channel.send(Triple(builder.rowType, items, builder.isDegraded))
             }
         }
 
+        var completed = 0
         repeat(rowBuilders.size) {
-            val (type, items) = channel.receive()
+            val (type, items, isDegraded) = channel.receive()
+            completed++
+            val stage = when (type) {
+                DiscoveryRowType.LIKE -> "Подбор похожего"
+                DiscoveryRowType.TASTE -> "Анализ предпочтений"
+                DiscoveryRowType.TREND -> "Загрузка трендов"
+                DiscoveryRowType.SOURCE -> "Опрос источников"
+            }
+            DiscoveryProgressTracker.update(
+                isRunning = true,
+                mediaType = context.mediaType,
+                stageText = "$stage ($completed/${rowBuilders.size})",
+                current = completed,
+                total = rowBuilders.size,
+            )
             if (items == null) {
                 failed += type
             } else {
+                if (isDegraded) {
+                    degraded += type
+                }
                 rawCandidates[type] = items
 
                 // Пересчитываем все полученные ряды в строгом порядке приоритета enum: LIKE > TASTE > TREND > SOURCE.
@@ -65,15 +87,28 @@ class DiscoveryCoordinator(
 
                 for (pType in DiscoveryRowType.entries) {
                     val candidates = rawCandidates[pType] ?: continue
-                    val selected = selectRowItems(
+                    val policyFiltered = context.candidatePolicy.filterRowCandidates(
                         candidates,
+                        genresSelector = { it.genres },
+                    )
+                    val selected = selectRowItems(
+                        policyFiltered,
                         excluded,
                         seenSoFar,
                         context.recentCleanTitles,
                         context.shownCutoffMap,
                         context.currentFeedCleanTitles,
                     )
-                    selected.forEach { seenSoFar += it.cleanTitle }
+                    logcat {
+                        "[DiscoverySelection] media=${context.mediaType} row=$pType raw=${candidates.size} " +
+                            "genre=${policyFiltered.size} selected=${selected.size} " +
+                            "excludedCurrent=${context.currentFeedCleanTitles.size} " +
+                            "excludedKnown=${excluded.size} seenAcrossRows=${seenSoFar.size}"
+                    }
+                    selected.forEach {
+                        seenSoFar += it.cleanTitle
+                        seenSoFar += it.altCleanTitles
+                    }
 
                     if (finalRows[pType] != selected) {
                         finalRows[pType] = selected
@@ -93,7 +128,9 @@ class DiscoveryCoordinator(
             mediaType = context.mediaType,
             rows = finalRows,
             failedRows = failed,
+            degradedRows = degraded,
             generatedAt = System.currentTimeMillis(),
+            rawCandidates = rawCandidates.toMap(),
         )
     }
 
@@ -109,7 +146,10 @@ class DiscoveryCoordinator(
         currentFeedCleanTitles: Set<String> = emptySet(),
     ): List<DiscoveryRowItem> {
         val valid = items
-            .filterNot { it.cleanTitle.isBlank() || it.cleanTitle in excluded || it.cleanTitle in seen }
+            .filterNot { item ->
+                val keys = listOf(item.cleanTitle) + item.altCleanTitles
+                keys.any { it.isBlank() || it in excluded || it in seen }
+            }
             .distinctBy { it.cleanTitle }
 
         val clustered = filterFranchiseClustering(valid, maxPerSeries = 2)

@@ -2,6 +2,7 @@ package eu.kanade.presentation.entries.components.aurora
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -106,11 +108,21 @@ fun QuietMetadataRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
+    val clickModifier = if (onClick != null) {
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+    } else {
+        Modifier
+    }
 
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .then(clickModifier)
+            .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -132,7 +144,7 @@ fun QuietMetadataRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = colors.textSecondary.copy(alpha = 0.78f),
+                tint = if (onClick != null) colors.accent else colors.textSecondary.copy(alpha = 0.78f),
                 modifier = Modifier.size(14.dp),
             )
             Text(

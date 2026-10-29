@@ -17,15 +17,23 @@ class DiscoverySourceParticipationTest {
     }
 
     @Test
-    fun `manual caps at 8 in weight order`() {
-        val weightOrder = (1L..10L).toList()
+    fun `manual allows all 15 in weight order and respects exclusions`() {
+        val weightOrder = (1L..15L).toList()
         resolveSourceParticipation(
             mode = "manual",
             excludedIds = emptySet(),
             weightOrder = weightOrder,
             lastUsedId = -1L,
             fallbackId = -1L,
-        ).sourceIds shouldBe (1L..8L).toList()
+        ).sourceIds shouldBe (1L..15L).toList()
+
+        resolveSourceParticipation(
+            mode = "manual",
+            excludedIds = setOf(2L, 5L, 10L),
+            weightOrder = weightOrder,
+            lastUsedId = -1L,
+            fallbackId = -1L,
+        ).sourceIds shouldBe weightOrder.filterNot { it in setOf(2L, 5L, 10L) }
     }
 
     @Test
@@ -104,5 +112,17 @@ class DiscoverySourceParticipationTest {
     fun `plugin grouping keeps language variants together`() {
         groupSourcesByPlugin(setOf(1L, 2L, 3L)) { id -> if (id == 3L) "ext.b" else "ext.a" } shouldBe
             mapOf("ext.a" to listOf(1L, 2L), "ext.b" to listOf(3L))
+    }
+
+    @Test
+    fun `selectPluginRepresentative prefers active library source over preferred language fallback`() {
+        val members = setOf(1L, 2L)
+        val selected = selectPluginRepresentative(
+            memberIds = members,
+            langs = mapOf(1L to "ru", 2L to "en"),
+            weights = mapOf(1L to 100, 2L to 0),
+            appLang = "en",
+        )
+        selected shouldBe 1L
     }
 }

@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeExtensionStoreRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeSeriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.CustomButtonRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.DiscoveryRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ExtensionsRestorer
@@ -78,6 +79,7 @@ class BackupRestorer(
     private val animeRestorer: AnimeRestorer = AnimeRestorer(),
     private val mangaRestorer: MangaRestorer = MangaRestorer(),
     private val novelRestorer: NovelRestorer = NovelRestorer(),
+    private val animeSeriesRestorer: AnimeSeriesRestorer = AnimeSeriesRestorer(),
     private val mangaSeriesRestorer: MangaSeriesRestorer = MangaSeriesRestorer(),
     private val novelSeriesRestorer: NovelSeriesRestorer = NovelSeriesRestorer(),
     private val feedRestorer: FeedRestorer = FeedRestorer(),
@@ -228,6 +230,7 @@ class BackupRestorer(
                 restoreAmount += backup.backupNovel.size
                 expect(TYPE_NOVEL, backup.backupNovel.size)
             }
+            if (options.restoreAnime) restoreAmount += backup.backupAnimeSeries.size
             if (options.restoreManga) restoreAmount += backup.backupMangaSeries.size
             if (options.restoreNovel) restoreAmount += backup.backupNovelSeries.size
         }
@@ -300,6 +303,9 @@ class BackupRestorer(
                     )
                 }
                 libraryRestoreJobs.joinAll()
+                if (shouldRestoreAnime) {
+                    restoreAnimeSeries(backup.backupAnimeSeries)
+                }
                 if (shouldRestoreManga) {
                     restoreMangaSeries(backup.backupMangaSeries)
                 }
@@ -475,6 +481,21 @@ class BackupRestorer(
 
                 notifier.showRestoreProgress(it.title, advanceProgress(), restoreAmount, isSync)
             }
+    }
+
+    private suspend fun restoreAnimeSeries(
+        backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupAnimeSeries>,
+    ) {
+        backupSeries.forEach {
+            try {
+                animeSeriesRestorer.restore(listOf(it))
+            } catch (e: Exception) {
+                errors.add(
+                    Date() to "Anime series '${it.title}': ${e.message}",
+                )
+            }
+            notifier.showRestoreProgress(it.title, advanceProgress(), restoreAmount, isSync)
+        }
     }
 
     private suspend fun restoreMangaSeries(

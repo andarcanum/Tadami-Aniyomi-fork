@@ -36,6 +36,7 @@ fun NovelHistoryScreen(
     onClickCover: (novelId: Long) -> Unit,
     onClickResume: (chapterId: Long) -> Unit,
     onDialogChange: (NovelHistoryScreenModel.Dialog?) -> Unit,
+    searchQuery: String? = null,
 ) {
     val uiPreferences = Injekt.get<UiPreferences>()
     val theme by uiPreferences.appTheme().collectAsState()
@@ -48,8 +49,13 @@ fun NovelHistoryScreen(
             if (it == null) {
                 LoadingScreen(Modifier.padding(contentPadding))
             } else if (it.isEmpty()) {
+                val msg = if (!searchQuery.isNullOrEmpty()) {
+                    MR.strings.no_results_found
+                } else {
+                    MR.strings.information_no_recent_manga
+                }
                 EmptyScreen(
-                    stringRes = MR.strings.information_no_recent_manga,
+                    stringRes = msg,
                     modifier = Modifier.padding(contentPadding),
                 )
             } else {

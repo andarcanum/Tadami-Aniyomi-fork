@@ -16,9 +16,12 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.domain.achievement.model.AchievementEvent
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.history.novel.model.NovelHistoryUpdate
 import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import uy.kohesive.injekt.Injekt
@@ -34,6 +37,7 @@ internal interface NovelProgressPersistenceHost {
 
     fun progressCurrentChapterId(): Long?
     fun progressCurrentNovel(): Novel?
+    fun progressOrderedChapters(): List<NovelChapter> = emptyList()
 }
 
 /**
@@ -58,9 +62,25 @@ data class PendingProgressPersistence(
             lastPageRead = other.lastPageRead,
             emitReadEvent = emitReadEvent || other.emitReadEvent,
             emitNovelCompleted = emitNovelCompleted || other.emitNovelCompleted,
-            sessionReadDurationMs = maxOf(sessionReadDurationMs, other.sessionReadDurationMs),
+            sessionReadDurationMs = sessionReadDurationMs + other.sessionReadDurationMs,
         )
     }
+}
+
+/**
+ * Reading-order slot resolution for "After Reading Automatically Delete" (manga parity:
+ * ReaderViewModel.deleteChapterIfNeeded): when the chapter [completedChapterId] is finished,
+ * the chapter [slots] positions behind it is the one whose download gets removed.
+ */
+internal fun resolveSlotsDeleteTargetId(
+    orderedChapters: List<NovelChapter>,
+    completedChapterId: Long,
+    slots: Int,
+): Long? {
+    if (slots < 0) return null
+    val index = orderedChapters.indexOfFirst { it.id == completedChapterId }
+    if (index < 0) return null
+    return orderedChapters.getOrNull(index - slots)?.id
 }
 
 /**
@@ -77,10 +97,15 @@ internal class NovelProgressPersistenceController(
     private val eventBus: AchievementEventBus?,
     private val activityDataRepository: ActivityDataRepository,
     private val historyRepository: NovelHistoryRepository?,
+    private val downloadPreferences: DownloadPreferences = Injekt.get(),
+    private val getNovelCategories: GetNovelCategories = Injekt.get(),
+    private val novelDownloadManager: eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager? = null,
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
 
-    private var chapterReadStartTimeMs: Long = System.currentTimeMillis()
-    private var pendingHistoryReadDurationMs: Long = 0L
+    private var chapterReadStartTimeMs: Long = clockMs()
+    private val historyDurationLock = Any()
+    private val pendingHistoryDurationByChapterId = mutableMapOf<Long, Long>()
     private val progressPersistenceMutex = Mutex()
     private val pendingProgressPersistenceByChapterId = linkedMapOf<Long, PendingProgressPersistence>()
     private var progressPersistenceJob: Job? = null
@@ -94,13 +119,38 @@ internal class NovelProgressPersistenceController(
 
     /** Restarts the session read timer (chapter anchor moved or a new chapter was loaded). */
     fun resetSessionReadTimer() {
-        chapterReadStartTimeMs = System.currentTimeMillis()
+        chapterReadStartTimeMs = clockMs()
     }
 
-    /** Milliseconds elapsed since the session read timer was last reset. */
-    fun sessionReadDurationMs(): Long = System.currentTimeMillis() - chapterReadStartTimeMs
+    /** Consumes and returns milliseconds elapsed since the session read timer was last reset or captured. */
+    fun takeSessionReadDurationMs(): Long {
+        val now = clockMs()
+        val delta = (now - chapterReadStartTimeMs).coerceAtLeast(0L)
+        chapterReadStartTimeMs = now
+        val currentNovel = host.progressCurrentNovel()
+        if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
+            return 0L
+        }
+        return delta
+    }
+
+    /** Synchronously accepts read duration into the chapter's history bucket. */
+    fun queueHistoryReadDuration(chapterId: Long, durationMs: Long) {
+        if (durationMs <= 0L) return
+        val currentNovel = host.progressCurrentNovel()
+        if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
+            return
+        }
+        synchronized(historyDurationLock) {
+            val current = pendingHistoryDurationByChapterId.getOrDefault(chapterId, 0L)
+            pendingHistoryDurationByChapterId[chapterId] = current + durationMs
+        }
+    }
 
     fun enqueueProgressPersistence(update: PendingProgressPersistence) {
+        if (update.sessionReadDurationMs > 0L) {
+            queueHistoryReadDuration(update.chapterId, update.sessionReadDurationMs)
+        }
         progressPersistenceScheduled = true
         // NonCancellable must wrap the block via withContext — passing it to launch() is
         // deprecated and breaks structured concurrency (will become an error).
@@ -151,13 +201,26 @@ internal class NovelProgressPersistenceController(
     }
 
     suspend fun persistCurrentChapterExitState() {
-        val chapterId = host.progressCurrentChapterId() ?: return
-        val finalReadDurationMs = (System.currentTimeMillis() - chapterReadStartTimeMs).coerceAtLeast(0L)
-        awaitPendingProgressPersistence()
-        flushPendingHistorySnapshot(
-            chapterId = chapterId,
-            additionalReadDurationMs = finalReadDurationMs,
-        )
+        withContext(NonCancellable) {
+            val chapterId = host.progressCurrentChapterId()
+            if (chapterId != null) {
+                val finalReadDurationMs = takeSessionReadDurationMs()
+                if (finalReadDurationMs > 0L) {
+                    queueHistoryReadDuration(chapterId, finalReadDurationMs)
+                }
+            }
+            awaitPendingProgressPersistence()
+            val residual = synchronized(historyDurationLock) {
+                val copy = HashMap(pendingHistoryDurationByChapterId)
+                pendingHistoryDurationByChapterId.clear()
+                copy
+            }
+            residual.forEach { (chapId, duration) ->
+                if (duration > 0L) {
+                    saveHistorySnapshot(chapId, duration)
+                }
+            }
+        }
     }
 
     /**
@@ -193,6 +256,11 @@ internal class NovelProgressPersistenceController(
                 ),
             )
 
+            if (nextUpdate.read) {
+                maybeDeleteReadChapterDownloads(nextUpdate)
+            }
+
+            val sessionDuration = nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
             if (nextUpdate.emitReadEvent) {
                 runCatching {
                     if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
@@ -212,7 +280,7 @@ internal class NovelProgressPersistenceController(
                 activityDataRepository.recordReading(
                     id = nextUpdate.chapterId,
                     chaptersCount = 1,
-                    durationMs = nextUpdate.sessionReadDurationMs.coerceAtLeast(0L),
+                    durationMs = sessionDuration,
                 )
                 if (Injekt.get<eu.kanade.domain.track.service.TrackPreferences>().autoUpdateTrack().get()) {
                     val context = Injekt.get<Application>()
@@ -222,14 +290,17 @@ internal class NovelProgressPersistenceController(
                         nextUpdate.chapterNumber.toDouble(),
                     )
                 }
+            } else if (sessionDuration > 0L) {
+                activityDataRepository.recordReading(
+                    id = nextUpdate.chapterId,
+                    chaptersCount = 0,
+                    durationMs = sessionDuration,
+                )
             }
 
-            val now = System.currentTimeMillis()
-            pendingHistoryReadDurationMs += nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
             if (nextUpdate.emitReadEvent) {
                 flushPendingHistorySnapshot(nextUpdate.chapterId)
             }
-            chapterReadStartTimeMs = now
         }
     }
 
@@ -278,10 +349,51 @@ internal class NovelProgressPersistenceController(
         chapterId: Long,
         additionalReadDurationMs: Long = 0L,
     ) {
-        val readDurationMs = (pendingHistoryReadDurationMs + additionalReadDurationMs).coerceAtLeast(0L)
-        if (readDurationMs <= 0L) return
-        pendingHistoryReadDurationMs = 0L
-        saveHistorySnapshot(chapterId, readDurationMs)
+        val currentNovel = host.progressCurrentNovel()
+        if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
+            synchronized(historyDurationLock) {
+                pendingHistoryDurationByChapterId.remove(chapterId)
+            }
+            return
+        }
+        val durationToFlush: Long = synchronized(historyDurationLock) {
+            if (additionalReadDurationMs > 0L) {
+                val current = pendingHistoryDurationByChapterId.getOrDefault(chapterId, 0L)
+                pendingHistoryDurationByChapterId[chapterId] = current + additionalReadDurationMs
+            }
+            pendingHistoryDurationByChapterId.remove(chapterId) ?: 0L
+        }
+        if (durationToFlush <= 0L) return
+        saveHistorySnapshot(chapterId, durationToFlush)
+    }
+
+    /**
+     * Reader-side auto-cleanup: honors "Remove when marked as read" (delete the finished
+     * chapter download) and "After Reading Automatically Delete" slots (delete the chapter
+     * N behind in reading order), with the same bookmark/category protections as the screen.
+     */
+    private suspend fun maybeDeleteReadChapterDownloads(update: PendingProgressPersistence) {
+        val novel = host.progressCurrentNovel() ?: return
+        val removeMarkedRead = downloadPreferences.removeAfterMarkedAsRead().get()
+        val slots = downloadPreferences.removeAfterReadSlots().get()
+        if (!removeMarkedRead && slots == -1) return
+        val ordered = host.progressOrderedChapters()
+        val completed = ordered.firstOrNull { it.id == update.chapterId } ?: return
+        val targetIds = mutableSetOf<Long>()
+        if (removeMarkedRead) targetIds += completed.id
+        resolveSlotsDeleteTargetId(ordered, completed.id, slots)?.let { targetIds += it }
+        if (targetIds.isEmpty()) return
+        val allowBookmarked = downloadPreferences.removeBookmarkedChapters().get()
+        val excludedCategories = downloadPreferences.removeExcludeNovelCategories().get().mapNotNull {
+            it.toLongOrNull()
+        }
+        if (excludedCategories.isNotEmpty()) {
+            val novelCategoryIds = getNovelCategories.await(novel.id).mapTo(mutableSetOf()) { it.id }
+            if (novelCategoryIds.intersect(excludedCategories).isNotEmpty()) return
+        }
+        val deletable = ordered.filter { it.id in targetIds && (allowBookmarked || !it.bookmark) }
+        if (deletable.isEmpty()) return
+        novelDownloadManager?.deleteChapters(novel, deletable.mapTo(mutableSetOf()) { it.id })
     }
 
     /** Cancels the flush pipeline and drops pending writes (screen model disposal). */
@@ -289,6 +401,9 @@ internal class NovelProgressPersistenceController(
         progressPersistenceJob?.cancel()
         pendingProgressPersistenceByChapterId.clear()
         progressPersistenceScheduled = false
+        synchronized(historyDurationLock) {
+            pendingHistoryDurationByChapterId.clear()
+        }
     }
 
     companion object {

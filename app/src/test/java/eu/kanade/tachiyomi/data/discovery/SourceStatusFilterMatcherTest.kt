@@ -38,6 +38,15 @@ class SourceStatusFilterMatcherTest {
         SourceStatusFilterMatcher.isStatusFilterName("") shouldBe false
     }
 
+    @Test
+    fun `имена групп жанров и тегов разных языков распознаются`() {
+        listOf(
+            "Genre", "Genres", "Жанры", "Жанр", "Tags", "Теги", "Categories", "Категории", "Género", "ジャンル",
+        ).forEach { name ->
+            isGenreGroupName(name) shouldBe true
+        }
+    }
+
     // ═══════════ Статус опции ═══════════
 
     @Test

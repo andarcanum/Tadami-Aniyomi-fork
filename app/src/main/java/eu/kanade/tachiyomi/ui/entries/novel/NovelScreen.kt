@@ -103,6 +103,8 @@ import eu.kanade.presentation.entries.EditCoverAction
 import eu.kanade.presentation.entries.components.EditMetadataSheet
 import eu.kanade.presentation.entries.components.aurora.AuroraNoteEditorDialog
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
+import eu.kanade.presentation.entries.novel.NovelDeleteDownloadsConfirmDialog
+import eu.kanade.presentation.entries.novel.NovelDeleteDownloadsProgressDialog
 import eu.kanade.presentation.entries.novel.NovelScreen
 import eu.kanade.presentation.entries.novel.NovelTranslationBatchSheet
 import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
@@ -120,6 +122,7 @@ import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelSourcePreferencesScreen
 import eu.kanade.tachiyomi.ui.browse.novel.migration.search.MigrateNovelSearchScreen
+import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourcePagerScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
@@ -143,6 +146,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -202,6 +206,9 @@ class NovelScreen(
         var epubExportProgress by remember { mutableStateOf<NovelEpubExportProgress?>(null) }
         var showNotesDialog by remember { mutableStateOf(false) }
         var showEditMetadataSheet by remember { mutableStateOf(false) }
+        var deleteDownloadsRequest by remember {
+            mutableStateOf<Pair<NovelDownloadDeletionMode, Int>?>(null)
+        }
         val epubExportPreferences = screenModel.getEpubExportPreferences()
         BackHandler(enabled = screenModel.isAnyChapterSelected) {
             screenModel.toggleAllSelection(false)
@@ -437,6 +444,9 @@ class NovelScreen(
                     performGenresSearch(navigator, genres, successState.source)
                 }
             },
+            onSourceClick = {
+                openSource(navigator, successState.source, context)
+            },
             onSuggestionClick = { item ->
                 coroutineScope.launch {
                     navigator.push(item.toDirectEntryScreenOrNull() ?: item.toGlobalSearchScreen())
@@ -563,7 +573,21 @@ class NovelScreen(
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDownloadClicked = screenModel::downloadSelectedChapters,
-            onMultiDeleteClicked = screenModel::deleteDownloadedSelectedChapters,
+            onMultiDeleteClicked = {
+                val state = screenModel.state.value as? NovelScreenModel.State.Success
+                val count = state?.selectedChapterIds?.count { it in state.downloadedChapterIds } ?: 0
+                if (count > 0) deleteDownloadsRequest = NovelDownloadDeletionMode.SELECTED to count
+            },
+            onOpenDeleteDownloadsClicked = {
+                val state = screenModel.state.value as? NovelScreenModel.State.Success
+                val count = state?.downloadedChapterIds?.size ?: 0
+                if (count > 0) deleteDownloadsRequest = NovelDownloadDeletionMode.ALL to count
+            },
+            onOpenDeleteReadChaptersClicked = {
+                val state = screenModel.state.value as? NovelScreenModel.State.Success
+                val count = state?.chapters?.count { it.read && it.id in state.downloadedChapterIds } ?: 0
+                if (count > 0) deleteDownloadsRequest = NovelDownloadDeletionMode.READ to count
+            },
             onSaveScrollPosition = screenModel::saveScrollPosition,
             onClickEditInfo = { showEditMetadataSheet = true },
             onRetrySuggestions = screenModel::retrySuggestions,
@@ -632,6 +656,25 @@ class NovelScreen(
                     screenModel.runDownloadAction(action, amount)
                     showBatchDownloadDialog = false
                 },
+            )
+        }
+
+        deleteDownloadsRequest?.let { (mode, count) ->
+            NovelDeleteDownloadsConfirmDialog(
+                isReadMode = mode == NovelDownloadDeletionMode.READ,
+                count = count,
+                onDismissRequest = { deleteDownloadsRequest = null },
+                onConfirm = {
+                    deleteDownloadsRequest = null
+                    screenModel.deleteDownloadedChapters(mode)
+                },
+            )
+        }
+        successState.deletionProgress?.let { progress ->
+            NovelDeleteDownloadsProgressDialog(
+                deleted = progress.deleted,
+                total = progress.total,
+                onHide = screenModel::hideDeletionProgress,
             )
         }
 
@@ -1081,6 +1124,27 @@ class NovelScreen(
         }
 
         navigator.push(BrowseNovelSourceScreen(sourceId, null, genresQuery = genres))
+    }
+
+    private fun openSource(
+        navigator: cafe.adriel.voyager.navigator.Navigator,
+        source: eu.kanade.tachiyomi.novelsource.NovelSource,
+        context: Context,
+    ) {
+        if (source is StubNovelSource) {
+            context.toast(context.contextStringResource(MR.strings.source_not_installed, source.name))
+            return
+        }
+        val sourceId = source.id
+        val existing = navigator.items.firstOrNull { screen ->
+            (screen is BrowseNovelSourceScreen && screen.sourceId == sourceId) ||
+                (screen is BrowseNovelSourcePagerScreen && screen.initialSourceId == sourceId)
+        }
+        if (existing != null) {
+            navigator.popUntil { it == existing }
+            return
+        }
+        navigator.push(BrowseNovelSourceScreen(sourceId, null))
     }
 
     private fun openNovelInWebView(

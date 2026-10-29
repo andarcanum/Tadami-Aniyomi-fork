@@ -3,75 +3,79 @@ package eu.kanade.tachiyomi.data.backup.create.creators
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeHistory
+import eu.kanade.tachiyomi.data.backup.models.BackupAnimeTracking
 import eu.kanade.tachiyomi.data.backup.models.BackupEpisode
-import eu.kanade.tachiyomi.data.backup.models.backupAnimeTrackMapper
-import eu.kanade.tachiyomi.data.backup.models.backupEpisodeMapper
+import eu.kanade.tachiyomi.data.backup.models.backupAnimeTrackWithAnimeIdMapper
+import eu.kanade.tachiyomi.data.backup.models.backupEpisodeWithAnimeIdMapper
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
-import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.entries.anime.model.Anime
-import tachiyomi.domain.history.anime.interactor.GetAnimeHistory
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class AnimeBackupCreator(
     private val handler: AnimeDatabaseHandler = Injekt.get(),
-    private val getCategories: GetAnimeCategories = Injekt.get(),
-    private val getHistory: GetAnimeHistory = Injekt.get(),
 ) {
 
     suspend operator fun invoke(animes: List<Anime>, options: BackupOptions): List<BackupAnime> {
-        return animes.map {
-            backupAnime(it, options)
-        }
-    }
+        if (animes.isEmpty()) return emptyList()
+        val scopeIds = animes.mapTo(hashSetOf()) { it.id }
 
-    private suspend fun backupAnime(anime: Anime, options: BackupOptions): BackupAnime {
-        // Entry for this anime
-        val animeObject = anime.toBackupAnime()
-
-        if (options.chapters) {
-            // Backup all the episodes
+        val episodesByAnime = if (!options.chapters) {
+            emptyMap()
+        } else {
+            // Single-pass grouping: filter().groupBy() would allocate an intermediate list
+            // of every episode row on a large library.
+            val grouped = LinkedHashMap<Long, MutableList<BackupEpisode>>()
             handler.awaitList { db ->
-                db.episodesQueries.getEpisodesByAnimeId(
-                    animeId = anime.id,
-                    mapper = backupEpisodeMapper,
-                )
-            }
-                .takeUnless(List<BackupEpisode>::isEmpty)
-                ?.let { animeObject.episodes = it }
-        }
-
-        if (options.categories) {
-            // Backup categories for this anime
-            val categoriesForAnime = getCategories.await(anime.id)
-            if (categoriesForAnime.isNotEmpty()) {
-                animeObject.categories = categoriesForAnime.map { it.order }
-            }
-        }
-
-        if (options.tracking) {
-            val tracks = handler.awaitList { db ->
-                db.anime_syncQueries.getTracksByAnimeId(anime.id, backupAnimeTrackMapper)
-            }
-            if (tracks.isNotEmpty()) {
-                animeObject.tracking = tracks
-            }
-        }
-
-        if (options.history) {
-            val historyByAnimeId = getHistory.await(anime.id)
-            if (historyByAnimeId.isNotEmpty()) {
-                val history = historyByAnimeId.map { history ->
-                    val episode = handler.awaitOne { db -> db.episodesQueries.getEpisodeById(history.episodeId) }
-                    BackupAnimeHistory(episode.url, history.seenAt?.time ?: 0L)
-                }
-                if (history.isNotEmpty()) {
-                    animeObject.history = history
+                db.episodesQueries.getAllEpisodesForBackup(backupEpisodeWithAnimeIdMapper)
+            }.forEach { (animeId, episode) ->
+                if (animeId in scopeIds) {
+                    grouped.getOrPut(animeId) { ArrayList() }.add(episode)
                 }
             }
+            grouped
         }
 
-        return animeObject
+        val categoryOrdersByAnime = if (!options.categories) {
+            emptyMap()
+        } else {
+            handler.awaitList { db -> db.categoriesQueries.getAllAnimeCategoryOrders() }
+                .filter { it.anime_id in scopeIds }
+                .groupBy({ it.anime_id }, { it.`order` })
+        }
+
+        val tracksByAnime = if (!options.tracking) {
+            emptyMap()
+        } else {
+            handler.awaitList { db ->
+                db.anime_syncQueries.getAnimeTracks(backupAnimeTrackWithAnimeIdMapper)
+            }
+                .filter { it.first in scopeIds }
+                .groupBy({ it.first }, { it.second })
+        }
+
+        val historyByAnime = if (!options.history) {
+            emptyMap()
+        } else {
+            handler.awaitList { db -> db.animehistoryQueries.getAllAnimeHistoryWithEpisode() }
+                .filter { it.anime_id in scopeIds }
+                .groupBy { it.anime_id }
+        }
+
+        return animes.map { anime ->
+            anime.toBackupAnime().apply {
+                episodesByAnime[anime.id]?.takeUnless(List<BackupEpisode>::isEmpty)
+                    ?.let { episodes = it }
+                categoryOrdersByAnime[anime.id]?.takeUnless(List<Long>::isEmpty)
+                    ?.let { categories = it }
+                tracksByAnime[anime.id]?.takeUnless(List<BackupAnimeTracking>::isEmpty)
+                    ?.let { tracking = it }
+                historyByAnime[anime.id]?.map {
+                    BackupAnimeHistory(it.url, it.last_seen?.time ?: 0L)
+                }?.takeUnless(List<BackupAnimeHistory>::isEmpty)
+                    ?.let { history = it }
+            }
+        }
     }
 }
 

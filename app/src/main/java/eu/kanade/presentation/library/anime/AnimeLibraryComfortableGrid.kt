@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import eu.kanade.presentation.library.anime.components.SeriesStackedCoverCard
 import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
@@ -19,17 +20,19 @@ import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.library.anime.LibraryAnime
+import tachiyomi.domain.series.model.SeriesCoverMode
 
 @Composable
 internal fun AnimeLibraryComfortableGrid(
     items: List<AnimeLibraryItem>,
     columns: Int,
     contentPadding: PaddingValues,
-    selection: List<LibraryAnime>,
+    selection: List<AnimeLibraryItem>,
     selectedIds: Set<Long> = selection.idsToHashSet { it.id },
     state: LazyGridState = rememberLazyGridState(),
-    onClick: (LibraryAnime) -> Unit,
-    onLongClick: (LibraryAnime) -> Unit,
+    onClick: (AnimeLibraryItem) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
+    onLongClick: (AnimeLibraryItem) -> Unit,
     onTogglePinned: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
     searchQuery: String?,
@@ -45,13 +48,24 @@ internal fun AnimeLibraryComfortableGrid(
 
         items(
             items = items,
-            key = { it.libraryAnime.id },
+            key = { it.id },
             contentType = { "anime_library_comfortable_grid_item" },
         ) { libraryItem ->
-            val anime = libraryItem.libraryAnime.anime
+            val anime = libraryItem.coverAnime ?: libraryItem.libraryAnime.anime
+            val isSeries = libraryItem is AnimeLibraryItem.Series
+            val notSelectionMode = selection.isEmpty()
+            val title = if (isSeries) libraryItem.title else anime.displayTitle
+            val isSelected = selectedIds.contains(libraryItem.id)
+            val targetAnime = if (isSeries) {
+                libraryItem.librarySeries.entries.firstOrNull {
+                    it.anime.id == libraryItem.librarySeries.activeAnime?.id
+                } ?: libraryItem.libraryAnime
+            } else {
+                libraryItem.libraryAnime
+            }
             EntryComfortableGridItem(
-                isSelected = selectedIds.contains(libraryItem.libraryAnime.id),
-                title = anime.displayTitle,
+                isSelected = isSelected,
+                title = title,
                 coverData = AnimeCover(
                     animeId = anime.id,
                     sourceId = anime.source,
@@ -59,6 +73,16 @@ internal fun AnimeLibraryComfortableGrid(
                     url = anime.thumbnailUrl,
                     lastModified = anime.coverLastModified,
                 ),
+                customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
+                    {
+                        SeriesStackedCoverCard(
+                            covers = libraryItem.covers,
+                            isSelected = isSelected,
+                        )
+                    }
+                } else {
+                    null
+                },
                 coverBadgeStart = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnviewedBadge(count = libraryItem.unseenCount)
@@ -75,15 +99,21 @@ internal fun AnimeLibraryComfortableGrid(
                     null
                 },
                 menuContent = null,
-                onLongClick = { onLongClick(libraryItem.libraryAnime) },
-                onClick = { onClick(libraryItem.libraryAnime) },
+                onLongClick = { onLongClick(libraryItem) },
+                onClick = {
+                    if (notSelectionMode && isSeries) {
+                        onSeriesClicked(libraryItem.librarySeries.id)
+                    } else {
+                        onClick(libraryItem)
+                    }
+                },
                 onClickContinueViewing = if (
                     shouldShowContinueViewingAction(
                         hasContinueAction = onClickContinueWatching != null,
-                        remainingCount = libraryItem.libraryAnime.unseenCount,
+                        remainingCount = libraryItem.unseenCount,
                     )
                 ) {
-                    { onClickContinueWatching?.invoke(libraryItem.libraryAnime) }
+                    { onClickContinueWatching?.invoke(targetAnime) }
                 } else {
                     null
                 },

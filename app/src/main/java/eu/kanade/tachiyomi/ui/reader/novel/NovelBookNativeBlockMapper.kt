@@ -12,25 +12,36 @@ import eu.kanade.tachiyomi.data.book.novel.NovelBookNativeSegment
  * TTS highlighting) without breaking books that were compiled by an older version: an unknown field
  * is ignored by the codec and an unmapped one simply falls back to the renderer default.
  */
-internal fun NovelBookNativeBlock.toRichContentBlock(): NovelRichContentBlock? = when (kind) {
-    NovelBookNativeBlockKind.RULE -> NovelRichContentBlock.HorizontalRule()
-    NovelBookNativeBlockKind.IMAGE -> imageUrl?.let { url ->
-        NovelRichContentBlock.Image(url = url, alt = imageAlt)
+internal fun NovelBookNativeBlock.toRichContentBlock(): NovelRichContentBlock? {
+    val range = if (charStart >= 0 && charLength > 0) {
+        NovelBookSourceRange(charStart, charLength)
+    } else {
+        null
     }
-    NovelBookNativeBlockKind.HEADING -> NovelRichContentBlock.Heading(
-        level = level.coerceIn(1, 6),
-        segments = segments.map { it.toRichSegment() },
-        textAlign = align.toRichAlign(),
-    )
-    NovelBookNativeBlockKind.QUOTE -> NovelRichContentBlock.BlockQuote(
-        segments = segments.map { it.toRichSegment() },
-        textAlign = align.toRichAlign(),
-    )
-    NovelBookNativeBlockKind.PARAGRAPH -> NovelRichContentBlock.Paragraph(
-        segments = segments.map { it.toRichSegment() },
-        textAlign = align.toRichAlign(),
-        firstLineIndentEm = indentEm,
-    )
+    return when (kind) {
+        NovelBookNativeBlockKind.RULE -> NovelRichContentBlock.HorizontalRule(bookRange = range)
+        NovelBookNativeBlockKind.IMAGE -> imageUrl?.let { url ->
+            NovelRichContentBlock.Image(url = url, alt = imageAlt, bookRange = range)
+        }
+        NovelBookNativeBlockKind.HEADING -> NovelRichContentBlock.Heading(
+            level = level.coerceIn(1, 6),
+            segments = segments.map { it.toRichSegment() },
+            textAlign = align.toRichAlign(),
+            bookRange = range,
+            isBookChapterHeading = isChapterHeading,
+        )
+        NovelBookNativeBlockKind.QUOTE -> NovelRichContentBlock.BlockQuote(
+            segments = segments.map { it.toRichSegment() },
+            textAlign = align.toRichAlign(),
+            bookRange = range,
+        )
+        NovelBookNativeBlockKind.PARAGRAPH -> NovelRichContentBlock.Paragraph(
+            segments = segments.map { it.toRichSegment() },
+            textAlign = align.toRichAlign(),
+            firstLineIndentEm = indentEm,
+            bookRange = range,
+        )
+    }
 }
 
 /**

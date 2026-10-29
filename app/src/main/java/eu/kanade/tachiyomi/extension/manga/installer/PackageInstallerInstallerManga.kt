@@ -103,7 +103,8 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
                     PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED,
                 )
             }
-            val fileSize = service.getUriSize(entry.uri) ?: throw IllegalStateException()
+            val fileSize = service.getUriSize(entry.uri)
+                ?: throw IllegalStateException("Unable to determine APK size for ${entry.uri}")
             installParams.setSize(fileSize)
             activeSession = entry to packageInstaller.createSession(installParams)
             scheduleSessionTimeout(entry, activeSession!!.second)

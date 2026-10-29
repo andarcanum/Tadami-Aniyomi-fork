@@ -149,9 +149,11 @@ internal fun NovelBookReader(
     // last reported. Kept in a holder so a recomposition can never reopen the book at a stale
     // coordinate, and keyed by the book itself (its first section) rather than by the spine object,
     // which is replaced on every window sync of the same book.
-    val openLocation = remember(spine.sections.firstOrNull()?.chapterId) { arrayOf(initialLocation) }
+    val initialBookSectionChapterId = spine.sections.firstOrNull()?.chapterId
+    val openLocation = remember(initialBookSectionChapterId) { arrayOf(initialLocation) }
     // Id of the last applied seek request, so the same request is never applied twice.
     val lastAppliedSeekId = remember { longArrayOf(0L) }
+    var seekRetryVersion by remember { mutableStateOf(0) }
     val engineHolder = remember { arrayOfNulls<NovelBookEngine>(1) }
     // The renderer is created before the stitching lambda exists, so boundary reports from the
     // document are routed through this holder instead of duplicating the logic.
@@ -253,53 +255,64 @@ internal fun NovelBookReader(
         }.onFailure { failure = it }
         if (flowChanged) loading = false
     }
-    LaunchedEffect(seekRequest, opened) {
+    LaunchedEffect(seekRequest, opened, seekRetryVersion) {
         if (!opened) return@LaunchedEffect
         if (!shouldApplyBookSeek(seekRequest, lastAppliedSeekId[0])) return@LaunchedEffect
         val request = seekRequest ?: return@LaunchedEffect
-        lastAppliedSeekId[0] = request.id
         val location = request.location
-        openLocation[0] = location
         val isSameSection = location.sectionIndex == engine.location.sectionIndex
-        if (isSameSection) {
-            runCatching {
+        failure = null
+        if (!isSameSection) loading = true
+        var acknowledgedLocation = location
+        try {
+            runNovelReaderOperation {
                 operationMutex.withLock {
-                    engine.goTo(location)
-                }
-            }
-        } else {
-            loading = true
-            failure = null
-            runCatching {
-                operationMutex.withLock {
-                    engine.open(
-                        spine = latestSpine.value,
-                        location = location,
-                        flow = latestFlow.value,
-                    )
+                    if (isSameSection) {
+                        engine.goTo(location)
+                    } else {
+                        engine.open(
+                            spine = latestSpine.value,
+                            location = location,
+                            flow = latestFlow.value,
+                        )
+                    }
+                    // Reads back the clamped/acknowledged position; the raw request must not
+                    // become the baseline that later seeks are compared against.
+                    acknowledgedLocation = engine.location
                 }
             }.onSuccess {
-                appliedFlow = latestFlow.value
-                appliedReaderCss = latestReaderCss.value
+                openLocation[0] = acknowledgedLocation
+                lastAppliedSeekId[0] = request.id
+                if (!isSameSection) {
+                    appliedFlow = latestFlow.value
+                    appliedReaderCss = latestReaderCss.value
+                }
+                onSeekApplied(request.id)
             }.onFailure { failure = it }
-            loading = false
+        } finally {
+            if (!isSameSection) loading = false
         }
-        // The core hides the "restoring position" cover on this acknowledgement instead of on a
-        // timer, so it can never uncover the reader before the position actually landed.
-        onSeekApplied(request.id)
     }
 
-    val appliedSectionRevisions = remember(spine) { mutableMapOf<Int, Long>() }
-    LaunchedEffect(sectionRevisions, opened) {
+    val appliedSectionRevisions = remember(spineIdentity) { mutableMapOf<Int, Long>() }
+    LaunchedEffect(sectionRevisions, opened, spineIdentity) {
         if (!opened || sectionRevisions.isEmpty()) return@LaunchedEffect
         sectionRevisions.forEach { (sectionIndex, revision) ->
             if (appliedSectionRevisions[sectionIndex] == revision) return@forEach
-            appliedSectionRevisions[sectionIndex] = revision
-            val html = runCatching { loadSectionHtml(sectionIndex) }.getOrNull() ?: return@forEach
-            runCatching {
-                operationMutex.withLock {
-                    engine.replaceSection(sectionIndex = sectionIndex, html = html)
+            for (attempt in 0 until 3) {
+                val applied = runNovelReaderOperation {
+                    val html = loadSectionHtml(sectionIndex) ?: return@runNovelReaderOperation false
+                    operationMutex.withLock {
+                        engine.replaceSection(sectionIndex = sectionIndex, html = html)
+                    }
+                }.onFailure {
+                    android.util.Log.w("NovelReader", "Section replacement failed: $sectionIndex", it)
+                }.getOrDefault(false)
+                if (applied) {
+                    appliedSectionRevisions[sectionIndex] = revision
+                    break
                 }
+                if (attempt < 2) kotlinx.coroutines.delay(100L * (attempt + 1))
             }
         }
     }
@@ -418,7 +431,11 @@ internal fun NovelBookReader(
         } else if (failure != null) {
             Surface(modifier = Modifier.align(Alignment.Center)) {
                 IconButton(
-                    onClick = {
+                    onClick = retry@{
+                        if (opened && shouldApplyBookSeek(seekRequest, lastAppliedSeekId[0])) {
+                            seekRetryVersion += 1
+                            return@retry
+                        }
                         coroutineScope.launch {
                             loading = true
                             failure = null

@@ -1,6 +1,7 @@
 # Reels Feed Contract
 
-**Current version: 23** (`extensionLib` 12.0–23.0 accepted by the host) ·
+**Current version: 27** (`extensionLib` 12.0–27.0 accepted by the host; v24–v26 are
+purely additive and stay below the v27 ceiling) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
@@ -12,13 +13,32 @@ API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/anime
 [`FeedPage`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedPage.kt),
 [`ShortVideoItem`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ShortVideoItem.kt),
 [`AnimeFeedWebLoginSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedWebLoginSource.kt),
+[`AnimeFeedOriginScopedSessionSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedOriginScopedSessionSource.kt),
+[`WebLoginCookie`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/WebLoginCookie.kt),
+[`AnimeFeedMediaDescriptorSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedMediaDescriptorSource.kt),
+[`FeedMediaDescriptor`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedMediaDescriptor.kt),
+[`FeedMediaKind`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedMediaKind.kt),
+[`AnimeFeedErrorClassifierSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedErrorClassifierSource.kt),
+[`FeedError`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedError.kt),
 [`AnimeFeedBrowseSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedBrowseSource.kt),
 [`AnimeCategorizedSearchSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategorizedSearchSource.kt),
 [`FeedCategory`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedCategory.kt),
 [`FeedCategoryPage`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedCategoryPage.kt),
 [`SearchSuggestion`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/SearchSuggestion.kt),
 [`SearchSuggestions`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/SearchSuggestions.kt),
-[`AnimeCategoryFeedOrderSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategoryFeedOrderSource.kt)
+[`AnimeCategoryFeedOrderSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategoryFeedOrderSource.kt),
+[`AnimeCategorySubscriptionSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategorySubscriptionSource.kt),
+[`AnimeContentPreferencesSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeContentPreferencesSource.kt),
+[`AnimeBlockedTagsSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeBlockedTagsSource.kt),
+[`AnimeFeedLoginInstrumentationSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedLoginInstrumentationSource.kt),
+[`AnimeFeedVideoResolverSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedVideoResolverSource.kt),
+[`AnimeAlbumSearchSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeAlbumSearchSource.kt),
+[`AnimeSearchHintsSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeSearchHintsSource.kt),
+[`AnimeFeedAccountIdentitySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedAccountIdentitySource.kt),
+[`AnimeFeedReplaySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedReplaySource.kt),
+[`FeedReplayContext`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayContext.kt),
+[`FeedReplayItemResult`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayItemResult.kt),
+[`ContentPreferenceOption`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ContentPreferenceOption.kt)
 
 This document is the standalone reference for authors of short-video feed
 (“Reels”) extensions. The Kotlin contracts live in `:source-api`; this file
@@ -103,6 +123,29 @@ back on the service domain and on the dialog's explicit "Done" action; `false` k
 open. Sources with this capability also implement `AnimeFeedLoginSource` for session state, and
 the host never shows them the password dialog.
 
+## Origin-scoped session import (v24 capability interface)
+
+`AnimeFeedOriginScopedSessionSource` is an optional refinement of `AnimeFeedWebLoginSource`
+for services that keep their session on more than one origin (web app + api host, or the same
+host on two ports). The legacy dump is one merged `name → value` map, so same-named cookies
+from different origins collapse there (last origin wins) and the source cannot tell which
+value belongs to which service. Sources implementing this capability receive
+`List<WebLoginCookie>` instead: each record carries `origin` (`scheme://host[:port]`, default
+ports folded, path/query never included) next to `name`/`value`.
+
+Host behavior: it checks `source is AnimeFeedOriginScopedSessionSource` at import time and
+calls `importWebSessionScoped(cookies, localStorage)` / `importWebRedirectScoped(url, cookies)`
+instead of the legacy methods. The dump origin set is the source's explicit
+`extraSessionCookieOrigins` (contract v22) when supplied; otherwise the host seeds the start
+origin plus its `api.` sibling (`www.` stripped) and grows the set with every page the WebView
+visits. A source that implements only this capability but not `AnimeFeedWebLoginSource` is
+never offered the web login; the unscoped methods must stay functional for hosts that predate
+v24, because those hosts will call them.
+
+Implementing the capability is additive: instanceof detection only, no `LIB_VERSION` bump,
+and every member is abstract (no default members on existing interfaces, see the v22 note in
+the evolution rules).
+
 ## Category browse (v20 capability interface)
 
 `AnimeFeedBrowseSource` serves a public category directory (`getBrowseCategories`) and one
@@ -162,6 +205,153 @@ playlist can recover when those links expire. The host calls it lazily per item,
 stored URL on null/failure, and never surfaces resolver errors. Instanceof-detected; sources
 without it keep storing and replaying the original URLs.
 
+## Account identity for durable history (v26 capability interface)
+
+`AnimeFeedAccountIdentitySource.accountScopeId(): String?` lets a source name the account it is
+serving right now with a **stable, non-secret** identifier.
+
+The host keeps the durable "already watched / deliberately skipped" summary and the candidate
+inbox keyed by `(source, account scope, item id)`. It has no way to derive that scope on its own:
+`loggedInAccount()` is a *display* label (it changes with the profile name and is reused by
+different accounts), and a session token or cookie is a secret that must never be written into a
+history table. So the host asks the source, and falls back to a source-scoped history when the
+answer is `null`.
+
+```kotlin
+interface AnimeFeedAccountIdentitySource {
+    fun accountScopeId(): String?
+}
+```
+
+- Return the backend's **numeric user id** (Telegram: TDLib `me.id`; a REST service: the `id`
+  field of the session). Anything that survives relogin, rename, app restart and reinstall of the
+  plugin. Do not return an `@handle`, a phone number, an email, a token, a signed URL or a
+  `createdAt` stamp.
+- Return `null` when no identity is proven — signed out, TDLib not ready, guest session, web
+  session imported without an id. `null` is the correct answer, not `""`: an empty or fabricated
+  value merges unrelated accounts into one history and makes "watched" items disappear for the
+  next person who signs in.
+- Must be cheap and synchronous (an in-memory field, not a network call), because the host calls
+  it when the For You feed is opened and again on every committed interaction. Cache the id at
+  login time and clear it on logout, together with the session.
+- Instanceof-detected; sources without the capability keep a source-scoped history. Additive: no
+  default members on existing interfaces, and pre-v26 hosts never ask.
+- **`extensionLib` 26.0 for implementers.** A plugin that *implements* the interface links
+  against it, so an older host would fail to load its class. Such a plugin must declare
+  `tachiyomix.extensionLib = 26.0`, which is why the host's `LIB_VERSION_MAX` was raised to
+  26.0 in that release. Raising the ceiling is non-breaking: every already-published plugin
+  declares a version inside the supported range and keeps loading.
+
+## Session continuity and replay (v27 capability interface)
+
+`AnimeFeedReplaySource` is an optional capability that lets a source participate in the host's
+persistent Reels queue. It extends `AnimeFeedAccountIdentitySource`, so the v26
+`accountScopeId()` is still the account key, and adds three members:
+
+```kotlin
+interface AnimeFeedReplaySource : AnimeFeedAccountIdentitySource {
+    val replayContextChanges: Flow<FeedReplayContext?>   // cold; null = signed out / invalidated
+    suspend fun prepareReplay(): FeedReplayContext?
+    suspend fun resolveReplayItem(
+        itemId: String,
+        expectedContext: FeedReplayContext,
+        filters: AnimeFilterList,
+    ): FeedReplayItemResult
+}
+```
+
+`FeedReplayContext(accountId, continuityKey)` proves that a saved queue still belongs to the
+backend session the user is on right now:
+
+- `accountId` must equal the source's `accountScopeId()` answer (Telegram: TDLib `me.id`).
+- `continuityKey` is a stable, source-owned identifier for the backend session/configuration.
+  It **must not** contain process ports, tokens, signed URLs, timestamps or epochs — the host
+  only fingerprints a persisted queue with it. Change it when a source setting materially
+  changes which items the backend can serve (Telegram hashes its feed preferences), so a stale
+  queue is not restored under a different configuration.
+
+Host behavior (For You feed, unseen filter on, incognito off, source implements the capability):
+
+1. `prepareReplay()` runs on IO when the feed opens. `null` means "no proven identity": the
+   host keeps the ordinary network-first feed and persists nothing under a guessed key.
+2. A non-null context restores the persisted queue without waiting for a fresh feed page: the
+   host opens the saved session and eagerly rehydrates the active checkpoint plus a bounded
+   window (at most six resolves); the remaining restored cards keep their stored metadata and
+   resolve lazily when they become active. A `Deferred` answer never drops the resume target.
+   The remote tail is fetched only after the restored window is shown.
+3. While the session is live the host collects `replayContextChanges`. Any change, including
+   `null`, invalidates the restored queue view; a new non-null context starts a fresh
+   generation. The flow must be cold, must not perform native/network work on the collecting
+   thread and may emit duplicates — the host compares by value.
+4. `resolveReplayItem` rehydrates one saved candidate. It must echo the requested `itemId`,
+   be safe to call repeatedly, and re-check the live context before answering (return
+   `ContextChanged` when it no longer matches `expectedContext`). It runs on IO; bound each
+   native/network step with a timeout and stay cancellation-cooperative.
+
+`FeedReplayItemResult` tells the host what to do with the saved card:
+
+| Result | Host action |
+|---|---|
+| `Available(item)` | Replace the stored card with the fresh URLs. `item.id` must equal the requested `itemId`; a mismatch is treated as `Deferred`. |
+| `FilteredOut` | Skip the card while rebuilding the restored window; it is excluded by the source's current filters. |
+| `Unavailable` | Mark the candidate unavailable and skip it while rebuilding the restored window. This is not a view and does not touch the watched summary. |
+| `Deferred(retryAtEpochMillis)` | Keep the stored metadata card and retry when it becomes active; the candidate stays pending. Never conflate it with EOF or removal. |
+| `ContextChanged` | Discard the answer; when the context flow reports a new context, the feed restarts under it. |
+
+A thrown exception is logged and handled as `Deferred(null)`, so an item stays recoverable —
+but an authoritative removal must be returned as `Unavailable`, not thrown.
+
+Rules for the source:
+
+- The replay path is **host-owned**: the source never persists its own seen/history state and
+  never pre-filters saved items. It only rehydrates an item id (or gives one of the terminal
+  verdicts above). Filtering by "watched" remains the host's job.
+- Stored URLs are cache hints at most. The host treats `resolveReplayItem` as the authority
+  for playable URLs and re-resolves before playback; never require a persisted secret or a
+  process-local token to resolve an item.
+- All members are abstract. Implementing the capability requires `extensionLib` 27.0;
+  `LIB_VERSION_MAX` is 27.0, and older plugins inside `12.0..27.0` keep loading.
+
+## Delivery is not consumption (what a feed source must NOT infer)
+
+The For You feed is "unseen items only": the host remembers what the user actually watched or
+deliberately skipped and never serves it again, while keeping everything that was merely *loaded*
+recoverable across restarts. That split only works if the source stays a content / continuation /
+resolver source and does not build a second opinion about what the user did.
+
+Hard rules for feed sources:
+
+- **Never treat delivery as a view.** A `DownloadFile`, an HTTP `Range` request against your
+  proxy, a prefetch/warm-up call, a poster fetch, a decode or a thumbnail read is *transport*, not
+  a view. The host is the only authority on views (it has the player, the foreground state and the
+  elapsed-time clock); a source that reports "viewed" from the proxy will mark items consumed
+  during scrolling and make them vanish from For You forever.
+- **Never persist a consumption history.** No "watched" table, no LRU of seen ids, no
+  `SharedPreferences` "seen" set. The host already has one durable summary; a second one goes
+  stale on the next reset, contradicts the first after an account switch, and cannot be filtered
+  in the same batch query as the feed.
+- **Replay caches are not history.** `FeedSessionStore`-style replay maps exist so a retried page
+  returns the *same* items; they have a TTL and are allowed to die. When they do, **restart your
+  own scan session and return a fresh continuation token** — the host dedupes by `id` and hides
+  what the user already watched, so re-delivering the head is safe and keeps the feed alive. If
+  you cannot rescan, return a terminal page, or `FeedError.ExpiredCursor` for v25 classifiers.
+  What you must never do is restart the scan from the head **under the same page number**: that
+  replays already-delivered items as if they were new and looks like a duplicate seam.
+- **`hasNextPage = false` must mean "the backend is exhausted".** The host spends a *bounded*
+  refill budget per generation (a handful of extra pages) to fill a For You page after filtering
+  consumed items. If an empty in-memory cache or a cold TDLib session reports EOF, the host
+  believes it, stops, and shows "nothing new" — the user sees an empty feed while the account is
+  full of unwatched videos. Return `hasNextPage = true` whenever a continuation token still
+  exists, even if the next page will need a fresh scan.
+- **Keep `id` stable and delivery-independent.** For You relies on `ShortVideoItem.id` to match a
+  page against the durable summary. The same backend item must produce the same id when it arrives
+  through a fresh scan, a replayed page, a creator feed or a resolver call. Do not fold a cursor,
+  a timestamp or a quality variant into the id.
+- **Do not pre-filter.** The source returns everything its backend considers a candidate. Filtering
+  by "seen" belongs to the host, which knows the account scope, the current generation and the
+  user's incognito/offline switches. A source that hides items itself cannot be overridden by
+  "show watched" or by a history reset.
+
 ## Pagination: the sticky protocol (the important part)
 
 Two modes. The mode is locked by the **host** for the whole feed *generation*
@@ -186,20 +376,69 @@ Rules for sources:
 - `page` arrives 1-based and resets to 1 on every generation reset
   (search/filter/source switch) — `cursor` is `null` in that first request,
   even if the previous generation was cursor-based.
+- **Opaque cursors expire.** A cursor the source can no longer resolve (TTL,
+  LRU eviction, logout, account/source-set change) must **not** be silently
+  restarted from the head under the same `page` number. Return a terminal page
+  (`hasNextPage = false`, `nextCursor = null`); the next generation starts with
+  `cursor = null`. `FeedPage` has no error channel: throwing a plain exception
+  makes the host treat it as a transient failure and retry the same dead cursor
+  on every scroll (there is no per-cursor backoff). Sources implementing the
+  [typed error classifier](#typed-feed-errors-v25-capability-interface) may
+  instead throw `FeedError.ExpiredCursor`: the host then stops the append
+  silently and waits for a manual refresh.
 - The host dedupes by `ShortVideoItem.id` across pages (first occurrence
   wins), so seam duplicates from cursor APIs are safe — but `id` values must
   be stable between requests.
 
 ## Video: `ShortVideoItem` (URL semantics changed in v17!)
 
-- `videoUrl: String` — the **guaranteed playable base URL** (lowest/only
-  quality variant). Required.
+- `videoUrl: String` — the **playable base URL** (lowest/only quality
+  variant). Required; the only exception is a source opting into lazy signing
+  through the v25 [media descriptor](#media-descriptor-v25-capability-interface)
+  (`lazyResolution = true` + `AnimeFeedVideoResolverSource`), which may return a
+  blank string and let the host sign the URL just in time.
 - `videoUrlHd: String?` — an optional **upgrade**. Strictly better than the
   base, or null. Never invert the two.
 - With HD on, the host plays `videoUrlHd ?: videoUrl`; with HD off it always
   plays `videoUrl`. Single-URL source: `videoUrl = url, videoUrlHd = null`.
+  Lazy HD: a failed `resolveVideoUrl(id, hd = true)` may retry the base variant
+  when the descriptor leaves `hdFallback = true`.
 - `posterUrlVertical` — vertical poster if available (ideal for the feed).
 - Temporary CDN links: always set `webUrl` (the watch page) — sharing uses it.
+
+## Media descriptor (v25 capability interface)
+
+`AnimeFeedMediaDescriptorSource.mediaDescriptor(item): FeedMediaDescriptor` is an optional
+per-item contract for the media semantics `ShortVideoItem` cannot express:
+
+| Field | Default | Host behavior |
+|---|---|---|
+| `kind` | `null` | `STILL` renders the URL as an image even without an image extension (signed/opaque photo URLs); `VIDEO` suppresses extension sniffing; `null` keeps the legacy URL-based guess. |
+| `lazyResolution` | `true` | A blank `videoUrl` is signed through `AnimeFeedVideoResolverSource`. `false` makes a blank URL a terminal playback error instead of an endless poster/spinner (no resolver, no retry loop). |
+| `hdFallback` | `true` | A failed HD resolution retries the base variant (`resolveVideoUrl(id, hd = false)`). A present base `videoUrl` is always preferred over HD already. |
+| `offlineSupported` | `true` | `false` refuses downloads for the item; removing an existing copy still works. |
+
+Instanceof-detected, no default members on existing interfaces; the host falls back to the
+legacy rules when the capability is absent, and the `ShortVideoItem` constructor is unchanged.
+`mediaDescriptor` must be cheap and side-effect free — it may run for preloaded pages.
+
+## Typed feed errors (v25 capability interface)
+
+`AnimeFeedErrorClassifierSource.classifyFeedError(error): FeedError?` lets a source classify
+its own failures instead of relying on the host's error-text matching. Returning `null` means
+"no verdict" and the host keeps its legacy 401/403 and 429/Retry-After heuristics; a throwing
+classifier is logged and treated as `null`.
+
+| Verdict | Host action |
+|---|---|
+| `ExpiredCursor` | Append: pagination stops silently, the dead cursor is never retried; refresh starts a fresh generation. Reset load: surfaced as a regular terminal error. |
+| `AuthRequired` | The host starts its web-login session bootstrap (web-login-capable sources) even when the message has no status-like text. |
+| `RateLimited(retryAtEpochMillis)` | The host hides the automatic retry until the given wall-clock time (null = its default backoff) and still caps consecutive automatic retries. |
+| `Transient` | Surfaced to the user; no bootstrap and no automatic backoff. |
+| `Terminal` | Surfaced to the user; **no** bootstrap and **no** automatic retry, even if the message contains `401`, `403` or `429`. |
+
+Instanceof-detected, no default members on existing interfaces. A classifier verdict
+overrides text heuristics; return `null` when unsure.
 
 ## Evolution rules (discipline)
 
@@ -279,6 +518,10 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 27 | Optional capability `AnimeFeedReplaySource` (`replayContextChanges: Flow<FeedReplayContext?>`, `prepareReplay()`, `resolveReplayItem(itemId, expectedContext, filters)`): session continuity and safe item rehydration without process tokens. Models `FeedReplayContext` (accountId, continuityKey) and `FeedReplayItemResult` (`Available`, `FilteredOut`, `Unavailable`, `Deferred`, `ContextChanged`). All members abstract, no default methods on existing interfaces. `LIB_VERSION_MAX` becomes 27.0; older plugins stay inside `12.0..27.0` and keep loading. |
+| 26 | Optional capability `AnimeFeedAccountIdentitySource.accountScopeId()`: a stable, non-secret account id so the host can key its durable watched/skipped summary per account instead of per source (display labels and session tokens are explicitly rejected). `null` = unproven identity → source-scoped history. Also documents the host-side For You rules a source must not violate: delivery (proxy `Range`, `DownloadFile`, prefetch, decode) is never a view, replay caches are not history, an empty cache is not EOF, `id` must be delivery-independent, and the source never pre-filters seen items. Instanceof-detected, no default members, existing constructors unchanged. A plugin that implements it declares `extensionLib` 26.0 and the host's `LIB_VERSION_MAX` becomes 26.0 (older plugins stay inside `12.0..26.0` and keep loading). |
+| 25 | Optional capabilities `AnimeFeedMediaDescriptorSource` (per-item `FeedMediaDescriptor`: media kind, lazy-resolution permission, HD fallback, offline support) and `AnimeFeedErrorClassifierSource` (typed `FeedError` verdicts: `ExpiredCursor`, `AuthRequired`, `RateLimited(retryAtEpochMillis)`, `Transient`, `Terminal`). Both instanceof-detected, no default members, existing constructors unchanged; `null` verdicts and absent capabilities keep the legacy host behavior. Additive: `LIB_VERSION_MAX` stays at 23.0. |
+| 24 | Optional capability `AnimeFeedOriginScopedSessionSource` (`importWebSessionScoped` / `importWebRedirectScoped`) plus model `WebLoginCookie`: origin-scoped session import that preserves same-named cookies from multiple origins and non-default ports. Instanceof-detected, no default members; the legacy `Map<String, String>` methods remain the fallback for pre-v24 hosts. Additive: `LIB_VERSION_MAX` stays at 23.0. |
 | 23 | Optional capability `AnimeAlbumSearchSource.searchAlbums(query, page, cursor): FeedCategoryPage` — paginated album-oriented search for bunkr-like sources; the host renders album cards (open / save to collection / long-press content preview) instead of the flat video feed when present. Instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep their pre-v23 search; `LIB_VERSION_MAX` → 23.0 as the discipline stamp. |
 | 22 | Optional capability `AnimeFeedLoginInstrumentationSource` (source-supplied session instrumentation JS + extra dump origins + logout purge origins) and `AnimeFeedVideoResolverSource` (stable-id → playable URL re-resolution for favorites). Both instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 22.0 as the discipline stamp. |
 | 21 | Optional capability `AnimeCategoryFeedOrderSource` (`categoryFilters()` + four-arg `getCategoryFeed`): source-defined category-feed orders rendered by the host in NICHE mode. Instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 21.0 as the discipline stamp. |

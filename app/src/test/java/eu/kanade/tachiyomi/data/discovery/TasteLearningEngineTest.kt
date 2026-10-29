@@ -1,10 +1,13 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import org.junit.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySuggestion
 
 class TasteLearningEngineTest {
 
@@ -45,13 +48,46 @@ class TasteLearningEngineTest {
     }
 
     @Test
-    fun `hide signal produces negative weight and is excluded from positive profile`() {
-        val profile = foldLearnedTasteProfile(
-            listOf(signal("x", DiscoverySignalType.HIDE, listOf("mecha"))),
+    fun `hide signal produces negative genre weight retained in learned profile`() {
+        val negative = foldLearnedTasteProfile(
+            listOf(signal("t2", DiscoverySignalType.HIDE, genres = listOf("harem"))),
             nowMs = now,
         )
-        // Негативный жанр в позитивный профиль не попадает (лента не обязана его «любить»).
-        profile.genres.any { it.first == "mecha" } shouldBe false
+        negative.genres.first { it.first == "harem" }.second shouldBe (-1.0)
+    }
+
+    @Test
+    fun `merge lets learned negative suppress library genre`() {
+        val library = listOf("harem" to 2.0, "drama" to 1.0)
+        val learned = LearnedTasteProfile(genres = listOf("harem" to -0.9), signalCount = 20)
+        val merged = mergeTasteProfiles(library, learned)
+        merged.first { it.first == "harem" }.second shouldBe 1.1
+    }
+
+    @Test
+    fun `implicit negative skips genres already in taste profile`() {
+        val suggestion = DiscoverySuggestion(
+            id = 1L,
+            mediaType = DiscoveryMediaType.MANGA,
+            rowType = DiscoveryRowType.TASTE,
+            title = "t",
+            cleanTitle = "t",
+            coverUrl = null,
+            reason = "harem",
+            seedTitle = null,
+            provider = "anilist",
+            score = 0.0,
+            position = 0L,
+            createdAt = 0L,
+        )
+        val signals = synthesizeImplicitNegatives(
+            shownWithCount = listOf(Triple("t", 0L, 5)),
+            explicitSignals = emptyList(),
+            currentSuggestions = listOf(suggestion),
+            mediaType = DiscoveryMediaType.MANGA,
+            profileGenres = listOf("harem"),
+        )
+        signals.shouldBeEmpty()
     }
 
     @Test
@@ -217,6 +253,34 @@ class TasteLearningEngineTest {
         (positive > zero) shouldBe true
         (huge <= 20.0) shouldBe true
         (negative >= 4.0) shouldBe true
+    }
+
+    @Test
+    fun `affinity boost works when libraryWeight is zero`() {
+        val zeroLibZeroAffinity = applySourceAffinity(libraryWeight = 0, affinity = 0.0)
+        val zeroLibPositive = applySourceAffinity(libraryWeight = 0, affinity = 2.0)
+        (zeroLibPositive > zeroLibZeroAffinity) shouldBe true
+        (zeroLibZeroAffinity >= 1.0) shouldBe true
+    }
+
+    @Test
+    fun `applySourceAffinity in manual mode ignores library weight and starts at 1_0`() {
+        val zeroAffinity = applySourceAffinity(libraryWeight = 100, affinity = 0.0, isManualMode = true)
+        zeroAffinity shouldBe 1.0
+    }
+
+    @Test
+    fun `applySourceAffinity in manual mode boosts weight with positive affinity up to 4_5`() {
+        val positive = applySourceAffinity(libraryWeight = 0, affinity = 4.0, isManualMode = true)
+        val huge = applySourceAffinity(libraryWeight = 0, affinity = 1000.0, isManualMode = true)
+        (positive > 1.0) shouldBe true
+        (huge <= 4.5) shouldBe true
+    }
+
+    @Test
+    fun `applySourceAffinity in manual mode does not drop below 1_0 for negative affinity`() {
+        val negative = applySourceAffinity(libraryWeight = 100, affinity = -5.0, isManualMode = true)
+        negative shouldBe 1.0
     }
 
     private companion object {

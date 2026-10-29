@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.backup.BackupOrigin
 import eu.kanade.tachiyomi.data.backup.BackupWriteReceipt
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -17,6 +18,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.security.DigestOutputStream
 import java.security.MessageDigest
+import java.util.zip.Deflater
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -59,8 +61,16 @@ class BackupWriter(
         try {
             var plainBytes = 0L
             val payloadDigest = BackupDiagnosticLog.measure(context, "stage_gzip") {
-                FileOutputStream(staging).use { fileOut ->
-                    GZIPOutputStream(fileOut).use { gzipOut ->
+                // Level 1 + 64 KiB buffering: the staging file is transient and rebuilt on every
+                // backup; on low-end devices CPU time and syscall count dominate file size
+                // (17.6 MB raw, level 6 = 3-24 s measured; the default GZIPOutputStream buffer
+                // is 512 bytes).
+                BufferedOutputStream(FileOutputStream(staging), 64 * 1024).use { bufferedOut ->
+                    object : GZIPOutputStream(bufferedOut, 64 * 1024) {
+                        init {
+                            def.setLevel(Deflater.BEST_SPEED)
+                        }
+                    }.use { gzipOut ->
                         val digestOut = DigestOutputStream(gzipOut, MessageDigest.getInstance("SHA-256"))
                         val counting = object : OutputStream() {
                             override fun write(b: Int) {

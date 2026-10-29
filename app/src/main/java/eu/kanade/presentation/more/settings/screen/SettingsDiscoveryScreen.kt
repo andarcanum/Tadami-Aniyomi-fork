@@ -75,6 +75,7 @@ import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.discovery.DiscoverySourcesScreen
+import eu.kanade.tachiyomi.data.discovery.DiscoveryProviderSetting
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
 import eu.kanade.tachiyomi.data.discovery.resolveUserGenreInput
@@ -96,6 +97,17 @@ import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
+
+internal fun changeDiscoveryProviderSetting(
+    context: android.content.Context,
+    preference: tachiyomi.core.common.preference.Preference<Boolean>,
+    setting: DiscoveryProviderSetting,
+    value: Boolean,
+): Boolean {
+    preference.set(value)
+    DiscoveryUpdateJob.refreshAfterProviderChange(context, setting)
+    return false
+}
 
 /**
  * Настройки ленты «Для тебя» (discovery). Правило адаптивных тумблеров:
@@ -133,7 +145,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
             val allSignals = DiscoveryMediaType.entries.flatMap { repository.getSignals(it) }
             tasteSignalCount = allSignals.size
             tasteTopGenres = eu.kanade.tachiyomi.data.discovery.foldLearnedTasteProfile(allSignals)
-                .genres.take(5)
+                .genres.filter { it.second > 0.0 }
+                .take(5)
         }
         LaunchedEffect(Unit) { reloadTaste() }
 
@@ -145,7 +158,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
         val reloadConsumed: suspend () -> Unit = {
             consumedSignals = DiscoveryMediaType.entries
                 .flatMap { repository.getSignals(it) }
-                .filter { it.signalType == tachiyomi.domain.discovery.model.DiscoverySignalType.CONSUMED }
+                .filter { it.signalType.excludesFromFeed }
                 .sortedByDescending { it.createdAt }
         }
 
@@ -368,9 +381,9 @@ object SettingsDiscoveryScreen : SearchableSettings {
                 onApply = { csv ->
                     discoveryPreferences.releaseStatusFilter().set(csv)
                     showStatusDialog = false
-                    // Применить сразу: без триггера лента показывала бы старые статусы
-                    // до следующего фонового цикла.
-                    DiscoveryUpdateJob.refreshNow(context)
+                    DiscoveryMediaType.entries.forEach { media ->
+                        DiscoveryUpdateJob.refreshConfiguration(context, media)
+                    }
                 },
                 onDismiss = { showStatusDialog = false },
             )
@@ -383,12 +396,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
                 requiredCsv = discoveryPreferences.requiredGenres().get(),
                 ignoredCsv = discoveryPreferences.ignoredGenres().get(),
                 onApply = { priCsv, reqCsv, ignCsv ->
-                    discoveryPreferences.priorityGenres().set(priCsv)
-                    discoveryPreferences.requiredGenres().set(reqCsv)
-                    discoveryPreferences.ignoredGenres().set(ignCsv)
+                    applyDiscoveryGenreFilters(context, discoveryPreferences, priCsv, reqCsv, ignCsv)
                     showGenreDialog = false
-                    // Игнор/приоритет/обязательные жанры — применить сразу, не ждать фоновый цикл.
-                    DiscoveryUpdateJob.refreshNow(context)
                 },
                 onDismiss = { showGenreDialog = false },
             )
@@ -425,11 +434,15 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             title = stringResource(AYMR.strings.pref_discovery_external_providers),
                             subtitle = stringResource(AYMR.strings.pref_discovery_external_providers_summary),
                             enabled = enabled,
-                            onValueChanged = {
+                            onValueChanged = { value ->
                                 // Переключение состава провайдеров — регенерировать ленту сразу,
                                 // иначе старые внешние тайтлы висят до фонового цикла.
-                                DiscoveryUpdateJob.refreshNow(context)
-                                true
+                                changeDiscoveryProviderSetting(
+                                    context,
+                                    discoveryPreferences.externalProvidersEnabled(),
+                                    DiscoveryProviderSetting.EXTERNAL,
+                                    value,
+                                )
                             },
                         ),
                     )
@@ -571,18 +584,42 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         title = stringResource(AYMR.strings.pref_discovery_provider_shikimori),
                         subtitle = stringResource(AYMR.strings.pref_discovery_provider_shikimori_summary),
                         enabled = enabled && rowLike && externalProviders,
+                        onValueChanged = { value ->
+                            changeDiscoveryProviderSetting(
+                                context,
+                                sourcePreferences.suggestionsUseShikimori(),
+                                DiscoveryProviderSetting.SHIKIMORI,
+                                value,
+                            )
+                        },
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = sourcePreferences.suggestionsUseMangaUpdatesNovel(),
                         title = stringResource(AYMR.strings.pref_discovery_provider_mangaupdates),
                         subtitle = stringResource(AYMR.strings.pref_discovery_provider_mangaupdates_summary),
                         enabled = enabled && rowLike && externalProviders,
+                        onValueChanged = { value ->
+                            changeDiscoveryProviderSetting(
+                                context,
+                                sourcePreferences.suggestionsUseMangaUpdatesNovel(),
+                                DiscoveryProviderSetting.MANGA_UPDATES,
+                                value,
+                            )
+                        },
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = sourcePreferences.suggestionsUseNovelUpdates(),
                         title = stringResource(AYMR.strings.pref_discovery_provider_novelupdates),
                         subtitle = stringResource(AYMR.strings.pref_discovery_provider_novelupdates_summary),
                         enabled = enabled && rowLike && externalProviders,
+                        onValueChanged = { value ->
+                            changeDiscoveryProviderSetting(
+                                context,
+                                sourcePreferences.suggestionsUseNovelUpdates(),
+                                DiscoveryProviderSetting.NOVEL_UPDATES,
+                                value,
+                            )
+                        },
                     ),
                 ),
             ),

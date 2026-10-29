@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.suggestions.anime
 
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
@@ -200,5 +201,71 @@ class AnimeSearchFallbackEngineTest {
 
         assertTrue(outcome is AnimeFallbackOutcome.Success)
         assertEquals(1, (outcome as AnimeFallbackOutcome.Success).items.size)
+    }
+
+    @Test
+    fun `fetchSearchFallback contains extension OutOfMemoryError and stops remaining tiers`() = runTest {
+        val anime = Anime.create().copy(
+            id = 123L,
+            title = "Solo Leveling",
+            author = "Chugong",
+            genre = listOf("Fantasy"),
+            url = "/solo-oom-abort-anime",
+        )
+        var searchCalls = 0
+        val source = object : FakeAnimeCatalogueSource() {
+            override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
+                searchCalls++
+                throw OutOfMemoryError("Failed to allocate a 8388624 byte allocation")
+            }
+        }
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.ANIME,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = AnimeSearchFallbackEngine().fetchSearchFallback(anime, source, seed)
+
+        assertTrue(outcome is AnimeFallbackOutcome.Empty)
+        // Tier 1 is the only tier that may run: the heap is already exhausted, so the
+        // author/genre tiers must not issue more requests against the same source.
+        assertEquals(1, searchCalls)
+    }
+
+    @Test
+    fun `fetchSearchFallback keeps already collected items when a later query runs out of memory`() = runTest {
+        val anime = Anime.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-oom-retain-anime")
+        val source = object : FakeAnimeCatalogueSource() {
+            override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
+                if (query == "Solo Leveling") {
+                    return AnimesPage(
+                        listOf(
+                            SAnime.create().apply {
+                                title = "Solo Leveling Side Stories"
+                                url = "/solo-oom-result-anime"
+                            },
+                        ),
+                        false,
+                    )
+                }
+                throw OutOfMemoryError("Failed to allocate a 8388624 byte allocation")
+            }
+        }
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.ANIME,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = AnimeSearchFallbackEngine().fetchSearchFallback(anime, source, seed)
+
+        val success = outcome as AnimeFallbackOutcome.Success
+        assertEquals(1, success.items.size)
+        assertEquals("Solo Leveling Side Stories", success.items.single().title)
     }
 }

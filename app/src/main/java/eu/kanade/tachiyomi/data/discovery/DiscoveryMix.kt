@@ -4,12 +4,21 @@ import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 
 data class DiscoveryMixQuotas(
-    val similar: Int = 10,
-    val taste: Int = 8,
-    val fresh: Int = 6,
-    val source: Int = 6,
+    val similar: Int = 20,
+    val taste: Int = 16,
+    val fresh: Int = 12,
+    val source: Int = 12,
 ) {
     val total: Int get() = similar + taste + fresh + source
+}
+
+/** runCatching, не глотающий отмену корутины: отмена = отмена, а не «пустой ряд». */
+internal inline fun <T> runCatchingUnlessCancelled(block: () -> T): Result<T> = try {
+    Result.success(block())
+} catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+} catch (e: Throwable) {
+    Result.failure(e)
 }
 
 /**
@@ -298,11 +307,10 @@ internal fun <T> applyRequiredGenres(
     itemGenres: (T) -> List<String>,
 ): List<T> {
     if (requiredGenres.isEmpty()) return items
-    val filtered = items.filter { item ->
+    return items.filter { item ->
         val genres = itemGenres(item)
         genres.isEmpty() || genres.any { g -> requiredGenres.any { req -> GenreMatcher.matches(req, g) } }
     }
-    return if (filtered.isEmpty()) items else filtered
 }
 
 /** Перегрузка для [DiscoveryTrendingItem]: жанры — поле genres. */
@@ -380,6 +388,7 @@ internal fun isBlacklisted(
     expandedBlacklist: Set<String>,
 ): Boolean {
     if (expandedBlacklist.isEmpty()) return false
+    if (item.genres.isNotEmpty()) return matchesAnyGenre(item.genres, expandedBlacklist)
     if (item.rowType != tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE) return false
     val reason = item.reason ?: return false
     return reason.splitToSequence(",").any { tag -> matchesAnyGenre(listOf(tag), expandedBlacklist) }
@@ -456,3 +465,211 @@ internal fun filterFranchiseClustering(
     cleanTitleExtractor = { it.cleanTitle },
     maxPerSeries = maxPerSeries,
 )
+
+/**
+ * Ограничивает кластеризацию одного доминирующего жанра в выдаче ряда «Твой вкус»:
+ * предотвращает монополизацию выдачи одним жанром, перемещая избыточные тайтлы
+ * того же первичного жанра сверх [maxPerGenre] в хвост списка.
+ */
+internal fun filterGenreClustering(
+    items: List<DiscoveryRowItem>,
+    maxPerGenre: Int = 6,
+): List<DiscoveryRowItem> {
+    if (items.size <= 1) return items
+    val result = mutableListOf<DiscoveryRowItem>()
+    val overflow = mutableListOf<DiscoveryRowItem>()
+    val genreCounts = mutableMapOf<String, Int>()
+    for (item in items) {
+        val primaryGenre = item.reason?.substringBefore(",")?.trim()?.lowercase().orEmpty()
+        val count = genreCounts.getOrDefault(primaryGenre, 0)
+        if (primaryGenre.isEmpty() || count < maxPerGenre) {
+            result.add(item)
+            if (primaryGenre.isNotEmpty()) genreCounts[primaryGenre] = count + 1
+        } else {
+            overflow.add(item)
+        }
+    }
+    return result + overflow
+}
+
+/**
+ * Балансировка разнообразия плагинов/источников:
+ * Плагины с более сильными сигналами могут выдавать больше тайтлов,
+ * но если доступны другие плагины/источники, минимум [minOtherCount] (дефолт 3)
+ * тайтлов строго сохраняются за другими плагинами/источниками для разнообразия.
+ */
+internal fun <T> balancePluginDiversity(
+    items: List<T>,
+    limit: Int,
+    sourceKeyExtractor: (T) -> String,
+    minOtherCount: Int = 3,
+    maxDominantShare: Double = 0.30,
+): List<T> {
+    if (items.size <= 1 || limit <= 0) return items.take(limit)
+
+    val sourceCounts = mutableMapOf<String, Int>()
+    items.forEach { item ->
+        val key = sourceKeyExtractor(item)
+        if (key.isNotEmpty()) {
+            sourceCounts[key] = (sourceCounts[key] ?: 0) + 1
+        }
+    }
+
+    val dominantSource = sourceCounts.maxByOrNull { it.value }?.key ?: return items.take(limit)
+    val otherCandidates = items.filter { sourceKeyExtractor(it) != dominantSource }
+    if (otherCandidates.isEmpty()) return items.take(limit)
+
+    // При N >= 4 доминирующий источник ограничивается потолком maxDominantShare (дефолт 30%).
+    // При N < 4 потолок не применяется (дефолтное поведение: minOtherCount).
+    val dominantCap = if (sourceCounts.size >= 4) {
+        maxOf(1, kotlin.math.ceil(limit * maxDominantShare).toInt())
+    } else {
+        limit - minOf(minOtherCount, otherCandidates.size)
+    }
+    val targetOtherCount = minOf(otherCandidates.size, limit - dominantCap)
+        .coerceAtLeast(minOf(minOtherCount, otherCandidates.size))
+        .coerceAtMost(maxOf(0, limit - 1))
+    val maxDominant = limit - targetOtherCount
+
+    val result = mutableListOf<T>()
+    var dominantCount = 0
+    val others = ArrayDeque(otherCandidates)
+    val seen = mutableSetOf<T>()
+
+    for (item in items) {
+        if (result.size >= limit) break
+        val key = sourceKeyExtractor(item)
+        if (key == dominantSource) {
+            if (dominantCount < maxDominant) {
+                result.add(item)
+                seen.add(item)
+                dominantCount++
+            }
+        } else {
+            result.add(item)
+            seen.add(item)
+        }
+    }
+
+    val currentOtherCount = result.count { sourceKeyExtractor(it) != dominantSource }
+    if (currentOtherCount < targetOtherCount) {
+        while (result.size < limit && others.isNotEmpty()) {
+            val other = others.removeFirst()
+            if (other !in seen) {
+                result.add(other)
+                seen.add(other)
+            }
+        }
+    }
+
+    return result.take(limit)
+}
+
+private fun normalizeWeight(raw: Double?): Double {
+    if (raw == null || raw.isNaN() || raw <= 0.0) return 0.0
+    if (raw.isInfinite()) return 1_000_000.0
+    return raw
+}
+
+/**
+ * Распределяет целое число слотов [totalSlots] между источниками [sourceIds]
+ * с учётом их эффективных весов [effectiveWeights].
+ *
+ * Если слотов достаточно (totalSlots >= sourceIds.size): каждый получает минимум 1 слот,
+ * а остаток делится пропорционально положительным весам методом Largest Remainder (Гамильтона).
+ * При равенстве остатков приоритет отдаётся исходному порядку.
+ * Если источников больше, чем слотов: выбираются источники с наибольшим весом (tie-break — исходный порядок).
+ * При неположительном totalSlots или пустом списке источников возвращается пустая карта.
+ */
+internal fun allocateSourceSlots(
+    sourceIds: List<Long>,
+    effectiveWeights: Map<Long, Double>,
+    totalSlots: Int,
+    maxDominantShare: Double = 0.30,
+): Map<Long, Int> {
+    if (totalSlots <= 0 || sourceIds.isEmpty()) return emptyMap()
+
+    if (sourceIds.size > totalSlots) {
+        val indexed = sourceIds.mapIndexed { index, id ->
+            Triple(id, normalizeWeight(effectiveWeights[id]), index)
+        }
+        val sorted = indexed.sortedWith(
+            compareByDescending<Triple<Long, Double, Int>> { it.second }
+                .thenBy { it.third },
+        )
+        val selected = sorted.take(totalSlots)
+        return selected.sortedBy { it.third }.associate { it.first to 1 }
+    }
+
+    val allocation = LinkedHashMap<Long, Int>(sourceIds.size)
+    sourceIds.forEach { allocation[it] = 1 }
+    val remainingSlots = totalSlots - sourceIds.size
+    if (remainingSlots == 0) return allocation
+
+    // При N >= 4 источниках ни один источник не может получить больше maxDominantShare от totalSlots
+    val slotCap = if (sourceIds.size >= 4) {
+        maxOf(1, (totalSlots * maxDominantShare).toInt())
+    } else {
+        totalSlots
+    }
+
+    val activeIds = sourceIds.toMutableList()
+    var slotsLeft = remainingSlots
+
+    while (slotsLeft > 0 && activeIds.isNotEmpty()) {
+        val weights = activeIds.map { id -> id to normalizeWeight(effectiveWeights[id]) }
+        val totalWeight = weights.sumOf { it.second }
+
+        val effectiveShares = if (totalWeight > 0.0) {
+            weights.map { (id, w) -> id to (w / totalWeight) }
+        } else {
+            val equalShare = 1.0 / activeIds.size
+            weights.map { (id, _) -> id to equalShare }
+        }
+
+        val exactQuotas = effectiveShares.map { (id, share) ->
+            val exact = slotsLeft * share
+            val floor = exact.toInt()
+            val remainder = exact - floor
+            id to (floor to remainder)
+        }
+
+        var hitCap = false
+        for ((id, pair) in exactQuotas) {
+            val cur = allocation[id] ?: 1
+            val next = cur + pair.first
+            if (next >= slotCap && cur < slotCap) {
+                allocation[id] = slotCap
+                activeIds.remove(id)
+                hitCap = true
+            } else if (next < slotCap) {
+                allocation[id] = next
+            }
+        }
+
+        if (hitCap) {
+            slotsLeft = totalSlots - allocation.values.sum()
+            continue
+        }
+
+        var leftover = slotsLeft - exactQuotas.sumOf { it.second.first }
+        val indexedRemainders = exactQuotas.mapIndexed { index, (id, pair) ->
+            Triple(id, pair.second, index)
+        }.sortedWith(
+            compareByDescending<Triple<Long, Double, Int>> { it.second }
+                .thenBy { it.third },
+        )
+
+        for (item in indexedRemainders) {
+            if (leftover <= 0) break
+            val cur = allocation[item.first] ?: 1
+            if (cur < slotCap) {
+                allocation[item.first] = cur + 1
+                leftover--
+            }
+        }
+        break
+    }
+
+    return allocation
+}

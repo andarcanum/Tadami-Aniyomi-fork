@@ -18,9 +18,9 @@ android {
 
     defaultConfig {
         applicationId = "com.tadami.aurora"
-        versionCode = 216
+        versionCode = 219
 
-        versionName = "0.62.9"
+        versionName = "0.63.2"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
@@ -237,7 +237,8 @@ dependencies {
     debugImplementation(compose.ui.tooling)
     implementation(compose.ui.tooling.preview)
     implementation(compose.ui.util)
-    implementation(compose.haze)
+    implementation(compose.haze.core)
+    implementation(compose.haze.blur)
 
     implementation(androidx.interpolator)
 
@@ -360,14 +361,14 @@ dependencies {
     testImplementation(kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.sqldelight.sqlite.driver)
-    testImplementation("androidx.test:core:1.6.1")
-    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation(androidx.test.core)
+    testImplementation(androidx.test.junit)
 
     androidTestImplementation(platform(compose.bom))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.compose.ui:ui-test-manifest")
-    androidTestImplementation("androidx.test:core:1.6.1")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation(androidx.test.core)
+    androidTestImplementation(androidx.test.junit)
 
     // mpv-android
     implementation(aniyomilibs.aniyomi.mpv)

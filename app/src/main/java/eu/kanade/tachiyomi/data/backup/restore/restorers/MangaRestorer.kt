@@ -7,7 +7,6 @@ import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupTracking
 import eu.kanade.tachiyomi.data.backup.restore.resolveRestoredText
-import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.entries.manga.interactor.GetMangaByUrlAndSourceId
@@ -133,7 +132,7 @@ class MangaRestorer(
                 author = manga.author,
                 description = manga.description,
                 notes = manga.notes,
-                genre = manga.genre?.joinToString(separator = ", "),
+                genre = manga.genre,
                 title = manga.title,
                 status = manga.status,
                 rating = manga.rating.toDouble(),
@@ -149,7 +148,7 @@ class MangaRestorer(
                 coverLastModified = manga.coverLastModified,
                 dateAdded = manga.dateAdded,
                 mangaId = manga.id,
-                updateStrategy = manga.updateStrategy.let(MangaUpdateStrategyColumnAdapter::encode),
+                updateStrategy = manga.updateStrategy,
                 version = manga.version,
                 isSyncing = 1,
                 completedAt = manga.completedAt,

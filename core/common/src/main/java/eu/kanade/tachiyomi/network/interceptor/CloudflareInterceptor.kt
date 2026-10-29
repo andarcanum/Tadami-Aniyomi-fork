@@ -32,6 +32,12 @@ class CloudflareInterceptor(
     )
 
     override fun shouldIntercept(response: Response): Boolean {
+        // Covers must never pay for a 30s hidden WebView solve: a challenged cover grid would
+        // serialize dozens of solves on the global gate and ANR the app. Fail fast instead -
+        // Coil shows a placeholder and the cover-host blacklist skips repeats.
+        if (CoverRequestPolicy.isCoverRequest(response.request)) {
+            return false
+        }
         if (response.code !in ERROR_CODES ||
             !CloudflareChallengeDetector.isCloudflareServer(response.header("Server"))
         ) {
@@ -53,6 +59,12 @@ class CloudflareInterceptor(
         val host = request.url.host
         try {
             response.close()
+            // Fingerprint-mismatched hosts (OkHttp challenged, WebView clean) are served via the
+            // WebView bridge by the plugin runtime: skip the doomed 30s hidden solve entirely
+            // and fail fast so the caller retries through the bridge immediately.
+            if (CloudflareBridgeRegistry.isBridged(host)) {
+                throw CloudflareFingerprintMismatchException()
+            }
             // One lock object per host is kept for the process lifetime so concurrent
             // requests to the same host coalesce onto a single WebView solve and then
             // reuse the resulting cf_clearance. Removing it eagerly (as before) reintroduced
@@ -115,6 +127,12 @@ class CloudflareInterceptor(
                 context.stringResource(MR.strings.information_cloudflare_interactive_challenge),
                 e,
             )
+        } catch (e: CloudflareFingerprintMismatchException) {
+            // Hidden WebView loaded clean (no widget, no markers) yet OkHttp stays challenged:
+            // a visible manual solve would show the same captcha-free logged-in page, so never
+            // register a manual-solve prompt - mark the host for silent WebView-bridge routing.
+            CloudflareBridgeRegistry.mark(host)
+            throw IOException(context.stringResource(MR.strings.information_cloudflare_bypass_failure), e)
         } catch (e: CloudflareBypassException) {
             CloudflareManualSolveRegistry.request(host)
             throw IOException(context.stringResource(MR.strings.information_cloudflare_bypass_failure), e)

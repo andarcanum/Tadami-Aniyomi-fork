@@ -96,3 +96,47 @@ val backupEpisodeMapper = {
         version = version,
     )
 }
+
+// Batched variant for getAllEpisodesForBackup: anime_id (column 2) is bound so the
+// creator can group all episodes in one query instead of one query per anime.
+val backupEpisodeWithAnimeIdMapper = {
+        _: Long,
+        animeId: Long,
+        url: String,
+        name: String,
+        scanlator: String?,
+        seen: Boolean,
+        bookmark: Boolean,
+        lastSecondSeen: Long,
+        totalSeconds: Long,
+        episodeNumber: Double,
+        source_order: Long,
+        dateFetch: Long,
+        dateUpload: Long,
+        lastModifiedAt: Long,
+        version: Long,
+        _: Long,
+        summary: String?,
+        previewUrl: String?,
+        fillermark: Boolean,
+        _: JsonObject,
+    ->
+    animeId to BackupEpisode(
+        url = url,
+        name = name,
+        episodeNumber = episodeNumber.toFloat(),
+        scanlator = scanlator,
+        summary = summary,
+        previewUrl = previewUrl,
+        seen = seen,
+        bookmark = bookmark,
+        fillermark = fillermark,
+        lastSecondSeen = lastSecondSeen,
+        totalSeconds = totalSeconds,
+        dateFetch = dateFetch,
+        dateUpload = dateUpload,
+        sourceOrder = source_order,
+        lastModifiedAt = lastModifiedAt,
+        version = version,
+    )
+}

@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reels
 
 import android.net.Uri
+import android.os.SystemClock
 import android.webkit.CookieManager
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
@@ -18,9 +19,14 @@ import eu.kanade.tachiyomi.animesource.AnimeCategorySubscriptionSource
 import eu.kanade.tachiyomi.animesource.AnimeContentPreferencesSource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedAccountIdentitySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginInstrumentationSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedReplaySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
@@ -32,10 +38,16 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.ContentPreferenceOption
 import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedCategory
+import eu.kanade.tachiyomi.animesource.model.FeedError
+import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedPage
+import eu.kanade.tachiyomi.animesource.model.FeedReplayContext
+import eu.kanade.tachiyomi.animesource.model.FeedReplayItemResult
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
+import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.ui.reels.components.legacyCookieMap
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -67,17 +79,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.reels.anime.model.ReelsAlbum
+import tachiyomi.domain.reels.anime.model.ReelsCandidate
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.model.ReelsHiddenEntry
+import tachiyomi.domain.reels.anime.model.ReelsSessionKey
 import tachiyomi.domain.reels.anime.model.ReelsWatchEntry
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
+import tachiyomi.domain.reels.anime.repository.ReelsCandidateRepository
+import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
+import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
@@ -143,8 +162,19 @@ class ReelsFeedScreenModel(
     private val reelsWatchRepository: ReelsWatchRepository = Injekt.get(),
     private val reelsHiddenRepository: ReelsHiddenRepository = Injekt.get(),
     private val reelsAlbumRepository: ReelsAlbumRepository = Injekt.get(),
+    private val reelsConsumptionRepository: ReelsConsumptionRepository = Injekt.get(),
+    private val reelsCandidateRepository: ReelsCandidateRepository = Injekt.get(),
+    private val reelsSessionRepository: ReelsSessionRepository? = null,
+    // Injectable monotonic clock (the watch accumulator must never use wall time) and wall
+    // clock (the durable summary stores real timestamps).
+    private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
+    private val wallClock: () -> Date = { Date() },
+    // Pure watch-qualification state machine; one per screen so a source switch starts clean.
+    private val interactionTracker: ReelsInteractionTracker = ReelsInteractionTracker(),
     private val offlineStore: ReelsOfflineStore = Injekt.get(),
     private val sessionSound: ReelsSessionSoundState = sharedSessionSound,
+    // Adaptive pager runway; injectable so tests can drive a fake mono clock.
+    private val runway: ReelsFeedRunway = ReelsFeedRunway(),
 ) : StateScreenModel<ReelsFeedScreenModel.State>(
     State(
         currentSourceId = initialSourceId,
@@ -161,6 +191,7 @@ class ReelsFeedScreenModel(
         preloadEnabled = sourcePreferences.reelsPreloadEnabled().get(),
         preloadWifiOnly = sourcePreferences.reelsPreloadWifiOnly().get(),
         isPipEnabled = sourcePreferences.reelsPipEnabled().get(),
+        unseenOnly = sourcePreferences.reelsUnseenOnly().get(),
         showUnmuteHint = !sessionSound.decided,
     ),
 ) {
@@ -189,6 +220,10 @@ class ReelsFeedScreenModel(
 
         // Bounded fan-out for the v22 resolver pass on playlist open (see resolveExpiredUrls).
         const val RESOLVE_URL_CONCURRENCY = 6
+
+        // F07: ceiling on the SILENT deep-link seek (a missing target must not drain an
+        // endless feed); manual pagination past the budget stays available.
+        const val RESUME_SEEK_MAX_PAGES = 10
 
         // Audit H6: word-boundary status match — a reel id or message that merely CONTAINS
         // "403"/"401" must not mount the bootstrap WebView.
@@ -232,6 +267,11 @@ class ReelsFeedScreenModel(
     // can no longer corrupt the newer feed's cursor.
     private val loadGeneration = AtomicInteger(0)
 
+    // Latest pager position, including transient pages crossed during a fling. The settled
+    // page is not enough: a 10-reel fling must already have the next page in flight.
+    @Volatile
+    private var lastPagerPage = 0
+
     // Snapshot of the unfiltered feed, used to restore position when a search is cleared.
     // Written only from main-thread entry points (search/clearSearch/switchSource).
     private var baseItems: ImmutableList<ShortVideoItem> = persistentListOf()
@@ -253,6 +293,10 @@ class ReelsFeedScreenModel(
     // often it won't; then the normal position restore wins and the seek stays armed for
     // whenever the clip does show up).
     private var resumeNavPending = resumeVideoId != null
+
+    // Pages appended by the SILENT seek so far (main-confined). The budget bounds the
+    // background fan-out; reaching it leaves the already-loaded feed untouched.
+    private var resumeSeekPages = 0
 
     // sourceId per offline playlist SLOT (index-aligned with the items list): a videoId is only
     // unique PER SOURCE, so a videoId-keyed map would misattribute likes of same-id favorites
@@ -308,6 +352,409 @@ class ReelsFeedScreenModel(
         return filterNot { it.id in videos || (it.author != null && it.author in authors) }
     }
 
+    // ---------------------------------------------------------------------------
+    // For You consumption history (durable, host-side)
+    //
+    // "Received", "inserted into the pager", "prefetched" and "decoded" are transport facts
+    // and never create history: only a qualified watch or a committed MANUAL forward swipe
+    // does. The scope is the source's stable account identity (never a display name or
+    // @handle), so a relogin keeps the history while a different account gets its own.
+    // ---------------------------------------------------------------------------
+
+    @Volatile
+    private var forYouScope: String? = null
+
+    @Volatile
+    private var forYouGeneration: Long = 0L
+
+    // Ids whose interaction was already committed in THIS session: duplicate player callbacks
+    // and repeated transitions must not issue duplicate writes (the DB upsert is idempotent
+    // as well — this only keeps the writer quiet).
+    private val watchedCommitted = mutableSetOf<String>()
+    private val skippedCommitted = mutableSetOf<String>()
+
+    // Pages fetched by the unseen refill loop in the current feed generation (bounded).
+    private var unseenRefillPages = 0
+
+    @Volatile
+    private var replayKey: ReelsSessionKey? = null
+    private var remoteTailJob: Job? = null
+
+    @Volatile
+    private var observedReplayKey: ReelsSessionKey? = null
+
+    private val sessionContinuity by lazy {
+        ReelsSessionContinuity(
+            scope = screenModelScope,
+            ioDispatcher = ioDispatcher,
+            repository = reelsSessionRepository ?: Injekt.get(),
+            nowMs = nowMs,
+            wallClock = wallClock,
+            isCurrentKey = { key ->
+                replayKey == key && state.value.currentSourceId == key.sourceId &&
+                    !isIncognito(key.sourceId) && filtersUnseen(state.value.searchQuery)
+            },
+            isObservedKey = { key -> observedReplayKey == key && state.value.currentSourceId == key.sourceId },
+            onContextInvalidated = { key, changed ->
+                screenModelScope.launch(Dispatchers.Main.immediate) {
+                    if (observedReplayKey != key || state.value.currentSourceId != key.sourceId) return@launch
+                    replayKey = null
+                    remoteTailJob?.cancel()
+                    loadJob?.cancel()
+                    loadGeneration.incrementAndGet()
+                    mutableState.update {
+                        it.copy(
+                            items = persistentListOf(),
+                            seenIds = persistentSetOf(),
+                            isPlaying = false,
+                            canLoadMore = false,
+                            replayLocalHasMore = false,
+                            isLoading = false,
+                            pendingSeekItemId = null,
+                            pendingSeekPositionMs = null,
+                        )
+                    }
+                    if (changed != null) source?.let { buildFiltersAndStartFeed(it, key.sourceId) }
+                }
+            },
+        )
+    }
+
+    private fun isReplaySurface(): Boolean = source is AnimeFeedReplaySource &&
+        filtersUnseen(state.value.searchQuery) && !isIncognito(state.value.currentSourceId)
+
+    private fun invalidateReplay(dropCheckpoint: Boolean = false) {
+        if (observedReplayKey == null && replayKey == null) return
+        observedReplayKey = null
+        replayKey = null
+        remoteTailJob?.cancel()
+        remoteTailJob = null
+        val handle = sessionContinuity.detach()
+        if (handle != null) {
+            screenModelScope.launch(ioDispatcher) {
+                (reelsSessionRepository ?: Injekt.get()).invalidate(handle, dropCheckpoint)
+            }
+        }
+        mutableState.update {
+            it.copy(replayLocalHasMore = false, pendingSeekItemId = null, pendingSeekPositionMs = null)
+        }
+    }
+
+    // Pinned account scope per source. The identity can arrive AFTER the first feed request
+    // (TDLib is still authorizing), and a scope that silently follows it would strand every
+    // watched/skipped row written a second earlier under the fallback scope — exactly the
+    // reels that then come back. The first PROVEN identity wins for this model's lifetime.
+    private var pinnedScope: Pair<Long, String>? = null
+
+    private fun accountScopeFor(sourceId: Long): String {
+        // A proven identity, once seen, outranks a later `null` (TDLib restarting, a web
+        // session losing its uid): dropping back to the fallback scope would hide the
+        // history that is already stored under the account.
+        pinnedScope?.let { (pinnedSourceId, scope) -> if (pinnedSourceId == sourceId) return scope }
+        // A capability lookup on plugin bytecode: never let a broken extension break history.
+        val identity = runCatching {
+            (sourceManager.get(sourceId) as? AnimeFeedAccountIdentitySource)?.accountScopeId()
+        }.getOrNull()
+        val proven = identity?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return ReelsForYou.accountScope(sourceId, null)
+        val scope = ReelsForYou.accountScope(sourceId, proven)
+        pinnedScope = sourceId to scope
+        return scope
+    }
+
+    /** Scope + history generation of the current account, cached until the scope changes. */
+    private suspend fun ensureForYouScope(sourceId: Long): Pair<String, Long> {
+        val scope = accountScopeFor(sourceId)
+        if (forYouScope == scope) return scope to forYouGeneration
+        adoptFallbackHistory(sourceId, scope)
+        val generation = reelsConsumptionRepository.ensureScope(scope, ReelsForYou.POLICY_VERSION)
+        forYouScope = scope
+        forYouGeneration = generation
+        return scope to generation
+    }
+
+    /**
+     * The first generation of a cold start may run before the source can prove an account
+     * identity, so its history lands in the fallback `src:` scope. When the real identity
+     * appears, that history has to follow the user instead of vanishing: one transactional
+     * copy into the account scope, then the fallback rows are dropped.
+     *
+     * Idempotent and cheap after the first run (the source scope is empty by then), so it is
+     * safe to attempt on every scope resolution.
+     */
+    private suspend fun adoptFallbackHistory(sourceId: Long, scope: String) {
+        val fallback = ReelsForYou.fallbackScope(sourceId)
+        if (scope == fallback) return
+        val previous = forYouScope
+        if (previous != null && previous != fallback) return
+        runCatching { reelsConsumptionRepository.mergeScope(fallback, scope, sourceId) }
+            .onFailure { logcat(LogPriority.WARN, it) { "Reels history merge $fallback -> $scope failed" } }
+    }
+
+    /** Diagnostic surface stored with the summary; never used to decide filtering. */
+    private fun currentSurface(): ReelsSurface {
+        if (state.value.isOffline) return ReelsSurface.PLAYLIST
+        if (state.value.searchQuery.isNotBlank()) return ReelsSurface.SEARCH
+        return when (mode) {
+            FeedMode.GLOBAL -> ReelsSurface.FOR_YOU
+            FeedMode.CREATOR -> ReelsSurface.CREATOR
+            FeedMode.FOLLOWING -> ReelsSurface.FOLLOWING
+            FeedMode.CUSTOM -> ReelsSurface.CUSTOM
+            FeedMode.NICHE -> ReelsSurface.NICHE
+        }
+    }
+
+    /**
+     * Only the automatic For You feed hides consumed reels. Explicit surfaces (creator, niche,
+     * search, custom feeds, favorites, history) must never go empty because of this history —
+     * they may grow an "unwatched only" switch later.
+     */
+    private fun filtersUnseen(query: String): Boolean {
+        return mode == FeedMode.GLOBAL &&
+            query.isBlank() &&
+            !state.value.isOffline &&
+            state.value.unseenOnly &&
+            // Entering from the watch history is an explicit "play THIS clip" request: hiding
+            // the target would break the resume promise.
+            resumeVideoId == null
+    }
+
+    /** A page became the active card: a fresh visit starts, the previous one is dropped. */
+    fun onVisitStarted(item: ShortVideoItem) {
+        if (state.value.isOffline) return
+        interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
+        if (isReplaySurface()) sessionContinuity.visitStarted(item, persistEligible = true)
+    }
+
+    /** The player presented its first frame for this visit: time may start counting. */
+    fun onFirstFramePresented(itemId: String) {
+        interactionTracker.onFirstFrame(itemId)
+    }
+
+    /**
+     * One sample of the active page's player state.
+     *
+     * [eligible] folds together every condition the product contract requires: the card is the
+     * settled one, the screen is in the foreground, the player is really playing (not
+     * READY/paused/buffering) and a frame was presented. The summary is committed the moment
+     * the threshold is crossed — not on `onStop`, which a process kill can preempt.
+     */
+    fun onPlaybackSample(itemId: String, positionMs: Long, eligible: Boolean) {
+        if (state.value.isOffline) return
+        if (isReplaySurface()) sessionContinuity.sample(itemId, positionMs, foreground = eligible)
+        val event = interactionTracker.onSample(itemId, nowMs(), positionMs, eligible) ?: return
+        commitWatched(event.itemId)
+    }
+
+    /** Foreground loss: persist the latest position of the active visit before it can be lost. */
+    fun onForegroundLost() {
+        if (isReplaySurface()) sessionContinuity.flushActiveVisit()
+    }
+
+    fun onVideoCompleted(itemId: String) {
+        if (isReplaySurface()) sessionContinuity.videoCompleted(itemId)
+    }
+
+    fun onSeekPositionConsumed(itemId: String) {
+        if (state.value.pendingSeekItemId == itemId) {
+            mutableState.update { it.copy(pendingSeekItemId = null, pendingSeekPositionMs = null) }
+        }
+    }
+
+    /**
+     * The active card left the screen. Persists the resume position and the legacy history
+     * row; guarantees consumption is committed if not already done.
+     */
+    fun onVisitEnded(item: ShortVideoItem, positionMs: Long, positionFraction: Float, durationSec: Float) {
+        if (isReplaySurface()) sessionContinuity.positionBoundary(item.id, positionMs)
+        val snapshot = interactionTracker.endVisit(item.id, nowMs(), positionMs)
+        if (snapshot == null) return
+        // Remote personalization (opt-in capability) reports the REAL foreground playback the
+        // tracker measured, not the wall time the card spent on screen.
+        reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec)
+        recordWatchHistory(item, positionFraction, durationSec)
+        if (state.value.isOffline) return
+        val sourceId = state.value.currentSourceId
+        if (isIncognito(sourceId)) return
+
+        // Guarantee consumption on visit end: if real playback reached the threshold count as watched,
+        // otherwise count as skipped (e.g. swiped away or screen closed before threshold).
+        if (snapshot.qualified || snapshot.watchedMs >= ReelsForYou.WATCH_THRESHOLD_MS) {
+            commitWatched(item.id)
+        } else {
+            commitSkipped(item.id)
+        }
+
+        if (positionMs <= 0L) return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val (scope, _) = ensureForYouScope(sourceId)
+            reelsCandidateRepository.saveResumePosition(scope, sourceId, item.id, positionMs)
+        }
+    }
+
+    private fun commitWatched(itemId: String) {
+        val sourceId = state.value.currentSourceId
+        // Incognito means "do not persist what I watch" — the For You history included.
+        if (isIncognito(sourceId)) return
+        if (!watchedCommitted.add(itemId)) return
+        val surface = currentSurface().key
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val (scope, generation) = ensureForYouScope(sourceId)
+            val at = wallClock()
+            var ok = reelsConsumptionRepository.markWatched(
+                scope,
+                sourceId,
+                itemId,
+                at,
+                surface,
+                ReelsForYou.POLICY_VERSION,
+                generation,
+            )
+            // A transient DB failure gets one retry; a stale generation (history reset while
+            // the write was in flight) must NOT be retried — that is exactly the row the
+            // reset deleted.
+            if (!ok && reelsConsumptionRepository.generation(scope) == generation) {
+                ok = reelsConsumptionRepository.markWatched(
+                    scope,
+                    sourceId,
+                    itemId,
+                    at,
+                    surface,
+                    ReelsForYou.POLICY_VERSION,
+                    generation,
+                )
+            }
+            if (ok) {
+                reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
+            } else {
+                logcat(LogPriority.WARN) { "Reels watch for $itemId was not persisted (generation $generation)" }
+            }
+        }
+    }
+
+    private fun commitSkipped(itemId: String) {
+        if (state.value.isOffline) return
+        val sourceId = state.value.currentSourceId
+        if (isIncognito(sourceId)) return
+        if (watchedCommitted.contains(itemId)) return
+        if (!skippedCommitted.add(itemId)) return
+        val surface = currentSurface().key
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val (scope, generation) = ensureForYouScope(sourceId)
+            val ok = reelsConsumptionRepository.markSkipped(
+                scope,
+                sourceId,
+                itemId,
+                wallClock(),
+                surface,
+                ReelsForYou.POLICY_VERSION,
+                generation,
+            )
+            if (ok) {
+                reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
+            } else {
+                logcat(LogPriority.WARN) { "Reels skip for $itemId was not persisted (generation $generation)" }
+            }
+        }
+    }
+
+    /** "Only unwatched in For You": OFF is the explicit show-watched mode, not a history wipe. */
+    fun setUnseenOnly(enabled: Boolean) {
+        if (state.value.unseenOnly == enabled) return
+        persistUnlessIncognito(state.value.currentSourceId) {
+            sourcePreferences.reelsUnseenOnly().set(enabled)
+        }
+        watchedCommitted.clear()
+        skippedCommitted.clear()
+        mutableState.update { it.copy(unseenOnly = enabled) }
+        loadFeed(reset = true)
+    }
+
+    /**
+     * "Reset For You history" — bumps the history generation (fencing writers that are still
+     * in flight) and drops the summary. Explicit hidden/blacklist entries live in their own
+     * table and survive by design.
+     */
+    fun resetForYouHistory() {
+        invalidateReplay(dropCheckpoint = true)
+        val sourceId = state.value.currentSourceId
+        watchedCommitted.clear()
+        skippedCommitted.clear()
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val scope = accountScopeFor(sourceId)
+            val generation = reelsConsumptionRepository.resetHistory(scope, ReelsForYou.POLICY_VERSION)
+            forYouScope = scope
+            forYouGeneration = generation
+            withContext(Dispatchers.Main.immediate) { loadFeed(reset = true) }
+        }
+    }
+
+    private suspend fun persistForYouPage(scope: String, sourceId: Long, items: List<ShortVideoItem>) {
+        if (items.isEmpty() || isIncognito(sourceId)) return
+        val now = wallClock()
+        val candidates = items.map { it.toCandidate(scope, sourceId, now) }
+        if (isReplaySurface() && sessionContinuity.activeHandle?.key?.accountScopeId == scope) {
+            val contextKey = sessionContinuity.activeHandle?.key?.contextKey
+            sessionContinuity.persistPage(
+                candidates.map {
+                    it.copy(
+                        videoUrl = "",
+                        videoUrlHd = null,
+                        posterUrl = "",
+                        posterUrlVertical = null,
+                        capturedContextKey = contextKey,
+                    )
+                },
+            )
+        } else {
+            reelsCandidateRepository.ingest(scope, sourceId, candidates)
+        }
+    }
+
+    private fun ShortVideoItem.toCandidate(scope: String, sourceId: Long, now: Date): ReelsCandidate {
+        return ReelsCandidate(
+            accountScopeId = scope,
+            sourceId = sourceId,
+            itemId = id,
+            title = title,
+            author = author,
+            videoUrl = videoUrl,
+            videoUrlHd = videoUrlHd,
+            posterUrl = posterUrl,
+            posterUrlVertical = posterUrlVertical,
+            webUrl = webUrl,
+            durationSec = durationSec?.toDouble(),
+            hasAudio = hasAudio,
+            createdAtEpochSec = createdAtEpochSec,
+            discoveredAt = now,
+            lastValidatedAt = now,
+            availability = ReelsCandidate.AVAILABILITY_AVAILABLE,
+            retryAfter = null,
+            resumePositionMs = null,
+            metadataSchemaVersion = ReelsForYou.METADATA_SCHEMA_VERSION,
+            tagsJson = Json.encodeToString(tags),
+            viewsCount = viewsCount, likesCount = likesCount, isAuthorVerified = isAuthorVerified,
+        )
+    }
+
+    private fun ReelsCandidate.toShortVideoItem(): ShortVideoItem {
+        return ShortVideoItem(
+            id = itemId,
+            title = title,
+            author = author,
+            videoUrl = videoUrl,
+            videoUrlHd = videoUrlHd,
+            posterUrl = posterUrl.orEmpty(),
+            posterUrlVertical = posterUrlVertical,
+            durationSec = durationSec?.toFloat(),
+            hasAudio = hasAudio,
+            tags = runCatching { Json.decodeFromString<List<String>>(tagsJson) }.getOrDefault(emptyList()),
+            viewsCount = viewsCount, likesCount = likesCount, isAuthorVerified = isAuthorVerified,
+            webUrl = webUrl,
+            createdAtEpochSec = createdAtEpochSec,
+        )
+    }
+
     init {
         // Reactive albums-collection marks (report fix): saves from any screen (search cards,
         // album screen, niche row) update the saved set everywhere without manual reloads.
@@ -353,7 +800,15 @@ class ReelsFeedScreenModel(
                     }
                 } ?: storedPlayable
                 offlineSourceIds = localPlayable.map { it.sourceId }
-                val requestedIndex = localPlayable.indexOfFirst { it.videoId == initialVideoId }
+                // The tapped favorite is identified by BOTH its source and video id: the same
+                // videoId may exist in several sources of the merged playlist.
+                val requestedIndex = localPlayable.indexOfFirst {
+                    it.videoId == initialVideoId && it.sourceId == initialSourceId
+                }.takeIf { it >= 0 } ?: if (initialVideoId == null) {
+                    -1
+                } else {
+                    localPlayable.indexOfFirst { it.videoId == initialVideoId }
+                }
                 if (requestedIndex < 0) {
                     // The tapped video vanished between screens (unliked elsewhere / DB edit):
                     // start the playlist at the top instead of at an arbitrary position.
@@ -368,8 +823,11 @@ class ReelsFeedScreenModel(
                         items = localPlayable.map { fav -> fav.toShortVideoItem() }.toImmutableList(),
                         offlineSourceIds = offlineSourceIds.toImmutableList(),
                         offlineStored = stored.map { "${it.first}:${it.second}" }.toImmutableSet(),
+                        // Append/dedupe bookkeeping: the offline playlist never appends.
                         seenIds = localPlayable.map { it.videoId }.toImmutableSet(),
-                        likedIds = localPlayable.map { it.videoId }.toImmutableSet(),
+                        // Liked state is per (sourceId, videoId) here: a raw videoId would make
+                        // same-id favorites from two sources share one heart.
+                        likedIds = localPlayable.map { "${it.sourceId}:${it.videoId}" }.toImmutableSet(),
                         isLoading = false,
                         feedGeneration = 1,
                         targetPageIndex = startIndex,
@@ -441,6 +899,7 @@ class ReelsFeedScreenModel(
 
     fun switchSource(newSourceId: Long) {
         if (state.value.isOffline) return
+        invalidateReplay()
         val previousSourceId = state.value.currentSourceId
         val rawSource = sourceManager.get(newSourceId)
         if (rawSource is AnimeFeedSource) {
@@ -493,6 +952,11 @@ class ReelsFeedScreenModel(
             baseCanLoadMore = true
             basePosition = 0
             decidedIds.clear()
+            // Interaction ids are per (source, item): a source switch must not suppress the
+            // same id in a different source's history.
+            watchedCommitted.clear()
+            skippedCommitted.clear()
+            unseenRefillPages = 0
             // A manual switch to a DIFFERENT source voids any pending deep-link seek from the
             // entry point; the entry switch itself (same id) keeps it.
             if (newSourceId != previousSourceId) resumeNavPending = false
@@ -526,6 +990,7 @@ class ReelsFeedScreenModel(
                     albumSearchResults = persistentListOf(),
                     albumSearchNextPage = 1,
                     albumSearchNextCursor = null,
+                    albumSearchCursorMode = false,
                     albumSearchCanLoadMore = true,
                     previewAlbumId = null,
                     previewItems = persistentListOf(),
@@ -553,9 +1018,7 @@ class ReelsFeedScreenModel(
                     // Login state is per source: snapshot the persisted session (non-suspend,
                     // so safe on the main thread) and drop the previous source's account.
                     isLoginCapable = loginCapable,
-                    loggedInAccount = (rawSource as? AnimeFeedLoginSource)
-                        ?.takeIf { it.isLoggedIn() }
-                        ?.loggedInAccount(),
+                    loggedInAccount = null,
                     isLoggingIn = false,
                     loginError = null,
                     loginRejected = false,
@@ -625,8 +1088,15 @@ class ReelsFeedScreenModel(
      * behind [AnimeFeedSource.getFilterList] must not run there), then starts the first feed
      * generation back on the main dispatcher. Skipped when the user already switched away.
      */
-    private fun buildFiltersAndStartFeed(rawSource: AnimeFeedSource, sourceId: Long) {
-        screenModelScope.launch(ioDispatcher) {
+    private fun buildFiltersAndStartFeed(rawSource: AnimeFeedSource, sourceId: Long, resetReplay: Boolean = false) {
+        invalidateReplay()
+        loadJob?.cancel()
+        val entryGeneration = loadGeneration.incrementAndGet()
+        loadJob = screenModelScope.launch(ioDispatcher) {
+            val account = (rawSource as? AnimeFeedLoginSource)
+                ?.takeIf { it.isLoggedIn() }
+                ?.loggedInAccount()
+
             val filters = when (mode) {
                 FeedMode.GLOBAL -> rawSource.getFilterList()
                 FeedMode.NICHE -> (rawSource as? AnimeCategoryFeedOrderSource)?.categoryFilters()
@@ -636,16 +1106,235 @@ class ReelsFeedScreenModel(
             if (mode == FeedMode.GLOBAL) {
                 restoreFilters(filters, sourcePreferences.lastReelsFilter(sourceId).get())
             }
+
+            var restoredSession: RestoredReelsSession? = null
+            if (mode == FeedMode.GLOBAL && rawSource is AnimeFeedReplaySource &&
+                filtersUnseen(state.value.searchQuery) && !isIncognito(sourceId)
+            ) {
+                val replayContext = rawSource.prepareReplay()
+                if (replayContext != null) {
+                    val frozen = ReelsSessionContext.freezeFilters(rawSource, filters)
+                    val contextKey = ReelsSessionContext.computeContextKey(
+                        sourceId = sourceId,
+                        route = "main",
+                        query = "",
+                        unseenOnly = filtersUnseen(""),
+                        filterFingerprint = frozen.fingerprint,
+                        continuityKey = replayContext.continuityKey,
+                    )
+                    val (accountScope, historyGen) = ensureForYouScope(sourceId)
+                    val key = ReelsSessionKey(
+                        accountScopeId = accountScope,
+                        sourceId = sourceId,
+                        contextKey = contextKey,
+                    )
+                    ensureActive()
+                    if (loadGeneration.get() != entryGeneration ||
+                        state.value.currentSourceId != sourceId
+                    ) {
+                        return@launch
+                    }
+                    observedReplayKey = key
+                    replayKey = key
+                    restoredSession = sessionContinuity.restore(
+                        source = rawSource,
+                        key = key,
+                        context = replayContext,
+                        filters = frozen.filters,
+                        historyGeneration = historyGen,
+                        reset = resetReplay,
+                    )?.let { restored ->
+                        // Last line of defence before the queue becomes visible content.
+                        // The stored window already anti-joins the consumption summary, but
+                        // the summary can move (a scope merge, a write that landed after the
+                        // read) — and a restored reel the user already watched or swiped past
+                        // must never be drawn again. Cheap: one batch query per restore.
+                        val ids = restored.initialItems.map { it.id }
+                        val consumed = if (ids.isEmpty()) {
+                            emptySet()
+                        } else {
+                            reelsConsumptionRepository.consumedIds(accountScope, sourceId, ids)
+                        }
+                        if (consumed.isEmpty()) {
+                            restored
+                        } else {
+                            val kept = restored.initialItems.filterNot { it.id in consumed }
+                            val seekId = restored.seekItemId?.takeIf { it !in consumed }
+                            restored.copy(
+                                initialItems = kept,
+                                seekItemId = seekId,
+                                seekPositionMs = if (seekId == null) null else restored.seekPositionMs,
+                            )
+                        }
+                    }
+                }
+            }
+
             withContext(Dispatchers.Main.immediate) {
-                if (state.value.currentSourceId != sourceId) return@withContext
-                mutableState.update { it.copy(filters = filters) }
-                loadFeed(reset = true)
+                if (state.value.currentSourceId != sourceId ||
+                    loadGeneration.get() != entryGeneration
+                ) {
+                    return@withContext
+                }
+                mutableState.update {
+                    it.copy(
+                        filters = filters,
+                        loggedInAccount = account,
+                    )
+                }
+                if (restoredSession != null && restoredSession.initialItems.isNotEmpty()) {
+                    applyRestoredSession(restoredSession)
+                } else {
+                    loadFeedInternal(reset = true)
+                }
             }
         }
     }
 
+    private fun applyRestoredSession(restored: RestoredReelsSession) {
+        val initialItems = restored.initialItems
+        val seekTargetIndex = if (restored.seekItemId != null) {
+            initialItems.indexOfFirst { it.id == restored.seekItemId }.coerceAtLeast(0)
+        } else {
+            0
+        }
+
+        mutableState.update { current ->
+            current.copy(
+                items = initialItems.toImmutableList(),
+                seenIds = initialItems.map { it.id }.toImmutableSet(),
+                isLoading = false,
+                canLoadMore = true,
+                feedGeneration = current.feedGeneration + 1,
+                targetPageIndex = seekTargetIndex,
+                activeIndex = seekTargetIndex,
+                pendingSeekItemId = restored.seekItemId,
+                pendingSeekPositionMs = restored.seekPositionMs,
+                replayLocalHasMore = restored.localHasMore,
+            )
+        }
+
+        initialItems.getOrNull(seekTargetIndex)?.let {
+            sessionContinuity.visitStarted(it, persistEligible = true)
+        }
+
+        val preparedKey = replayKey
+        remoteTailJob?.cancel()
+        remoteTailJob = screenModelScope.launch(ioDispatcher) {
+            delay(1000L)
+            if (preparedKey != null && replayKey == preparedKey) loadRemoteTail(reset = true)
+        }
+    }
+
+    private fun loadRemoteTail(reset: Boolean) {
+        if (state.value.isOffline || !isReplaySurface()) return
+        val requestedKey = replayKey ?: return
+        val src = source ?: return
+        val snapshot = state.value
+        val sourceIdAtStart = snapshot.currentSourceId
+        val filters = sessionContinuity.frozenFilters() ?: return
+        val page = if (reset) 1 else snapshot.nextPageIndex
+        val cursor = if (reset) null else (if (snapshot.cursorMode) snapshot.nextCursor else null)
+
+        remoteTailJob = screenModelScope.launch(ioDispatcher) {
+            try {
+                val pageData = src.getFeed(page, cursor, filters)
+                ensureActive()
+                if (replayKey != requestedKey || !isReplaySurface()) return@launch
+
+                val rawIncoming = pageData.videos.distinctBy { it.id }.filterHidden()
+                val (scope, _) = ensureForYouScope(sourceIdAtStart)
+                val consumed = reelsConsumptionRepository.consumedIds(scope, sourceIdAtStart, rawIncoming.map { it.id })
+                val incoming = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+
+                if (incoming.isNotEmpty()) {
+                    persistForYouPage(scope, sourceIdAtStart, incoming)
+                }
+
+                val step = ReelsPagination(
+                    nextPage = page,
+                    nextCursor = cursor,
+                    cursorMode = snapshot.cursorMode,
+                    canLoadMore = snapshot.canLoadMore,
+                ).advance(pageData.hasNextPage, pageData.nextCursor)
+
+                withContext(Dispatchers.Main.immediate) {
+                    if (state.value.currentSourceId != sourceIdAtStart || replayKey != requestedKey) return@withContext
+                    mutableState.update { current ->
+                        current.copy(
+                            canLoadMore = step.pagination.canLoadMore,
+                            nextPageIndex = step.pagination.nextPage,
+                            nextCursor = step.pagination.nextCursor,
+                            cursorMode = step.pagination.cursorMode,
+                            replayLocalHasMore = current.replayLocalHasMore || incoming.isNotEmpty(),
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                // Cancelled
+            } catch (t: Throwable) {
+                logcat(LogPriority.WARN, t) { "Background tail load failed for source $sourceIdAtStart" }
+            }
+        }
+    }
+
+    private fun loadLocalReplayWindow(): Boolean {
+        val snapshot = state.value
+        if (!isReplaySurface() || !snapshot.replayLocalHasMore || snapshot.isLoading) return false
+        val generation = loadGeneration.incrementAndGet()
+        loadJob?.cancel()
+        mutableState.update { it.copy(isLoading = true) }
+        loadJob = screenModelScope.launch(ioDispatcher) {
+            try {
+                val window = sessionContinuity.loadNextWindow()
+                ensureActive()
+                withContext(Dispatchers.Main.immediate) {
+                    if (loadGeneration.get() != generation ||
+                        state.value.currentSourceId != snapshot.currentSourceId
+                    ) {
+                        return@withContext
+                    }
+                    mutableState.update { current ->
+                        val added = window.entries.map { it.candidate.toShortVideoItem() }.filterHidden()
+                            .filterNot { it.id in current.seenIds }
+                        current.copy(
+                            items = (current.items + added).toImmutableList(),
+                            seenIds = (current.seenIds + added.map { it.id }).toImmutableSet(),
+                            replayLocalHasMore = window.hasMore,
+                            isLoading = false,
+                            pageError = null,
+                        )
+                    }
+                    if (window.entries.isEmpty() && window.hasMore) loadLocalReplayWindow()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                if (loadGeneration.get() == generation) {
+                    mutableState.update {
+                        it.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
+                    }
+                }
+            }
+        }
+        return true
+    }
+
     fun loadFeed(reset: Boolean = false) {
+        if (reset) {
+            val replaySource = source
+            if (replaySource != null && isReplaySurface()) {
+                buildFiltersAndStartFeed(replaySource, state.value.currentSourceId, resetReplay = true)
+                return
+            }
+            invalidateReplay()
+        }
+        loadFeedInternal(reset)
+    }
+
+    private fun loadFeedInternal(reset: Boolean = false) {
         if (state.value.isOffline) return
+        if (!reset && loadLocalReplayWindow()) return
         val src = source ?: return
         if (!reset && state.value.isLoading) return
         // Album-search pagination lives on its own cursor/cap flag (report fix): the feed's
@@ -656,6 +1345,11 @@ class ReelsFeedScreenModel(
 
         loadJob?.cancel()
         val generation = loadGeneration.incrementAndGet()
+        if (reset) {
+            runway.reset()
+            lastPagerPage = 0
+            unseenRefillPages = 0
+        }
 
         // Set synchronously before the coroutine is dispatched: two rapid
         // loadNextPageIfNeeded() calls must not both pass the isLoading guard while the
@@ -675,7 +1369,10 @@ class ReelsFeedScreenModel(
                     albumSearchResults = persistentListOf(),
                     albumSearchNextPage = 1,
                     albumSearchNextCursor = null,
+                    albumSearchCursorMode = false,
                     albumSearchCanLoadMore = true,
+                    unseenHidden = 0,
+                    unseenScanStopped = false,
                 )
             } else {
                 current.copy(isLoading = true, error = null, errorRes = null, errorCounts = null)
@@ -685,8 +1382,11 @@ class ReelsFeedScreenModel(
         // must not read snapshot state after its input sections were reset by a newer load.
         val snapshot = state.value
         val query = snapshot.searchQuery
-        val filters = snapshot.filters
+        val filters = if (replayKey != null) sessionContinuity.frozenFilters() ?: snapshot.filters else snapshot.filters
         val page = snapshot.nextPageIndex
+        val sourceIdAtStart = snapshot.currentSourceId
+        // Decided once per request: a preference flip mid-flight must not half-filter a page.
+        val unseenFilter = filtersUnseen(query)
         // Contract v17: while locked into cursor mode the token is authoritative;
         // in page-int mode the source always receives a null cursor.
         val cursor = if (snapshot.cursorMode) snapshot.nextCursor else null
@@ -708,11 +1408,13 @@ class ReelsFeedScreenModel(
             return
         }
 
+        val pageAtLoadStart = lastPagerPage
         loadJob = screenModelScope.launch(ioDispatcher) {
             if (mode == FeedMode.FOLLOWING) {
                 loadFollowing(generation = generation, reset = reset, src = src)
                 return@launch
             }
+            runway.onLoadStarted()
             try {
                 // The creator page shares the sticky cursor protocol with the global feed,
                 // just on its own per-stream token space (contract v18). switchSource has
@@ -781,39 +1483,79 @@ class ReelsFeedScreenModel(
                     pageData.videos.distinctBy { it.id }.filterHidden()
                         .all { it.id in state.value.seenIds }
 
+                val itemsBeforeAppend = state.value.items.size
+
+                // --- For You: filter BEFORE the page is published, never after ---
+                // Receiving, decoding and prefetching are transport facts: they never create
+                // a consumption row. Only an already recorded watch/skip removes a reel here.
+                val rawIncoming = pageData.videos.distinctBy { it.id }.filterHidden()
+                val forYou = if (unseenFilter) ensureForYouScope(sourceIdAtStart) else null
+                val consumed = if (forYou != null && rawIncoming.isNotEmpty()) {
+                    reelsConsumptionRepository.consumedIds(
+                        forYou.first,
+                        sourceIdAtStart,
+                        rawIncoming.map { it.id },
+                    )
+                } else {
+                    emptySet()
+                }
+                val incoming = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+                // Durable inbox: persisted BEFORE the UI publish, so a crash between the two
+                // still leaves the received candidates recoverable after reopening.
+                if (forYou != null && incoming.isNotEmpty()) {
+                    persistForYouPage(forYou.first, sourceIdAtStart, incoming)
+                }
+                // Restart/rescan recovery: the durable unseen backlog seeds a fresh generation,
+                // so reels the user never reached survive a lost plugin cursor. Fresh items
+                // keep the head of the feed; the backlog follows them.
+                val backlog = if (reset && forYou != null) {
+                    reelsCandidateRepository
+                        .unconsumed(forYou.first, sourceIdAtStart, ReelsForYou.BACKLOG_SEED_LIMIT)
+                        .map { it.toShortVideoItem() }
+                } else {
+                    emptyList()
+                }
+
                 mutableState.update { current ->
                     // Re-check inside the CAS: a reset may have landed between the outer guard
                     // and this update; writing a stale page would corrupt the newer feed.
                     if (loadGeneration.get() != generation) return@update current
-                    val incoming = pageData.videos.distinctBy { it.id }.filterHidden()
                     val newItems = if (reset) {
                         incoming
                     } else {
                         incoming.filterNot { it.id in current.seenIds }
                     }
-                    // Sticky cursor mode (contract v17): the first non-null cursor locks the
-                    // whole generation into cursor mode.
-                    val newCursorMode = current.cursorMode || pageData.nextCursor != null
-                    // Cursor lost mid-feed while more pages are claimed is a protocol
-                    // violation: stop pagination, keep the feed usable.
-                    val cursorLost = newCursorMode && pageData.nextCursor == null && pageData.hasNextPage
-                    if (cursorLost) {
+                    val merged = when {
+                        !reset -> current.items + newItems
+                        backlog.isEmpty() -> newItems
+                        else -> (newItems + backlog).distinctBy { it.id }
+                    }
+                    // Sticky cursor mode (contract v17), shared with every other host surface:
+                    // the first non-null token locks the generation, and losing the token while
+                    // more pages are claimed is a protocol violation that stops pagination.
+                    val step = ReelsPagination(
+                        nextPage = current.nextPageIndex,
+                        nextCursor = current.nextCursor,
+                        cursorMode = current.cursorMode,
+                        canLoadMore = current.canLoadMore,
+                    ).advance(pageData.hasNextPage, pageData.nextCursor)
+                    if (step.cursorLost) {
                         logcat(LogPriority.WARN) {
                             "Feed ${current.currentSourceId} dropped its cursor mid-feed; stopping pagination (contract v17)."
                         }
                     }
                     current.copy(
-                        items = (if (reset) newItems else current.items + newItems).toImmutableList(),
+                        items = merged.toImmutableList(),
                         seenIds = if (reset) {
-                            newItems.map { it.id }.toImmutableSet()
+                            merged.map { it.id }.toImmutableSet()
                         } else {
                             (current.seenIds + newItems.map { it.id }).toImmutableSet()
                         },
                         isLoading = false,
-                        canLoadMore = pageData.hasNextPage && !cursorLost,
-                        nextPageIndex = page + 1,
-                        nextCursor = pageData.nextCursor,
-                        cursorMode = newCursorMode,
+                        canLoadMore = step.pagination.canLoadMore,
+                        nextPageIndex = step.pagination.nextPage,
+                        nextCursor = step.pagination.nextCursor,
+                        cursorMode = step.pagination.cursorMode,
                         feedGeneration = if (reset || resumeTarget >= 0) {
                             current.feedGeneration + 1
                         } else {
@@ -834,18 +1576,47 @@ class ReelsFeedScreenModel(
                         activeIndex = if (reset) 0 else current.activeIndex,
                         // A recovered append must not leave a stale transient error.
                         pageError = null,
+                        unseenHidden = if (consumed.isEmpty()) {
+                            current.unseenHidden
+                        } else {
+                            current.unseenHidden + consumed.size
+                        },
                     )
                 }
-                // Deep-link seek continuation: the tapped clip was not on this page — silently
-                // append the next page until it surfaces (unbounded by design: deep albums put
-                // the clip dozens of pages in). Natural stops: end of feed, or a stall page
-                // that adds nothing new (protects against infinite loops on broken sources).
+                runway.onLoadFinished()
+                val itemsAfterAppend = state.value.items.size
+                val appended = if (reset) itemsAfterAppend else itemsAfterAppend - itemsBeforeAppend
+                // Deep-link seek continuation: the tapped clip was not on this page — append
+                // the next page until it surfaces, bounded by RESUME_SEEK_MAX_PAGES so a
+                // missing target cannot drain an endless feed. Natural stops: end of feed,
+                // a stall page that adds nothing new, or the page budget.
                 if (resumeNavPending && state.value.canLoadMore) {
-                    if (seekStalled) {
+                    if (seekStalled || resumeSeekPages >= RESUME_SEEK_MAX_PAGES) {
+                        if (!seekStalled) {
+                            logcat(LogPriority.WARN) {
+                                "Deep-link target $resumeVideoId not found within " +
+                                    "$RESUME_SEEK_MAX_PAGES pages; stopping the silent seek."
+                            }
+                        }
                         resumeNavPending = false
                     } else {
+                        resumeSeekPages++
                         loadFeed(reset = false)
                     }
+                } else if (unseenFilter && incoming.isEmpty() && state.value.canLoadMore) {
+                    // The whole page was already consumed. Keep scanning — bounded — so a deep
+                    // watch history cannot turn For You into a permanent empty screen. Running
+                    // out of budget is NOT end-of-feed: the screen says "still scanning".
+                    if (unseenRefillPages < ReelsForYou.UNSEEN_REFILL_MAX_PAGES) {
+                        unseenRefillPages++
+                        loadFeed(reset = false)
+                    } else {
+                        mutableState.update { it.copy(unseenScanStopped = true) }
+                    }
+                } else if (appended > 0 && lastPagerPage > pageAtLoadStart) {
+                    // The fling crossed at least one page while this page was in flight:
+                    // re-evaluate the runway so the next page is already on its way.
+                    maybeLoadMoreForRunway()
                 }
             } catch (e: CancellationException) {
                 // Superseded by a newer reset/switch: keep whatever state the new load owns.
@@ -856,6 +1627,19 @@ class ReelsFeedScreenModel(
                 logcat(LogPriority.ERROR, t) { "Failed to load video feed from source ${state.value.currentSourceId}" }
                 // A load that lost the generation race must not stamp its error onto the new feed.
                 if (loadGeneration.get() != generation) return@launch
+                runway.onLoadAborted()
+                val msg = t.localizedMessage.orEmpty()
+                // Contract v25: a source-supplied verdict replaces the text heuristics. On an
+                // append, an expired cursor only ends this feed session: the usable feed stays,
+                // the dead cursor is never retried, and a refresh starts a fresh generation.
+                val verdict = classifyFeedError(t)
+                if (verdict == FeedError.ExpiredCursor && !reset && state.value.items.isNotEmpty()) {
+                    logcat(LogPriority.WARN) {
+                        "Feed ${state.value.currentSourceId} cursor expired; stopping pagination (contract v25)."
+                    }
+                    mutableState.update { it.copy(isLoading = false, canLoadMore = false, pageError = null) }
+                    return@launch
+                }
                 mutableState.update { current ->
                     if (current.items.isEmpty()) {
                         current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
@@ -865,21 +1649,66 @@ class ReelsFeedScreenModel(
                         current.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
                     }
                 }
-                // Cloudflare managed challenge (403) or a dead account bearer (401) on
-                // web-login-capable sources: bootstrap the session cookies/tokens via an
-                // offscreen WebView without any user interaction; the import verification
-                // reloads the feed on success. Capped per source entry (see the helper).
-                val msg = t.localizedMessage.orEmpty()
-                maybeBumpBootstrap(HTTP_SESSION_ERROR_REGEX.containsMatchIn(msg))
-                maybeScheduleRateLimitRetry(msg, reset)
+                handleFeedErrorVerdict(verdict, msg, reset)
             }
         }
     }
 
+    /**
+     * Samples the live pager position (including transient pages crossed during a fling)
+     * and asks the adaptive runway whether the next page should already be in flight.
+     */
+    fun onPagerPositionChanged(page: Int) {
+        if (page < 0) return
+        lastPagerPage = page
+        runway.onPage(page)
+        maybeLoadMoreForRunway()
+    }
+
     fun loadNextPageIfNeeded(visibleIndex: Int) {
-        if (visibleIndex >= state.value.items.size - 2 && state.value.canLoadMore && !state.value.isLoading) {
-            loadFeed(reset = false)
+        if (mode == FeedMode.FOLLOWING) {
+            // Following feeds top up per-creator streams and keep their own merged-tail rule.
+            if (visibleIndex >= state.value.items.size - 2 &&
+                state.value.canLoadMore &&
+                !state.value.isLoading
+            ) {
+                loadFeed(reset = false)
+            }
+            return
         }
+        if (visibleIndex >= 0) {
+            lastPagerPage = visibleIndex
+            runway.onPage(visibleIndex)
+        }
+        maybeLoadMoreForRunway()
+    }
+
+    private fun maybeLoadMoreForRunway() {
+        val current = state.value
+        if (mode == FeedMode.FOLLOWING) return
+        if (current.isOffline || current.isLoading || (!current.canLoadMore && !current.replayLocalHasMore) ||
+            current.items.isEmpty()
+        ) {
+            return
+        }
+        // Album search paginates on its own cursor/cap flag; the reels runway does not apply.
+        if (current.albumSearchCapable && current.searchQuery.isNotBlank()) return
+
+        val page = lastPagerPage.coerceIn(0, current.items.lastIndex)
+        val decision = runway.evaluate(
+            page = page,
+            total = current.items.size,
+            isLoading = current.isLoading,
+            canLoadMore = current.canLoadMore || current.replayLocalHasMore,
+        )
+        if (!decision.shouldLoad) return
+
+        logcat(LogPriority.DEBUG) {
+            "Reels runway: page=$page size=${current.items.size} " +
+                "remaining=${decision.pagesRemaining} rate=${"%.2f".format(decision.pagesPerSecond)}/s " +
+                "eta=${decision.etaMs}ms"
+        }
+        loadFeed(reset = false)
     }
 
     /**
@@ -904,19 +1733,47 @@ class ReelsFeedScreenModel(
     private suspend fun loadAlbumSearch(generation: Int, reset: Boolean, src: AnimeAlbumSearchSource, query: String) {
         try {
             val snapshot = state.value
-            val page = if (reset) 1 else snapshot.albumSearchNextPage
-            val cursor = if (reset) null else snapshot.albumSearchNextCursor
+            // Same sticky reducer as the video feed: the album stream owns its own cursor
+            // space, and a null token after the lock is a violation, not a page-int restart.
+            val pagination = if (reset) {
+                ReelsPagination()
+            } else {
+                ReelsPagination(
+                    nextPage = snapshot.albumSearchNextPage,
+                    nextCursor = snapshot.albumSearchNextCursor,
+                    cursorMode = snapshot.albumSearchCursorMode,
+                    canLoadMore = snapshot.albumSearchCanLoadMore,
+                )
+            }
+            val page = pagination.nextPage
+            val cursor = if (pagination.cursorMode) pagination.nextCursor else null
             val pageData = src.searchAlbums(query, page, cursor)
             currentCoroutineContext().ensureActive()
             if (loadGeneration.get() != generation) return
             rateLimitRetries = 0
             mutableState.update { current ->
+                // Re-check inside the CAS: a newer query/reset may have landed between the
+                // outer guard and this update; a stale album page must not touch its state.
+                if (loadGeneration.get() != generation) return@update current
+                val step = ReelsPagination(
+                    nextPage = current.albumSearchNextPage,
+                    nextCursor = current.albumSearchNextCursor,
+                    cursorMode = current.albumSearchCursorMode,
+                    canLoadMore = current.albumSearchCanLoadMore,
+                ).advance(pageData.hasNextPage, pageData.nextCursor)
+                if (step.cursorLost) {
+                    logcat(LogPriority.WARN) {
+                        "Album search for \"$query\" dropped its cursor mid-stream; stopping pagination (contract v17)."
+                    }
+                }
                 val base = if (reset) persistentListOf<FeedCategory>() else current.albumSearchResults
                 current.copy(
-                    albumSearchResults = (base + pageData.categories).toImmutableList(),
-                    albumSearchNextPage = page + 1,
-                    albumSearchNextCursor = pageData.nextCursor,
-                    albumSearchCanLoadMore = pageData.hasNextPage,
+                    // Duplicate ids would collide in the lazy-grid key space.
+                    albumSearchResults = (base + pageData.categories).distinctBy { it.id }.toImmutableList(),
+                    albumSearchNextPage = step.pagination.nextPage,
+                    albumSearchNextCursor = step.pagination.nextCursor,
+                    albumSearchCursorMode = step.pagination.cursorMode,
+                    albumSearchCanLoadMore = step.pagination.canLoadMore,
                     isLoading = false,
                     error = null,
                     errorRes = null,
@@ -928,10 +1785,25 @@ class ReelsFeedScreenModel(
         } catch (t: Throwable) {
             logcat(LogPriority.ERROR, throwable = t) { "Album search failed for query $query" }
             if (loadGeneration.get() != generation) return
-            maybeScheduleRateLimitRetry(t.localizedMessage.orEmpty(), reset)
-            mutableState.update { current ->
-                current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
+            val msg = t.localizedMessage.orEmpty()
+            val verdict = classifyFeedError(t)
+            if (verdict == FeedError.ExpiredCursor && !reset && state.value.albumSearchResults.isNotEmpty()) {
+                // The album cursor expired mid-stream: stop its pagination silently, keeping
+                // the albums already on screen (contract v25).
+                logcat(LogPriority.WARN) {
+                    "Album search for \"$query\" cursor expired; stopping pagination (contract v25)."
+                }
+                mutableState.update { current ->
+                    if (loadGeneration.get() != generation) return@update current
+                    current.copy(isLoading = false, albumSearchCanLoadMore = false)
+                }
+                return
             }
+            mutableState.update { current ->
+                if (loadGeneration.get() != generation) return@update current
+                current.copy(isLoading = false, error = msg)
+            }
+            handleFeedErrorVerdict(verdict, msg, reset)
         }
     }
 
@@ -1072,14 +1944,43 @@ class ReelsFeedScreenModel(
             if (loadGeneration.get() != generation) return
 
             val failures = mutableListOf<String>()
+            val unclassifiedFailures = mutableListOf<String>()
             val alive = mutableListOf<FollowingStream>()
+            val failedStreams = mutableSetOf<FollowingStream>()
+            var authRequired = false
+            var rateLimited = false
+            var rateLimitRetryAt: Long? = null
             requests.forEachIndexed { index, (stream, page, _) ->
                 val result = outcomes[index]
                 val pageData = result.getOrNull()
                 if (pageData == null) {
                     val t = result.exceptionOrNull()
+                    val verdict = t?.let(::classifyFeedError)
+                    if (verdict == FeedError.ExpiredCursor) {
+                        // One creator's cursor went stale: end that stream silently while the
+                        // aggregate feed keeps its other streams (contract v25). A reset
+                        // generation rebuilds the stream from cursor = null.
+                        logcat(LogPriority.WARN) {
+                            "Following stream '${stream.creator}' cursor expired; stopping it (contract v25)."
+                        }
+                        stream.exhausted = true
+                        alive += stream
+                        return@forEachIndexed
+                    }
                     logcat(LogPriority.ERROR, throwable = t) { "Following stream '${stream.creator}' failed" }
-                    failures += "'${stream.creator}': ${t?.localizedMessage ?: "failed"}"
+                    failedStreams += stream
+                    val text = "'${stream.creator}': ${t?.localizedMessage ?: "failed"}"
+                    failures += text
+                    when (verdict) {
+                        FeedError.AuthRequired -> authRequired = true
+                        is FeedError.RateLimited -> {
+                            rateLimited = true
+                            val at = verdict.retryAtEpochMillis
+                            if (at != null) rateLimitRetryAt = minOf(rateLimitRetryAt ?: at, at)
+                        }
+                        FeedError.Terminal, FeedError.Transient -> Unit
+                        FeedError.ExpiredCursor, null -> unclassifiedFailures += text
+                    }
                     return@forEachIndexed
                 }
                 stream.buffer.addAll(pageData.videos)
@@ -1098,19 +1999,27 @@ class ReelsFeedScreenModel(
                 stream.exhausted = !pageData.hasNextPage || cursorLost
                 alive += stream
             }
-            val failedStreams = requests.filterIndexed { index, _ -> outcomes[index].isFailure }
-                .map { it.first }
-                .toSet()
             followingStreams = if (reset) alive else followingStreams.filterNot { it in failedStreams }
             val merged = mergeFollowingStreams(followingStreams)
             val failedText = failures.joinToString("; ")
+            // Only unclassified failures fall through to the legacy text heuristics; a typed
+            // Terminal verdict must not bootstrap or back off just because its message
+            // happens to contain a status-like number.
+            val legacyText = unclassifiedFailures.joinToString("; ")
             // Same self-healing as loadFeed: a Cloudflare/dead-session failure inside the
             // creator streams re-lifts the web session through the bootstrap WebView.
-            maybeBumpBootstrap(HTTP_SESSION_ERROR_REGEX.containsMatchIn(failedText))
+            maybeBumpBootstrap(authRequired || HTTP_SESSION_ERROR_REGEX.containsMatchIn(legacyText))
             // B1: a rate-limited shutdown (every stream 429'd) schedules the capped auto-retry;
             // a fully clean fan-out resets the budget.
             if (alive.isEmpty() && failures.isNotEmpty()) {
-                maybeScheduleRateLimitRetry(failedText, reset)
+                if (rateLimited) {
+                    val seconds = rateLimitRetryAt
+                        ?.let { ((it - System.currentTimeMillis() + 999) / 1000L).coerceIn(1L, 120L).toInt() }
+                        ?: RATE_LIMIT_DEFAULT_RETRY_SEC
+                    scheduleRateLimitRetry(seconds, reset)
+                } else {
+                    maybeScheduleRateLimitRetry(legacyText, reset)
+                }
             } else if (failures.isEmpty()) {
                 rateLimitRetries = 0
             }
@@ -1179,6 +2088,8 @@ class ReelsFeedScreenModel(
         } catch (t: Throwable) {
             logcat(LogPriority.ERROR, t) { "Failed to load following feed from source ${state.value.currentSourceId}" }
             if (loadGeneration.get() != generation) return
+            val msg = t.localizedMessage.orEmpty()
+            val verdict = classifyFeedError(t)
             mutableState.update { current ->
                 if (current.items.isEmpty()) {
                     current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
@@ -1186,7 +2097,7 @@ class ReelsFeedScreenModel(
                     current.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
                 }
             }
-            maybeScheduleRateLimitRetry(t.localizedMessage.orEmpty(), reset)
+            handleFeedErrorVerdict(verdict, msg, reset)
         }
     }
 
@@ -1503,11 +2414,22 @@ class ReelsFeedScreenModel(
      * retries on the next page-finished/Done press) and surfaces [State.webLoginHint]; true
      * closes the dialog, snapshots the account label and reloads the feed exactly like a
      * password-login success. Transport failures of the import count as "not yet".
+     *
+     * Contract v24: [cookies] are origin-scoped records. A source implementing
+     * [AnimeFeedOriginScopedSessionSource] receives them as-is; legacy sources get the old
+     * last-wins name → value merge.
      */
-    fun tryImportWebSession(cookies: Map<String, String>, localStorage: Map<String, String>) {
+    fun tryImportWebSession(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) {
         val webSource = source as? AnimeFeedWebLoginSource ?: return
+        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching { webSource.importWebSession(cookies, localStorage) }.getOrDefault(false)
+            val imported = runCatching {
+                if (scopedSource != null) {
+                    scopedSource.importWebSessionScoped(cookies, localStorage)
+                } else {
+                    webSource.importWebSession(legacyCookieMap(cookies), localStorage)
+                }
+            }.getOrDefault(false)
             if (imported) onWebSessionImported() else mutableState.update { it.copy(webLoginHint = true) }
         }
     }
@@ -1517,10 +2439,17 @@ class ReelsFeedScreenModel(
         (source as? AnimeFeedWebLoginSource)?.isOwnLoginRedirect(url) == true
 
     /** Stage-2 code exchange (contract v20): same success/failure semantics as the SPA import. */
-    fun tryImportWebRedirect(url: String, cookies: Map<String, String>) {
+    fun tryImportWebRedirect(url: String, cookies: List<WebLoginCookie>) {
         val webSource = source as? AnimeFeedWebLoginSource ?: return
+        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching { webSource.importWebRedirect(url, cookies) }.getOrDefault(false)
+            val imported = runCatching {
+                if (scopedSource != null) {
+                    scopedSource.importWebRedirectScoped(url, cookies)
+                } else {
+                    webSource.importWebRedirect(url, legacyCookieMap(cookies))
+                }
+            }.getOrDefault(false)
             if (imported) applyWebLoginSuccess() else mutableState.update { it.copy(webLoginHint = true) }
         }
     }
@@ -1530,10 +2459,17 @@ class ReelsFeedScreenModel(
      * memory (nothing to lift — the RedGIFs case), bump the stage-2 counter so the dialog
      * loads the source's own PKCE authorize URL in the same WebView.
      */
-    fun tryImportWebSessionStage2(cookies: Map<String, String>, localStorage: Map<String, String>) {
+    fun tryImportWebSessionStage2(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) {
         val webSource = source as? AnimeFeedWebLoginSource ?: return
+        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching { webSource.importWebSession(cookies, localStorage) }.getOrDefault(false)
+            val imported = runCatching {
+                if (scopedSource != null) {
+                    scopedSource.importWebSessionScoped(cookies, localStorage)
+                } else {
+                    webSource.importWebSession(legacyCookieMap(cookies), localStorage)
+                }
+            }.getOrDefault(false)
             if (imported) {
                 onWebSessionImported()
             } else {
@@ -1798,6 +2734,7 @@ class ReelsFeedScreenModel(
      * write gates react through the preference's change flow / live reads.
      */
     fun toggleReelsIncognito() {
+        invalidateReplay()
         val next = !sourcePreferences.reelsIncognitoMode().get()
         sourcePreferences.reelsIncognitoMode().set(next)
     }
@@ -1874,8 +2811,19 @@ class ReelsFeedScreenModel(
     }
 
     fun toggleLike(item: ShortVideoItem, itemIndex: Int = -1) {
+        setLike(item, liked = !state.value.isLiked(item.id, itemIndex), itemIndex = itemIndex)
+    }
+
+    /**
+     * Idempotent like write. Gestures and accessibility actions can deliver the same intent
+     * twice (a double-tap replayed after the page was rebound, a repeated action) — a call
+     * whose target equals the current state must not flip the like back or duplicate the
+     * insert / remote feedback.
+     */
+    fun setLike(item: ShortVideoItem, liked: Boolean, itemIndex: Int = -1) {
         val videoId = item.id
-        val willLike = videoId !in state.value.likedIds
+        val likeKey = state.value.likeKey(videoId, itemIndex)
+        if (liked == (likeKey in state.value.likedIds)) return
         // The item comes from the caller (the page rendering it): re-finding it in state
         // would silently skip the insert when a feed refresh displaced the video between
         // the tap and the write. The write must survive screen disposal (NonCancellable).
@@ -1892,17 +2840,13 @@ class ReelsFeedScreenModel(
         val feedback = source as? AnimeReelsFeedbackSource
         decidedIds += videoId
         mutableState.update { state ->
-            val newLikes = if (videoId in state.likedIds) {
-                state.likedIds - videoId
-            } else {
-                state.likedIds + videoId
-            }
+            val newLikes = if (liked) state.likedIds + likeKey else state.likedIds - likeKey
             state.copy(likedIds = newLikes.toImmutableSet())
         }
         // Incognito blocks persisting a NEW like, but a removal must always reach the DB so a
         // previously saved like doesn't "resurrect" after restart.
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            if (willLike) {
+            if (liked) {
                 if (!isIncognito(sourceId)) {
                     reelsFavoriteRepository.insert(item.toReelsFavorite(sourceId))
                 }
@@ -1914,7 +2858,7 @@ class ReelsFeedScreenModel(
             // Incognito suppresses the REMOTE signal too: privacy applies end-to-end, not only
             // to the local DB.
             if (feedback != null && !isIncognito(sourceId)) {
-                runCatching { feedback.onVideoLiked(videoId, willLike) }
+                runCatching { feedback.onVideoLiked(videoId, liked) }
             }
         }
     }
@@ -2023,6 +2967,12 @@ class ReelsFeedScreenModel(
                     loginRejected = !ok,
                 )
             }
+            // A login can change the underlying account: the For You scope must be re-resolved
+            // instead of reusing the previous account's generation (or its pinned identity).
+            forYouScope = null
+            pinnedScope = null
+            watchedCommitted.clear()
+            skippedCommitted.clear()
             if (ok) loadFeed(reset = true)
         }
     }
@@ -2042,6 +2992,12 @@ class ReelsFeedScreenModel(
                 runCatching { clearWebLoginCookies(webLoginSource.webLoginUrl(), purgeOrigins) }
             }
             mutableState.update { it.copy(loggedInAccount = null, loginError = null, loginRejected = false) }
+            // Logout fences the account scope: the next load re-resolves it, so the previous
+            // account's history is never reused for a different session.
+            forYouScope = null
+            pinnedScope = null
+            watchedCommitted.clear()
+            skippedCommitted.clear()
             loadFeed(reset = true)
         }
     }
@@ -2196,16 +3152,75 @@ class ReelsFeedScreenModel(
 
     // --- B3.3 offline copies ---
 
-    enum class OfflineCopyResult { SAVED, REMOVED, FAILED_QUOTA, FAILED_NETWORK }
+    enum class OfflineCopyResult { SAVED, REMOVED, FAILED_QUOTA, FAILED_NETWORK, FAILED_UNSUPPORTED }
+
+    /**
+     * Contract v25: the source's own media verdict for [item], or null when the source does
+     * not implement the capability (the host then keeps the legacy URL-based rules).
+     * [sourceId] names the item's owning source when it differs from the live feed source
+     * (the offline playlist mixes sources; its slots carry their own id).
+     */
+    fun mediaDescriptor(item: ShortVideoItem, sourceId: Long? = null): FeedMediaDescriptor? {
+        val owner = sourceId?.let(sourceManager::get) ?: source
+        val descriptorSource = owner as? AnimeFeedMediaDescriptorSource ?: return null
+        return try {
+            descriptorSource.mediaDescriptor(item)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "mediaDescriptor failed for item ${item.id}; using legacy rules" }
+            null
+        }
+    }
 
     /**
      * Just-in-time stream signing (contract v22): sources may serve items with a blank
      * videoUrl (balbums v6+ defers signing to playback time); the player and the offline
      * downloader resolve through the resolver capability instead of batch-resolving pages.
+     * v25: a failed HD resolution may retry the base variant unless the descriptor opts out.
      */
-    suspend fun resolvePlaybackUrl(item: ShortVideoItem, hd: Boolean): String? {
-        val resolver = source as? AnimeFeedVideoResolverSource ?: return null
-        return runCatching { resolver.resolveVideoUrl(item.id, hd) }.getOrNull()
+    suspend fun resolvePlaybackUrl(
+        item: ShortVideoItem,
+        hd: Boolean,
+        sourceId: Long? = null,
+    ): String? {
+        val owner = sourceId?.let(sourceManager::get) ?: source
+        if (owner === source && isReplaySurface() && replayKey != null) {
+            val key = replayKey
+            val result = sessionContinuity.resolveItem(item.id)
+            if (replayKey != key) return null
+            if (result is FeedReplayItemResult.Available && result.item.id == item.id) {
+                val fresh = result.item
+                withContext(Dispatchers.Main.immediate) {
+                    if (replayKey == key) {
+                        mutableState.update { current ->
+                            current.copy(
+                                items = current.items.map { old ->
+                                    if (old.id == item.id && old.videoUrl.isBlank()) fresh else old
+                                }.toImmutableList(),
+                            )
+                        }
+                    }
+                }
+                return if (hd) fresh.videoUrlHd?.takeIf { it.isNotBlank() } ?: fresh.videoUrl else fresh.videoUrl
+            }
+            return null
+        }
+        val resolver = owner as? AnimeFeedVideoResolverSource ?: return null
+        val hdFallback = mediaDescriptor(item, sourceId)?.hdFallback ?: true
+        return try {
+            resolver.resolveVideoUrl(item.id, hd)?.takeIf { it.isNotBlank() }
+                ?: if (hd && hdFallback) {
+                    resolver.resolveVideoUrl(item.id, false)?.takeIf { it.isNotBlank() }
+                } else {
+                    null
+                }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "Video resolver failed for item ${item.id}" }
+            null
+        }
     }
 
     /**
@@ -2240,20 +3255,31 @@ class ReelsFeedScreenModel(
         }
         // Transport exceptions are a NETWORK verdict, never a crash in the UI scope.
         // Lazy-signed items (blank url) are resolved just-in-time before the download.
+        // v25: a source can declare an item non-downloadable; removing a stored copy above
+        // stays available regardless.
+        if (mediaDescriptor(item, sourceId)?.offlineSupported == false) {
+            return OfflineCopyResult.FAILED_UNSUPPORTED
+        }
         val downloadItem = if (item.videoUrl.isBlank()) {
-            val resolved = resolvePlaybackUrl(item, state.value.isHdQuality)
+            val resolved = resolvePlaybackUrl(item, state.value.isHdQuality, sourceId)
                 ?: return OfflineCopyResult.FAILED_NETWORK
             item.copy(videoUrl = resolved)
         } else {
             item
         }
-        val result = runCatching { offlineStore.download(downloadItem, sourceId) }
-            .getOrDefault(ReelsOfflineStore.DownloadResult.NETWORK)
+        val result = try {
+            offlineStore.download(downloadItem, sourceId)
+        } catch (e: CancellationException) {
+            // A cancelled screen must not report the download as a network failure.
+            throw e
+        } catch (_: Exception) {
+            ReelsOfflineStore.DownloadResult.NETWORK
+        }
         if (result != ReelsOfflineStore.DownloadResult.SAVED) {
-            return if (result == ReelsOfflineStore.DownloadResult.QUOTA) {
-                OfflineCopyResult.FAILED_QUOTA
-            } else {
-                OfflineCopyResult.FAILED_NETWORK
+            return when (result) {
+                ReelsOfflineStore.DownloadResult.QUOTA -> OfflineCopyResult.FAILED_QUOTA
+                ReelsOfflineStore.DownloadResult.UNSUPPORTED -> OfflineCopyResult.FAILED_UNSUPPORTED
+                else -> OfflineCopyResult.FAILED_NETWORK
             }
         }
         val local = offlineStore.localUrl(sourceId, item.id)
@@ -2394,13 +3420,58 @@ class ReelsFeedScreenModel(
     }
 
     /**
-     * Mirrors the active player's real state (audio-focus, lifecycle pauses and seek can stop
-     * ExoPlayer without the model's play intent changing). Drives FLAG_KEEP_SCREEN_ON and the
-     * watched-seconds accounting via [State.isActuallyPlaying].
+     * Mirrors the active player's real state (buffering, audio-focus, lifecycle pauses and
+     * seek can stop ExoPlayer without the model's play intent changing). Drives
+     * FLAG_KEEP_SCREEN_ON, PiP eligibility and chrome auto-hide via [State.isActuallyPlaying].
      */
     fun setPlaybackRunning(running: Boolean) {
         mutableState.update { current ->
             if (current.isActuallyPlaying == running) current else current.copy(isActuallyPlaying = running)
+        }
+    }
+
+    /**
+     * Contract v25: the source's typed verdict for a failed request, or null when it has no
+     * opinion (or the classifier itself failed) — the host then keeps its legacy error-text
+     * heuristics. A broken classifier must never mask the original feed error.
+     */
+    private fun classifyFeedError(error: Throwable): FeedError? {
+        val classifier = source as? AnimeFeedErrorClassifierSource ?: return null
+        return try {
+            classifier.classifyFeedError(error)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "Feed error classifier failed; using legacy heuristics" }
+            null
+        }
+    }
+
+    /**
+     * Applies a typed verdict (contract v25). A verdict is authoritative: Terminal suppresses
+     * the 401/403/429 text heuristics entirely, AuthRequired bootstraps even without status
+     * text, and RateLimited honors the source's retry window. Null = legacy behavior.
+     */
+    private fun handleFeedErrorVerdict(verdict: FeedError?, message: String, reset: Boolean) {
+        when (verdict) {
+            // Expired cursors are handled by the caller (silent append stop); a reset load
+            // has no cursor to expire and is surfaced as a regular terminal error.
+            FeedError.ExpiredCursor -> Unit
+            FeedError.AuthRequired -> maybeBumpBootstrap(true)
+            is FeedError.RateLimited -> scheduleRateLimitRetry(
+                seconds = verdict.retryAtEpochMillis
+                    ?.let { ((it - System.currentTimeMillis() + 999) / 1000L).coerceIn(1L, 120L).toInt() }
+                    ?: RATE_LIMIT_DEFAULT_RETRY_SEC,
+                reset = reset,
+            )
+            FeedError.Transient, FeedError.Terminal -> Unit
+            null -> {
+                // Cloudflare managed challenge (403) or a dead account bearer (401) on
+                // web-login-capable sources: bootstrap via an offscreen WebView without user
+                // interaction; the import verification reloads the feed on success.
+                maybeBumpBootstrap(HTTP_SESSION_ERROR_REGEX.containsMatchIn(message))
+                maybeScheduleRateLimitRetry(message, reset)
+            }
         }
     }
 
@@ -2412,10 +3483,14 @@ class ReelsFeedScreenModel(
      */
     private fun maybeScheduleRateLimitRetry(message: String, reset: Boolean) {
         if (!HTTP_TOO_MANY_REQUESTS_REGEX.containsMatchIn(message)) return
-        if (rateLimitRetries >= RATE_LIMIT_MAX_RETRIES) return
         val seconds = RETRY_AFTER_REGEX.find(message)?.groupValues?.get(1)?.toIntOrNull()
             ?.coerceIn(1, 120)
             ?: RATE_LIMIT_DEFAULT_RETRY_SEC
+        scheduleRateLimitRetry(seconds, reset)
+    }
+
+    private fun scheduleRateLimitRetry(seconds: Int, reset: Boolean) {
+        if (rateLimitRetries >= RATE_LIMIT_MAX_RETRIES) return
         val sourceId = state.value.currentSourceId
         rateLimitRetries++
         mutableState.update { it.copy(retryAfterSec = seconds) }
@@ -2449,14 +3524,33 @@ class ReelsFeedScreenModel(
         }
     }
 
-    fun onPageChanged(index: Int) {
+    fun onPageChanged(index: Int, cause: ReelsTransitionCause = ReelsTransitionCause.PROGRAMMATIC) {
+        val previousIndex = state.value.activeIndex
+        val previousItem = state.value.items.getOrNull(previousIndex)
+        // A skip exists only for a COMMITTED MANUAL forward move away from the card that was
+        // actually settled. Cancelled drags never reach this collector (settledPage does not
+        // change), auto-advance/restore/error-fallback arrive as PROGRAMMATIC and a backward
+        // move is USER_BACKWARD.
+        //
+        // EVERY card the user moved past is a skip, not only the origin: a fling settles one
+        // page further but means "I did not want any of these". Recording only the origin left
+        // the flown-over reels unconsumed, so they came back in the next generation.
+        if (cause == ReelsTransitionCause.USER_FORWARD && index > previousIndex && previousItem != null) {
+            val items = state.value.items
+            for (position in previousIndex until minOf(index, items.size)) {
+                items.getOrNull(position)?.let { commitSkipped(it.id) }
+            }
+        }
         mutableState.update {
             it.copy(
                 activeIndex = index,
                 // Swiping resumes playback only when the user has not deliberately paused;
                 // the sticky pause keeps every subsequently swiped page paused until resumed.
                 isPlaying = !it.userPaused,
-                isActuallyPlaying = !it.userPaused,
+                // P03: actual playback belongs to the settled page's player. The new page
+                // starts paused/preloaded, so claiming "running" here would keep the screen
+                // awake and hide the chrome while it is still buffering.
+                isActuallyPlaying = false,
             )
         }
         // Every feed mode persists its own browsing position (B3.1); the offline playlist has no
@@ -2606,6 +3700,7 @@ class ReelsFeedScreenModel(
         // Sticky per generation: locked true on the first response with a non-null cursor.
         val cursorMode: Boolean = false,
         val canLoadMore: Boolean = true,
+        val replayLocalHasMore: Boolean = false,
         val isMuted: Boolean = false,
         val isHdQuality: Boolean = true,
         // Force SD while on metered (non-Wi-Fi) networks; applied when a page activates.
@@ -2621,14 +3716,17 @@ class ReelsFeedScreenModel(
         // B3.1 resume-seek: when set, the matching clip seeks to [resumeFraction] once.
         val resumeVideoId: String? = null,
         val resumeFraction: Float? = null,
+        val pendingSeekItemId: String? = null,
+        val pendingSeekPositionMs: Long? = null,
         val isPlaying: Boolean = true,
         // Sticky user pause: set by an explicit pause tap, survives swipes (auto-advance must
         // not undo a deliberate pause) and is cleared only by an explicit resume tap.
         val userPaused: Boolean = false,
-        // Actual playback state as reported by the active page's player: audio-focus loss,
-        // lifecycle pauses and seek stop ExoPlayer without the model's play intent changing.
-        // Gates FLAG_KEEP_SCREEN_ON and the watched-seconds accounting.
-        val isActuallyPlaying: Boolean = true,
+        // Actual playback state as reported by the active page's player: buffering, audio-focus
+        // loss, lifecycle pauses and the media end stop ExoPlayer without the play intent
+        // changing. Starts false — nothing is confirmed playing before the player says so.
+        // Gates FLAG_KEEP_SCREEN_ON, PiP eligibility and chrome auto-hide.
+        val isActuallyPlaying: Boolean = false,
         // Bumped every time the feed content is replaced (search/filter/source/reset) so the
         // pager can reliably scroll back to the first video.
         val feedGeneration: Int = 0,
@@ -2642,6 +3740,9 @@ class ReelsFeedScreenModel(
         val albumSearchResults: ImmutableList<FeedCategory> = persistentListOf(),
         val albumSearchNextPage: Int = 1,
         val albumSearchNextCursor: String? = null,
+        // Sticky cursor lock of the album-search stream (contract v17): a null token after a
+        // token was seen is a violation, not a restart of the head page.
+        val albumSearchCursorMode: Boolean = false,
         val albumSearchCanLoadMore: Boolean = true,
         val savedAlbumIds: Set<String> = emptySet(),
         val previewAlbumId: String? = null,
@@ -2690,7 +3791,29 @@ class ReelsFeedScreenModel(
         val blockedTagsSaveFailed: Boolean = false,
         // Session-scoped "tap to unmute" pill: visible while the user has not decided sound.
         val showUnmuteHint: Boolean = false,
-    )
+        // For You unseen policy (durable consumption history). [unseenOnly] mirrors the user
+        // preference ("show watched" is its OFF state, not a history wipe); [unseenHidden]
+        // counts reels dropped because they were already watched/skipped in this generation;
+        // [unseenScanStopped] means the bounded refill budget ran out — which is NOT the same
+        // as "everything has been seen".
+        val unseenOnly: Boolean = true,
+        val unseenHidden: Int = 0,
+        val unseenScanStopped: Boolean = false,
+    ) {
+        /**
+         * Like identity for the playlist slot: the offline playlist merges several sources,
+         * where a raw videoId is ambiguous; single-source feeds keep the plain id.
+         */
+        fun likeKey(videoId: String, itemIndex: Int): String =
+            if (isOffline && itemIndex >= 0) {
+                "${offlineSourceIds.getOrNull(itemIndex) ?: currentSourceId}:$videoId"
+            } else {
+                videoId
+            }
+
+        fun isLiked(videoId: String, itemIndex: Int): Boolean =
+            likeKey(videoId, itemIndex) in likedIds
+    }
 }
 
 /**

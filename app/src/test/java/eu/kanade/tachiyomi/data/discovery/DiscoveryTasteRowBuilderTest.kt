@@ -12,8 +12,13 @@ class DiscoveryTasteRowBuilderTest {
 
     private class FakeTrending(
         private val genreItems: List<DiscoveryTrendingItem> = emptyList(),
+        private val pageItems: Map<Int, List<DiscoveryTrendingItem>> = emptyMap(),
         private val shouldFail: Boolean = false,
     ) : DiscoveryTrendingSource {
+        var lastQueriedGenres: List<String>? = null
+        var lastQueriedPage: Int? = null
+        val queriedPages = mutableListOf<Int>()
+
         override suspend fun fetch(
             mediaType: DiscoveryMediaType,
             season: TrendSeason,
@@ -29,8 +34,11 @@ class DiscoveryTasteRowBuilderTest {
             page: Int,
             releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
         ): List<DiscoveryTrendingItem> {
+            lastQueriedGenres = genres
+            lastQueriedPage = page
             if (shouldFail) throw IOException("trending boom")
-            return genreItems
+            queriedPages += page
+            return pageItems[page] ?: genreItems
         }
 
         override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? = null
@@ -38,6 +46,7 @@ class DiscoveryTasteRowBuilderTest {
 
     private class FakeCatalog(
         private val genreItems: List<DiscoveryRowItem> = emptyList(),
+        private val perSourceGenreItems: Map<Long, List<DiscoveryRowItem>> = emptyMap(),
         private val shouldFail: Boolean = false,
     ) : DiscoverySourceCatalog {
         override suspend fun popular(
@@ -55,7 +64,7 @@ class DiscoveryTasteRowBuilderTest {
             releaseStatuses: Set<DiscoveryReleaseStatus>,
         ): List<DiscoveryRowItem> {
             if (shouldFail) throw IOException("catalog boom")
-            return genreItems
+            return perSourceGenreItems[sourceId] ?: genreItems
         }
 
         override suspend fun latest(
@@ -189,5 +198,149 @@ class DiscoveryTasteRowBuilderTest {
             ).build(context())
         }
         result.getOrDefault(emptyList()) shouldBe emptyList()
+    }
+
+    @Test
+    fun `includeExternal false queries multiple sources and interleaves results`() = runTest {
+        val catalog = FakeCatalog(
+            perSourceGenreItems = mapOf(
+                10L to listOf(
+                    DiscoveryRowItem("Src10 Item 1", "src10 item 1", null, null, null, "Src10", 1.0, sourceId = 10L),
+                    DiscoveryRowItem("Src10 Item 2", "src10 item 2", null, null, null, "Src10", 0.9, sourceId = 10L),
+                ),
+                20L to listOf(
+                    DiscoveryRowItem("Src20 Item 1", "src20 item 1", null, null, null, "Src20", 1.0, sourceId = 20L),
+                    DiscoveryRowItem("Src20 Item 2", "src20 item 2", null, null, null, "Src20", 0.9, sourceId = 20L),
+                ),
+            ),
+        )
+        val ctx = context().copy(
+            sourceId = 10L,
+            sourceIds = listOf(10L, 20L),
+        )
+        val result = DiscoveryTasteRowBuilder(
+            trending = FakeTrending(shouldFail = true),
+            catalog = catalog,
+            sortProvider = { TrendSort.POPULARITY },
+            includeExternal = false,
+        ).build(ctx)
+
+        result.map { it.title } shouldBe listOf("Src10 Item 1", "Src20 Item 1", "Src10 Item 2", "Src20 Item 2")
+    }
+
+    @Test
+    fun `includeExternal true queries multiple sources and interleaves results with external trends`() = runTest {
+        val catalog = FakeCatalog(
+            perSourceGenreItems = mapOf(
+                10L to listOf(
+                    DiscoveryRowItem("Src10 Item 1", "src10 item 1", null, null, null, "Src10", 1.0, sourceId = 10L),
+                ),
+                20L to listOf(
+                    DiscoveryRowItem("Src20 Item 1", "src20 item 1", null, null, null, "Src20", 1.0, sourceId = 20L),
+                ),
+            ),
+        )
+        val ctx = context().copy(
+            sourceId = 10L,
+            sourceIds = listOf(10L, 20L),
+        )
+        val result = DiscoveryTasteRowBuilder(
+            trending = FakeTrending(shouldFail = true),
+            catalog = catalog,
+            sortProvider = { TrendSort.POPULARITY },
+            includeExternal = true,
+        ).build(ctx)
+
+        result.map { it.title } shouldBe listOf("Src10 Item 1", "Src20 Item 1")
+    }
+
+    @Test
+    fun `empty taste profile with required genres builds TASTE row from explicit genres`() = runTest {
+        val trending = FakeTrending(
+            genreItems = listOf(
+                DiscoveryTrendingItem("Cyber Love", "cyber love", null, 1L, null, genres = listOf("Cyberpunk")),
+            ),
+        )
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Cyberpunk"),
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val ctx = context(profile = emptyList()).copy(
+            requiredGenres = setOf("Cyberpunk"),
+            genreFilterSpec = spec,
+        )
+        val result = builder(trending, FakeCatalog()).build(ctx)
+        result.map { it.title } shouldBe listOf("Cyber Love")
+        trending.lastQueriedGenres shouldBe listOf("Cyberpunk")
+    }
+
+    @Test
+    fun `explicit required and priority genres take precedence over library profile in external query`() = runTest {
+        val trending = FakeTrending(
+            genreItems = listOf(
+                DiscoveryTrendingItem("Item", "item", null, 1L, null, genres = listOf("Sci-Fi")),
+            ),
+        )
+        val ctx = context(profile = listOf("Action" to 5.0, "Comedy" to 4.0)).copy(
+            requiredGenres = setOf("Sci-Fi"),
+            priorityGenres = setOf("Mecha"),
+        )
+        builder(trending, FakeCatalog()).build(ctx)
+        trending.lastQueriedGenres shouldBe listOf("Sci-Fi")
+    }
+
+    @Test
+    fun `strict required taste pages external provider until rich target`() = runTest {
+        val trending = FakeTrending(
+            pageItems = (1..3).associateWith { page ->
+                (1..10).map { index ->
+                    val title = "Page $page Item $index"
+                    DiscoveryTrendingItem(
+                        title,
+                        title.lowercase(),
+                        null,
+                        index.toLong(),
+                        null,
+                        genres = listOf("Milf"),
+                    )
+                }
+            },
+        )
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Milf"),
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val ctx = context(profile = emptyList()).copy(
+            requiredGenres = setOf("Milf"),
+            genreFilterSpec = spec,
+        )
+
+        val result = builder(trending, FakeCatalog()).build(ctx)
+
+        result.size shouldBe RICH_SOURCE_TARGET
+        trending.queriedPages shouldBe listOf(1, 2, 3)
+    }
+
+    @Test
+    fun `repeated external page stops required paging`() = runTest {
+        val repeated = (1..10).map { index ->
+            DiscoveryTrendingItem("Item $index", "item $index", null, index.toLong(), null, genres = listOf("Milf"))
+        }
+        val trending = FakeTrending(
+            pageItems = mapOf(1 to repeated, 2 to repeated, 3 to repeated),
+        )
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Milf"),
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val ctx = context(profile = emptyList()).copy(
+            requiredGenres = setOf("Milf"),
+            genreFilterSpec = spec,
+        )
+
+        val result = builder(trending, FakeCatalog()).build(ctx)
+
+        result.size shouldBe 10
+        trending.queriedPages shouldBe listOf(1, 2)
     }
 }

@@ -21,3 +21,7 @@ getExcludedScanlatorsByNovelId:
 SELECT scanlator
 FROM novel_excluded_scanlators
 WHERE novel_id = :novelId;
+
+getAll:
+SELECT novel_id, scanlator
+FROM novel_excluded_scanlators;

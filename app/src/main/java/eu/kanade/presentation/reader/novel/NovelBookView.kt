@@ -61,6 +61,9 @@ internal enum class NovelBookRendererReason {
     /** The content uses features the native renderer cannot express. */
     UNSUPPORTED_CONTENT,
 
+    /** The user explicitly opted into the WebView reader in preferences. */
+    USER_WEBVIEW,
+
     /** The native renderer presents the book; nothing was given up. */
     NONE,
 }
@@ -92,15 +95,9 @@ internal fun resolveNovelBookRenderer(
     richNativeRendererExperimentalEnabled: Boolean,
     bionicReadingEnabled: Boolean,
     richContentUnsupportedFeaturesDetected: Boolean,
-    /**
-     * True when the user configured custom CSS or JavaScript for the reader.
-     *
-     * Those hooks are applied to the WebView document and have no meaning for Compose text,
-     * so silently dropping them in the native renderer would look like the setting stopped
-     * working. Honouring the setting by staying on the WebView is the honest behaviour.
-     */
     customStylesPresent: Boolean = false,
     nativeBookRendererAvailable: Boolean = NOVEL_BOOK_NATIVE_RENDERER_READY,
+    preferWebViewRenderer: Boolean = false,
 ): NovelBookRenderer = resolveNovelBookRendererDecision(
     pageReaderEnabled = pageReaderEnabled,
     richNativeRendererExperimentalEnabled = richNativeRendererExperimentalEnabled,
@@ -108,6 +105,7 @@ internal fun resolveNovelBookRenderer(
     richContentUnsupportedFeaturesDetected = richContentUnsupportedFeaturesDetected,
     customStylesPresent = customStylesPresent,
     nativeBookRendererAvailable = nativeBookRendererAvailable,
+    preferWebViewRenderer = preferWebViewRenderer,
 ).renderer
 
 /**
@@ -123,6 +121,7 @@ internal fun resolveNovelBookRendererDecision(
     richContentUnsupportedFeaturesDetected: Boolean,
     customStylesPresent: Boolean = false,
     nativeBookRendererAvailable: Boolean = NOVEL_BOOK_NATIVE_RENDERER_READY,
+    preferWebViewRenderer: Boolean = false,
 ): NovelBookRendererDecision {
     // Pages are a presentation choice, not a fallback: the paged flow is a first-class book flow and
     // now stitches sections just like the scrolled one.
@@ -130,6 +129,12 @@ internal fun resolveNovelBookRendererDecision(
         return NovelBookRendererDecision(
             renderer = NovelBookRenderer.WEBVIEW_PAGINATED,
             reason = NovelBookRendererReason.PAGE_MODE,
+        )
+    }
+    if (preferWebViewRenderer) {
+        return NovelBookRendererDecision(
+            renderer = NovelBookRenderer.WEBVIEW_SCROLLED,
+            reason = NovelBookRendererReason.USER_WEBVIEW,
         )
     }
     val reason = when {

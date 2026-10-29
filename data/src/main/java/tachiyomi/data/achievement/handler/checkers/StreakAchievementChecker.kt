@@ -53,7 +53,7 @@ class StreakAchievementChecker(
 
             when {
                 // First iteration (today): no activity yet is OK, check yesterday
-                !checkedToday && activity == null -> {
+                !checkedToday && (activity == null || !hasActivity(activity)) -> {
                     checkedToday = true
                     checkDate = checkDate.minusDays(1)
                     return@repeat
@@ -62,12 +62,6 @@ class StreakAchievementChecker(
                 !checkedToday && hasActivity(activity) -> {
                     checkedToday = true
                     streak++
-                    checkDate = checkDate.minusDays(1)
-                    return@repeat
-                }
-                // First iteration (today): no activity log at all, check yesterday
-                !checkedToday -> {
-                    checkedToday = true
                     checkDate = checkDate.minusDays(1)
                     return@repeat
                 }
@@ -129,6 +123,9 @@ class StreakAchievementChecker(
                 date = dateStr,
                 chapterCount = record.chapters_read,
                 episodeCount = record.episodes_watched,
+                appOpens = record.app_opens,
+                durationMs = record.duration_ms,
+                level = record.level,
                 lastUpdated = record.last_updated,
             )
         } else {
@@ -140,7 +137,11 @@ class StreakAchievementChecker(
      * Check if an activity log contains any activity.
      */
     private fun hasActivity(activity: ActivityLog?): Boolean {
-        return activity != null && (activity.chapterCount > 0 || activity.episodeCount > 0)
+        return activity != null && (
+            activity.chapterCount > 0 ||
+                activity.episodeCount > 0 ||
+                activity.durationMs > 0
+            )
     }
 
     /**
@@ -150,6 +151,9 @@ class StreakAchievementChecker(
         val date: String,
         val chapterCount: Long,
         val episodeCount: Long,
+        val appOpens: Long,
+        val durationMs: Long,
+        val level: Long,
         val lastUpdated: Long,
     )
 }

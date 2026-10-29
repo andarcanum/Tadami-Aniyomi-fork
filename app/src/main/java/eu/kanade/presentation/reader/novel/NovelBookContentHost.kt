@@ -82,7 +82,7 @@ internal fun NovelBookContentHost(
     handle: NovelBookContentHandle,
     loadDocument: (suspend (NovelBookSection) -> NovelBookDocument)?,
     loadSectionHtml: suspend (Int) -> String?,
-    nativeBookBlocksForSection: (Int) -> List<eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock>?,
+    nativeBookBlocksForSection: suspend (Int) -> List<eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock>?,
     onSeekApplied: (Long) -> Unit,
     onLocationChanged: (NovelBookLocation) -> Unit,
     onScroll: (Int, Float) -> Unit,
@@ -207,17 +207,25 @@ internal fun NovelBookContentHost(
         if (pruned !== currentSections) nativeSections.value = pruned
         var sections = pruned
         missingNovelBookNativeSections(sections, window).forEach { sectionIndex ->
+            val expectedRevision = window.revisionOf(sectionIndex)
             val blocks = nativeBookBlocksForSection(sectionIndex)
                 ?: withContext(Dispatchers.Default) {
                     loadSectionHtml(sectionIndex)?.let(::parseNovelBookNativeSection)
                 }
                 ?: return@forEach
+            if (sectionIndex !in window.residentSections || window.revisionOf(sectionIndex) != expectedRevision) {
+                return@forEach
+            }
+            val canonicalStart = spine.startOffsetOf(sectionIndex)
+            val canonicalCount = spine.sectionAt(sectionIndex)?.charCount
             sections = withNovelBookNativeSection(
                 sections = sections,
                 section = NovelBookNativeSection(
                     sectionIndex = sectionIndex,
                     blocks = blocks,
-                    revision = window.revisionOf(sectionIndex),
+                    revision = expectedRevision,
+                    canonicalCharStart = canonicalStart,
+                    canonicalCharCount = canonicalCount,
                 ),
             )
             nativeSections.value = sections
@@ -231,7 +239,6 @@ internal fun NovelBookContentHost(
             lastAppliedSeekId = appliedSeekId[0],
             sectionFraction = state.bookMode.currentSectionFraction,
         ) ?: return@LaunchedEffect
-        appliedSeekId[0] = seekTarget.seekRequestId
         textListState.scrollToItem(seekTarget.itemIndex)
         val itemHeight = textListState.layoutInfo.visibleItemsInfo
             .firstOrNull { it.index == seekTarget.itemIndex }
@@ -239,6 +246,8 @@ internal fun NovelBookContentHost(
             ?: 0
         val offsetPx = (itemHeight * seekTarget.fraction).toInt()
         if (offsetPx > 0) textListState.scrollToItem(seekTarget.itemIndex, offsetPx)
+        // Cancellation during either scroll leaves the request eligible for the next effect.
+        appliedSeekId[0] = seekTarget.seekRequestId
         onSeekApplied(seekTarget.seekRequestId)
     }
     LaunchedEffect(useNativeBookScroll, nativeEntries) {
@@ -434,7 +443,9 @@ internal fun androidx.compose.foundation.lazy.LazyListScope.novelBookNativeConte
         entries,
         key = { _, entry ->
             when (entry) {
-                is NovelBookNativeEntry.Block -> "book-${entry.sectionIndex}-${entry.blockIndex}"
+                is NovelBookNativeEntry.Block ->
+                    entry.block.anchor?.domId
+                        ?: "book-${entry.sectionIndex}-${entry.blockIndex}"
                 is NovelBookNativeEntry.Failed -> "book-${entry.sectionIndex}-failed"
             }
         },

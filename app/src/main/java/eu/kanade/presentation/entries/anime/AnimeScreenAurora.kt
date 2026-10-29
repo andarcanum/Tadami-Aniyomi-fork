@@ -232,6 +232,9 @@ fun AnimeScreenAuroraImpl(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
+    onDeleteDownloadsClicked: () -> Unit = {},
+    onDeleteReadEpisodesClicked: () -> Unit = {},
 ) {
     val anime = state.anime
     var selectedGenres by remember { mutableStateOf(emptySet<String>()) }
@@ -853,6 +856,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -970,6 +974,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1342,6 +1347,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1488,6 +1494,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1959,6 +1966,26 @@ fun AnimeScreenAuroraImpl(
                                 showMenu = false
                             },
                         )
+                        val downloadedEpisodes = state.episodes.count { it.isDownloaded }
+                        val watchedDownloadedEpisodes = state.episodes.count { it.isDownloaded && it.episode.seen }
+                        if (downloadedEpisodes > 0) {
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(AYMR.strings.anime_delete_downloaded_menu, downloadedEpisodes),
+                                onClick = {
+                                    onDeleteDownloadsClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
+                        if (watchedDownloadedEpisodes > 0) {
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(AYMR.strings.anime_delete_read_menu, watchedDownloadedEpisodes),
+                                onClick = {
+                                    onDeleteReadEpisodesClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
                         AuroraEntryDropdownMenuItem(
                             text = autoJumpToNextLabel,
                             onClick = {

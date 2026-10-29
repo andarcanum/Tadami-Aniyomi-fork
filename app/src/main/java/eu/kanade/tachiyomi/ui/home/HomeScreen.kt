@@ -94,10 +94,11 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
@@ -163,7 +164,7 @@ val LocalHomeHazeState = staticCompositionLocalOf<HazeState?> { null }
 /**
  * Slot for overlays that must draw above the whole home scaffold but OUTSIDE the
  * [LocalHomeHazeState] haze source. Content hosted here (e.g. the nickname editor)
- * can use hazeEffect surfaces that sample and blur the real home content behind them
+ * can use haze blur surfaces that sample and blur the real home content behind them
  * — blurring only what sits under the surface instead of the entire screen.
  */
 val LocalHomeOverlayHost =
@@ -548,7 +549,7 @@ object HomeScreen : Screen() {
                         }
                         // Overlay slot rendered OUTSIDE the hazeSource content above:
                         // overlays hosted here (e.g. the nickname editor) can use
-                        // hazeEffect to blur the real home content behind their surface.
+                        // haze blur to blur the real home content behind their surface.
                         homeOverlayContent.value?.invoke()
                     }
                 }
@@ -876,12 +877,12 @@ object HomeScreen : Screen() {
         shape: Shape,
         hazeState: HazeState,
     ): Modifier {
-        val hazeStyle = HazeStyle(
-            backgroundColor = colors.background,
-            tint = HazeTint(colors.surface.copy(alpha = 0.65f)),
-            blurRadius = 24.dp,
-            noiseFactor = 0.12f,
-        )
+        val hazeStyle = HazeBlurStyle {
+            backgroundColor(colors.background)
+            colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.65f))))
+            blurRadius(24.dp)
+            noiseFactor(0.12f)
+        }
         return if (colors.isDark) {
             this
                 .shadow(
@@ -901,7 +902,7 @@ object HomeScreen : Screen() {
                 // (e.g. popping back to home) the haze layer has not captured
                 // content yet, so without this the bar flashes transparent.
                 .background(colors.background, shape)
-                .hazeEffect(state = hazeState, style = hazeStyle)
+                .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
                 .border(
                     BorderStroke(width = 1.dp, brush = auroraMenuRimLightBrush(colors)),
                     shape = shape,
@@ -912,7 +913,7 @@ object HomeScreen : Screen() {
                 .clip(shape)
                 // Opaque base under the frost (see dark branch comment).
                 .background(colors.background, shape)
-                .hazeEffect(state = hazeState, style = hazeStyle)
+                .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
                 .border(
                     BorderStroke(
                         width = 1.dp,

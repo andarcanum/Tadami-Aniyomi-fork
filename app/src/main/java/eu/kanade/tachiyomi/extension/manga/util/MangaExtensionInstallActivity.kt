@@ -10,6 +10,8 @@ import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.util.system.hasMiuiPackageInstaller
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.toast
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
@@ -113,7 +115,14 @@ class MangaExtensionInstallActivity : Activity() {
                 }
                 InstallStep.Installed
             }
-            RESULT_CANCELED -> InstallStep.Idle
+            RESULT_CANCELED -> {
+                val pkgName = intent.extras?.getString(MangaExtensionInstaller.EXTRA_PACKAGE_NAME)
+                logcat(LogPriority.WARN) {
+                    "System installer returned RESULT_CANCELED (dismissed or APK rejected) " +
+                        "for package=$pkgName download=$downloadId"
+                }
+                InstallStep.Idle
+            }
             else -> InstallStep.Error
         }
         extensionManager.updateInstallStep(downloadId, newStep)

@@ -133,12 +133,10 @@ class NovelReaderWebView(context: Context) : WebView(context) {
                 return true
             }
             MENU_ID_HIGHLIGHT -> {
+                val callback = onSelectedTextSelectionChanged ?: return false
                 isExecutingAction = true
-                android.widget.Toast.makeText(
-                    context,
-                    context.getString(AYMR.strings.novel_highlight_saved.resourceId),
-                    android.widget.Toast.LENGTH_SHORT,
-                ).show()
+                callback(selection.copy(triggerAction = SelectedTextAction.HIGHLIGHT))
+                // Persistence, not a menu click, determines whether the operation succeeded.
                 mode?.finish()
                 return true
             }

@@ -36,6 +36,8 @@ internal fun parseJikanAnimePage(
             val title = item["title"]?.jsonPrimitive?.contentOrNull
                 ?: item["title_english"]?.jsonPrimitive?.contentOrNull
                 ?: return@mapNotNull null
+            val altTitle = item["title_english"]?.jsonPrimitive?.contentOrNull
+                ?: item["title_japanese"]?.jsonPrimitive?.contentOrNull
             val coverUrl = runCatching {
                 item["images"]?.jsonObject
                     ?.get("jpg")?.jsonObject
@@ -52,6 +54,7 @@ internal fun parseJikanAnimePage(
             DiscoveryTrendingItem(
                 title = title,
                 cleanTitle = normalizeDiscoveryTitle(title),
+                altTitle = altTitle,
                 coverUrl = coverUrl,
                 anilistId = malId,
                 seasonLabel = seasonLabel,
@@ -95,7 +98,7 @@ open class JikanTrendingSource(
     private val nsfwFilterProvider: () -> Boolean = { discoveryNsfwFilterEnabled() },
 ) : DiscoveryTrendingSource {
 
-    private val metaCache = mutableMapOf<String, DiscoveryMeta>()
+    private val metaCache = DiscoveryLruCache<String, DiscoveryMeta>(200)
 
     override suspend fun fetch(
         mediaType: DiscoveryMediaType,
@@ -162,7 +165,7 @@ open class JikanTrendingSource(
 
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
         if (mediaType != DiscoveryMediaType.ANIME) return null
-        metaCache[title]?.let { return it }
+        metaCache.get(title)?.let { return it }
 
         return try {
             val url = "https://api.jikan.moe/v4/anime?q=${URLEncoder.encode(title, "UTF-8")}&limit=5"
@@ -196,7 +199,7 @@ open class JikanTrendingSource(
                 genres = genres,
                 altTitle = altTitle,
             )
-            metaCache[title] = meta
+            metaCache.put(title, meta)
             meta
         } catch (e: CancellationException) {
             throw e

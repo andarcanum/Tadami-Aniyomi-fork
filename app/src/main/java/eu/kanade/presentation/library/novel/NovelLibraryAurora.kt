@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,9 +65,9 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.LocalTabState
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
@@ -748,6 +749,7 @@ private fun NovelLibraryAuroraCoverOnlyCard(
         Color(0xFFF8F9FA) // Opaque light surface — elevation shadow separates
     }
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    val context = LocalContext.current
     Card(
         modifier = modifier.combinedClickable(
             onClick = onClick,
@@ -779,8 +781,15 @@ private fun NovelLibraryAuroraCoverOnlyCard(
             if (customCover != null) {
                 customCover()
             } else {
+                // Same anti-flash contract as GlowContourLibraryCard: buildAuroraCoverImageRequest
+                // sets placeholderMemoryCacheKey, so a cover already in the memory cache is painted
+                // immediately instead of flashing the flat placeholder on every rebind. A raw
+                // AsyncImage(model = ...) carried no such key.
+                val coverRequest = remember(coverData) {
+                    buildAuroraCoverImageRequest(context, coverData)
+                }
                 AsyncImage(
-                    model = resolveAuroraCoverModel(coverData),
+                    model = coverRequest,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     colorFilter = rememberAuroraPosterColorFilter(),

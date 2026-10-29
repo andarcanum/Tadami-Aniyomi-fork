@@ -122,4 +122,62 @@ class DiscoveryCoordinatorTest {
         feed.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
         feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("Ok")
     }
+
+    @Test
+    fun `item matching library by alt title is excluded`() = runTest {
+        val item = DiscoveryRowItem(
+            title = "Kimetsu no Yaiba",
+            cleanTitle = "kimetsu no yaiba",
+            coverUrl = null,
+            reason = null,
+            seedTitle = null,
+            provider = "anilist",
+            score = 1.0,
+            altCleanTitles = listOf("клинок рассекающий демонов"),
+        )
+        val context = DiscoveryBuildContext(
+            mediaType = DiscoveryMediaType.MANGA,
+            seeds = emptyList(),
+            libraryCleanTitles = setOf("клинок рассекающий демонов"),
+            historyCleanTitles = emptySet(),
+            hiddenCleanTitles = emptySet(),
+        )
+        val feed = DiscoveryCoordinator(listOf(builder(DiscoveryRowType.TREND, listOf(item)))).buildFeed(context)
+        feed.rows[DiscoveryRowType.TREND].orEmpty() shouldBe emptyList()
+    }
+
+    @Test
+    fun `blacklisted candidate in higher row is filtered before dedup so lower row survives`() = runTest {
+        val likeItem = DiscoveryRowItem(
+            title = "Shared Novel",
+            cleanTitle = "shared novel",
+            coverUrl = null,
+            reason = null,
+            seedTitle = null,
+            provider = "like",
+            score = 10.0,
+            genres = listOf("Hentai"),
+        )
+        val trendItem = DiscoveryRowItem(
+            title = "Shared Novel",
+            cleanTitle = "shared novel",
+            coverUrl = null,
+            reason = null,
+            seedTitle = null,
+            provider = "trend",
+            score = 1.0,
+            genres = listOf("Fantasy"),
+        )
+
+        val like = builder(DiscoveryRowType.LIKE, listOf(likeItem))
+        val trend = builder(DiscoveryRowType.TREND, listOf(trendItem))
+
+        val context = baseContext.copy(
+            blacklistedTags = setOf("Hentai"),
+        )
+        val feed = DiscoveryCoordinator(listOf(like, trend)).buildFeed(context)
+
+        feed.rows[DiscoveryRowType.LIKE]?.map { it.title }.orEmpty() shouldBe emptyList()
+        feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("Shared Novel")
+    }
 }

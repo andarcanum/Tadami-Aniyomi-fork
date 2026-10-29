@@ -66,6 +66,7 @@ data class DiscoverySuggestion(
     val createdAt: Long,
     val sourceId: Long? = null,
     val sourceUrl: String? = null,
+    val genres: List<String> = emptyList(),
 )
 
 /** Строка `discovery_hidden` для backup (негативный сигнал пользователя). */

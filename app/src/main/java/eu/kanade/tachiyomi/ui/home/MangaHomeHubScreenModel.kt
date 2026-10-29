@@ -10,7 +10,6 @@ import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
-import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
@@ -24,11 +23,9 @@ import tachiyomi.domain.history.manga.model.MangaHistoryWithRelations
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.source.manga.service.MangaSourceManager
-import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 internal class MangaHomeHubScreenModel(
     context: android.content.Context = Injekt.get<android.app.Application>(),
@@ -97,8 +94,22 @@ internal class MangaHomeHubScreenModel(
     private val getEnabledMangaSources: GetEnabledMangaSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: MangaSourceManager by injectLazy()
+    private val mangaExtensionManager: MangaExtensionManager by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
     private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
+
+    override val discoveryController: HomeDiscoveryController by lazy {
+        HomeDiscoveryController(
+            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
+            repository = discoveryRepository,
+            preferences = discoveryPreferences,
+            context = context,
+            scope = screenModelScope,
+            onStateUpdate = { update -> mutableState.update(update) },
+            currentState = { state.value },
+            onEmitEffect = { emitEffect(it) },
+        )
+    }
 
     override val avatarFileName: String = "user_avatar_manga.jpg"
 
@@ -152,175 +163,11 @@ internal class MangaHomeHubScreenModel(
             }
         }
 
-        // Тизер ленты «Для тебя» — чтение только из БД (ноль сети на рендер Home).
-        screenModelScope.launchIO {
-            combine(
-                discoveryRepository.subscribe(tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA),
-                discoveryPreferences.discoveryEnabled().changes(),
-                discoveryPreferences.teaserCount().changes(),
-                // «Просмотрено/прочитано»: реактивно исчезает из пула/тизера сразу
-                // после открытия читалки (в т.ч. в инкогнито) или ручной отметки.
-                combine(
-                    discoveryRepository.subscribeHidden(tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA),
-                    discoveryRepository.subscribeConsumed(tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA),
-                ) { hidden, consumed -> hidden to consumed },
-                discoveryRepository.subscribeBlacklist(tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA),
-            ) { items, enabled, count, hiddenAndConsumed, blacklist ->
-                val hidden = hiddenAndConsumed.first
-                val consumed = hiddenAndConsumed.second
-                items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed } to Triple(
-                    enabled,
-                    count,
-                    eu.kanade.tachiyomi.data.discovery.expandGenreSet(blacklist.toList()),
-                )
-            }
-                .collectLatest { (visible, prefs) ->
-                    val (enabled, count, expandedBlacklist) = prefs
-                    val filtered = visible.filterNot {
-                        eu.kanade.tachiyomi.data.discovery.isBlacklisted(it, expandedBlacklist)
-                    }
-                    cachedDiscoveryPool = eu.kanade.tachiyomi.data.discovery.dedupeCrossRow(filtered)
-                    // 48h-метки показа: hero-карусель Stage заказывает непоказанное вперёд.
-                    val shownAtByTitle = runCatching {
-                        discoveryRepository.getShownTitlesWithTimestamp(
-                            tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
-                        )
-                    }.getOrDefault(emptyMap())
-                    // Полный пул для hero-карусели: без тизерного окна, чтобы листать всю подборку.
-                    mutableState.update {
-                        it.copy(
-                            discoveryPool = cachedDiscoveryPool.map { item ->
-                                item.toHomeHubDiscoveryItem(shownAtByTitle[item.cleanTitle])
-                            },
-                        )
-                    }
-                    if (enabled) {
-                        updateDiscoveryTeaser(advanceOffset = false)
-                    } else {
-                        mutableState.update {
-                            it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
-                        }
-                    }
-                }
-        }
-    }
-
-    private var cachedDiscoveryPool: List<tachiyomi.domain.discovery.model.DiscoverySuggestion> = emptyList()
-    private var discoveryOffset: Int = 0
-    private var lastReentryTime: Long = 0L
-
-    private var lastRefreshClickTime = 0L
-
-    private suspend fun updateDiscoveryTeaser(
-        advanceOffset: Boolean = false,
-        forceUpdate: Boolean = false,
-        notifyIfLimited: Boolean = false,
-    ) {
-        if (!discoveryPreferences.discoveryEnabled().get()) {
-            mutableState.update { it.copy(discovery = emptyList(), discoveryEnabled = false) }
-            return
-        }
-        val count = discoveryPreferences.teaserCount().get().coerceIn(3, 20)
-        val pool = cachedDiscoveryPool
-        if (pool.isEmpty()) {
-            mutableState.update { it.copy(discovery = emptyList(), discoveryEnabled = true) }
-            return
-        }
-
-        if (!forceUpdate && !advanceOffset && state.value.discovery.isNotEmpty()) {
-            val validCleanTitles = pool.mapTo(HashSet()) { it.cleanTitle }
-            val currentValid = state.value.discovery.filter { it.cleanTitle in validCleanTitles }
-            if (currentValid.size == count) {
-                return
-            }
-        }
-
-        if (advanceOffset) {
-            val step = if (pool.size > count) count else 1
-            discoveryOffset = (discoveryOffset + step) % pool.size
-        }
-
-        val shownMap = runCatching {
-            discoveryRepository.getShownTitlesWithTimestamp(tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA)
-        }.getOrDefault(emptyMap())
-        val shownTitles = shownMap.keys
-        val currentTitles = state.value.discovery.mapTo(HashSet()) { it.cleanTitle }
-
-        val teaser = selectFreshTeaserItems(
-            pool = pool,
-            shownTitles = shownTitles,
-            count = count,
-            offset = discoveryOffset,
-            shownCutoffMap = shownMap,
-            currentTitles = currentTitles,
+        observeDiscoveryRefreshFailure(
+            discoveryPreferences,
+            tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
         )
-
-        if (notifyIfLimited && currentTitles.isNotEmpty()) {
-            val distinctPoolSize = pool.distinctBy { it.cleanTitle }.size
-            val hasOverlap = teaser.any { it.cleanTitle in currentTitles }
-            if (hasOverlap || distinctPoolSize <= count) {
-                context.toast(context.contextStringResource(AYMR.strings.for_you_limited_pool))
-            }
-        }
-
-        val cleanTitlesToMark = teaser.map { it.cleanTitle }
-        if (cleanTitlesToMark.isNotEmpty()) {
-            runCatching {
-                discoveryRepository.markShown(
-                    mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
-                    cleanTitles = cleanTitlesToMark,
-                )
-            }
-        }
-
-        mutableState.update { it.copy(discovery = teaser, discoveryEnabled = true) }
-    }
-
-    override fun onScreenReentry() {
-        val now = System.currentTimeMillis()
-        if (!shouldAdvanceDiscoveryTeaserOnReentry(now, lastReentryTime)) return
-        lastReentryTime = now
-        screenModelScope.launchIO {
-            updateDiscoveryTeaser(advanceOffset = true)
-        }
-    }
-
-    override fun rotateOrRefreshDiscovery() {
-        if (!discoveryPreferences.discoveryEnabled().get()) return
-        if (state.value.isDiscoveryRefreshing) return
-
-        val now = System.currentTimeMillis()
-        if (now - lastRefreshClickTime < 500L) return
-        lastRefreshClickTime = now
-
-        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA
-        val lastManual = discoveryPreferences.homeManualRefreshAt(mediaType).get().takeIf { it > 0L }
-        val cooldown = eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds(
-            lastManual,
-            now,
-            cooldownMs = eu.kanade.tachiyomi.ui.discovery.HOME_DISCOVERY_COOLDOWN_MS,
-        )
-        if (cooldown > 0L) {
-            screenModelScope.launchIO {
-                updateDiscoveryTeaser(advanceOffset = true, forceUpdate = true, notifyIfLimited = true)
-            }
-            return
-        }
-
-        discoveryPreferences.homeManualRefreshAt(mediaType).set(now)
-        discoveryPreferences.manualRefreshAt().set(now)
-        mutableState.update { it.copy(isDiscoveryRefreshing = true) }
-        screenModelScope.launchIO {
-            try {
-                Injekt.get<eu.kanade.tachiyomi.data.discovery.DiscoveryRunner>().run(
-                    listOf(mediaType),
-                    isManualRefresh = true,
-                )
-            } finally {
-                mutableState.update { it.copy(isDiscoveryRefreshing = false) }
-                updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
-            }
-        }
+        discoveryController.startObserving()
     }
 
     fun startLiveUpdates() {
@@ -518,8 +365,6 @@ internal class MangaHomeHubScreenModel(
             ),
         )
     }
-
-    private val mangaExtensionManager: MangaExtensionManager by injectLazy()
 
     fun getLastUsedMangaSourceId(): Long = sourcePreferences.lastUsedMangaSource().get()
 

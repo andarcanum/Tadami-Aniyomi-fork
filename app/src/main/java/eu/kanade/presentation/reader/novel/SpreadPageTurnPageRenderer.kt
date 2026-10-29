@@ -27,9 +27,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
@@ -40,7 +38,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTapZoneAction
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.setting.parseNovelReaderTapZoneActions
 import eu.kanade.tachiyomi.ui.reader.novel.setting.resolveConfiguredNovelReaderTapAction
 import eu.wewox.pagecurl.config.PageCurlConfig
@@ -472,50 +469,6 @@ internal fun SpreadPageTurnPageRenderer(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val density = LocalDensity.current
-        val halfPageSize = IntSize(
-            width = with(density) { (maxWidth / 2).roundToPx() }.coerceAtLeast(1),
-            height = with(density) { maxHeight.roundToPx() }.coerceAtLeast(1),
-        )
-        val contentPaddingPx = with(density) { contentPadding.roundToPx() }
-        // Compact spread: landscape has no status bar on the text, so skip its top inset to win
-        // back vertical space (matches the pagination math in NovelReaderContentHost).
-        val statusBarTopPaddingPx = with(density) { 0.dp.roundToPx() }
-        val snapshotCache = remember(
-            halfPageSize,
-            transitionStyle,
-            readerSettings.fontFamily,
-            readerSettings.fontSize,
-            readerSettings.lineHeight,
-            readerSettings.margin,
-            readerSettings.textAlign,
-            readerSettings.forceBoldText,
-            readerSettings.forceItalicText,
-            readerSettings.textShadow,
-            readerSettings.textShadowColor,
-            readerSettings.textShadowBlur,
-            readerSettings.textShadowX,
-            readerSettings.textShadowY,
-            readerSettings.bionicReading,
-            textColor,
-            textBackground,
-            backgroundTexture,
-            nativeTextureStrengthPercent,
-            backgroundImageModel,
-            backgroundModeIdentity,
-            isBackgroundMode,
-            activeBackgroundTexture,
-            activeOledEdgeGradient,
-            isDarkTheme,
-            chapterTitleTextColor,
-            textTypeface,
-            chapterTitleTypeface,
-            safeContentPages,
-            rendererConfig.backPageColor,
-        ) {
-            NovelPageTurnSnapshotCache<ImageBitmap>(maxSize = 6)
-        }
-
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -543,10 +496,6 @@ internal fun SpreadPageTurnPageRenderer(
                 safeContentPages = safeContentPages,
                 chapterId = chapterId,
                 rendererConfig = rendererConfig,
-                pageSize = halfPageSize,
-                snapshotCache = snapshotCache,
-                contentPaddingPx = contentPaddingPx,
-                statusBarTopPaddingPx = statusBarTopPaddingPx,
                 readerSettings = readerSettings,
                 textColor = textColor,
                 textBackground = textBackground,
@@ -593,10 +542,6 @@ internal fun SpreadPageTurnPageRenderer(
                 safeContentPages = safeContentPages,
                 chapterId = chapterId,
                 rendererConfig = rendererConfig,
-                pageSize = halfPageSize,
-                snapshotCache = snapshotCache,
-                contentPaddingPx = contentPaddingPx,
-                statusBarTopPaddingPx = statusBarTopPaddingPx,
                 readerSettings = readerSettings,
                 textColor = textColor,
                 textBackground = textBackground,
@@ -738,10 +683,6 @@ private fun SpreadColumnCurl(
     safeContentPages: List<NovelPageContentPage>,
     chapterId: Long,
     rendererConfig: NovelPageTurnRendererConfig,
-    pageSize: IntSize,
-    snapshotCache: NovelPageTurnSnapshotCache<ImageBitmap>,
-    contentPaddingPx: Int,
-    statusBarTopPaddingPx: Int,
     readerSettings: NovelReaderSettings,
     textColor: Color,
     textBackground: Color,
@@ -816,60 +757,12 @@ private fun SpreadColumnCurl(
         val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
         val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
         val pageSurfaceColor = if (isBackgroundMode) null else rendererConfig.backPageColor
-        val pageContentIdentity = boundaryPreview ?: contentPage
-        val pageSnapshotKey = resolveNovelPageTurnSnapshotKey(
-            style = rendererConfig.style,
-            // The two surfaces address independent PageCurl instances with their own page-index
-            // spaces, so columnOffset has to be part of the key or they would collide in the
-            // shared cache despite showing different halves of the spread.
-            pageIndex = actualPage * 2 + columnOffset,
-            pageCount = virtualSlotCount * 2,
-            pageContentHash = pageContentIdentity.hashCode(),
-            pageSize = pageSize,
-            fontFamilyKey = readerSettings.fontFamily,
-            chapterTitleFontFamilyKey = chapterTitleTypeface?.hashCode()?.toString().orEmpty(),
-            chapterTitleTextColor = chapterTitleTextColor,
-            fontSize = readerSettings.fontSize,
-            lineHeight = readerSettings.lineHeight,
-            margin = readerSettings.margin,
-            contentPaddingPx = contentPaddingPx,
-            statusBarTopPaddingPx = statusBarTopPaddingPx,
-            textAlign = if (boundaryPreview != null) {
-                TextAlign.CENTER
-            } else {
-                readerSettings.textAlign
-            },
-            textColor = textColor,
-            textBackground = textBackground,
-            pageSurfaceColor = pageSurfaceColor ?: Color.Transparent,
-            isBackgroundMode = isBackgroundMode,
-            backgroundImageIdentity = backgroundModeIdentity,
-            backgroundTextureName = pageTexture.name,
-            nativeTextureStrengthPercentEffective = pageTextureStrengthPercent,
-            oledEdgeGradient = if (isBackgroundMode) activeOledEdgeGradient else false,
-            isDarkTheme = isDarkTheme,
-            pageEdgeShadow = pageEdgeShadow,
-            pageEdgeShadowAlpha = pageEdgeShadowAlpha,
-            backgroundTexture = pageTexture,
-            nativeTextureStrengthPercent = pageTextureStrengthPercent,
-            forceBoldText = readerSettings.forceBoldText,
-            forceItalicText = readerSettings.forceItalicText,
-            textShadow = readerSettings.textShadow,
-            textShadowColor = readerSettings.textShadowColor,
-            textShadowBlur = readerSettings.textShadowBlur,
-            textShadowX = readerSettings.textShadowX,
-            textShadowY = readerSettings.textShadowY,
-            bionicReading = readerSettings.bionicReading,
-        )
         val contentModifier = if (mirrored) {
             Modifier.fillMaxSize().graphicsLayer(scaleX = -1f)
         } else {
             Modifier.fillMaxSize()
         }
         NovelPageTurnSnapshotRenderer(
-            snapshotKey = pageSnapshotKey,
-            snapshotCache = snapshotCache,
-            preferCachedBitmap = false,
             modifier = contentModifier,
         ) {
             NovelAtmosphereBackground(

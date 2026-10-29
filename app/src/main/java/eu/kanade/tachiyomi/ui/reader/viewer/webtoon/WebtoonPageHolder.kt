@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updateMargins
+import androidx.recyclerview.widget.RecyclerView
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.tadami.aurora.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
@@ -17,6 +18,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ProcessedPageImage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScaleUtil
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
 import kotlinx.coroutines.Job
@@ -133,21 +135,41 @@ class WebtoonPageHolder(
     }
 
     private fun refreshLayoutParams() {
-        val margin = (Resources.getSystem().displayMetrics.widthPixels * (viewer.config.sidePadding / 100f)).toInt()
+        val displayMetrics = Resources.getSystem().displayMetrics
+        val totalWidth = if (viewer.recycler.width > 0) viewer.recycler.width else displayMetrics.widthPixels
+        val totalHeight = if (viewer.recycler.height > 0) viewer.recycler.height else displayMetrics.heightPixels
+
+        val dims = page?.imageDimensions
+        val margin = ReaderScaleUtil.computeWebtoonAdaptiveSideMargin(
+            viewportWidth = totalWidth,
+            viewportHeight = totalHeight,
+            imageWidth = dims?.width,
+            imageHeight = dims?.height,
+            basePaddingPercent = viewer.config.sidePadding,
+            webtoonSmartFit = viewer.config.webtoonSmartFit,
+        )
         val bottomMargin = if (viewer.hasPageGaps) 15.dpToPx else 0
 
         // Avoid layout thrash: rebinds while scrolling must not trigger a requestLayout
         // when nothing about the layout params actually changed.
-        val current = frame.layoutParams as? FrameLayout.LayoutParams
-        if (current != null &&
-            current.marginStart == margin &&
-            current.marginEnd == margin &&
-            current.bottomMargin == bottomMargin
-        ) {
+        val current = frame.layoutParams as? ViewGroup.MarginLayoutParams
+        if (current != null) {
+            if (current.marginStart == margin &&
+                current.marginEnd == margin &&
+                current.bottomMargin == bottomMargin
+            ) {
+                return
+            }
+            current.width = MATCH_PARENT
+            current.height = WRAP_CONTENT
+            current.bottomMargin = bottomMargin
+            current.marginStart = margin
+            current.marginEnd = margin
+            frame.layoutParams = current
             return
         }
 
-        frame.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+        frame.layoutParams = RecyclerView.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
             this.bottomMargin = bottomMargin
             marginEnd = margin
             marginStart = margin
@@ -196,7 +218,7 @@ class WebtoonPageHolder(
             ?: currentPage.chapter.typicalPageRatio
             ?: viewer.activity.viewModel.sessionTypicalPageRatio
             ?: return viewportHeight
-        val margins = (frame.layoutParams as? FrameLayout.LayoutParams)
+        val margins = (frame.layoutParams as? ViewGroup.MarginLayoutParams)
             ?.let { it.marginStart + it.marginEnd }
             ?: 0
         val contentWidth = viewer.recycler.width - margins
@@ -356,6 +378,8 @@ class WebtoonPageHolder(
                     val ratio = it.height.toFloat() / it.width.toFloat()
                     currentPage.chapter.notePageRatio(ratio)
                     viewer.activity.viewModel.noteSessionPageRatio(ratio)
+                    refreshLayoutParams()
+                    refreshPlaceholderHeight()
                 }
                 when (prepared) {
                     is PageImageData.Encoded -> {

@@ -1,0 +1,142 @@
+import java.util.Date;
+import kotlin.Boolean;
+
+-- Durable candidate inbox (host-side). Delivery/decoding/prefetch NEVER create rows here:
+-- only a page the host actually received from the source does. Consumed items are filtered
+-- by the anti-join in `unconsumed`, never by deleting the summary. `video_url` is a CACHE
+-- HINT: signed/rotating links may be stale, so playback re-resolves through the source's
+-- resolver when it exposes one.
+CREATE TABLE reels_candidate(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    title TEXT,
+    author TEXT,
+    video_url TEXT NOT NULL,
+    video_url_hd TEXT,
+    poster_url TEXT,
+    poster_url_vertical TEXT,
+    web_url TEXT,
+    duration_sec REAL,
+    has_audio INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at_epoch_sec INTEGER,
+    discovered_at INTEGER AS Date NOT NULL,
+    last_validated_at INTEGER AS Date,
+    availability TEXT NOT NULL DEFAULT 'available',
+    retry_after INTEGER AS Date,
+    resume_position_ms INTEGER,
+    metadata_schema_version INTEGER NOT NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    views_count INTEGER,
+    likes_count INTEGER,
+    is_author_verified INTEGER AS Boolean NOT NULL DEFAULT 0,
+    captured_context_key TEXT,
+    PRIMARY KEY (account_scope_id, source_id, item_id)
+);
+
+CREATE INDEX reels_candidate_scope_index ON reels_candidate(account_scope_id, source_id, discovered_at DESC);
+
+getByItem:
+SELECT *
+FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id = :itemId;
+
+countForSource:
+SELECT COUNT(*)
+FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+existingIds:
+SELECT item_id
+FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN :itemIds;
+
+-- Unseen backlog: durable rows that carry no qualifying interaction. Batch anti-join, one
+-- statement for the whole page.
+unconsumed:
+SELECT c.*
+FROM reels_candidate AS c
+WHERE c.account_scope_id = :scope
+  AND c.source_id = :sourceId
+  AND c.availability = 'available'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM reels_consumption AS k
+      WHERE k.account_scope_id = c.account_scope_id
+        AND k.source_id = c.source_id
+        AND k.item_id = c.item_id
+        AND (k.watched_qualified_at IS NOT NULL OR k.skipped_forward_at IS NOT NULL)
+  )
+ORDER BY c.discovered_at DESC
+LIMIT :limit;
+
+upsert:
+INSERT INTO reels_candidate(
+    account_scope_id, source_id, item_id, title, author, video_url, video_url_hd,
+    poster_url, poster_url_vertical, web_url, duration_sec, has_audio, created_at_epoch_sec,
+    discovered_at, last_validated_at, availability, retry_after, resume_position_ms,
+    metadata_schema_version, tags_json, views_count, likes_count, is_author_verified, captured_context_key
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(account_scope_id, source_id, item_id)
+DO UPDATE SET
+    -- Fresh metadata replaces the stored copy, but the FIRST discovery time and the
+    -- playback position belong to the user's history and survive re-ingest.
+    title = excluded.title,
+    author = excluded.author,
+    video_url = excluded.video_url,
+    video_url_hd = excluded.video_url_hd,
+    poster_url = excluded.poster_url,
+    poster_url_vertical = excluded.poster_url_vertical,
+    web_url = excluded.web_url,
+    duration_sec = excluded.duration_sec,
+    has_audio = excluded.has_audio,
+    created_at_epoch_sec = excluded.created_at_epoch_sec,
+    last_validated_at = excluded.last_validated_at,
+    availability = excluded.availability,
+    retry_after = excluded.retry_after,
+    metadata_schema_version = excluded.metadata_schema_version,
+    tags_json = excluded.tags_json,
+    views_count = excluded.views_count,
+    likes_count = excluded.likes_count,
+    is_author_verified = excluded.is_author_verified,
+    captured_context_key = excluded.captured_context_key;
+
+saveResumePosition:
+UPDATE reels_candidate
+SET resume_position_ms = :positionMs
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id = :itemId;
+
+updateAvailability:
+UPDATE reels_candidate
+SET availability = :availability, retry_after = :retryAfter
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id = :itemId;
+
+clearTransportHintsForScope:
+UPDATE reels_candidate
+SET video_url = '', video_url_hd = NULL, poster_url = NULL, poster_url_vertical = NULL
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+pruneConsumedRemnants:
+DELETE FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN (
+    SELECT c.item_id FROM reels_candidate AS c
+    JOIN reels_consumption AS k
+      ON k.account_scope_id = c.account_scope_id
+     AND k.source_id = c.source_id
+     AND k.item_id = c.item_id
+    WHERE c.account_scope_id = :scope AND c.source_id = :sourceId
+      AND (k.watched_qualified_at IS NOT NULL OR k.skipped_forward_at IS NOT NULL)
+);
+
+remove:
+DELETE FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN :itemIds;
+
+deleteForScope:
+DELETE FROM reels_candidate
+WHERE account_scope_id = :scope;
+
+deleteForSource:
+DELETE FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId;

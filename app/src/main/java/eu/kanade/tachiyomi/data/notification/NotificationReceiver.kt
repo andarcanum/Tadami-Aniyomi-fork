@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.core.net.toUri
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
+import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
@@ -25,6 +26,7 @@ import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.runBlocking
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.model.Anime
@@ -98,6 +100,11 @@ class NotificationReceiver : BroadcastReceiver() {
             ACTION_CANCEL_LIBRARY_UPDATE -> cancelLibraryUpdate(context)
             ACTION_CANCEL_ANIMELIB_UPDATE -> cancelAnimelibUpdate(context)
             ACTION_CANCEL_NOVEL_LIBRARY_UPDATE -> cancelNovelLibraryUpdate(context)
+            ACTION_CANCEL_DISCOVERY_UPDATE -> {
+                val mediaKey = intent.getStringExtra(EXTRA_DISCOVERY_MEDIA_TYPE)
+                val mediaType = mediaKey?.let { DiscoveryMediaType.fromKey(it) }
+                cancelDiscoveryUpdate(context, mediaType)
+            }
             // Start downloading app update
             ACTION_START_APP_UPDATE -> startDownloadAppUpdate(context, intent)
             // Cancel downloading app update
@@ -293,6 +300,10 @@ class NotificationReceiver : BroadcastReceiver() {
         NovelLibraryUpdateJob.stop(context)
     }
 
+    private fun cancelDiscoveryUpdate(context: Context, mediaType: DiscoveryMediaType?) {
+        DiscoveryUpdateJob.stop(context, mediaType)
+    }
+
     private fun startDownloadAppUpdate(context: Context, intent: Intent) {
         val url = intent.getStringExtra(AppUpdateDownloadJob.EXTRA_DOWNLOAD_URL) ?: return
         AppUpdateDownloadJob.start(context, url)
@@ -400,6 +411,8 @@ class NotificationReceiver : BroadcastReceiver() {
         private const val ACTION_CANCEL_LIBRARY_UPDATE = "$ID.$NAME.CANCEL_LIBRARY_UPDATE"
         private const val ACTION_CANCEL_ANIMELIB_UPDATE = "$ID.$NAME.CANCEL_ANIMELIB_UPDATE"
         private const val ACTION_CANCEL_NOVEL_LIBRARY_UPDATE = "$ID.$NAME.CANCEL_NOVEL_LIBRARY_UPDATE"
+        private const val ACTION_CANCEL_DISCOVERY_UPDATE = "$ID.$NAME.CANCEL_DISCOVERY_UPDATE"
+        private const val EXTRA_DISCOVERY_MEDIA_TYPE = "$ID.$NAME.EXTRA_DISCOVERY_MEDIA_TYPE"
 
         private const val ACTION_START_APP_UPDATE = "$ID.$NAME.ACTION_START_APP_UPDATE"
         private const val ACTION_CANCEL_APP_UPDATE_DOWNLOAD = "$ID.$NAME.CANCEL_APP_UPDATE_DOWNLOAD"
@@ -886,6 +899,32 @@ class NotificationReceiver : BroadcastReceiver() {
         internal fun cancelNovelLibraryUpdatePendingBroadcast(context: Context): PendingIntent {
             val intent = Intent(context, NotificationReceiver::class.java).apply {
                 action = ACTION_CANCEL_NOVEL_LIBRARY_UPDATE
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
+
+        /**
+         * Returns [PendingIntent] that stops the discovery feed update
+         *
+         * @param context context of application
+         * @param mediaType optional target media type
+         * @return [PendingIntent]
+         */
+        internal fun cancelDiscoveryUpdatePendingBroadcast(
+            context: Context,
+            mediaType: DiscoveryMediaType? = null,
+        ): PendingIntent {
+            val intent = Intent(context, NotificationReceiver::class.java).apply {
+                action = ACTION_CANCEL_DISCOVERY_UPDATE
+                data = "$ID.discovery/cancel/${mediaType?.key ?: "all"}".toUri()
+                if (mediaType != null) {
+                    putExtra(EXTRA_DISCOVERY_MEDIA_TYPE, mediaType.key)
+                }
             }
             return PendingIntent.getBroadcast(
                 context,

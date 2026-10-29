@@ -196,6 +196,7 @@ class PlayerViewModelRegressionTest {
             getTracks = mockk(relaxed = true),
             upsertHistory = mockk(relaxed = true),
             updateEpisode = mockk(relaxed = true),
+            updateAnime = mockk(relaxed = true),
             setAnimeViewerFlags = mockk(relaxed = true),
             playerPreferences = playerPreferences,
             gesturePreferences = gesturePreferences,
@@ -211,6 +212,7 @@ class PlayerViewModelRegressionTest {
             uiPreferences = uiPreferences,
             eventBus = mockk(relaxed = true),
             activityDataRepository = mockk(relaxed = true),
+            discoveryRepository = mockk(relaxed = true),
         )
 
         return TestContext(

@@ -10,7 +10,8 @@ package eu.kanade.tachiyomi.ui.player.subtitle.translation
  * original line instead of emitting broken markup.
  */
 object SubtitleInlineTagMasker {
-    private val assBlock = Regex("\\{[^}]*}")
+    // Android's ICU regex engine rejects a literal '}' that is not escaped, unlike the desktop JVM.
+    internal val assBlock = Regex("""\{[^}]*\}""")
     private val htmlTag = Regex("</?[a-zA-Z][^>]*>")
 
     // Word-joiner wrapped index. These code points are virtually never produced

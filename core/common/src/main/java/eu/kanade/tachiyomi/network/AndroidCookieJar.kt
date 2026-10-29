@@ -20,6 +20,7 @@ class AndroidCookieJar : CookieJar {
         val urlString = url.toString()
 
         cookies.forEach { manager.setCookie(urlString, it.toString()) }
+        manager.flush()
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {

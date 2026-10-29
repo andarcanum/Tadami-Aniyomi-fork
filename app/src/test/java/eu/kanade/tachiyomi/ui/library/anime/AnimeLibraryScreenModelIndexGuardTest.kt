@@ -112,11 +112,11 @@ class AnimeLibraryScreenModelIndexGuardTest {
         advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 1)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.toggleSelection(a)
+        screenModel.toggleSelection(AnimeLibraryItem.Single(a))
         screenModel.invertSelection(5)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.state.value.selection.shouldContainExactly(a)
+        screenModel.state.value.selection.shouldContainExactly(AnimeLibraryItem.Single(a))
     }
 
     @Test
@@ -129,7 +129,7 @@ class AnimeLibraryScreenModelIndexGuardTest {
         advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 1)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        screenModel.toggleSelection(a)
+        screenModel.toggleSelection(AnimeLibraryItem.Single(a))
         screenModel.invertSelection(0)
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -223,9 +223,28 @@ class AnimeLibraryScreenModelIndexGuardTest {
         group.map { it.libraryAnime.anime.title } shouldContainExactly listOf("Alpha", "Zeta")
     }
 
+    @Test
+    fun `showSettingsDialog sets SettingsSheet dialog even when categories are empty`() = runTest(testDispatcher) {
+        categoriesFlow.value = emptyList()
+        animeFlow.value = emptyList()
+
+        val screenModel = trackedAnimeLibraryScreenModel()
+        advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.activeCategoryIndex = 99
+        screenModel.showSettingsDialog()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.dialog shouldBe AnimeLibraryScreenModel.Dialog.SettingsSheet
+        screenModel.state.value.categories shouldBe emptyList()
+    }
+
     private fun trackedAnimeLibraryScreenModel(): AnimeLibraryScreenModel {
         return AnimeLibraryScreenModel(
             getLibraryAnime = getLibraryAnime,
+            getLibraryAnimeSeries = mockk { every { subscribe() } returns MutableStateFlow(emptyList()) },
+            getAnimeIdsInAnySeries = mockk { every { subscribe() } returns MutableStateFlow(emptySet()) },
             getCategories = getCategories,
             getTracksPerAnime = getTracksPerAnime,
             getNextEpisodes = mockk(relaxed = true),
@@ -233,6 +252,11 @@ class AnimeLibraryScreenModelIndexGuardTest {
             setSeenStatus = mockk(relaxed = true),
             updateAnime = mockk(relaxed = true),
             setAnimeCategories = mockk(relaxed = true),
+            createAnimeSeries = mockk(relaxed = true),
+            addAnimesToSeries = mockk(relaxed = true),
+            updateAnimeSeries = mockk(relaxed = true),
+            deleteAnimeSeries = mockk(relaxed = true),
+            removeAnimeFromSeries = mockk(relaxed = true),
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),

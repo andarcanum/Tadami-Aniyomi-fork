@@ -149,5 +149,5 @@ data class NovelReaderScreenActions(
      * 50-100 chapter book instant instead of running Jsoup over a 200k character window on
      * every append.
      */
-    val nativeBookBlocksForSection: (sectionIndex: Int) -> List<NovelRichContentBlock>? = { null },
+    val nativeBookBlocksForSection: suspend (sectionIndex: Int) -> List<NovelRichContentBlock>? = { null },
 )

@@ -2,10 +2,10 @@ package eu.kanade.presentation.easteregg.aurora
 
 import android.graphics.RuntimeShader
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.floor
 import kotlin.math.sin
 
@@ -57,7 +58,7 @@ float noise(float2 p) {
 float fbm(float2 p) {
     float v = 0.0;
     float amp = 0.5;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
         v += amp * noise(p);
         p *= 2.0;
         amp *= 0.5;
@@ -170,29 +171,31 @@ fun AuroraBackdrop(
     colorB: Color = AuroraPublicPalette.Blue,
     colorC: Color = AuroraPublicPalette.Violet,
 ) {
-    val time by produceState(0f) {
+    val timeState = produceState(0f) {
         while (true) {
             withFrameNanos { value = it / 1_000_000_000f }
         }
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val shader = remember { RuntimeShader(AURORA_SKSL) }
-        val brush = remember(shader) { ShaderBrush(shader) }
+        val helper = remember { AuroraBackdropShader() }
         Canvas(modifier = modifier.fillMaxSize()) {
-            shader.setFloatUniform("iResolution", size.width, size.height)
-            shader.setFloatUniform("iTime", time)
-            shader.setFloatUniform("iIntensity", intensity)
-            shader.setFloatUniform("iVeilThinness", veilThinness)
-            shader.setFloatUniform("iRitualIntensity", ritualIntensity)
-            shader.setFloatUniform("cA", colorA.red, colorA.green, colorA.blue)
-            shader.setFloatUniform("cB", colorB.red, colorB.green, colorB.blue)
-            shader.setFloatUniform("cC", colorC.red, colorC.green, colorC.blue)
-            drawRect(brush)
+            with(helper) {
+                draw(
+                    time = timeState.value,
+                    intensity = intensity,
+                    veilThinness = veilThinness,
+                    ritualIntensity = ritualIntensity,
+                    colorA = colorA,
+                    colorB = colorB,
+                    colorC = colorC,
+                )
+            }
         }
     } else {
         // Fallback для Android < 13 (v2): три дрейфующих «занавеса» из
         // градиентов + мерцающие звёзды. Только Canvas, без AGSL.
         Canvas(modifier = modifier.fillMaxSize()) {
+            val time = timeState.value
             drawRect(AuroraPublicPalette.Night)
 
             // Звёзды: детерминированные псевдослучайные позиции + мерцание
@@ -237,22 +240,23 @@ fun AuroraEchoExplosion(
     colorB: Color = AuroraPublicPalette.Blue,
     colorC: Color = AuroraPublicPalette.Violet,
 ) {
-    val time by produceState(0f) {
+    val timeState = produceState(0f) {
         while (true) {
             withFrameNanos { value = it / 1_000_000_000f }
         }
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val shader = remember { RuntimeShader(ECHO_FLASH_EXPLOSION_SKSL) }
-        val brush = remember(shader) { ShaderBrush(shader) }
+        val helper = remember { AuroraEchoExplosionShader() }
         Canvas(modifier = modifier.fillMaxSize()) {
-            shader.setFloatUniform("iResolution", size.width, size.height)
-            shader.setFloatUniform("iTime", time)
-            shader.setFloatUniform("iIntensity", intensity)
-            shader.setFloatUniform("cA", colorA.red, colorA.green, colorA.blue)
-            shader.setFloatUniform("cB", colorB.red, colorB.green, colorB.blue)
-            shader.setFloatUniform("cC", colorC.red, colorC.green, colorC.blue)
-            drawRect(brush)
+            with(helper) {
+                draw(
+                    time = timeState.value,
+                    intensity = intensity,
+                    colorA = colorA,
+                    colorB = colorB,
+                    colorC = colorC,
+                )
+            }
         }
     } else {
         // fallback simple explosion
@@ -270,20 +274,87 @@ fun AuroraSigilProjection(
     intensity: Float = 1f,
     colorA: Color = AuroraPublicPalette.Green,
 ) {
-    val time by produceState(0f) {
+    val timeState = produceState(0f) {
         while (true) {
             withFrameNanos { value = it / 1_000_000_000f }
         }
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val shader = remember { RuntimeShader(SIGIL_PROJECTION_SKSL) }
-        val brush = remember(shader) { ShaderBrush(shader) }
+        val helper = remember { AuroraSigilProjectionShader() }
         Canvas(modifier = modifier.fillMaxSize()) {
-            shader.setFloatUniform("iResolution", size.width, size.height)
-            shader.setFloatUniform("iTime", time)
-            shader.setFloatUniform("iIntensity", intensity)
-            shader.setFloatUniform("cA", colorA.red, colorA.green, colorA.blue)
-            drawRect(brush)
+            with(helper) {
+                draw(
+                    time = timeState.value,
+                    intensity = intensity,
+                    colorA = colorA,
+                )
+            }
         }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private class AuroraBackdropShader {
+    private val shader = RuntimeShader(AURORA_SKSL)
+    private val brush = ShaderBrush(shader)
+
+    fun DrawScope.draw(
+        time: Float,
+        intensity: Float,
+        veilThinness: Float,
+        ritualIntensity: Float,
+        colorA: Color,
+        colorB: Color,
+        colorC: Color,
+    ) {
+        shader.setFloatUniform("iResolution", size.width, size.height)
+        shader.setFloatUniform("iTime", time)
+        shader.setFloatUniform("iIntensity", intensity)
+        shader.setFloatUniform("iVeilThinness", veilThinness)
+        shader.setFloatUniform("iRitualIntensity", ritualIntensity)
+        shader.setFloatUniform("cA", colorA.red, colorA.green, colorA.blue)
+        shader.setFloatUniform("cB", colorB.red, colorB.green, colorB.blue)
+        shader.setFloatUniform("cC", colorC.red, colorC.green, colorC.blue)
+        drawRect(brush)
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private class AuroraEchoExplosionShader {
+    private val shader = RuntimeShader(ECHO_FLASH_EXPLOSION_SKSL)
+    private val brush = ShaderBrush(shader)
+
+    fun DrawScope.draw(
+        time: Float,
+        intensity: Float,
+        colorA: Color,
+        colorB: Color,
+        colorC: Color,
+    ) {
+        shader.setFloatUniform("iResolution", size.width, size.height)
+        shader.setFloatUniform("iTime", time)
+        shader.setFloatUniform("iIntensity", intensity)
+        shader.setFloatUniform("cA", colorA.red, colorA.green, colorA.blue)
+        shader.setFloatUniform("cB", colorB.red, colorB.green, colorB.blue)
+        shader.setFloatUniform("cC", colorC.red, colorC.green, colorC.blue)
+        drawRect(brush)
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private class AuroraSigilProjectionShader {
+    private val shader = RuntimeShader(SIGIL_PROJECTION_SKSL)
+    private val brush = ShaderBrush(shader)
+
+    fun DrawScope.draw(
+        time: Float,
+        intensity: Float,
+        colorA: Color,
+    ) {
+        shader.setFloatUniform("iResolution", size.width, size.height)
+        shader.setFloatUniform("iTime", time)
+        shader.setFloatUniform("iIntensity", intensity)
+        shader.setFloatUniform("cA", colorA.red, colorA.green, colorA.blue)
+        drawRect(brush)
     }
 }

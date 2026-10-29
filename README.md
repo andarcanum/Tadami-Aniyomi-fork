@@ -104,11 +104,12 @@ and put real OAuth credentials only in the ignored local file.
 Short-video feed (“Reels”) sources are built against the `AnimeFeedSource`
 contract in `:source-api`. The full author-facing specification — the sticky
 cursor/page-int pagination protocol, `ShortVideoItem` URL semantics, plugin
-API versioning rules, and a source skeleton — lives in
+API versioning rules, the optional v27 session-continuity capability
+(`AnimeFeedReplaySource`), and a source skeleton — lives in
 **[`source-api/FEED_CONTRACT.md`](source-api/FEED_CONTRACT.md)**
-(current contract version: **17**). Feed plugins declare compatibility via the
-`tachiyomix.extensionLib` manifest metadata; the host rejects plugins outside
-the supported range instead of crashing at runtime.
+(current contract version: **27**). Feed plugins declare compatibility via the
+`tachiyomix.extensionLib` manifest metadata; the host accepts **12.0–27.0** and
+rejects plugins outside that range instead of crashing at runtime.
 
 ## Contributing
 

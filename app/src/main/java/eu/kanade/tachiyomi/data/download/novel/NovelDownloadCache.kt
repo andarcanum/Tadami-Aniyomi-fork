@@ -1,12 +1,14 @@
 package eu.kanade.tachiyomi.data.download.novel
 
 import android.app.Application
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +19,9 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.encodeToByteArray
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -30,6 +34,7 @@ import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
@@ -67,8 +72,13 @@ class NovelDownloadCache(
     private val cacheFileProvider: () -> File = {
         File(Injekt.get<Application>().cacheDir, "dl_novel_cache_v1")
     },
-    private val downloadCountLookup: (Novel) -> Int = { novel ->
-        NovelDownloadManager(downloadCache = null).getDownloadCount(novel)
+    // Retained for existing test harnesses; production reads IDs once, not count + IDs.
+    private val downloadCountLookup: ((Novel) -> Int)? = null,
+    private val downloadedChapterIdsLookup: (Novel) -> Set<Long> = { novel ->
+        if (storageManager.getDownloadsDirectory() == null) {
+            throw IOException("Novel downloads storage is unavailable")
+        }
+        NovelDownloadManager(downloadCache = null).getDownloadedChapterIds(novel)
     },
 ) {
 
@@ -76,6 +86,10 @@ class NovelDownloadCache(
     private val cachedChapterIds = ConcurrentHashMap<Long, Set<Long>>()
     private val cacheStateLock = Any()
     private val cacheStateVersion = AtomicLong(0L)
+    private val storageGeneration = AtomicLong(0L)
+    private val novelVersions = HashMap<Long, Long>()
+    private val renewalLock = Any()
+    private var renewalRequested = false
     private val diskCacheFile: File = cacheFileProvider()
 
     private val _changes = MutableSharedFlow<NovelDownloadCacheEvent>(
@@ -90,6 +104,8 @@ class NovelDownloadCache(
 
     private var updateDiskCacheJob: Job? = null
     private val writeDiskCacheMutex = Mutex()
+    private val diskWriterLock = Any()
+    private val scanPermits = Semaphore(2)
     private val isRenewing = AtomicBoolean(false)
     private val pendingCountRefreshIds = ConcurrentHashMap.newKeySet<Long>()
 
@@ -107,6 +123,7 @@ class NovelDownloadCache(
                             null
                         } else {
                             cache.data.forEach { (novelId, chapterIds) ->
+                                novelVersions[novelId] = cacheStateVersion.incrementAndGet()
                                 if (chapterIds.isEmpty()) {
                                     cachedChapterIds.remove(novelId)
                                     cachedCounts.remove(novelId)
@@ -123,13 +140,16 @@ class NovelDownloadCache(
                             "NovelDownloadCache: restored $restoredEntries entries from disk cache"
                         }
                         rebuildDownloadedIds()
+                        _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
                         restored = true
                     }
                 }
                 if (!restored) {
                     renewCache()
                 }
-            } catch (e: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 val fileSize = diskCacheFile.length()
                 logcat(LogPriority.ERROR, e) {
                     "NovelDownloadCache: failed to restore disk cache (fileSize=${fileSize}B, error=${e::class.simpleName})"
@@ -174,34 +194,39 @@ class NovelDownloadCache(
         return 0
     }
 
+    private fun lookupChapterIds(novel: Novel): Set<Long> {
+        // Compatibility with count-only harnesses for known-empty entries.
+        if (downloadCountLookup?.invoke(novel) == 0) return emptySet()
+        return downloadedChapterIdsLookup(novel).toSet()
+    }
+
     private fun scheduleDownloadCountRefresh(novel: Novel) {
         if (!pendingCountRefreshIds.add(novel.id)) return
         scope.launch {
             try {
-                val lookupVersion = cacheStateVersion.get()
-                val count = downloadCountLookup(novel)
+                val (generation, version) = synchronized(cacheStateLock) {
+                    storageGeneration.get() to (novelVersions[novel.id] ?: 0L)
+                }
+                val ids = scanPermits.withPermit { lookupChapterIds(novel) }
+                ensureActive()
                 val applied = synchronized(cacheStateLock) {
-                    if (cacheStateVersion.get() != lookupVersion) {
+                    if (storageGeneration.get() != generation ||
+                        (novelVersions[novel.id] ?: 0L) != version
+                    ) {
                         false
                     } else {
-                        if (count > 0) {
-                            cachedCounts[novel.id] = count
-                        } else {
-                            cachedCounts.remove(novel.id)
-                        }
+                        applyScannedIds(novel.id, ids)
                         true
                     }
                 }
-                if (applied && count > 0) {
-                    _changes.tryEmit(
-                        NovelDownloadCacheEvent.ChaptersChanged(
-                            novelId = novel.id,
-                            chapterIds = emptySet(),
-                            downloaded = true,
-                        ),
-                    )
+                if (applied) {
+                    rebuildDownloadedIds()
+                    writeDiskCache()
+                    _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
                 }
-            } catch (e: Throwable) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) {
                     "NovelDownloadCache: failed to refresh download count for novel ${novel.id}"
                 }
@@ -211,13 +236,24 @@ class NovelDownloadCache(
         }
     }
 
+    /** Requires cacheStateLock. Empty IDs are known-empty counts, not unknown entries. */
+    private fun applyScannedIds(novelId: Long, ids: Set<Long>) {
+        novelVersions[novelId] = cacheStateVersion.incrementAndGet()
+        cachedCounts[novelId] = ids.size
+        if (ids.isEmpty()) {
+            cachedChapterIds.remove(novelId)
+        } else {
+            cachedChapterIds[novelId] = ids
+        }
+    }
+
     fun onChaptersChanged(
         novel: Novel,
         chapterIds: Set<Long>,
         downloaded: Boolean,
     ) {
         val updatedIds = synchronized(cacheStateLock) {
-            cacheStateVersion.incrementAndGet()
+            novelVersions[novel.id] = cacheStateVersion.incrementAndGet()
             val currentIds = cachedChapterIds[novel.id] ?: emptySet()
             val nextIds = if (downloaded) {
                 currentIds + chapterIds
@@ -226,7 +262,7 @@ class NovelDownloadCache(
             }
             if (nextIds.isEmpty()) {
                 cachedChapterIds.remove(novel.id)
-                cachedCounts.remove(novel.id)
+                cachedCounts[novel.id] = 0
             } else {
                 cachedChapterIds[novel.id] = nextIds
                 cachedCounts[novel.id] = nextIds.size
@@ -258,7 +294,7 @@ class NovelDownloadCache(
 
     fun onNovelRemoved(novel: Novel) {
         synchronized(cacheStateLock) {
-            cacheStateVersion.incrementAndGet()
+            novelVersions[novel.id] = cacheStateVersion.incrementAndGet()
             cachedCounts.remove(novel.id)
             cachedChapterIds.remove(novel.id)
         }
@@ -270,13 +306,14 @@ class NovelDownloadCache(
     fun invalidateAll() {
         synchronized(cacheStateLock) {
             cacheStateVersion.incrementAndGet()
+            storageGeneration.incrementAndGet()
+            novelVersions.clear()
             cachedCounts.clear()
             cachedChapterIds.clear()
+            _downloadedIds.value = emptySet()
         }
-        updateDiskCacheJob?.cancel()
-        updateDiskCacheJob = null
-        diskCacheFile.delete()
-        _downloadedIds.value = emptySet()
+        // Serialize deletion with existing writers; never race a direct delete against a write.
+        persistDiskCache()
         _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
     }
 
@@ -290,10 +327,10 @@ class NovelDownloadCache(
 
     internal fun updateChapterIds(novelId: Long, chapterIds: Set<Long>) {
         val updatedIds = synchronized(cacheStateLock) {
-            cacheStateVersion.incrementAndGet()
+            novelVersions[novelId] = cacheStateVersion.incrementAndGet()
             if (chapterIds.isEmpty()) {
                 cachedChapterIds.remove(novelId)
-                cachedCounts.remove(novelId)
+                cachedCounts[novelId] = 0
             } else {
                 cachedChapterIds[novelId] = chapterIds
                 cachedCounts[novelId] = chapterIds.size
@@ -321,13 +358,15 @@ class NovelDownloadCache(
     }
 
     private fun writeDiskCache(immediate: Boolean) {
-        updateDiskCacheJob?.cancel()
-        updateDiskCacheJob = scope.launch {
-            if (!immediate) {
-                delay(2000L)
-            }
-            writeDiskCacheMutex.withLock {
-                writeDiskCacheSnapshot()
+        synchronized(diskWriterLock) {
+            updateDiskCacheJob?.cancel()
+            updateDiskCacheJob = scope.launch {
+                if (!immediate) {
+                    delay(2000L)
+                }
+                writeDiskCacheMutex.withLock {
+                    writeDiskCacheSnapshot()
+                }
             }
         }
     }
@@ -351,7 +390,9 @@ class NovelDownloadCache(
                 diskCacheFile.toPath(),
                 StandardCopyOption.REPLACE_EXISTING,
             )
-        } catch (e: Throwable) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) {
                 "NovelDownloadCache: failed to write disk cache (${data.size} entries)"
             }
@@ -359,43 +400,55 @@ class NovelDownloadCache(
     }
 
     fun renewCache() {
-        // compareAndSet closes the check-then-act race: the flag is set
-        // atomically BEFORE launching the coroutine, not inside it.
-        if (!isRenewing.compareAndSet(false, true)) return
+        synchronized(renewalLock) {
+            if (!isRenewing.compareAndSet(false, true)) {
+                renewalRequested = true
+                return
+            }
+        }
         scope.launch {
             try {
+                val (generation, versions) = synchronized(cacheStateLock) {
+                    storageGeneration.get() to novelVersions.toMap()
+                }
                 val libraryNovels = novelRepository.getLibraryNovel().map { it.novel }
                 val readNovels = novelRepository.getReadNovelNotInLibrary()
                 val allNovels = (libraryNovels + readNovels).distinctBy { it.id }
 
-                val downloadManager = NovelDownloadManager(downloadCache = null)
-
-                synchronized(cacheStateLock) {
-                    allNovels.forEach { novel ->
-                        val downloadedIds = downloadManager.getDownloadedChapterIds(novel)
-                        if (downloadedIds.isNotEmpty()) {
-                            cachedChapterIds[novel.id] = downloadedIds
-                            cachedCounts[novel.id] = downloadedIds.size
-                        } else {
-                            cachedChapterIds.remove(novel.id)
-                            cachedCounts.remove(novel.id)
+                allNovels.forEach { novel ->
+                    ensureActive()
+                    if (storageGeneration.get() != generation) return@launch
+                    val ids = scanPermits.withPermit { lookupChapterIds(novel) }
+                    synchronized(cacheStateLock) {
+                        if (storageGeneration.get() == generation &&
+                            (novelVersions[novel.id] ?: 0L) == (versions[novel.id] ?: 0L)
+                        ) {
+                            applyScannedIds(novel.id, ids)
                         }
                     }
                 }
                 rebuildDownloadedIds()
                 writeDiskCache()
-            } catch (e: Throwable) {
+                _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to renew novel download cache" }
             } finally {
-                isRenewing.set(false)
+                synchronized(renewalLock) {
+                    isRenewing.set(false)
+                    if (renewalRequested) {
+                        renewalRequested = false
+                        renewCache()
+                    }
+                }
             }
         }
     }
 
     private fun rebuildDownloadedIds() {
-        val ids = synchronized(cacheStateLock) {
-            cachedChapterIds.keys.toHashSet()
+        synchronized(cacheStateLock) {
+            _downloadedIds.value = cachedChapterIds.keys.toHashSet()
         }
-        _downloadedIds.value = ids
     }
 }

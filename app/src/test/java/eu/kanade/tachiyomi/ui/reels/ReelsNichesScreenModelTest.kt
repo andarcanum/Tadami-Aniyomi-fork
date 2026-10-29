@@ -30,6 +30,8 @@ import tachiyomi.domain.reels.anime.model.ReelsAlbum
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
+import java.util.Date
+import java.util.concurrent.atomic.AtomicInteger
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReelsNichesScreenModelTest {
@@ -122,6 +124,92 @@ class ReelsNichesScreenModelTest {
                 hasNextPage = true,
             )
         }
+
+        override suspend fun getCategoryFeed(categoryId: String, page: Int, cursor: String?): FeedPage =
+            FeedPage(emptyList(), false)
+    }
+
+    /** Whole directory in one page, the way a channel catalog is served. */
+    private class CatalogBrowseSource(override val id: Long = 4005L) : AnimeFeedSource, AnimeFeedBrowseSource {
+        override val name: String = "Catalog Browse"
+        override val lang: String = "all"
+        val requests = AtomicInteger(0)
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun getBrowseCategories(page: Int, cursor: String?): FeedCategoryPage {
+            requests.incrementAndGet()
+            return FeedCategoryPage(
+                categories = listOf(
+                    FeedCategory(id = "channel:durov", name = "Pavel Durov"),
+                    FeedCategory(id = "channel:anime_clips", name = "Anime Clips"),
+                    FeedCategory(id = "channel:films", name = "Films · без видео"),
+                    FeedCategory(id = "niche:mix", name = "All channels"),
+                ),
+                hasNextPage = false,
+            )
+        }
+
+        override suspend fun getCategoryFeed(categoryId: String, page: Int, cursor: String?): FeedPage =
+            FeedPage(emptyList(), false)
+    }
+
+    /** Two cursor pages where the second drops the locked token (protocol violation). */
+    private class CursorBrowseSource(override val id: Long = 4006L) : AnimeFeedSource, AnimeFeedBrowseSource {
+        override val name: String = "Cursor Browse"
+        override val lang: String = "all"
+        val requests = mutableListOf<Pair<Int, String?>>()
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun getBrowseCategories(page: Int, cursor: String?): FeedCategoryPage {
+            requests += page to cursor
+            return if (page == 1) {
+                FeedCategoryPage(
+                    categories = listOf(FeedCategory(id = "c1", name = "one")),
+                    hasNextPage = true,
+                    nextCursor = "T",
+                )
+            } else {
+                FeedCategoryPage(
+                    categories = listOf(FeedCategory(id = "c2", name = "two")),
+                    hasNextPage = true,
+                    nextCursor = null,
+                )
+            }
+        }
+
+        override suspend fun getCategoryFeed(categoryId: String, page: Int, cursor: String?): FeedPage =
+            FeedPage(emptyList(), false)
+    }
+
+    private class DedupBrowseSource(override val id: Long = 4007L) : AnimeFeedSource, AnimeFeedBrowseSource {
+        override val name: String = "Dedup Browse"
+        override val lang: String = "all"
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun getBrowseCategories(page: Int, cursor: String?): FeedCategoryPage =
+            if (page == 1) {
+                FeedCategoryPage(
+                    categories = listOf(
+                        FeedCategory(id = "c1", name = "one"),
+                        FeedCategory(id = "c2", name = "two"),
+                    ),
+                    hasNextPage = true,
+                )
+            } else {
+                FeedCategoryPage(
+                    categories = listOf(
+                        FeedCategory(id = "c2", name = "two"),
+                        FeedCategory(id = "c3", name = "three"),
+                    ),
+                    hasNextPage = false,
+                )
+            }
 
         override suspend fun getCategoryFeed(categoryId: String, page: Int, cursor: String?): FeedPage =
             FeedPage(emptyList(), false)
@@ -238,25 +326,180 @@ class ReelsNichesScreenModelTest {
         model.state.value.pageError shouldBe null
     }
 
-    private class FakeAlbumRepository : ReelsAlbumRepository {
-        val albums = mutableMapOf<Pair<String, Long>, ReelsAlbum>()
+    @Test
+    fun `search narrows the whole catalog locally without extra requests`() = runTest(testDispatcher) {
+        val source = CatalogBrowseSource()
+        val model = ReelsNichesScreenModel(
+            sourceId = 4005L,
+            sourceManager = sourceManagerOf(source),
+            ioDispatcher = testDispatcher,
+            albumRepository = FakeAlbumRepository(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
 
-        override fun subscribeBySource(sourceId: Long): Flow<List<ReelsAlbum>> =
-            MutableStateFlow(albums.values.filter { it.sourceId == sourceId })
+        model.state.value.visibleCategories.shouldHaveSize(4)
+        source.requests.get() shouldBe 1
+
+        // @username, any register: matched against the category id, not the visible title.
+        model.onSearchQueryChange("@ANIME")
+        model.state.value.visibleCategories.map { it.id } shouldBe listOf("channel:anime_clips")
+
+        // Title match, without the leading "@".
+        model.onSearchQueryChange("durov")
+        model.state.value.visibleCategories.map { it.name } shouldBe listOf("Pavel Durov")
+
+        // The full directory is kept: filtering never drops pages from the state.
+        model.state.value.categories.shouldHaveSize(4)
+
+        // A blank query restores everything; a miss yields an empty (but non-error) grid.
+        model.onSearchQueryChange("   ")
+        model.state.value.visibleCategories.shouldHaveSize(4)
+        model.onSearchQueryChange("nothing-matches")
+        model.state.value.visibleCategories.shouldHaveSize(0)
+
+        // No extra directory request (and no feed search) was issued while typing.
+        source.requests.get() shouldBe 1
+        model.state.value.error shouldBe null
+    }
+
+    @Test
+    fun `retry keeps the search query`() = runTest(testDispatcher) {
+        val source = CatalogBrowseSource()
+        val model = ReelsNichesScreenModel(
+            sourceId = 4005L,
+            sourceManager = sourceManagerOf(source),
+            ioDispatcher = testDispatcher,
+            albumRepository = FakeAlbumRepository(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.onSearchQueryChange("durov")
+        model.retry()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.searchQuery shouldBe "durov"
+        model.state.value.visibleCategories.map { it.name } shouldBe listOf("Pavel Durov")
+    }
+
+    @Test
+    fun `the first niche token locks the cursor and a dropped token stops pagination`() = runTest(testDispatcher) {
+        val source = CursorBrowseSource()
+        val model = ReelsNichesScreenModel(
+            sourceId = 4006L,
+            sourceManager = sourceManagerOf(source),
+            ioDispatcher = testDispatcher,
+            albumRepository = FakeAlbumRepository(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.loadMore()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.requests shouldBe listOf(1 to null, 2 to "T")
+        model.state.value.categories.map { it.id } shouldBe listOf("c1", "c2")
+        model.state.value.canLoadMore shouldBe false
+
+        // Scrolling further must not restart page 1 or repeat page 2.
+        model.loadMore()
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.requests shouldBe listOf(1 to null, 2 to "T")
+    }
+
+    @Test
+    fun `duplicate category ids across pages collapse into one lazy key`() = runTest(testDispatcher) {
+        val model = ReelsNichesScreenModel(
+            sourceId = 4007L,
+            sourceManager = sourceManagerOf(DedupBrowseSource()),
+            ioDispatcher = testDispatcher,
+            albumRepository = FakeAlbumRepository(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.loadMore()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.categories.map { it.id } shouldBe listOf("c1", "c2", "c3")
+        model.state.value.canLoadMore shouldBe false
+    }
+
+    @Test
+    fun `saved marks follow collection changes made on other screens`() = runTest(testDispatcher) {
+        val repository = FakeAlbumRepository()
+        val model = ReelsNichesScreenModel(
+            sourceId = 4001L,
+            sourceManager = sourceManagerOf(FakeBrowseSource()),
+            ioDispatcher = testDispatcher,
+            albumRepository = repository,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.savedAlbumIds shouldBe emptySet()
+
+        // Save from the albums/feed surface while the niches screen sits in the back stack.
+        repository.insert(
+            ReelsAlbum(sourceId = 4001L, albumId = "c1", name = "niche1", coverUrl = null, addedAt = Date()),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.savedAlbumIds shouldBe setOf("c1")
+
+        repository.delete(4001L, "c1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.savedAlbumIds shouldBe emptySet()
+    }
+
+    @Test
+    fun `rapid save toggles settle on the state the database ends with`() = runTest(testDispatcher) {
+        val repository = FakeAlbumRepository()
+        val model = ReelsNichesScreenModel(
+            sourceId = 4001L,
+            sourceManager = sourceManagerOf(FakeBrowseSource()),
+            ioDispatcher = testDispatcher,
+            albumRepository = repository,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        val category = model.state.value.categories.first()
+
+        model.toggleAlbumSaved(category)
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.savedAlbumIds shouldBe setOf(category.id)
+
+        // Two taps queued before either write lands must not both delete from a stale read.
+        model.toggleAlbumSaved(category)
+        model.toggleAlbumSaved(category)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        repository.getBySource(4001L).map { it.albumId } shouldBe listOf(category.id)
+        model.state.value.savedAlbumIds shouldBe setOf(category.id)
+    }
+
+    private class FakeAlbumRepository : ReelsAlbumRepository {
+        private val albums = mutableMapOf<Pair<String, Long>, ReelsAlbum>()
+        private val bySource = mutableMapOf<Long, MutableStateFlow<List<ReelsAlbum>>>()
+
+        private fun flowOf(sourceId: Long): MutableStateFlow<List<ReelsAlbum>> =
+            bySource.getOrPut(sourceId) { MutableStateFlow(albums.values.filter { it.sourceId == sourceId }) }
+
+        private fun publish(sourceId: Long) {
+            bySource[sourceId]?.value = albums.values.filter { it.sourceId == sourceId }
+        }
+
+        override fun subscribeBySource(sourceId: Long): Flow<List<ReelsAlbum>> = flowOf(sourceId)
 
         override suspend fun getBySource(sourceId: Long): List<ReelsAlbum> =
             albums.values.filter { it.sourceId == sourceId }
 
         override suspend fun insert(album: ReelsAlbum) {
             albums[album.albumId to album.sourceId] = album
+            publish(album.sourceId)
         }
 
         override suspend fun delete(sourceId: Long, albumId: String) {
             albums.remove(albumId to sourceId)
+            publish(sourceId)
         }
 
         override suspend fun deleteBySource(sourceId: Long) {
             albums.keys.filter { it.second == sourceId }.forEach { albums.remove(it) }
+            publish(sourceId)
         }
 
         override fun subscribeWatched(sourceId: Long): Flow<Set<String>> = MutableStateFlow(emptySet())

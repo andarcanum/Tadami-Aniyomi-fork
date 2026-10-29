@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.size
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.drop
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.extension
@@ -312,29 +314,41 @@ class MangaDownloadManager(
      * @param chapters the list of chapters to delete.
      * @param manga the manga of the chapters.
      * @param source the source of the chapters.
+     * @param onProgress optional progress callback reporting (deleted, total).
+     * @return the number of deleted chapter directories.
      */
-    fun deleteChapters(chapters: List<Chapter>, manga: Manga, source: MangaSource) {
-        launchIO {
-            val filteredChapters = getChaptersToDelete(chapters, manga)
-            if (filteredChapters.isEmpty()) {
-                return@launchIO
-            }
+    suspend fun deleteChapters(
+        chapters: List<Chapter>,
+        manga: Manga,
+        source: MangaSource,
+        onProgress: ((deleted: Int, total: Int) -> Unit)? = null,
+    ): Int = withContext(Dispatchers.IO) {
+        val filteredChapters = getChaptersToDelete(chapters, manga)
+        if (filteredChapters.isEmpty()) {
+            onProgress?.invoke(0, 0)
+            return@withContext 0
+        }
 
-            removeFromDownloadQueue(filteredChapters)
+        removeFromDownloadQueue(filteredChapters)
 
-            val (mangaDirs, chapterDirs) = provider.findChapterDirs(filteredChapters, manga, source)
-            chapterDirs.forEach { it.delete() }
-            cache.removeChapters(filteredChapters, manga)
+        var deletedCount = 0
+        val (mangaDirs, chapterDirs) = provider.findChapterDirs(filteredChapters, manga, source)
+        chapterDirs.forEach { dir ->
+            dir.delete()
+            deletedCount++
+            onProgress?.invoke(deletedCount, chapterDirs.size)
+        }
+        cache.removeChapters(filteredChapters, manga)
 
-            // Delete manga directories that became empty (scoped and/or legacy)
-            if (mangaDirs.isNotEmpty() && mangaDirs.all { it.listFiles()?.isEmpty() == true }) {
-                deleteManga(manga, source, removeQueued = false)
-            } else {
-                mangaDirs.forEach { dir ->
-                    if (dir.listFiles()?.isEmpty() == true) dir.delete()
-                }
+        // Delete manga directories that became empty (scoped and/or legacy)
+        if (mangaDirs.isNotEmpty() && mangaDirs.all { it.listFiles()?.isEmpty() == true }) {
+            deleteManga(manga, source, removeQueued = false)
+        } else {
+            mangaDirs.forEach { dir ->
+                if (dir.listFiles()?.isEmpty() == true) dir.delete()
             }
         }
+        deletedCount
     }
 
     /**
@@ -412,7 +426,9 @@ class MangaDownloadManager(
         val pendingChapters = pendingDeleter.getPendingChapters()
         for ((manga, chapters) in pendingChapters) {
             val source = sourceManager.get(manga.source) ?: continue
-            deleteChapters(chapters, manga, source)
+            launchIO {
+                deleteChapters(chapters, manga, source)
+            }
         }
     }
 

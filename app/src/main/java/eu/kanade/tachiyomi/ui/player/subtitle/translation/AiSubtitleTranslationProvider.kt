@@ -216,9 +216,12 @@ fun parseIndexedSubtitleTranslationResponse(raw: String): Map<Int, String> {
         .toMap()
 }
 
+// Android's ICU regex engine rejects a literal '}' that is not escaped, unlike the desktop JVM.
+internal val subtitleAssBlockRegex = Regex("""\{[^}]+\}""")
+
 private fun protectSubtitleText(text: String): String {
     return text
-        .replace(Regex("\\{[^}]+}")) { match -> "<keep>${match.value}</keep>" }
+        .replace(subtitleAssBlockRegex) { match -> "<keep>${match.value}</keep>" }
 }
 
 private fun restoreSubtitleText(text: String): String {

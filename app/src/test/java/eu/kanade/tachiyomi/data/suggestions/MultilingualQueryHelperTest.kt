@@ -69,6 +69,9 @@ class MultilingualQueryHelperTest {
 
         val translations3 = MultilingualQueryHelper.getGenreTranslations("Приключения")
         assertTrue(translations3.contains("adventure"))
+
+        val translations4 = MultilingualQueryHelper.getGenreTranslations("milf")
+        assertTrue(translations4.contains("милфы"))
     }
 
     @Test

@@ -1,10 +1,13 @@
 package eu.kanade.tachiyomi.ui.discovery
 
 import android.content.Context
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.discovery.CompositeTrendingSource
+import eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
 import eu.kanade.tachiyomi.data.discovery.DiscoveryLibraryAdder
 import eu.kanade.tachiyomi.data.discovery.DiscoveryRowItem
 import eu.kanade.tachiyomi.data.discovery.DiscoveryTrendingSource
@@ -20,15 +23,22 @@ import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
-import eu.kanade.tachiyomi.util.system.isRunningFlow
+import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -42,6 +52,7 @@ import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.UUID
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 internal data class DiscoveryFeedUiState(
@@ -69,6 +80,9 @@ internal data class DiscoveryFeedUiState(
     val coverRecoveryTick: Int = 0,
     // Табы, видимые при текущих настройках рядов/провайдеров (выключенный ряд = мёртвый таб).
     val visibleTabs: Set<FeedSignalTab> = FeedSignalTab.entries.toSet(),
+    val progressText: String? = null,
+    val tabOffsets: Map<FeedSignalTab, Int> = emptyMap(),
+    val activeWindows: Map<FeedSignalTab, List<DiscoverySuggestion>> = emptyMap(),
 )
 
 /** CSV ключей упавших рядов из prefs → набор [DiscoveryRowType]. */
@@ -103,8 +117,32 @@ internal fun filterByProvider(items: List<DiscoverySuggestion>, provider: String
 internal fun providerOptions(state: DiscoveryFeedUiState): List<String> =
     state.rows.values.flatten().map { it.provider }.distinct().sorted()
 
-internal const val DISCOVERY_REFRESH_COOLDOWN_MS = 5 * 60_000L
-internal const val HOME_DISCOVERY_COOLDOWN_MS = 10_000L
+internal const val DISCOVERY_REFRESH_COOLDOWN_MS = DiscoveryPreferences.MANUAL_REFRESH_COOLDOWN_MS
+
+/** Legacy name: user-visible refresh activity includes configuration work, but ownership stays separate. */
+internal fun manualRefreshFlow(workManager: WorkManager, mediaType: DiscoveryMediaType): Flow<Boolean> = combine(
+    workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.manualWorkTag(mediaType)),
+    workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.configurationWorkName(mediaType)),
+) { manual, configuration -> manual || configuration }.distinctUntilChanged()
+
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun manualRefreshWorkInfoFlow(
+    workManager: WorkManager,
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+): Flow<WorkInfo?> = preferences.manualRefreshWorkId(mediaType).changes()
+    .distinctUntilChanged()
+    .flatMapLatest { requestId ->
+        val uuid = runCatching { UUID.fromString(requestId) }.getOrNull()
+        if (uuid == null) flowOf(null) else workManager.getWorkInfoByIdFlow(uuid)
+    }
+
+internal fun claimManualRefreshFailure(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    workInfo: WorkInfo?,
+): Boolean = workInfo?.state == WorkInfo.State.FAILED &&
+    preferences.claimManualRefreshFailure(mediaType, workInfo.id.toString())
 
 internal fun remainingCooldownSeconds(
     lastRefreshAt: Long?,
@@ -202,13 +240,36 @@ internal class DiscoveryFeedScreenModel(
 ) : StateScreenModel<DiscoveryFeedUiState>(DiscoveryFeedUiState(mediaType = initialMedia)) {
 
     private var observeJob: Job? = null
+    private var progressJob: Job? = null
+    private var failureJob: Job? = null
     private var prefetchJob: Job? = null
+    private val hideUndoOperations = DiscoveryHideUndoQueue(screenModelScope)
     private var lastHidden: DiscoverySuggestion? = null
+    private var lastHiddenTab: FeedSignalTab = FeedSignalTab.MIX
     private var lastBlacklistedTag: String? = null
 
     fun start() {
         observeMedia(state.value.mediaType)
         observeVisibleTabs()
+    }
+
+    private fun observeProgress(mediaType: DiscoveryMediaType) {
+        progressJob?.cancel()
+        progressJob = screenModelScope.launchIO {
+            eu.kanade.tachiyomi.data.discovery.DiscoveryProgressTracker.progress(mediaType).collectLatest { progress ->
+                mutableState.update { current ->
+                    current.copy(
+                        progressText = if (progress.isRunning &&
+                            (progress.mediaType == null || progress.mediaType == current.mediaType)
+                        ) {
+                            progress.stageText
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+        }
     }
 
     /** Табы по настройкам рядов/провайдеров: выключенный ряд — мёртвый таб, скрываем. */
@@ -223,7 +284,7 @@ internal class DiscoveryFeedScreenModel(
             ) { like, trend, taste, source, external ->
                 buildSet {
                     add(FeedSignalTab.MIX)
-                    if (like && external) add(FeedSignalTab.SIMILAR)
+                    if (like) add(FeedSignalTab.SIMILAR)
                     if (taste) add(FeedSignalTab.TASTE)
                     if (trend && external) add(FeedSignalTab.FRESH)
                     if (source) add(FeedSignalTab.SOURCE)
@@ -235,6 +296,17 @@ internal class DiscoveryFeedScreenModel(
     }
 
     private fun observeMedia(mediaType: DiscoveryMediaType) {
+        observeProgress(mediaType)
+        failureJob?.cancel()
+        failureJob = screenModelScope.launchIO {
+            manualRefreshWorkInfoFlow(context.workManager, preferences, mediaType).collectLatest { workInfo ->
+                withContext(Dispatchers.Main.immediate) {
+                    if (claimManualRefreshFailure(preferences, mediaType, workInfo)) {
+                        context.toast(context.contextStringResource(AYMR.strings.for_you_refresh_failed))
+                    }
+                }
+            }
+        }
         observeJob?.cancel()
         observeJob = screenModelScope.launchIO {
             combine(
@@ -246,27 +318,56 @@ internal class DiscoveryFeedScreenModel(
                     repository.subscribeConsumed(mediaType),
                 ) { hidden, consumed -> hidden to consumed },
                 preferences.lastFailedRows(mediaType).changes(),
-                repository.subscribeBlacklist(mediaType),
-            ) { all, refreshing, hiddenAndConsumed, failedCsv, blacklist ->
-                FeedSources(all, refreshing, hiddenAndConsumed.first, failedCsv, blacklist, hiddenAndConsumed.second)
+                combine(
+                    repository.subscribeBlacklist(mediaType),
+                    preferences.observeGenreFilterSpec(),
+                ) { blacklist, filterSpec ->
+                    DiscoveryCandidatePolicy(
+                        spec = filterSpec,
+                        blacklistedTags = blacklist,
+                    )
+                },
+            ) { all, refreshing, hiddenAndConsumed, failedCsv, policy ->
+                FeedSources(all, refreshing, hiddenAndConsumed.first, failedCsv, policy, hiddenAndConsumed.second)
             }
-                .collectLatest { (all, refreshing, hidden, failedCsv, blacklist, consumed) ->
+                .collectLatest { (all, refreshing, hidden, failedCsv, policy, consumed) ->
                     // Кросс-рядовой дедуп: упавший ряд живёт старым кэшем и может
                     // содержать тайтлы свежих рядов — приоритет у rowType.ordinal.
-                    val expandedBlacklist = expandGenreSet(blacklist.toList())
+                    val allowed = all.filter { item ->
+                        item.cleanTitle !in hidden && item.cleanTitle !in consumed && policy.isAllowed(item)
+                    }
                     val visible = dedupeCrossRow(
-                        all.filterNot {
-                            it.cleanTitle in hidden || it.cleanTitle in consumed ||
-                                isBlacklisted(it, expandedBlacklist)
-                        },
+                        allowed.groupBy { it.rowType }
+                            .flatMap { (_, items) ->
+                                policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
+                            },
                     )
                     val rows = groupFeedRows(visible)
                     val rowItems = rows.mapValues { (_, items) -> items.map { it.toRowItem() } }
                     // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
                     val mix = interleaveMix(rowItems, rrf = rrfScores(rowItems))
                         .mapNotNull { row -> visible.firstOrNull { it.cleanTitle == row.cleanTitle } }
-                    mutableState.update {
-                        it.copy(
+                    mutableState.update { current ->
+                        val currentWindows = current.activeWindows
+                        val updatedWindows = if (currentWindows.isEmpty() ||
+                            currentWindows[FeedSignalTab.MIX].isNullOrEmpty()
+                        ) {
+                            if (mix.isNotEmpty()) {
+                                mapOf(FeedSignalTab.MIX to sliceFeedWindow(mix, 0, FEED_WINDOW_SIZE))
+                            } else {
+                                emptyMap()
+                            }
+                        } else {
+                            currentWindows.mapValues { (tab, currentWindow) ->
+                                val pool = if (tab == FeedSignalTab.MIX) mix else rows[tab.rowType()].orEmpty()
+                                reconcileFeedWindow(
+                                    currentWindow = currentWindow,
+                                    pool = pool,
+                                    targetSize = FEED_WINDOW_SIZE,
+                                )
+                            }
+                        }
+                        current.copy(
                             rows = rows,
                             mix = mix,
                             hidden = hidden,
@@ -274,10 +375,12 @@ internal class DiscoveryFeedScreenModel(
                             isRefreshing = refreshing,
                             isLoading = false,
                             failedRows = parseFailedRows(failedCsv),
+                            activeWindows = updatedWindows,
                         )
                     }
                     prefetchJob?.cancel()
                     prefetchJob = screenModelScope.launchIO {
+                        kotlinx.coroutines.delay(500) // коалесцируем всплески эмиссий при регенерации рядов
                         prefetchDiscoveryMeta(mix, mediaType, trendingSource)
                         recoverMissingCovers(
                             mix,
@@ -297,7 +400,7 @@ internal class DiscoveryFeedScreenModel(
         val refreshing: Boolean,
         val hidden: Set<String>,
         val failedCsv: String,
-        val blacklist: Set<String>,
+        val policy: DiscoveryCandidatePolicy,
         val consumed: Set<String>,
     )
 
@@ -309,43 +412,188 @@ internal class DiscoveryFeedScreenModel(
         seedTitle = seedTitle,
         provider = provider,
         score = score,
+        sourceId = sourceId,
+        sourceUrl = sourceUrl,
+        genres = genres,
     )
 
     private fun refreshingFlow(): Flow<Boolean> =
-        context.workManager.isRunningFlow(DiscoveryUpdateJob.TAG_MANUAL)
+        manualRefreshFlow(context.workManager, state.value.mediaType)
 
     fun refreshNow(): Long {
         val now = System.currentTimeMillis()
-        // Cooldown считается от нажатия (общий pref с home-рефрешем), а не от возраста контента:
-        // фоновое автообновление больше не блокирует ручное.
+        val media = state.value.mediaType
         val remaining = remainingCooldownSeconds(
-            preferences.manualRefreshAt().get().takeIf { it > 0L },
+            preferences.manualRefreshAt(media).get().takeIf { it > 0L },
             now,
         )
-        if (remaining > 0L) return remaining
-        preferences.manualRefreshAt().set(now)
-        DiscoveryUpdateJob.refreshNow(context, state.value.mediaType)
+        when (resolveManualRefreshAction(state.value.isRefreshing, remaining)) {
+            ManualRefreshAction.CANCEL -> cancelRefresh()
+            ManualRefreshAction.ROTATE -> return remaining
+            ManualRefreshAction.REFRESH -> {
+                if (!preferences.tryStartManualRefresh(media, now)) {
+                    return remainingCooldownSeconds(preferences.manualRefreshAt(media).get(), now)
+                }
+                mutableState.update { it.copy(isRefreshing = true) }
+                DiscoveryUpdateJob.refreshNow(context, media)
+            }
+        }
         return 0L
     }
 
-    fun hide(item: DiscoverySuggestion) {
-        lastHidden = item
-        mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
+    fun displayedItems(tab: FeedSignalTab, provider: String?): List<DiscoverySuggestion> {
+        val window = state.value.activeWindows[tab] ?: run {
+            val pool = itemsForTab(state.value, tab)
+            val offset = state.value.tabOffsets[tab] ?: 0
+            sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
+        }
+        return filterByProvider(window, provider)
+    }
+
+    fun onTabSelected(tab: FeedSignalTab) {
+        val currentState = state.value
+        if (currentState.activeWindows[tab] == null) {
+            val pool = itemsForTab(currentState, tab)
+            val offset = currentState.tabOffsets[tab] ?: 0
+            val window = sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
+            mutableState.update { it.copy(activeWindows = it.activeWindows + (tab to window)) }
+        }
+    }
+
+    fun rotateOrRefreshFeed(currentTab: FeedSignalTab): Long {
+        val currentState = state.value
+        val pool = itemsForTab(currentState, currentTab)
+        val currentOffset = currentState.tabOffsets[currentTab] ?: 0
+        val now = System.currentTimeMillis()
+        val media = currentState.mediaType
+        val remaining = remainingCooldownSeconds(
+            preferences.manualRefreshAt(media).get().takeIf { it > 0L },
+            now,
+        )
+        val action = resolveManualRefreshAction(currentState.isRefreshing, remaining)
+        if (action == ManualRefreshAction.CANCEL) {
+            cancelRefresh()
+            return 0L
+        }
+        val canNetworkRefresh = action == ManualRefreshAction.REFRESH
+        val (nextOffset, shouldNetworkRefresh) = resolveNextFeedOffset(
+            currentOffset = currentOffset,
+            poolSize = pool.size,
+            windowSize = FEED_WINDOW_SIZE,
+            canNetworkRefresh = canNetworkRefresh,
+        )
+
+        if (shouldNetworkRefresh) {
+            mutableState.update { it.copy(tabOffsets = emptyMap(), activeWindows = emptyMap()) }
+            return refreshNow()
+        }
+
+        if (pool.size <= FEED_WINDOW_SIZE && remaining > 0L) {
+            return remaining
+        }
+
+        val newWindow = sliceFeedWindow(pool, nextOffset, FEED_WINDOW_SIZE)
+        mutableState.update {
+            it.copy(
+                tabOffsets = it.tabOffsets + (currentTab to nextOffset),
+                activeWindows = it.activeWindows + (currentTab to newWindow),
+            )
+        }
+        return 0L
+    }
+
+    private suspend fun backfillRemovedItem(removed: DiscoverySuggestion, tab: FeedSignalTab) {
+        val currentState = state.value
+        val pool = itemsForTab(currentState, tab)
+        val currentOffset = currentState.tabOffsets[tab] ?: 0
+        val currentWindow = currentState.activeWindows[tab]
+            ?: sliceFeedWindow(pool, currentOffset, FEED_WINDOW_SIZE)
+        val currentWindowTitles = currentWindow.map { it.cleanTitle }.toSet()
+        val shownTitles = repository.getRecentExclusions(currentState.mediaType)
+
+        val candidate = selectBackfillCandidate(
+            removedItem = removed,
+            pool = pool,
+            currentWindowTitles = currentWindowTitles,
+            shownTitles = shownTitles,
+        )
+        val patchedWindow = patchFeedWindowAfterRemoval(
+            currentWindow = currentWindow,
+            removedTitle = removed.cleanTitle,
+            replacement = candidate,
+        )
+        mutableState.update { current ->
+            current.copy(
+                activeWindows = current.activeWindows + (tab to patchedWindow),
+            )
+        }
+    }
+
+    fun markItemExposed(cleanTitle: String) {
+        if (cleanTitle.isBlank()) return
         screenModelScope.launchIO {
+            repository.recordExposure(
+                mediaType = state.value.mediaType,
+                cleanTitles = listOf(cleanTitle),
+            )
+        }
+    }
+
+    fun cancelRefresh() {
+        val media = state.value.mediaType
+        DiscoveryUpdateJob.stop(context, media)
+        mutableState.update { it.copy(isRefreshing = false, progressText = null) }
+    }
+
+    fun hide(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
+        lastHidden = item
+        lastHiddenTab = activeTab
+        hideUndoOperations.enqueue {
+            backfillRemovedItem(item, activeTab)
             // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
             TasteSignalRecorder.record(repository, item, DiscoverySignalType.HIDE)
-            repository.hide(state.value.mediaType, item.cleanTitle)
+            repository.hide(item.mediaType, item.cleanTitle)
         }
+        // Register Hide before exposing its Undo action.
+        mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
     }
 
     fun undoHide() {
         val item = lastHidden ?: return
-        mutableState.update { it.copy(hiddenSnackbarTitle = null) }
-        screenModelScope.launchIO {
-            repository.unhide(state.value.mediaType, item.cleanTitle)
-            // Taste Engine: undo отменяет и сигнал (профиль возвращается к «до скрытия»).
-            repository.removeSignal(state.value.mediaType, item.cleanTitle)
+        val tab = lastHiddenTab
+        lastHidden = null
+        hideUndoOperations.enqueue {
+            repository.undoHide(item.mediaType, item.cleanTitle)
+            val freshItem = repository.subscribe(item.mediaType).first()
+                .firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@enqueue
+            val consumed = repository.getSignals(item.mediaType)
+                .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
+            if (consumed || item.cleanTitle in repository.getHiddenTitles(item.mediaType)) return@enqueue
+            val blacklist = repository.getBlacklistedTags(item.mediaType)
+            val policy = DiscoveryCandidatePolicy(
+                spec = preferences.genreFilterSpec(),
+                blacklistedTags = blacklist,
+            )
+            if (!preferences.discoveryEnabled().get() || !policy.isAllowed(freshItem)) return@enqueue
+
+            mutableState.update { current ->
+                if (current.mediaType != item.mediaType) return@update current
+                val window = current.activeWindows[tab]
+                val updatedWindow = if (window != null && window.none { it.cleanTitle == freshItem.cleanTitle }) {
+                    listOf(freshItem) + window.dropLast(1)
+                } else {
+                    window
+                }
+                current.copy(
+                    activeWindows = if (updatedWindow != null) {
+                        current.activeWindows + (tab to updatedWindow)
+                    } else {
+                        current.activeWindows
+                    },
+                )
+            }
         }
+        mutableState.update { it.copy(hiddenSnackbarTitle = null) }
     }
 
     fun dismissHiddenSnackbar() = mutableState.update { it.copy(hiddenSnackbarTitle = null) }
@@ -411,8 +659,9 @@ internal class DiscoveryFeedScreenModel(
     }
 
     /** Taste Engine: «Просмотрено» — нейтральное исключение (вкус не трогает) + тост. */
-    fun recordConsumed(item: DiscoverySuggestion) {
+    fun recordConsumed(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
         screenModelScope.launchIO {
+            backfillRemovedItem(item, activeTab)
             TasteSignalRecorder.record(repository, item, DiscoverySignalType.CONSUMED)
         }
         context.toast(

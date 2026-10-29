@@ -57,8 +57,8 @@ fun Novel.copyFrom(other: SNovel): Novel {
 
 fun SNovel.toDomainNovel(sourceId: Long): Novel {
     return Novel.create().copy(
-        url = url,
-        title = title,
+        url = url.trim(),
+        title = title.trim(),
         author = author,
         description = normalizeNovelDescription(description),
         genre = getGenres(),

@@ -339,12 +339,9 @@ data object MangaLibraryTab : Tab {
 
         val onDismissRequest = screenModel::closeDialog
         when (val dialog = state.dialog) {
-            is MangaLibraryScreenModel.Dialog.SettingsSheet -> run {
+            is MangaLibraryScreenModel.Dialog.SettingsSheet -> {
                 val category = state.categories.getOrNull(screenModel.activeCategoryIndex)
-                if (category == null) {
-                    onDismissRequest()
-                    return@run
-                }
+                    ?: state.categories.firstOrNull()
                 MangaLibrarySettingsDialog(
                     onDismissRequest = onDismissRequest,
                     screenModel = settingsScreenModel,
@@ -372,7 +369,7 @@ data object MangaLibraryTab : Tab {
                     containsLocalEntry = dialog.manga.any(Manga::isLocal),
                     onDismissRequest = onDismissRequest,
                     onConfirm = { deleteManga, deleteChapter ->
-                        screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
+                        screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter, dialog.seriesIds)
                         screenModel.clearSelection()
                     },
                     entryType = DeleteLibraryEntryType.Manga,

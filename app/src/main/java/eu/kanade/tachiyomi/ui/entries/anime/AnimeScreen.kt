@@ -40,6 +40,7 @@ import eu.kanade.presentation.entries.anime.components.AnimeImagesDialog
 import eu.kanade.presentation.entries.components.DeleteItemsDialog
 import eu.kanade.presentation.entries.components.DuplicateEntryDialog
 import eu.kanade.presentation.entries.components.EditMetadataSheet
+import eu.kanade.presentation.entries.components.EntryDeleteProgressDialog
 import eu.kanade.presentation.entries.components.SetIntervalDialog
 import eu.kanade.presentation.entries.components.aurora.AuroraNoteEditorDialog
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsGesturesScreen.SkipIntroLengthDialog
@@ -55,6 +56,7 @@ import eu.kanade.tachiyomi.ui.browse.anime.migration.anime.season.MigrateSeasonS
 import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeDialog
 import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeDialogScreenModel
 import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeSearchScreen
+import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourcePagerScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
@@ -78,6 +80,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeUpdate
 import tachiyomi.domain.items.episode.model.Episode
+import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -193,6 +196,9 @@ class AnimeScreen(
             onGenresSearch = { genres ->
                 scope.launch { performGenresSearch(navigator, genres, screenModel.source!!) }
             },
+            onSourceClick = {
+                openSource(navigator, successState.source, context)
+            },
             onFilterButtonClicked = screenModel::showSettingsDialog,
             onToggleSort = { screenModel.setSorting(successState.anime.sorting) },
             onToggleUnseenFilter = {
@@ -247,6 +253,8 @@ class AnimeScreen(
             onMultiMarkAsSeenClicked = screenModel::markEpisodesSeen,
             onMarkPreviousAsSeenClicked = screenModel::markPreviousEpisodeSeen,
             onMultiDeleteClicked = screenModel::showDeleteEpisodeDialog,
+            onDeleteDownloadsClicked = screenModel::deleteAllDownloadedEpisodes,
+            onDeleteReadEpisodesClicked = screenModel::deleteWatchedDownloadedEpisodes,
             onEpisodeSwipe = screenModel::episodeSwipe,
             onEpisodeSelected = screenModel::toggleSelection,
             onAllEpisodeSelected = screenModel::toggleAllSelection,
@@ -492,6 +500,20 @@ class AnimeScreen(
             }
         }
 
+        successState.deletionProgress?.let { progress ->
+            EntryDeleteProgressDialog(
+                title = stringResource(AYMR.strings.anime_delete_downloaded_title),
+                progressText = stringResource(
+                    AYMR.strings.anime_delete_downloaded_progress,
+                    progress.deleted,
+                    progress.total,
+                ),
+                deleted = progress.deleted,
+                total = progress.total,
+                onHide = screenModel::hideDeletionProgress,
+            )
+        }
+
         if (showNotesDialog) {
             AuroraNoteEditorDialog(
                 initialText = successState.anime.notes,
@@ -669,6 +691,27 @@ class AnimeScreen(
         }
 
         navigator.push(BrowseAnimeSourceScreen(sourceId, null, genresQuery = genres))
+    }
+
+    private fun openSource(
+        navigator: Navigator,
+        source: AnimeSource,
+        context: Context,
+    ) {
+        if (source is StubAnimeSource) {
+            context.toast(context.stringResource(MR.strings.source_not_installed, source.name))
+            return
+        }
+        val sourceId = source.id
+        val existing = navigator.items.firstOrNull { screen ->
+            (screen is BrowseAnimeSourceScreen && screen.sourceId == sourceId) ||
+                (screen is BrowseAnimeSourcePagerScreen && screen.initialSourceId == sourceId)
+        }
+        if (existing != null) {
+            navigator.popUntil { it == existing }
+            return
+        }
+        navigator.push(BrowseAnimeSourceScreen(sourceId, null))
     }
 
     /**

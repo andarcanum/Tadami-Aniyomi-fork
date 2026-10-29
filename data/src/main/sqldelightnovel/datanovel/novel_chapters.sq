@@ -139,3 +139,7 @@ SELECT last_insert_rowid();
 getChapterCountByNovelId:
 SELECT COUNT(*) FROM novel_chapters
 WHERE novel_id = :novelId;
+
+getAllChaptersForBackup:
+SELECT C.*
+FROM novel_chapters C;

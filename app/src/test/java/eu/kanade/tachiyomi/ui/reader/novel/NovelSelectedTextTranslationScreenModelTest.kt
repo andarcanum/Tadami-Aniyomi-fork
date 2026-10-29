@@ -59,6 +59,9 @@ import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
@@ -246,6 +249,29 @@ class NovelSelectedTextTranslationScreenModelTest {
                 Injekt.addSingleton(
                     fullType<BasePreferences>(),
                     BasePreferences(Injekt.get<Application>(), ReactivePreferenceStore()),
+                )
+            }
+
+        runCatching { Injekt.get<DownloadPreferences>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<DownloadPreferences>(),
+                    DownloadPreferences(PersistingPreferenceStore()),
+                )
+            }
+
+        val novelCategoryRepository = runCatching { Injekt.get<NovelCategoryRepository>() }
+            .getOrElse {
+                mockk<NovelCategoryRepository>(relaxed = true).also {
+                    Injekt.addSingleton(fullType<NovelCategoryRepository>(), it)
+                }
+            }
+
+        runCatching { Injekt.get<GetNovelCategories>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<GetNovelCategories>(),
+                    GetNovelCategories(novelCategoryRepository),
                 )
             }
     }

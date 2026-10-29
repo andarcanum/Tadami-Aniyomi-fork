@@ -173,6 +173,7 @@ fun AnimeScreen(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 
     onFilterButtonClicked: () -> Unit,
     onRefresh: () -> Unit,
@@ -224,6 +225,8 @@ fun AnimeScreen(
     onClickEditInfo: (() -> Unit)? = null,
     onRetrySuggestions: () -> Unit = {},
     onOpenSuggestions: () -> Unit = {},
+    onDeleteDownloadsClicked: () -> Unit = {},
+    onDeleteReadEpisodesClicked: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
@@ -267,6 +270,7 @@ fun AnimeScreen(
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
+            onSourceClick = onSourceClick,
             onFilterButtonClicked = onFilterButtonClicked,
             onToggleSort = onToggleSort,
             onToggleUnseenFilter = onToggleUnseenFilter,
@@ -304,6 +308,8 @@ fun AnimeScreen(
             onClickEditInfo = onClickEditInfo,
             onRetrySuggestions = onRetrySuggestions,
             onOpenSuggestions = onOpenSuggestions,
+            onDeleteDownloadsClicked = onDeleteDownloadsClicked,
+            onDeleteReadEpisodesClicked = onDeleteReadEpisodesClicked,
         )
         return
     }

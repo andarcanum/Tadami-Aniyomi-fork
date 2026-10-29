@@ -56,9 +56,9 @@ internal fun foldLearnedTasteProfile(
             // Пересечение: жанр из k разных тайтлов усиливается.
             val k = genreTitleCount[genre] ?: 1
             val boosted = weight * (1.0 + OVERLAP_MULTIPLIER * (k - 1))
-            genre to boosted.coerceAtMost(maxGenreWeight)
+            genre to boosted.coerceIn(-maxGenreWeight, maxGenreWeight)
         }
-        .filter { it.second > 0.0 }
+        .filter { it.second != 0.0 }
         .sortedByDescending { it.second }
 
     return LearnedTasteProfile(
@@ -93,8 +93,11 @@ internal fun mergeTasteProfiles(
     learned.genres.forEach { (genre, learnedWeight) ->
         val key = genre.trim().lowercase()
         val scaled = learnedWeight * blend
-        // max: положительный выученный жанр поднимает, но не складывается с библиотечным.
-        merged[key] = maxOf(merged[key] ?: 0.0, scaled)
+        if (learnedWeight >= 0.0) {
+            merged[key] = maxOf(merged[key] ?: 0.0, scaled)
+        } else {
+            merged[key] = ((merged[key] ?: 0.0) + scaled).coerceAtLeast(0.0)
+        }
     }
     return merged.entries
         .filter { it.value > 0.0 }
@@ -112,9 +115,15 @@ internal fun applySourceAffinity(
     affinity: Double,
     affinityScale: Double = 4.0,
     boostCap: Double = 0.6,
+    isManualMode: Boolean = false,
 ): Double {
+    if (isManualMode) {
+        val positiveAffinity = affinity.coerceAtLeast(0.0)
+        return 1.0 + 3.5 * kotlin.math.tanh(positiveAffinity / affinityScale)
+    }
     val boost = 1.0 + boostCap * kotlin.math.tanh(affinity / affinityScale)
-    return libraryWeight * boost.coerceIn(0.4, 2.0)
+    val effectiveBase = libraryWeight.coerceAtLeast(1)
+    return effectiveBase * boost.coerceIn(0.4, 2.0)
 }
 
 /** Выученный профиль: жанры с весами, аффинити источников, счётчик сигналов. */
@@ -144,26 +153,20 @@ internal fun synthesizeImplicitNegatives(
     explicitSignals: List<DiscoverySignal>,
     currentSuggestions: List<tachiyomi.domain.discovery.model.DiscoverySuggestion>,
     mediaType: DiscoveryMediaType,
+    profileGenres: List<String> = emptyList(),
 ): List<DiscoverySignal> {
     val explicitTitles = explicitSignals.mapTo(HashSet()) { it.cleanTitle }
-    // cleanTitle → жанры из reason-CSV текущего кэша (TASTE-ряд; прочие — без жанров).
+    // cleanTitle → достоверные жанры текущего кэша (только известные genres).
     val genresByTitle = currentSuggestions
-        .filter { it.rowType == tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE }
-        .associate { item ->
-            item.cleanTitle to (
-                item.reason
-                    ?.splitToSequence(",")
-                    ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-                    ?.toList()
-                    .orEmpty()
-                )
-        }
+        .filter { it.genres.isNotEmpty() }
+        .associate { item -> item.cleanTitle to item.genres }
     return shownWithCount
         .filter { (cleanTitle, _, count) ->
             count >= SHOWN_IGNORED_MIN_SHOWS && cleanTitle !in explicitTitles
         }
         .mapNotNull { (cleanTitle, _, _) ->
             val genres = genresByTitle[cleanTitle].orEmpty()
+                .filterNot { g -> profileGenres.any { p -> GenreMatcher.matches(p, g) } }
             if (genres.isEmpty()) return@mapNotNull null
             DiscoverySignal(
                 mediaType = mediaType,

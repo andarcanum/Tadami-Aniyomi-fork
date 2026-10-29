@@ -9,16 +9,19 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.library.anime.components.SeriesStackedCoverCard
 import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryListItem
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.LanguageBadge
+import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.library.anime.LibraryAnime
+import tachiyomi.domain.series.model.SeriesCoverMode
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.util.plus
 
@@ -28,11 +31,12 @@ internal fun AnimeLibraryList(
     entries: Int,
     containerHeight: Int,
     contentPadding: PaddingValues,
-    selection: List<LibraryAnime>,
+    selection: List<AnimeLibraryItem>,
     selectedIds: Set<Long> = selection.idsToHashSet { it.id },
     state: LazyListState = rememberLazyListState(),
-    onClick: (LibraryAnime) -> Unit,
-    onLongClick: (LibraryAnime) -> Unit,
+    onClick: (AnimeLibraryItem) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
+    onLongClick: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
@@ -54,13 +58,24 @@ internal fun AnimeLibraryList(
 
         items(
             items = items,
-            key = { it.libraryAnime.id },
+            key = { it.id },
             contentType = { "anime_library_list_item" },
         ) { libraryItem ->
-            val anime = libraryItem.libraryAnime.anime
+            val anime = libraryItem.coverAnime ?: libraryItem.libraryAnime.anime
+            val isSeries = libraryItem is AnimeLibraryItem.Series
+            val notSelectionMode = selection.isEmpty()
+            val title = if (isSeries) libraryItem.title else anime.displayTitle
+            val isSelected = selectedIds.contains(libraryItem.id)
+            val targetAnime = if (isSeries) {
+                libraryItem.librarySeries.entries.firstOrNull {
+                    it.anime.id == libraryItem.librarySeries.activeAnime?.id
+                } ?: libraryItem.libraryAnime
+            } else {
+                libraryItem.libraryAnime
+            }
             EntryListItem(
-                isSelected = selectedIds.contains(libraryItem.libraryAnime.id),
-                title = anime.displayTitle,
+                isSelected = isSelected,
+                title = title,
                 coverData = AnimeCover(
                     animeId = anime.id,
                     sourceId = anime.source,
@@ -68,6 +83,16 @@ internal fun AnimeLibraryList(
                     url = anime.thumbnailUrl,
                     lastModified = anime.coverLastModified,
                 ),
+                customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
+                    {
+                        SeriesStackedCoverCard(
+                            covers = libraryItem.covers,
+                            isSelected = isSelected,
+                        )
+                    }
+                } else {
+                    null
+                },
                 badge = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnviewedBadge(count = libraryItem.unseenCount)
@@ -76,15 +101,26 @@ internal fun AnimeLibraryList(
                         sourceLanguage = libraryItem.sourceLanguage,
                     )
                 },
-                onLongClick = { onLongClick(libraryItem.libraryAnime) },
-                onClick = { onClick(libraryItem.libraryAnime) },
+                onLongClick = { onLongClick(libraryItem) },
+                topEndBadge = if (libraryItem.pinned) {
+                    { PinnedBadge() }
+                } else {
+                    null
+                },
+                onClick = {
+                    if (notSelectionMode && isSeries) {
+                        onSeriesClicked(libraryItem.librarySeries.id)
+                    } else {
+                        onClick(libraryItem)
+                    }
+                },
                 onClickContinueViewing = if (
                     shouldShowContinueViewingAction(
                         hasContinueAction = onClickContinueWatching != null,
-                        remainingCount = libraryItem.libraryAnime.unseenCount,
+                        remainingCount = libraryItem.unseenCount,
                     )
                 ) {
-                    { onClickContinueWatching?.invoke(libraryItem.libraryAnime) }
+                    { onClickContinueWatching?.invoke(targetAnime) }
                 } else {
                     null
                 },

@@ -1,10 +1,42 @@
 package eu.kanade.domain.discovery.service
 
+import eu.kanade.tachiyomi.data.discovery.GenreFilterSpec
+import eu.kanade.tachiyomi.data.discovery.RequiredEnforcement
+import eu.kanade.tachiyomi.data.discovery.RequiredMatchMode
+import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 
 class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
+
+    fun manualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> = synchronized(manualRefreshLock) {
+        val shared = preferenceStore.getLong("discovery_manual_refresh_at_" + mediaType.key, 0L)
+        val migrated = preferenceStore.getBoolean("discovery_manual_refresh_migrated_" + mediaType.key, false)
+        if (!migrated.get()) {
+            val home = homeManualRefreshAt(mediaType)
+            val feed = feedManualRefreshAt(mediaType)
+            shared.set(maxOf(shared.get(), home.get(), feed.get()))
+            home.delete()
+            feed.delete()
+            migrated.set(true)
+        }
+        shared
+    }
+
+    fun clearManualRefreshAt(mediaType: DiscoveryMediaType) = synchronized(manualRefreshLock) {
+        manualRefreshAt(mediaType).set(0L)
+    }
+
+    fun tryStartManualRefresh(mediaType: DiscoveryMediaType, now: Long): Boolean = synchronized(manualRefreshLock) {
+        val timestamp = manualRefreshAt(mediaType)
+        val previous = timestamp.get()
+        if (previous > 0L && now - previous in 0 until MANUAL_REFRESH_COOLDOWN_MS) return@synchronized false
+        timestamp.set(now)
+        true
+    }
 
     fun discoveryEnabled(): Preference<Boolean> = preferenceStore.getBoolean("discovery_enabled", true)
     fun homeHeroMode(): Preference<String> = preferenceStore.getString("home_hero_mode", "auto")
@@ -31,10 +63,23 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun refreshAfterLibrary(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_after_library", true)
     fun refreshWifiOnly(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_wifi_only", false)
 
-    /** Момент последнего РУЧНОГО обновления (общий cooldown home/feed, 5 мин от нажатия). */
-    fun manualRefreshAt(): Preference<Long> = preferenceStore.getLong("discovery_manual_refresh_at", 0L)
+    /** Legacy migration input; new refreshes use [manualRefreshAt]. */
+    fun feedManualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("discovery_feed_manual_refresh_at_" + mediaType.key, 0L)
 
-    /** Момент последнего РУЧНОГО обновления ленты на главном экране (10 сек cooldown per-media). */
+    fun manualRefreshWorkId(mediaType: DiscoveryMediaType): Preference<String> =
+        preferenceStore.getString("discovery_manual_refresh_work_id_" + mediaType.key, "")
+
+    fun claimManualRefreshFailure(mediaType: DiscoveryMediaType, requestId: String): Boolean =
+        synchronized(manualRefreshLock) {
+            if (requestId.isBlank() || manualRefreshWorkId(mediaType).get() != requestId) return@synchronized false
+            val shown = preferenceStore.getString("discovery_manual_refresh_failure_shown_" + mediaType.key, "")
+            if (shown.get() == requestId) return@synchronized false
+            shown.set(requestId)
+            true
+        }
+
+    /** Legacy migration input; new refreshes use [manualRefreshAt]. */
     fun homeManualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> =
         preferenceStore.getLong("discovery_home_manual_refresh_at_" + mediaType.key, 0L)
 
@@ -99,9 +144,69 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun ignoredGenres(): Preference<String> =
         preferenceStore.getString("discovery_ignored_genres", "")
 
+    /** G01: Режим сопоставления обязательных жанров ("ALL" | "ANY"). По умолчанию "ALL". */
+    fun requiredMatchMode(): Preference<String> =
+        preferenceStore.getString("discovery_required_match_mode", "ALL")
+
+    /** G01: Режим строгости обязательных жанров ("STRICT" | "BEST_EFFORT"). По умолчанию "STRICT". */
+    fun requiredEnforcement(): Preference<String> =
+        preferenceStore.getString("discovery_required_enforcement", "STRICT")
+
+    fun genreFilterSpec(): GenreFilterSpec {
+        val (ignCanon, ignRaw) = parseGenreFilterCsv(ignoredGenres().get())
+        val (reqCanon, reqRaw) = parseGenreFilterCsv(requiredGenres().get())
+        val (priCanon, priRaw) = parseGenreFilterCsv(priorityGenres().get())
+        val matchMode = runCatching {
+            RequiredMatchMode.valueOf(requiredMatchMode().get())
+        }.getOrDefault(RequiredMatchMode.ALL)
+        val enforcement = runCatching {
+            RequiredEnforcement.valueOf(requiredEnforcement().get())
+        }.getOrDefault(RequiredEnforcement.STRICT)
+        return GenreFilterSpec(
+            ignoredGenres = ignCanon + ignRaw.toSet(),
+            requiredGenres = reqCanon + reqRaw.toSet(),
+            priorityGenres = priCanon + priRaw.toSet(),
+            requiredMatchMode = matchMode,
+            requiredEnforcement = enforcement,
+        )
+    }
+
+    fun observeGenreFilterSpec(): Flow<GenreFilterSpec> = combine(
+        ignoredGenres().changes(),
+        requiredGenres().changes(),
+        priorityGenres().changes(),
+        requiredMatchMode().changes(),
+        requiredEnforcement().changes(),
+    ) { ignCsv, reqCsv, priCsv, matchModeStr, enforcementStr ->
+        val (ignCanon, ignRaw) = parseGenreFilterCsv(ignCsv)
+        val (reqCanon, reqRaw) = parseGenreFilterCsv(reqCsv)
+        val (priCanon, priRaw) = parseGenreFilterCsv(priCsv)
+        val matchMode = runCatching {
+            RequiredMatchMode.valueOf(matchModeStr)
+        }.getOrDefault(RequiredMatchMode.ALL)
+        val enforcement = runCatching {
+            RequiredEnforcement.valueOf(enforcementStr)
+        }.getOrDefault(RequiredEnforcement.STRICT)
+        GenreFilterSpec(
+            ignoredGenres = ignCanon + ignRaw.toSet(),
+            requiredGenres = reqCanon + reqRaw.toSet(),
+            priorityGenres = priCanon + priRaw.toSet(),
+            requiredMatchMode = matchMode,
+            requiredEnforcement = enforcement,
+        )
+    }
+
     /** CSV ключей рядов, упавших при последней генерации (для баннера «показан кэш»). */
     fun lastFailedRows(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString("discovery_failed_rows_" + mediaType.key, "")
+
+    /** Статус последней генерации per-media: "SUCCESS", "PARTIAL", "FAILED", "SKIPPED", "" (не запускалось). */
+    fun lastGenerationStatus(mediaType: DiscoveryMediaType): Preference<String> =
+        preferenceStore.getString("discovery_last_gen_status_" + mediaType.key, "")
+
+    /** Время завершения последней попытки генерации per-media. */
+    fun lastGenerationAt(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("discovery_last_gen_at_" + mediaType.key, 0L)
 
     /** Режим участия плагинов в подборках: "auto" (топ-3 по весу библиотеки) | "manual" (свой набор). */
     fun discoverySourceMode(mediaType: DiscoveryMediaType): Preference<String> =
@@ -128,11 +233,21 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
     fun collageRotationIntervalHours(): Preference<Int> = preferenceStore.getInt("collage_rotation_interval_hours", 2)
     fun collageAnimationSpeed(): Preference<String> = preferenceStore.getString("collage_animation_speed", "normal")
-    fun collageLastRotationTime(): Preference<Long> = preferenceStore.getLong("collage_last_rotation_time", 0L)
-    fun collageOffset(): Preference<Int> = preferenceStore.getInt("collage_offset", 0)
+    fun collageLastRotationTime(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("collage_last_rotation_time_" + mediaType.key, 0L)
+    fun collageOffset(mediaType: DiscoveryMediaType): Preference<Int> =
+        preferenceStore.getInt("collage_offset_" + mediaType.key, 0)
 
     fun stageRotationIntervalHours(): Preference<Int> = preferenceStore.getInt("stage_rotation_interval_hours", 2)
     fun stageAnimationSpeed(): Preference<String> = preferenceStore.getString("stage_animation_speed", "normal")
-    fun stageLastRotationTime(): Preference<Long> = preferenceStore.getLong("stage_last_rotation_time", 0L)
-    fun stageOffset(): Preference<Int> = preferenceStore.getInt("stage_offset", 0)
+    fun stageLastRotationTime(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("stage_last_rotation_time_" + mediaType.key, 0L)
+    fun stageOffset(mediaType: DiscoveryMediaType): Preference<Int> =
+        preferenceStore.getInt("stage_offset_" + mediaType.key, 0)
+
+    companion object {
+        private val manualRefreshLock = Any()
+
+        const val MANUAL_REFRESH_COOLDOWN_MS = 5 * 60_000L
+    }
 }

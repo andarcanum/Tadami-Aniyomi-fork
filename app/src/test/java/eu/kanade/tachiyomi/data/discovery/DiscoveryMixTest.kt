@@ -1,11 +1,16 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.doubles.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySuggestion
 
 class DiscoveryMixTest {
 
@@ -32,13 +37,13 @@ class DiscoveryMixTest {
     }
 
     @Test
-    fun `default quotas sum to 30 items`() {
+    fun `default quotas sum to 60 items`() {
         val quotas = DiscoveryMixQuotas()
-        quotas.total shouldBe 30
-        quotas.similar shouldBe 10
-        quotas.taste shouldBe 8
-        quotas.fresh shouldBe 6
-        quotas.source shouldBe 6
+        quotas.total shouldBe 60
+        quotas.similar shouldBe 20
+        quotas.taste shouldBe 16
+        quotas.fresh shouldBe 12
+        quotas.source shouldBe 12
     }
 
     @Test
@@ -287,11 +292,12 @@ class DiscoveryMixTest {
         val trend = (1..8).map { item(DiscoveryRowType.TREND, "T$it", 0.0) }
         val rows = mapOf(DiscoveryRowType.LIKE to like, DiscoveryRowType.TREND to trend)
 
+        val quotas = DiscoveryMixQuotas(similar = 10, taste = 8, fresh = 6, source = 6)
         // без rrf — прежнее поведение по сырым скорам (LIKE 100/99 топится выше TREND 0.0)
-        interleaveMix(rows, total = 30).takeLast(4).map { it.title } shouldBe
+        interleaveMix(rows, quotas = quotas, total = 30).takeLast(4).map { it.title } shouldBe
             listOf("L11", "L12", "T7", "T8")
         // с rrf — ранг важнее шкалы: T7 (rank 6) опережает L11 (rank 10)
-        interleaveMix(rows, total = 30, rrf = rrfScores(rows)).takeLast(4).map { it.title } shouldBe
+        interleaveMix(rows, quotas = quotas, total = 30, rrf = rrfScores(rows)).takeLast(4).map { it.title } shouldBe
             listOf("T7", "T8", "L11", "L12")
     }
 
@@ -331,4 +337,117 @@ class DiscoveryMixTest {
         position = position,
         createdAt = 0L,
     )
+
+    private fun itemWithGenres(title: String, genres: List<String>) =
+        DiscoveryTrendingItem(title, title.lowercase(), null, 0L, null, genres)
+
+    @Test
+    fun `required genres filter is strict and may return empty`() {
+        val items = listOf(itemWithGenres("a", listOf("harem")), itemWithGenres("b", listOf("drama")))
+        applyRequiredGenres(items, setOf("romance")) { it.genres }.shouldBeEmpty()
+    }
+
+    @Test
+    fun `blacklist checks genres column for any row type`() {
+        val item = DiscoverySuggestion(
+            id = 1L, mediaType = DiscoveryMediaType.MANGA, rowType = DiscoveryRowType.TREND,
+            title = "t", cleanTitle = "t", coverUrl = null, reason = "next", seedTitle = null,
+            provider = "anilist", score = 0.0, position = 0L, createdAt = 0L,
+            genres = listOf("harem"),
+        )
+        isBlacklisted(item, expandGenreSet(listOf("гарем"))).shouldBeTrue()
+    }
+
+    @Test
+    fun `blacklist falls back to taste reason for legacy rows without genres`() {
+        val legacy = DiscoverySuggestion(
+            id = 1L, mediaType = DiscoveryMediaType.MANGA, rowType = DiscoveryRowType.TASTE,
+            title = "t", cleanTitle = "t", coverUrl = null, reason = "harem, drama", seedTitle = null,
+            provider = "anilist", score = 0.0, position = 0L, createdAt = 0L,
+        )
+        isBlacklisted(legacy, expandGenreSet(listOf("harem"))).shouldBeTrue()
+    }
+
+    @Test
+    fun `allocateSourceSlots equal 3 weights 10 slots gives 4 3 3 in input order`() {
+        val slots = allocateSourceSlots(
+            sourceIds = listOf(1L, 2L, 3L),
+            effectiveWeights = mapOf(1L to 2.0, 2L to 2.0, 3L to 2.0),
+            totalSlots = 10,
+        )
+        slots shouldBe mapOf(1L to 4, 2L to 3, 3L to 3)
+    }
+
+    @Test
+    fun `allocateSourceSlots weights 6 2 1 with 11 slots respects ranking and minimums`() {
+        val slots = allocateSourceSlots(
+            sourceIds = listOf(1L, 2L, 3L),
+            effectiveWeights = mapOf(1L to 6.0, 2L to 2.0, 3L to 1.0),
+            totalSlots = 11,
+        )
+        slots.values.all { it >= 1 }.shouldBeTrue()
+        slots[1L]!! shouldBeGreaterThan slots[2L]!!
+        slots[2L]!! shouldBeGreaterThan slots[3L]!!
+        slots shouldBe mapOf(1L to 6, 2L to 3, 3L to 2)
+    }
+
+    @Test
+    fun `allocateSourceSlots handles empty or zero totalSlots`() {
+        allocateSourceSlots(emptyList(), emptyMap(), 10) shouldBe emptyMap()
+        allocateSourceSlots(listOf(1L, 2L), mapOf(1L to 1.0), 0) shouldBe emptyMap()
+        allocateSourceSlots(listOf(1L, 2L), mapOf(1L to 1.0), -3) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `allocateSourceSlots normalizes super positive and non numeric weights deterministically`() {
+        val slots = allocateSourceSlots(
+            sourceIds = listOf(1L, 2L, 3L),
+            effectiveWeights = mapOf(1L to Double.POSITIVE_INFINITY, 2L to Double.NaN, 3L to -5.0),
+            totalSlots = 10,
+        )
+        slots.values.sum() shouldBe 10
+        slots.values.all { it >= 1 }.shouldBeTrue()
+        slots[1L]!! shouldBeGreaterThan slots[2L]!!
+        slots[1L]!! shouldBeGreaterThan slots[3L]!!
+    }
+
+    @Test
+    fun `allocateSourceSlots enforces 30 percent dominance cap when source count is at least 4`() {
+        val sources = (1L..15L).toList()
+        // Source 1L has huge weight, others have weight 1.0
+        val weights = sources.associateWith { if (it == 1L) 1000.0 else 1.0 }
+        val slots = allocateSourceSlots(
+            sourceIds = sources,
+            effectiveWeights = weights,
+            totalSlots = 50,
+            maxDominantShare = 0.30,
+        )
+        slots.values.sum() shouldBe 50
+        // Dominant source 1L should not exceed 30% of 50 = 15 slots
+        slots[1L]!! shouldBe 15
+        // Other sources all get at least 1 slot
+        sources.drop(1).forEach { id ->
+            (slots[id]!! >= 1).shouldBeTrue()
+        }
+    }
+
+    @Test
+    fun `balancePluginDiversity enforces 30 percent dominance cap when 4 or more sources present`() {
+        data class TestItem(val title: String, val provider: String)
+        val dominantItems = (1..30).map { TestItem("Dominant $it", "src1") }
+        val other1 = (1..5).map { TestItem("Other1 $it", "src2") }
+        val other2 = (1..5).map { TestItem("Other2 $it", "src3") }
+        val other3 = (1..5).map { TestItem("Other3 $it", "src4") }
+        val allItems = dominantItems + other1 + other2 + other3
+
+        val balanced = balancePluginDiversity(
+            items = allItems,
+            limit = 20,
+            sourceKeyExtractor = { it.provider },
+            maxDominantShare = 0.30,
+        )
+        balanced.size shouldBe 20
+        // Dominant source src1 should not exceed 30% of 20 = 6 items
+        balanced.count { it.provider == "src1" } shouldBe 6
+    }
 }

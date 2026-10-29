@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -98,6 +99,36 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
+/**
+ * Показывает разовые уведомления Home Hub: модели эмитят типизированные эффекты
+ * ([BaseHomeHubScreenModel.effects]) вместо прямого Toast, потому что пайплайны подборки
+ * работают на Dispatchers.IO, а Toast требует Looper на вызывающем потоке.
+ */
+@Composable
+private fun HomeHubEffects(screenModel: BaseHomeHubScreenModel) {
+    val context = LocalContext.current
+    val poolLimitedMessage = stringResource(AYMR.strings.for_you_limited_pool)
+    val refreshFailedMessage = stringResource(AYMR.strings.for_you_refresh_failed)
+    LaunchedEffect(screenModel) {
+        screenModel.effects.collect { effect ->
+            when (effect) {
+                HomeHubEffect.DiscoveryPoolLimited -> context.toast(poolLimitedMessage)
+            }
+        }
+    }
+    LaunchedEffect(screenModel) {
+        val discoveryPreferences = Injekt.get<eu.kanade.domain.discovery.service.DiscoveryPreferences>()
+        screenModel.discoveryRefreshFailures.collect { pending ->
+            pending.forEach { (mediaType, requestId) ->
+                if (discoveryPreferences.claimManualRefreshFailure(mediaType, requestId)) {
+                    context.toast(refreshFailedMessage)
+                }
+                screenModel.acknowledgeDiscoveryRefreshFailure(mediaType, requestId)
+            }
+        }
+    }
+}
+
 @Composable
 internal fun AnimeHomeHub(
     contentPadding: PaddingValues,
@@ -109,12 +140,14 @@ internal fun AnimeHomeHub(
     onUndoHidden: () -> Unit = {},
     onDiscoveryLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryBlacklistTag: ((HomeHubDiscoveryItem, String, Int) -> Unit)? = null,
+    onDiscoveryItemFocused: ((HomeHubDiscoveryItem) -> Unit)? = null,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
     providedScreenModel: HomeHubScreenModel? = null,
 ) {
     val screenModel = providedScreenModel ?: HomeHubTab.rememberScreenModel { HomeHubScreenModel() }
+    HomeHubEffects(screenModel)
     val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
@@ -225,6 +258,8 @@ internal fun AnimeHomeHub(
         onLibraryClick = { tabNavigator.current = AnimeLibraryTab },
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.ANIME.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
+        onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
+        onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -245,12 +280,14 @@ internal fun MangaHomeHub(
     onUndoHidden: () -> Unit = {},
     onDiscoveryLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryBlacklistTag: ((HomeHubDiscoveryItem, String, Int) -> Unit)? = null,
+    onDiscoveryItemFocused: ((HomeHubDiscoveryItem) -> Unit)? = null,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
     providedScreenModel: MangaHomeHubScreenModel? = null,
 ) {
     val screenModel = providedScreenModel ?: HomeHubTab.rememberScreenModel { MangaHomeHubScreenModel() }
+    HomeHubEffects(screenModel)
     val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
@@ -364,6 +401,8 @@ internal fun MangaHomeHub(
         },
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.MANGA.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
+        onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
+        onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -384,12 +423,14 @@ internal fun NovelHomeHub(
     onUndoHidden: () -> Unit = {},
     onDiscoveryLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryBlacklistTag: ((HomeHubDiscoveryItem, String, Int) -> Unit)? = null,
+    onDiscoveryItemFocused: ((HomeHubDiscoveryItem) -> Unit)? = null,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
     providedScreenModel: NovelHomeHubScreenModel? = null,
 ) {
     val screenModel = providedScreenModel ?: HomeHubTab.rememberScreenModel { NovelHomeHubScreenModel() }
+    HomeHubEffects(screenModel)
     val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val tabNavigator = LocalTabNavigator.current
@@ -506,6 +547,8 @@ internal fun NovelHomeHub(
         },
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.NOVEL.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
+        onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
+        onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -545,6 +588,8 @@ private fun HomeHubScreen(
     onLibraryClick: () -> Unit,
     onForYouMoreClick: () -> Unit,
     onDiscoveryRefreshClick: (() -> Unit)? = null,
+    onDiscoveryItemFocused: (HomeHubDiscoveryItem) -> Unit = {},
+    onDiscoveryLikeClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryItemClick: (HomeHubDiscoveryItem) -> Unit,
     // Direct open тизера: пушит экран тайтла своего медиатипа (fromSource = true).
     openDirectEntry: ((Long) -> Unit)? = null,
@@ -609,6 +654,30 @@ private fun HomeHubScreen(
     val trendingSource = remember { CompositeTrendingSource() }
     val directOpenResolver = remember { DiscoveryDirectOpenResolver() }
 
+    val isSectionActive = section == activeSection
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isResumed by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            isResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val exposureTracker = remember(section) {
+        HomeDiscoveryExposureTracker(scope = scope, onExposure = onDiscoveryItemFocused)
+    }
+    LaunchedEffect(isSectionActive, isResumed) {
+        if (!isSectionActive || !isResumed) {
+            exposureTracker.onPauseOrInactive()
+        }
+    }
+
     // Direct open для Home-тизеров: plugin-bound карточка открывает экран тайтла
     // напрямую (materialize по sourceId/sourceUrl); неполная привязка, неустановленный
     // источник или любая ошибка деградирует в прежнюю шторку предпросмотра.
@@ -672,6 +741,17 @@ private fun HomeHubScreen(
         discoveryEnabled = state.discoveryEnabled,
         discoveryCount = heroFeedItems.size,
     )
+    // Auto keeps the discovery slot only after discovery produced content once:
+    // on a cold start the Continue hero must stay. Explicit discovery modes keep
+    // their slot regardless of the current count.
+    val hasPreviousDiscoveryContent = state.discoveryLastUpdated != null ||
+        filteredContent.discoveryPool.isNotEmpty()
+    val keepDiscoveryHeroSlot = shouldKeepDiscoveryHeroSlot(
+        preferredMode = heroMode,
+        discoveryEnabled = state.discoveryEnabled,
+        isFiltering = isFiltering,
+        hasPreviousDiscoveryContent = hasPreviousDiscoveryContent,
+    )
     // Коллаж и гибрид уже отображают «Для тебя» в слоте героя; для них нижний дублирующий ряд не нужен.
     val forYouItems = resolveForYouItems(
         heroPresentation = heroPresentation,
@@ -681,8 +761,13 @@ private fun HomeHubScreen(
     // В Collage/Stage hero-слот занят «Для тебя»: возвращаем последний прочитанный
     // тайтл первым элементом ряда «Недавно просмотренные» (без визуального выделения —
     // пользователь и так знает, что читал последним).
-    val historyItems = remember(history, hero, heroPresentation, section) {
-        prependLastReadHero(hero, history, heroPresentation, section)
+    val historyItems = remember(history, hero, heroPresentation, section, keepDiscoveryHeroSlot) {
+        val historyPresentation = if (keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue) {
+            HomeHeroMode.Stage
+        } else {
+            heroPresentation
+        }
+        prependLastReadHero(hero, history, historyPresentation, section)
     }
     // Считается после historyItems: scroll-эвристика обязана видеть ряд вместе
     // с возвращённым последним прочитанным (иначе расхождение с рендером).
@@ -691,6 +776,7 @@ private fun HomeHubScreen(
         historyCount = historyItems.size,
         recommendationCount = recommendations.size,
         discoveryCount = heroFeedItems.size,
+        discoveryEnabled = state.discoveryEnabled,
     )
 
     Box(Modifier.fillMaxSize()) {
@@ -707,7 +793,7 @@ private fun HomeHubScreen(
                     WelcomeSection(onBrowseClick = onBrowseClick, onExtensionClick = onExtensionClick)
                 }
                 // Онбординг не должен лишать discovery: тизер под приветственным блоком.
-                if (discovery.isNotEmpty()) {
+                if (shouldShowForYouSection(state.discoveryEnabled)) {
                     item(key = "for_you_welcome", contentType = "home_hub_for_you") {
                         ForYouSection(
                             items = discovery,
@@ -715,12 +801,24 @@ private fun HomeHubScreen(
                             onMoreClick = onForYouMoreClick,
                             onItemClick = { openTeaser(it) },
                             onLongClick = { longPressItem = it },
+                            isRefreshing = state.isDiscoveryRefreshing,
+                            onRefreshClick = onDiscoveryRefreshClick,
+                            tracker = exposureTracker,
+                            isSectionActive = isSectionActive,
+                            isResumed = isResumed,
+                            emptyState = resolveForYouEmptyState(
+                                discoveryEnabled = state.discoveryEnabled,
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                hasItems = discovery.isNotEmpty(),
+                                lastUpdatedAt = state.discoveryLastUpdated,
+                                isFailed = state.isDiscoveryFailed,
+                            ),
                         )
                     }
                 }
             } else {
                 if (
-                    shouldRenderHomeHubHeroSlot(
+                    keepDiscoveryHeroSlot || shouldRenderHomeHubHeroSlot(
                         heroPresentation = heroPresentation,
                         hasHero = hero != null,
                         reserveHeroSlot = reserveHeroSlot,
@@ -729,6 +827,30 @@ private fun HomeHubScreen(
                 ) {
                     item(key = "hero", contentType = "home_hub_hero") {
                         when {
+                            keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue -> Box(
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                ForYouSection(
+                                    items = heroFeedItems,
+                                    coverMediaType = section.toDiscoveryMediaType(),
+                                    onMoreClick = onForYouMoreClick,
+                                    onItemClick = { openTeaser(it) },
+                                    onLongClick = { longPressItem = it },
+                                    isRefreshing = state.isDiscoveryRefreshing,
+                                    onRefreshClick = onDiscoveryRefreshClick,
+                                    tracker = exposureTracker,
+                                    isSectionActive = isSectionActive,
+                                    isResumed = isResumed,
+                                    emptyState = resolveForYouEmptyState(
+                                        discoveryEnabled = state.discoveryEnabled,
+                                        isRefreshing = state.isDiscoveryRefreshing,
+                                        hasItems = heroFeedItems.isNotEmpty(),
+                                        lastUpdatedAt = state.discoveryLastUpdated,
+                                        isFailed = state.isDiscoveryFailed,
+                                    ),
+                                )
+                            }
                             // Ветка stage идёт первой: при наличии hero она обязана перебивать HeroSection,
                             // иначе режим не отрисуется никогда.
                             heroPresentation == HomeHeroMode.Stage -> DiscoveryHeroStage(
@@ -737,6 +859,9 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
+                                onItemFocused = { item ->
+                                    exposureTracker.recordStageFocus(item, isSectionActive, isResumed)
+                                },
                             )
                             heroPresentation == HomeHeroMode.Collage -> DiscoveryHeroCollage(
                                 items = heroFeedItems,
@@ -744,6 +869,9 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
+                                onItemFocused = { item ->
+                                    exposureTracker.recordStageFocus(item, isSectionActive, isResumed)
+                                },
                             )
                             heroPresentation == HomeHeroMode.Hybrid && hero != null -> Column {
                                 HeroSection(
@@ -762,8 +890,23 @@ private fun HomeHubScreen(
                                     onLongClick = { longPressItem = it },
                                     isRefreshing = state.isDiscoveryRefreshing,
                                     onRefreshClick = onDiscoveryRefreshClick,
+                                    tracker = exposureTracker,
+                                    isSectionActive = isSectionActive,
+                                    isResumed = isResumed,
                                 )
                             }
+                            heroPresentation == HomeHeroMode.Hybrid && hero == null -> HybridDiscoveryStrip(
+                                items = discovery,
+                                coverMediaType = section.toDiscoveryMediaType(),
+                                onMoreClick = onForYouMoreClick,
+                                onItemClick = { openTeaser(it) },
+                                onLongClick = { longPressItem = it },
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                onRefreshClick = onDiscoveryRefreshClick,
+                                tracker = exposureTracker,
+                                isSectionActive = isSectionActive,
+                                isResumed = isResumed,
+                            )
                             hero != null -> HeroSection(
                                 hero = hero,
                                 section = section,
@@ -801,7 +944,7 @@ private fun HomeHubScreen(
                 }
 
                 if (
-                    shouldShowForYouSection(state.discoveryEnabled) &&
+                    shouldShowForYouSection(state.discoveryEnabled) && !keepDiscoveryHeroSlot &&
                     heroPresentation != HomeHeroMode.Collage &&
                     heroPresentation != HomeHeroMode.Stage &&
                     (forYouItems.isNotEmpty() || discovery.isEmpty())
@@ -815,6 +958,16 @@ private fun HomeHubScreen(
                             onLongClick = { longPressItem = it },
                             isRefreshing = state.isDiscoveryRefreshing,
                             onRefreshClick = onDiscoveryRefreshClick,
+                            tracker = exposureTracker,
+                            isSectionActive = isSectionActive,
+                            isResumed = isResumed,
+                            emptyState = resolveForYouEmptyState(
+                                discoveryEnabled = state.discoveryEnabled,
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                hasItems = forYouItems.isNotEmpty(),
+                                lastUpdatedAt = state.discoveryLastUpdated,
+                                isFailed = state.isDiscoveryFailed,
+                            ),
                         )
                     }
                 }
@@ -901,7 +1054,7 @@ private fun HomeHubScreen(
         longPressItem?.let { lpItem ->
             DiscoveryHideOptionsSheet(
                 itemTitle = lpItem.title,
-                tag = firstBlacklistTag(lpItem.rowType, lpItem.reasonPayload),
+                tag = firstBlacklistTag(lpItem.genres, lpItem.rowType, lpItem.reasonPayload),
                 onHide = {
                     longPressItem = null
                     onDiscoveryLongClick?.invoke(lpItem)
@@ -913,13 +1066,17 @@ private fun HomeHubScreen(
                 onDismiss = { longPressItem = null },
                 onMoreLikeThis = {
                     longPressItem = null
-                    // Taste Engine: явный лайк — сильный позитивный сигнал.
-                    scope.launch {
-                        eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
-                            tasteRepository,
-                            lpItem.toDiscoverySuggestion(),
-                            tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
-                        )
+                    // Taste Engine: явный лайк — сильный позитивный сигнал + локальная замена карточки в тизере.
+                    if (onDiscoveryLikeClick != null) {
+                        onDiscoveryLikeClick.invoke(lpItem)
+                    } else {
+                        scope.launch {
+                            eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
+                                tasteRepository,
+                                lpItem.toDiscoverySuggestion(),
+                                tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
+                            )
+                        }
                     }
                     context.toast(
                         context.contextStringResource(AYMR.strings.for_you_more_like_this_toast),
@@ -1075,7 +1232,12 @@ internal fun shouldRenderHomeHubHeroSlot(
     reserveHeroSlot: Boolean,
     hasDiscovery: Boolean,
 ): Boolean {
-    if ((heroPresentation == HomeHeroMode.Collage || heroPresentation == HomeHeroMode.Stage) && hasDiscovery) {
+    if ((
+            heroPresentation == HomeHeroMode.Collage || heroPresentation == HomeHeroMode.Stage ||
+                heroPresentation == HomeHeroMode.Hybrid
+            ) &&
+        hasDiscovery
+    ) {
         return true
     }
     return hasHero || reserveHeroSlot
@@ -1099,10 +1261,11 @@ internal fun shouldEnableHomeHubScroll(
     historyCount: Int,
     recommendationCount: Int,
     discoveryCount: Int = 0,
+    discoveryEnabled: Boolean = false,
 ): Boolean {
-    // Под Welcome-блоком скролл нужен, если есть discovery-контент (тизер под онбордингом).
-    if (showWelcome) return discoveryCount > 0
-    return historyCount > 0 || recommendationCount > 0 || discoveryCount > 0
+    // Под Welcome-блоком скролл нужен, если есть discovery-контент (тизер или empty card с действием).
+    if (showWelcome) return discoveryCount > 0 || discoveryEnabled
+    return historyCount > 0 || recommendationCount > 0 || discoveryCount > 0 || discoveryEnabled
 }
 
 internal fun resolveForYouItems(

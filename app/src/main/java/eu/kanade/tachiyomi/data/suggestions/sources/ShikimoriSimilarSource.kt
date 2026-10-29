@@ -182,5 +182,6 @@ internal fun shikimoriSimilarToSuggestion(
         reason = SuggestionReason.EXTERNAL_SHIKIMORI,
         // Статус выпуска («ongoing»/«released»/…) — для строгого пост-фильтра ленты.
         releaseStatus = item.status,
+        genres = item.genres?.mapNotNull { it.russian ?: it.name.takeIf(String::isNotBlank) }.orEmpty(),
     )
 }

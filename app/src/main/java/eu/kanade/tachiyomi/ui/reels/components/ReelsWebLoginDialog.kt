@@ -37,6 +37,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.tadami.aurora.BuildConfig
+import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -60,9 +61,11 @@ fun ReelsWebLoginDialog(
     // null/empty = the generic cookie/localStorage dump only.
     instrumentationJs: String? = null,
     extraCookieOrigins: List<String> = emptyList(),
-    onSession: (cookies: Map<String, String>, localStorage: Map<String, String>) -> Unit,
-    onDoneSession: (cookies: Map<String, String>, localStorage: Map<String, String>) -> Unit,
-    onOwnRedirect: (url: String, cookies: Map<String, String>) -> Unit,
+    // Contract v24: origin-scoped records instead of the lossy name→value merge, so the
+    // source can resolve same-named cookies from different origins/ports.
+    onSession: (cookies: List<WebLoginCookie>, localStorage: Map<String, String>) -> Unit,
+    onDoneSession: (cookies: List<WebLoginCookie>, localStorage: Map<String, String>) -> Unit,
+    onOwnRedirect: (url: String, cookies: List<WebLoginCookie>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -71,13 +74,13 @@ fun ReelsWebLoginDialog(
     // cookies are otherwise unreachable).
     val cookieOrigins = remember(startUrl, extraCookieOrigins) { seedOrigins(startUrl, extraCookieOrigins) }
 
-    // Async-dump plumbing: a dump stores the target consumer + the cookie map; the JS answer
-    // arrives either synchronously (evaluateJavascript result) or later through the
-    // window.prompt bridge (the window.kinde.getToken path / the timeout). The generation
-    // counter makes exactly one of the two deliveries win.
-    var dumpMember by remember { mutableStateOf<((Map<String, String>, Map<String, String>) -> Unit)?>(null) }
-    var dumpCookiesHolder by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var dumpGen by remember { mutableStateOf(0) }
+    // Async-dump plumbing: one immutable pending request (its consumer + its own cookie
+    // snapshot + its monotonic id). The JS answer arrives either synchronously
+    // (evaluateJavascript result) or later through the window.prompt bridge. The id is
+    // embedded in the JS payload, so a late answer can only satisfy the request that
+    // produced it — ids are never reused and are not reset on stage 2.
+    var pendingDump by remember { mutableStateOf<PendingDump?>(null) }
+    var dumpSeq by remember { mutableStateOf(0L) }
     var isStage2Active by remember { mutableStateOf(false) }
     var redirectHandled by remember { mutableStateOf(false) }
 
@@ -88,8 +91,8 @@ fun ReelsWebLoginDialog(
         if (stage2Attempt > 0) {
             isStage2Active = true
             redirectHandled = false
-            dumpMember = null
-            dumpGen = 0
+            // An answer from the SPA phase must not land during the code exchange.
+            pendingDump = null
             webView?.loadUrl(freshStartUrl() ?: startUrl)
         } else {
             isStage2Active = false
@@ -97,23 +100,29 @@ fun ReelsWebLoginDialog(
         }
     }
 
-    fun deliverDump(gen: Int, storage: Map<String, String>) {
-        if (isStage2Active || dumpGen != gen || gen == 0) return
-        val consumer = dumpMember ?: return
-        dumpMember = null
-        dumpGen = 0
-        consumer(dumpCookiesHolder, storage)
+    fun deliverDump(requestId: Long, storage: Map<String, String>, fromUrl: String?) {
+        if (isStage2Active) return
+        val pending = pendingDump ?: return
+        if (pending.id != requestId) return
+        // The answer must come from a page whose cookies we are allowed to read. A navigation
+        // clears [pendingDump] in onPageStarted, so this also rejects cross-page deliveries.
+        val origin = originOf(fromUrl) ?: return
+        if (origin !in cookieOrigins) return
+        pendingDump = null
+        pending.consumer(pending.cookies, storage)
     }
 
-    fun requestDump(view: WebView, consumer: (Map<String, String>, Map<String, String>) -> Unit) {
-        val cookies = cookieDump(cookieOrigins)
-        dumpCookiesHolder = cookies
-        dumpMember = consumer
-        val gen = dumpGen + 1
-        dumpGen = gen
-        view.evaluateJavascript(LOCAL_STORAGE_DUMP_JS) { raw ->
+    fun requestDump(view: WebView, consumer: (List<WebLoginCookie>, Map<String, String>) -> Unit) {
+        if (isStage2Active) return
+        val requestId = ++dumpSeq
+        pendingDump = PendingDump(
+            id = requestId,
+            cookies = cookieDump(cookieOrigins),
+            consumer = consumer,
+        )
+        view.evaluateJavascript(localStorageDumpJs(requestId)) { raw ->
             val parsed = parseJsonStringMap(raw)
-            if (parsed.isNotEmpty()) deliverDump(gen, parsed)
+            if (parsed.isNotEmpty()) deliverDump(requestId, parsed, view.url)
         }
     }
 
@@ -160,12 +169,11 @@ fun ReelsWebLoginDialog(
                 defaultValue: String?,
                 result: JsPromptResult?,
             ): Boolean {
-                if (message?.startsWith(DEEP_DUMP_MARKER) == true) {
-                    deliverDump(dumpGen, parseJsonStringMap(message.removePrefix(DEEP_DUMP_MARKER)))
-                    result?.confirm("")
-                    return true
-                }
-                return super.onJsPrompt(view, url, message, defaultValue, result)
+                val dump = parseDumpPrompt(message)
+                    ?: return super.onJsPrompt(view, url, message, defaultValue, result)
+                deliverDump(dump.requestId, parseJsonStringMap(dump.json), view?.url ?: url)
+                result?.confirm("")
+                return true
             }
         }
     }
@@ -246,6 +254,9 @@ fun ReelsWebLoginDialog(
                                         favicon: android.graphics.Bitmap?,
                                     ) {
                                         if (handleRedirect(view, url)) return
+                                        // A navigation invalidates every in-flight dump: its answer
+                                        // would describe a page we no longer own.
+                                        pendingDump = null
                                         originOf(url)?.let { cookieOrigins += it }
                                         // Instrument the SPA's own fetch/XHR so the dump can lift its
                                         // live credentials (contract v22: the source supplies the
@@ -263,6 +274,19 @@ fun ReelsWebLoginDialog(
                                     ): Boolean {
                                         val url = request.url.toString()
                                         if (handleRedirect(view, url)) return true
+                                        val scheme = request.url.scheme
+                                        if (scheme != null && scheme != "http" && scheme != "https") {
+                                            runCatching {
+                                                val intent = android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    request.url,
+                                                ).apply {
+                                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                                }
+                                                view.context.startActivity(intent)
+                                            }
+                                            return true
+                                        }
                                         return false
                                     }
 
@@ -351,13 +375,14 @@ fun ReelsWebLoginDialog(
 fun CfBootstrapWebView(
     startUrl: String,
     attempt: Int,
-    onSession: (cookies: Map<String, String>, localStorage: Map<String, String>) -> Unit,
+    onSession: (cookies: List<WebLoginCookie>, localStorage: Map<String, String>) -> Unit,
     instrumentationJs: String? = null,
     extraCookieOrigins: List<String> = emptyList(),
 ) {
     var firesLeft by remember(attempt) { mutableStateOf(2) }
     val currentAttempt by rememberUpdatedState(attempt)
     var view by remember { mutableStateOf<WebView?>(null) }
+    val dumpIds = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val cookieOrigins = remember(startUrl, extraCookieOrigins) { seedOrigins(startUrl, extraCookieOrigins) }
     LaunchedEffect(attempt) {
         firesLeft = 2
@@ -371,6 +396,25 @@ fun CfBootstrapWebView(
                 settings.domStorageEnabled = true
                 settings.userAgentString = WEBVIEW_USER_AGENT
                 CookieManager.getInstance().setAcceptCookie(true)
+                webChromeClient = object : WebChromeClient() {
+                    // The dump JS answers through window.prompt when the site exposes its own
+                    // token SDK. This view is offscreen: without an owner the prompt would
+                    // surface as a system dialog (or be dropped by the default client).
+                    override fun onJsPrompt(
+                        view: WebView?,
+                        url: String?,
+                        message: String?,
+                        defaultValue: String?,
+                        result: JsPromptResult?,
+                    ): Boolean {
+                        val dump = parseDumpPrompt(message)
+                            ?: return super.onJsPrompt(view, url, message, defaultValue, result)
+                        val storage = parseJsonStringMap(dump.json)
+                        if (storage.isNotEmpty()) onSession(cookieDump(cookieOrigins), storage)
+                        result?.confirm("")
+                        return true
+                    }
+                }
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(page: WebView, url: String?) {
                         originOf(url)?.let { cookieOrigins += it }
@@ -385,7 +429,7 @@ fun CfBootstrapWebView(
                         if (scheduledFor != currentAttempt || firesLeft <= 0) return
                         firesLeft -= 1
                         val dumpStorage: () -> Unit = {
-                            page.evaluateJavascript(LOCAL_STORAGE_DUMP_JS) { raw ->
+                            page.evaluateJavascript(localStorageDumpJs(dumpIds.incrementAndGet())) { raw ->
                                 onSession(cookieDump(cookieOrigins), parseJsonStringMap(raw))
                             }
                         }
@@ -412,47 +456,31 @@ private fun isBackOnServiceSite(url: String, startUrl: String): Boolean {
     return uri.host == serviceHost && !uri.path.orEmpty().startsWith("/auth")
 }
 
-/**
- * Synchronous CookieManager dump of the given origins (session cookies included). The
- * former redgifs.com hardcode left every other source (XFree, ...) with an empty dump,
- * so their importWebSession could never lift the login cookies.
- */
-private fun cookieDump(urls: Collection<String>): Map<String, String> = buildMap {
+/** Synchronous CookieManager dump of the given origins, one record per origin. */
+private fun cookieDump(urls: Collection<String>): List<WebLoginCookie> = buildList {
     val cookieManager = CookieManager.getInstance()
-    urls.forEach { domain ->
-        cookieManager.getCookie(domain)?.split(";")?.forEach { pair ->
+    urls.forEach { origin ->
+        cookieManager.getCookie(origin)?.split(";")?.forEach { pair ->
             val idx = pair.indexOf('=')
-            if (idx > 0) put(pair.substring(0, idx).trim(), pair.substring(idx + 1).trim())
+            if (idx > 0) {
+                add(
+                    WebLoginCookie(
+                        origin = origin,
+                        name = pair.substring(0, idx).trim(),
+                        value = pair.substring(idx + 1).trim(),
+                    ),
+                )
+            }
         }
     }
 }
 
-/** "https://www.example.com/x?y" -> "https://www.example.com"; null for opaque urls. */
-private fun originOf(url: String?): String? {
-    val uri = Uri.parse(url ?: return null)
-    val scheme = uri.scheme ?: return null
-    val host = uri.host ?: return null
-    return "$scheme://$host"
-}
-
-/**
- * The start origin plus its "api." sibling: the SPA sets api-side session cookies through
- * fetch calls without ever navigating there, so page-visit tracking alone would miss them.
- * [extra] origins are merged on top (contract v22, source-supplied).
- */
-private fun seedOrigins(startUrl: String, extra: List<String> = emptyList()): MutableSet<String> {
-    val origins = mutableSetOf<String>()
-    extra.forEach { origin -> if (origin.isNotBlank()) origins += origin }
-    val uri = Uri.parse(startUrl)
-    val scheme = uri.scheme ?: return origins
-    val host = uri.host ?: return origins
-    origins += "$scheme://$host"
-    val labels = host.split('.')
-    if (labels.size >= 2) {
-        origins += "$scheme://api.${labels.takeLast(2).joinToString(".")}"
-    }
-    return origins
-}
+/** In-flight dump: its consumer, the cookie snapshot taken at request time, and its own id. */
+private class PendingDump(
+    val id: Long,
+    val cookies: List<WebLoginCookie>,
+    val consumer: (List<WebLoginCookie>, Map<String, String>) -> Unit,
+)
 
 /** evaluateJavascript result / prompt payload -> key-value map. */
 private fun parseJsonStringMap(raw: String?): Map<String, String> {
@@ -471,38 +499,10 @@ private fun parseJsonStringMap(raw: String?): Map<String, String> {
     }
 }
 
-// localStorage + sessionStorage merged into one dump (sessionStorage keys get an "ss."
-// prefix); when the page exposes the site's own kinde SDK client, its ACCESS token (the one
-// the site's api client itself uses) is appended as a bare JWT under a reserved key — the
-// answer is delivered through the window.prompt bridge (with a 4s timeout fallback).
-private const val DEEP_DUMP_MARKER = "__DUMP2__:"
-
 // The pre-v22 host-side RedGIFs instrumentation lived here. Contract v22 moved it into the
 // plugin (AnimeFeedLoginInstrumentationSource.sessionInstrumentationJs) and every web-login
 // plugin now implements the capability (redgifs supplies the snippet, xfree an empty one),
 // so the host injects NOTHING by default — no source-specific JS on foreign origins.
-
-private const val LOCAL_STORAGE_DUMP_JS =
-    "(function(){" +
-        "  var base={};" +
-        "  try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);" +
-        "base[k]=localStorage.getItem(k);}}catch(e){}" +
-        "  try{for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);" +
-        "base['ss.'+k]=sessionStorage.getItem(k);}}catch(e){}" +
-        "  var finished=false;" +
-        "  try{if(window.__rgHandshake){base['__handshake__']=window.__rgHandshake;}}catch(e){}" +
-        "  try{if(window.__rgBearer){base['__rg_bearer__']=window.__rgBearer;}}catch(e){}" +
-        "  function finish(obj){if(finished)return;finished=true;" +
-        "window.prompt('" + DEEP_DUMP_MARKER + "'+JSON.stringify(obj));}" +
-        "  if(window.kinde&&typeof window.kinde.getToken==='function'){" +
-        "    setTimeout(function(){finish(base);},4000);" +
-        "    try{window.kinde.getToken().then(function(t){" +
-        "if(t){base['__kinde_token__']=String(t);}finish(base);},function(){finish(base);});}" +
-        "    catch(e){finish(base);}" +
-        "    return;" +
-        "  }" +
-        "  return JSON.stringify(base);" +
-        "})()"
 
 private const val TAG = "ReelsWebLogin"
 

@@ -4,81 +4,87 @@ import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
-import eu.kanade.tachiyomi.data.backup.models.backupChapterMapper
-import eu.kanade.tachiyomi.data.backup.models.backupMangaTrackMapper
+import eu.kanade.tachiyomi.data.backup.models.BackupTracking
+import eu.kanade.tachiyomi.data.backup.models.backupChapterWithMangaIdMapper
+import eu.kanade.tachiyomi.data.backup.models.backupMangaTrackWithMangaIdMapper
 import eu.kanade.tachiyomi.data.backup.models.toBackupMemoJson
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
-import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.entries.manga.model.Manga
-import tachiyomi.domain.history.manga.interactor.GetMangaHistory
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class MangaBackupCreator(
     private val handler: MangaDatabaseHandler = Injekt.get(),
-    private val getCategories: GetMangaCategories = Injekt.get(),
-    private val getHistory: GetMangaHistory = Injekt.get(),
 ) {
 
     suspend operator fun invoke(mangas: List<Manga>, options: BackupOptions): List<BackupManga> {
-        return mangas.map {
-            backupManga(it, options)
+        if (mangas.isEmpty()) return emptyList()
+        val scopeIds = mangas.mapTo(hashSetOf()) { it.id }
+
+        val excludedByManga = handler.awaitList { db ->
+            db.excluded_scanlatorsQueries.getAll()
         }
-    }
+            .filter { it.manga_id in scopeIds }
+            .groupBy({ it.manga_id }, { it.scanlator })
 
-    private suspend fun backupManga(manga: Manga, options: BackupOptions): BackupManga {
-        // Entry for this manga
-        val mangaObject = manga.toBackupManga()
-
-        mangaObject.excludedScanlators = handler.awaitList { db ->
-            db.excluded_scanlatorsQueries.getExcludedScanlatorsByMangaId(manga.id)
-        }
-
-        if (options.chapters) {
-            // Backup all the chapters
+        val chaptersByManga = if (!options.chapters) {
+            emptyMap()
+        } else {
+            // Single-pass grouping: filter().groupBy() would allocate an intermediate list
+            // of every chapter row (50-100k entries on a large library).
+            val grouped = LinkedHashMap<Long, MutableList<BackupChapter>>()
             handler.awaitList { db ->
-                db.chaptersQueries.getChaptersByMangaId(
-                    mangaId = manga.id,
-                    applyScanlatorFilter = 0, // false
-                    mapper = backupChapterMapper,
-                )
-            }
-                .takeUnless(List<BackupChapter>::isEmpty)
-                ?.let { mangaObject.chapters = it }
-        }
-
-        if (options.categories) {
-            // Backup categories for this manga
-            val categoriesForManga = getCategories.await(manga.id)
-            if (categoriesForManga.isNotEmpty()) {
-                mangaObject.categories = categoriesForManga.map { it.order }
-            }
-        }
-
-        if (options.tracking) {
-            val tracks = handler.awaitList { db ->
-                db.manga_syncQueries.getTracksByMangaId(manga.id, backupMangaTrackMapper)
-            }
-            if (tracks.isNotEmpty()) {
-                mangaObject.tracking = tracks
-            }
-        }
-
-        if (options.history) {
-            val historyByMangaId = getHistory.await(manga.id)
-            if (historyByMangaId.isNotEmpty()) {
-                val history = historyByMangaId.map { history ->
-                    val chapter = handler.awaitOne { db -> db.chaptersQueries.getChapterById(history.chapterId) }
-                    BackupHistory(chapter.url, history.readAt?.time ?: 0L, history.readDuration)
-                }
-                if (history.isNotEmpty()) {
-                    mangaObject.history = history
+                db.chaptersQueries.getAllChaptersForBackup(backupChapterWithMangaIdMapper)
+            }.forEach { (mangaId, chapter) ->
+                if (mangaId in scopeIds) {
+                    grouped.getOrPut(mangaId) { ArrayList() }.add(chapter)
                 }
             }
+            grouped
         }
 
-        return mangaObject
+        val categoryOrdersByManga = if (!options.categories) {
+            emptyMap()
+        } else {
+            handler.awaitList { db -> db.categoriesQueries.getAllMangaCategoryOrders() }
+                .filter { it.manga_id in scopeIds }
+                .groupBy({ it.manga_id }, { it.`order` })
+        }
+
+        val tracksByManga = if (!options.tracking) {
+            emptyMap()
+        } else {
+            handler.awaitList { db ->
+                db.manga_syncQueries.getTracks(backupMangaTrackWithMangaIdMapper)
+            }
+                .filter { it.first in scopeIds }
+                .groupBy({ it.first }, { it.second })
+        }
+
+        val historyByManga = if (!options.history) {
+            emptyMap()
+        } else {
+            handler.awaitList { db -> db.historyQueries.getAllHistoryWithChapter() }
+                .filter { it.manga_id in scopeIds }
+                .groupBy { it.manga_id }
+        }
+
+        return mangas.map { manga ->
+            manga.toBackupManga().apply {
+                excludedScanlators = excludedByManga[manga.id].orEmpty()
+                chaptersByManga[manga.id]?.takeUnless(List<BackupChapter>::isEmpty)
+                    ?.let { chapters = it }
+                categoryOrdersByManga[manga.id]?.takeUnless(List<Long>::isEmpty)
+                    ?.let { categories = it }
+                tracksByManga[manga.id]?.takeUnless(List<BackupTracking>::isEmpty)
+                    ?.let { tracking = it }
+                historyByManga[manga.id]?.map {
+                    BackupHistory(it.url, it.last_read?.time ?: 0L, it.time_read)
+                }?.takeUnless(List<BackupHistory>::isEmpty)
+                    ?.let { history = it }
+            }
+        }
     }
 }
 

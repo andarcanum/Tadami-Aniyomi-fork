@@ -223,6 +223,24 @@ private class FakeDiscoveryRepository : DiscoveryRepository {
         mediaType: DiscoveryMediaType,
         windowMillis: Long,
     ): List<Triple<String, Long, Int>> = emptyList()
+    override suspend fun recordExposure(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long,
+    ) = Unit
+    override suspend fun suppressRecentlyConsumed(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long,
+    ) = Unit
+    override suspend fun getRecentExclusions(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long,
+    ): Set<String> = emptySet()
+    override suspend fun getRecentExclusionsWithTimestamp(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long,
+    ): Map<String, Long> = emptyMap()
     override suspend fun markShown(
         mediaType: DiscoveryMediaType,
         cleanTitles: Collection<String>,
@@ -245,6 +263,14 @@ private class FakeDiscoveryRepository : DiscoveryRepository {
         sourceKey: String?,
         timestamp: Long,
     ) = Unit
+    override suspend fun enrichSignalMetadataIfCurrent(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        expectedCreatedAt: Long,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+    ): Boolean = false
     override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) = Unit
     override suspend fun clearSignals(mediaType: DiscoveryMediaType) = Unit
     override suspend fun clearAllSignals() = Unit

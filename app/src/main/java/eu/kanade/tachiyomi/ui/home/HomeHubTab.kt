@@ -83,10 +83,11 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
@@ -109,6 +110,8 @@ import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.DayActivity
 import tachiyomi.i18n.MR
@@ -681,6 +684,8 @@ internal data class HomeHubUiState(
     val discoveryPool: List<HomeHubDiscoveryItem> = emptyList(),
     val discoveryEnabled: Boolean = false,
     val isDiscoveryRefreshing: Boolean = false,
+    val isDiscoveryFailed: Boolean = false,
+    val discoveryLastUpdated: Long? = null,
     val userName: String,
     val userAvatar: String,
     val greeting: dev.icerock.moko.resources.StringResource,
@@ -690,6 +695,21 @@ internal data class HomeHubUiState(
     val showFilteredEmpty: Boolean = false,
     val availableSources: List<HomeSourceItem> = emptyList(),
 )
+
+internal fun HomeHubUiState.reduceDismissTeaserCard(
+    likedCleanTitle: String,
+    targetCount: Int = discovery.size,
+    dismissedTitles: Set<String> = emptySet(),
+): HomeHubUiState {
+    val patched = patchAfterLocalLike(
+        currentTeaser = discovery,
+        persistedPool = discoveryPool,
+        likedCleanTitle = likedCleanTitle,
+        targetCount = targetCount,
+        dismissedTitles = dismissedTitles,
+    )
+    return copy(discovery = patched)
+}
 
 internal data class HomeHubHero(
     val entryId: Long,
@@ -730,6 +750,7 @@ internal data class HomeHubDiscoveryItem(
     val sourceUrl: String? = null,
     // Метка последнего показа (48h-окно): hero-карусель Stage заказывает непоказанное вперёд.
     val shownAt: Long? = null,
+    val genres: List<String> = emptyList(),
 )
 
 /** Бейдж «откроется напрямую»: только полная привязка (id + непустой url). */
@@ -936,7 +957,13 @@ object HomeHubTab : Tab {
         val context = LocalContext.current
         LaunchedEffect(headerState.isLoading) {
             if (!headerState.isLoading && !hasReportedDrawn) {
-                (context as? ComponentActivity)?.reportFullyDrawn()
+                try {
+                    (context as? ComponentActivity)?.reportFullyDrawn()
+                } catch (e: Exception) {
+                    // Metrics-only call; some OEM ROMs (e.g. Samsung Android 9) throw
+                    // SecurityException from its internal broadcast — must not crash the app.
+                    logcat(LogPriority.WARN, e) { "reportFullyDrawn failed" }
+                }
                 hasReportedDrawn = true
             }
         }
@@ -1022,10 +1049,13 @@ object HomeHubTab : Tab {
                 val item = hiddenSnackItem
                 hiddenSnackItem = null
                 if (item != null) {
-                    discoveryHideScope.launch {
-                        discoveryRepository.unhide(item.mediaType, item.cleanTitle)
-                        // Taste Engine: undo отменяет и сигнал скрытия.
-                        discoveryRepository.removeSignal(item.mediaType, item.cleanTitle)
+                    when (item.mediaType) {
+                        tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL ->
+                            novelScreenModel.restoreHiddenTeaserItem(item)
+                        tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA ->
+                            mangaScreenModel.restoreHiddenTeaserItem(item)
+                        tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME ->
+                            animeScreenModel.restoreHiddenTeaserItem(item)
                     }
                 }
             }
@@ -1102,6 +1132,7 @@ object HomeHubTab : Tab {
                                 onUndoHidden = onUndoHidden,
                                 onDiscoveryLongClick = onDiscoveryHide,
                                 onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                onDiscoveryItemFocused = { animeScreenModel.markDiscoveryItemShown(it) },
                                 activeSection = selectedSection,
                                 scrollResetToken = scrollResetToken,
                                 onScrollSignal = onScrollSignal,
@@ -1123,6 +1154,7 @@ object HomeHubTab : Tab {
                                 onUndoHidden = onUndoHidden,
                                 onDiscoveryLongClick = onDiscoveryHide,
                                 onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                onDiscoveryItemFocused = { mangaScreenModel.markDiscoveryItemShown(it) },
                                 activeSection = selectedSection,
                                 scrollResetToken = scrollResetToken,
                                 onScrollSignal = onScrollSignal,
@@ -1144,6 +1176,7 @@ object HomeHubTab : Tab {
                                 onUndoHidden = onUndoHidden,
                                 onDiscoveryLongClick = onDiscoveryHide,
                                 onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                onDiscoveryItemFocused = { novelScreenModel.markDiscoveryItemShown(it) },
                                 activeSection = selectedSection,
                                 scrollResetToken = scrollResetToken,
                                 onScrollSignal = onScrollSignal,
@@ -1263,7 +1296,7 @@ object HomeHubTab : Tab {
             homeContent()
 
             // Studio editors (nickname + greeting): installed into the Home overlay host,
-            // which is rendered OUTSIDE the tabs' hazeSource so hazeEffect can blur only
+            // which is rendered OUTSIDE the tabs' hazeSource so haze blur can target only
             // the content under the frosted panel.
             val homeOverlayHost = LocalHomeOverlayHost.current
             val homeHazeState = LocalHomeHazeState.current
@@ -1718,7 +1751,7 @@ private fun NameDialog(
 
     BackHandler(onBack = onDismiss)
 
-    // Backdrop blur is applied ONLY under this panel via hazeEffect: the overlay is
+    // Backdrop blur is applied ONLY under this panel via haze blur: the overlay is
     // hosted outside the home hazeSource, so haze capture works, and the rest of the
     // screen stays sharp (dimmed by the scrim, never blurred).
     val hasBackdropBlur = hazeState != null && !colors.isEInk
@@ -1777,14 +1810,14 @@ private fun NameDialog(
                 .clip(cardShape)
                 .then(
                     if (hazeState != null && hasBackdropBlur) {
-                        Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeStyle(
-                                backgroundColor = colors.background,
-                                tint = HazeTint(colors.surface.copy(alpha = 0.55f)),
-                                blurRadius = 24.dp,
-                                noiseFactor = 0.12f,
-                            ),
+                        Modifier.hazeBlur(
+                            input = HazeInput.Sources(hazeState),
+                            style = HazeBlurStyle {
+                                backgroundColor(colors.background)
+                                colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.55f))))
+                                blurRadius(24.dp)
+                                noiseFactor(0.12f)
+                            },
                         )
                     } else {
                         Modifier
@@ -2404,14 +2437,14 @@ private fun GreetingStyleDialog(
                 .clip(cardShape)
                 .then(
                     if (hazeState != null && hasBackdropBlur) {
-                        Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeStyle(
-                                backgroundColor = colors.background,
-                                tint = HazeTint(colors.surface.copy(alpha = 0.55f)),
-                                blurRadius = 24.dp,
-                                noiseFactor = 0.12f,
-                            ),
+                        Modifier.hazeBlur(
+                            input = HazeInput.Sources(hazeState),
+                            style = HazeBlurStyle {
+                                backgroundColor(colors.background)
+                                colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.55f))))
+                                blurRadius(24.dp)
+                                noiseFactor(0.12f)
+                            },
                         )
                     } else {
                         Modifier

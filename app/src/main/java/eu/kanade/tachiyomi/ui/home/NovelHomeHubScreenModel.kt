@@ -6,11 +6,13 @@ import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
-import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovel
@@ -26,7 +28,6 @@ import tachiyomi.source.local.io.novel.hasSupportedLocalNovelContent
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 internal class NovelHomeHubScreenModel(
     context: android.content.Context = Injekt.get<android.app.Application>(),
@@ -109,9 +110,23 @@ internal class NovelHomeHubScreenModel(
     private val getEnabledNovelSources: GetEnabledNovelSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: NovelSourceManager by injectLazy()
+    private val novelExtensionManager: eu.kanade.tachiyomi.extension.novel.NovelExtensionManager by injectLazy()
     private val localNovelSourceFileSystem: LocalNovelSourceFileSystem by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
     private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
+
+    override val discoveryController: HomeDiscoveryController by lazy {
+        HomeDiscoveryController(
+            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
+            repository = discoveryRepository,
+            preferences = discoveryPreferences,
+            context = context,
+            scope = screenModelScope,
+            onStateUpdate = { update -> mutableState.update(update) },
+            currentState = { state.value },
+            onEmitEffect = { emitEffect(it) },
+        )
+    }
 
     override val avatarFileName: String = "user_avatar_novel.jpg"
 
@@ -132,6 +147,12 @@ internal class NovelHomeHubScreenModel(
     }
 
     init {
+        observeDiscoveryRefreshFailure(
+            discoveryPreferences,
+            tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
+        )
+        discoveryController.startObserving()
+
         val cached = fastCache.load()
         val hadCache = !cached.isEmpty || cached.isInitialized
 
@@ -232,180 +253,24 @@ internal class NovelHomeHubScreenModel(
                 }
             }
         }
-
-        // Тизер ленты «Для тебя» — чтение только из БД (ноль сети на рендер Home).
-        screenModelScope.launchIO {
-            combine(
-                discoveryRepository.subscribe(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL),
-                discoveryPreferences.discoveryEnabled().changes(),
-                discoveryPreferences.teaserCount().changes(),
-                // «Просмотрено/прочитано»: реактивно исчезает из пула/тизера сразу
-                // после открытия читалки (в т.ч. в инкогнито) или ручной отметки.
-                combine(
-                    discoveryRepository.subscribeHidden(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL),
-                    discoveryRepository.subscribeConsumed(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL),
-                ) { hidden, consumed -> hidden to consumed },
-                discoveryRepository.subscribeBlacklist(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL),
-            ) { items, enabled, count, hiddenAndConsumed, blacklist ->
-                val hidden = hiddenAndConsumed.first
-                val consumed = hiddenAndConsumed.second
-                items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed } to Triple(
-                    enabled,
-                    count,
-                    eu.kanade.tachiyomi.data.discovery.expandGenreSet(blacklist.toList()),
-                )
-            }
-                .collectLatest { (visible, prefs) ->
-                    val (enabled, count, expandedBlacklist) = prefs
-                    val filtered = visible.filterNot {
-                        eu.kanade.tachiyomi.data.discovery.isBlacklisted(it, expandedBlacklist)
-                    }
-                    cachedDiscoveryPool = eu.kanade.tachiyomi.data.discovery.dedupeCrossRow(filtered)
-                    // 48h-метки показа: hero-карусель Stage заказывает непоказанное вперёд.
-                    val shownAtByTitle = runCatching {
-                        discoveryRepository.getShownTitlesWithTimestamp(
-                            tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
-                        )
-                    }.getOrDefault(emptyMap())
-                    // Полный пул для hero-карусели: без тизерного окна, чтобы листать всю подборку.
-                    mutableState.update {
-                        it.copy(
-                            discoveryPool = cachedDiscoveryPool.map { item ->
-                                item.toHomeHubDiscoveryItem(shownAtByTitle[item.cleanTitle])
-                            },
-                        )
-                    }
-                    if (enabled) {
-                        updateDiscoveryTeaser(advanceOffset = false)
-                    } else {
-                        mutableState.update {
-                            it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
-                        }
-                    }
-                }
-        }
-    }
-
-    private var cachedDiscoveryPool: List<tachiyomi.domain.discovery.model.DiscoverySuggestion> = emptyList()
-    private var discoveryOffset: Int = 0
-    private var lastReentryTime: Long = 0L
-
-    private var lastRefreshClickTime = 0L
-
-    private suspend fun updateDiscoveryTeaser(
-        advanceOffset: Boolean = false,
-        forceUpdate: Boolean = false,
-        notifyIfLimited: Boolean = false,
-    ) {
-        if (!discoveryPreferences.discoveryEnabled().get()) {
-            mutableState.update { it.copy(discovery = emptyList(), discoveryEnabled = false) }
-            return
-        }
-        val count = discoveryPreferences.teaserCount().get().coerceIn(3, 20)
-        val pool = cachedDiscoveryPool
-        if (pool.isEmpty()) {
-            mutableState.update { it.copy(discovery = emptyList(), discoveryEnabled = true) }
-            return
-        }
-
-        if (!forceUpdate && !advanceOffset && state.value.discovery.isNotEmpty()) {
-            val validCleanTitles = pool.mapTo(HashSet()) { it.cleanTitle }
-            val currentValid = state.value.discovery.filter { it.cleanTitle in validCleanTitles }
-            if (currentValid.size == count) {
-                return
-            }
-        }
-
-        if (advanceOffset) {
-            val step = if (pool.size > count) count else 1
-            discoveryOffset = (discoveryOffset + step) % pool.size
-        }
-
-        val shownMap = runCatching {
-            discoveryRepository.getShownTitlesWithTimestamp(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL)
-        }.getOrDefault(emptyMap())
-        val shownTitles = shownMap.keys
-        val currentTitles = state.value.discovery.mapTo(HashSet()) { it.cleanTitle }
-
-        val teaser = selectFreshTeaserItems(
-            pool = pool,
-            shownTitles = shownTitles,
-            count = count,
-            offset = discoveryOffset,
-            shownCutoffMap = shownMap,
-            currentTitles = currentTitles,
-        )
-
-        if (notifyIfLimited && currentTitles.isNotEmpty()) {
-            val distinctPoolSize = pool.distinctBy { it.cleanTitle }.size
-            val hasOverlap = teaser.any { it.cleanTitle in currentTitles }
-            if (hasOverlap || distinctPoolSize <= count) {
-                context.toast(context.contextStringResource(AYMR.strings.for_you_limited_pool))
-            }
-        }
-
-        val cleanTitlesToMark = teaser.map { it.cleanTitle }
-        if (cleanTitlesToMark.isNotEmpty()) {
-            runCatching {
-                discoveryRepository.markShown(
-                    mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
-                    cleanTitles = cleanTitlesToMark,
-                )
-            }
-        }
-
-        mutableState.update { it.copy(discovery = teaser, discoveryEnabled = true) }
-    }
-
-    override fun onScreenReentry() {
-        val now = System.currentTimeMillis()
-        if (!shouldAdvanceDiscoveryTeaserOnReentry(now, lastReentryTime)) return
-        lastReentryTime = now
-        screenModelScope.launchIO {
-            updateDiscoveryTeaser(advanceOffset = true)
-        }
-    }
-
-    override fun rotateOrRefreshDiscovery() {
-        if (!discoveryPreferences.discoveryEnabled().get()) return
-        if (state.value.isDiscoveryRefreshing) return
-
-        val now = System.currentTimeMillis()
-        if (now - lastRefreshClickTime < 500L) return
-        lastRefreshClickTime = now
-
-        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL
-        val lastManual = discoveryPreferences.homeManualRefreshAt(mediaType).get().takeIf { it > 0L }
-        val cooldown = eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds(
-            lastManual,
-            now,
-            cooldownMs = eu.kanade.tachiyomi.ui.discovery.HOME_DISCOVERY_COOLDOWN_MS,
-        )
-        if (cooldown > 0L) {
-            screenModelScope.launchIO {
-                updateDiscoveryTeaser(advanceOffset = true, forceUpdate = true, notifyIfLimited = true)
-            }
-            return
-        }
-
-        discoveryPreferences.homeManualRefreshAt(mediaType).set(now)
-        discoveryPreferences.manualRefreshAt().set(now)
-        mutableState.update { it.copy(isDiscoveryRefreshing = true) }
-        screenModelScope.launchIO {
-            try {
-                Injekt.get<eu.kanade.tachiyomi.data.discovery.DiscoveryRunner>().run(
-                    listOf(mediaType),
-                    isManualRefresh = true,
-                )
-            } finally {
-                mutableState.update { it.copy(isDiscoveryRefreshing = false) }
-                updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
-            }
-        }
     }
 
     fun startLiveUpdates() {
         if (liveUpdatesStarted) return
+
+        // Защита от NPE «kotlin.Lazy.getValue() on a null object reference»:
+        // если injectLazy()-делегат ещё не проинициализирован (DI не готов),
+        // любой доступ к injectLazy-полю внутри combine/collectLatest уронит процесс.
+        // Проверяем готовность DI до установки liveUpdatesStarted, чтобы при
+        // неудаче метод можно было вызвать повторно.
+        if (!runCatching {
+                getNovelCategories
+                Unit
+            }.isSuccess
+        ) {
+            return
+        }
+
         liveUpdatesStarted = true
 
         screenModelScope.launchIO {
@@ -418,128 +283,134 @@ internal class NovelHomeHubScreenModel(
             ) { name, avatar, categories, historyList, novelList ->
                 LiveData(name, avatar, categories, historyList, novelList)
             }.collectLatest { data ->
-                val hiddenCategoryIds = hiddenHomeHubCategoryIds(
-                    categories = data.categories,
-                    isHiddenFromHomeHub = { it.hiddenFromHomeHub },
-                    idSelector = { it.id },
-                )
-                val novelCategoryIdsByNovelId = homeHubCategoryIdsByEntryId(
-                    items = data.novelList,
-                    entryIdSelector = { it.novel.id },
-                    categoryIdSelector = { it.category },
-                )
-
-                val categoryFilteredHistory = filterHomeHubEntriesBy(
-                    items = data.historyList,
-                    keySelector = { it.novelId },
-                    entryCategoryIds = novelCategoryIdsByNovelId,
-                    hiddenCategoryIds = hiddenCategoryIds,
-                )
-                val filteredHistory = filterGhostLocalNovelHistory(categoryFilteredHistory)
-
-                val categoryFilteredNovel = filterHomeHubEntriesByDistinct(
-                    items = data.novelList,
-                    keySelector = { it.novel.id },
-                    entryCategoryIds = novelCategoryIdsByNovelId,
-                    hiddenCategoryIds = hiddenCategoryIds,
-                )
-                val filteredNovel = categoryFilteredNovel.filter { item ->
-                    LocalNovelVisibility.shouldShowLocalNovelEntry(
-                        sourceId = item.novel.source,
-                        url = item.novel.url,
-                        coverUrl = item.novel.thumbnailUrl,
-                        hasSupportedContent = localNovelSourceFileSystem::hasSupportedLocalNovelContent,
+                try {
+                    val hiddenCategoryIds = hiddenHomeHubCategoryIds(
+                        categories = data.categories,
+                        isHiddenFromHomeHub = { it.hiddenFromHomeHub },
+                        idSelector = { it.id },
                     )
-                }
+                    val novelCategoryIdsByNovelId = homeHubCategoryIdsByEntryId(
+                        items = data.novelList,
+                        entryIdSelector = { it.novel.id },
+                        categoryIdSelector = { it.category },
+                    )
 
-                val hero = filteredHistory.firstOrNull()
-                val history = takeHomeHubHistoryExcluding(
-                    items = filteredHistory,
-                    limit = 6,
-                    excludedEntryId = hero?.novelId,
-                    entryIdSelector = { it.novelId },
-                )
+                    val categoryFilteredHistory = filterHomeHubEntriesBy(
+                        items = data.historyList,
+                        keySelector = { it.novelId },
+                        entryCategoryIds = novelCategoryIdsByNovelId,
+                        hiddenCategoryIds = hiddenCategoryIds,
+                    )
+                    val filteredHistory = filterGhostLocalNovelHistory(categoryFilteredHistory)
 
-                val hasData = hero != null || history.isNotEmpty() || filteredNovel.isNotEmpty()
-                val isInitialized = hasData ||
-                    (
-                        state.value.showFilteredEmpty ||
-                            (state.value.showWelcome.not() && state.value.isLoading.not())
+                    val categoryFilteredNovel = filterHomeHubEntriesByDistinct(
+                        items = data.novelList,
+                        keySelector = { it.novel.id },
+                        entryCategoryIds = novelCategoryIdsByNovelId,
+                        hiddenCategoryIds = hiddenCategoryIds,
+                    )
+                    val filteredNovel = categoryFilteredNovel.filter { item ->
+                        LocalNovelVisibility.shouldShowLocalNovelEntry(
+                            sourceId = item.novel.source,
+                            url = item.novel.url,
+                            coverUrl = item.novel.thumbnailUrl,
+                            hasSupportedContent = localNovelSourceFileSystem::hasSupportedLocalNovelContent,
                         )
+                    }
 
-                val novelRecommendations = filteredNovel
-                    .sortedByDescending { it.novel.dateAdded }
-                    .take(10)
-
-                val previousHero = state.value.hero
-                val previousHeroChapterId = originalHeroChapterId
-
-                originalHeroChapterId = hero?.chapterId
-
-                val isEmpty = hero == null && history.isEmpty() && novelRecommendations.isEmpty()
-                val showWelcome = !isInitialized && isEmpty
-                val showFilteredEmpty = isInitialized && isEmpty
-
-                mutableState.update {
-                    it.copy(
-                        hero = hero?.let { h ->
-                            HomeHubHero(
-                                entryId = h.novelId,
-                                title = h.title,
-                                progressNumber = h.chapterNumber,
-                                coverData = h.coverData,
-                            )
-                        },
-                        history = history.map { h ->
-                            HomeHubHistory(
-                                entryId = h.novelId,
-                                title = h.title,
-                                progressNumber = h.chapterNumber,
-                                coverData = h.coverData,
-                                section = HomeHubSection.Novel,
-                            )
-                        },
-                        recommendations = novelRecommendations.map { n ->
-                            HomeHubRecommendation(
-                                entryId = n.novel.id,
-                                title = n.novel.title,
-                                coverData = NovelCover(
-                                    novelId = n.novel.id,
-                                    sourceId = n.novel.source,
-                                    isNovelFavorite = n.novel.favorite,
-                                    url = n.novel.thumbnailUrl,
-                                    lastModified = n.novel.coverLastModified,
-                                ),
-                                section = HomeHubSection.Novel,
-                                progressNumerator = n.readCount,
-                                progressDenominator = n.totalChapters,
-                            )
-                        },
-                        userName = data.name,
-                        userAvatar = data.avatar,
-                        isLoading = false,
-                        showWelcome = showWelcome,
-                        showFilteredEmpty = showFilteredEmpty,
+                    val hero = filteredHistory.firstOrNull()
+                    val history = takeHomeHubHistoryExcluding(
+                        items = filteredHistory,
+                        limit = 6,
+                        excludedEntryId = hero?.novelId,
+                        entryIdSelector = { it.novelId },
                     )
-                }
 
-                if (hasData && !fastCache.load().isInitialized) {
-                    fastCache.markInitialized()
-                }
+                    val hasData = hero != null || history.isNotEmpty() || filteredNovel.isNotEmpty()
+                    val isInitialized = hasData ||
+                        (
+                            state.value.showFilteredEmpty ||
+                                (state.value.showWelcome.not() && state.value.isLoading.not())
+                            )
 
-                if (
-                    hero != null &&
-                    shouldReloadNovelHomeHeroChapterId(
-                        previousHeroNovelId = previousHero?.entryId,
-                        previousHeroChapterId = previousHeroChapterId,
-                        currentHeroNovelId = hero.novelId,
-                        currentHeroChapterId = hero.chapterId,
-                    )
-                ) {
-                    loadHeroChapterId(hero.novelId, hero.chapterId)
-                }
+                    val novelRecommendations = filteredNovel
+                        .sortedByDescending { it.novel.dateAdded }
+                        .take(10)
 
-                saveCache()
+                    val previousHero = state.value.hero
+                    val previousHeroChapterId = originalHeroChapterId
+
+                    originalHeroChapterId = hero?.chapterId
+
+                    val isEmpty = hero == null && history.isEmpty() && novelRecommendations.isEmpty()
+                    val showWelcome = !isInitialized && isEmpty
+                    val showFilteredEmpty = isInitialized && isEmpty
+
+                    mutableState.update {
+                        it.copy(
+                            hero = hero?.let { h ->
+                                HomeHubHero(
+                                    entryId = h.novelId,
+                                    title = h.title,
+                                    progressNumber = h.chapterNumber,
+                                    coverData = h.coverData,
+                                )
+                            },
+                            history = history.map { h ->
+                                HomeHubHistory(
+                                    entryId = h.novelId,
+                                    title = h.title,
+                                    progressNumber = h.chapterNumber,
+                                    coverData = h.coverData,
+                                    section = HomeHubSection.Novel,
+                                )
+                            },
+                            recommendations = novelRecommendations.map { n ->
+                                HomeHubRecommendation(
+                                    entryId = n.novel.id,
+                                    title = n.novel.title,
+                                    coverData = NovelCover(
+                                        novelId = n.novel.id,
+                                        sourceId = n.novel.source,
+                                        isNovelFavorite = n.novel.favorite,
+                                        url = n.novel.thumbnailUrl,
+                                        lastModified = n.novel.coverLastModified,
+                                    ),
+                                    section = HomeHubSection.Novel,
+                                    progressNumerator = n.readCount,
+                                    progressDenominator = n.totalChapters,
+                                )
+                            },
+                            userName = data.name,
+                            userAvatar = data.avatar,
+                            isLoading = false,
+                            showWelcome = showWelcome,
+                            showFilteredEmpty = showFilteredEmpty,
+                        )
+                    }
+
+                    if (hasData && !fastCache.load().isInitialized) {
+                        fastCache.markInitialized()
+                    }
+
+                    if (
+                        hero != null &&
+                        shouldReloadNovelHomeHeroChapterId(
+                            previousHeroNovelId = previousHero?.entryId,
+                            previousHeroChapterId = previousHeroChapterId,
+                            currentHeroNovelId = hero.novelId,
+                            currentHeroChapterId = hero.chapterId,
+                        )
+                    ) {
+                        loadHeroChapterId(hero.novelId, hero.chapterId)
+                    }
+
+                    saveCache()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) { "Failed to update novel home hub data" }
+                }
             }
         }
     }
@@ -609,8 +480,6 @@ internal class NovelHomeHubScreenModel(
             ),
         )
     }
-
-    private val novelExtensionManager: eu.kanade.tachiyomi.extension.novel.NovelExtensionManager by injectLazy()
 
     fun getLastUsedNovelSourceId(): Long = sourcePreferences.lastUsedNovelSource().get()
 

@@ -39,11 +39,36 @@ interface DiscoveryRepository {
         windowMillis: Long = 48 * 3600_000L,
     ): Map<String, Long>
 
-    /** Счётчик показов (cleanTitle, lastShownAt, count) — для мягкого неявного негатива. */
+    /** Счётчик показов (cleanTitle, lastShownAt, count) — для мягкого неявного негатива (только реальные экспозиции). */
     suspend fun getShownWithCount(
         mediaType: DiscoveryMediaType,
         windowMillis: Long = 48 * 3600_000L,
     ): List<Triple<String, Long, Int>>
+
+    /** Реальные показы рекомендаций пользователю на экране (видимость >= 50% не менее 1с или Stage focus). */
+    suspend fun recordExposure(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long = System.currentTimeMillis(),
+    )
+
+    /** Временное исключение недавно прочитанных/просмотренных тайтлов (без накрутки счётчика показов). */
+    suspend fun suppressRecentlyConsumed(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long = System.currentTimeMillis(),
+    )
+
+    /** Объединённые недавние исключения: реальные экспозиции + временные супрессии. */
+    suspend fun getRecentExclusions(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long = 48 * 3600_000L,
+    ): Set<String>
+
+    suspend fun getRecentExclusionsWithTimestamp(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long = 48 * 3600_000L,
+    ): Map<String, Long>
 
     suspend fun markShown(
         mediaType: DiscoveryMediaType,
@@ -77,6 +102,52 @@ interface DiscoveryRepository {
         sourceKey: String?,
         timestamp: Long = System.currentTimeMillis(),
     )
+
+    /**
+     * Write a signal and return its persisted event timestamp, or null if superseded.
+     * Persistent implementations that adjust timestamps must override this method.
+     * The default retains compatibility with simple, timestamp-preserving repositories.
+     */
+    suspend fun recordSignalWithReceipt(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        title: String,
+        signalType: DiscoverySignalType,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+        timestamp: Long = System.currentTimeMillis(),
+    ): Long? {
+        recordSignal(mediaType, cleanTitle, title, signalType, genres, provider, sourceKey, timestamp)
+        return timestamp
+    }
+
+    /**
+     * Undo hiding without deleting an unrelated LIKE, ADD or CONSUMED signal.
+     * Persistent implementations must override this fallback with an atomic operation.
+     */
+    suspend fun undoHide(mediaType: DiscoveryMediaType, cleanTitle: String) {
+        unhide(mediaType, cleanTitle)
+        val current = getSignals(mediaType).firstOrNull { it.cleanTitle == cleanTitle }
+        if (current?.signalType == DiscoverySignalType.HIDE) {
+            removeSignal(mediaType, cleanTitle)
+        }
+    }
+
+    /**
+     * Атомарное дообогащение метаданных (жанры, provider, sourceKey) существующего сигнала.
+     * Обновляет метаданные ТОЛЬКО если сигнал существует и его [createdAt] совпадает с [expectedCreatedAt].
+     * Не создаёт новую строку, не меняет тип сигнала, вес и время создания [createdAt].
+     * Возвращает true, если строка найдена и обновлена, иначе false.
+     */
+    suspend fun enrichSignalMetadataIfCurrent(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        expectedCreatedAt: Long,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+    ): Boolean
 
     /** Undo сигнала: строка удаляется (профиль возвращается к состоянию «до сигнала»). */
     suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String)

@@ -1,53 +1,182 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.novelsource.model.SNovel
+import eu.kanade.tachiyomi.source.model.SManga
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.source.anime.model.StubAnimeSource
+import tachiyomi.domain.source.manga.model.StubMangaSource
+import tachiyomi.domain.source.novel.model.StubNovelSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+private val defaultEnrichmentScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+/** Общий инстанс для кэшей меты (globalMetaCache статический, per-source кэши — общие). */
+private val sharedTrendingSource: CompositeTrendingSource by lazy { CompositeTrendingSource() }
+
+/** Альт-ключ consumed-сигнала: нормализованное альтернативное название тайтла. */
+internal fun consumedAltKey(primaryTitle: String, meta: DiscoveryMeta?): String? {
+    val alt = meta?.altTitle?.trim().orEmpty()
+    if (alt.isEmpty()) return null
+    val altKey = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(alt)
+    val primaryKey = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(primaryTitle)
+    return altKey.takeIf { it.isNotBlank() && it != primaryKey }
+}
 
 /**
  * Taste Learning Engine: wiring записи сигналов взаимодействия.
  * Жанры — best-effort снимок: TASTE-ряд хранит их в reason-CSV; для прочих
  * рядов жанрового вклада нет, но source-аффинити (по sourceId) считается.
- * Сеть в момент сигнала не трогается — обогащение остаётся за генерацией ленты.
+ * Сеть в момент non-consumed сигналов не трогается; для consumed-сигналов
+ * допустим best-effort резолв альтернативного названия через мету (fire-and-forget, throttled).
+ * Диалог «Просмотренные» в настройках покажет альт-строку отдельной записью (undo по языковой форме).
+ * Alt-строка с уже существующим LIKE/CLICK на этом ключе мержится в CONSUMED_LIKED обычной матрицей.
  */
 object TasteSignalRecorder {
 
-    /** Жанры тайтла из reason-CSV (TASTE) — пусто для прочих рядов. */
-    fun snapshotGenres(item: DiscoverySuggestion): List<String> =
-        if (item.rowType == DiscoveryRowType.TASTE) {
-            item.reason
-                ?.splitToSequence(",")
-                ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-                ?.toList()
-                .orEmpty()
-        } else {
-            emptyList()
+    private val lastSignalTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
+
+    internal fun nextMonotonicTimestamp(): Long {
+        while (true) {
+            val current = lastSignalTimestamp.get()
+            val now = System.currentTimeMillis()
+            val next = if (now > current) now else current + 1
+            if (lastSignalTimestamp.compareAndSet(current, next)) {
+                return next
+            }
         }
+    }
+
+    /**
+     * Жанры тайтла строго из достоверных метаданных: [item.genres] или cached meta по названию тайтла.
+     * Explanation payload ([item.reason]) и сидовые метаданные ([item.seedTitle]) исключены,
+     * чтобы не приписывать кандидату вымышленные жанры профиля/сида.
+     */
+    fun snapshotGenres(item: DiscoverySuggestion): List<String> {
+        if (item.genres.isNotEmpty()) return item.genres
+        val titleMeta = CompositeTrendingSource.getCachedMeta(item.title, item.mediaType)
+        if (titleMeta != null && titleMeta.genres.isNotEmpty()) return titleMeta.genres
+        return emptyList()
+    }
 
     suspend fun record(
         repository: DiscoveryRepository,
         item: DiscoverySuggestion,
         signalType: DiscoverySignalType,
-    ) {
+        enrichmentScope: CoroutineScope = defaultEnrichmentScope,
+        altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
+            runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
+        },
+        sourceDetailsResolver: suspend (
+            DiscoveryMediaType,
+            Long,
+            String,
+        ) -> List<String> = { mediaType, sourceId, sourceUrl ->
+            fetchSourceGenres(mediaType, sourceId, sourceUrl)
+        },
+        localEntryResolver: suspend (
+            DiscoveryMediaType,
+            Long,
+            String,
+        ) -> List<String> = { mediaType, sourceId, sourceUrl ->
+            fetchLocalGenres(mediaType, sourceId, sourceUrl)
+        },
+    ): Boolean {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
-        runCatching {
-            repository.recordSignal(
+        var genres = snapshotGenres(item)
+        if (genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+            val local = runCatchingUnlessCancelled {
+                localEntryResolver(item.mediaType, item.sourceId!!, item.sourceUrl!!)
+            }.getOrNull().orEmpty()
+            if (local.isNotEmpty()) {
+                genres = local
+            }
+        }
+        val eventTimestamp = nextMonotonicTimestamp()
+        val recordedTimestamp = runCatchingUnlessCancelled {
+            repository.recordSignalWithReceipt(
                 mediaType = item.mediaType,
                 cleanTitle = item.cleanTitle,
                 title = item.title,
                 signalType = signalType,
-                genres = snapshotGenres(item),
+                genres = genres,
                 provider = item.provider,
                 sourceKey = sourceKey,
+                timestamp = eventTimestamp,
+            )
+        }.getOrNull() ?: return false
+        if (signalType.excludesFromFeed) {
+            recordConsumedAltKeys(
+                repository = repository,
+                mediaType = item.mediaType,
+                primaryTitle = item.title,
+                sourceKey = sourceKey,
+                altMetaResolver = altMetaResolver,
             )
         }
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)
+        } else if (signalType == DiscoverySignalType.LIKE) {
+            runCatching {
+                val app = Injekt.get<android.app.Application>()
+                DiscoveryUpdateJob.scheduleRefill(app, item.mediaType)
+            }
+            if (genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+                enrichmentScope.launch {
+                    enrichLikeMetadata(
+                        repository = repository,
+                        item = item,
+                        sourceKey = sourceKey,
+                        expectedCreatedAt = recordedTimestamp,
+                        sourceDetailsResolver = sourceDetailsResolver,
+                    )
+                }
+            }
+        }
+        return true
+    }
+
+    internal suspend fun enrichLikeMetadata(
+        repository: DiscoveryRepository,
+        item: DiscoverySuggestion,
+        sourceKey: String?,
+        expectedCreatedAt: Long,
+        sourceDetailsResolver: suspend (
+            DiscoveryMediaType,
+            Long,
+            String,
+        ) -> List<String> = { mediaType, sourceId, sourceUrl ->
+            fetchSourceGenres(mediaType, sourceId, sourceUrl)
+        },
+    ) {
+        if ((item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+            val sourceId = item.sourceId!!
+            val sourceUrl = item.sourceUrl!!
+            val enriched = runCatchingUnlessCancelled {
+                sourceDetailsResolver(item.mediaType, sourceId, sourceUrl)
+            }.getOrNull().orEmpty()
+            if (enriched.isNotEmpty()) {
+                runCatchingUnlessCancelled {
+                    repository.enrichSignalMetadataIfCurrent(
+                        mediaType = item.mediaType,
+                        cleanTitle = item.cleanTitle,
+                        expectedCreatedAt = expectedCreatedAt,
+                        genres = enriched,
+                        provider = item.provider,
+                        sourceKey = sourceKey,
+                    )
+                }
+            }
         }
     }
 
@@ -63,11 +192,15 @@ object TasteSignalRecorder {
         mediaType: DiscoveryMediaType,
         title: String,
         sourceId: Long?,
+        altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
+            runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
+        },
     ) {
         val cleanTitle = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(title)
         if (cleanTitle.isBlank()) return
         val sourceKey = resolveSourceKey(mediaType, sourceId)
-        runCatching {
+        val eventTimestamp = nextMonotonicTimestamp()
+        runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = mediaType,
                 cleanTitle = cleanTitle,
@@ -76,9 +209,47 @@ object TasteSignalRecorder {
                 genres = emptyList(),
                 provider = null,
                 sourceKey = sourceKey,
+                timestamp = eventTimestamp,
             )
         }
+        recordConsumedAltKeys(
+            repository = repository,
+            mediaType = mediaType,
+            primaryTitle = title,
+            sourceKey = sourceKey,
+            altMetaResolver = altMetaResolver,
+        )
         afterConsumed(repository, mediaType, cleanTitle)
+    }
+
+    /**
+     * Мультиключевой consumed: тот же тайтл от другого провайдера называется иначе
+     * (ромадзи/EN/RU) — single-ключ не совпадает и тайтл рекомендуется повторно.
+     * Best-effort резолв альтернативного названия через мету (кэш → сеть), сигнал
+     * пишется и под альтернативным именем. Ошибка резолва молча пропускается.
+     */
+    private suspend fun recordConsumedAltKeys(
+        repository: DiscoveryRepository,
+        mediaType: DiscoveryMediaType,
+        primaryTitle: String,
+        sourceKey: String?,
+        altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta?,
+    ) {
+        val meta = runCatchingUnlessCancelled { altMetaResolver(primaryTitle, mediaType) }.getOrNull() ?: return
+        val altKey = consumedAltKey(primaryTitle, meta) ?: return
+        val eventTimestamp = nextMonotonicTimestamp()
+        runCatchingUnlessCancelled {
+            repository.recordSignal(
+                mediaType = mediaType,
+                cleanTitle = altKey,
+                title = meta.altTitle!!,
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = sourceKey,
+                timestamp = eventTimestamp,
+            )
+        }
     }
 
     /**
@@ -91,7 +262,7 @@ object TasteSignalRecorder {
         mediaType: DiscoveryMediaType,
         cleanTitle: String,
     ) {
-        runCatching { repository.markShown(mediaType, listOf(cleanTitle)) }
+        runCatching { repository.suppressRecentlyConsumed(mediaType, listOf(cleanTitle)) }
         runCatching {
             val app = Injekt.get<android.app.Application>()
             DiscoveryUpdateJob.scheduleConsumedRefill(app, mediaType)
@@ -136,4 +307,67 @@ object TasteSignalRecorder {
             }
         }.getOrNull()
     }
+
+    internal suspend fun fetchSourceGenres(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        sourceUrl: String,
+    ): List<String> = runCatchingUnlessCancelled {
+        when (mediaType) {
+            DiscoveryMediaType.MANGA -> {
+                val source = Injekt.get<tachiyomi.domain.source.manga.service.MangaSourceManager>().get(sourceId)
+                if (source != null && source !is StubMangaSource) {
+                    val sManga = SManga.create().apply { url = sourceUrl }
+                    val details = fetchDiscoveryMangaDetails(source, sManga)
+                    parseGenres(details.genre)
+                } else {
+                    emptyList()
+                }
+            }
+            DiscoveryMediaType.ANIME -> {
+                val source = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>().get(sourceId)
+                if (source != null && source !is StubAnimeSource) {
+                    val sAnime = SAnime.create().apply { url = sourceUrl }
+                    val details = source.getAnimeDetails(sAnime)
+                    parseGenres(details.genre)
+                } else {
+                    emptyList()
+                }
+            }
+            DiscoveryMediaType.NOVEL -> {
+                val source = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>().get(sourceId)
+                if (source != null && source !is StubNovelSource) {
+                    val sNovel = SNovel.create().apply { url = sourceUrl }
+                    val details = source.getNovelDetails(sNovel)
+                    parseGenres(details.genre)
+                } else {
+                    emptyList()
+                }
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    internal suspend fun fetchLocalGenres(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        sourceUrl: String,
+    ): List<String> = runCatching {
+        when (mediaType) {
+            DiscoveryMediaType.MANGA -> {
+                val getManga = Injekt.get<tachiyomi.domain.entries.manga.interactor.GetMangaByUrlAndSourceId>()
+                getManga.await(sourceUrl, sourceId)?.genre.orEmpty()
+            }
+            DiscoveryMediaType.ANIME -> {
+                val getAnime = Injekt.get<tachiyomi.domain.entries.anime.interactor.GetAnimeByUrlAndSourceId>()
+                getAnime.await(sourceUrl, sourceId)?.genre.orEmpty()
+            }
+            DiscoveryMediaType.NOVEL -> {
+                val getNovel = Injekt.get<tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId>()
+                getNovel.await(sourceUrl, sourceId)?.genre.orEmpty()
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    internal fun parseGenres(genre: String?): List<String> =
+        genre.orEmpty().splitToSequence(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toList()
 }

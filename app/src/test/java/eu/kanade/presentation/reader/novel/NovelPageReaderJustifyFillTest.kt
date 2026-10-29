@@ -26,15 +26,26 @@ class NovelPageReaderJustifyFillTest {
     }
 
     @Test
-    fun `small leftover splits evenly across gaps under the cap`() {
-        // leftover 40, 2 gaps, cap 28 → 20 per gap.
+    fun `small leftover reserves safety buffer and splits remainder evenly across gaps under the cap`() {
+        // leftover 40, safety buffer 6 → usable 34, 2 gaps, cap 28 → 17 per gap.
         val extra = resolveNovelPageReaderJustifyFillPx(
             sliceSpacingBeforePx = listOf(0, 30, 30),
             leftoverPx = 40,
             sliceLineHeightPx = 56,
         )
 
-        assertEquals(listOf(0, 20, 20), extra)
+        assertEquals(listOf(0, 17, 17), extra)
+    }
+
+    @Test
+    fun `leftover within safety buffer gets no fill to prevent edge clipping`() {
+        val extra = resolveNovelPageReaderJustifyFillPx(
+            sliceSpacingBeforePx = listOf(0, 30, 30),
+            leftoverPx = 5,
+            sliceLineHeightPx = 56,
+        )
+
+        assertEquals(listOf(0, 0, 0), extra)
     }
 
     @Test

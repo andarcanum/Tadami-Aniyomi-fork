@@ -1,6 +1,7 @@
 package tachiyomi.data.discovery
 
 import data.Discovery_signals
+import data.Discovery_signalsQueries
 import data.Discovery_suggestions
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -30,6 +31,9 @@ object DiscoveryMapper {
         createdAt = row.created_at,
         sourceId = row.source_id,
         sourceUrl = row.source_url,
+        genres = row.genres?.splitToSequence(",")
+            ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
+            ?.toList().orEmpty(),
     )
 }
 
@@ -69,6 +73,7 @@ class DiscoveryRepositoryImpl(
                     created_at = item.createdAt,
                     source_id = item.sourceId,
                     source_url = item.sourceUrl,
+                    genres = item.genres.joinToString(","),
                 )
             }
         }
@@ -162,7 +167,7 @@ class DiscoveryRepositoryImpl(
     override suspend fun getShownTitles(mediaType: DiscoveryMediaType, windowMillis: Long): Set<String> {
         val since = System.currentTimeMillis() - windowMillis
         return handler.awaitList { db ->
-            db.discovery_shownQueries.selectShownSince(mediaType.key, since)
+            db.discovery_exposuresQueries.selectExposedSince(mediaType.key, since)
         }.toSet()
     }
 
@@ -172,8 +177,11 @@ class DiscoveryRepositoryImpl(
     ): Map<String, Long> {
         val since = System.currentTimeMillis() - windowMillis
         return handler.awaitList { db ->
-            db.discovery_shownQueries.selectShownWithTimeSince(mediaType.key, since) { clean_title, shown_at ->
-                clean_title to shown_at
+            db.discovery_exposuresQueries.selectExposedWithTimeSince(mediaType.key, since) {
+                    clean_title,
+                    latest_exposed_at,
+                ->
+                clean_title to latest_exposed_at
             }
         }.toMap()
     }
@@ -184,13 +192,93 @@ class DiscoveryRepositoryImpl(
     ): List<Triple<String, Long, Int>> {
         val since = System.currentTimeMillis() - windowMillis
         return handler.awaitList { db ->
-            db.discovery_shownQueries.selectShownWithCountSince(mediaType.key, since) {
+            db.discovery_exposuresQueries.selectExposedWithCountSince(mediaType.key, since) {
                     clean_title,
-                    shown_at,
-                    shown_count,
+                    latest_exposed_at,
+                    count,
                 ->
-                Triple(clean_title, shown_at, shown_count.toInt())
+                Triple(clean_title, latest_exposed_at, count.toInt())
             }
+        }
+    }
+
+    override suspend fun recordExposure(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long,
+    ) {
+        if (cleanTitles.isEmpty()) return
+        val cutoff = timestamp - (48 * 3600_000L)
+        val dedupeIntervalMillis = 15 * 60_000L // 15 minutes deduplication window
+        handler.await(inTransaction = true) { db ->
+            db.discovery_exposuresQueries.cleanupOld(cutoff)
+            for (cleanTitle in cleanTitles) {
+                if (cleanTitle.isNotBlank()) {
+                    val latest = db.discovery_exposuresQueries
+                        .selectLatestExposedAt(mediaType.key, cleanTitle)
+                        .executeAsOneOrNull()
+                        ?.latest
+                    if (latest == null || (timestamp - latest) >= dedupeIntervalMillis) {
+                        db.discovery_exposuresQueries.insert(mediaType.key, cleanTitle, timestamp)
+                    }
+                }
+            }
+        }
+    }
+
+    override suspend fun suppressRecentlyConsumed(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long,
+    ) {
+        if (cleanTitles.isEmpty()) return
+        val cutoff = timestamp - (48 * 3600_000L)
+        handler.await(inTransaction = true) { db ->
+            db.discovery_suppressionsQueries.cleanupOld(cutoff)
+            for (cleanTitle in cleanTitles) {
+                if (cleanTitle.isNotBlank()) {
+                    db.discovery_suppressionsQueries.upsert(mediaType.key, cleanTitle, timestamp)
+                }
+            }
+        }
+    }
+
+    override suspend fun getRecentExclusions(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long,
+    ): Set<String> {
+        val since = System.currentTimeMillis() - windowMillis
+        return handler.await(inTransaction = true) { db ->
+            val exposed = db.discovery_exposuresQueries.selectExposedSince(mediaType.key, since).executeAsList()
+            val suppressed = db.discovery_suppressionsQueries.selectSuppressedSince(
+                mediaType.key,
+                since,
+            ).executeAsList()
+            (exposed + suppressed).toSet()
+        }
+    }
+
+    override suspend fun getRecentExclusionsWithTimestamp(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long,
+    ): Map<String, Long> {
+        val since = System.currentTimeMillis() - windowMillis
+        return handler.await(inTransaction = true) { db ->
+            val result = mutableMapOf<String, Long>()
+            db.discovery_exposuresQueries.selectExposedWithTimeSince(mediaType.key, since) {
+                    clean_title,
+                    latest_exposed_at,
+                ->
+                result[clean_title] = latest_exposed_at
+            }.executeAsList()
+            db.discovery_suppressionsQueries.selectSuppressedWithTimeSince(mediaType.key, since) {
+                    clean_title,
+                    suppressed_at,
+                ->
+                val existing = result[clean_title] ?: 0L
+                result[clean_title] = maxOf(existing, suppressed_at)
+            }.executeAsList()
+            result
         }
     }
 
@@ -199,20 +287,14 @@ class DiscoveryRepositoryImpl(
         cleanTitles: Collection<String>,
         timestamp: Long,
     ) {
-        if (cleanTitles.isEmpty()) return
-        val cutoff = timestamp - (48 * 3600_000L)
-        handler.await(inTransaction = true) { db ->
-            db.discovery_shownQueries.cleanupOld(cutoff)
-            for (cleanTitle in cleanTitles) {
-                if (cleanTitle.isNotBlank()) {
-                    db.discovery_shownQueries.upsert(mediaType.key, cleanTitle, timestamp)
-                }
-            }
-        }
+        recordExposure(mediaType, cleanTitles, timestamp)
     }
 
     override suspend fun clearShown(mediaType: DiscoveryMediaType) {
-        handler.await { db -> db.discovery_shownQueries.deleteAllByMedia(mediaType.key) }
+        handler.await(inTransaction = true) { db ->
+            db.discovery_exposuresQueries.deleteAllByMedia(mediaType.key)
+            db.discovery_suppressionsQueries.deleteAllByMedia(mediaType.key)
+        }
     }
 
     // ==================== Taste Learning Engine ====================
@@ -252,6 +334,19 @@ class DiscoveryRepositoryImpl(
             db.discovery_signalsQueries.selectConsumedByMedia(mediaType.key, ::signalMapper)
         }.map { signals -> signals.mapTo(HashSet()) { it.cleanTitle } }
 
+    private val lastSignalTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
+
+    private fun nextMonotonicTimestamp(timestamp: Long): Long {
+        while (true) {
+            val current = lastSignalTimestamp.get()
+            val base = if (timestamp > 0L) timestamp else System.currentTimeMillis()
+            val next = if (base > current) base else current + 1
+            if (lastSignalTimestamp.compareAndSet(current, next)) {
+                return next
+            }
+        }
+    }
+
     override suspend fun recordSignal(
         mediaType: DiscoveryMediaType,
         cleanTitle: String,
@@ -262,40 +357,96 @@ class DiscoveryRepositoryImpl(
         sourceKey: String?,
         timestamp: Long,
     ) {
-        handler.await(inTransaction = true) { db ->
+        recordSignalWithReceipt(mediaType, cleanTitle, title, signalType, genres, provider, sourceKey, timestamp)
+    }
+
+    override suspend fun recordSignalWithReceipt(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        title: String,
+        signalType: DiscoverySignalType,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+        timestamp: Long,
+    ): Long? {
+        return handler.await(inTransaction = true) { db ->
             // Старшинство: слабый сигнал не затирает уже записанный сильный
             // (клик после лайка не понижает вес).
             val existing = db.discovery_signalsQueries
                 .selectByTitle(mediaType.key, cleanTitle, ::signalMapper)
                 .executeAsOneOrNull()
-            if (!DiscoverySignalType.overrides(existing?.signalType, signalType)) {
-                return@await
+            val effectiveNext = DiscoverySignalType.resolveEffectiveSignal(existing?.signalType, signalType)
+            if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
+                return@await null
             }
+            val eventTimestamp = nextMonotonicTimestamp(timestamp)
+            val mergedMeta = mergeSignalMetadata(
+                existing = existing,
+                incomingTitle = title,
+                incomingGenres = genres,
+                incomingProvider = provider,
+                incomingSourceKey = sourceKey,
+            )
             db.discovery_signalsQueries.upsert(
                 media_type = mediaType.key,
                 clean_title = cleanTitle,
-                title = title,
-                signal = signalType.key,
-                weight = signalType.weight,
-                genres = genres.joinToString(","),
-                provider = provider,
-                source_key = sourceKey,
-                created_at = timestamp,
+                title = mergedMeta.title,
+                signal = effectiveNext.key,
+                weight = effectiveNext.weight,
+                genres = mergedMeta.genres.joinToString(","),
+                provider = mergedMeta.provider,
+                source_key = mergedMeta.sourceKey,
+                created_at = eventTimestamp,
             )
-            // LRU-cap: лог не растёт бесконечно, вытесняются самые старые записи.
-            val count = db.discovery_signalsQueries.countByMedia(mediaType.key).executeAsOne()
-            if (count > SIGNALS_CAP_PER_MEDIA) {
-                db.discovery_signalsQueries.evictOldest(
-                    mediaType.key,
-                    mediaType.key,
-                    (count - SIGNALS_CAP_PER_MEDIA).toLong(),
-                )
-            }
+            enforceSignalCaps(db.discovery_signalsQueries, mediaType)
+            eventTimestamp
         }
+    }
+
+    override suspend fun enrichSignalMetadataIfCurrent(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        expectedCreatedAt: Long,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+    ): Boolean = handler.await(inTransaction = true) { db ->
+        val existing = db.discovery_signalsQueries
+            .selectByTitle(mediaType.key, cleanTitle, ::signalMapper)
+            .executeAsOneOrNull()
+        if (existing == null || existing.createdAt != expectedCreatedAt ||
+            existing.signalType != DiscoverySignalType.LIKE
+        ) {
+            return@await false
+        }
+        val mergedMeta = mergeSignalMetadata(
+            existing = existing,
+            incomingTitle = existing.title,
+            incomingGenres = genres,
+            incomingProvider = provider,
+            incomingSourceKey = sourceKey,
+        )
+        db.discovery_signalsQueries.updateMetadataIfMatchesCreatedAt(
+            genres = mergedMeta.genres.joinToString(","),
+            provider = mergedMeta.provider,
+            source_key = mergedMeta.sourceKey,
+            media_type = mediaType.key,
+            clean_title = cleanTitle,
+            created_at = expectedCreatedAt,
+        )
+        true
     }
 
     override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) {
         handler.await { db -> db.discovery_signalsQueries.delete(mediaType.key, cleanTitle) }
+    }
+
+    override suspend fun undoHide(mediaType: DiscoveryMediaType, cleanTitle: String) {
+        handler.await(inTransaction = true) { db ->
+            db.discovery_hiddenQueries.delete(mediaType.key, cleanTitle)
+            db.discovery_signalsQueries.deleteHideByTitle(mediaType.key, cleanTitle)
+        }
     }
 
     override suspend fun clearSignals(mediaType: DiscoveryMediaType) {
@@ -310,43 +461,93 @@ class DiscoveryRepositoryImpl(
         if (signals.isEmpty()) return
         handler.await(inTransaction = true) { db ->
             signals.forEach { signal ->
-                // Страршинство и при restore: бэкапный слабый сигнал не затирает
+                // Старшинство и при restore: бэкапный слабый сигнал не затирает
                 // локальный сильный (устройство A: HIDE; устройство B: LIKE →
                 // после restore остаётся HIDE — пользователь на A скрыл осознанно).
                 val existing = db.discovery_signalsQueries
                     .selectByTitle(signal.mediaType.key, signal.cleanTitle, ::signalMapper)
                     .executeAsOneOrNull()
-                if (!DiscoverySignalType.overrides(existing?.signalType, signal.signalType)) {
+                val effectiveNext = DiscoverySignalType.resolveEffectiveSignal(existing?.signalType, signal.signalType)
+                if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
                     return@forEach
                 }
+                val mergedMeta = mergeSignalMetadata(
+                    existing = existing,
+                    incomingTitle = signal.title,
+                    incomingGenres = signal.genres,
+                    incomingProvider = signal.provider,
+                    incomingSourceKey = signal.sourceKey,
+                )
                 db.discovery_signalsQueries.upsert(
                     media_type = signal.mediaType.key,
                     clean_title = signal.cleanTitle,
-                    title = signal.title,
-                    signal = signal.signalType.key,
-                    weight = signal.signalType.weight,
-                    genres = signal.genres.joinToString(","),
-                    provider = signal.provider,
-                    source_key = signal.sourceKey,
+                    title = mergedMeta.title,
+                    signal = effectiveNext.key,
+                    weight = effectiveNext.weight,
+                    genres = mergedMeta.genres.joinToString(","),
+                    provider = mergedMeta.provider,
+                    source_key = mergedMeta.sourceKey,
                     created_at = signal.createdAt,
                 )
             }
             // Тот же LRU-cap, что у live-записей: restore старого большого бэкапа
             // не должен раздувать таблицу сверх лимита.
             DiscoveryMediaType.entries.forEach { mediaType ->
-                val count = db.discovery_signalsQueries.countByMedia(mediaType.key).executeAsOne()
-                if (count > SIGNALS_CAP_PER_MEDIA) {
-                    db.discovery_signalsQueries.evictOldest(
-                        mediaType.key,
-                        mediaType.key,
-                        (count - SIGNALS_CAP_PER_MEDIA).toLong(),
-                    )
-                }
+                enforceSignalCaps(db.discovery_signalsQueries, mediaType)
             }
+        }
+    }
+
+    private fun enforceSignalCaps(
+        queries: Discovery_signalsQueries,
+        mediaType: DiscoveryMediaType,
+    ) {
+        val liveCount = queries.countLiveByMedia(mediaType.key).executeAsOne()
+        if (liveCount > SIGNALS_CAP_PER_MEDIA) {
+            queries.evictOldestLive(
+                mediaType.key,
+                mediaType.key,
+                liveCount - SIGNALS_CAP_PER_MEDIA,
+            )
+        }
+        val consumedCount = queries.countConsumedByMedia(mediaType.key).executeAsOne()
+        if (consumedCount > CONSUMED_CAP_PER_MEDIA) {
+            queries.evictOldestConsumed(
+                mediaType.key,
+                mediaType.key,
+                consumedCount - CONSUMED_CAP_PER_MEDIA,
+            )
         }
     }
 
     private companion object {
         const val SIGNALS_CAP_PER_MEDIA = 500L
+        const val CONSUMED_CAP_PER_MEDIA = 5000L
     }
+}
+
+internal data class MergedSignalMetadata(
+    val title: String,
+    val genres: List<String>,
+    val provider: String?,
+    val sourceKey: String?,
+)
+
+internal fun mergeSignalMetadata(
+    existing: DiscoverySignal?,
+    incomingTitle: String,
+    incomingGenres: List<String>,
+    incomingProvider: String?,
+    incomingSourceKey: String?,
+): MergedSignalMetadata {
+    val title = incomingTitle.takeIf { it.isNotBlank() } ?: existing?.title.orEmpty()
+    val genres = incomingGenres.ifEmpty { existing?.genres.orEmpty() }
+    val provider = incomingProvider?.takeIf { it.isNotBlank() } ?: existing?.provider
+    val sourceKey = incomingSourceKey?.takeIf { it.isNotBlank() } ?: existing?.sourceKey
+    return MergedSignalMetadata(
+        title = title,
+        genres = genres,
+        provider = provider,
+        sourceKey = sourceKey,
+    )
 }

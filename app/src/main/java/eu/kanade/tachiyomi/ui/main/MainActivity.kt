@@ -8,6 +8,7 @@ import android.app.assist.AssistContent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
@@ -124,6 +125,7 @@ import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.ui.player.ExternalIntents
 import eu.kanade.tachiyomi.ui.player.PlayerActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
+import eu.kanade.tachiyomi.ui.reels.ReelsFullscreen
 import eu.kanade.tachiyomi.ui.reels.ReelsPip
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
@@ -198,6 +200,10 @@ class MainActivity : BaseActivity() {
         val splashScreen = if (isLaunch) installSplashScreen() else null
 
         super.onCreate(savedInstanceState)
+
+        // A recreated activity may come back directly in PiP; the process-wide flag must
+        // not keep suppressing the reels fullscreen rotation from a previous instance.
+        ReelsPip.updatePictureInPictureMode(isInPictureInPictureMode)
 
         updateMainActivityWindowBackground(
             readerBackdropColor = NovelReaderBackdropSession.backgroundColor,
@@ -292,7 +298,7 @@ class MainActivity : BaseActivity() {
                     val statusBarBackgroundColor = when {
                         indexing || indexingAnime -> IndexingBannerBackgroundColor
                         downloadOnly -> DownloadedOnlyBannerBackgroundColor
-                        effectiveIncognito -> IncognitoModeBannerBackgroundColor
+                        globalIncognito -> IncognitoModeBannerBackgroundColor
                         else -> MaterialTheme.colorScheme.surface
                     }
                     LaunchedEffect(isSystemInDarkTheme, statusBarBackgroundColor, navigator.lastItem, isAurora) {
@@ -391,7 +397,7 @@ class MainActivity : BaseActivity() {
                         topBar = {
                             AppStateBanners(
                                 downloadedOnlyMode = downloadOnly,
-                                incognitoMode = effectiveIncognito,
+                                incognitoMode = globalIncognito,
                                 indexing = indexing || indexingAnime,
                                 modifier = Modifier.windowInsetsPadding(scaffoldInsets),
                             )
@@ -440,8 +446,10 @@ class MainActivity : BaseActivity() {
                                     },
                                 )
                             }
-                            // Draw navigation bar scrim when needed
-                            if (remember { isNavigationBarNeedsScrim() }) {
+                            // Draw navigation bar scrim when needed. Reels software
+                            // fullscreen owns the window; its generic scrim must not cover
+                            // the video (audit U07).
+                            if (remember { isNavigationBarNeedsScrim() } && !ReelsFullscreen.isActive) {
                                 Spacer(
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)
@@ -639,6 +647,14 @@ class MainActivity : BaseActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         ReelsPip.handler?.invoke()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        ReelsPip.updatePictureInPictureMode(isInPictureInPictureMode)
     }
 
     // The manifest configChanges (added for the reels PiP) suppresses rotation recreation,

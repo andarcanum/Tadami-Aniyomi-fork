@@ -52,7 +52,17 @@ internal object AnimeExtensionLoader {
     private const val METADATA_TORRENT = "tachiyomi.animeextension.torrent"
     private const val METADATA_EXTENSION_LIB = "tachiyomix.extensionLib"
     const val LIB_VERSION_MIN = 12.0
-    const val LIB_VERSION_MAX = 23.0
+
+    /**
+     * Highest `tachiyomix.extensionLib` the host accepts.
+     *
+     * Raised to 27.0 by the reels feed-contract v27 capability
+     * (`AnimeFeedReplaySource`): a plugin that *implements* a new interface links
+     * against it, so an older host must refuse that plugin instead of failing to load its
+     * class. Raising the ceiling is non-breaking for every already-published plugin — their
+     * declared lib versions stay inside `12.0..27.0`.
+     */
+    const val LIB_VERSION_MAX = 27.0
 
     val SUPPORTED_LIB_VERSIONS: ClosedFloatingPointRange<Double> = LIB_VERSION_MIN..LIB_VERSION_MAX
 
@@ -409,7 +419,7 @@ internal object AnimeExtensionLoader {
         }
 
         val classLoader = try {
-            ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
+            ChildFirstPathClassLoader(appInfo.sourceDir, appInfo.nativeLibraryDir, context.classLoader)
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Extension load error: $extName ($pkgName)" }
             return AnimeLoadResult.Error

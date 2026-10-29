@@ -37,6 +37,21 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         google()
+        // Tadami mpv library: tag-pinned AAR from GitHub Releases (no JitPack, no binary in git)
+        ivy {
+            name = "TadamiMpvLib"
+            url = uri("https://github.com/andarcanum/tadami-mpv-lib/releases/download/")
+            patternLayout {
+                ivy("[revision]/ivy.xml")
+                artifact("[revision]/[artifact]-[revision].[ext]")
+            }
+            metadataSources {
+                ivyDescriptor()
+            }
+            content {
+                includeModule("com.github.andarcanum", "tadami-mpv-lib")
+            }
+        }
         maven(url = "https://www.jitpack.io")
     }
 }

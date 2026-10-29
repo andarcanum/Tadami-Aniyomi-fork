@@ -100,3 +100,9 @@ flags = coalesce(?, flags);
 
 selectLastInsertedRowId:
 SELECT last_insert_rowid();
+
+getAllNovelCategoryOrders:
+SELECT NC.novel_id, C.sort AS `order`
+FROM novel_categories C
+JOIN novels_categories NC
+ON C._id = NC.category_id;

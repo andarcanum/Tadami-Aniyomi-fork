@@ -37,6 +37,7 @@ data class DiscoveryTrendingItem(
     val provider: String = "anilist_trend",
     /** V1: сырой статус провайдера (Shikimori «ongoing/released/…»), для пост-фильтра. */
     val releaseStatus: String? = null,
+    val altTitle: String? = null,
 )
 
 data class DiscoveryMeta(
@@ -55,6 +56,22 @@ enum class TrendSort(val anilist: String) {
     TRENDING("TRENDING_DESC"),
 }
 
+/**
+ * AniList genre_in матчится со своей фиксированной англ. таксономией: жанры профиля
+ * (часто русские) нужно переводить. Резолв через GenreOntology (любой язык → canonical
+ * key → English display name как у AniList), raw-жанры проходят как есть.
+ */
+internal fun anilistGenreVariables(genres: List<String>): List<String> {
+    val out = LinkedHashSet<String>()
+    genres.forEach { genre ->
+        out += genre
+        GenreMatcher.resolve(genre).forEach { canonical ->
+            GenreOntology.displayNames[canonical]?.first?.let { out += it }
+        }
+    }
+    return out.toList().take(12)
+}
+
 internal fun resolveSeasonWindow(nowMonth: Int, nowYear: Int, next: Boolean): Pair<String, Int> {
     val order = listOf("WINTER", "SPRING", "SUMMER", "FALL")
     val idx = ((nowMonth - 1) / 3).coerceIn(0, 3)
@@ -62,15 +79,49 @@ internal fun resolveSeasonWindow(nowMonth: Int, nowYear: Int, next: Boolean): Pa
     return if (target > 3) order[0] to (nowYear + 1) else order[target] to nowYear
 }
 
+internal fun buildSeasonQuery(hasStatuses: Boolean): String {
+    val statusArg = if (hasStatuses) ", status_in: \$statuses" else ""
+    return """
+        query (${'$'}season: MediaSeason, ${'$'}year: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""}) {
+          Page(page: ${'$'}page, perPage: 50) {
+            media(type: ANIME, season: ${'$'}season, seasonYear: ${'$'}year, sort: ${'$'}sort, isAdult: ${'$'}isAdult$statusArg) {
+              id title { romaji english native } coverImage { large } genres
+            }
+          }
+        }
+    """.trimIndent()
+}
+
+internal fun buildPopularQuery(format: String?, hasStatuses: Boolean): String {
+    val formatArg = if (format != null) ", format: \$format" else ""
+    val statusArg = if (hasStatuses) ", status_in: \$statuses" else ""
+    return """
+        query (${'$'}type: MediaType, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (format != null) ", ${'$'}format: MediaFormat" else ""}${if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""}) {
+          Page(page: ${'$'}page, perPage: 50) {
+            media(type: ${'$'}type, sort: ${'$'}sort, isAdult: ${'$'}isAdult$formatArg$statusArg) {
+              id title { romaji english native } coverImage { large } genres
+            }
+          }
+        }
+    """.trimIndent()
+}
+
 internal fun parseTrendingPage(page: JsonObject, seasonLabel: String? = null): List<DiscoveryTrendingItem> =
     (((page["data"] as? JsonObject)?.get("Page") as? JsonObject)?.get("media") as? JsonArray)
         ?.mapNotNull { it as? JsonObject }
         ?.mapNotNull { media ->
             val titleObj = media["title"] as? JsonObject
-            val title = titleObj?.get("romaji")?.jsonPrimitive?.contentOrNull
-                ?: titleObj?.get("english")?.jsonPrimitive?.contentOrNull
-                ?: titleObj?.get("native")?.jsonPrimitive?.contentOrNull
-                ?: return@mapNotNull null
+            val romaji = titleObj?.get("romaji")?.jsonPrimitive?.contentOrNull
+            val english = titleObj?.get("english")?.jsonPrimitive?.contentOrNull
+            val native = titleObj?.get("native")?.jsonPrimitive?.contentOrNull
+            val title = romaji ?: english ?: native ?: return@mapNotNull null
+            val altTitle = if (title == romaji) {
+                english ?: native
+            } else if (title == english) {
+                romaji ?: native
+            } else {
+                romaji ?: english
+            }
             DiscoveryTrendingItem(
                 title = title,
                 cleanTitle = normalizeDiscoveryTitle(title),
@@ -79,6 +130,7 @@ internal fun parseTrendingPage(page: JsonObject, seasonLabel: String? = null): L
                 seasonLabel = seasonLabel,
                 genres = (media["genres"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty(),
                 provider = "anilist_trend",
+                altTitle = altTitle,
             )
         }
         .orEmpty()
@@ -89,7 +141,7 @@ open class AniListTrendingSource(
     private val nsfwFilterProvider: () -> Boolean = { discoveryNsfwFilterEnabled() },
 ) : DiscoveryTrendingSource {
 
-    private val metaCache = mutableMapOf<String, DiscoveryMeta>()
+    private val metaCache = DiscoveryLruCache<String, DiscoveryMeta>(200)
 
     /**
      * isAdult=false исключает взрослый контент серверной фильтрацией AniList;
@@ -157,17 +209,7 @@ open class AniListTrendingSource(
         page: Int = 1,
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
     ): List<DiscoveryTrendingItem> {
-        // V1: статус фильтруется серверно через status_in (AniList поддерживает список).
-        val statusArg = if (releaseStatuses.isNotEmpty()) ", status_in: ${'$'}statuses" else ""
-        val query = """
-            query (${'$'}season: MediaSeason, ${'$'}year: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (releaseStatuses.isNotEmpty()) ", ${'$'}statuses: [MediaStatus]" else ""}) {
-              Page(page: ${'$'}page, perPage: 50) {
-                media(type: ANIME, season: ${'$'}season, seasonYear: ${'$'}year, sort: ${'$'}sort, isAdult: ${'$'}isAdult$statusArg) {
-                  id title { romaji english native } coverImage { large }
-                }
-              }
-            }
-        """.trimIndent()
+        val query = buildSeasonQuery(releaseStatuses.isNotEmpty())
         val payload = buildJsonObject {
             put("query", query)
             put(
@@ -204,17 +246,7 @@ open class AniListTrendingSource(
         page: Int = 1,
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
     ): List<DiscoveryTrendingItem> {
-        val formatArg = if (format != null) ", format: ${'$'}format" else ""
-        val statusArg = if (releaseStatuses.isNotEmpty()) ", status_in: ${'$'}statuses" else ""
-        val query = """
-            query (${'$'}type: MediaType, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (format != null) ", ${'$'}format: MediaFormat" else ""}${if (releaseStatuses.isNotEmpty()) ", ${'$'}statuses: [MediaStatus]" else ""}) {
-              Page(page: ${'$'}page, perPage: 50) {
-                media(type: ${'$'}type, sort: ${'$'}sort, isAdult: ${'$'}isAdult$formatArg$statusArg) {
-                  id title { romaji english native } coverImage { large }
-                }
-              }
-            }
-        """.trimIndent()
+        val query = buildPopularQuery(format, releaseStatuses.isNotEmpty())
         val payload = buildJsonObject {
             put("query", query)
             put(
@@ -293,7 +325,7 @@ open class AniListTrendingSource(
                 "variables",
                 buildJsonObject {
                     put("type", type)
-                    put("genres", buildJsonArray { genres.forEach { add(JsonPrimitive(it)) } })
+                    put("genres", buildJsonArray { anilistGenreVariables(genres).forEach { add(JsonPrimitive(it)) } })
                     put("page", page)
                     put("isAdult", adultVariableValue())
                     put(
@@ -319,7 +351,7 @@ open class AniListTrendingSource(
 
     /** Лёгкие метаданные для превью-листа: описание/жанры/альт-тайтл по тайтлу (кэш в памяти). */
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
-        metaCache[title]?.let { return it }
+        metaCache.get(title)?.let { return it }
         return try {
             val type = when (mediaType) {
                 DiscoveryMediaType.ANIME -> "ANIME"
@@ -379,7 +411,7 @@ open class AniListTrendingSource(
                 },
                 coverUrl = (media["coverImage"] as? JsonObject)?.get("large")?.jsonPrimitive?.contentOrNull,
             )
-            metaCache[title] = meta
+            metaCache.put(title, meta)
             meta
         } catch (e: CancellationException) {
             throw e

@@ -7,18 +7,70 @@ import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
+import androidx.work.ListenableWorker
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import eu.kanade.tachiyomi.util.system.setForegroundSafely
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.UUID
 import java.util.concurrent.TimeUnit
+
+internal enum class DiscoveryProviderSetting {
+    EXTERNAL,
+    SHIKIMORI,
+    MANGA_UPDATES,
+    NOVEL_UPDATES,
+}
+
+internal fun resolveWorkResult(
+    isManual: Boolean,
+    runAttemptCount: Int,
+    isSuccess: Boolean,
+    maxAutoAttempts: Int = 2,
+): ListenableWorker.Result = when {
+    isSuccess -> ListenableWorker.Result.success()
+    isManual -> ListenableWorker.Result.failure()
+    runAttemptCount > maxAutoAttempts -> ListenableWorker.Result.failure()
+    else -> ListenableWorker.Result.retry()
+}
+
+internal fun resolveWorkResult(
+    isManual: Boolean,
+    runAttemptCount: Int,
+    outcomes: Collection<DiscoveryRunOutcome>,
+    maxAutoAttempts: Int = 2,
+): ListenableWorker.Result {
+    val allSuccessfulOrSkipped = outcomes.isEmpty() || outcomes.all { it.isSuccess || it.isSkipped }
+    return resolveWorkResult(
+        isManual = isManual,
+        runAttemptCount = runAttemptCount,
+        isSuccess = allSuccessfulOrSkipped,
+        maxAutoAttempts = maxAutoAttempts,
+    )
+}
+
+internal fun finishManualRefresh(
+    mediaType: DiscoveryMediaType,
+    workId: UUID,
+    preferences: DiscoveryPreferences,
+    notifier: DiscoveryNotifier,
+) {
+    if (preferences.manualRefreshWorkId(mediaType).get() == workId.toString()) {
+        notifier.cancel(mediaType)
+    }
+}
 
 /**
  * Фоновое обновление ленты «Для тебя» (паттерн SyncJob):
@@ -28,24 +80,87 @@ import java.util.concurrent.TimeUnit
 class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
 
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val targetKey = inputData.getString(KEY_TARGET_MEDIA_TYPE)
+        val mediaType = targetKey?.let { DiscoveryMediaType.fromKey(it) } ?: DiscoveryMediaType.ANIME
+        return DiscoveryNotifier(applicationContext).getForegroundInfo(mediaType)
+    }
+
     override suspend fun doWork(): Result {
         val preferences = Injekt.get<DiscoveryPreferences>()
         if (!preferences.discoveryEnabled().get()) return Result.success()
+        val isConfiguration = inputData.getBoolean(KEY_CONFIGURATION_REFRESH, false)
+        val isManual = tags.contains(TAG_MANUAL) && !isConfiguration
+        if (isManual) {
+            setForegroundSafely()
+        }
+        val targetKey = inputData.getString(KEY_TARGET_MEDIA_TYPE)
+        val mediaTypes = if (targetKey != null) {
+            listOfNotNull(DiscoveryMediaType.fromKey(targetKey))
+        } else {
+            DiscoveryMediaType.entries
+        }
+        val notifier = DiscoveryNotifier(applicationContext)
         return try {
-            val targetKey = inputData.getString(KEY_TARGET_MEDIA_TYPE)
-            val mediaTypes = if (targetKey != null) {
-                listOfNotNull(DiscoveryMediaType.fromKey(targetKey))
-            } else {
-                DiscoveryMediaType.entries
+            coroutineScope {
+                val progressJob = if (isManual) {
+                    launch {
+                        mediaTypes.forEach { mediaType ->
+                            launch {
+                                DiscoveryProgressTracker.progress(mediaType).collect { progress ->
+                                    if (progress.isRunning) {
+                                        notifier.showProgress(
+                                            mediaType = mediaType,
+                                            progressText = progress.stageText,
+                                            current = progress.current,
+                                            total = progress.total,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    null
+                }
+                try {
+                    val completed = withTimeoutOrNull(WORKER_TIMEOUT_MS) {
+                        Injekt.get<DiscoveryRunner>().run(
+                            mediaTypes,
+                            isManualRefresh = isManual,
+                            totalBudgetMs = WORKER_TIMEOUT_MS,
+                            isConfigurationRefresh = isConfiguration,
+                        )
+                    }
+                    if (completed != null) {
+                        resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)
+                    } else {
+                        logcat { "[DiscoveryUpdateJob] TIMEOUT after ${WORKER_TIMEOUT_MS}ms" }
+                        mediaTypes.forEach { mediaType ->
+                            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
+                            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+                        }
+                        resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
+                    }
+                } finally {
+                    progressJob?.cancel()
+                }
             }
-            val isManual = tags.contains(TAG_MANUAL)
-            Injekt.get<DiscoveryRunner>().run(mediaTypes, isManualRefresh = isManual)
-            Result.success()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             logcat { "[DiscoveryUpdateJob] FAILED: ${e.message}" }
-            Result.retry()
+            mediaTypes.forEach { mediaType ->
+                preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
+                preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+            }
+            resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
+        } finally {
+            if (isManual) {
+                mediaTypes.forEach { mediaType ->
+                    finishManualRefresh(mediaType, id, preferences, notifier)
+                }
+            }
         }
     }
 
@@ -53,9 +168,34 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         private const val TAG_AUTO = "DiscoveryUpdate"
         private const val TAG_AFTER_LIBRARY = "DiscoveryUpdateAfterLibrary"
         const val TAG_MANUAL = "DiscoveryUpdateManual"
+        const val WORKER_TIMEOUT_MS = 120_000L
 
         private fun networkType(preferences: DiscoveryPreferences): NetworkType =
             if (preferences.refreshWifiOnly().get()) NetworkType.UNMETERED else NetworkType.CONNECTED
+
+        fun stop(context: Context, mediaType: DiscoveryMediaType? = null) {
+            val wm = context.workManager
+            if (mediaType == null) {
+                cancelAllManualRefreshes(context)
+            } else {
+                wm.cancelUniqueWork(manualWorkName(mediaType))
+                wm.cancelUniqueWork(configurationWorkName(mediaType))
+                Injekt.get<DiscoveryPreferences>().clearManualRefreshAt(mediaType)
+                DiscoveryNotifier(context).cancel(mediaType)
+            }
+        }
+
+        fun cancelAllManualRefreshes(context: Context) {
+            val wm = context.workManager
+            wm.cancelAllWorkByTag(TAG_MANUAL)
+            DiscoveryMediaType.entries.forEach { wm.cancelAllWorkByTag(manualWorkTag(it)) }
+            DiscoveryNotifier(context).cancel()
+        }
+
+        @Deprecated("Use cancelAllManualRefreshes", ReplaceWith("cancelAllManualRefreshes(context)"))
+        fun cleanupStaleManualWork(context: Context) {
+            cancelAllManualRefreshes(context)
+        }
 
         fun setupTask(context: Context) {
             val preferences = Injekt.get<DiscoveryPreferences>()
@@ -98,26 +238,32 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         }
 
         const val KEY_TARGET_MEDIA_TYPE = "target_media_type"
+        const val KEY_CONFIGURATION_REFRESH = "configuration_refresh"
 
-        /**
-         * Unique-имя ручного обновления — своё на медиатип: REPLACE не должен отменять
-         * bootstrap/рефреш соседней вкладки при быстром переключении (тот же TAG_MANUAL
-         * сохраняет работу isRunningFlow-индикаторов).
-         */
-        fun manualWorkName(mediaType: DiscoveryMediaType?): String =
-            if (mediaType == null) TAG_MANUAL else "$TAG_MANUAL:${mediaType.key}"
+        fun configurationWorkName(mediaType: DiscoveryMediaType): String =
+            "DiscoveryUpdateConfiguration:${mediaType.key}"
 
-        fun refreshNow(context: Context, mediaType: DiscoveryMediaType? = null) {
+        internal fun refreshAfterProviderChange(context: Context, setting: DiscoveryProviderSetting) {
+            val mediaTypes = when (setting) {
+                DiscoveryProviderSetting.EXTERNAL, DiscoveryProviderSetting.SHIKIMORI -> DiscoveryMediaType.entries
+                DiscoveryProviderSetting.MANGA_UPDATES -> listOf(DiscoveryMediaType.MANGA, DiscoveryMediaType.NOVEL)
+                DiscoveryProviderSetting.NOVEL_UPDATES -> listOf(DiscoveryMediaType.NOVEL)
+            }
+            mediaTypes.forEach { refreshConfiguration(context, it) }
+        }
+
+        /** Revalidate settings from page one without manual anti-repeat or rotation accounting. */
+        internal fun refreshConfiguration(context: Context, mediaType: DiscoveryMediaType) {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
-            val inputData = Data.Builder().apply {
-                if (mediaType != null) {
-                    putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)
-                }
-            }.build()
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
-                .addTag(TAG_MANUAL)
-                .setInputData(inputData)
+                .addTag(configurationWorkName(mediaType))
+                .setInputData(
+                    Data.Builder()
+                        .putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)
+                        .putBoolean(KEY_CONFIGURATION_REFRESH, true)
+                        .build(),
+                )
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(networkType(preferences))
@@ -125,10 +271,44 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                 )
                 .build()
             context.workManager.enqueueUniqueWork(
-                manualWorkName(mediaType),
+                configurationWorkName(mediaType),
                 ExistingWorkPolicy.REPLACE,
                 request,
             )
+        }
+
+        /**
+         * Unique-имя ручного обновления — своё на медиатип: REPLACE не должен отменять
+         * bootstrap/рефреш соседней вкладки при быстром переключении.
+         */
+        fun manualWorkName(mediaType: DiscoveryMediaType?): String =
+            if (mediaType == null) TAG_MANUAL else "$TAG_MANUAL:${mediaType.key}"
+
+        fun manualWorkTag(mediaType: DiscoveryMediaType): String = manualWorkName(mediaType)
+
+        fun refreshNow(context: Context, mediaType: DiscoveryMediaType? = null): Map<DiscoveryMediaType, UUID> {
+            val preferences = Injekt.get<DiscoveryPreferences>()
+            if (!preferences.discoveryEnabled().get()) return emptyMap()
+            val mediaTypes = mediaType?.let { listOf(it) } ?: DiscoveryMediaType.entries
+            return mediaTypes.associateWith { target ->
+                val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
+                    .addTag(TAG_MANUAL)
+                    .addTag(manualWorkTag(target))
+                    .setInputData(Data.Builder().putString(KEY_TARGET_MEDIA_TYPE, target.key).build())
+                    .setConstraints(
+                        Constraints.Builder()
+                            .setRequiredNetworkType(networkType(preferences))
+                            .build(),
+                    )
+                    .build()
+                context.workManager.enqueueUniqueWork(
+                    manualWorkName(target),
+                    ExistingWorkPolicy.REPLACE,
+                    request,
+                )
+                preferences.manualRefreshWorkId(target).set(request.id.toString())
+                request.id
+            }
         }
 
         private const val TAG_BACKFILL = "DiscoveryUpdateBackfill"
@@ -154,14 +334,15 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
 
         private const val TAG_AFTER_CONSUMED = "DiscoveryRefillAfterConsumed"
 
+        fun refillWorkName(mediaType: DiscoveryMediaType): String = "$TAG_AFTER_CONSUMED:${mediaType.key}"
+
         /**
-         * Дебаунс-дозаполнение ленты после «просмотрено»: 10 минут REPLACE-очередью —
-         * каждое новое чтение сдвигает окно, шторма обновлений нет (не более одного
-         * прогона на очередь). Прогон фоновый: consumed-тайтл исключён (сигнал-лог +
-         * 48h-полка), ряды добираются свежим из тех же плагинов — прочитанное
-         * заменяется, а не оставляет дыру.
+         * Дебаунс-дозаполнение ленты после явного сигнала («просмотрено», LIKE): 10 минут
+         * REPLACE-очередью — каждое новое действие сдвигает окно, шторма обновлений нет
+         * (не более одного прогона на очередь). Прогон фоновый: consumed-тайтл исключён,
+         * liked-тайтл входит в сиды похожих рекомендаций, ряды добираются свежим.
          */
-        fun scheduleConsumedRefill(context: Context, mediaType: DiscoveryMediaType) {
+        fun scheduleRefill(context: Context, mediaType: DiscoveryMediaType) {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
@@ -177,11 +358,14 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                 )
                 .build()
             context.workManager.enqueueUniqueWork(
-                TAG_AFTER_CONSUMED + ":" + mediaType.key,
+                refillWorkName(mediaType),
                 ExistingWorkPolicy.REPLACE,
                 request,
             )
         }
+
+        fun scheduleConsumedRefill(context: Context, mediaType: DiscoveryMediaType) =
+            scheduleRefill(context, mediaType)
     }
 }
 

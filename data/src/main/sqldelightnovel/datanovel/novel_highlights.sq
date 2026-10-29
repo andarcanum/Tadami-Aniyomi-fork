@@ -72,3 +72,11 @@ ORDER BY h.updated_at DESC;
 
 countAll:
 SELECT COUNT(*) FROM novel_highlights;
+
+getAllHighlightsWithChapterUrl:
+SELECT h.*,
+    c.url AS chapter_url
+FROM novel_highlights h
+LEFT JOIN novel_chapters c
+ON c._id = h.chapter_id
+ORDER BY h.novel_id, h.chapter_id, h.block_index, h.char_start;

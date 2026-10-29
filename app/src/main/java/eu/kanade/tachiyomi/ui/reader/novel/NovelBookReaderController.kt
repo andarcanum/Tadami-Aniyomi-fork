@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
+import eu.kanade.presentation.reader.novel.parseNovelBookNativeSection
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToNativeBlocks
 import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
@@ -155,15 +156,51 @@ internal class NovelBookReaderController(
     var artifactSource: NovelBookArtifactSource? = null
         private set
 
-    /** Pre-compiled native blocks of a book section, or null when this book has none. */
-    fun nativeBookBlocksForSection(sectionIndex: Int): List<NovelRichContentBlock>? =
-        artifactSource
-            ?.anchoredNativeBlocksFor(sectionIndex)
-            ?.let { blocks ->
-                applyReplaceRulesToNativeBlocks(blocks, novelReaderPreferences.enabledReplaceRules())
+    /** Pre-compiled native blocks of a book section, or translated/HTML fallback when translated or absent. */
+    suspend fun nativeBookBlocksForSection(sectionIndex: Int): List<NovelRichContentBlock>? =
+        withContext(Dispatchers.Default) {
+            val showHeadings = novelReaderPreferences.bookModeShowChapterHeadings().get()
+            val isTranslated = bookTranslationVariant() != "raw"
+            if (!isTranslated) {
+                val precompiled = artifactSource
+                    ?.anchoredNativeBlocksFor(sectionIndex)
+                    ?.let { blocks ->
+                        applyReplaceRulesToNativeBlocks(blocks, novelReaderPreferences.enabledReplaceRules())
+                    }
+                    ?.toAnchoredRichContentBlocks(includeChapterHeadings = showHeadings)
+                    ?.takeIf { it.isNotEmpty() }
+                if (precompiled != null) return@withContext precompiled
             }
-            ?.toAnchoredRichContentBlocks()
-            ?.takeIf { it.isNotEmpty() }
+            bookSectionHtml(sectionIndex)?.let { html ->
+                parseNovelBookNativeSection(html, showChapterHeadings = showHeadings)
+            }
+        }
+
+    private var showChapterHeadingsJob: Job? = null
+
+    private fun startHeadingsWatcher() {
+        showChapterHeadingsJob?.cancel()
+        showChapterHeadingsJob = host.bookScope.launch {
+            novelReaderPreferences.bookModeShowChapterHeadings().changes()
+                .distinctUntilChanged()
+                .collect {
+                    if (!bookModeRuntime.isActive) return@collect
+                    onBookHeadingsPreferenceChanged()
+                }
+        }
+    }
+
+    internal fun onBookHeadingsPreferenceChanged() {
+        if (!bookModeRuntime.isActive) return
+        bookModeRuntime.invalidatePreparedSections()
+        val resident = bookWindowState.value.residentSections
+        if (resident.isNotEmpty()) {
+            resident.forEach { sectionIndex ->
+                bumpBookSectionRevision(sectionIndex)
+            }
+            refreshBookWindow()
+        }
+    }
 
     /** Content revision per section, bumped when a mounted section's markup changed. */
     private val bookSectionRevisions = mutableMapOf<Int, Long>()
@@ -210,12 +247,16 @@ internal class NovelBookReaderController(
      * the only pipeline step left to run here.
      */
     internal suspend fun bookSectionHtml(sectionIndex: Int): String? {
-        if (!bookModeRuntime.isActive) return null
-        val html = runCatching { bookModeRuntime.sectionHtml(sectionIndex) }
-            .onFailure { error -> logBookModeFailure("load section $sectionIndex", error) }
-            .getOrNull()
-            ?: return null
-        val artifact = artifactSource ?: return html
+        val artifact = artifactSource ?: return null
+        val html = (
+            if (bookModeRuntime.isActive) {
+                runCatching { bookModeRuntime.sectionHtml(sectionIndex) }
+                    .onFailure { error -> logBookModeFailure("load section $sectionIndex", error) }
+                    .getOrNull()
+            } else {
+                null
+            }
+            ) ?: artifact.documentFor(sectionIndex)?.html ?: return null
         return runCatching {
             sectionRepository.applyArtifactTranslations(
                 html = html,
@@ -427,6 +468,8 @@ internal class NovelBookReaderController(
                     if (isBookModeEnabled()) {
                         maybeStartBookMode(host.bookCurrentChapter() ?: loadedChapter)
                     } else {
+                        showChapterHeadingsJob?.cancel()
+                        showChapterHeadingsJob = null
                         bookEnginePrefetchJob?.cancel()
                         lastBookEnginePrefetchSectionIndex = -1
                         bookModeRuntime.stop()
@@ -517,6 +560,8 @@ internal class NovelBookReaderController(
         scheduleNativeBookStreamUpgrade()
         if (!isBookModeEnabled()) {
             if (bookModeRuntime.isActive) {
+                showChapterHeadingsJob?.cancel()
+                showChapterHeadingsJob = null
                 bookEnginePrefetchJob?.cancel()
                 lastBookEnginePrefetchSectionIndex = -1
                 bookModeRuntime.stop()
@@ -567,6 +612,7 @@ internal class NovelBookReaderController(
                 artifact.documentFor(sectionKey.toInt())?.html.orEmpty()
             },
         )
+        startHeadingsWatcher()
         bookEnginePrefetchJob?.cancel()
         lastBookEnginePrefetchSectionIndex = -1
         bookSectionRevisions.clear()
@@ -1026,6 +1072,8 @@ internal class NovelBookReaderController(
      * window of reading progress, and chapters the reader scrolled past would never be marked read.
      */
     fun flushAndStop() {
+        showChapterHeadingsJob?.cancel()
+        showChapterHeadingsJob = null
         readingModeJob?.cancel()
         readingModeJob = null
         if (bookModeRuntime.isActive) {

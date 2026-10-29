@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 class BackupSeriesModelsTest {
 
     @Test
-    fun `backup stores manga and novel series payload`() {
+    fun `backup stores manga, novel and anime series payload`() {
         val mangaSeries = BackupMangaSeries(
             title = "Manga Series",
             categoryName = "Reading",
@@ -19,10 +19,17 @@ class BackupSeriesModelsTest {
             entries = listOf(BackupSeriesEntryRef(source = 2L, url = "/novel/1", position = 0)),
             customCover = byteArrayOf(7, 8),
         )
+        val animeSeries = BackupAnimeSeries(
+            title = "Anime Series",
+            categoryName = "Watching",
+            entries = listOf(BackupSeriesEntryRef(source = 3L, url = "/anime/1", position = 0)),
+            customCover = byteArrayOf(9, 10),
+        )
 
         val backup = Backup(
             backupMangaSeries = listOf(mangaSeries),
             backupNovelSeries = listOf(novelSeries),
+            backupAnimeSeries = listOf(animeSeries),
         )
 
         backup.backupMangaSeries.first().title shouldBe "Manga Series"
@@ -31,6 +38,9 @@ class BackupSeriesModelsTest {
         backup.backupNovelSeries.first().title shouldBe "Novel Series"
         backup.backupNovelSeries.first().entries.first().url shouldBe "/novel/1"
         backup.backupNovelSeries.first().customCover?.contentEquals(byteArrayOf(7, 8)) shouldBe true
+        backup.backupAnimeSeries.first().title shouldBe "Anime Series"
+        backup.backupAnimeSeries.first().entries.first().url shouldBe "/anime/1"
+        backup.backupAnimeSeries.first().customCover?.contentEquals(byteArrayOf(9, 10)) shouldBe true
     }
 
     @Test
@@ -48,12 +58,19 @@ class BackupSeriesModelsTest {
                     entries = listOf(BackupSeriesEntryRef(source = 2L, url = "/novel/legacy", position = 0)),
                 ),
             ),
+            backupAnimeSeries = listOf(
+                BackupAnimeSeries(
+                    title = "Legacy Anime Series",
+                    entries = listOf(BackupSeriesEntryRef(source = 3L, url = "/anime/legacy", position = 0)),
+                ),
+            ),
         )
 
         val backup = legacy.toBackup()
 
         backup.backupMangaSeries.map { it.title } shouldBe listOf("Legacy Manga Series")
         backup.backupNovelSeries.map { it.title } shouldBe listOf("Legacy Novel Series")
+        backup.backupAnimeSeries.map { it.title } shouldBe listOf("Legacy Anime Series")
     }
 
     @Test

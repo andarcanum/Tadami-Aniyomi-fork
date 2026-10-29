@@ -175,10 +175,16 @@ fun GeneralTab(
             NovelGlassHint(stringResource(AYMR.strings.novel_reader_page_mode_summary))
 
             if (settings.pageReader) {
+                val spreadAvailability = resolveSpreadSettingsAvailability(bookModeActive)
                 AuroraToggleRow(
                     label = stringResource(AYMR.strings.novel_reader_two_page_landscape),
-                    subtitle = stringResource(AYMR.strings.novel_reader_two_page_landscape_summary),
+                    subtitle = if (!spreadAvailability.spreadEnabled) {
+                        stringResource(AYMR.strings.novel_reader_spread_unavailable_in_book_mode_summary)
+                    } else {
+                        stringResource(AYMR.strings.novel_reader_two_page_landscape_summary)
+                    },
                     checked = settings.twoPageLandscape,
+                    enabled = spreadAvailability.spreadEnabled,
                     onClick = {
                         update(
                             !settings.twoPageLandscape,
@@ -190,8 +196,13 @@ fun GeneralTab(
                 if (settings.twoPageLandscape) {
                     AuroraToggleRow(
                         label = stringResource(AYMR.strings.novel_reader_spread_cutout_guard),
-                        subtitle = stringResource(AYMR.strings.novel_reader_spread_cutout_guard_summary),
+                        subtitle = if (!spreadAvailability.cutoutGuardEnabled) {
+                            stringResource(AYMR.strings.novel_reader_spread_unavailable_in_book_mode_summary)
+                        } else {
+                            stringResource(AYMR.strings.novel_reader_spread_cutout_guard_summary)
+                        },
                         checked = settings.spreadCutoutGuard,
+                        enabled = spreadAvailability.cutoutGuardEnabled,
                         // Device-level setting: the cutout-guard is a property of the display, not
                         // of a source, so it only ever toggles the global preference.
                         onClick = { preferences.spreadCutoutGuard().set(!settings.spreadCutoutGuard) },

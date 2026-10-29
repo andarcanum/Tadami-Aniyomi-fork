@@ -7,6 +7,8 @@ import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.extension.novel.NovelPluginId
+import eu.kanade.tachiyomi.network.interceptor.CloudflareChallengeDetector
+import eu.kanade.tachiyomi.network.interceptor.HttpErrorPageDetector
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
@@ -674,10 +676,22 @@ class NovelJsSource internal constructor(
             operation = "chapterText(url=${chapter.url})",
             defaultValue = "",
         ) {
-            mutex.withLock {
+            val html = mutex.withLock {
                 val runtime = ensureRuntimeLocked()
                 val payload = callPlugin(runtime, "parseChapter", toJsString(chapter.url))
                 if (payload.isBlank() || payload == "null") "" else json.decodeFromString<String>(payload)
+            }
+            if (html.isNotBlank() && (
+                    CloudflareChallengeDetector.isBlockingChallengePage(html) ||
+                        HttpErrorPageDetector.isErrorPage(html)
+                    )
+            ) {
+                logcat(LogPriority.WARN) {
+                    "parseChapter returned error or challenge page instead of chapter content: url=${chapter.url}"
+                }
+                ""
+            } else {
+                html
             }
         }
     }
@@ -925,10 +939,21 @@ class NovelJsSource internal constructor(
                 "chapters=${parsed?.chapters?.size ?: 0} " +
                 "totalPages=${parsed?.totalPages?.toString() ?: "null"}"
         }
-        if (parsed != null) {
+        if (parsed != null && !isGarbageParseNovel(parsed)) {
             parseNovelCache[url] = parsed
         }
         return parsed
+    }
+
+    /**
+     * The plugin defaults a failed parse to name "Untitled": it happens when a wrong page
+     * (homepage served instead of the series page during a rate-limit/challenge wave) is
+     * parsed as a novel. Such results must never poison [parseNovelCache] - the retry after
+     * the wave would otherwise keep serving the garbage until the process restarts.
+     */
+    private fun isGarbageParseNovel(parsed: ParsedPluginNovel): Boolean {
+        return parsed.chapters.isNullOrEmpty() &&
+            (parsed.name.isNullOrBlank() || parsed.name == "Untitled")
     }
 
     private fun callPlugin(runtime: NovelJsRuntime, functionName: String, vararg args: String): String {

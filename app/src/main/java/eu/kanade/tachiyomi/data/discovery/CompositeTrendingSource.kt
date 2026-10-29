@@ -2,6 +2,9 @@ package eu.kanade.tachiyomi.data.discovery
 
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
@@ -48,7 +51,34 @@ class CompositeTrendingSource(
                 "anilist" to suspend { anilist.fetch(mediaType, season, sort, page, releaseStatuses) },
             )
         }
-        return fetchWithFallback(providers, mediaType)
+        val merged = fetchMerged(providers.take(2), mediaType)
+        if (merged.isNotEmpty()) return merged
+        return fetchWithFallback(providers.drop(2), mediaType)
+    }
+
+    /** Мерж топ-2 провайдеров: primary-first, дедуп по cleanTitle, кап 50; ошибки — пустой вклад. */
+    private suspend fun fetchMerged(
+        providers: List<Pair<String, suspend () -> List<DiscoveryTrendingItem>>>,
+        mediaType: DiscoveryMediaType,
+    ): List<DiscoveryTrendingItem> = coroutineScope {
+        val jobs = providers.map { (name, action) ->
+            async {
+                try {
+                    action()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat {
+                        "[CompositeTrending] failed: provider=" + name + " media=" + mediaType + " error=" +
+                            e.message
+                    }
+                    emptyList()
+                }
+            }
+        }
+        val results = jobs.awaitAll()
+        val seen = mutableSetOf<String>()
+        results.flatten().filter { it.cleanTitle.isNotBlank() && seen.add(it.cleanTitle) }.take(50)
     }
 
     private suspend fun fetchWithFallback(
@@ -160,5 +190,10 @@ class CompositeTrendingSource(
     companion object {
         private val globalMetaCache = DiscoveryLruCache<String, DiscoveryMeta>(100)
         private val cyrillicRegex = Regex("[а-яА-ЯёЁ]")
+
+        fun getCachedMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
+            val cacheKey = "${mediaType.key}:${normalizeDiscoveryTitle(title)}"
+            return globalMetaCache.get(cacheKey)
+        }
     }
 }

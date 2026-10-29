@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reels
 
 import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -19,8 +20,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +53,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material3.AlertDialog
@@ -70,9 +75,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -84,8 +91,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,6 +104,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
@@ -123,6 +136,7 @@ import eu.kanade.tachiyomi.ui.reels.player.clearReelsVideoCache
 import eu.kanade.tachiyomi.ui.reels.player.prewarmReelHead
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
@@ -136,6 +150,8 @@ import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.abs
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
 data class ReelsFeedScreen(
@@ -213,7 +229,30 @@ data class ReelsFeedScreen(
         val state by screenModel.state.collectAsStateWithLifecycle()
         val snackbarHostState = remember { SnackbarHostState() }
         var pendingDeleteFeed by remember { mutableStateOf<CustomFeedRef?>(null) }
+        // "Reset For You history" is destructive (watched reels become recommendable again),
+        // so it is always confirmed. Explicit hidden/blacklist entries are NOT touched.
+        var pendingResetHistory by remember { mutableStateOf(false) }
         val retryLabel = stringResource(MR.strings.action_retry)
+        // Foreground gate for watch qualification: playback that keeps running while the app
+        // is backgrounded (audio-only, PiP hand-off) must never earn "watched" credit.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var isForeground by remember(lifecycleOwner) {
+            mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> isForeground = true
+                    Lifecycle.Event.ON_PAUSE -> {
+                        isForeground = false
+                        screenModel.onForegroundLost()
+                    }
+                    else -> Unit
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
         // Audit H9: incognito must be VISIBLE — every like/follow/history write for this
         // source is silently suppressed while it is on. Reels owns its incognito: only the
         // reels-only toggle applies here — the global switch, the NSFW auto policy and the
@@ -275,6 +314,7 @@ data class ReelsFeedScreen(
         val offlineRemovedMessage = stringResource(MR.strings.reels_offline_removed)
         val offlineQuotaMessage = stringResource(MR.strings.reels_offline_failed_quota)
         val offlineNetworkMessage = stringResource(MR.strings.reels_offline_failed_network)
+        val offlineUnsupportedMessage = stringResource(MR.strings.reels_offline_failed_unsupported)
         val undoLabel = stringResource(MR.strings.action_undo)
         fun notifyHidden() {
             // Capture THIS hide's token: with two rapid hides the older snackbar's undo must
@@ -288,24 +328,27 @@ data class ReelsFeedScreen(
                 if (result == SnackbarResult.ActionPerformed) screenModel.undoHide(token)
             }
         }
-        // Preload gating must be reactive: a plain context.isOnWifi() call here would be
-        // recomputed (stale) on every recomposition instead of tracking network changes.
-        var isOnWifi by remember { mutableStateOf(context.isOnWifi()) }
+        // Preload gating must be reactive: a plain context call here would be recomputed
+        // (stale) on every recomposition instead of tracking network changes. Transport
+        // (Wi-Fi) and cost (metered) are tracked separately — a metered hotspot is not
+        // "Wi-Fi" for the data saver, and an unmetered Ethernet is not metered.
+        var networkStatus by remember { mutableStateOf(context.reelsNetworkStatus()) }
         DisposableEffect(Unit) {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                    isOnWifi = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    networkStatus = networkCapabilities.toReelsNetworkStatus()
                 }
 
                 override fun onLost(network: Network) {
-                    // The default network went away: a stale true would let the wifi-gated
-                    // preload keep running over whatever (possibly mobile) network comes next.
-                    isOnWifi = false
+                    // The default network went away: a stale "on Wi-Fi" would let the
+                    // wifi-gated preload keep running over whatever network comes next, and
+                    // an unknown network must count as metered for the data saver.
+                    networkStatus = ReelsNetworkStatus(onWifi = false, metered = true)
                 }
 
                 override fun onAvailable(network: Network) {
-                    isOnWifi = context.isOnWifi()
+                    networkStatus = context.reelsNetworkStatus()
                 }
             }
             cm?.registerDefaultNetworkCallback(callback)
@@ -313,10 +356,37 @@ data class ReelsFeedScreen(
                 cm?.unregisterNetworkCallback(callback)
             }
         }
-        val preloadAllowed = state.preloadEnabled && (!state.preloadWifiOnly || isOnWifi)
+        val preloadAllowed = reelsPreloadAllowed(
+            preloadEnabled = state.preloadEnabled,
+            preloadWifiOnly = state.preloadWifiOnly,
+            onWifi = networkStatus.onWifi,
+        )
         // Data saver: force SD on metered networks. The page pins this value at activation,
         // so playback never rebuilds mid-clip when connectivity changes.
-        val effectiveHd = if (state.dataSaverMetered && !isOnWifi) false else state.isHdQuality
+        val effectiveHd = if (reelsForcesSd(state.dataSaverMetered, networkStatus.metered)) {
+            false
+        } else {
+            state.isHdQuality
+        }
+        // U02: software fullscreen rotates the page subtree instead of requesting an
+        // orientation. A window that is already landscape (split-screen/tablet/foldable)
+        // or a system-owned PiP frame must not rotate at all.
+        val windowConfiguration = LocalConfiguration.current
+        val windowIsLandscape = reelsWindowIsLandscape(
+            windowConfiguration.screenWidthDp,
+            windowConfiguration.screenHeightDp,
+        )
+        val inPictureInPicture = ReelsPip.isInPictureInPictureMode
+        // The active reel's orientation drives the PiP aspect ratio. Values are kept per
+        // item: a preloaded neighbor may report before it settles into the active page.
+        val videoOrientations = remember { mutableStateMapOf<String, Boolean>() }
+        var activeVideoLandscape by remember { mutableStateOf<Boolean?>(null) }
+        val currentActiveVideoLandscape by rememberUpdatedState(activeVideoLandscape)
+        // Measured frame dimensions per item (audit C03): the PiP window shape comes from the
+        // actual video rect/aspect, not from the portrait feed window.
+        val videoSizes = remember { mutableStateMapOf<String, Pair<Int, Int>>() }
+        var activeVideoSize by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+        val currentActiveVideoSize by rememberUpdatedState(activeVideoSize)
         var chromeVisible by remember { mutableStateOf(true) }
         // Device UX: the ⋮ settings block holds playback and pins the chrome while open.
         var moreMenuOpen by remember { mutableStateOf(false) }
@@ -326,6 +396,26 @@ data class ReelsFeedScreen(
         // re-enters fullscreen on its own; a manual exit disarms it.
         var landscapeFullscreen by remember { mutableStateOf(false) }
         var landscapeAutoRestore by remember { mutableStateOf(false) }
+        // U02: the portrait lock pins Display.rotation, so the physical hold side comes from
+        // gravity. The sensor is registered only while the rotated frame is actually used.
+        val landscapeRotation = rememberReelsLandscapeRotation(
+            enabled = landscapeFullscreen && !windowIsLandscape && !inPictureInPicture,
+        )
+        val softwareRotationDegrees = reelsSoftwareRotationDegrees(
+            landscapeRotation = landscapeRotation,
+            windowIsLandscape = windowIsLandscape,
+            inPictureInPicture = inPictureInPicture,
+        )
+        // The HOME-gesture handler runs outside composition: these refs keep the PiP params
+        // and the chrome decision tied to the live frame, crop mode and rotation.
+        val currentCropMode by rememberUpdatedState(state.isCropMode)
+        val currentSoftwareRotation by rememberUpdatedState(softwareRotationDegrees)
+        // U07: while software fullscreen is active, the window belongs to the video —
+        // MainActivity's generic navigation-bar scrim must not paint over it.
+        val fullscreenOwner = remember { Any() }
+        DisposableEffect(fullscreenOwner) {
+            onDispose { ReelsFullscreen.release(fullscreenOwner) }
+        }
         BackHandler(enabled = landscapeFullscreen) {
             landscapeFullscreen = false
             landscapeAutoRestore = false
@@ -345,7 +435,8 @@ data class ReelsFeedScreen(
 
         // Hide the system bars while the rotated video owns the screen; restore on exit
         // and on screen disposal so the rest of the app is unaffected.
-        DisposableEffect(landscapeFullscreen) {
+        DisposableEffect(landscapeFullscreen, fullscreenOwner) {
+            ReelsFullscreen.set(fullscreenOwner, landscapeFullscreen)
             val window = (context as? Activity)?.window
             val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
             if (landscapeFullscreen && controller != null) {
@@ -382,15 +473,27 @@ data class ReelsFeedScreen(
         // Declutter redesign: PiP enters via the HOME gesture, not a top-bar button. The feed
         // registers the entry handler while composed; MainActivity calls it from
         // onUserLeaveHint. Gates are evaluated at call time: feature toggle on, a reel is
-        // actually playing, and this is not the offline playlist screen variant.
+        // actually playing (player-reported), and this is not the offline playlist variant.
+        fun buildPipParams(activity: Activity): PictureInPictureParams = ReelsPip.buildParams(
+            activity = activity,
+            videoWidth = currentActiveVideoSize?.first ?: 0,
+            videoHeight = currentActiveVideoSize?.second ?: 0,
+            cropMode = currentCropMode,
+            landscapeFallback = currentActiveVideoLandscape,
+            rotated = currentSoftwareRotation != 0,
+        )
         DisposableEffect(screenModel) {
             val handler: () -> Boolean = {
                 val current = screenModel.state.value
                 val activity = context as? Activity
                 if (activity != null && current.isPipEnabled && current.isActuallyPlaying && !current.isOffline) {
-                    runCatching {
-                        activity.enterPictureInPictureMode(ReelsPip.buildParams(activity))
+                    val entered = runCatching {
+                        activity.enterPictureInPictureMode(buildPipParams(activity))
                     }.getOrDefault(false)
+                    // Hide the immersive chrome with the entry, before the system snapshots
+                    // the surface: the PiP window must show the reel, not the feed's top bar.
+                    if (entered) chromeVisible = false
+                    entered
                 } else {
                     false
                 }
@@ -404,6 +507,14 @@ data class ReelsFeedScreen(
                     ReelsPip.handler = null
                 }
             }
+        }
+
+        // Auto-advance keeps running in PiP: when the settled reel (or crop mode/rotation)
+        // changes, update the system window shape instead of leaving the old cover ratio.
+        LaunchedEffect(inPictureInPicture, activeVideoSize, state.isCropMode, softwareRotationDegrees) {
+            if (!inPictureInPicture) return@LaunchedEffect
+            val activity = context as? Activity ?: return@LaunchedEffect
+            runCatching { activity.setPictureInPictureParams(buildPipParams(activity)) }
         }
 
         // B1: a rate-limit verdict surfaces the wait; the model schedules the capped auto-retry.
@@ -536,6 +647,32 @@ data class ReelsFeedScreen(
                             ),
                             modifier = Modifier.fillMaxSize(),
                         )
+                    } else if (
+                        state.unseenOnly &&
+                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL &&
+                        state.searchQuery.isBlank() &&
+                        !state.isOffline
+                    ) {
+                        // For You has nothing UNWATCHED left (or the bounded scan stopped).
+                        // "Show watched" is an explicit mode switch, never a history wipe.
+                        // Search and the offline playlist are explicit surfaces and keep the
+                        // neutral "nothing here" copy: their emptiness has nothing to do with
+                        // the watch history.
+                        EmptyScreen(
+                            stringRes = if (state.unseenScanStopped) {
+                                MR.strings.reels_feed_empty_unseen_scanning
+                            } else {
+                                MR.strings.reels_feed_empty_unseen
+                            },
+                            actions = persistentListOf(
+                                EmptyScreenAction(
+                                    stringRes = MR.strings.reels_feed_show_watched,
+                                    icon = Icons.Filled.PlayArrow,
+                                    onClick = { screenModel.setUnseenOnly(false) },
+                                ),
+                            ),
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     } else {
                         // Audit H11: "No source found" was semantically wrong — the source IS
                         // there, it just served nothing (or everything is filtered/hidden).
@@ -554,6 +691,14 @@ data class ReelsFeedScreen(
                         pageCount = { state.items.size },
                     )
 
+                    // PiP shape follows the settled reel, including one whose player already
+                    // reported its frame while the page was only preloaded.
+                    LaunchedEffect(pagerState.settledPage, state.items) {
+                        val settledId = state.items.getOrNull(pagerState.settledPage)?.id
+                        activeVideoLandscape = settledId?.let(videoOrientations::get)
+                        activeVideoSize = settledId?.let(videoSizes::get)
+                    }
+
                     // C-intermediate (audit): heads of the reels BEYOND the player preload window
                     // (+2..+4) are warmed into the video cache with plain bytes — no player, no
                     // decoder — so a deep swipe starts from disk instead of a cold CDN round-trip.
@@ -570,7 +715,11 @@ data class ReelsFeedScreen(
                         val sourceId = state.currentSourceId
                         val headers = state.sourceHeaders
                         withContext(Dispatchers.IO) {
+                            // The effect's job dies on a settled-page/source/quality change; a
+                            // prewarm run must stop pulling bytes instead of warming stale pages.
+                            val prewarmJob = coroutineContext[Job]
                             for (index in settled + 2..settled + 4) {
+                                if (prewarmJob?.isActive == false) break
                                 val item = items.getOrNull(index) ?: break
                                 val url = if (effectiveHd) item.videoUrlHd ?: item.videoUrl else item.videoUrl
                                 val prefix = if (offline) {
@@ -584,6 +733,7 @@ data class ReelsFeedScreen(
                                     cacheKey = "$prefix:${item.id}:${if (effectiveHd) "hd" else "sd"}",
                                     headers = headers,
                                     webUrl = item.webUrl,
+                                    isCancelled = { prewarmJob?.isActive == false },
                                 )
                             }
                         }
@@ -606,11 +756,35 @@ data class ReelsFeedScreen(
                         }
                     }
 
+                    // Passive gesture observer: `settledPage` alone cannot tell a deliberate
+                    // swipe from an auto-advance/restore. This records WHEN a real drag moved
+                    // the pager; it never consumes events, so the pager keeps full control.
+                    val lastUserNavAtMs = remember(pagerState) { AtomicLong(0L) }
+
                     LaunchedEffect(pagerState) {
+                        var previous = pagerState.settledPage
                         snapshotFlow { pagerState.settledPage }
                             .distinctUntilChanged()
                             .collect { page ->
-                                screenModel.onPageChanged(page)
+                                val from = previous
+                                previous = page
+                                val cause = ReelsForYou.resolveTransitionCause(
+                                    fromPage = from,
+                                    toPage = page,
+                                    nowMs = SystemClock.elapsedRealtime(),
+                                    lastUserNavAtMs = lastUserNavAtMs.get(),
+                                )
+                                screenModel.onPageChanged(page, cause)
+                            }
+                    }
+
+                    // The settled page only changes after the fling ends. The runway needs the
+                    // live page during the fling so the next page can already be in flight.
+                    LaunchedEffect(pagerState) {
+                        snapshotFlow { pagerState.currentPage }
+                            .distinctUntilChanged()
+                            .collect { page ->
+                                screenModel.onPagerPositionChanged(page)
                             }
                     }
 
@@ -642,6 +816,20 @@ data class ReelsFeedScreen(
                     VerticalPager(
                         state = pagerState,
                         beyondViewportPageCount = 1,
+                        // Pages belong to the media identity, not the slot: after a feed reset
+                        // an index can point at an entirely different reel, and per-page state
+                        // (gesture captures, progress, speed) must not leak across. The offline
+                        // playlist merges favorites from several sources, so its key includes
+                        // the source — the same videoId may legitimately repeat there.
+                        key = { index ->
+                            val item = state.items.getOrNull(index)
+                            val offlineSourceId = state.offlineSourceIds.getOrNull(index)
+                            when {
+                                item == null -> index
+                                state.isOffline && offlineSourceId != null -> "$offlineSourceId:${item.id}"
+                                else -> item.id
+                            }
+                        },
                         // The pager lives outside the software rotation, so manual swipes in
                         // landscape fullscreen would land sideways; auto-advance still moves
                         // the feed programmatically (portrait reels exit fullscreen, see
@@ -649,6 +837,25 @@ data class ReelsFeedScreen(
                         userScrollEnabled = !landscapeFullscreen && !touchLocked,
                         modifier = Modifier
                             .fillMaxSize()
+                            .pointerInput(pagerState) {
+                                // Observe-only: reports a completed vertical drag. The page is
+                                // NOT required to have moved yet: a fling releases the finger
+                                // while the pager is still on the origin page, and that release
+                                // is exactly the "the user decided" signal the skip path needs.
+                                // A drag that snaps back never changes settledPage, so it still
+                                // records nothing (FY04: no skip).
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(
+                                        requireUnconsumed = false,
+                                        pass = PointerEventPass.Initial,
+                                    )
+                                    var dragged = false
+                                    drag(down.id) { change ->
+                                        if (abs(change.positionChange().y) > 0f) dragged = true
+                                    }
+                                    if (dragged) lastUserNavAtMs.set(SystemClock.elapsedRealtime())
+                                }
+                            }
                             .pointerInput(feedSwipeEnabled, swipeThresholdPx) {
                                 if (!feedSwipeEnabled) return@pointerInput
                                 detectHorizontalDragGestures(
@@ -676,6 +883,9 @@ data class ReelsFeedScreen(
                     ) { page ->
                         val item = state.items.getOrNull(page)
                         if (item != null) {
+                            // Contract v25: the source's per-item media verdict; remembered
+                            // per item so re-composition does not re-run plugin code.
+                            val mediaDescriptor = remember(item) { screenModel.mediaDescriptor(item) }
                             ReelsVideoPage(
                                 item = item,
                                 // Activate only the settled page: during fast flings intermediate
@@ -687,12 +897,26 @@ data class ReelsFeedScreen(
                                 isPreload = preloadAllowed && page == pagerState.settledPage + 1,
                                 isPlaying = state.isPlaying,
                                 isMuted = state.isMuted,
-                                isLiked = (item.id in state.likedIds),
+                                isLiked = state.isLiked(item.id, page),
                                 isHdQuality = effectiveHd,
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
                                 chromeVisible = chromeVisible && page == pagerState.settledPage && !landscapeFullscreen,
                                 isLandscapeFullscreen = landscapeFullscreen,
+                                softwareRotationDegrees = softwareRotationDegrees,
+                                isInPictureInPicture = inPictureInPicture,
+                                onVideoLandscapeKnown = { landscape ->
+                                    videoOrientations[item.id] = landscape
+                                    if (page == pagerState.settledPage) {
+                                        activeVideoLandscape = landscape
+                                    }
+                                },
+                                onVideoSizeKnown = { width, height ->
+                                    videoSizes[item.id] = width to height
+                                    if (page == pagerState.settledPage) {
+                                        activeVideoSize = width to height
+                                    }
+                                },
                                 landscapeAutoRestore = landscapeAutoRestore,
                                 onLandscapeFullscreenChange = { enter ->
                                     landscapeFullscreen = enter
@@ -704,6 +928,8 @@ data class ReelsFeedScreen(
                                     screenModel.togglePlayPause()
                                 },
                                 onToggleLike = { screenModel.toggleLike(item, page) },
+                                // Double-tap is idempotent: a second tap must not unlike.
+                                onLike = { screenModel.setLike(item, true, page) },
                                 onToggleMute = screenModel::toggleMute,
                                 onShare = { secondsPlayed ->
                                     // Prefer the watch page URL; raw CDN links can expire.
@@ -759,6 +985,7 @@ data class ReelsFeedScreen(
                                                     OfflineCopyResult.REMOVED -> offlineRemovedMessage
                                                     OfflineCopyResult.FAILED_QUOTA -> offlineQuotaMessage
                                                     OfflineCopyResult.FAILED_NETWORK -> offlineNetworkMessage
+                                                    OfflineCopyResult.FAILED_UNSUPPORTED -> offlineUnsupportedMessage
                                                 }
                                                 snackbarHostState.showSnackbar(message)
                                             } finally {
@@ -791,7 +1018,26 @@ data class ReelsFeedScreen(
                                 } else {
                                     null
                                 },
+                                onCreatorClick = if (state.isCreatorCapable && !state.isOffline) {
+                                    { creator ->
+                                        if (!(
+                                                state.mode == ReelsFeedScreenModel.FeedMode.CREATOR &&
+                                                    creator == state.creator
+                                                )
+                                        ) {
+                                            navigator.push(
+                                                ReelsFeedScreen(
+                                                    sourceId = state.currentSourceId,
+                                                    creator = creator,
+                                                ),
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
                                 onVideoCompleted = {
+                                    screenModel.onVideoCompleted(item.id)
                                     // B2 sleep timer: "after this video" pauses the feed
                                     // (sticky) instead of auto-advancing to the next reel.
                                     if (!screenModel.consumeSleepAtVideoEnd()) {
@@ -826,10 +1072,11 @@ data class ReelsFeedScreen(
                                     }
                                 },
                                 onScrubStart = { chromeVisible = true },
-                                onViewReported = { watched, duration, fraction ->
-                                    screenModel.reportVideoView(item.id, watched, duration)
-                                    screenModel.recordWatchHistory(item, fraction, duration)
-                                },
+                                onVisitStarted = screenModel::onVisitStarted,
+                                onFirstFramePresented = screenModel::onFirstFramePresented,
+                                onPlaybackSample = screenModel::onPlaybackSample,
+                                onVisitEnded = screenModel::onVisitEnded,
+                                isForeground = isForeground,
                                 onPlayingStateChanged = screenModel::setPlaybackRunning,
                                 initialSeekFraction = if (item.id ==
                                     state.resumeVideoId
@@ -839,6 +1086,14 @@ data class ReelsFeedScreen(
                                     null
                                 },
                                 onInitialSeekConsumed = screenModel::onInitialSeekConsumed,
+                                initialSeekPositionMs = if (item.id == state.pendingSeekItemId) {
+                                    state.pendingSeekPositionMs
+                                } else {
+                                    null
+                                },
+                                onInitialSeekPositionConsumed = {
+                                    screenModel.onSeekPositionConsumed(item.id)
+                                },
                                 // Audit H3: the offline playlist mixes sources — the cache key prefix must be the
                                 // SLOT's sourceId, not the single tapped-favorite source; videoIds
                                 // are only unique per source, a shared prefix lets CacheDataSource
@@ -851,14 +1106,15 @@ data class ReelsFeedScreen(
                                 resolveUrl = { pageItem ->
                                     screenModel.resolvePlaybackUrl(pageItem, effectiveHd)
                                 },
+                                mediaDescriptor = mediaDescriptor,
                                 isLastPage = page == state.items.lastIndex,
                                 headers = state.sourceHeaders,
                             )
                         }
                     }
 
-                    // Next-page loading indicator
-                    if (state.isLoading && state.items.isNotEmpty()) {
+                    // Next-page loading indicator (the PiP frame shows only the reel).
+                    if (state.isLoading && state.items.isNotEmpty() && !inPictureInPicture) {
                         ReelsNextPageLoader(modifier = Modifier.align(Alignment.BottomCenter))
                     }
                 }
@@ -867,7 +1123,8 @@ data class ReelsFeedScreen(
             // "Tap to unmute" (approved variant A): visible while the session sound is
             // undecided; tapping unmutes (and decides), otherwise it auto-dismisses.
             AnimatedVisibility(
-                visible = state.showUnmuteHint && state.isMuted && !landscapeFullscreen,
+                visible = state.showUnmuteHint && state.isMuted && !landscapeFullscreen &&
+                    !inPictureInPicture,
                 enter = fadeIn() + scaleIn(initialScale = 0.85f),
                 exit = fadeOut() + scaleOut(targetScale = 0.85f),
                 modifier = Modifier
@@ -906,9 +1163,9 @@ data class ReelsFeedScreen(
             }
 
             // Top Bar Overlay; auto-hidden in immersive mode, revealed on tap or when a
-            // search/filter/source sheet is open.
+            // search/filter/source sheet is open. The system-owned PiP frame never shows it.
             AnimatedVisibility(
-                visible = !landscapeFullscreen &&
+                visible = !landscapeFullscreen && !inPictureInPicture &&
                     (
                         chromeVisible || state.isSearchBarOpen || state.isFilterDialogOpen ||
                             state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen ||
@@ -970,11 +1227,18 @@ data class ReelsFeedScreen(
                     onSuggestionsRequest = screenModel::requestSearchSuggestions,
                     // Favorites stays a direct circle; personal content groups into the account hub.
                     // Source switching lives on the title badge only — one affordance per action.
-                    // Account hub (V1): login state, custom feeds, Following, login/logout.
-                    showAccount = state.isLoginCapable && !state.isOffline &&
-                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    // Account hub (V1): login state, custom feeds, Following, login/logout, Niches.
+                    showAccount = (
+                        state.isLoginCapable ||
+                            state.isBrowseCapable ||
+                            state.isCreatorCapable ||
+                            state.isCustomFeedCapable ||
+                            state.isContentPreferencesCapable ||
+                            state.isBlockedTagsCapable
+                        ) && !state.isOffline && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
                     isLoggedIn = state.loggedInAccount != null,
                     loggedInAccount = state.loggedInAccount,
+                    showLoginAccountRow = state.isLoginCapable,
                     showCustomFeedsAccountRow = state.isCustomFeedCapable,
                     showFollowsAccountRow = state.isCreatorCapable,
                     showNichesAccountRow = state.isBrowseCapable &&
@@ -1041,6 +1305,9 @@ data class ReelsFeedScreen(
                     onToggleTouchLock = { touchLocked = !touchLocked },
                     isReelsIncognito = isIncognito,
                     onToggleReelsIncognito = screenModel::toggleReelsIncognito,
+                    isUnseenOnly = state.unseenOnly,
+                    onToggleUnseenOnly = { screenModel.setUnseenOnly(!state.unseenOnly) },
+                    onResetForYouHistory = { pendingResetHistory = true },
                     onMoreMenuOpenChanged = { moreMenuOpen = it },
                     onClearVideoCache = {
                         coroutineScope.launch {
@@ -1202,6 +1469,30 @@ data class ReelsFeedScreen(
                         )
                     },
                     onDeleteFeed = { feed -> pendingDeleteFeed = feed },
+                )
+            }
+
+            // Reset For You history confirmation
+            if (pendingResetHistory) {
+                AlertDialog(
+                    onDismissRequest = { pendingResetHistory = false },
+                    title = { Text(stringResource(MR.strings.reels_menu_reset_history)) },
+                    text = { Text(stringResource(MR.strings.reels_reset_history_confirm)) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                screenModel.resetForYouHistory()
+                                pendingResetHistory = false
+                            },
+                        ) {
+                            Text(stringResource(MR.strings.reels_menu_reset_history))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingResetHistory = false }) {
+                            Text(stringResource(MR.strings.action_cancel))
+                        }
+                    },
                 )
             }
 
@@ -1452,11 +1743,18 @@ data class ReelsFeedScreen(
     }
 }
 
-private fun Context.isOnWifi(): Boolean {
-    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-    val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-    return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+private fun Context.reelsNetworkStatus(): ReelsNetworkStatus {
+    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        ?: return ReelsNetworkStatus(onWifi = false, metered = true)
+    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        ?: return ReelsNetworkStatus(onWifi = false, metered = true)
+    return caps.toReelsNetworkStatus()
 }
+
+private fun NetworkCapabilities.toReelsNetworkStatus(): ReelsNetworkStatus = reelsNetworkStatus(
+    onWifi = hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+    unmetered = hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
+)
 
 /** Device UX (sign-off): same-message error snackbars are coalesced within this window. */
 private const val ERROR_SNACK_COOLDOWN_MS = 10_000L

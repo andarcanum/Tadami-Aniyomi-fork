@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.suggestions.manga
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCache
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.data.suggestions.SuggestionSearchGate
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
@@ -13,8 +14,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.manga.model.Manga
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class MangaSearchFallbackEngine {
@@ -161,6 +164,10 @@ class MangaSearchFallbackEngine {
         val candidatesToScore = seed.candidateTitles.distinct()
 
         val uniqueResults = LinkedHashMap<String, SuggestionItem>() // key: providerUrl
+        // Set when the extension exhausts the heap while handling a query. The buffers it
+        // allocated become garbage when its stack unwinds, but the heap is fragile at that
+        // point: issuing more source requests would risk a second, fatal OOM.
+        val oomAborted = AtomicBoolean(false)
         // getFilterList() executes extension code: it is exactly where a source built
         // against a different library ABI blows up with a LinkageError (e.g.
         // NoSuchMethodError: BuildersKt.runBlockingK). Degrade to an empty filter
@@ -179,6 +186,12 @@ class MangaSearchFallbackEngine {
         }
 
         for ((tierName, tierQueries) in queryTiers) {
+            if (oomAborted.get()) {
+                logcat(LogPriority.WARN) {
+                    "[MangaSearchFallbackEngine] Skipping $tierName after the source ran out of memory. Returning collected results."
+                }
+                break
+            }
             if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) {
                 logcat {
                     "[MangaSearchFallbackEngine] Reached target results limit ($boundedMaxResults) before processing all tiers. Stopping early."
@@ -191,11 +204,14 @@ class MangaSearchFallbackEngine {
             coroutineScope {
                 tierQueries.forEach { query ->
                     launch {
+                        if (oomAborted.get()) return@launch
                         if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) return@launch
                         try {
                             logcat { "[MangaSearchFallbackEngine] Searching for query: '$query'" }
                             val page = searchSemaphore.withPermit {
-                                source.getSearchManga(1, query, filterList)
+                                SuggestionSearchGate.withPermit {
+                                    source.getSearchManga(1, query, filterList)
+                                }
                             }
                             if (page.mangas.isEmpty()) {
                                 logcat {
@@ -308,6 +324,15 @@ class MangaSearchFallbackEngine {
                             logcat {
                                 "[MangaSearchFallbackEngine] Incompatible extension ABI for query '$query': ${e.message}"
                             }
+                        } catch (e: OutOfMemoryError) {
+                            // Extensions allocate inside getSearchManga (in-memory catalog indexes,
+                            // multi-MB JSON decoding). OOM is an Error, so the Exception catch below
+                            // never sees it and the whole process dies, as in the 0.62.9 crash logs.
+                            oomAborted.set(true)
+                            logcat(LogPriority.WARN) {
+                                "[MangaSearchFallbackEngine] Source '${source.name}' exhausted the heap for query " +
+                                    "'$query': ${e.message}. Stopping further search tiers."
+                            }
                         } catch (e: Exception) {
                             logcat { "[MangaSearchFallbackEngine] Search failed for query '$query': ${e.message}" }
                         }
@@ -328,7 +353,11 @@ class MangaSearchFallbackEngine {
                 }}"
             }
         }
-        SuggestionCache.put(cacheKey, items)
+        // An out-of-memory run is incomplete: caching it would hide the source behind a
+        // 24h negative entry instead of letting the next visit retry.
+        if (!oomAborted.get()) {
+            SuggestionCache.put(cacheKey, items)
+        }
 
         return if (items.isEmpty()) {
             MangaFallbackOutcome.Empty(MangaFallbackReason.SEARCH_EMPTY)

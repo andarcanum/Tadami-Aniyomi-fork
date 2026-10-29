@@ -4,9 +4,20 @@ import android.os.Handler
 import android.os.Looper
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.ui.discovery.manualRefreshWorkInfoFlow
+import eu.kanade.tachiyomi.util.system.workManager
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 
 internal abstract class BaseHomeHubScreenModel(
     protected val context: android.content.Context,
@@ -16,8 +27,74 @@ internal abstract class BaseHomeHubScreenModel(
 
     protected abstract val avatarFileName: String
 
-    open fun rotateOrRefreshDiscovery() {}
-    open fun onScreenReentry() {}
+    /**
+     * Разовые UI-эффекты (тосты и т.п.). Модель не показывает их сама: пайплайны Home Hub
+     * работают на Dispatchers.IO, а Toast требует Looper — прямой вызов из модели роняет процесс
+     * (NPE «Can't toast on a thread that has not called Looper.prepare()», краш 0.62.9).
+     * Без replay: если экран не подписан, эффект не показывается вовсе, а не всплывает позже
+     * при возврате на вкладку.
+     */
+    private val _effects = MutableSharedFlow<HomeHubEffect>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    private val _discoveryRefreshFailures = MutableStateFlow<Map<DiscoveryMediaType, String>>(emptyMap())
+
+    val effects: SharedFlow<HomeHubEffect> = _effects.asSharedFlow()
+    val discoveryRefreshFailures = _discoveryRefreshFailures.asStateFlow()
+
+    fun acknowledgeDiscoveryRefreshFailure(mediaType: DiscoveryMediaType, requestId: String) {
+        _discoveryRefreshFailures.update { pending ->
+            if (pending[mediaType] == requestId) pending - mediaType else pending
+        }
+    }
+
+    protected fun emitEffect(effect: HomeHubEffect) {
+        _effects.tryEmit(effect)
+    }
+
+    protected fun observeDiscoveryRefreshFailure(preferences: DiscoveryPreferences, mediaType: DiscoveryMediaType) {
+        screenModelScope.launchIO {
+            manualRefreshWorkInfoFlow(context.workManager, preferences, mediaType).collectLatest { workInfo ->
+                if (workInfo?.state == androidx.work.WorkInfo.State.FAILED) {
+                    _discoveryRefreshFailures.update { it + (mediaType to workInfo.id.toString()) }
+                }
+            }
+        }
+    }
+
+    protected open val discoveryController: HomeDiscoveryController? = null
+
+    open fun likeDiscoveryItem(item: HomeHubDiscoveryItem) {
+        discoveryController?.likeDiscoveryItem(item)
+    }
+
+    open fun restoreHiddenTeaserItem(item: HomeHubDiscoveryItem) {
+        discoveryController?.restoreHiddenTeaserItem(item)
+    }
+
+    protected open fun onItemDismissedFromPool(cleanTitle: String) {
+        discoveryController?.onItemDismissedFromPool(cleanTitle)
+    }
+
+    protected open fun onItemRestoredToPool(cleanTitle: String) {}
+
+    open fun rotateOrRefreshDiscovery() {
+        discoveryController?.rotateOrRefreshDiscovery()
+    }
+
+    open fun onScreenReentry() {
+        discoveryController?.onScreenReentry()
+    }
+
+    open fun recordExposure(item: HomeHubDiscoveryItem) {
+        discoveryController?.recordExposure(item)
+    }
+
+    open fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
+        discoveryController?.markDiscoveryItemShown(item)
+    }
 
     protected abstract fun updateCacheUserName(name: String)
     protected abstract fun updateCacheUserAvatar(path: String)
@@ -98,6 +175,12 @@ internal abstract class BaseHomeHubScreenModel(
     }
 }
 
+/** Разовые UI-эффекты Home Hub, которые показывает экран (см. [BaseHomeHubScreenModel.effects]). */
+internal sealed interface HomeHubEffect {
+    /** Пул подборки «Для вас» мал или пересекается с текущим окном: обновление почти не меняет ленту. */
+    data object DiscoveryPoolLimited : HomeHubEffect
+}
+
 /**
  * Минимальный интервал между ротациями тизера «Для тебя» по возвращению на экран.
  * Ротация метит окно тизера как показанное (48h-уникальность): дебаунс 500 мс
@@ -112,3 +195,16 @@ internal fun shouldAdvanceDiscoveryTeaserOnReentry(
     lastReentryTimeMs: Long,
     cooldownMs: Long = DISCOVERY_REENTRY_COOLDOWN_MS,
 ): Boolean = lastReentryTimeMs <= 0L || (nowMs - lastReentryTimeMs) >= cooldownMs
+
+/**
+ * Ограничение размера сессионного кэша исключённых тайтлов:
+ * если размер превышает [maxLimit], оставляет последние [keepRecent] элементов.
+ */
+internal fun pruneDismissedSessionTitles(
+    titles: Set<String>,
+    maxLimit: Int = 100,
+    keepRecent: Int = 50,
+): Set<String> {
+    if (titles.size <= maxLimit) return titles
+    return titles.toList().takeLast(keepRecent).toSet()
+}

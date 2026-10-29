@@ -37,6 +37,13 @@ internal interface NovelAutoScrollTarget {
      * pixels per frame and return 0, which makes the adaptive delay fall back to the base interval.
      */
     fun pageDelayCharacterCount(): Int = 0
+
+    /**
+     * Syncs continuous in-document auto-scroll speed.
+     *
+     * Returns true when the target owns continuous in-document movement (e.g. scrolled book WebView).
+     */
+    fun syncAutoScrollSpeed(physicalPixelsPerSecond: Float): Boolean = false
 }
 
 /**
@@ -58,6 +65,9 @@ internal class BookSurfaceAutoScrollTarget(
     override suspend fun scrollBy(distancePx: Int): Float = surface.scrollBy(distancePx).toFloat()
 
     override suspend fun stepPage(forward: Boolean) = surface.step(forward)
+
+    override fun syncAutoScrollSpeed(physicalPixelsPerSecond: Float): Boolean =
+        surface.syncAutoScrollSpeed(physicalPixelsPerSecond)
 }
 
 /**

@@ -3,7 +3,10 @@ package eu.kanade.tachiyomi.extension.novel.runtime
 import android.content.Context
 import android.util.Log
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.interceptor.CloudflareBridgeRegistry
+import eu.kanade.tachiyomi.network.interceptor.CloudflareChallengeDetector
 import eu.kanade.tachiyomi.network.interceptor.CloudflareManualSolveRegistry
+import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -76,11 +79,23 @@ class NovelJsRuntimeFactory(
             // Hosts whose Cloudflare challenge the hidden solve could not finish are flagged by
             // the interceptor; their requests go through the WebView network stack, which
             // Cloudflare trusts, instead of paying for a doomed OkHttp + solve cycle every time.
+            // Fingerprint-mismatched hosts (OkHttp challenged, WebView clean - e.g. NovelUpdates)
+            // route the same way but never show a manual-solve prompt: there is no captcha to
+            // pass in the visible WebView, only the shared-cookie bridge helps.
+            // External chapter redirect endpoints (/extnu/*) bounce to third-party translator sites
+            // (e.g. Wuxiaworld, LightNovelPub, Foxaholic). Many translator sites are client-rendered SPAs
+            // requiring full JavaScript evaluation to render chapter text or are behind Cloudflare/Turnstile.
+            // These must be routed directly via the WebView bridge.
+            val isRedirectEndpoint = NovelWebViewFetchBridge.isRedirectUrl(resolvedUrl)
             val blockedHost = resolvedUrl.toHttpUrlOrNull()?.host
-                ?.takeIf { CloudflareManualSolveRegistry.isPending(it) }
-            if (blockedHost != null) {
+                ?.takeIf { CloudflareManualSolveRegistry.isPending(it) || CloudflareBridgeRegistry.isBridged(it) }
+            if (isRedirectEndpoint || blockedHost != null) {
                 logcat(priority = LogPriority.DEBUG, tag = "NovelWebViewBridge") {
-                    "gate: routing via bridge host=$blockedHost url=$resolvedUrl"
+                    if (isRedirectEndpoint) {
+                        "gate: routing redirect endpoint via bridge url=$resolvedUrl"
+                    } else {
+                        "gate: routing via bridge host=$blockedHost url=$resolvedUrl"
+                    }
                 }
                 NovelWebViewFetchBridge.fetchBlocking(resolvedUrl, options)?.let { bridgeResponse ->
                     return json.encodeToString(bridgeResponse)
@@ -113,11 +128,30 @@ class NovelJsRuntimeFactory(
                         headers.keys.removeIf { it.equals("Content-Encoding", ignoreCase = true) }
                     }
                     val body = bodyBytes.toString(bodyCharset)
-                    if (!response.isSuccessful) {
+                    val isChallenge = CloudflareChallengeDetector.isBlockingChallengePage(body)
+                    if (!response.isSuccessful || isChallenge) {
                         logcat(priority = LogPriority.WARN, tag = "NovelFetch") {
-                            "Novel plugin fetch $pluginId: HTTP ${response.code} " +
+                            "Novel plugin fetch $pluginId: HTTP ${response.code} isChallenge=$isChallenge " +
                                 "url=${response.request.url} resolved=$resolvedUrl " +
                                 "body=${body.take(240)}"
+                        }
+                    }
+                    if (response.code in 401..403 || response.code == 429 || isChallenge) {
+                        val host = resolvedUrl.toHttpUrlOrNull()?.host.orEmpty()
+                        val shouldTryBridge = NovelWebViewFetchBridge.isRedirectUrl(resolvedUrl) ||
+                            isChallenge ||
+                            CloudflareBridgeRegistry.isBridged(host) ||
+                            CloudflareManualSolveRegistry.isPending(host)
+                        if (shouldTryBridge) {
+                            logcat(priority = LogPriority.DEBUG, tag = "NovelWebViewBridge") {
+                                "response challenge/error detected, fallback via bridge url=$resolvedUrl"
+                            }
+                            NovelWebViewFetchBridge.fetchBlocking(resolvedUrl, options)?.let { bridgeResponse ->
+                                if (host.isNotBlank() && (isChallenge || response.code in 401..403)) {
+                                    CloudflareBridgeRegistry.mark(host)
+                                }
+                                return json.encodeToString(bridgeResponse)
+                            }
                         }
                     }
                     json.encodeToString(
@@ -138,7 +172,13 @@ class NovelJsRuntimeFactory(
                 // very first blocked call can still recover through the WebView bridge instead of
                 // handing the plugin a dead status 0 after a 30s solve.
                 val failedHost = resolvedUrl.toHttpUrlOrNull()?.host
-                if (failedHost != null && CloudflareManualSolveRegistry.isPending(failedHost)) {
+                if (failedHost != null &&
+                    (
+                        CloudflareManualSolveRegistry.isPending(failedHost) ||
+                            CloudflareBridgeRegistry.isBridged(failedHost) ||
+                            NovelWebViewFetchBridge.isRedirectUrl(resolvedUrl)
+                        )
+                ) {
                     logcat(priority = LogPriority.DEBUG, tag = "NovelWebViewBridge") {
                         "post-failure retry via bridge host=$failedHost url=$resolvedUrl"
                     }
@@ -764,17 +804,27 @@ class NovelJsRuntimeFactory(
                 }
             }
 
+            val userAgent = networkHelper.pluginUserAgentProvider().ifBlank { DEFAULT_USER_AGENT }
             if ("user-agent" !in presentHeaders) {
-                builder.addHeader(
-                    "User-Agent",
-                    networkHelper.pluginUserAgentProvider().ifBlank { DEFAULT_USER_AGENT },
-                )
+                builder.addHeader("User-Agent", userAgent)
             }
             if ("accept" !in presentHeaders) {
                 builder.addHeader("Accept", DEFAULT_ACCEPT)
             }
             if ("accept-language" !in presentHeaders) {
                 builder.addHeader("Accept-Language", DEFAULT_ACCEPT_LANGUAGE)
+            }
+            val hints = UserAgentInterceptor.resolveClientHints(userAgent)
+            if (hints != null) {
+                if ("sec-ch-ua" !in presentHeaders) {
+                    builder.addHeader("sec-ch-ua", hints.secChUa)
+                }
+                if ("sec-ch-ua-mobile" !in presentHeaders) {
+                    builder.addHeader("sec-ch-ua-mobile", hints.secChUaMobile)
+                }
+                if ("sec-ch-ua-platform" !in presentHeaders) {
+                    builder.addHeader("sec-ch-ua-platform", hints.secChUaPlatform)
+                }
             }
             if ("cache-control" !in presentHeaders) {
                 builder.addHeader("Cache-Control", "max-age=0")

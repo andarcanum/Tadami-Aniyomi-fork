@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.getAndSet
+import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
@@ -499,7 +500,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
                         downloadIdToPkgName[id] = pkgName
                         activeDownloads[pkgName] = id
                         downloadReceiver.register()
-                        handleDownloadCompletion(id)
+                        installerScope.launch { handleDownloadCompletion(id) }
                     }
                 }
                 else -> stillActive += entry
@@ -635,7 +636,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
         updateInstallStep(downloadId, InstallStep.Idle)
     }
 
-    private fun handleDownloadCompletion(id: Long) {
+    private suspend fun handleDownloadCompletion(id: Long) {
         if (!handledDownloadIds.add(id)) return
 
         val query = DownloadManager.Query().setFilterById(id)
@@ -649,32 +650,30 @@ internal class AnimeExtensionInstaller(private val context: Context) {
             val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
             when (status) {
                 DownloadManager.STATUS_SUCCESSFUL -> {
-                    val uri = getDownloadedApkUri(id, cursor)
-                    if (uri == null) {
+                    val pkgName = downloadIdToPkgName[id]
+                    if (pkgName == null) {
                         updateInstallStep(id, InstallStep.Error)
-                    } else {
-                        val pkgName = downloadIdToPkgName[id]
-                        if (pkgName != null) {
-                            installerScope.launch {
-                                runCatching { pendingApkFileMaterializer.materialize(context, uri, pkgName) }
-                                    .onSuccess { file ->
-                                        apkFileStore.save(
-                                            ExtensionApkFileStore.ApkFile(
-                                                packageName = pkgName,
-                                                displayName = pkgName,
-                                                filePath = file.absolutePath,
-                                                kind = ApkExtensionKind.ANIME,
-                                            ),
-                                        )
-                                    }
-                                    .onFailure { error ->
-                                        logcat(LogPriority.WARN, error) {
-                                            "Failed to materialize DownloadManager anime APK for manual share package=$pkgName uri=$uri"
-                                        }
-                                    }
-                            }
-                        }
-                        installApk(id, uri)
+                        return
+                    }
+                    // Downloads land in the app-specific external dir, where direct file access
+                    // can be denied (EACCES). Install and share the app-cache copy instead.
+                    val apkFile = materializeDownloadedApk(id, cursor, pkgName)
+                    if (apkFile == null) {
+                        updateInstallStep(id, InstallStep.Error)
+                        return
+                    }
+                    withIOContext {
+                        apkFileStore.save(
+                            ExtensionApkFileStore.ApkFile(
+                                packageName = pkgName,
+                                displayName = pkgName,
+                                filePath = apkFile.absolutePath,
+                                kind = ApkExtensionKind.ANIME,
+                            ),
+                        )
+                    }
+                    withUIContext {
+                        installApk(id, apkFile.getUriCompat(context))
                     }
                 }
                 DownloadManager.STATUS_FAILED -> {
@@ -690,13 +689,51 @@ internal class AnimeExtensionInstaller(private val context: Context) {
         }
     }
 
-    private fun getDownloadedApkUri(id: Long, cursor: android.database.Cursor): Uri? {
-        val localUri = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-        if (localUri.isNullOrBlank()) {
-            return downloadManager.getUriForDownloadedFile(id).also {
-                if (it == null) logcat(LogPriority.ERROR) { "Downloaded APK URI is unavailable for id=$id" }
-            }
+    /**
+     * Copies the downloaded APK into the app cache so it can be installed and shared.
+     *
+     * The DownloadManager content URI is tried first: the app-specific external dir file is
+     * created by DownloadProvider and may not be openable by our process (EACCES), while the
+     * content URI is served by DownloadProvider itself. The local file URI stays as a fallback
+     * because some OEMs (MIUI) only expose the downloaded file that way.
+     */
+    private suspend fun materializeDownloadedApk(
+        id: Long,
+        cursor: android.database.Cursor,
+        pkgName: String,
+    ): File? {
+        val candidates = buildList {
+            runCatching { downloadManager.getUriForDownloadedFile(id) }
+                .onFailure { logcat(LogPriority.WARN, it) { "Failed to resolve DownloadManager URI for id=$id" } }
+                .getOrNull()
+                ?.let(::add)
+            runCatching { getLocalApkUri(cursor) }
+                .onFailure { logcat(LogPriority.WARN, it) { "Failed to resolve local APK URI for id=$id" } }
+                .getOrNull()
+                ?.let(::add)
+        }.distinct()
+
+        if (candidates.isEmpty()) {
+            logcat(LogPriority.ERROR) { "Downloaded APK URI is unavailable for id=$id" }
+            return null
         }
+
+        for (uri in candidates) {
+            val file = runCatching { pendingApkFileMaterializer.materialize(context, uri, pkgName) }
+                .onFailure { error ->
+                    logcat(LogPriority.WARN, error) {
+                        "Failed to materialize DownloadManager anime APK package=$pkgName uri=$uri"
+                    }
+                }
+                .getOrNull()
+            if (file != null) return file
+        }
+        return null
+    }
+
+    private fun getLocalApkUri(cursor: android.database.Cursor): Uri? {
+        val localUri = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+        if (localUri.isNullOrBlank()) return null
 
         val parsedUri = localUri.toUri()
         return when (parsedUri.scheme) {
@@ -748,7 +785,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
             // Avoid events for downloads we didn't request
             if (id !in activeDownloads.values) return
 
-            handleDownloadCompletion(id)
+            installerScope.launch { handleDownloadCompletion(id) }
         }
     }
 

@@ -89,8 +89,8 @@ fun Manga.copyFrom(other: SManga): Manga {
 
 fun SManga.toDomainManga(sourceId: Long): Manga {
     return Manga.create().copy(
-        url = url,
-        title = title,
+        url = url.trim(),
+        title = title.trim(),
         artist = artist,
         author = author,
         description = description,

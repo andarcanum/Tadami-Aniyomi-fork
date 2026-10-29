@@ -86,6 +86,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -161,6 +162,8 @@ enum class NovelDownloadAction {
     NOT_DOWNLOADED,
 }
 
+enum class NovelDownloadDeletionMode { SELECTED, ALL, READ }
+
 data class NovelEpubExportPreferencesState(
     val destinationTreeUri: String,
     val applyReaderTheme: Boolean,
@@ -222,6 +225,7 @@ class NovelScreenModel(
     private val trackNovelChapter: TrackNovelChapter = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
+    private val downloadPreferences: tachiyomi.domain.download.service.DownloadPreferences = Injekt.get(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
     private val downloadCacheChanges: Flow<NovelDownloadCacheEvent> = runCatching {
         Injekt.get<NovelDownloadCache>().changes
@@ -260,6 +264,9 @@ class NovelScreenModel(
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<NovelScreenModel.State>(State.Loading) {
+
+    private var hasVerifiedDiskDownloadsOnce = false
+    private var downloadsCleanupOfferShown = false
 
     private val relatedCoordinator = NovelRelatedSuggestionCoordinator()
     private val searchFallbackEngine = NovelSearchFallbackEngine()
@@ -971,7 +978,7 @@ class NovelScreenModel(
 
                 coroutineScope {
                     // Task 1: External Suggestions (AniList/etc)
-                    launch {
+                    val externalJob = launch {
                         try {
                             val externalResult = suggestionCoordinator.fetchSuggestions(seed, limit = 40)
                             if (externalResult.items.isNotEmpty()) {
@@ -994,6 +1001,10 @@ class NovelScreenModel(
                             }
                         } catch (e: CancellationException) {
                             throw e
+                        } catch (e: OutOfMemoryError) {
+                            logcat(LogPriority.WARN) {
+                                "[NovelScreenModel] External suggestions aborted (out of memory): ${e.message}"
+                            }
                         } catch (e: LinkageError) {
                             logcat {
                                 "[NovelScreenModel] External suggestions failed (incompatible extension): ${e.message}"
@@ -1004,7 +1015,9 @@ class NovelScreenModel(
                     }
 
                     // Task 2: Native Related suggestions
-                    if (currentNovel != null && currentSource != null) {
+                    val relatedJob = if (currentNovel != null && currentSource != null &&
+                        currentSource.supportsRelatedNovels
+                    ) {
                         launch {
                             try {
                                 val relatedOutcome = relatedCoordinator.fetchRelatedSuggestions(
@@ -1023,6 +1036,10 @@ class NovelScreenModel(
                                 }
                             } catch (e: CancellationException) {
                                 throw e
+                            } catch (e: OutOfMemoryError) {
+                                logcat(LogPriority.WARN) {
+                                    "[NovelScreenModel] Native related suggestions aborted (out of memory): ${e.message}"
+                                }
                             } catch (e: LinkageError) {
                                 logcat {
                                     "[NovelScreenModel] Native related suggestions failed (incompatible extension): ${e.message}"
@@ -1031,10 +1048,15 @@ class NovelScreenModel(
                                 logcat { "[NovelScreenModel] Native related suggestions failed: ${e.message}" }
                             }
                         }
+                    } else {
+                        null
                     }
 
-                    // Task 3: Search Fallback suggestions
-                    if (currentNovel != null && currentSource != null) {
+                    externalJob.join()
+                    relatedJob?.join()
+
+                    // Task 3: Search Fallback suggestions only when external and related returned nothing
+                    if (currentNovel != null && currentSource != null && suggestionsList.isEmpty()) {
                         launch {
                             try {
                                 val searchOutcome = searchFallbackEngine.fetchSearchFallback(
@@ -1063,6 +1085,10 @@ class NovelScreenModel(
                                 }
                             } catch (e: CancellationException) {
                                 throw e
+                            } catch (e: OutOfMemoryError) {
+                                logcat(LogPriority.WARN) {
+                                    "[NovelScreenModel] Native search suggestions aborted (out of memory): ${e.message}"
+                                }
                             } catch (e: LinkageError) {
                                 logcat {
                                     "[NovelScreenModel] Native search suggestions failed (incompatible extension): ${e.message}"
@@ -1107,6 +1133,13 @@ class NovelScreenModel(
                 updateSuccessState { it.copy(suggestions = nextState) }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: OutOfMemoryError) {
+                // Suggestions are decorative: never let a source that exhausted the heap
+                // take the whole process down while the user is merely reading an entry.
+                logcat(LogPriority.WARN) {
+                    "[NovelScreenModel] Suggestions aborted (out of memory): ${e.message}"
+                }
+                updateSuccessState { it.copy(suggestions = SuggestionState.Empty()) }
             } catch (e: LinkageError) {
                 logcat { "NovelScreenModel suggestions fetch failed (incompatible extension): ${e.message}" }
                 updateSuccessState {
@@ -1481,7 +1514,18 @@ class NovelScreenModel(
             } else {
                 null
             }
-            if (cachedIds != null) {
+            if (cachedIds != null && !hasVerifiedDiskDownloadsOnce) {
+                // One cheap batch listing per screen open reconciles externally-deleted files
+                // (manual deletion from a file manager) instead of trusting the persistent cache.
+                hasVerifiedDiskDownloadsOnce = true
+                val elapsed = measureTimeMillis {
+                    downloadedIds = resolveDownloadedChapterIds(state.novel, state.chapters)
+                }
+                logcat(LogPriority.DEBUG) {
+                    "Novel downloaded-state sync: novel=${state.novel.id}, revalidated=true, count=${downloadedIds.size}, elapsedMs=$elapsed"
+                }
+                downloadCache?.updateChapterIds(state.novel.id, downloadedIds)
+            } else if (cachedIds != null) {
                 downloadedIds = cachedIds.intersect(state.chapters.map { it.id }.toSet())
                 logcat(LogPriority.DEBUG) {
                     "Novel downloaded-state sync: novel=${state.novel.id}, from_cache=true, count=${downloadedIds.size}"
@@ -1511,6 +1555,7 @@ class NovelScreenModel(
                     it.copy(downloadedChapterIds = downloadedIds)
                 }
             }
+            maybeOfferDownloadsCleanup()
         }
     }
 
@@ -2307,6 +2352,8 @@ class NovelScreenModel(
                 )
             }
             if (newRead) {
+                maybeDeleteReadDownloads(listOf(chapter))
+                maybeOfferDownloadsCleanup()
                 maybeTrackMarkedRead(chapter.chapterNumber)
             }
         }
@@ -2373,6 +2420,10 @@ class NovelScreenModel(
             if (markRead && chaptersBecomingRead.isNotEmpty()) {
                 val maxChapter = chaptersBecomingRead.maxOf { it.chapterNumber }
                 maybeTrackMarkedRead(maxChapter)
+            }
+            if (chaptersBecomingRead.isNotEmpty()) {
+                maybeDeleteReadDownloads(chaptersBecomingRead)
+                maybeOfferDownloadsCleanup()
             }
         }
     }
@@ -2502,6 +2553,8 @@ class NovelScreenModel(
                 if (willComplete) {
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToMarkRead.first().novelId))
                 }
+                maybeDeleteReadDownloads(chaptersToMarkRead)
+                maybeOfferDownloadsCleanup()
             }
             if (!markRead || chaptersToMarkRead.isEmpty()) {
                 toggleAllSelection(false)
@@ -2552,10 +2605,10 @@ class NovelScreenModel(
                 if (willComplete) {
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToAchieve.first().novelId))
                 }
-            }
-            if (chaptersToAchieve.isNotEmpty()) {
                 val maxChapter = chaptersToAchieve.maxOf { it.chapterNumber }
                 maybeTrackMarkedRead(maxChapter)
+                maybeDeleteReadDownloads(chaptersToAchieve)
+                maybeOfferDownloadsCleanup()
             }
             toggleAllSelection(false)
         }
@@ -2921,16 +2974,136 @@ class NovelScreenModel(
     }
 
     fun deleteDownloadedSelectedChapters() {
-        val state = successState ?: return
-        val selectedDownloadedIds = state.selectedChapterIds.intersect(state.downloadedChapterIds)
-        if (selectedDownloadedIds.isEmpty()) return
+        deleteDownloadedChapters(NovelDownloadDeletionMode.SELECTED)
+    }
 
+    fun deleteDownloadedChapters(mode: NovelDownloadDeletionMode) {
+        val state = successState ?: return
+        val ids: Set<Long> = when (mode) {
+            NovelDownloadDeletionMode.SELECTED -> state.selectedChapterIds.intersect(state.downloadedChapterIds)
+            NovelDownloadDeletionMode.ALL -> state.downloadedChapterIds
+            NovelDownloadDeletionMode.READ -> state.chapters.asSequence()
+                .filter { it.read && it.id in state.downloadedChapterIds }
+                .map { it.id }
+                .toSet()
+        }
+        if (ids.isEmpty()) return
+        startDownloadedChaptersDeletion(
+            ids = ids,
+            silent = false,
+            clearSelection = mode == NovelDownloadDeletionMode.SELECTED,
+        )
+    }
+
+    fun hideDeletionProgress() {
+        updateSuccessState { it.copy(deletionProgress = null) }
+    }
+
+    /**
+     * Runs the deletion with NonCancellable so leaving the screen never aborts a batch midway
+     * (a half-deleted 2000-chapter batch with a stale cache was the reported production bug).
+     * Full cleanup (ids == all downloaded) reuses deleteNovel: one SAF directory delete instead
+     * of thousands of per-file operations.
+     */
+    private fun startDownloadedChaptersDeletion(
+        ids: Set<Long>,
+        silent: Boolean,
+        clearSelection: Boolean,
+    ) {
+        val state = successState ?: return
+        if (ids.isEmpty()) return
+        val novel = state.novel
+        val isFullCleanup = ids == state.downloadedChapterIds
         screenModelScope.launchIO {
-            novelDownloadManager.deleteChapters(state.novel, selectedDownloadedIds)
-            updateSuccessState {
-                it.copy(downloadedChapterIds = it.downloadedChapterIds - selectedDownloadedIds)
+            withContext(NonCancellable) {
+                if (!silent) {
+                    updateSuccessState {
+                        it.copy(deletionProgress = State.Success.ChapterDeletionProgress(0, ids.size))
+                    }
+                }
+                val deleted = if (isFullCleanup) {
+                    novelDownloadManager.deleteNovel(novel)
+                    ids.size
+                } else if (!silent) {
+                    novelDownloadManager.deleteChapters(novel, ids) { done, total ->
+                        updateSuccessState {
+                            it.copy(deletionProgress = State.Success.ChapterDeletionProgress(done, total))
+                        }
+                    }
+                } else {
+                    novelDownloadManager.deleteChapters(novel, ids)
+                }
+                updateSuccessState {
+                    it.copy(
+                        downloadedChapterIds = it.downloadedChapterIds - ids,
+                        deletionProgress = null,
+                    )
+                }
+                if (clearSelection) toggleAllSelection(false)
+                if (!silent) {
+                    runCatching {
+                        snackbarHostState.showSnackbar(
+                            message = context.stringResource(AYMR.strings.novel_delete_downloaded_done, deleted),
+                        )
+                    }
+                }
             }
-            toggleAllSelection(false)
+        }
+    }
+
+    /**
+     * Manga-parity auto-cleanup (cf. SetReadStatus + MangaDownloadManager.getChaptersToDelete):
+     * when "Remove when marked as read" is on, delete the downloads of chapters that just became
+     * read. Bookmarked chapters are kept unless the user opted in; novels in excluded categories
+     * keep their read-chapter downloads. Silent: no dialog, no snackbar — state updates only.
+     */
+    private suspend fun maybeDeleteReadDownloads(chaptersMarkedRead: List<NovelChapter>) {
+        if (chaptersMarkedRead.isEmpty()) return
+        if (!downloadPreferences.removeAfterMarkedAsRead().get()) return
+        val state = successState ?: return
+        val downloadedIds = state.downloadedChapterIds
+        if (downloadedIds.isEmpty()) return
+        val allowBookmarked = downloadPreferences.removeBookmarkedChapters().get()
+        var candidates = chaptersMarkedRead.filter { it.id in downloadedIds && (allowBookmarked || !it.bookmark) }
+        val excludedCategories = downloadPreferences.removeExcludeNovelCategories().get()
+            .mapNotNull { it.toLongOrNull() }
+        if (candidates.isNotEmpty() && excludedCategories.isNotEmpty()) {
+            val novelCategoryIds = getNovelCategories.await(state.novel.id).mapTo(mutableSetOf()) { it.id }
+            if (novelCategoryIds.intersect(excludedCategories).isNotEmpty()) {
+                candidates = emptyList()
+            }
+        }
+        if (candidates.isEmpty()) return
+        startDownloadedChaptersDeletion(
+            ids = candidates.mapTo(mutableSetOf()) { it.id },
+            silent = true,
+            clearSelection = false,
+        )
+    }
+
+    /**
+     * One-shot, non-intrusive offer per screen instance: when the novel just became fully read
+     * (or already is, on open) and still has downloads, suggest cleaning them up. Skipped when
+     * removeAfterMarkedAsRead is on — the auto-cleanup handles that case.
+     */
+    private suspend fun maybeOfferDownloadsCleanup() {
+        if (downloadsCleanupOfferShown) return
+        if (downloadPreferences.removeAfterMarkedAsRead().get()) return
+        val state = successState ?: return
+        val downloadedCount = state.downloadedChapterIds.size
+        if (downloadedCount == 0) return
+        if (!state.chapters.all { it.read }) return
+        downloadsCleanupOfferShown = true
+        val result = runCatching {
+            snackbarHostState.showSnackbar(
+                message = context.stringResource(AYMR.strings.novel_delete_downloaded_offer, downloadedCount),
+                actionLabel = context.stringResource(MR.strings.action_delete),
+                duration = SnackbarDuration.Long,
+                withDismissAction = true,
+            )
+        }.getOrNull() ?: return
+        if (result == SnackbarResult.ActionPerformed) {
+            deleteDownloadedChapters(NovelDownloadDeletionMode.ALL)
         }
     }
 
@@ -3206,6 +3379,7 @@ class NovelScreenModel(
             val bookBuildProgress: eu.kanade.tachiyomi.data.book.novel.NovelBookBuildProgress? = null,
             /** Set when a build was refused because some chapters are not downloaded yet. */
             val bookMissingChapterCount: Int? = null,
+            val deletionProgress: ChapterDeletionProgress? = null,
         ) : State {
             /**
              * True when the compiled book was built from a different chapter set than the title
@@ -3310,6 +3484,9 @@ class NovelScreenModel(
                     .toList()
                 processedMemoTargetIndex = null
             }
+
+            @Immutable
+            data class ChapterDeletionProgress(val deleted: Int, val total: Int)
 
             /**
              * PERF: updateSuccessState copies this state object on every unrelated mutation

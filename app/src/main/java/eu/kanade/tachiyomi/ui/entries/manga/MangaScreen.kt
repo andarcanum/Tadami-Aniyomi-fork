@@ -35,6 +35,7 @@ import eu.kanade.presentation.entries.components.AuthRequiredDialog
 import eu.kanade.presentation.entries.components.DeleteItemsDialog
 import eu.kanade.presentation.entries.components.DuplicateEntryDialog
 import eu.kanade.presentation.entries.components.EditMetadataSheet
+import eu.kanade.presentation.entries.components.EntryDeleteProgressDialog
 import eu.kanade.presentation.entries.components.SetIntervalDialog
 import eu.kanade.presentation.entries.components.aurora.AuroraNoteEditorDialog
 import eu.kanade.presentation.entries.manga.ChapterSettingsDialog
@@ -51,6 +52,7 @@ import eu.kanade.tachiyomi.ui.browse.manga.extension.details.MangaSourcePreferen
 import eu.kanade.tachiyomi.ui.browse.manga.migration.search.MigrateMangaDialog
 import eu.kanade.tachiyomi.ui.browse.manga.migration.search.MigrateMangaDialogScreenModel
 import eu.kanade.tachiyomi.ui.browse.manga.migration.search.MigrateMangaSearchScreen
+import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourcePagerScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
@@ -75,6 +77,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaUpdate
 import tachiyomi.domain.items.chapter.model.Chapter
+import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -187,6 +190,9 @@ class MangaScreen(
             onGenresSearch = { genres ->
                 scope.launch { performGenresSearch(navigator, genres, screenModel.source!!) }
             },
+            onSourceClick = {
+                openSource(navigator, successState.source, context)
+            },
             onFilterButtonClicked = screenModel::showSettingsDialog,
             onToggleSort = { screenModel.setSorting(successState.manga.sorting) },
             onToggleUnreadFilter = {
@@ -228,6 +234,8 @@ class MangaScreen(
             onClickEditInfo = {
                 showEditMetadataSheet = true
             },
+            onDeleteDownloadsClicked = screenModel::deleteAllDownloadedChapters,
+            onDeleteReadChaptersClicked = screenModel::deleteReadDownloadedChapters,
             onMigrateClicked = {
                 navigator.push(MigrateMangaSearchScreen(successState.manga.id))
             }.takeIf { shouldExposeMangaMigrationAction(successState.manga.id) },
@@ -394,6 +402,20 @@ class MangaScreen(
                         .takeIf { screenModel.isUpdateIntervalEnabled },
                 )
             }
+        }
+
+        successState.deletionProgress?.let { progress ->
+            EntryDeleteProgressDialog(
+                title = stringResource(AYMR.strings.novel_delete_downloaded_title),
+                progressText = stringResource(
+                    AYMR.strings.novel_delete_downloaded_progress,
+                    progress.deleted,
+                    progress.total,
+                ),
+                deleted = progress.deleted,
+                total = progress.total,
+                onHide = screenModel::hideDeletionProgress,
+            )
         }
 
         if (showScanlatorsDialog) {
@@ -571,6 +593,27 @@ class MangaScreen(
         }
 
         navigator.push(BrowseMangaSourceScreen(sourceId, null, genresQuery = genres))
+    }
+
+    private fun openSource(
+        navigator: Navigator,
+        source: MangaSource,
+        context: Context,
+    ) {
+        if (source is StubMangaSource) {
+            context.toast(context.stringResource(MR.strings.source_not_installed, source.name))
+            return
+        }
+        val sourceId = source.id
+        val existing = navigator.items.firstOrNull { screen ->
+            (screen is BrowseMangaSourceScreen && screen.sourceId == sourceId) ||
+                (screen is BrowseMangaSourcePagerScreen && screen.initialSourceId == sourceId)
+        }
+        if (existing != null) {
+            navigator.popUntil { it == existing }
+            return
+        }
+        navigator.push(BrowseMangaSourceScreen(sourceId, null))
     }
 
     /**

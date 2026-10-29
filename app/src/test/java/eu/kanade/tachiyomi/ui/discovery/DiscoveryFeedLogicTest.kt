@@ -1,7 +1,16 @@
 package eu.kanade.tachiyomi.ui.discovery
 
+import androidx.work.WorkManager
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkAll
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
@@ -47,6 +56,23 @@ class DiscoveryFeedLogicTest {
         canManualRefresh(lastRefreshAt = now - 60_000, now = now) shouldBe false
         canManualRefresh(lastRefreshAt = now - 6 * 60_000, now = now) shouldBe true
         canManualRefresh(lastRefreshAt = null, now = now) shouldBe true
+    }
+
+    @Test
+    fun `foreign and legacy manual tags do not mark target media refreshing`() = runBlocking {
+        val workManager = mockk<WorkManager>()
+        mockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
+        try {
+            val activeTags = setOf("DiscoveryUpdateManual", "DiscoveryUpdateManual:anime")
+            every { workManager.isRunningOrEnqueuedFlow(any()) } answers {
+                flowOf(firstArg<String>() in activeTags)
+            }
+            manualRefreshFlow(workManager, DiscoveryMediaType.ANIME).first() shouldBe true
+            manualRefreshFlow(workManager, DiscoveryMediaType.MANGA).first() shouldBe false
+            manualRefreshFlow(workManager, DiscoveryMediaType.NOVEL).first() shouldBe false
+        } finally {
+            unmockkAll()
+        }
     }
 
     @Test
@@ -103,5 +129,33 @@ class DiscoveryFeedLogicTest {
             .toSuggestionItem().reason shouldBe SuggestionReason.EXTERNAL_SHIKIMORI
         suggestion(DiscoveryRowType.SOURCE, "P", provider = "InkStory")
             .toSuggestionItem().reason shouldBe SuggestionReason.SEARCH_TITLE
+    }
+
+    @Test
+    fun `itemsForTab returns mix for MIX and row items for signal tabs`() {
+        val s1 = suggestion(DiscoveryRowType.LIKE, "S1")
+        val s2 = suggestion(DiscoveryRowType.TREND, "S2")
+        val state = DiscoveryFeedUiState(
+            mix = listOf(s1, s2),
+            rows = mapOf(
+                DiscoveryRowType.LIKE to listOf(s1),
+                DiscoveryRowType.TREND to listOf(s2),
+            ),
+        )
+        itemsForTab(state, FeedSignalTab.MIX) shouldBe listOf(s1, s2)
+        itemsForTab(state, FeedSignalTab.SIMILAR) shouldBe listOf(s1)
+        itemsForTab(state, FeedSignalTab.FRESH) shouldBe listOf(s2)
+        itemsForTab(state, FeedSignalTab.TASTE) shouldBe emptyList()
+    }
+
+    @Test
+    fun `filterByProvider filters by provider name when non-null and preserves all when null or blank`() {
+        val s1 = suggestion(DiscoveryRowType.LIKE, "S1", provider = "AniList")
+        val s2 = suggestion(DiscoveryRowType.LIKE, "S2", provider = "MAL")
+        val items = listOf(s1, s2)
+        filterByProvider(items, null) shouldBe items
+        filterByProvider(items, "") shouldBe items
+        filterByProvider(items, "AniList") shouldBe listOf(s1)
+        filterByProvider(items, "Unknown") shouldBe emptyList()
     }
 }

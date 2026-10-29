@@ -1,0 +1,31 @@
+CREATE TABLE discovery_suppressions (
+    media_type TEXT NOT NULL,
+    clean_title TEXT NOT NULL,
+    suppressed_at INTEGER NOT NULL,
+    PRIMARY KEY (media_type, clean_title)
+);
+
+CREATE INDEX discovery_suppressions_time ON discovery_suppressions(media_type, suppressed_at);
+
+selectSuppressedSince:
+SELECT clean_title FROM discovery_suppressions
+WHERE media_type = ? AND suppressed_at >= ?;
+
+selectSuppressedWithTimeSince:
+SELECT clean_title, suppressed_at FROM discovery_suppressions
+WHERE media_type = ? AND suppressed_at >= ?
+ORDER BY suppressed_at ASC;
+
+upsert:
+INSERT INTO discovery_suppressions(media_type, clean_title, suppressed_at)
+VALUES (?, ?, ?)
+ON CONFLICT(media_type, clean_title) DO UPDATE SET
+    suppressed_at = excluded.suppressed_at;
+
+cleanupOld:
+DELETE FROM discovery_suppressions
+WHERE suppressed_at < ?;
+
+deleteAllByMedia:
+DELETE FROM discovery_suppressions
+WHERE media_type = ?;

@@ -213,6 +213,8 @@ fun NovelScreenAuroraImpl(
     onMarkPreviousAsReadClicked: (NovelChapter) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
+    onOpenDeleteDownloadsClicked: () -> Unit = {},
+    onOpenDeleteReadChaptersClicked: () -> Unit = {},
     isAutoJumpToNextEnabled: Boolean,
     autoJumpToNextLabel: String,
     onToggleAutoJumpToNext: () -> Unit,
@@ -227,6 +229,7 @@ fun NovelScreenAuroraImpl(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 ) {
     val novel = state.novel
     var selectedGenres by remember { mutableStateOf(emptySet<String>()) }
@@ -637,6 +640,7 @@ fun NovelScreenAuroraImpl(
                                         nextUpdate = nextUpdate,
                                         sourceName = state.source.name,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -754,6 +758,7 @@ fun NovelScreenAuroraImpl(
                                         nextUpdate = nextUpdate,
                                         sourceName = state.source.name,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1308,6 +1313,31 @@ fun NovelScreenAuroraImpl(
                                         },
                                     )
                                 }
+                                val readDownloadedCount = state.chapters.count {
+                                    it.read &&
+                                        it.id in state.downloadedChapterIds
+                                }
+                                if (state.downloadedChapterIds.isNotEmpty()) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(
+                                            AYMR.strings.novel_delete_downloaded_menu,
+                                            state.downloadedChapterIds.size,
+                                        ),
+                                        onClick = {
+                                            onOpenDeleteDownloadsClicked()
+                                            showMenu = false
+                                        },
+                                    )
+                                }
+                                if (readDownloadedCount > 0) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(AYMR.strings.novel_delete_read_menu, readDownloadedCount),
+                                        onClick = {
+                                            onOpenDeleteReadChaptersClicked()
+                                            showMenu = false
+                                        },
+                                    )
+                                }
                                 AuroraEntryDropdownMenuItem(
                                     text = autoJumpToNextLabel,
                                     onClick = {
@@ -1576,6 +1606,7 @@ fun NovelScreenAuroraImpl(
                                     nextUpdate = nextUpdate,
                                     sourceName = state.source.name,
                                     showAuthor = false,
+                                    onSourceClick = onSourceClick,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .titleScreenStagger(titleStaggerState, 2),
@@ -1711,6 +1742,7 @@ fun NovelScreenAuroraImpl(
                                     nextUpdate = nextUpdate,
                                     sourceName = state.source.name,
                                     showAuthor = false,
+                                    onSourceClick = onSourceClick,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .titleScreenStagger(titleStaggerState, 2),
@@ -2282,6 +2314,31 @@ fun NovelScreenAuroraImpl(
                                     text = stringResource(AYMR.strings.novel_book_delete),
                                     onClick = {
                                         onDeleteBookClicked()
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            val readDownloadedCount = state.chapters.count {
+                                it.read &&
+                                    it.id in state.downloadedChapterIds
+                            }
+                            if (state.downloadedChapterIds.isNotEmpty()) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(
+                                        AYMR.strings.novel_delete_downloaded_menu,
+                                        state.downloadedChapterIds.size,
+                                    ),
+                                    onClick = {
+                                        onOpenDeleteDownloadsClicked()
+                                        showMenu = false
+                                    },
+                                )
+                            }
+                            if (readDownloadedCount > 0) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(AYMR.strings.novel_delete_read_menu, readDownloadedCount),
+                                    onClick = {
+                                        onOpenDeleteReadChaptersClicked()
                                         showMenu = false
                                     },
                                 )

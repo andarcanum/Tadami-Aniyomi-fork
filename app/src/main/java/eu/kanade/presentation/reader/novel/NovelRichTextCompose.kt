@@ -34,6 +34,7 @@ import android.graphics.Color as AndroidColor
 
 internal fun buildNovelRichAnnotatedString(
     segments: List<NovelRichTextSegment>,
+    preserveSourceColors: Boolean = false,
 ): AnnotatedString {
     if (segments.isEmpty()) return AnnotatedString("")
 
@@ -46,7 +47,14 @@ internal fun buildNovelRichAnnotatedString(
             cursor += segment.text.length
             val end = cursor
 
-            buildNovelRichSpanStyle(segment.style)?.let { addStyle(it, start, end) }
+            // Reader ink owns contrast by default, as it does in the WebView renderer.
+            // TTS and saved highlights are painted later and are deliberately unaffected.
+            val sourceStyle = if (preserveSourceColors) {
+                segment.style
+            } else {
+                segment.style.copy(colorCss = null, backgroundColorCss = null)
+            }
+            buildNovelRichSpanStyle(sourceStyle)?.let { addStyle(it, start, end) }
             segment.linkUrl?.takeIf { it.isNotBlank() }?.let { url ->
                 addStringAnnotation(tag = "URL", annotation = url, start = start, end = end)
             }
@@ -188,6 +196,7 @@ internal fun NovelRichNativeScrollItem(
                         textShadowBlur = readerSettings.textShadowBlur,
                         textShadowX = readerSettings.textShadowX,
                         textShadowY = readerSettings.textShadowY,
+                        layoutMode = NovelPageReaderLayoutMode.SCROLL,
                         selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                         selectionSessionIdProvider = selectionSessionIdProvider,
                         selectionAnchorChapterId = block.anchor?.chapterId,
@@ -222,6 +231,7 @@ internal fun NovelRichNativeScrollItem(
                     textShadowBlur = readerSettings.textShadowBlur,
                     textShadowX = readerSettings.textShadowX,
                     textShadowY = readerSettings.textShadowY,
+                    layoutMode = NovelPageReaderLayoutMode.SCROLL,
                     selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                     selectionSessionIdProvider = selectionSessionIdProvider,
                     selectionAnchorChapterId = block.anchor?.chapterId,
@@ -274,6 +284,7 @@ internal fun NovelRichNativeScrollItem(
                 fontSizeMultiplier = headingScale,
                 lineHeightMultiplier = 1.1f,
                 baseTypefaceStyle = Typeface.BOLD,
+                layoutMode = NovelPageReaderLayoutMode.SCROLL,
                 selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                 selectionSessionIdProvider = selectionSessionIdProvider,
                 selectionAnchorChapterId = block.anchor?.chapterId,
@@ -317,6 +328,7 @@ internal fun NovelRichNativeScrollItem(
                 textShadowX = readerSettings.textShadowX,
                 textShadowY = readerSettings.textShadowY,
                 textColorOverride = textColor.copy(alpha = 0.92f),
+                layoutMode = NovelPageReaderLayoutMode.SCROLL,
                 selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                 selectionSessionIdProvider = selectionSessionIdProvider,
                 selectionAnchorChapterId = block.anchor?.chapterId,

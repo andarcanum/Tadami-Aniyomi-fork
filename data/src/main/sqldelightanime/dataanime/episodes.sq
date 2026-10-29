@@ -130,3 +130,7 @@ WHERE _id = :episodeId;
 
 selectLastInsertedRowId:
 SELECT last_insert_rowid();
+
+getAllEpisodesForBackup:
+SELECT *
+FROM episodes;

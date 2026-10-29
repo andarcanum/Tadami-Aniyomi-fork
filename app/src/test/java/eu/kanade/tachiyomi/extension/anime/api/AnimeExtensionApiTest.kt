@@ -98,7 +98,7 @@ class AnimeExtensionApiTest {
     }
 
     @Test
-    fun `supported library versions accept the full 12-23 range including minor versions`() {
+    fun `supported library versions accept the full 12-26 range including minor versions`() {
         (12.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.4 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
@@ -111,15 +111,21 @@ class AnimeExtensionApiTest {
         (20.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         // The reels feed-contract v21 addendum raised LIB_VERSION_MAX to 21.0,
         // the v22 addendum (login instrumentation + video resolver) to 22.0,
-        // the v23 addendum (paginated album search) to 23.0.
+        // the v23 addendum (paginated album search) to 23.0,
+        // the v26 addendum (account identity for durable history) to 26.0.
         (20.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (21.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (21.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (22.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (22.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (23.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        // v24/v25 stayed additive (instanceof-only, no plugin links against them), so a
+        // plugin may legitimately declare any version up to the v26 ceiling.
+        (24.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (25.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (26.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (11.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
-        (23.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
+        (26.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
     }
 
     @Test

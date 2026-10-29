@@ -52,10 +52,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogWindowProvider
 import coil3.compose.AsyncImage
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberCoverReloadTick
@@ -172,20 +173,24 @@ internal fun DiscoveryPreviewSheet(
                 .clip(sheetShape)
                 .then(
                     if (hazeState != null && !colors.isEInk) {
-                        Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeStyle(
-                                backgroundColor = colors.background,
-                                tint = HazeTint(
-                                    if (isDark) {
-                                        Color(0xFF141824).copy(alpha = 0.76f)
-                                    } else {
-                                        Color.White.copy(alpha = 0.82f)
-                                    },
-                                ),
-                                blurRadius = 28.dp,
-                                noiseFactor = 0.10f,
-                            ),
+                        Modifier.hazeBlur(
+                            input = HazeInput.Sources(hazeState),
+                            style = HazeBlurStyle {
+                                backgroundColor(colors.background)
+                                colorEffects(
+                                    listOf(
+                                        HazeColorEffect.tint(
+                                            if (isDark) {
+                                                Color(0xFF141824).copy(alpha = 0.76f)
+                                            } else {
+                                                Color.White.copy(alpha = 0.82f)
+                                            },
+                                        ),
+                                    ),
+                                )
+                                blurRadius(28.dp)
+                                noiseFactor(0.10f)
+                            },
                         )
                     } else {
                         Modifier.background(

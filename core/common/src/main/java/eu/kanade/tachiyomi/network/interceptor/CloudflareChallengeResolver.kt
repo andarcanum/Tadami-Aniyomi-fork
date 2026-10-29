@@ -49,6 +49,11 @@ internal class WebViewCloudflareChallengeResolver(
         var isWebViewOutdatedNow = false
         var released = false
         var pollingScheduled = false
+        // Fingerprint-mismatch signal: the hidden WebView finished at least one main-frame
+        // load. If it shows a clean page (no widget, no challenge markers) yet no clearance
+        // appears, OkHttp is fingerprinted but the WebView is trusted - a manual solve cannot
+        // help (there is no captcha in the visible WebView either), only the WebView bridge can.
+        var pageFinishedOnce = false
 
         val origRequestUrl = originalRequest.url.toString()
         val headers = parseHeaders(originalRequest.headers)
@@ -95,6 +100,7 @@ internal class WebViewCloudflareChallengeResolver(
 
             createdWebView.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
+                    pageFinishedOnce = true
                     // Success is signaled only by the presence of the cf_clearance cookie, not by
                     // the page finishing loading. The challenge JS runs after this callback, so
                     // releasing here (the old behaviour) killed the WebView mid-solve and the
@@ -136,6 +142,9 @@ internal class WebViewCloudflareChallengeResolver(
             createdWebView.loadUrl(origRequestUrl, headers)
         }
 
+        var isFingerprintMismatch = false
+        var isDestroyed = false
+
         // Stage 1 -- optimistic wait. Most managed challenges self-solve within a couple of
         // seconds, so we first wait only up to the *soft* limit; the poller keeps running in
         // the background and releases the latch as soon as the cookie appears.
@@ -147,18 +156,31 @@ internal class WebViewCloudflareChallengeResolver(
             // challenge will never self-solve, so fail it here instead of sitting out the full
             // timeout. Widget-free challenges (or a cookie that appears during the probe) keep
             // their remaining time below, so slow auto-solves are not aborted.
-            if (!waiter.bypassed && !hasInteractiveWidget && detectInteractiveWidgetSync(webview)) {
+            if (!waiter.bypassed && !hasInteractiveWidget && detectInteractiveWidgetSync(webview, isDestroyed)) {
                 hasInteractiveWidget = true
                 release()
             } else if (!waiter.bypassed) {
-                // Stage 3 -- give a widget-free auto-solve the rest of the window up to the hard cap.
-                latch.await(CHALLENGE_RESOLVE_TIMEOUT_MS - waiter.softLimitMs, TimeUnit.MILLISECONDS)
+                // Fast-fail fingerprint mismatches too: the hidden WebView already finished a
+                // clean page (no widget, no challenge markers) yet no clearance appeared, so the
+                // remaining wait would only burn ~21s for a cookie that is never issued - the
+                // caller routes these hosts via the WebView bridge instead.
+                if (pageFinishedOnce && !detectChallengeMarkersSync(webview, isDestroyed)) {
+                    isFingerprintMismatch = true
+                    release()
+                } else {
+                    // Stage 3 -- give a widget-free auto-solve the rest of the window up to the hard cap.
+                    latch.await(CHALLENGE_RESOLVE_TIMEOUT_MS - waiter.softLimitMs, TimeUnit.MILLISECONDS)
+                    if (!waiter.bypassed && pageFinishedOnce && !detectChallengeMarkersSync(webview, isDestroyed)) {
+                        isFingerprintMismatch = true
+                    }
+                }
             }
         } finally {
             // P5: stop the poller the moment the wait ends - with a congested main thread the
             // poller used to outlive the resolve (running sync cookie probes on main) long
             // after the WebView was destroyed.
             release()
+            isDestroyed = true
             // Guaranteed teardown: an interrupted worker thread used to unwind before this
             // block ran, leaking the created WebView (an OOM driver on low-heap devices).
             mainExecutor.execute {
@@ -184,6 +206,14 @@ internal class WebViewCloudflareChallengeResolver(
                 throw CloudflareInteractiveChallengeException()
             }
 
+            // OkHttp challenged, hidden WebView clean: fingerprint mismatch, not a solvable
+            // challenge. The visible WebView shows the same clean logged-in page with no captcha,
+            // so registering a manual solve would only show a dead-end button. Route via the
+            // WebView bridge instead (caller marks the host).
+            if (isFingerprintMismatch) {
+                throw CloudflareFingerprintMismatchException()
+            }
+
             throw CloudflareBypassException()
         }
     }
@@ -196,14 +226,41 @@ internal class WebViewCloudflareChallengeResolver(
         )
     }
 
-    private fun detectInteractiveWidgetSync(webview: WebView?): Boolean {
-        if (webview == null) return false
+    private fun detectInteractiveWidgetSync(webview: WebView?, isDestroyed: Boolean): Boolean {
+        if (webview == null || isDestroyed) return false
         val checkLatch = CountDownLatch(1)
         var detected = false
         mainExecutor.execute {
+            if (isDestroyed) {
+                checkLatch.countDown()
+                return@execute
+            }
             try {
                 webview.evaluateJavascript(INTERACTIVE_WIDGET_PROBE) { result ->
                     detected = result == "true"
+                    checkLatch.countDown()
+                }
+            } catch (_: Throwable) {
+                checkLatch.countDown()
+            }
+        }
+        checkLatch.await(2, TimeUnit.SECONDS)
+        return detected
+    }
+
+    private fun detectChallengeMarkersSync(webview: WebView?, isDestroyed: Boolean): Boolean {
+        if (webview == null || isDestroyed) return true
+        val checkLatch = CountDownLatch(1)
+        var detected = true
+        mainExecutor.execute {
+            if (isDestroyed) {
+                checkLatch.countDown()
+                return@execute
+            }
+            try {
+                webview.evaluateJavascript(CHALLENGE_MARKERS_PROBE) { result ->
+                    // "true" = challenge markers present, "false" = clean page, null = unknown.
+                    detected = result != "false"
                     checkLatch.countDown()
                 }
             } catch (_: Throwable) {
@@ -217,6 +274,14 @@ internal class WebViewCloudflareChallengeResolver(
 
 // P7: single source of the widget probe - shared with the manual WebView screen.
 internal val INTERACTIVE_WIDGET_PROBE = CloudflareChallengeDetector.interactiveWidgetProbeJs
+
+/**
+ * True when the loaded WebView document still looks like a Cloudflare challenge
+ * (interstitial / error / widget remnants). False means a clean content page loaded with
+ * no challenge - the OkHttp-vs-WebView fingerprint-mismatch signal. Unknown probe results
+ * conservatively count as a challenge so genuine failures keep the manual-solve path.
+ */
+internal val CHALLENGE_MARKERS_PROBE = CloudflareChallengeDetector.challengeMarkersProbeJs
 
 // P4: a clearance counts as new only when it differs from the cookie we entered the solve
 // with, and only on the ORIGINAL host. The previous cross-host OR-branch accepted any
@@ -236,3 +301,12 @@ private const val CHALLENGE_RESOLVE_TIMEOUT_MS = 30_000L
 
 internal open class CloudflareBypassException : Exception()
 internal class CloudflareInteractiveChallengeException : CloudflareBypassException()
+
+/**
+ * OkHttp is challenged but the hidden WebView loads a clean page (no widget, no challenge
+ * markers) and earns no clearance: the WebView fingerprint is trusted, OkHttp's is not.
+ * A visible manual solve shows the same clean page with no captcha, so it cannot help -
+ * the host must be served via the WebView bridge instead. Handled separately from
+ * [CloudflareBypassException] so no dead-end manual-solve prompt is registered.
+ */
+internal class CloudflareFingerprintMismatchException : CloudflareBypassException()

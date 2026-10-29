@@ -200,6 +200,13 @@ class SourcePreferences(
     // there. Regular (non appState) key: the choice must survive restarts.
     fun reelsIncognitoMode() = preferenceStore.getBoolean("pref_reels_incognito", false)
 
+    /**
+     * For You only serves reels without a recorded watch/forward-skip. On by default: the
+     * whole point of the durable consumption history. Turning it off is the explicit
+     * "show watched" mode — it never clears the history.
+     */
+    fun reelsUnseenOnly() = preferenceStore.getBoolean("pref_reels_unseen_only", true)
+
     fun animeExtensionUpdatesCount() = preferenceStore.getInt("animeext_updates_count", 0)
     fun mangaExtensionUpdatesCount() = preferenceStore.getInt("ext_updates_count", 0)
     fun novelExtensionUpdatesCount() = preferenceStore.getInt("novelext_updates_count", 0)

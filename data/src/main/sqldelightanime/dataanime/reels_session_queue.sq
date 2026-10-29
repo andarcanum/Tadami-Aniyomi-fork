@@ -1,0 +1,41 @@
+CREATE TABLE reels_session_queue(
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id, session_id, item_id),
+    UNIQUE (account_scope_id, source_id, session_id, ordinal),
+    FOREIGN KEY (account_scope_id, source_id)
+      REFERENCES reels_session(account_scope_id, source_id) ON DELETE CASCADE
+);
+
+maxOrdinal:
+SELECT MAX(ordinal)
+FROM reels_session_queue
+WHERE account_scope_id = :scope AND source_id = :sourceId AND session_id = :sessionId;
+
+rawQueueWindow:
+SELECT ordinal, item_id
+FROM reels_session_queue
+WHERE account_scope_id = :scope AND source_id = :sourceId AND session_id = :sessionId AND ordinal > :afterOrdinal
+ORDER BY ordinal ASC
+LIMIT :limit;
+
+append:
+INSERT OR IGNORE INTO reels_session_queue(
+    account_scope_id, source_id, session_id, item_id, ordinal
+)
+VALUES (?, ?, ?, ?, ?);
+
+deleteForSession:
+DELETE FROM reels_session_queue
+WHERE account_scope_id = :scope AND source_id = :sourceId AND session_id = :sessionId;
+
+deleteForScope:
+DELETE FROM reels_session_queue
+WHERE account_scope_id = :scope;
+
+deleteForSource:
+DELETE FROM reels_session_queue
+WHERE account_scope_id = :scope AND source_id = :sourceId;

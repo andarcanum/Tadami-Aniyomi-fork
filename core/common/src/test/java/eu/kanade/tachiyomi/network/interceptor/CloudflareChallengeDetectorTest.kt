@@ -126,4 +126,55 @@ class CloudflareChallengeDetectorTest {
             CloudflareChallengeDetector.classify(429, "cloudflare", null, body),
         )
     }
+
+    @Test
+    fun `isBlockingChallengePage detects challenge titles and active containers`() {
+        val justAMoment = "<html><head><title>Just a moment...</title></head><body>Checking...</body></html>"
+        val botVerification = "<html><head><title>Bot Verification</title></head><body>Checking...</body></html>"
+        val activeContainer = "<html><body><div id=\"challenge-stage\"></div></body></html>"
+        val errorTitle = "<html><body><span id=\"challenge-error-title\">Failed</span></body></html>"
+
+        assertTrue(CloudflareChallengeDetector.isBlockingChallengePage(justAMoment))
+        assertTrue(CloudflareChallengeDetector.isBlockingChallengePage(botVerification))
+        assertTrue(CloudflareChallengeDetector.isBlockingChallengePage(activeContainer))
+        assertTrue(CloudflareChallengeDetector.isBlockingChallengePage(errorTitle))
+    }
+
+    @Test
+    fun `isBlockingChallengePage does not falsely flag substantive chapter pages with turnstile comments`() {
+        val paragraphs = (1..50).joinToString("\n") { "<p>This is paragraph $it of a long chapter in the novel.</p>" }
+        val chapterWithTurnstileCommentForm = """
+            <!DOCTYPE html>
+            <html>
+            <head><title>Chapter 105 - The Dungeon Boss</title></head>
+            <body>
+            <h1>Chapter 105</h1>
+            $paragraphs
+            <form id="commentform">
+                <h3>Leave a comment</h3>
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAA"></div>
+            </form>
+            </body>
+            </html>
+        """.trimIndent()
+
+        // Substantive content (paragraphs) with comment widget must NOT be flagged as blocking challenge
+        assertTrue(chapterWithTurnstileCommentForm.length > 1000)
+        assertFalse(CloudflareChallengeDetector.isBlockingChallengePage(chapterWithTurnstileCommentForm))
+    }
+
+    @Test
+    fun `isBlockingChallengePage flags short pages dominated by turnstile challenge`() {
+        val shortTurnstilePage = """
+            <!DOCTYPE html>
+            <html>
+            <head><title>Verify</title></head>
+            <body>
+            <div class="cf-turnstile" data-sitekey="0x4AAAAAA"></div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        assertTrue(CloudflareChallengeDetector.isBlockingChallengePage(shortTurnstilePage))
+    }
 }

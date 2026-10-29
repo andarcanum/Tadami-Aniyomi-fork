@@ -482,6 +482,10 @@ class AnimeScreenModel(
                             }
                         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                             throw e
+                        } catch (e: OutOfMemoryError) {
+                            logcat(LogPriority.WARN) {
+                                "[AnimeScreenModel] External suggestions aborted (out of memory): ${e.message}"
+                            }
                         } catch (e: LinkageError) {
                             logcat {
                                 "[AnimeScreenModel] External suggestions failed (incompatible extension): ${e.message}"
@@ -519,6 +523,10 @@ class AnimeScreenModel(
                                 }
                             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                                 throw e
+                            } catch (e: OutOfMemoryError) {
+                                logcat(LogPriority.WARN) {
+                                    "[AnimeScreenModel] Native search fallback aborted (out of memory): ${e.message}"
+                                }
                             } catch (e: LinkageError) {
                                 logcat {
                                     "[AnimeScreenModel] Native search fallback failed (incompatible extension): ${e.message}"
@@ -557,6 +565,13 @@ class AnimeScreenModel(
                 }
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                 throw e
+            } catch (e: OutOfMemoryError) {
+                // Suggestions are decorative: never let a source that exhausted the heap
+                // take the whole process down while the user is merely reading an entry.
+                logcat(LogPriority.WARN) {
+                    "[AnimeScreenModel] Suggestions aborted (out of memory): ${e.message}"
+                }
+                updateSuccessState { it.copy(suggestions = SuggestionState.Empty()) }
             } catch (e: LinkageError) {
                 logcat { "AnimeScreenModel suggestions fetch failed (incompatible extension): ${e.message}" }
                 updateSuccessState {
@@ -765,6 +780,7 @@ class AnimeScreenModel(
                             }
                         }
                     }
+                    maybeOfferDownloadsCleanup()
                 }
             }
 
@@ -1678,6 +1694,7 @@ class AnimeScreenModel(
 
             if (seen) {
                 updateNewEpisodeIds(clearedIds = episodes.map { it.id })
+                maybeOfferDownloadsCleanup()
             }
 
             if (!seen || successState?.hasLoggedInTrackers == false || autoTrackState == AutoTrackState.NEVER) {
@@ -1787,15 +1804,73 @@ class AnimeScreenModel(
         screenModelScope.launchNonCancellable {
             try {
                 successState?.let { state ->
-                    downloadManager.deleteEpisodes(
-                        episodes,
-                        state.anime,
-                        state.source,
-                    )
+                    updateSuccessState {
+                        it.copy(deletionProgress = State.Success.EpisodeDeletionProgress(0, episodes.size))
+                    }
+                    val deleted = downloadManager.deleteEpisodes(episodes, state.anime, state.source) { done, total ->
+                        updateSuccessState {
+                            it.copy(deletionProgress = State.Success.EpisodeDeletionProgress(done, total))
+                        }
+                    }
+                    updateSuccessState { it.copy(deletionProgress = null) }
+                    runCatching {
+                        snackbarHostState.showSnackbar(
+                            message = context.stringResource(AYMR.strings.anime_delete_downloaded_done, deleted),
+                        )
+                    }
                 }
             } catch (e: Throwable) {
+                updateSuccessState { it.copy(deletionProgress = null) }
                 logcat(LogPriority.ERROR, e)
             }
+        }
+    }
+
+    fun deleteAllDownloadedEpisodes() {
+        val episodes = successState?.episodes
+            ?.filter { it.isDownloaded }
+            ?.map { it.episode }
+            ?: return
+        if (episodes.isNotEmpty()) showDeleteEpisodeDialog(episodes)
+    }
+
+    fun deleteWatchedDownloadedEpisodes() {
+        val episodes = successState?.episodes
+            ?.filter { it.isDownloaded && it.episode.seen }
+            ?.map { it.episode }
+            ?: return
+        if (episodes.isNotEmpty()) showDeleteEpisodeDialog(episodes)
+    }
+
+    fun hideDeletionProgress() {
+        updateSuccessState { it.copy(deletionProgress = null) }
+    }
+
+    private var downloadsCleanupOfferShown = false
+
+    /**
+     * One-shot, non-intrusive offer per screen instance: when the anime just became fully watched
+     * (or already is, on open) and still has downloads, suggest cleaning them up via the existing
+     * confirm dialog. Skipped when removeAfterMarkedAsRead is on — the auto-cleanup handles that.
+     */
+    private suspend fun maybeOfferDownloadsCleanup() {
+        if (downloadsCleanupOfferShown) return
+        if (downloadPreferences.removeAfterMarkedAsRead().get()) return
+        val state = successState ?: return
+        val downloadedEpisodes = state.episodes.filter { it.isDownloaded }
+        if (downloadedEpisodes.isEmpty()) return
+        if (!state.episodes.all { it.episode.seen }) return
+        downloadsCleanupOfferShown = true
+        val result = runCatching {
+            snackbarHostState.showSnackbar(
+                message = context.stringResource(AYMR.strings.anime_delete_downloaded_offer, downloadedEpisodes.size),
+                actionLabel = context.stringResource(MR.strings.action_delete),
+                duration = SnackbarDuration.Long,
+                withDismissAction = true,
+            )
+        }.getOrNull() ?: return
+        if (result == SnackbarResult.ActionPerformed) {
+            showDeleteEpisodeDialog(downloadedEpisodes.map { it.episode })
         }
     }
 
@@ -2385,6 +2460,14 @@ class AnimeScreenModel(
                 anime = currentState.anime,
                 source = currentState.anime.toCatalogueSource(),
             )
+        } catch (e: OutOfMemoryError) {
+            // Metadata payloads can be large enough to fail on an already tight heap. Stop the
+            // spinner and keep source-provided data instead of crashing or offering a retry that
+            // would immediately hit the same exhaustion.
+            logcat(LogPriority.WARN) { "Out of memory while loading anime metadata for anime $animeId" }
+            updateSuccessState {
+                it.copy(isMetadataLoading = false)
+            }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to load anime metadata for anime $animeId" }
 
@@ -2527,12 +2610,15 @@ class AnimeScreenModel(
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
             val suggestions: SuggestionState = SuggestionState.Idle,
+            val deletionProgress: EpisodeDeletionProgress? = null,
             /**
              * Display-only preview from source list (after getEpisodeList, before full sync).
              * Real persisted episodes come via the DB flow.
              */
             val episodeSourcePreview: List<EpisodeList.Item>? = null,
         ) : State {
+            @Immutable
+            data class EpisodeDeletionProgress(val deleted: Int, val total: Int)
 
             val processedSeasons by lazy {
                 seasons.applySeasonFilters(anime).toList()

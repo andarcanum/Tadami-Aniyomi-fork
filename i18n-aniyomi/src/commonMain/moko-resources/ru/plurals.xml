@@ -23,6 +23,18 @@
         <item quantity="many">%d глав</item>
         <item quantity="other">%d главы</item>
     </plurals>
+    <plurals name="anime_series_num_titles">
+        <item quantity="one">%d тайтл</item>
+        <item quantity="few">%d тайтла</item>
+        <item quantity="many">%d тайтлов</item>
+        <item quantity="other">%d тайтла</item>
+    </plurals>
+    <plurals name="anime_series_num_episodes">
+        <item quantity="one">%d эпизод</item>
+        <item quantity="few">%d эпизода</item>
+        <item quantity="many">%d эпизодов</item>
+        <item quantity="other">%d эпизода</item>
+    </plurals>
     <plurals name="novel_quotes_count_quotes">
         <item quantity="one">%d цитата</item>
         <item quantity="few">%d цитаты</item>

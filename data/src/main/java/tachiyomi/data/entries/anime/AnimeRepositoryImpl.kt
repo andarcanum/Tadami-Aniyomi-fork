@@ -4,9 +4,6 @@ import aniyomi.domain.anime.SeasonAnime
 import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.data.AnimeUpdateStrategyColumnAdapter
-import tachiyomi.data.FetchTypeColumnAdapter
-import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.domain.achievement.model.AchievementCategory
@@ -180,7 +177,7 @@ class AnimeRepositoryImpl(
                         author = updated.author,
                         description = updated.description,
                         notes = updated.notes,
-                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        genre = updated.genre,
                         title = updated.title,
                         status = updated.status,
                         thumbnailUrl = updated.thumbnailUrl,
@@ -197,10 +194,10 @@ class AnimeRepositoryImpl(
                         backgroundLastModified = updated.backgroundLastModified,
                         dateAdded = updated.dateAdded,
                         animeId = updated.id,
-                        updateStrategy = AnimeUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        updateStrategy = updated.updateStrategy,
                         version = updated.version,
                         isSyncing = 0,
-                        fetchType = FetchTypeColumnAdapter.encode(updated.fetchType),
+                        fetchType = updated.fetchType,
                         parentId = updated.parentId,
                         seasonFlags = updated.seasonFlags,
                         seasonNumber = updated.seasonNumber,
@@ -217,7 +214,7 @@ class AnimeRepositoryImpl(
                         author = updated.author,
                         description = updated.description,
                         notes = updated.notes,
-                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        genre = updated.genre,
                         title = updated.title,
                         status = updated.status,
                         thumbnailUrl = updated.thumbnailUrl,
@@ -234,10 +231,10 @@ class AnimeRepositoryImpl(
                         backgroundLastModified = updated.backgroundLastModified,
                         dateAdded = updated.dateAdded,
                         animeId = updated.id,
-                        updateStrategy = AnimeUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        updateStrategy = updated.updateStrategy,
                         version = updated.version,
                         isSyncing = 0,
-                        fetchType = FetchTypeColumnAdapter.encode(updated.fetchType),
+                        fetchType = updated.fetchType,
                         parentId = updated.parentId,
                         seasonFlags = updated.seasonFlags,
                         seasonNumber = updated.seasonNumber,
@@ -260,7 +257,7 @@ class AnimeRepositoryImpl(
                             author = updated.author,
                             description = updated.description,
                             notes = updated.notes,
-                            genre = updated.genre?.let(StringListColumnAdapter::encode),
+                            genre = updated.genre,
                             title = updated.title,
                             status = updated.status,
                             thumbnailUrl = updated.thumbnailUrl,
@@ -277,10 +274,10 @@ class AnimeRepositoryImpl(
                             backgroundLastModified = updated.backgroundLastModified,
                             dateAdded = updated.dateAdded,
                             animeId = updated.id,
-                            updateStrategy = AnimeUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                            updateStrategy = updated.updateStrategy,
                             version = updated.version,
                             isSyncing = 0,
-                            fetchType = FetchTypeColumnAdapter.encode(updated.fetchType),
+                            fetchType = updated.fetchType,
                             parentId = updated.parentId,
                             seasonFlags = updated.seasonFlags,
                             seasonNumber = updated.seasonNumber,
@@ -297,7 +294,13 @@ class AnimeRepositoryImpl(
     }
 
     override suspend fun insertAnime(anime: Anime): Long? {
-        return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
+        return handler.await(inTransaction = true) { db ->
+            val existing = db.animesQueries
+                .getAnimeByUrlAndSource(anime.url, anime.source, AnimeMapper::mapAnime)
+                .executeAsOneOrNull()
+            if (existing != null) {
+                return@await existing.id
+            }
             db.animesQueries.insert(
                 source = anime.source,
                 url = anime.url,
@@ -330,7 +333,7 @@ class AnimeRepositoryImpl(
                 seasonNumber = anime.seasonNumber,
                 seasonSourceOrder = anime.seasonSourceOrder,
             )
-            db.animesQueries.selectLastInsertedRowId()
+            db.animesQueries.selectLastInsertedRowId().executeAsOneOrNull()
         }
     }
 
@@ -429,7 +432,7 @@ class AnimeRepositoryImpl(
                     author = value.author,
                     description = value.description,
                     notes = value.notes,
-                    genre = value.genre?.let(StringListColumnAdapter::encode),
+                    genre = value.genre,
                     title = value.title,
                     status = value.status,
                     thumbnailUrl = value.thumbnailUrl,
@@ -446,10 +449,10 @@ class AnimeRepositoryImpl(
                     backgroundLastModified = value.backgroundLastModified,
                     dateAdded = value.dateAdded,
                     animeId = value.id,
-                    updateStrategy = value.updateStrategy?.let(AnimeUpdateStrategyColumnAdapter::encode),
+                    updateStrategy = value.updateStrategy,
                     version = value.version,
                     isSyncing = 0,
-                    fetchType = value.fetchType?.let(FetchTypeColumnAdapter::encode),
+                    fetchType = value.fetchType,
                     parentId = value.parentId,
                     seasonFlags = value.seasonFlags,
                     seasonNumber = value.seasonNumber,

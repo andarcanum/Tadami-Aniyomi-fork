@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -45,15 +46,21 @@ class ReelsAlbumScreenModel(
         val items: ImmutableList<ShortVideoItem> = persistentListOf(),
         val isLoading: Boolean = false,
         val canLoadMore: Boolean = true,
+        // First-load failure: nothing is rendered yet, retry reloads the SAME page/cursor.
         val error: String? = null,
+        // Append failure: the loaded grid stays usable and the error is transient.
+        val pageError: String? = null,
+        // The source lost the browse capability (or was uninstalled): not an empty album.
+        val unsupported: Boolean = false,
+        val nextPage: Int = 1,
+        val nextCursor: String? = null,
+        val cursorMode: Boolean = false,
         val watched: Set<String> = emptySet(),
         val progress: Map<String, Float> = emptyMap(),
         // Report fix: the AppBar save toggle observes the collection reactively.
         val isAlbumSaved: Boolean = false,
     )
 
-    private var nextPage = 1
-    private var nextCursor: String? = null
     private val seenIds = mutableSetOf<String>()
 
     init {
@@ -88,31 +95,64 @@ class ReelsAlbumScreenModel(
 
     /** Appends the next category-feed page; sticky-cursor protocol per contract v17. */
     fun loadMore() {
-        if (state.value.isLoading || !state.value.canLoadMore) return
+        val snapshot = state.value
+        if (snapshot.isLoading || !snapshot.canLoadMore || snapshot.unsupported) return
         val browse = sourceManager.get(sourceId) as? AnimeFeedBrowseSource
         if (browse == null) {
-            mutableState.update { it.copy(error = "Source unavailable", canLoadMore = false) }
+            mutableState.update {
+                it.copy(isLoading = false, canLoadMore = false, error = null, pageError = null, unsupported = true)
+            }
             return
         }
         mutableState.update { it.copy(isLoading = true, error = null) }
         screenModelScope.launch(ioDispatcher) {
             try {
-                val page = browse.getCategoryFeed(albumId, nextPage, nextCursor)
-                val fresh = page.videos.filter { seenIds.add(it.id) }
-                nextPage++
-                nextCursor = page.nextCursor
+                // Contract v17: the token is authoritative only once cursor mode is locked;
+                // before that the source always receives a null cursor.
+                val cursor = if (snapshot.cursorMode) snapshot.nextCursor else null
+                val page = browse.getCategoryFeed(albumId, snapshot.nextPage, cursor)
+                val fresh = page.videos.distinctBy { it.id }.filter { seenIds.add(it.id) }
                 mutableState.update { current ->
+                    val step = ReelsPagination(
+                        nextPage = current.nextPage,
+                        nextCursor = current.nextCursor,
+                        cursorMode = current.cursorMode,
+                        canLoadMore = current.canLoadMore,
+                    ).advance(page.hasNextPage, page.nextCursor)
+                    if (step.cursorLost) {
+                        logcat(LogPriority.WARN) {
+                            "Album $albumId dropped its cursor mid-feed; stopping pagination (contract v17)."
+                        }
+                    }
                     current.copy(
                         items = (current.items + fresh).toImmutableList(),
                         isLoading = false,
-                        canLoadMore = page.hasNextPage,
+                        error = null,
+                        pageError = null,
+                        canLoadMore = step.pagination.canLoadMore,
+                        nextPage = step.pagination.nextPage,
+                        nextCursor = step.pagination.nextCursor,
+                        cursorMode = step.pagination.cursorMode,
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (t: Throwable) {
-                logcat(LogPriority.ERROR, throwable = t) { "Failed to load album $albumId page $nextPage" }
-                mutableState.update { it.copy(isLoading = false, error = t.localizedMessage.orEmpty()) }
+                logcat(LogPriority.ERROR, throwable = t) { "Failed to load album $albumId page ${snapshot.nextPage}" }
+                mutableState.update { current ->
+                    // Pagination inputs were not advanced, so a retry repeats this page/cursor.
+                    if (current.items.isEmpty()) {
+                        current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
+                    } else {
+                        current.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
+                    }
+                }
             }
         }
+    }
+
+    fun onPageErrorShown() {
+        mutableState.update { it.copy(pageError = null) }
     }
 
     fun markWatched(videoId: String) {

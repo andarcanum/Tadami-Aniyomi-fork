@@ -139,12 +139,16 @@ internal fun buildWebReaderSelectionJavascript(
                     }
                 } catch (e) {}
 
+                const viewport = window.visualViewport;
+                const viewportLeft = viewport ? viewport.offsetLeft : 0;
+                const viewportTop = viewport ? viewport.offsetTop : 0;
                 const payload = JSON.stringify({
                     text: text,
-                    left: rect.left,
-                    top: rect.top,
-                    right: rect.right,
-                    bottom: rect.bottom,
+                    left: rect.left - viewportLeft,
+                    top: rect.top - viewportTop,
+                    right: rect.right - viewportLeft,
+                    bottom: rect.bottom - viewportTop,
+                    viewportWidth: viewport ? viewport.width : window.innerWidth,
                     domId: domId,
                     charStart: charStart,
                     charEnd: charEnd,
@@ -198,29 +202,39 @@ internal class NovelReaderSelectionBridge(
             return
         }
         val selectedText = payload.optString("text").orEmpty()
-        val selection = if (selectedText.isBlank()) {
-            null
-        } else {
-            val locationOnScreen = IntArray(2)
-            view.getLocationOnScreen(locationOnScreen)
-            NovelSelectedTextSelection(
-                sessionId = selectionSessionIdProvider(),
-                renderer = NovelSelectedTextRenderer.WEBVIEW,
-                text = selectedText,
-                anchor = NovelSelectedTextAnchor(
-                    leftPx = locationOnScreen[0] + payload.optDouble("left").toInt(),
-                    topPx = locationOnScreen[1] + payload.optDouble("top").toInt(),
-                    rightPx = locationOnScreen[0] + payload.optDouble("right").toInt(),
-                    bottomPx = locationOnScreen[1] + payload.optDouble("bottom").toInt(),
-                ),
-                selectionAnchor = parseNovelSelectionAnchor(
-                    domId = payload.optString("domId").takeIf { it.isNotBlank() },
-                    charStart = payload.optInt("charStart", -1),
-                    charEndExclusive = payload.optInt("charEnd", -1),
-                ),
-            )
-        }
         view.post {
+            // JavascriptInterface calls arrive off-main: geometry and session state are UI work.
+            val selection = if (selectedText.isBlank()) {
+                null
+            } else {
+                val locationOnScreen = IntArray(2)
+                view.getLocationOnScreen(locationOnScreen)
+                val cssScale = resolveNovelWebSelectionScale(
+                    viewWidthPx = view.width,
+                    viewportWidthCss = payload.optDouble("viewportWidth"),
+                    fallbackDensity = view.resources.displayMetrics.density,
+                )
+                fun coordinate(name: String, origin: Int): Int {
+                    val css = payload.optDouble(name).takeIf { it.isFinite() } ?: 0.0
+                    return origin + (css * cssScale).roundToInt()
+                }
+                NovelSelectedTextSelection(
+                    sessionId = selectionSessionIdProvider(),
+                    renderer = NovelSelectedTextRenderer.WEBVIEW,
+                    text = selectedText,
+                    anchor = NovelSelectedTextAnchor(
+                        leftPx = coordinate("left", locationOnScreen[0]),
+                        topPx = coordinate("top", locationOnScreen[1]),
+                        rightPx = coordinate("right", locationOnScreen[0]),
+                        bottomPx = coordinate("bottom", locationOnScreen[1]),
+                    ),
+                    selectionAnchor = parseNovelSelectionAnchor(
+                        domId = payload.optString("domId").takeIf { it.isNotBlank() },
+                        charStart = payload.optInt("charStart", -1),
+                        charEndExclusive = payload.optInt("charEnd", -1),
+                    ),
+                )
+            }
             if (view is NovelReaderWebView) {
                 view.localSelection = selection
                 if (selection == null) {
@@ -320,34 +334,87 @@ internal fun WebView.resolveCurrentWebViewProgressPercent(
     )
 }
 
+private val novelReaderScrollRestoreRequests = java.util.WeakHashMap<WebView, Any>()
+
+private const val NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS = 2_000L
+
+/** Invalidates any in-flight restore so its retries and completion cannot outlive this document. */
+internal fun WebView.cancelReaderScrollRestore() {
+    novelReaderScrollRestoreRequests.remove(this)
+}
+
 internal fun WebView.restoreWebViewScroll(
     progressPercent: Int,
     maxAttempts: Int = 14,
     onComplete: ((restored: Boolean) -> Unit)? = null,
 ) {
-    if (progressPercent <= 0) {
-        onComplete?.invoke(true)
-        return
-    }
-
-    fun attemptRestore(attempt: Int) {
-        val totalScrollable = resolveWebViewTotalScrollablePx(
-            contentHeightPx = resolveWebViewContentHeightPx(),
-            viewHeightPx = height,
-        )
-        if (totalScrollable <= 0 && attempt < maxAttempts) {
-            postDelayed({ attemptRestore(attempt + 1) }, 42L)
-            return
-        }
-        val restored = totalScrollable > 0
-        if (restored) {
-            val targetY = ((progressPercent.toFloat() / 100f) * totalScrollable.toFloat()).roundToInt()
-            scrollTo(0, targetY.coerceIn(0, totalScrollable))
-        }
+    val request = Any()
+    novelReaderScrollRestoreRequests[this] = request
+    val documentToken = SystemClock.elapsedRealtimeNanos().toString()
+    val deadlineUptimeMs = SystemClock.uptimeMillis() + NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS
+    var finished = false
+    var previousHeight = -1
+    var stableSamples = 0
+    fun isCurrent(): Boolean = novelReaderScrollRestoreRequests[this] === request
+    fun finish(restored: Boolean) {
+        if (finished || !isCurrent()) return
+        finished = true
+        novelReaderScrollRestoreRequests.remove(this)
         onComplete?.invoke(restored)
     }
-
-    post { attemptRestore(0) }
+    fun attemptRestore(attempt: Int) {
+        if (!isCurrent() || finished) return
+        // The height can stay unstable forever on a still-loading page; the deadline guarantees
+        // the reveal callback runs instead of leaving the document hidden.
+        if (SystemClock.uptimeMillis() >= deadlineUptimeMs) {
+            finish(false)
+            return
+        }
+        evaluateJavascript(
+            "document.documentElement && document.documentElement.getAttribute('data-an-reader-restore-id')",
+        ) { rawToken ->
+            if (!isCurrent() || finished) return@evaluateJavascript
+            // A replacement document has a different root even when its base URL is identical.
+            if (rawToken != JSONObject.quote(documentToken)) {
+                // Do not run a stale completion callback against the replacement chapter.
+                finished = true
+                novelReaderScrollRestoreRequests.remove(this)
+                return@evaluateJavascript
+            }
+            val totalScrollable = resolveWebViewTotalScrollablePx(
+                contentHeightPx = resolveWebViewContentHeightPx(),
+                viewHeightPx = height,
+            )
+            stableSamples = if (totalScrollable == previousHeight && height > 0) stableSamples + 1 else 0
+            previousHeight = totalScrollable
+            if ((height <= 0 || stableSamples < 2) && attempt < maxAttempts.coerceAtLeast(0)) {
+                postDelayed({ attemptRestore(attempt + 1) }, 42L)
+                return@evaluateJavascript
+            }
+            val targetY = ((progressPercent.coerceIn(0, 100) / 100f) * totalScrollable).roundToInt()
+            // Restoring zero must actively return a reused WebView to the top.
+            scrollTo(0, targetY.coerceIn(0, totalScrollable.coerceAtLeast(0)))
+            finish(height > 0 && (progressPercent <= 0 || totalScrollable > 0))
+        }
+    }
+    postDelayed({ finish(false) }, NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS)
+    evaluateJavascript(
+        """
+        (function() {
+            const root = document.documentElement;
+            if (!root) return null;
+            root.setAttribute('data-an-reader-restore-id', '$documentToken');
+            return '$documentToken';
+        })();
+        """.trimIndent(),
+    ) { rawToken ->
+        if (!isCurrent()) return@evaluateJavascript
+        if (rawToken == JSONObject.quote(documentToken)) {
+            post { attemptRestore(0) }
+        } else {
+            finish(false)
+        }
+    }
 }
 
 internal fun WebView.revealReaderDocumentAndWebView(hideUntilReveal: Boolean = true) {

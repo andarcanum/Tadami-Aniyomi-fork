@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.home
 import eu.kanade.domain.ui.model.HomeHeroMode
 import eu.kanade.tachiyomi.data.discovery.extractSeriesKey
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.junit.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
@@ -129,6 +130,30 @@ class HomeHubDiscoveryRotationTest {
 
         shouldRenderHomeHubHeroSlot(
             heroPresentation = HomeHeroMode.Stage,
+            hasHero = true,
+            reserveHeroSlot = false,
+            hasDiscovery = false,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `shouldRenderHomeHubHeroSlot renders hybrid when hero is null but discovery is present`() {
+        shouldRenderHomeHubHeroSlot(
+            heroPresentation = HomeHeroMode.Hybrid,
+            hasHero = false,
+            reserveHeroSlot = false,
+            hasDiscovery = true,
+        ) shouldBe true
+
+        shouldRenderHomeHubHeroSlot(
+            heroPresentation = HomeHeroMode.Hybrid,
+            hasHero = false,
+            reserveHeroSlot = false,
+            hasDiscovery = false,
+        ) shouldBe false
+
+        shouldRenderHomeHubHeroSlot(
+            heroPresentation = HomeHeroMode.Hybrid,
             hasHero = true,
             reserveHeroSlot = false,
             hasDiscovery = false,
@@ -369,5 +394,245 @@ class HomeHubDiscoveryRotationTest {
         extractSeriesKey("Spy x Family Part 2", "spy x family part 2") shouldBe "spy x family"
         extractSeriesKey("Attack on Titan: The Final Season", "attack on titan: the final season") shouldBe
             "attack on titan"
+    }
+
+    @Test
+    fun `exhausted pool larger than window rotates selection by offset`() {
+        val pool = (1..10).map { suggestion("title$it") }
+        val shown = pool.map { it.cleanTitle }.toSet()
+        val cutoffMap = pool.mapIndexed { idx, item -> item.cleanTitle to 100L * (idx + 1) }.toMap()
+        val window1 =
+            selectFreshTeaserItems(pool, shownTitles = shown, count = 5, offset = 0, shownCutoffMap = cutoffMap)
+        val window2 =
+            selectFreshTeaserItems(pool, shownTitles = shown, count = 5, offset = 5, shownCutoffMap = cutoffMap)
+        window2.map { it.cleanTitle }.toSet() shouldNotBe window1.map { it.cleanTitle }.toSet()
+    }
+
+    private fun discoveryItem(title: String, type: DiscoveryRowType = DiscoveryRowType.TREND) = HomeHubDiscoveryItem(
+        title = title,
+        cleanTitle = title.lowercase(),
+        coverUrl = null,
+        seedTitle = null,
+        reasonPayload = null,
+        provider = "test",
+        rowType = type,
+        mediaType = DiscoveryMediaType.MANGA,
+    )
+
+    @Test
+    fun `patchAfterLocalLike replaces liked card with first available candidate from persistent pool at same index`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+        val persistedPool = listOf(
+            discoveryItem("Card 1"),
+            discoveryItem("Card 2"),
+            discoveryItem("Card 3"),
+            discoveryItem("Card 4"),
+            discoveryItem("Card 5"),
+        )
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "card 2",
+            targetCount = 3,
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 4", "Card 3")
+    }
+
+    @Test
+    fun `patchAfterLocalLike skips candidates already in current teaser or in dismissed set`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+        val persistedPool = listOf(
+            discoveryItem("Card 1"),
+            discoveryItem("Card 2"),
+            discoveryItem("Card 3"),
+            discoveryItem("Card 4"),
+            discoveryItem("Card 5"),
+        )
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "card 2",
+            targetCount = 3,
+            dismissedTitles = setOf("card 4"),
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 5", "Card 3")
+    }
+
+    @Test
+    fun `patchAfterLocalLike removes card and shrinks list when no candidates available in persistent pool`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+        val persistedPool = listOf(
+            discoveryItem("Card 1"),
+            discoveryItem("Card 2"),
+            discoveryItem("Card 3"),
+        )
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "card 2",
+            targetCount = 3,
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 3")
+    }
+
+    @Test
+    fun `patchAfterLocalLike returns unchanged list when liked title is not in current teaser`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"))
+        val persistedPool = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "nonexistent",
+            targetCount = 2,
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 2")
+    }
+
+    @Test
+    fun `reduceDismissTeaserCard updates discovery list in HomeHubUiState using patchAfterLocalLike`() {
+        val state = HomeHubUiState(
+            userName = "User",
+            userAvatar = "",
+            greeting = tachiyomi.i18n.MR.strings.app_name,
+            greetingReady = true,
+            isLoading = false,
+            showWelcome = false,
+            discovery = listOf(discoveryItem("Card 1"), discoveryItem("Card 2")),
+            discoveryPool = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3")),
+        )
+
+        val updated = state.reduceDismissTeaserCard(likedCleanTitle = "card 1")
+        updated.discovery.map { it.title } shouldBe listOf("Card 3", "Card 2")
+        updated.discoveryPool.map { it.title } shouldBe listOf("Card 1", "Card 2", "Card 3")
+    }
+
+    @Test
+    fun `restoreTeaserItem replaces last candidate or inserts restored item at target count`() {
+        val item1 = discoveryItem("Card 1")
+        val item2 = discoveryItem("Card 2")
+        val restored = discoveryItem("Card Restored")
+
+        val current = listOf(item1, item2)
+        val result = restoreTeaserItem(current, restored, targetCount = 2)
+
+        result.size shouldBe 2
+        result.any { it.cleanTitle == "card restored" } shouldBe true
+        result[1].title shouldBe "Card Restored"
+    }
+
+    @Test
+    fun `restoreTeaserItem returns unchanged list when restored item already in current list`() {
+        val item1 = discoveryItem("Card 1")
+        val item2 = discoveryItem("Card 2")
+
+        val current = listOf(item1, item2)
+        val result = restoreTeaserItem(current, item1, targetCount = 2)
+
+        result shouldBe current
+    }
+
+    @Test
+    fun `pruneDismissedSessionTitles keeps size under maximum limit`() {
+        val titles = (1..150).map { "item$it" }.toSet()
+        val pruned = pruneDismissedSessionTitles(titles, maxLimit = 100, keepRecent = 50)
+        pruned.size shouldBe 50
+        pruned shouldBe (101..150).map { "item$it" }.toSet()
+    }
+
+    @Test
+    fun `pruneDismissedSessionTitles returns original set if below maximum limit`() {
+        val titles = setOf("a", "b", "c")
+        pruneDismissedSessionTitles(titles, maxLimit = 100, keepRecent = 50) shouldBe titles
+    }
+
+    @Test
+    fun `patchTeaserItems preserves card position but refreshes metadata from pool`() {
+        val oldCard1 = discoveryItem("Card 1").copy(coverUrl = "old_cover_1")
+        val oldCard2 = discoveryItem("Card 2").copy(coverUrl = "old_cover_2")
+        val currentItems = listOf(oldCard1, oldCard2)
+
+        val freshSug1 = suggestion("Card 1").copy(coverUrl = "new_cover_1", genres = listOf("Action"))
+        val freshSug2 = suggestion("Card 2").copy(coverUrl = "new_cover_2", genres = listOf("Comedy"))
+        val pool = listOf(freshSug1, freshSug2)
+
+        val result = patchTeaserItems(
+            currentItems = currentItems,
+            pool = pool,
+            validCleanTitles = setOf("card 1", "card 2"),
+            targetCount = 2,
+            shownTitles = emptySet(),
+            shownCutoffMap = emptyMap(),
+        )
+
+        result.size shouldBe 2
+        result[0].cleanTitle shouldBe "card 1"
+        result[0].coverUrl shouldBe "new_cover_1"
+        result[0].genres shouldBe listOf("Action")
+        result[1].cleanTitle shouldBe "card 2"
+        result[1].coverUrl shouldBe "new_cover_2"
+        result[1].genres shouldBe listOf("Comedy")
+    }
+
+    @Test
+    fun `selectFreshTeaserItems shownOnScreen never jumps ahead of shownNotCurrent`() {
+        val pool = listOf(
+            suggestion("Card 1"),
+            suggestion("Card 2"),
+            suggestion("Card 3"),
+            suggestion("Card 4"),
+        )
+        val shownTitles = setOf("card 1", "card 2", "card 3", "card 4")
+        val shownCutoffMap = mapOf(
+            "card 1" to 100L,
+            "card 2" to 200L,
+            "card 3" to 300L,
+            "card 4" to 400L,
+        )
+        val currentTitles = setOf("card 1", "card 2")
+
+        val result = selectFreshTeaserItems(
+            pool = pool,
+            shownTitles = shownTitles,
+            count = 3,
+            offset = 1,
+            shownCutoffMap = shownCutoffMap,
+            currentTitles = currentTitles,
+        )
+
+        val nonCurrentCleanTitles = setOf("card 3", "card 4")
+        val firstIndexNotCurrent = result.indexOfFirst { it.cleanTitle in nonCurrentCleanTitles }
+        val firstIndexOnScreen = result.indexOfFirst { it.cleanTitle in currentTitles }
+
+        firstIndexNotCurrent shouldBe 0
+        (firstIndexOnScreen > firstIndexNotCurrent) shouldBe true
+    }
+
+    @Test
+    fun `selectFreshTeaserItems franchise clustering backfills up to count`() {
+        val pool = listOf(
+            suggestion("Jujutsu Kaisen Season 2"),
+            suggestion("Jujutsu Kaisen: Shibuya Incident"),
+            suggestion("Dungeon Meshi"),
+            suggestion("Chainsaw Man"),
+        )
+        val result = selectFreshTeaserItems(
+            pool = pool,
+            shownTitles = emptySet(),
+            count = 3,
+            offset = 0,
+            shownCutoffMap = emptyMap(),
+            currentTitles = emptySet(),
+        )
+
+        result.size shouldBe 3
+        result.map { it.title } shouldBe listOf("Jujutsu Kaisen Season 2", "Dungeon Meshi", "Chainsaw Man")
     }
 }

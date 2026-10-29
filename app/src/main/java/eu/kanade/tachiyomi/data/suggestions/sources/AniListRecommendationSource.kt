@@ -112,6 +112,7 @@ class AniListRecommendationSource(
                                         siteUrl
                                         title { romaji english native }
                                         coverImage { large }
+                                        genres
                                     }
                                 }
                             }
@@ -300,6 +301,10 @@ class AniListRecommendationSource(
 
                 val thumbnailUrl = rec["coverImage"]?.jsonObject?.get("large")?.jsonPrimitive?.contentOrNull
 
+                val recGenres = rec["genres"]?.jsonArray
+                    ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                    .orEmpty()
+
                 SuggestionItem(
                     title = recTitle,
                     searchQueries = listOf(recTitle),
@@ -311,6 +316,7 @@ class AniListRecommendationSource(
                     reason = SuggestionReason.EXTERNAL_ANILIST,
                     // Статус выпуска рекомендации — для строгого пост-фильтра ленты.
                     releaseStatus = rec["status"]?.jsonPrimitive?.contentOrNull,
+                    genres = recGenres,
                 )
             }
         } else {
@@ -365,6 +371,7 @@ class AniListRecommendationSource(
                                         siteUrl
                                         title { romaji english native }
                                         coverImage { large }
+                                        genres
                                     }
                                 }
                             }

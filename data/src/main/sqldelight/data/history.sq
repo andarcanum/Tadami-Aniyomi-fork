@@ -101,3 +101,13 @@ SELECT COUNT(*)
 FROM history H
 INNER JOIN chapters C ON H.chapter_id = C._id
 WHERE C.manga_id = :mangaId;
+
+getAllHistoryWithChapter:
+SELECT
+C.manga_id,
+C.url,
+H.last_read,
+H.time_read
+FROM history H
+JOIN chapters C
+ON H.chapter_id = C._id;

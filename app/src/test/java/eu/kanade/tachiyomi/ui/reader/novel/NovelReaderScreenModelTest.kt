@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
@@ -78,6 +79,9 @@ import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
@@ -947,6 +951,68 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `update content keeps runtime resolved tts engine when preference is blank`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Original paragraph</p>",
+                ),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(ttsEnabled = true),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val ttsController = getPrivateField<NovelTtsController>(screenModel, "ttsController")
+            // In JVM tests the engine init never completes, so the runtime stays parked after
+            // publishing the loading state; waiting for it makes the seeding below race-free.
+            withTimeout(1_000) {
+                while (!ttsController.snapshot().isLoadingVoices) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            // Model the resolved runtime state (TTS enabled, engine auto-selected, locale picked)
+            // that the controller publishes while TTS is active.
+            ttsController.setTtsUiStateFromReader(
+                state.ttsUiState.copy(
+                    enabled = true,
+                    selectedEnginePackage = "com.google.android.tts",
+                    selectedLocaleTag = "en-GB",
+                ),
+            )
+
+            invokePrivateUpdateContent(
+                target = screenModel,
+                settings = state.readerSettings.copy(ttsEnabled = true),
+            )
+
+            val updated = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            updated.ttsUiState.enabled shouldBe true
+            updated.ttsUiState.selectedEnginePackage shouldBe "com.google.android.tts"
+            updated.ttsUiState.selectedLocaleTag shouldBe "en-GB"
+        }
+    }
+
+    @Test
     fun `disable tts updates preference and reader state`() {
         runBlocking {
             val novelReaderPreferences = createNovelReaderPreferences(
@@ -1746,6 +1812,53 @@ class NovelReaderScreenModelTest {
                 activityDataRepository.recordReading(
                     id = chapter.id,
                     chaptersCount = 1,
+                    durationMs = match { it >= 0L },
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `re-reading already read chapter records reading duration with zero chapter count`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                read = true,
+                lastPageRead = 0L,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+            val activityDataRepository = mockk<ActivityDataRepository>(relaxed = true)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+                activityDataRepository = activityDataRepository,
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            Thread.sleep(50)
+            screenModel.updateReadingProgress(currentIndex = 9, totalItems = 10)
+            screenModel.awaitPendingProgressPersistence()
+            yield()
+
+            coVerify {
+                activityDataRepository.recordReading(
+                    id = chapter.id,
+                    chaptersCount = 0,
                     durationMs = match { it >= 0L },
                 )
             }
@@ -3243,6 +3356,37 @@ class NovelReaderScreenModelTest {
                     tachiyomi.domain.book.novel.interactor.GetNovelHighlights(highlightRepository),
                 )
             }
+
+        runCatching { Injekt.get<tachiyomi.domain.discovery.repository.DiscoveryRepository>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.discovery.repository.DiscoveryRepository>(),
+                    mockk(relaxed = true),
+                )
+            }
+
+        runCatching { Injekt.get<DownloadPreferences>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<DownloadPreferences>(),
+                    DownloadPreferences(PersistingPreferenceStore()),
+                )
+            }
+
+        val novelCategoryRepository = runCatching { Injekt.get<NovelCategoryRepository>() }
+            .getOrElse {
+                mockk<NovelCategoryRepository>(relaxed = true).also {
+                    Injekt.addSingleton(fullType<NovelCategoryRepository>(), it)
+                }
+            }
+
+        runCatching { Injekt.get<GetNovelCategories>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<GetNovelCategories>(),
+                    GetNovelCategories(novelCategoryRepository),
+                )
+            }
     }
 
     private class ReactivePreferenceStore : PreferenceStore {
@@ -3738,5 +3882,197 @@ class NovelReaderScreenModelTest {
         // Chapter 90 is outside the default window radius (50) from Chapter 1
         screenModel.downloadChapter(90L)
         coVerify { downloadManager.downloadChapter(match { it.id == novel.id }, match { it.id == 90L }) }
+    }
+
+    @Test
+    fun `book adopt chapter updates published state and chapter lists without state desynchronization`() = runBlocking {
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Test Novel")
+        val chapterA = NovelChapter.create().copy(
+            id = 1L,
+            novelId = 1L,
+            name = "Chapter 1",
+            url = "https://example.org/ch1",
+            sourceOrder = 0L,
+        )
+        val chapterB = NovelChapter.create().copy(
+            id = 2L,
+            novelId = 1L,
+            name = "Chapter 2",
+            url = "https://example.org/ch2",
+            sourceOrder = 1L,
+        )
+        val chapters = listOf(chapterA, chapterB)
+        val chapterRepo = FakeNovelChapterRepository(
+            chapter = chapterA,
+            chaptersByNovel = chapters,
+        )
+        val screenModel = trackedNovelReaderScreenModel(
+            chapterId = chapterA.id,
+            novelChapterRepository = chapterRepo,
+            getNovel = GetNovel(FakeNovelRepository(novel)),
+            sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+            pluginAssetBindings = emptyPluginAssetBindings(),
+            novelReaderPreferences = createNovelReaderPreferences(),
+            isSystemDark = { false },
+        )
+        withTimeout(1_000) {
+            while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                yield()
+            }
+        }
+        val initialSuccess = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        initialSuccess.chapter.id shouldBe chapterA.id
+        screenModel.bookCurrentChapter()?.id shouldBe chapterA.id
+
+        // Adopt Chapter B
+        screenModel.bookAdoptBookModeChapter(chapterB.id)
+
+        val successB = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        successB.chapter.id shouldBe chapterB.id
+        screenModel.bookCurrentChapter()?.id shouldBe chapterB.id
+        successB.previousChapterId shouldBe chapterA.id
+        successB.chapterOrderList.map { it.id }.contains(chapterB.id) shouldBe true
+        screenModel.getChapterOrderList().map { it.id }.contains(chapterB.id) shouldBe true
+
+        // Adopt Chapter A again
+        screenModel.bookAdoptBookModeChapter(chapterA.id)
+
+        val successA = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        successA.chapter.id shouldBe chapterA.id
+        screenModel.bookCurrentChapter()?.id shouldBe chapterA.id
+        successA.nextChapterId shouldBe chapterB.id
+        successA.chapterOrderList.map { it.id }.contains(chapterA.id) shouldBe true
+        screenModel.getChapterOrderList().map { it.id }.contains(chapterA.id) shouldBe true
+    }
+
+    @Test
+    fun `bookmark toggle round trip updates snapshots and writes false on second click`() =
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Test Novel")
+            val chapterA = NovelChapter.create().copy(
+                id = 1L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                sourceOrder = 0L,
+                bookmark = false,
+            )
+            val chapterB = NovelChapter.create().copy(
+                id = 2L,
+                novelId = 1L,
+                name = "Chapter 2",
+                url = "https://example.org/ch2",
+                sourceOrder = 1L,
+                bookmark = false,
+            )
+            val chapters = listOf(chapterA, chapterB)
+            val chapterRepo = FakeNovelChapterRepository(
+                chapter = chapterA,
+                chaptersByNovel = chapters,
+            )
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapterA.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+            val initialSuccess = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            initialSuccess.chapter.id shouldBe chapterA.id
+            screenModel.bookCurrentChapter()?.bookmark shouldBe false
+
+            // First click: bookmark Chapter A (false -> true)
+            screenModel.toggleChapterBookmark()
+            yield()
+
+            screenModel.bookCurrentChapter()?.bookmark shouldBe true
+            chapterRepo.lastUpdate?.bookmark shouldBe true
+
+            val successAfterFirst = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            successAfterFirst.chapter.bookmark shouldBe true
+            successAfterFirst.chapterOrderList.first { it.id == chapterA.id }.bookmark shouldBe true
+            successAfterFirst.fullChapterOrderList.first { it.id == chapterA.id }.bookmark shouldBe true
+            screenModel.getChapterOrderList().first { it.id == chapterA.id }.bookmark shouldBe true
+            screenModel.bookFullChapterOrderList().first { it.id == chapterA.id }.bookmark shouldBe true
+
+            // Adopt Chapter B
+            screenModel.bookAdoptBookModeChapter(chapterB.id)
+            val successB = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            successB.chapter.id shouldBe chapterB.id
+            screenModel.bookCurrentChapter()?.id shouldBe chapterB.id
+
+            // Return to Chapter A (A -> B -> A)
+            screenModel.bookAdoptBookModeChapter(chapterA.id)
+            val successReturnedA = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            successReturnedA.chapter.id shouldBe chapterA.id
+            screenModel.bookCurrentChapter()?.id shouldBe chapterA.id
+            screenModel.bookCurrentChapter()?.bookmark shouldBe true
+            successReturnedA.chapter.bookmark shouldBe true
+            successReturnedA.chapterOrderList.first { it.id == chapterA.id }.bookmark shouldBe true
+            successReturnedA.fullChapterOrderList.first { it.id == chapterA.id }.bookmark shouldBe true
+
+            // Second click: unbookmark Chapter A (true -> false)
+            screenModel.toggleChapterBookmark()
+            yield()
+
+            screenModel.bookCurrentChapter()?.bookmark shouldBe false
+            chapterRepo.lastUpdate?.bookmark shouldBe false
+
+            val successAfterSecond = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            successAfterSecond.chapter.bookmark shouldBe false
+            successAfterSecond.chapterOrderList.first { it.id == chapterA.id }.bookmark shouldBe false
+            successAfterSecond.fullChapterOrderList.first { it.id == chapterA.id }.bookmark shouldBe false
+            screenModel.getChapterOrderList().first { it.id == chapterA.id }.bookmark shouldBe false
+            screenModel.bookFullChapterOrderList().first { it.id == chapterA.id }.bookmark shouldBe false
+        }
+
+    @Test
+    fun `tts settings enable webview javascript when follow along or highlight is active`() = runBlocking {
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Test Novel")
+        val chapter = NovelChapter.create().copy(id = 1L, novelId = 1L, name = "Ch 1", url = "/c1")
+        val chapterRepo = FakeNovelChapterRepository(chapter)
+
+        suspend fun checkEnableJs(
+            ttsEnabled: Boolean,
+            followAlong: Boolean,
+            highlightMode: NovelTtsHighlightMode,
+        ): Boolean {
+            val prefs = createNovelReaderPreferences(
+                selectedTextTranslationEnabled = false,
+                ttsEnabled = ttsEnabled,
+            ).also {
+                it.ttsFollowAlong().set(followAlong)
+                it.ttsHighlightMode().set(highlightMode)
+            }
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            return state.enableJs
+        }
+
+        // Cases: off/off -> false; on/follow -> true; on/highlight -> true; on/noFollow/OFF -> false
+        checkEnableJs(ttsEnabled = false, followAlong = false, highlightMode = NovelTtsHighlightMode.OFF) shouldBe false
+        checkEnableJs(ttsEnabled = true, followAlong = true, highlightMode = NovelTtsHighlightMode.OFF) shouldBe true
+        checkEnableJs(ttsEnabled = true, followAlong = false, highlightMode = NovelTtsHighlightMode.EXACT) shouldBe true
+        checkEnableJs(ttsEnabled = true, followAlong = false, highlightMode = NovelTtsHighlightMode.OFF) shouldBe false
     }
 }

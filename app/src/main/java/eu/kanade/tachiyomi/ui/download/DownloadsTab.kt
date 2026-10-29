@@ -36,6 +36,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +92,7 @@ import eu.kanade.tachiyomi.ui.download.manga.mangaDownloadTab
 import eu.kanade.tachiyomi.ui.download.novel.NovelDownloadQueueScreenModel
 import eu.kanade.tachiyomi.ui.download.novel.novelDownloadTab
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.launch
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.i18n.MR
@@ -226,8 +228,24 @@ data object DownloadsTab : Tab {
             derivedStateOf { novelDownloadsState.queueCount }
         }
 
-        val queueTabs = downloadQueueTabs()
+        val showAnimeSection by uiPreferences.showAnimeSection().preferenceCollectAsState()
+        val showMangaSection by uiPreferences.showMangaSection().preferenceCollectAsState()
+        val showNovelSection by uiPreferences.showNovelSection().preferenceCollectAsState()
+
+        val queueTabs = remember(showAnimeSection, showMangaSection, showNovelSection) {
+            downloadQueueTabs(
+                showAnimeSection = showAnimeSection,
+                showMangaSection = showMangaSection,
+                showNovelSection = showNovelSection,
+            )
+        }
         val state = rememberPagerState { queueTabs.size }
+
+        LaunchedEffect(queueTabs) {
+            if (state.currentPage >= queueTabs.size) {
+                state.scrollToPage(0)
+            }
+        }
         val snackbarHostState = remember { SnackbarHostState() }
         val currentDownloadCount by remember(
             state.currentPage,
@@ -237,10 +255,11 @@ data object DownloadsTab : Tab {
             novelDownloadCount,
         ) {
             derivedStateOf {
-                when (queueTabs[state.currentPage]) {
+                when (queueTabs.getOrNull(state.currentPage) ?: queueTabs.firstOrNull()) {
                     DownloadQueueTab.ANIME -> animeDownloadCount
                     DownloadQueueTab.MANGA -> mangaDownloadCount
                     DownloadQueueTab.NOVEL -> novelDownloadCount
+                    null -> 0
                 }
             }
         }
@@ -280,7 +299,7 @@ data object DownloadsTab : Tab {
                             },
                             onNavigateUp = navigator::pop,
                             actions = {
-                                when (queueTabs[state.currentPage]) {
+                                when (queueTabs.getOrNull(state.currentPage) ?: queueTabs.firstOrNull()) {
                                     DownloadQueueTab.ANIME -> AnimeActions(
                                         animeScreenModel = animeScreenModel,
                                         animeDownloadList = animeDownloadList,
@@ -297,6 +316,7 @@ data object DownloadsTab : Tab {
                                         isAurora = true,
                                         onOpenFolder = { openDownloadFolder(context, "novels") },
                                     )
+                                    null -> Unit
                                 }
                             },
                         )
@@ -321,7 +341,7 @@ data object DownloadsTab : Tab {
                             },
                             navigateUp = navigator::pop,
                             actions = {
-                                when (queueTabs[state.currentPage]) {
+                                when (queueTabs.getOrNull(state.currentPage) ?: queueTabs.firstOrNull()) {
                                     DownloadQueueTab.ANIME -> AnimeActions(
                                         animeScreenModel = animeScreenModel,
                                         animeDownloadList = animeDownloadList,
@@ -338,6 +358,7 @@ data object DownloadsTab : Tab {
                                         isAurora = false,
                                         onOpenFolder = { openDownloadFolder(context, "novels") },
                                     )
+                                    null -> Unit
                                 }
                             },
                             scrollBehavior = scrollBehavior,
@@ -353,60 +374,70 @@ data object DownloadsTab : Tab {
                     ),
                 ) {
                     if (isAurora) {
-                        val auroraTabs = remember(animeDownloadCount, mangaDownloadCount, novelDownloadCount) {
-                            persistentListOf(
-                                TabContent(
-                                    titleRes = AYMR.strings.label_anime,
-                                    badgeNumber = animeDownloadCount,
-                                    content = { _, _ -> },
-                                ),
-                                TabContent(
-                                    titleRes = AYMR.strings.label_manga,
-                                    badgeNumber = mangaDownloadCount,
-                                    content = { _, _ -> },
-                                ),
-                                TabContent(
-                                    titleRes = AYMR.strings.label_novel,
-                                    badgeNumber = novelDownloadCount,
-                                    content = { _, _ -> },
-                                ),
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .zIndex(1f),
-                        ) {
-                            AuroraTabRow(
-                                tabs = auroraTabs,
-                                selectedIndex = state.currentPage,
-                                onTabSelected = { index ->
-                                    scope.launch { state.animateScrollToPage(index) }
-                                },
-                                scrollable = false,
-                            )
+                        val auroraTabs =
+                            remember(queueTabs, animeDownloadCount, mangaDownloadCount, novelDownloadCount) {
+                                queueTabs.map { tab ->
+                                    when (tab) {
+                                        DownloadQueueTab.ANIME -> TabContent(
+                                            titleRes = AYMR.strings.label_anime,
+                                            badgeNumber = animeDownloadCount,
+                                            content = { _, _ -> },
+                                        )
+                                        DownloadQueueTab.MANGA -> TabContent(
+                                            titleRes = AYMR.strings.label_manga,
+                                            badgeNumber = mangaDownloadCount,
+                                            content = { _, _ -> },
+                                        )
+                                        DownloadQueueTab.NOVEL -> TabContent(
+                                            titleRes = AYMR.strings.label_novel,
+                                            badgeNumber = novelDownloadCount,
+                                            content = { _, _ -> },
+                                        )
+                                    }
+                                }.toPersistentList()
+                            }
+                        if (queueTabs.size > 1) {
+                            Box(
+                                modifier = Modifier
+                                    .zIndex(1f),
+                            ) {
+                                AuroraTabRow(
+                                    tabs = auroraTabs,
+                                    selectedIndex = state.currentPage.coerceIn(
+                                        0,
+                                        (auroraTabs.size - 1).coerceAtLeast(0),
+                                    ),
+                                    onTabSelected = { index ->
+                                        scope.launch { state.animateScrollToPage(index) }
+                                    },
+                                    scrollable = false,
+                                )
+                            }
                         }
                     } else {
-                        PrimaryTabRow(
-                            selectedTabIndex = state.currentPage,
-                            modifier = Modifier.zIndex(1f),
-                        ) {
-                            queueTabs.forEachIndexed { index, tab ->
-                                val (label, badgeCount) = when (tab) {
-                                    DownloadQueueTab.ANIME -> AYMR.strings.label_anime to animeDownloadCount
-                                    DownloadQueueTab.MANGA -> AYMR.strings.label_manga to mangaDownloadCount
-                                    DownloadQueueTab.NOVEL -> AYMR.strings.label_novel to novelDownloadCount
+                        if (queueTabs.size > 1) {
+                            PrimaryTabRow(
+                                selectedTabIndex = state.currentPage.coerceIn(0, (queueTabs.size - 1).coerceAtLeast(0)),
+                                modifier = Modifier.zIndex(1f),
+                            ) {
+                                queueTabs.forEachIndexed { index, tab ->
+                                    val (label, badgeCount) = when (tab) {
+                                        DownloadQueueTab.ANIME -> AYMR.strings.label_anime to animeDownloadCount
+                                        DownloadQueueTab.MANGA -> AYMR.strings.label_manga to mangaDownloadCount
+                                        DownloadQueueTab.NOVEL -> AYMR.strings.label_novel to novelDownloadCount
+                                    }
+                                    Tab(
+                                        selected = state.currentPage == index,
+                                        onClick = { scope.launch { state.animateScrollToPage(index) } },
+                                        text = {
+                                            TabText(
+                                                text = stringResource(label),
+                                                badgeCount = badgeCount,
+                                            )
+                                        },
+                                        unselectedContentColor = MaterialTheme.colorScheme.onSurface,
+                                    )
                                 }
-                                Tab(
-                                    selected = state.currentPage == index,
-                                    onClick = { scope.launch { state.animateScrollToPage(index) } },
-                                    text = {
-                                        TabText(
-                                            text = stringResource(label),
-                                            badgeCount = badgeCount,
-                                        )
-                                    },
-                                    unselectedContentColor = MaterialTheme.colorScheme.onSurface,
-                                )
                             }
                         }
                     }
@@ -448,7 +479,7 @@ data object DownloadsTab : Tab {
                         verticalAlignment = Alignment.Top,
                         pageNestedScrollConnection = nestedScrollConnection,
                     ) { page ->
-                        when (queueTabs[page]) {
+                        when (queueTabs.getOrNull(page)) {
                             DownloadQueueTab.ANIME -> animeDownloadTab(
                                 nestedScrollConnection,
                             ).content(
@@ -467,6 +498,7 @@ data object DownloadsTab : Tab {
                                 PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                                 snackbarHostState,
                             )
+                            null -> Unit
                         }
                     }
                 }
@@ -812,10 +844,20 @@ internal enum class DownloadQueueTab {
     NOVEL,
 }
 
-internal fun downloadQueueTabs(): List<DownloadQueueTab> {
-    return listOf(
-        DownloadQueueTab.ANIME,
-        DownloadQueueTab.MANGA,
-        DownloadQueueTab.NOVEL,
-    )
+internal fun downloadQueueTabs(
+    showAnimeSection: Boolean = true,
+    showMangaSection: Boolean = true,
+    showNovelSection: Boolean = true,
+): List<DownloadQueueTab> {
+    return buildList {
+        if (showAnimeSection) add(DownloadQueueTab.ANIME)
+        if (showMangaSection) add(DownloadQueueTab.MANGA)
+        if (showNovelSection) add(DownloadQueueTab.NOVEL)
+    }.ifEmpty {
+        listOf(
+            DownloadQueueTab.ANIME,
+            DownloadQueueTab.MANGA,
+            DownloadQueueTab.NOVEL,
+        )
+    }
 }

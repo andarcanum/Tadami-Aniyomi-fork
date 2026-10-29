@@ -34,6 +34,10 @@ ON CONFLICT(media_type, clean_title) DO UPDATE SET
 delete:
 DELETE FROM discovery_signals WHERE media_type = ? AND clean_title = ?;
 
+deleteHideByTitle:
+DELETE FROM discovery_signals
+WHERE media_type = ? AND clean_title = ? AND signal = 'hide';
+
 deleteAllByMedia:
 DELETE FROM discovery_signals WHERE media_type = ?;
 
@@ -43,11 +47,40 @@ DELETE FROM discovery_signals;
 countByMedia:
 SELECT COUNT(*) FROM discovery_signals WHERE media_type = ?;
 
-selectConsumedByMedia:
-SELECT * FROM discovery_signals WHERE media_type = ? AND signal = 'consumed' ORDER BY created_at ASC;
+countLiveByMedia:
+SELECT COUNT(*)
+FROM discovery_signals
+WHERE media_type = ?
+  AND signal NOT IN ('consumed', 'consumed_liked', 'consumed_added');
 
-evictOldest:
+selectConsumedByMedia:
+SELECT * FROM discovery_signals WHERE media_type = ? AND signal IN ('consumed', 'consumed_liked', 'consumed_added') ORDER BY created_at ASC;
+
+countConsumedByMedia:
+SELECT COUNT(*) FROM discovery_signals
+WHERE media_type = ? AND signal IN ('consumed', 'consumed_liked', 'consumed_added');
+
+evictOldestLive:
 DELETE FROM discovery_signals WHERE media_type = ? AND clean_title IN (
-    SELECT clean_title FROM discovery_signals WHERE media_type = ?
-    ORDER BY created_at ASC LIMIT ?
+    SELECT clean_title FROM discovery_signals
+    WHERE media_type = ? AND signal NOT IN ('consumed', 'consumed_liked', 'consumed_added')
+    ORDER BY created_at ASC, clean_title ASC LIMIT ?
 );
+
+evictOldestConsumed:
+DELETE FROM discovery_signals WHERE media_type = ? AND clean_title IN (
+    SELECT clean_title FROM discovery_signals
+    WHERE media_type = ? AND signal IN ('consumed', 'consumed_liked', 'consumed_added')
+    ORDER BY created_at ASC, clean_title ASC LIMIT ?
+);
+
+updateMetadataIfMatchesCreatedAt:
+UPDATE discovery_signals
+SET
+    genres = ?,
+    provider = ?,
+    source_key = ?
+WHERE media_type = ?
+  AND clean_title = ?
+  AND created_at = ?
+  AND signal = 'like';

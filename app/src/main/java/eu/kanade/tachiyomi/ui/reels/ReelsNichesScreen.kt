@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,9 +18,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -101,40 +105,76 @@ data class ReelsNichesScreen(
                     )
                 else -> {
                     val gridState = rememberLazyGridState()
+                    val visible = state.visibleCategories
                     val nearEnd by remember {
                         derivedStateOf {
                             val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                            last >= state.categories.size - 4
+                            // Read through state so the predicate follows filter changes.
+                            last >= state.visibleCategories.size - 4
                         }
                     }
                     LaunchedEffect(nearEnd, state.canLoadMore) {
                         if (nearEnd && state.canLoadMore) model.loadMore()
                     }
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(110.dp),
-                        state = gridState,
-                        contentPadding = padding,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp),
-                    ) {
-                        items(state.categories, key = { it.id }) { category ->
-                            NicheCell(
-                                category = category,
-                                saved = category.id in state.savedAlbumIds,
-                                onToggleSaved = { model.toggleAlbumSaved(category) },
-                                onClick = {
-                                    navigator.push(
-                                        ReelsFeedScreen(
-                                            sourceId = sourceId,
-                                            nicheId = category.id,
-                                            nicheName = category.name,
-                                        ),
-                                    )
-                                },
+                    Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                        // Local filter over the whole directory: typing never triggers a feed
+                        // search request, it only narrows the already loaded catalog.
+                        OutlinedTextField(
+                            value = state.searchQuery,
+                            onValueChange = model::onSearchQueryChange,
+                            singleLine = true,
+                            placeholder = { Text(stringResource(MR.strings.reels_niches_search)) },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (state.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { model.onSearchQueryChange("") }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = null,
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                        if (visible.isEmpty()) {
+                            EmptyScreen(
+                                stringRes = MR.strings.reels_niches_search_empty,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
                             )
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(110.dp),
+                                state = gridState,
+                                contentPadding = PaddingValues(bottom = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp),
+                            ) {
+                                items(visible, key = { it.id }) { category ->
+                                    NicheCell(
+                                        category = category,
+                                        saved = category.id in state.savedAlbumIds,
+                                        onToggleSaved = { model.toggleAlbumSaved(category) },
+                                        onClick = {
+                                            navigator.push(
+                                                ReelsFeedScreen(
+                                                    sourceId = sourceId,
+                                                    nicheId = category.id,
+                                                    nicheName = category.name,
+                                                ),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }

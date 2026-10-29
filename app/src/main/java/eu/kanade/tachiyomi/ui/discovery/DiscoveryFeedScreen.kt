@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Warning
@@ -41,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,15 +64,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
@@ -100,8 +106,10 @@ import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.entries.suggestions.toDirectEntryScreenOrNull
 import eu.kanade.tachiyomi.ui.entries.suggestions.toGlobalSearchScreen
+import eu.kanade.tachiyomi.ui.home.HomeDiscoveryExposureTracker
 import eu.kanade.tachiyomi.ui.home.discoveryReasonText
 import eu.kanade.tachiyomi.ui.home.toHomeHubDiscoveryItem
+import eu.kanade.tachiyomi.ui.home.trackDiscoveryExposure
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -156,6 +164,28 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
         var longPressItem by remember { mutableStateOf<DiscoverySuggestion?>(null) }
         val trendingSource = remember { CompositeTrendingSource() }
 
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var isResumed by remember(lifecycleOwner) {
+            mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                isResumed = event.targetState.isAtLeast(Lifecycle.State.RESUMED)
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        val exposureTracker = remember(screenModel, scope) {
+            HomeDiscoveryExposureTracker(scope) { homeItem ->
+                screenModel.markItemExposed(homeItem.cleanTitle)
+            }
+        }
+        LaunchedEffect(isResumed) {
+            if (!isResumed) {
+                exposureTracker.onPauseOrInactive()
+            }
+        }
+
         val navigateFor: (DiscoverySuggestion) -> Unit = { item ->
             scope.launch {
                 if (item.rowType == DiscoveryRowType.SOURCE) {
@@ -206,17 +236,21 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
             // Выбранный таб могли скрыть в настройках после открытия экрана — контент
             // и табы показывают effectiveTab (fallback MIX), чтобы не было пустого разрыва.
             val effectiveTab = if (tab in state.visibleTabs) tab else FeedSignalTab.MIX
+            val feedItems = remember(state, effectiveTab, provider) {
+                screenModel.displayedItems(effectiveTab, provider)
+            }
             FeedBody(
                 state = state,
                 hazeState = hazeState,
-                tab = effectiveTab,
-                provider = provider,
+                items = feedItems,
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
                     top = if (topBarHeightDp > 0.dp) topBarHeightDp + 8.dp else 140.dp,
                     bottom = 24.dp,
                 ),
+                exposureTracker = exposureTracker,
+                isResumed = isResumed,
                 // Прямое открытие plugin-bound карточки; guard от повторного тапа
                 // на время резолва, fallback в шторку при неполной привязке/ошибке.
                 onItemClick = { item ->
@@ -264,14 +298,20 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                                 .background(colors.surface)
                                 .border(1.dp, colors.divider)
                         } else {
-                            Modifier.hazeEffect(
-                                state = hazeState,
-                                style = HazeStyle(
-                                    backgroundColor = colors.background,
-                                    tint = HazeTint(colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f)),
-                                    blurRadius = 22.dp,
-                                    noiseFactor = 0.10f,
-                                ),
+                            Modifier.hazeBlur(
+                                input = HazeInput.Sources(hazeState),
+                                style = HazeBlurStyle {
+                                    backgroundColor(colors.background)
+                                    colorEffects(
+                                        listOf(
+                                            HazeColorEffect.tint(
+                                                colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f),
+                                            ),
+                                        ),
+                                    )
+                                    blurRadius(22.dp)
+                                    noiseFactor(0.10f)
+                                },
                             )
                         },
                     )
@@ -290,11 +330,16 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                         state = state,
                         onBack = { navigator.pop() },
                         onRefresh = {
-                            val cooldown = screenModel.refreshNow()
-                            if (cooldown > 0L) {
-                                context.toast(
-                                    context.contextStringResource(AYMR.strings.for_you_refresh_cooldown, cooldown),
-                                )
+                            if (state.isRefreshing) {
+                                screenModel.cancelRefresh()
+                                context.toast(context.contextStringResource(MR.strings.action_cancel))
+                            } else {
+                                val cooldown = screenModel.rotateOrRefreshFeed(effectiveTab)
+                                if (cooldown > 0L) {
+                                    context.toast(
+                                        context.contextStringResource(AYMR.strings.for_you_refresh_cooldown, cooldown),
+                                    )
+                                }
                             }
                         },
                     )
@@ -327,7 +372,10 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                     FeedTabs(
                         tab = effectiveTab,
                         counts = tabCounts,
-                        onTab = { tab = it },
+                        onTab = {
+                            tab = it
+                            screenModel.onTabSelected(it)
+                        },
                         visibleTabs = state.visibleTabs,
                     )
                     FeedProviderChips(
@@ -370,7 +418,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                         navigateFor(item)
                     },
                     onHide = {
-                        screenModel.hide(item)
+                        screenModel.hide(item, effectiveTab)
                         sheetItem = null
                     },
                     hazeState = hazeState,
@@ -379,9 +427,9 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
             longPressItem?.let { lpItem ->
                 eu.kanade.tachiyomi.ui.home.DiscoveryHideOptionsSheet(
                     itemTitle = lpItem.title,
-                    tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(lpItem.rowType, lpItem.reason),
+                    tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(lpItem.genres, lpItem.rowType, lpItem.reason),
                     onHide = {
-                        screenModel.hide(lpItem)
+                        screenModel.hide(lpItem, effectiveTab)
                         longPressItem = null
                     },
                     onBlacklistTag = { tag ->
@@ -395,7 +443,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                     },
                     onMarkConsumed = {
                         longPressItem = null
-                        screenModel.recordConsumed(lpItem)
+                        screenModel.recordConsumed(lpItem, effectiveTab)
                     },
                 )
             }
@@ -412,12 +460,16 @@ private fun FeedToolbar(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val (labelKind, labelValue) = resolveUpdatedLabel(state.lastUpdatedAt, System.currentTimeMillis())
-    val updatedLabel = when (labelKind) {
-        UpdatedLabelKind.MINUTES ->
-            stringResource(AYMR.strings.for_you_updated_minutes, labelValue?.toInt() ?: 0)
-        UpdatedLabelKind.HOURS ->
-            stringResource(AYMR.strings.for_you_updated_hours, labelValue?.toInt() ?: 0)
-        UpdatedLabelKind.NEVER -> stringResource(AYMR.strings.for_you_updated_never)
+    val updatedLabel = if (state.isRefreshing && !state.progressText.isNullOrBlank()) {
+        state.progressText
+    } else {
+        when (labelKind) {
+            UpdatedLabelKind.MINUTES ->
+                stringResource(AYMR.strings.for_you_updated_minutes, labelValue?.toInt() ?: 0)
+            UpdatedLabelKind.HOURS ->
+                stringResource(AYMR.strings.for_you_updated_hours, labelValue?.toInt() ?: 0)
+            UpdatedLabelKind.NEVER -> stringResource(AYMR.strings.for_you_updated_never)
+        }
     }
     Row(
         Modifier
@@ -464,7 +516,6 @@ private fun FeedToolbar(
                 .size(44.dp)
                 .clip(CircleShape)
                 .clickable(
-                    enabled = !state.isRefreshing,
                     interactionSource = remember { MutableInteractionSource() },
                     indication = ripple(bounded = false, radius = 22.dp),
                     onClick = {
@@ -475,11 +526,19 @@ private fun FeedToolbar(
             contentAlignment = Alignment.Center,
         ) {
             if (state.isRefreshing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = colors.accent,
-                    strokeWidth = 2.dp,
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = colors.accent,
+                        strokeWidth = 2.dp,
+                    )
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(MR.strings.action_cancel),
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
             } else {
                 Icon(
                     Icons.Filled.Refresh,
@@ -734,9 +793,10 @@ private fun FeedProviderChips(
 private fun FeedBody(
     state: DiscoveryFeedUiState,
     hazeState: HazeState,
-    tab: FeedSignalTab,
-    provider: String?,
+    items: List<DiscoverySuggestion>,
     contentPadding: PaddingValues,
+    exposureTracker: HomeDiscoveryExposureTracker,
+    isResumed: Boolean,
     onItemClick: (DiscoverySuggestion) -> Unit,
     onItemLongClick: (DiscoverySuggestion) -> Unit,
     onItemAdd: (DiscoverySuggestion) -> Unit,
@@ -750,9 +810,6 @@ private fun FeedBody(
     val similarTemplate = stringResource(AYMR.strings.for_you_reason_similar)
     val trendTemplate = stringResource(AYMR.strings.for_you_reason_trending)
     val nextTemplate = stringResource(AYMR.strings.for_you_reason_season_next)
-    val items = remember(state, tab, provider) {
-        filterByProvider(itemsForTab(state, tab), provider)
-    }
 
     when {
         state.isLoading -> Box(
@@ -832,6 +889,12 @@ private fun FeedBody(
                     isAdding = item.title in state.addingTitles,
                     coverMediaType = state.mediaType,
                     coverRecoveryTick = state.coverRecoveryTick,
+                    modifier = Modifier.trackDiscoveryExposure(
+                        tracker = exposureTracker,
+                        item = homeItem,
+                        isSectionActive = true,
+                        isResumed = isResumed,
+                    ),
                     onClick = {
                         appHaptics.tap()
                         onItemClick(item)
@@ -857,6 +920,7 @@ private fun FeedCard(
     isAdding: Boolean,
     coverMediaType: DiscoveryMediaType,
     coverRecoveryTick: Int,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onAdd: () -> Unit,
@@ -897,7 +961,7 @@ private fun FeedCard(
     }
 
     Column(
-        Modifier
+        modifier
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .clip(containerShape)
             .background(if (isDark) colors.glass.copy(alpha = 0.10f) else colors.cardBackground)

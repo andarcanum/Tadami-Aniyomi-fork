@@ -107,6 +107,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.applyFilter
 import tachiyomi.domain.entries.manga.interactor.GetDuplicateLibraryManga
 import tachiyomi.domain.entries.manga.interactor.GetMangaWithChapters
@@ -124,6 +125,7 @@ import tachiyomi.domain.items.chapter.service.getChapterSort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.domain.metadata.model.MetadataSource
+import tachiyomi.domain.series.manga.interactor.RemoveMangaFromSeries
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.track.manga.interactor.GetMangaTracks
 import tachiyomi.i18n.MR
@@ -156,6 +158,7 @@ class MangaScreenModel(
     private val setMangaChapterFlags: SetMangaChapterFlags = Injekt.get(),
     private val setMangaDefaultChapterFlags: SetMangaDefaultChapterFlags = Injekt.get(),
     private val setReadStatus: SetReadStatus = Injekt.get(),
+    private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val updateChapter: UpdateChapter = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
     private val syncChaptersWithSource: SyncChaptersWithSource = Injekt.get(),
@@ -171,6 +174,7 @@ class MangaScreenModel(
     private val sourceMangaRatingFetcher: SourceMangaRatingFetcher = Injekt.get(),
     private val suggestionCoordinator: SuggestionCoordinator = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
+    private val removeMangaFromSeries: RemoveMangaFromSeries = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<MangaScreenModel.State>(State.Loading) {
 
@@ -340,6 +344,10 @@ class MangaScreenModel(
                             }
                         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                             throw e
+                        } catch (e: OutOfMemoryError) {
+                            logcat(LogPriority.WARN) {
+                                "[MangaScreenModel] External suggestions aborted (out of memory): ${e.message}"
+                            }
                         } catch (e: LinkageError) {
                             logcat {
                                 "[MangaScreenModel] External suggestions failed (incompatible extension): ${e.message}"
@@ -377,6 +385,10 @@ class MangaScreenModel(
                                 }
                             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                                 throw e
+                            } catch (e: OutOfMemoryError) {
+                                logcat(LogPriority.WARN) {
+                                    "[MangaScreenModel] Native search fallback aborted (out of memory): ${e.message}"
+                                }
                             } catch (e: LinkageError) {
                                 logcat {
                                     "[MangaScreenModel] Native search fallback failed (incompatible extension): ${e.message}"
@@ -415,6 +427,13 @@ class MangaScreenModel(
                 }
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                 throw e
+            } catch (e: OutOfMemoryError) {
+                // Suggestions are decorative: never let a source that exhausted the heap
+                // take the whole process down while the user is merely reading an entry.
+                logcat(LogPriority.WARN) {
+                    "[MangaScreenModel] Suggestions aborted (out of memory): ${e.message}"
+                }
+                updateSuccessState { it.copy(suggestions = SuggestionState.Empty()) }
             } catch (e: LinkageError) {
                 logcat { "MangaScreenModel suggestions fetch failed (incompatible extension): ${e.message}" }
                 updateSuccessState {
@@ -639,6 +658,7 @@ class MangaScreenModel(
                         }
                     }
                 }
+                maybeOfferDownloadsCleanup()
             }
 
             val fetchFromSourceTasks = if (screenModelScope.isActive) {
@@ -945,6 +965,14 @@ class MangaScreenModel(
                 manga = currentState.manga,
                 source = currentState.manga.toCatalogueSource(),
             )
+        } catch (e: OutOfMemoryError) {
+            // Metadata payloads can be large enough to fail on an already tight heap. Stop the
+            // spinner and keep source-provided data instead of crashing or offering a retry that
+            // would immediately hit the same exhaustion.
+            logcat(LogPriority.WARN) { "Out of memory while loading manga metadata for manga $mangaId" }
+            updateSuccessState {
+                it.copy(isMetadataLoading = false)
+            }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to load manga metadata for manga $mangaId" }
             val error = when {
@@ -1004,6 +1032,7 @@ class MangaScreenModel(
             if (isFavorited) {
                 // Remove from library
                 if (updateManga.awaitUpdateFavorite(manga.id, false)) {
+                    removeMangaFromSeries.await(manga.id)
                     // Remove covers and update last modified in db
                     if (manga.removeCovers() != manga) {
                         updateManga.awaitUpdateCoverLastModified(manga.id)
@@ -1657,6 +1686,7 @@ class MangaScreenModel(
 
             if (read) {
                 updateNewChapterIds(clearedIds = chapters.map { it.id })
+                maybeOfferDownloadsCleanup()
             }
 
             if (!read || successState?.hasLoggedInTrackers == false || autoTrackState == AutoTrackState.NEVER) {
@@ -1747,15 +1777,73 @@ class MangaScreenModel(
         screenModelScope.launchNonCancellable {
             try {
                 successState?.let { state ->
-                    downloadManager.deleteChapters(
-                        chapters,
-                        state.manga,
-                        state.source,
-                    )
+                    updateSuccessState {
+                        it.copy(deletionProgress = State.Success.ChapterDeletionProgress(0, chapters.size))
+                    }
+                    val deleted = downloadManager.deleteChapters(chapters, state.manga, state.source) { done, total ->
+                        updateSuccessState {
+                            it.copy(deletionProgress = State.Success.ChapterDeletionProgress(done, total))
+                        }
+                    }
+                    updateSuccessState { it.copy(deletionProgress = null) }
+                    runCatching {
+                        snackbarHostState.showSnackbar(
+                            message = context.stringResource(AYMR.strings.novel_delete_downloaded_done, deleted),
+                        )
+                    }
                 }
             } catch (e: Throwable) {
+                updateSuccessState { it.copy(deletionProgress = null) }
                 logcat(LogPriority.ERROR, e)
             }
+        }
+    }
+
+    fun deleteAllDownloadedChapters() {
+        val chapters = successState?.chapters
+            ?.filter { it.isDownloaded }
+            ?.map { it.chapter }
+            ?: return
+        if (chapters.isNotEmpty()) showDeleteChapterDialog(chapters)
+    }
+
+    fun deleteReadDownloadedChapters() {
+        val chapters = successState?.chapters
+            ?.filter { it.isDownloaded && it.chapter.read }
+            ?.map { it.chapter }
+            ?: return
+        if (chapters.isNotEmpty()) showDeleteChapterDialog(chapters)
+    }
+
+    fun hideDeletionProgress() {
+        updateSuccessState { it.copy(deletionProgress = null) }
+    }
+
+    private var downloadsCleanupOfferShown = false
+
+    /**
+     * One-shot, non-intrusive offer per screen instance: when the manga just became fully read
+     * (or already is, on open) and still has downloads, suggest cleaning them up via the existing
+     * confirm dialog. Skipped when removeAfterMarkedAsRead is on — the auto-cleanup handles that.
+     */
+    private suspend fun maybeOfferDownloadsCleanup() {
+        if (downloadsCleanupOfferShown) return
+        if (downloadPreferences.removeAfterMarkedAsRead().get()) return
+        val state = successState ?: return
+        val downloadedChapters = state.chapters.filter { it.isDownloaded }
+        if (downloadedChapters.isEmpty()) return
+        if (!state.chapters.all { it.chapter.read }) return
+        downloadsCleanupOfferShown = true
+        val result = runCatching {
+            snackbarHostState.showSnackbar(
+                message = context.stringResource(AYMR.strings.novel_delete_downloaded_offer, downloadedChapters.size),
+                actionLabel = context.stringResource(MR.strings.action_delete),
+                duration = SnackbarDuration.Long,
+                withDismissAction = true,
+            )
+        }.getOrNull() ?: return
+        if (result == SnackbarResult.ActionPerformed) {
+            showDeleteChapterDialog(downloadedChapters.map { it.chapter })
         }
     }
 
@@ -2098,9 +2186,13 @@ class MangaScreenModel(
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
             val suggestions: SuggestionState = SuggestionState.Idle,
+            val deletionProgress: ChapterDeletionProgress? = null,
             /** Display-only preview from source list (after getChapterList, before full sync). Real persisted chapters come via DB flow. */
             val chapterSourcePreview: List<ChapterList.Item>? = null,
         ) : State {
+            @Immutable
+            data class ChapterDeletionProgress(val deleted: Int, val total: Int)
+
             val processedChapters by lazy {
                 val displayChapters = chapterSourcePreview ?: chapters
                 displayChapters.applyFilters(manga).toList()

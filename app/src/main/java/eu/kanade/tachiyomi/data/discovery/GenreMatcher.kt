@@ -150,6 +150,30 @@ object GenreMatcher {
     }
 
     /**
+     * Строгое сопоставление жанров для ограничений (blacklist, ignored, required):
+     * 1. Семантическое равенство через канонический жанр [GenreOntology].
+     * 2. Точное совпадение нормализованных форм/романизаций и основ (без Левенштейна и разбивки на токены).
+     */
+    fun matchesConstraint(constraintGenre: String, itemGenre: String): Boolean {
+        val poolA = matchPool(constraintGenre)
+        val poolB = matchPool(itemGenre)
+        if (poolA.isEmpty() || poolB.isEmpty()) return false
+
+        // 1. Семантический мост онтологии: совпадение канонических категорий
+        val canonA = canonicalsOf(poolA)
+        val canonB = canonicalsOf(poolB)
+        if (canonA.isNotEmpty() && canonB.isNotEmpty() && canonA.intersect(canonB).isNotEmpty()) return true
+
+        // 2. Прямое пересечение нормализованных форм (включая романизации и мягкие основы)
+        if (poolA.intersect(poolB).isNotEmpty()) return true
+
+        return false
+    }
+
+    /** Нестрогий/поисковый матчинг (алиас к [matches]). */
+    fun matchesSearch(userGenre: String, sourceGenre: String): Boolean = matches(userGenre, sourceGenre)
+
+    /**
      * Какие чекбоксы жанров источника проставить под список пользовательских жанров.
      * Прямая замена строгого сравнения в фильтрах каталога: мусор с любой стороны
      * просто не попадает в результат. Сетевой fallback — [GenreTranslationFallback].

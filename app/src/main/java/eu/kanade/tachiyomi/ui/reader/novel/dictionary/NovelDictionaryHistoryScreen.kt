@@ -93,10 +93,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
@@ -134,7 +135,7 @@ import tachiyomi.core.common.i18n.stringResource as contextStringResource
  * and a lightweight flashcard review mode.
  *
  * Visual language: Aurora glass via `haze` (same stack as the Aurora navigation bar).
- * Content is a haze source; chips / cards / FAB / review panel apply hazeEffect blur + tint.
+ * Content is a haze source; chips / cards / FAB / review panel apply haze blur + tint.
  */
 class NovelDictionaryHistoryScreen : Screen() {
 
@@ -205,13 +206,13 @@ private fun dictionaryHazeStyle(
     tint: Color,
     blurRadius: Dp = 22.dp,
     noiseFactor: Float = 0.10f,
-): HazeStyle {
-    return HazeStyle(
-        backgroundColor = colors.background,
-        tint = HazeTint(tint),
-        blurRadius = blurRadius,
-        noiseFactor = noiseFactor,
-    )
+): HazeBlurStyle {
+    return HazeBlurStyle {
+        backgroundColor(colors.background)
+        colorEffects(listOf(HazeColorEffect.tint(tint)))
+        blurRadius(blurRadius)
+        noiseFactor(noiseFactor)
+    }
 }
 
 /**
@@ -240,8 +241,8 @@ private fun Modifier.dictionaryGlass(
     }
     var result = this
         .clip(shape)
-        .hazeEffect(
-            state = hazeState,
+        .hazeBlur(
+            input = HazeInput.Sources(hazeState),
             style = dictionaryHazeStyle(colors, tint = tint, blurRadius = blurRadius),
         )
     when {

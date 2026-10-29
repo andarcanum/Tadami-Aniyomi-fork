@@ -5,6 +5,8 @@ import data.History
 import data.Mangas
 import dataanime.Animehistory
 import dataanime.Animes
+import dataanime.Reels_candidate
+import dataanime.Reels_consumption
 import datanovel.Novel_history
 import datanovel.Novels
 import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
@@ -97,6 +99,16 @@ class StatsReadCountSqlTest {
             reels_hiddenAdapter = dataanime.Reels_hidden.Adapter(hidden_atAdapter = DateColumnAdapter),
             reels_albumsAdapter = dataanime.Reels_albums.Adapter(added_atAdapter = DateColumnAdapter),
             reels_album_watchedAdapter = dataanime.Reels_album_watched.Adapter(marked_atAdapter = DateColumnAdapter),
+            reels_consumptionAdapter = Reels_consumption.Adapter(
+                watched_qualified_atAdapter = DateColumnAdapter,
+                skipped_forward_atAdapter = DateColumnAdapter,
+                last_action_atAdapter = DateColumnAdapter,
+            ),
+            reels_candidateAdapter = Reels_candidate.Adapter(
+                discovered_atAdapter = DateColumnAdapter,
+                last_validated_atAdapter = DateColumnAdapter,
+                retry_afterAdapter = DateColumnAdapter,
+            ),
         )
 
         db.animesQueries.insertAnime(id = 1)

@@ -176,6 +176,7 @@ import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.series.anime.AnimeSeriesScreen
 import eu.kanade.tachiyomi.ui.series.manga.MangaSeriesScreen
 import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreen
 import kotlinx.collections.immutable.persistentListOf
@@ -212,6 +213,8 @@ import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.text.NumberFormat
 import java.util.Locale
+import eu.kanade.presentation.library.anime.components.AddToSeriesDialog as AnimeAddToSeriesDialog
+import eu.kanade.presentation.library.anime.components.CreateSeriesDialog as AnimeCreateSeriesDialog
 import eu.kanade.presentation.library.manga.components.AddToSeriesDialog as MangaAddToSeriesDialog
 import tachiyomi.domain.items.novelchapter.model.NovelChapter as DomainNovelChapter
 
@@ -230,7 +233,7 @@ data object AnimeLibraryTab : Tab {
 
     private val userProfilePreferences: UserProfilePreferences by injectLazy()
 
-    private const val AURORA_LIBRARY_IDLE_PRELOAD_DELAY_MS = 300L
+    private const val AURORA_LIBRARY_IDLE_PRELOAD_DELAY_MS = 2000L
 
     @OptIn(ExperimentalAnimationGraphicsApi::class)
     override val options: TabOptions
@@ -416,7 +419,15 @@ data object AnimeLibraryTab : Tab {
             if (showNovelSection && auroraCurrentSection == Section.Novel) {
                 novelScreenModel?.setLibraryPipelineActive(true)
             }
-
+        }
+        // Idle preload of the neighbour sections. Deliberately NOT keyed on auroraCurrentSection:
+        // the old single effect restarted on every section change, so a swipe cancelled the
+        // pending delay before it could warm anything. The neighbours then stayed on
+        // isLoading = true for the whole session and every first visit to a section paid the full
+        // pipeline cost (behind a spinner) under the user's finger. Only section visibility
+        // restarts it, so a real idle window is finally reachable.
+        LaunchedEffect(isAurora, showMangaSection, showNovelSection) {
+            if (!isAurora) return@LaunchedEffect
             delay(AURORA_LIBRARY_IDLE_PRELOAD_DELAY_MS)
             if (showMangaSection) mangaScreenModel.setLibraryPipelineActive(true)
             if (showNovelSection) novelScreenModel?.setLibraryPipelineActive(true)
@@ -651,6 +662,11 @@ data object AnimeLibraryTab : Tab {
             titleRes = AYMR.strings.label_anime,
             searchEnabled = true,
             content = { contentPadding, _ ->
+                // Per-section-page gate: a section that has never emitted shows its spinner INSIDE
+                // the page slot, so the pager, header and category row survive the first visit.
+                if (state.isLoading) {
+                    return@TabContent LoadingScreen(Modifier.padding(contentPadding))
+                }
                 val pagerState = rememberPagerState(
                     initialPage = animeCategoryIndex,
                     pageCount = { state.categories.size },
@@ -713,12 +729,13 @@ data object AnimeLibraryTab : Tab {
                         displayMode = animeDisplayMode,
                         columns = animeColumns,
                         onAnimeClicked = { navigator.push(AnimeScreen(it)) },
+                        onSeriesClicked = { navigator.push(AnimeSeriesScreen(it)) },
                         onToggleSelection = screenModel::toggleSelection,
                         onToggleRangeSelection = {
                             screenModel.toggleRangeSelection(it)
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
-                        onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
+                        onTogglePinned = screenModel::togglePinned,
                         onContinueWatchingClicked = { item: LibraryAnime ->
                             if (!continueActionGuard.inFlight) {
                                 continueActionGuard.inFlight = true
@@ -748,6 +765,11 @@ data object AnimeLibraryTab : Tab {
             titleRes = AYMR.strings.label_manga,
             searchEnabled = true,
             content = { contentPadding, _ ->
+                // Per-section-page gate: a section that has never emitted shows its spinner INSIDE
+                // the page slot, so the pager, header and category row survive the first visit.
+                if (mangaState.isLoading) {
+                    return@TabContent LoadingScreen(Modifier.padding(contentPadding))
+                }
                 val pagerState = rememberPagerState(
                     initialPage = mangaCategoryIndex,
                     pageCount = { mangaState.categories.size },
@@ -854,6 +876,11 @@ data object AnimeLibraryTab : Tab {
             content = { contentPadding, _ ->
                 val activeNovelScreenModel = novelScreenModel
                     ?: return@TabContent LoadingScreen(Modifier.padding(contentPadding))
+                // Per-section-page gate: a section that has never emitted shows its spinner INSIDE
+                // the page slot, so the pager, header and category row survive the first visit.
+                if (novelState.isLoading) {
+                    return@TabContent LoadingScreen(Modifier.padding(contentPadding))
+                }
 
                 val pagerState = rememberPagerState(
                     initialPage = novelCategoryIndex,
@@ -1219,7 +1246,11 @@ data object AnimeLibraryTab : Tab {
                     scope.launch {
                         val randomItem = screenModel.getRandomAnimelibItemForCurrentCategory()
                         if (randomItem != null) {
-                            navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                            if (randomItem is AnimeLibraryItem.Series) {
+                                navigator.push(AnimeSeriesScreen(randomItem.librarySeries.id))
+                            } else {
+                                navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                            }
                         } else {
                             snackbarHostState.showSnackbar(
                                 context.stringResource(MR.strings.information_no_entries_found),
@@ -1300,7 +1331,11 @@ data object AnimeLibraryTab : Tab {
                         scope.launch {
                             val randomItem = screenModel.getRandomAnimelibItemForCurrentCategory()
                             if (randomItem != null) {
-                                navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                                if (randomItem is AnimeLibraryItem.Series) {
+                                    navigator.push(AnimeSeriesScreen(randomItem.librarySeries.id))
+                                } else {
+                                    navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                                }
                             } else {
                                 snackbarHostState.showSnackbar(
                                     context.stringResource(MR.strings.information_no_entries_found),
@@ -1324,14 +1359,33 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsViewedClicked = { screenModel.markSeenSelection(true) },
                             onMarkAsUnviewedClicked = { screenModel.markSeenSelection(false) },
                             onDownloadClicked = screenModel::runDownloadActionSelection
-                                .takeIf { state.selection.fastAll { !it.anime.isLocal() } },
+                                .takeIf {
+                                    state.selection.fastAll { selected ->
+                                        when (selected) {
+                                            is AnimeLibraryItem.Single -> !selected.libraryAnime.anime.isLocal()
+                                            is AnimeLibraryItem.Series -> selected.librarySeries.entries.fastAll {
+                                                !it.anime.isLocal()
+                                            }
+                                        }
+                                    }
+                                },
                             onMigrateClicked = {
-                                val selectedAnimeIds = state.selection.map { it.anime.id }
+                                val selectedAnimeIds = state.selection
+                                    .flatMap { selected ->
+                                        when (selected) {
+                                            is AnimeLibraryItem.Single -> listOf(selected.libraryAnime.id)
+                                            is AnimeLibraryItem.Series -> selected.librarySeries.entries.map { it.id }
+                                        }
+                                    }
+                                    .distinct()
                                 screenModel.clearSelection()
-                                navigator.push(AnimeMigrationConfigScreen(selectedAnimeIds))
+                                if (selectedAnimeIds.isNotEmpty()) {
+                                    navigator.push(AnimeMigrationConfigScreen(selectedAnimeIds))
+                                }
                             }.takeIf {
-                                state.selection.isNotEmpty() && state.selection.fastAll { it.anime.id > 0L }
+                                state.selection.isNotEmpty()
                             },
+                            onSeriesClicked = { screenModel.openAddToSeries() },
                             onDeleteClicked = screenModel::openDeleteAnimeDialog,
                             isManga = false,
                         )
@@ -1413,7 +1467,14 @@ data object AnimeLibraryTab : Tab {
             },
         ) { contentPadding ->
             when {
-                isLoading -> LoadingScreen(Modifier.padding(contentPadding))
+                // Aurora gates loading per SECTION PAGE (see the content lambdas below): a
+                // full-screen spinner here replaced the whole TabbedScreenAurora, and because
+                // auroraCurrentSection follows PagerState.currentPage - which flips before a
+                // swipe gesture ends - the first visit to any section tore the pager down
+                // mid-drag, killed the gesture and flashed background -> spinner -> content.
+                // Warm sections never take that path, which is why only the first visit flickered.
+                shouldShowAuroraLibraryFullScreenLoading(isAurora, isLoading) ->
+                    LoadingScreen(Modifier.padding(contentPadding))
                 isLibraryEmpty -> {
                     val handler = LocalUriHandler.current
                     EmptyScreen(
@@ -1525,6 +1586,7 @@ data object AnimeLibraryTab : Tab {
                             onChangeCurrentPage = { screenModel.activeCategoryIndex = it },
                             onCategoryLongSelected = screenModel::selectAll,
                             onAnimeClicked = { navigator.push(AnimeScreen(it)) },
+                            onSeriesClicked = { navigator.push(AnimeSeriesScreen(it)) },
                             onContinueWatchingClicked = { it: LibraryAnime ->
                                 // D7: single-flight guard - a double tap used to launch two players.
                                 if (!continueActionGuard.inFlight) {
@@ -1545,7 +1607,7 @@ data object AnimeLibraryTab : Tab {
                                 screenModel.toggleRangeSelection(it)
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             },
-                            onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
+                            onTogglePinned = screenModel::togglePinned,
                             onRefresh = onClickRefresh,
                             onGlobalSearchClicked = {
                                 navigator.push(
@@ -1565,12 +1627,9 @@ data object AnimeLibraryTab : Tab {
 
         val onDismissRequest = screenModel::closeDialog
         when (val dialog = state.dialog) {
-            is AnimeLibraryScreenModel.Dialog.SettingsSheet -> run {
+            is AnimeLibraryScreenModel.Dialog.SettingsSheet -> {
                 val category = state.categories.getOrNull(screenModel.activeCategoryIndex)
-                if (category == null) {
-                    onDismissRequest()
-                    return@run
-                }
+                    ?: state.categories.firstOrNull()
                 AnimeLibrarySettingsDialog(
                     onDismissRequest = onDismissRequest,
                     screenModel = settingsScreenModel,
@@ -1603,17 +1662,28 @@ data object AnimeLibraryTab : Tab {
                     entryType = DeleteLibraryEntryType.Anime,
                 )
             }
+            AnimeLibraryScreenModel.Dialog.CreateSeries -> {
+                AnimeCreateSeriesDialog(
+                    onDismissRequest = onDismissRequest,
+                    onCreate = screenModel::createSeries,
+                )
+            }
+            is AnimeLibraryScreenModel.Dialog.AddToSeries -> {
+                AnimeAddToSeriesDialog(
+                    onDismissRequest = onDismissRequest,
+                    series = dialog.series,
+                    onSelect = screenModel::addSelectionToSeries,
+                    onCreateSeries = screenModel::openCreateSeries,
+                )
+            }
             null -> {}
         }
 
         val onDismissMangaRequest = mangaScreenModel::closeDialog
         when (val dialog = mangaState.dialog) {
-            is MangaLibraryScreenModel.Dialog.SettingsSheet -> run {
+            is MangaLibraryScreenModel.Dialog.SettingsSheet -> {
                 val category = mangaState.categories.getOrNull(mangaScreenModel.activeCategoryIndex)
-                if (category == null) {
-                    onDismissMangaRequest()
-                    return@run
-                }
+                    ?: mangaState.categories.firstOrNull()
                 MangaLibrarySettingsDialog(
                     onDismissRequest = onDismissMangaRequest,
                     screenModel = mangaSettingsScreenModel,
@@ -2384,15 +2454,22 @@ private fun AuroraLibraryCategoryTabs(
     var containerWidthPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
 
-    val animTabWidths = remember(categories) { mutableStateMapOf<Int, Float>() }
-    val animTabHeights = remember(categories) { mutableStateMapOf<Int, Float>() }
-    val animTabPositionsX = remember(categories) { mutableStateMapOf<Int, Float>() }
-    val animTabPositionsY = remember(categories) { mutableStateMapOf<Int, Float>() }
+    // NOT keyed on `categories`: this row is shared by every library section, and the maps are
+    // re-measured in the same layout pass that composes the new section's tabs. Keying them on the
+    // list re-created them empty on every section switch, so the indicator targets fell back to
+    // 0f and the pill visibly collapsed into the left corner before flying back out.
+    val animTabWidths = remember { mutableStateMapOf<Int, Float>() }
+    val animTabHeights = remember { mutableStateMapOf<Int, Float>() }
+    val animTabPositionsX = remember { mutableStateMapOf<Int, Float>() }
+    val animTabPositionsY = remember { mutableStateMapOf<Int, Float>() }
 
     val activeWidth = animTabWidths[coercedSelected] ?: 0f
     val activeHeight = animTabHeights[coercedSelected] ?: 0f
     val activeX = animTabPositionsX[coercedSelected] ?: 0f
     val activeY = animTabPositionsY[coercedSelected] ?: 0f
+    // Only meaningful once the selected tab has been laid out at least once; before that the
+    // targets above are all 0f and drawing would animate the pill into the row origin.
+    val selectionMeasured = activeWidth > 0f && activeHeight > 0f
 
     val activeLeft = activeX
     val activeRight = activeX + activeWidth
@@ -2501,7 +2578,8 @@ private fun AuroraLibraryCategoryTabs(
                 .horizontalScroll(scrollState)
                 .padding(6.dp)
                 .drawBehind {
-                    if (animatedRight > animatedLeft &&
+                    if (selectionMeasured &&
+                        animatedRight > animatedLeft &&
                         animatedHeight > 0f &&
                         colors.eInkProfile != EInkProfile.MONOCHROME
                     ) {
@@ -2654,6 +2732,24 @@ internal fun resolveAuroraLibrarySelectionMode(
         AnimeLibraryTab.Section.Novel -> novelSelectionMode
         null -> false
     }
+}
+
+/**
+ * Where the "section is still loading" spinner belongs.
+ *
+ * Classic (non-Aurora) mode has a single section, so a full-screen spinner above the content is
+ * correct and cheap. Aurora composes one pager page per section and tracks the current section by
+ * [androidx.compose.foundation.pager.PagerState.currentPage] - a value that flips while a swipe is
+ * still in flight. Gating the WHOLE [eu.kanade.presentation.components.TabbedScreenAurora] on it
+ * therefore tore down the pager, header and background mid-gesture on the first visit to any
+ * section (background -> spinner -> content flash, gesture killed). The Aurora spinner is rendered
+ * inside the section page instead, so the surrounding chrome survives the first visit.
+ */
+internal fun shouldShowAuroraLibraryFullScreenLoading(
+    isAurora: Boolean,
+    isCurrentSectionLoading: Boolean,
+): Boolean {
+    return !isAurora && isCurrentSectionLoading
 }
 
 internal fun shouldShowAuroraLibraryCategoryTabs(section: AnimeLibraryTab.Section?): Boolean {

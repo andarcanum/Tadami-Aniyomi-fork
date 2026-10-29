@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.suggestions.novel
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
+import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -277,5 +278,80 @@ class NovelSearchFallbackEngineTest {
 
         assertTrue(outcome is NovelFallbackOutcome.Success)
         assertEquals(1, (outcome as NovelFallbackOutcome.Success).items.size)
+    }
+
+    @Test
+    fun `fetchSearchFallback contains extension OutOfMemoryError and stops remaining tiers`() = runTest {
+        val novel = Novel.create().copy(
+            id = 123L,
+            title = "Solo Leveling",
+            author = "Chugong",
+            genre = listOf("Fantasy"),
+            url = "/solo-oom-abort-novel",
+        )
+        var searchCalls = 0
+        val source = object : FakeNovelCatalogueSource() {
+            override suspend fun getSearchNovels(
+                page: Int,
+                query: String,
+                filters: NovelFilterList,
+            ): NovelsPage {
+                searchCalls++
+                throw OutOfMemoryError("Failed to allocate a 8388624 byte allocation")
+            }
+        }
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.NOVEL,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = NovelSearchFallbackEngine().fetchSearchFallback(novel, source, seed)
+
+        assertTrue(outcome is NovelFallbackOutcome.Empty)
+        // Tier 1 is the only tier that may run, and the genre/popular backfills must be
+        // skipped: the heap is already exhausted, so more extension requests are unsafe.
+        assertEquals(1, searchCalls)
+        assertEquals(0, source.getPopularNovelsCallCount)
+    }
+
+    @Test
+    fun `fetchSearchFallback keeps already collected items when a later query runs out of memory`() = runTest {
+        val novel = Novel.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-oom-retain-novel")
+        val source = object : FakeNovelCatalogueSource() {
+            override suspend fun getSearchNovels(
+                page: Int,
+                query: String,
+                filters: NovelFilterList,
+            ): NovelsPage {
+                if (query == "Solo Leveling") {
+                    return NovelsPage(
+                        listOf(
+                            SNovel.create().apply {
+                                title = "Solo Leveling Side Stories"
+                                url = "/solo-oom-result-novel"
+                            },
+                        ),
+                        false,
+                    )
+                }
+                throw OutOfMemoryError("Failed to allocate a 8388624 byte allocation")
+            }
+        }
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.NOVEL,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = NovelSearchFallbackEngine().fetchSearchFallback(novel, source, seed)
+
+        val success = outcome as NovelFallbackOutcome.Success
+        assertEquals(1, success.items.size)
+        assertEquals("Solo Leveling Side Stories", success.items.single().title)
     }
 }

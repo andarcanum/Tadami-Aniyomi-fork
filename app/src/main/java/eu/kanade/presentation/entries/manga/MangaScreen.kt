@@ -127,6 +127,7 @@ fun MangaScreen(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 
     onFilterButtonClicked: () -> Unit,
     showScanlatorSelector: Boolean,
@@ -149,6 +150,8 @@ fun MangaScreen(
     onEditNotesClicked: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
     onClickEditInfo: (() -> Unit)? = null,
+    onDeleteDownloadsClicked: () -> Unit = {},
+    onDeleteReadChaptersClicked: () -> Unit = {},
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
@@ -206,6 +209,7 @@ fun MangaScreen(
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
+            onSourceClick = onSourceClick,
             onFilterButtonClicked = onFilterButtonClicked,
             onToggleSort = onToggleSort,
             onToggleUnreadFilter = onToggleUnreadFilter,
@@ -225,6 +229,8 @@ fun MangaScreen(
             onEditNotesClicked = onEditNotesClicked,
             onMigrateClicked = onMigrateClicked,
             onClickEditInfo = onClickEditInfo,
+            onDeleteDownloadsClicked = onDeleteDownloadsClicked,
+            onDeleteReadChaptersClicked = onDeleteReadChaptersClicked,
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,

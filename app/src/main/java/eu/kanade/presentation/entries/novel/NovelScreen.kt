@@ -140,6 +140,7 @@ fun NovelScreen(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
     onPosterLongClicked: (() -> Unit)? = null,
     onToggleAllChaptersRead: () -> Unit,
     onShare: (() -> Unit)?,
@@ -180,6 +181,8 @@ fun NovelScreen(
     onMarkPreviousAsReadClicked: (NovelChapter) -> Unit,
     onMultiDownloadClicked: () -> Unit,
     onMultiDeleteClicked: () -> Unit,
+    onOpenDeleteDownloadsClicked: () -> Unit = {},
+    onOpenDeleteReadChaptersClicked: () -> Unit = {},
     onSaveScrollPosition: (Int, Int) -> Unit = { _, _ -> },
     onRetrySuggestions: () -> Unit = {},
     onOpenSuggestions: () -> Unit = {},
@@ -232,6 +235,7 @@ fun NovelScreen(
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
+            onSourceClick = onSourceClick,
             onPosterLongClicked = onPosterLongClicked,
             onShare = onShare,
             onWebView = onWebView,
@@ -277,6 +281,8 @@ fun NovelScreen(
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
             onMultiDownloadClicked = onMultiDownloadClicked,
             onMultiDeleteClicked = onMultiDeleteClicked,
+            onOpenDeleteDownloadsClicked = onOpenDeleteDownloadsClicked,
+            onOpenDeleteReadChaptersClicked = onOpenDeleteReadChaptersClicked,
             isAutoJumpToNextEnabled = autoJumpToNextEnabled,
             autoJumpToNextLabel = autoJumpToNextLabel,
             onToggleAutoJumpToNext = onToggleAutoJumpToNext,
@@ -743,6 +749,13 @@ fun NovelScreen(
                                         text = state.source.name,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = if (onSourceClick != null) {
+                                            Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .clickable(onClick = onSourceClick)
+                                        } else {
+                                            Modifier
+                                        },
                                     )
                                     Text(
                                         text = pluralStringResource(

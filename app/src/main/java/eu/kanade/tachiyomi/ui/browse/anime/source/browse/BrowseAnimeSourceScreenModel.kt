@@ -291,7 +291,12 @@ class BrowseAnimeSourceScreenModel(
     val animePagerFlowFlow = state.map { it.listing }
         .distinctUntilChanged()
         .map { listing ->
-            Pager(PagingConfig(pageSize = 25)) {
+            Pager(
+                PagingConfig(
+                    pageSize = 25,
+                    initialLoadSize = 25,
+                ),
+            ) {
                 getRemoteAnime.subscribe(sourceId, listing.query ?: "", listing.filters)
             }.flow
                 .cachedIn(ioCoroutineScope)
@@ -396,6 +401,16 @@ class BrowseAnimeSourceScreenModel(
                 toolbarQuery = query ?: input.query,
             )
         }
+    }
+
+    private var initialGenreSearchPerformed = false
+
+    fun initGenreSearch(genre: String?, genres: List<String>?) {
+        if (initialGenreSearchPerformed) return
+        if (genre == null && genres.isNullOrEmpty()) return
+        initialGenreSearchPerformed = true
+        genre?.let { searchGenre(it) }
+        genres?.let { searchGenres(it) }
     }
 
     fun searchGenre(genreName: String) {

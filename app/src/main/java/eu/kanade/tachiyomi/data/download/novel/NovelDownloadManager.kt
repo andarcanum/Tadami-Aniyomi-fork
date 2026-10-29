@@ -196,29 +196,72 @@ class NovelDownloadManager(
     }
 
     fun deleteChapter(novel: Novel, chapterId: Long) {
-        findChapterFile(novel, chapterId)?.delete()
-        legacyChapterFile(novel, chapterId)?.delete()
-        invalidateCache()
-        cleanupDirectories(novel)
-        downloadCache?.onChaptersChanged(
-            novel = novel,
-            chapterIds = setOf(chapterId),
-            downloaded = false,
-        )
+        deleteChapters(novel, setOf(chapterId))
     }
 
-    fun deleteChapters(novel: Novel, chapterIds: Collection<Long>) {
-        chapterIds.forEach { chapterId ->
-            findChapterFile(novel, chapterId)?.delete()
-            legacyChapterFile(novel, chapterId)?.delete()
+    /**
+     * Batch-deletes downloaded chapter files.
+     *
+     * Lists each candidate novel directory ONCE (READABLE / READABLE_LEGACY / STABLE_ID /
+     * memoized drift dir, plus the legacy java File dir) instead of running a SAF findFile
+     * (a full directory listing) per chapter — the per-chapter walk made deleting ~2000
+     * chapters take tens of minutes and look like "nothing happens".
+     *
+     * A missing file is not an error: the id is still reconciled in the download cache so
+     * externally-deleted chapters stop showing as downloaded. One failing delete() does not
+     * abort the batch.
+     *
+     * @return number of chapter files actually deleted on disk.
+     */
+    fun deleteChapters(
+        novel: Novel,
+        chapterIds: Collection<Long>,
+        onProgress: ((deleted: Int, total: Int) -> Unit)? = null,
+    ): Int {
+        if (chapterIds.isEmpty()) return 0
+        val wanted = chapterIds.toSet()
+        var targets = collectChapterFiles(novel, wanted)
+        if (targets.isEmpty()) {
+            // Directory-name drift: one full-tree scan memoizes the real directory, then the
+            // cheap batch listing is repeated once. Bounded to a single tree walk per call.
+            findChapterFileByScan(novel, wanted.first())
+            targets = collectChapterFiles(novel, wanted)
+        }
+        val legacyDir = legacyNovelDirectory(novel)
+        val legacyTargets = if (legacyDir?.exists() == true) {
+            wanted.mapNotNull { id -> File(legacyDir, "$id.html").takeIf { it.isFile } }
+        } else {
+            emptyList()
+        }
+        val total = targets.size + legacyTargets.size
+        var deleted = 0
+        targets.forEach { file ->
+            if (runCatching { file.delete() }.getOrDefault(false)) deleted++
+            onProgress?.invoke(deleted, total)
+        }
+        legacyTargets.forEach { file ->
+            if (runCatching { file.delete() }.getOrDefault(false)) deleted++
+            onProgress?.invoke(deleted, total)
         }
         invalidateCache()
         cleanupDirectories(novel)
-        downloadCache?.onChaptersChanged(
-            novel = novel,
-            chapterIds = chapterIds.toSet(),
-            downloaded = false,
-        )
+        downloadCache?.onChaptersChanged(novel = novel, chapterIds = wanted, downloaded = false)
+        return deleted
+    }
+
+    private fun collectChapterFiles(novel: Novel, wanted: Set<Long>): List<UniFile> {
+        if (wanted.isEmpty()) return emptyList()
+        val result = mutableListOf<UniFile>()
+        scopedNovelDirectories(novel).forEach { dir ->
+            dir.listFiles()?.forEach { file ->
+                if (!file.isFile) return@forEach
+                val name = file.name ?: return@forEach
+                if (!name.endsWith(".html")) return@forEach
+                val id = name.substringBeforeLast(".html").toLongOrNull() ?: return@forEach
+                if (id in wanted) result.add(file)
+            }
+        }
+        return result
     }
 
     fun deleteNovel(novel: Novel) {

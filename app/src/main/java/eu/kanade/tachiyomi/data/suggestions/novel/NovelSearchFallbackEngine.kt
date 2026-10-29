@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.suggestions.novel
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCache
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.data.suggestions.SuggestionSearchGate
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSourceWeight
 import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
@@ -14,11 +15,14 @@ import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class NovelSearchFallbackEngine {
@@ -139,28 +143,29 @@ class NovelSearchFallbackEngine {
                 val separators = listOf(":", "-", "(", "[", ",", ";")
                 separators.forEach { sep ->
                     val part = title.substringBefore(sep).trim()
-                    if (part.isNotEmpty() && part != title && part.length >= 6) {
+                    if (part.isNotEmpty() && part != title && part.length >= 6 && isMeaningfulSearchQuery(part)) {
                         add(part)
                     }
                 }
 
                 // 2. Cleaned title (removes volumes, chapters, seasons)
                 val cleaned = eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver.cleanTitle(title)
-                if (cleaned.isNotEmpty() && cleaned != title && cleaned.length >= 6) {
+                if (cleaned.isNotEmpty() && cleaned != title && cleaned.length >= 6 &&
+                    isMeaningfulSearchQuery(cleaned)
+                ) {
                     add(cleaned)
                 }
 
                 // 3. For any title with 3 or more words, generate the first-3-words
-                //    prefix only. Earlier code emitted 2/3/4 word variants which
-                //    multiplied requests without improving precision noticeably.
+                //    prefix only, verifying it contains non-stopword meaningful terms.
                 val words = cleaned.split(Regex("\\s+")).filter { it.isNotBlank() }
                 if (words.size >= 3) {
                     val first3 = words.take(3).joinToString(" ")
-                    if (first3.length >= 6) add(first3)
+                    if (first3.length >= 6 && isMeaningfulSearchQuery(first3)) add(first3)
                 }
             }
         }.map { it.trim() }
-            .filter { it.length >= 6 }
+            .filter { it.length >= 6 && isMeaningfulSearchQuery(it) }
             .distinct()
 
         // Tier 3: Author queries
@@ -175,6 +180,10 @@ class NovelSearchFallbackEngine {
         val candidatesToScore = seed.candidateTitles.distinct()
 
         val uniqueResults = LinkedHashMap<String, SuggestionItem>() // key: providerUrl
+        // Set when the extension exhausts the heap while handling a query. The buffers it
+        // allocated become garbage when its stack unwinds, but the heap is fragile at that
+        // point: issuing more source requests would risk a second, fatal OOM.
+        val oomAborted = AtomicBoolean(false)
         // Reuse the already fetched (and interop-guarded) filter list instead of
         // asking the extension a second time.
         val filterList = freshFilterList
@@ -190,6 +199,12 @@ class NovelSearchFallbackEngine {
         }
 
         for ((tierName, tierQueries) in queryTiers) {
+            if (oomAborted.get()) {
+                logcat(LogPriority.WARN) {
+                    "[NovelSearchFallbackEngine] Skipping $tierName after the source ran out of memory. Returning collected results."
+                }
+                break
+            }
             if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) {
                 logcat {
                     "[NovelSearchFallbackEngine] Reached target results limit ($boundedMaxResults) before processing all tiers. Stopping early."
@@ -202,11 +217,15 @@ class NovelSearchFallbackEngine {
             coroutineScope {
                 tierQueries.forEach { query ->
                     launch {
+                        if (oomAborted.get()) return@launch
                         if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) return@launch
                         try {
                             logcat { "[NovelSearchFallbackEngine] Searching for query: '$query'" }
                             val page = searchSemaphore.withPermit {
-                                source.getSearchNovels(1, query, filterList)
+                                delay(QUERY_PACING_MS)
+                                SuggestionSearchGate.withPermit {
+                                    source.getSearchNovels(1, query, filterList)
+                                }
                             }
                             if (page.novels.isEmpty()) {
                                 logcat {
@@ -319,6 +338,15 @@ class NovelSearchFallbackEngine {
                             logcat {
                                 "[NovelSearchFallbackEngine] Incompatible extension ABI for query '$query': ${e.message}"
                             }
+                        } catch (e: OutOfMemoryError) {
+                            // Extensions allocate inside getSearchNovels (in-memory catalog indexes,
+                            // multi-MB JSON decoding). OOM is an Error, so the Exception catch below
+                            // never sees it and the whole process dies.
+                            oomAborted.set(true)
+                            logcat(LogPriority.WARN) {
+                                "[NovelSearchFallbackEngine] Source '${source.name}' exhausted the heap for query " +
+                                    "'$query': ${e.message}. Stopping further search tiers."
+                            }
                         } catch (e: Exception) {
                             logcat { "[NovelSearchFallbackEngine] Search failed for query '$query': ${e.message}" }
                         }
@@ -327,31 +355,43 @@ class NovelSearchFallbackEngine {
             }
         }
 
-        if (fallbackPolicy.genreFillEnabled &&
-            synchronized(uniqueResults) { uniqueResults.size < boundedMaxResults } &&
-            genreParts.isNotEmpty()
-        ) {
-            backfillFromGenreQueries(
-                source = source,
-                novel = novel,
-                selectedGenres = genreParts,
-                maxResults = boundedMaxResults,
-                uniqueResults = uniqueResults,
-                thumbnailDetailBudget = thumbnailDetailBudget,
-                onProgress = onProgress,
-            )
-        }
+        // The backfills hit the same extension entry points as the tiers. Once the heap has
+        // already failed, running them would turn a contained OOM into a fatal one.
+        if (!oomAborted.get()) {
+            try {
+                if (fallbackPolicy.genreFillEnabled &&
+                    synchronized(uniqueResults) { uniqueResults.size < boundedMaxResults } &&
+                    genreParts.isNotEmpty()
+                ) {
+                    backfillFromGenreQueries(
+                        source = source,
+                        novel = novel,
+                        selectedGenres = genreParts,
+                        maxResults = boundedMaxResults,
+                        uniqueResults = uniqueResults,
+                        thumbnailDetailBudget = thumbnailDetailBudget,
+                        onProgress = onProgress,
+                    )
+                }
 
-        if (synchronized(uniqueResults) { uniqueResults.size < boundedMaxResults }) {
-            backfillFromPopularNovels(
-                source = source,
-                novel = novel,
-                maxResults = boundedMaxResults,
-                uniqueResults = uniqueResults,
-                popularBackfillCap = fallbackPolicy.popularBackfillCap,
-                thumbnailDetailBudget = thumbnailDetailBudget,
-                onProgress = onProgress,
-            )
+                if (synchronized(uniqueResults) { uniqueResults.size < boundedMaxResults }) {
+                    backfillFromPopularNovels(
+                        source = source,
+                        novel = novel,
+                        maxResults = boundedMaxResults,
+                        uniqueResults = uniqueResults,
+                        popularBackfillCap = fallbackPolicy.popularBackfillCap,
+                        thumbnailDetailBudget = thumbnailDetailBudget,
+                        onProgress = onProgress,
+                    )
+                }
+            } catch (e: OutOfMemoryError) {
+                oomAborted.set(true)
+                logcat(LogPriority.WARN) {
+                    "[NovelSearchFallbackEngine] Source '${source.name}' exhausted the heap during backfill: " +
+                        "${e.message}. Returning collected results."
+                }
+            }
         }
 
         // F2.2 — final pass: dedupe by cleaned title across the entire
@@ -371,7 +411,11 @@ class NovelSearchFallbackEngine {
                 }}"
             }
         }
-        SuggestionCache.put(cacheKey, items)
+        // An out-of-memory run is incomplete: caching it would hide the source behind a
+        // 24h negative entry instead of letting the next visit retry.
+        if (!oomAborted.get()) {
+            SuggestionCache.put(cacheKey, items)
+        }
 
         return if (items.isEmpty()) {
             NovelFallbackOutcome.Empty(NovelFallbackReason.SEARCH_EMPTY)
@@ -610,14 +654,29 @@ class NovelSearchFallbackEngine {
         }
     }
 
-    private companion object {
+    companion object {
         const val TAG = "NovelSearchFallbackEngine"
 
-        /** Max parallel search requests against a single source. */
-        const val MAX_CONCURRENT_QUERIES = 3
+        /** Max parallel search requests against a single source to avoid triggering WAF rate limits. */
+        const val MAX_CONCURRENT_QUERIES = 1
+
+        /** Inter-query pacing delay (ms) preventing burst detection. */
+        const val QUERY_PACING_MS = 500L
 
         /** Max extra detail requests per fetch, used only to backfill missing thumbnails. */
         const val MAX_THUMBNAIL_DETAIL_LOOKUPS = 6
+
+        private val stopWords = setOf(
+            "i'm", "im", "the", "a", "an", "of", "in", "to", "is", "it", "my", "me", "you",
+            "that", "this", "and", "or", "for", "with", "on", "at", "by", "from", "as", "was",
+        )
+
+        fun isMeaningfulSearchQuery(query: String): Boolean {
+            val words = query.lowercase().split(Regex("""[\s\p{Punct}]+""")).filter { it.isNotBlank() }
+            if (words.isEmpty()) return false
+            val meaningfulWords = words.filter { it.length >= 3 && it !in stopWords }
+            return meaningfulWords.isNotEmpty()
+        }
 
         val broadGenres = setOf(
             "фэнтези", "fantasy",
