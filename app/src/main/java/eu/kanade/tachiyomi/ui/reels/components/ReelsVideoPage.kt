@@ -19,7 +19,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,8 +56,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -68,14 +69,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AuroraFrostCancel
 import eu.kanade.presentation.components.AuroraFrostDialog
+import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedMediaKind
@@ -85,6 +89,7 @@ import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -103,11 +108,17 @@ fun ReelsVideoPage(
     // Feed-level immersive chrome flag: the side action bar and the bottom meta hide
     // together with the top bar.
     chromeVisible: Boolean = true,
+    // Landscape top bar had no search entry: the field is rendered by the host, but nothing in
+    // the rotated chrome could open it.
+    showSearch: Boolean = false,
+    isSearchBarOpen: Boolean = false,
+    onToggleSearch: () -> Unit = {},
     // Window geometry only: landscape gets a horizontal actions row. Never a media-aspect hint.
     isLandscape: Boolean = false,
     // Orientation toggle lives in the action rail (thumb reach), not in the top bar.
     landscape: Boolean = false,
     onToggleLandscape: () -> Unit = {},
+    onExitLandscape: () -> Unit = onToggleLandscape,
     isInPictureInPicture: Boolean = false,
     // Reports the media orientation to the host for the PiP aspect ratio; re-emitted when
     // the page becomes active so a preloaded report cannot be lost.
@@ -146,6 +157,12 @@ fun ReelsVideoPage(
     showOfflineAction: Boolean = false,
     isOfflineStored: Boolean = false,
     onToggleOffline: () -> Unit = {},
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    isPartial: Boolean = false,
+    downloadSizeText: String? = null,
+    downloadProgress: Float? = null,
+    onDownload: (() -> Unit)? = null,
     onTagClick: (String) -> Unit,
     onVideoCompleted: () -> Unit,
     // Second parameter retries the current video (snackbar "Retry" action).
@@ -215,17 +232,12 @@ fun ReelsVideoPage(
     var isBuffering by remember { mutableStateOf(false) }
     var drawerOpen by remember { mutableStateOf(false) }
     var drawerTab by remember { mutableIntStateOf(0) }
-    var seekNoticeText by remember { mutableStateOf<String?>(null) }
+    val seekNotice = rememberReelsSeekNotice(item.id, isActive, isInPictureInPicture)
+    val currentSeekNotice by rememberUpdatedState(seekNotice)
     // Measured height of the portrait caption block: the action rail's bottom sits at the
     // author-name horizon (the block's top edge) so no icon drops into the description.
     var portraitMetaHeightPx by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(seekNoticeText) {
-        if (seekNoticeText != null) {
-            delay(1000)
-            seekNoticeText = null
-        }
-    }
     val currentIsActive by rememberUpdatedState(isActive)
     // The tap recognizer below is keyed by Unit and survives page rebinds (the pager reuses
     // a slot for a different item after a feed reset); values read inside the gesture must
@@ -239,6 +251,12 @@ fun ReelsVideoPage(
     // (a still reel reports its own eligibility).
     var actuallyPlaying by remember(item.id) { mutableStateOf(false) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
+    // Rate while a finger is held down at an edge. Kept apart from playbackSpeed on purpose:
+    // playbackSpeed is the user's *chosen* rate (button, drawer) and must survive the finger lift.
+    var heldRate by remember { mutableStateOf<Float?>(null) }
+    // The lift at the end of a hold also reaches the tap detector; without this the reel would
+    // pause every time the user lets go of a speed hold.
+    var heldToIgnoreTap by remember { mutableStateOf(false) }
     var retrySignal by remember { mutableIntStateOf(0) }
     val heartScale = remember { Animatable(0f) }
     val hapticFeedback = LocalHapticFeedback.current
@@ -459,27 +477,56 @@ fun ReelsVideoPage(
                 )
             }
             .pointerInput(Unit) {
-                // 2x speed from a long-press must reset when the finger lifts. detectTapGestures
-                // cancels its press scope the moment the long-press fires (tryAwaitRelease
-                // returns false before the finger is up), so reset from a passive watcher instead.
+                // Hold-to-rate. detectTapGestures' onLongPress is unusable here: it abandons the
+                // press the moment the finger drifts past touchSlop (~8dp) before the ~500ms
+                // timeout, which a one-handed thumb does constantly. Here the press only has to
+                // stay inside a wider slop until the timeout; after activation every movement is
+                // ignored and the rate is held until the finger lifts.
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    waitForUpOrCancellation()
-                    if (playbackSpeed != 1f) playbackSpeed = 1f
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val rate = reelsHoldRate(down.position.x, size.width.toFloat())
+                        ?: return@awaitEachGesture
+                    val timeout = viewConfiguration.longPressTimeoutMillis
+                    val slop = viewConfiguration.touchSlop * 3f
+                    // A perfectly still finger emits no pointer events, so activation has to be
+                    // timed out rather than waited for.
+                    val gaveUpEarly = withTimeoutOrNull(timeout) {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: return@withTimeoutOrNull true
+                            if (!change.pressed) return@withTimeoutOrNull true
+                            if ((change.position - down.position).getDistance() > slop) {
+                                return@withTimeoutOrNull true
+                            }
+                        }
+                    } == true
+                    if (gaveUpEarly) return@awaitEachGesture
+                    heldRate = rate
+                    heldToIgnoreTap = true
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        // Consume so the pager cannot flip the reel under a holding finger.
+                        if (!change.isConsumed) change.consume()
+                        if (!change.pressed) break
+                    }
+                    heldRate = null
                 }
             }
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onLongPress = {
-                        playbackSpeed = 2f
-                    },
                     onTap = {
-                        // Device report: a reveal-only tap made pause unreachable — with the
-                        // 3s auto-hide it was buried behind a second, timed tap (landscape
-                        // had no pause path at all). Tap now reveals the chrome AND toggles
-                        // playback in both orientations; clean viewing stays on the eye
-                        // button (hides the chrome without pausing).
-                        currentOnTogglePlayPause()
+                        if (heldToIgnoreTap) {
+                            heldToIgnoreTap = false
+                        } else {
+                            // Device report: a reveal-only tap made pause unreachable — with the
+                            // 3s auto-hide it was buried behind a second, timed tap (landscape
+                            // had no pause path at all). Tap now reveals the chrome AND toggles
+                            // playback in both orientations; clean viewing stays on the eye
+                            // button (hides the chrome without pausing).
+                            currentOnTogglePlayPause()
+                        }
                     },
                     onDoubleTap = { offset ->
                         // Left / right thirds seek ±10s, center double-tap likes.
@@ -494,7 +541,9 @@ fun ReelsVideoPage(
                             val target = ((currentSec + seekDeltaSec) / activeDurationSec).coerceIn(0f, 1f)
                             seekFraction = target
                             progressState.floatValue = target
-                            seekNoticeText = if (seekDeltaSec < 0f) "« -10 сек" else "+10 сек »"
+                            // The caption reports what the player really moved, so a tap near the
+                            // ends cannot promise +10 while the reel only had 3 seconds left.
+                            currentSeekNotice.show((target * activeDurationSec - currentSec).toInt())
                             coroutineScope.launch {
                                 delay(50)
                                 seekFraction = null
@@ -562,7 +611,7 @@ fun ReelsVideoPage(
                 actuallyPlaying = playing
                 if (currentIsActive) onPlayingStateChanged(playing)
             },
-            playbackSpeed = playbackSpeed,
+            playbackSpeed = heldRate ?: playbackSpeed,
             retrySignal = retrySignal,
             headers = headers,
             webUrl = item.webUrl,
@@ -643,55 +692,95 @@ fun ReelsVideoPage(
             )
         }
 
-        // 5. 2x Speed HUD Pill overlay
+        // 5. Speed pill: one slot, two meanings kept visibly apart. While a finger holds an edge
+        // the pill shows that temporary rate with a direction chevron; a rate chosen from the
+        // button or drawer stays on screen without the chevron.
+        val holdingRate = heldRate
+        val pillRate = holdingRate ?: playbackSpeed
+        val pillFast = (holdingRate ?: playbackSpeed) > 1f
+        val auroraColors = AuroraTheme.colors
         AnimatedVisibility(
-            visible = playbackSpeed == 2f && !isInPictureInPicture,
-            enter = fadeIn() + scaleIn(initialScale = 0.85f),
-            exit = fadeOut() + scaleOut(targetScale = 0.85f),
+            visible = pillRate != 1f && !isInPictureInPicture,
+            enter = fadeIn() + scaleIn(initialScale = 0.9f),
+            exit = fadeOut() + scaleOut(targetScale = 0.9f),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 70.dp),
         ) {
+            // TalkBack needs the spoken meaning; the visible text stays a bare "2×" / "0.5×".
+            val holdLabel = stringResource(
+                if (pillFast) MR.strings.reels_hold_fast else MR.strings.reels_hold_slow,
+            )
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color.Black.copy(alpha = 0.72f))
-                    .border(1.dp, AuroraTheme.colors.accent, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .reelsFrostPill(
+                        rim = auroraMenuRimLightBrush(auroraColors),
+                        eInk = auroraColors.isEInk,
+                        solid = auroraColors.cardBackground,
+                        strong = true,
+                    )
+                    .padding(horizontal = 13.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
+                if (holdingRate != null) {
+                    Text(
+                        text = if (pillFast) "»" else "«",
+                        color = if (pillFast) auroraColors.accent else Color.White.copy(alpha = 0.75f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 Text(
-                    text = "⚡ 2.0x Ускорение",
-                    color = AuroraTheme.colors.accent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = reelsSpeedLabel(pillRate),
+                    color = if (pillFast && holdingRate != null) auroraColors.accent else Color.White,
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    modifier = Modifier.semantics {
+                        contentDescription = holdLabel
+                    },
                 )
             }
         }
 
-        // 6. Seek Notice overlay (±10s)
+        // 6. Seek caption: light frost plate hugging the edge of the seek direction. The type
+        // scales with the window: a portrait screen has no room for a 18sp block over the caption,
+        // while landscape has the whole width to spare.
         AnimatedVisibility(
-            visible = seekNoticeText != null && !isInPictureInPicture,
-            enter = fadeIn() + scaleIn(initialScale = 0.85f),
-            exit = fadeOut() + scaleOut(targetScale = 0.85f),
-            modifier = Modifier.align(Alignment.Center),
+            visible = seekNotice.seconds != null && heldRate == null && isActive && !isInPictureInPicture,
+            enter = fadeIn() + slideInHorizontally { if (seekNotice.forward) it / 5 else -it / 5 },
+            exit = fadeOut() + slideOutHorizontally { if (seekNotice.forward) it / 5 else -it / 5 },
+            modifier = Modifier
+                .align(if (seekNotice.forward) Alignment.CenterEnd else Alignment.CenterStart)
+                .padding(horizontal = if (isLandscape) 18.dp else 14.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color.Black.copy(alpha = 0.75f))
-                    .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = seekNoticeText.orEmpty(),
+            Text(
+                text = seekNotice.seconds?.let { seconds ->
+                    stringResource(
+                        if (seconds < 0) MR.strings.reels_seek_notice_back else MR.strings.reels_seek_notice_forward,
+                        kotlin.math.abs(seconds),
+                    )
+                }.orEmpty(),
+                style = TextStyle(
                     color = Color.White,
-                    fontSize = 15.sp,
+                    fontSize = if (isLandscape) 18.sp else 12.sp,
                     fontWeight = FontWeight.Bold,
-                )
-            }
+                    fontFeatureSettings = "tnum",
+                    shadow = Shadow(color = Color.Black, offset = Offset(0f, 1f), blurRadius = 4f),
+                ),
+                maxLines = 1,
+                modifier = Modifier
+                    .reelsFrostPill(
+                        rim = auroraMenuRimLightBrush(auroraColors),
+                        eInk = auroraColors.isEInk,
+                        solid = auroraColors.cardBackground,
+                        strong = false,
+                    )
+                    .padding(horizontal = if (isLandscape) 12.dp else 9.dp, vertical = if (isLandscape) 5.dp else 3.dp),
+            )
         }
 
         // 7. Controls sit inside the rotated frame and are inset from physical safe edges
@@ -723,6 +812,9 @@ fun ReelsVideoPage(
                                 drawerOpen = true
                             },
                             onClearDisplay = onToggleChrome,
+                            showSearch = showSearch,
+                            isSearchOpen = isSearchBarOpen,
+                            onToggleSearch = onToggleSearch,
                         )
                     }
 
@@ -740,17 +832,18 @@ fun ReelsVideoPage(
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
                                 onToggleLike()
                             },
-                            isOfflineStored = isOfflineStored,
-                            onToggleOffline = {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                if (showOfflineAction) {
-                                    onToggleOffline()
-                                } else {
-                                    drawerTab = 1
-                                    drawerOpen = true
+                            onToggleLandscape = onExitLandscape,
+                            isDownloaded = isDownloaded,
+                            isDownloading = isDownloading,
+                            isPartial = isPartial,
+                            downloadSizeText = downloadSizeText,
+                            downloadProgress = downloadProgress,
+                            onDownload = onDownload?.let { download ->
+                                {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    download()
                                 }
                             },
-                            offlineSizeText = if (isOfflineStored) "✓" else "~24 МБ",
                             onOpenHide = null,
                             onShare = { onShare(progressState.floatValue * durationSec.coerceAtLeast(0f)) },
                             modifier = Modifier.padding(end = 16.dp),
@@ -832,14 +925,11 @@ fun ReelsVideoPage(
                             onCycleSleepTimer = onCycleSleepTimer,
                             isIncognito = isIncognito,
                             onToggleIncognito = onToggleIncognito,
-                            isOfflineStored = isOfflineStored,
-                            onToggleOfflineCurrent = {
-                                if (showOfflineAction) {
-                                    onToggleOffline()
-                                } else {
-                                    onToggleOffline()
-                                }
-                            },
+                            isDownloaded = isDownloaded,
+                            isDownloading = isDownloading,
+                            isPartial = isPartial,
+                            downloadSizeText = downloadSizeText,
+                            onDownloadCurrent = onDownload,
                             preloadWifiOnly = preloadWifiOnly,
                             onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
                             dataSaverEnabled = dataSaverEnabled,
@@ -888,10 +978,20 @@ fun ReelsVideoPage(
                             } else {
                                 null
                             },
-                            offlineSizeText = if (isOfflineStored) "✓" else "~24 МБ",
                             isOfflineStored = isOfflineStored,
                             landscape = landscape,
                             onToggleLandscape = onToggleLandscape,
+                            onDownload = onDownload?.let { download ->
+                                {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    download()
+                                }
+                            },
+                            isDownloaded = isDownloaded,
+                            isDownloading = isDownloading,
+                            isPartial = isPartial,
+                            downloadSizeText = downloadSizeText,
+                            downloadProgress = downloadProgress,
                             isLandscapeLayout = false,
                             modifier = Modifier.padding(end = 8.dp, bottom = actionsBottomPadding),
                         )
@@ -1019,6 +1119,66 @@ fun ReelsVideoPage(
         }
     }
 }
+
+internal const val REELS_HOLD_SLOW_RATE = 0.5f
+internal const val REELS_HOLD_FAST_RATE = 2f
+
+/** "2×" / "0.5×" — locale independent, so the pill never shows "2,0×" by accident. */
+internal fun reelsSpeedLabel(rate: Float): String {
+    val digits = if (rate % 1f == 0f) rate.toInt().toString() else rate.toString().trimEnd('0').trimEnd('.')
+    return "$digits×"
+}
+
+private val REELS_FROST_STRONG = listOf(
+    0f to Color(0xFF2E2740).copy(alpha = 0.78f),
+    0.45f to Color(0xFF171221).copy(alpha = 0.72f),
+    1f to Color(0xFF0E0C13).copy(alpha = 0.74f),
+)
+private val REELS_FROST_LIGHT = listOf(
+    0f to Color(0xFF2A2438).copy(alpha = 0.46f),
+    0.45f to Color(0xFF15111F).copy(alpha = 0.40f),
+    1f to Color(0xFF0E0C13).copy(alpha = 0.44f),
+)
+
+/**
+ * The Aurora frost plate: rim light comes from the shared token so light/dark/AMOLED/e-ink all
+ * stay correct, and e-ink gets a solid surface instead of translucency.
+ */
+internal fun Modifier.reelsFrostPill(
+    rim: Brush,
+    eInk: Boolean,
+    solid: Color,
+    strong: Boolean,
+): Modifier {
+    if (eInk) return clip(CircleShape).background(solid).border(1.dp, rim, CircleShape)
+    val stops = (if (strong) REELS_FROST_STRONG else REELS_FROST_LIGHT).map { it.second }
+    return clip(CircleShape)
+        .background(Brush.verticalGradient(stops), CircleShape)
+        .border(1.dp, rim, CircleShape)
+}
+
+/**
+ * Hold-to-rate: the left half of the reel slows it down, the right half speeds it up. Halves and
+ * not thirds because a hold has no competing meaning in the middle (unlike the double-tap, which
+ * needs it for "like"), and a thumb landing at 34% of the width should not silently do nothing.
+ */
+internal fun reelsHoldRate(offsetX: Float, width: Float): Float? = when {
+    width <= 0f -> null
+    offsetX < width / 2f -> REELS_HOLD_SLOW_RATE
+    else -> REELS_HOLD_FAST_RATE
+}
+
+/**
+ * A finger can drift while the user is still deciding; only a drift *before* the long-press
+ * timeout means "this was a swipe, not a hold". After activation the rate is kept no matter where
+ * the thumb wanders, which is what makes the gesture tolerable on a phone held one-handed.
+ */
+internal fun reelsHoldCancelledByDrift(
+    distancePx: Float,
+    slopPx: Float,
+    elapsedMs: Long,
+    timeoutMs: Long,
+): Boolean = elapsedMs < timeoutMs && distancePx > slopPx
 
 /** How a page turns its raw URL into a playable player input (contract v25). */
 internal enum class ReelMediaPlan {

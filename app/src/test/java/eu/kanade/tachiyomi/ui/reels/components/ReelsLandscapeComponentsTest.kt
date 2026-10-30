@@ -96,27 +96,61 @@ class ReelsLandscapeComponentsTest {
     }
 
     @Test
-    fun `offline compact label logic formats properly`() {
-        resolveOfflineActionLabel(isOfflineStored = true, offlineSizeText = null) shouldBe "✓"
-        resolveOfflineActionLabel(isOfflineStored = true, offlineSizeText = "~24 МБ") shouldBe "✓"
-        resolveOfflineActionLabel(isOfflineStored = false, offlineSizeText = "~24 МБ") shouldBe "~24 МБ"
-        resolveOfflineActionLabel(isOfflineStored = false, offlineSizeText = null) shouldBe "24 МБ"
-        resolveOfflineActionLabel(isOfflineStored = false, offlineSizeText = "") shouldBe "24 МБ"
+    fun `speed pill never shows a trailing zero or a locale comma`() {
+        reelsSpeedLabel(2f) shouldBe "2×"
+        reelsSpeedLabel(0.5f) shouldBe "0.5×"
+        reelsSpeedLabel(1.5f) shouldBe "1.5×"
+        reelsSpeedLabel(1.25f) shouldBe "1.25×"
+        reelsSpeedLabel(1f) shouldBe "1×"
     }
 
     @Test
-    fun `3-pod landscape action rail clearance when hide pod is disabled`() {
+    fun `hold uses halves so a thumb near the middle still lands`() {
+        val width = 900f
+        reelsHoldRate(0f, width) shouldBe REELS_HOLD_SLOW_RATE
+        reelsHoldRate(300f, width) shouldBe REELS_HOLD_SLOW_RATE
+        reelsHoldRate(449f, width) shouldBe REELS_HOLD_SLOW_RATE
+        // The midpoint itself is no longer a dead zone: it belongs to the fast half.
+        reelsHoldRate(450f, width) shouldBe REELS_HOLD_FAST_RATE
+        reelsHoldRate(899f, width) shouldBe REELS_HOLD_FAST_RATE
+    }
+
+    @Test
+    fun `drift only cancels a hold before the timeout`() {
+        reelsHoldCancelledByDrift(30f, 24f, elapsedMs = 300L, timeoutMs = 500L) shouldBe true
+        reelsHoldCancelledByDrift(24f, 24f, elapsedMs = 300L, timeoutMs = 500L) shouldBe false
+        reelsHoldCancelledByDrift(10f, 24f, elapsedMs = 300L, timeoutMs = 500L) shouldBe false
+        // Once the hold activated, the finger may roam anywhere without losing the rate.
+        reelsHoldCancelledByDrift(400f, 24f, elapsedMs = 600L, timeoutMs = 500L) shouldBe false
+        reelsHoldCancelledByDrift(400f, 24f, elapsedMs = 500L, timeoutMs = 500L) shouldBe false
+    }
+
+    @Test
+    fun `a hold before the layout has a width does nothing`() {
+        reelsHoldRate(10f, 0f) shouldBe null
+        reelsHoldRate(-1f, -1f) shouldBe null
+    }
+
+    @Test
+    fun `download labels never invent a file size`() {
+        resolveDownloadActionLabel(false, null, "Скачать", "Загрузка") shouldBe "Скачать"
+        resolveDownloadActionLabel(false, "", "Download", "Downloading") shouldBe "Download"
+        resolveDownloadActionLabel(true, null, "Скачать", "Загрузка") shouldBe "Загрузка"
+        resolveDownloadActionLabel(true, "3,6 МБ", "Скачать", "Загрузка") shouldBe "3,6 МБ"
+        resolveDownloadActionLabel(false, "8.1 MB", "Download", "Downloading") shouldBe "8.1 MB"
+    }
+
+    @Test
+    fun `portrait return fits the compact landscape rail at enlarged font scale`() {
         val screenHeightDp = 360f
         val topBarBottomDp = 54f
 
-        // When hide pod is null, 3 pods are rendered: Like, Offline, Share
-        val podsCount = 3
-        val podHeight = 44f + 2f + 11f // 57dp
-        val spacing = 4f
-        val railHeightDp = (podsCount * podHeight) + ((podsCount - 1) * spacing) // 179dp
-        val railTopDp = (screenHeightDp / 2f) - (railHeightDp / 2f) // 90.5dp
-        val clearanceFromTopBar = railTopDp - topBarBottomDp // 36.5dp
-
-        (clearanceFromTopBar >= 30f) shouldBe true
+        // Like, portrait return, download and share; only the portrait return has no caption.
+        for (fontScale in listOf(1f, 1.3f)) {
+            val captionedPodHeight = 44f + 2f + 12f * fontScale
+            val railHeightDp = 3 * captionedPodHeight + 44f + 3 * 4f
+            val railTopDp = (screenHeightDp - railHeightDp) / 2f
+            (railTopDp - topBarBottomDp > 0f) shouldBe true
+        }
     }
 }

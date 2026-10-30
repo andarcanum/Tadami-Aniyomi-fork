@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -235,6 +236,9 @@ fun ReelsTopBar(
             .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
+        // Search moves inside the source capsule only when both halves are usable: switchable
+        // source (so the left half is a real target) and an actual search mode.
+        val mergedSearch = showSourcePicker && showSearch
         // Main Navigation & Actions Row
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -253,14 +257,17 @@ fun ReelsTopBar(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
+                        .clip(CircleShape)
                         .clickable { onBackClick() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
                         modifier = Modifier
                             .size(40.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
+                            .reelsGlassSurface(
+                                eInk = AuroraTheme.colors.isEInk,
+                                eInkColor = AuroraTheme.colors.cardBackground,
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -272,20 +279,103 @@ fun ReelsTopBar(
                     }
                 }
 
-                // Source Title Badge (with dropdown if multiple sources available)
+                // Source identity. The capsule exists only where the source can actually be
+                // switched: a plate that is not tappable reads as a broken button, which is what
+                // the single-source case used to look like.
                 if (sourceName.isNotBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                            .clickable(enabled = showSourcePicker) {
-                                onOpenSourcePicker()
-                                openHub = HubMenu.NONE
+                    if (showSourcePicker) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .height(40.dp)
+                                .reelsGlassSurface(
+                                    RoundedCornerShape(20.dp),
+                                    eInk = AuroraTheme.colors.isEInk,
+                                    eInkColor = AuroraTheme.colors.cardBackground,
+                                )
+                                .clickable {
+                                    onOpenSourcePicker()
+                                    openHub = HubMenu.NONE
+                                }
+                                .padding(start = 10.dp, end = if (mergedSearch) 4.dp else 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                if (sourceIcon != null) {
+                                    Image(
+                                        bitmap = sourceIcon,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(RoundedCornerShape(6.dp)),
+                                    )
+                                }
+                                Text(
+                                    text = sourceName,
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    // Weighted so the fixed icon/dropdown are measured first and
+                                    // never squeezed out by a long name.
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (isIncognito) {
+                                    // Audit H9: a visible marker that writes are being suppressed.
+                                    Icon(
+                                        imageVector = Icons.Filled.PrivacyTip,
+                                        contentDescription = stringResource(MR.strings.reels_incognito_active),
+                                        tint = AuroraTheme.colors.accent,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowDropDown,
+                                    contentDescription = stringResource(MR.strings.reels_switch_source),
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                if (mergedSearch) {
+                                    // Search lives inside the capsule so the row keeps one circle
+                                    // more for real session actions. 32dp inside a 40dp plate is
+                                    // the deliberate trade recorded in the prototype.
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .reelsGlassSurface(
+                                                active = isSearchBarOpen,
+                                                eInk = AuroraTheme.colors.isEInk,
+                                                eInkColor = AuroraTheme.colors.cardBackground,
+                                            )
+                                            .clickable {
+                                                onToggleSearchBar()
+                                                openHub = HubMenu.NONE
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Search,
+                                            contentDescription = stringResource(MR.strings.action_search),
+                                            tint = if (isSearchBarOpen) {
+                                                AuroraTheme.colors.accent
+                                            } else {
+                                                Color.White
+                                            },
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
                             }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
+                        }
+                    } else {
                         Row(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .padding(start = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
@@ -300,17 +390,14 @@ fun ReelsTopBar(
                             }
                             Text(
                                 text = sourceName,
-                                color = Color.White,
+                                color = Color.White.copy(alpha = 0.92f),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                // Weighted so the fixed icon/dropdown are measured first and
-                                // never squeezed out by a long name.
                                 modifier = Modifier.weight(1f, fill = false),
                             )
                             if (isIncognito) {
-                                // Audit H9: a visible marker that writes are being suppressed.
                                 Icon(
                                     imageVector = Icons.Filled.PrivacyTip,
                                     contentDescription = stringResource(MR.strings.reels_incognito_active),
@@ -318,18 +405,14 @@ fun ReelsTopBar(
                                     modifier = Modifier.size(14.dp),
                                 )
                             }
-                            if (showSourcePicker) {
-                                Icon(
-                                    imageVector = Icons.Filled.ArrowDropDown,
-                                    contentDescription = stringResource(MR.strings.reels_switch_source),
-                                    tint = Color.White.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
                         }
                     }
                 }
             }
+
+            // Guaranteed air: a long source capsule can consume the whole row, and
+            // SpaceBetween alone then leaves zero gap before the first action circle.
+            Spacer(Modifier.width(10.dp))
 
             // Right Actions: Search, Filter (online only), Favorites, Follows, Follow, More.
             // Horizontally scrollable: the fixed-size circles must never be squeezed to
@@ -339,23 +422,15 @@ fun ReelsTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                if (!isOffline && showSearch) {
+                if (!isOffline && showSearch && !mergedSearch) {
                     // Search toggle button
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(
-                                if (isSearchBarOpen) {
-                                    AuroraTheme.colors.accent.copy(alpha = 0.35f)
-                                } else {
-                                    Color.Black.copy(alpha = 0.5f)
-                                },
-                                CircleShape,
-                            )
-                            .border(
-                                1.dp,
-                                if (isSearchBarOpen) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
-                                CircleShape,
+                            .reelsGlassSurface(
+                                active = isSearchBarOpen,
+                                eInk = AuroraTheme.colors.isEInk,
+                                eInkColor = AuroraTheme.colors.cardBackground,
                             )
                             .clickable {
                                 onToggleSearchBar()
@@ -378,8 +453,10 @@ fun ReelsTopBar(
                 Box(
                     modifier = Modifier
                         .size(36.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                        .reelsGlassSurface(
+                            eInk = AuroraTheme.colors.isEInk,
+                            eInkColor = AuroraTheme.colors.cardBackground,
+                        )
                         .clickable {
                             onOpenFavorites()
                             openHub = HubMenu.NONE
@@ -399,18 +476,10 @@ fun ReelsTopBar(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(
-                                if (isFollowingCreator) {
-                                    AuroraTheme.colors.accent.copy(alpha = 0.35f)
-                                } else {
-                                    Color.Black.copy(alpha = 0.5f)
-                                },
-                                CircleShape,
-                            )
-                            .border(
-                                1.dp,
-                                if (isFollowingCreator) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
-                                CircleShape,
+                            .reelsGlassSurface(
+                                active = isFollowingCreator,
+                                eInk = AuroraTheme.colors.isEInk,
+                                eInkColor = AuroraTheme.colors.cardBackground,
                             )
                             .clickable {
                                 onToggleFollow()
@@ -435,18 +504,10 @@ fun ReelsTopBar(
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .background(
-                                    if (isLoggedIn) {
-                                        AuroraTheme.colors.accent.copy(alpha = 0.35f)
-                                    } else {
-                                        Color.Black.copy(alpha = 0.5f)
-                                    },
-                                    CircleShape,
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isLoggedIn) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
-                                    CircleShape,
+                                .reelsGlassSurface(
+                                    active = isLoggedIn,
+                                    eInk = AuroraTheme.colors.isEInk,
+                                    eInkColor = AuroraTheme.colors.cardBackground,
                                 )
                                 .clickable {
                                     openHub = if (openHub ==
@@ -494,26 +555,10 @@ fun ReelsTopBar(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(
-                                if (openHub == HubMenu.MORE) {
-                                    AuroraTheme.colors.accent.copy(
-                                        alpha = 0.35f,
-                                    )
-                                } else {
-                                    Color.Black.copy(alpha = 0.5f)
-                                },
-                                CircleShape,
-                            )
-                            .border(
-                                1.dp,
-                                if (openHub ==
-                                    HubMenu.MORE
-                                ) {
-                                    AuroraTheme.colors.accent
-                                } else {
-                                    Color.White.copy(alpha = 0.2f)
-                                },
-                                CircleShape,
+                            .reelsGlassSurface(
+                                active = openHub == HubMenu.MORE,
+                                eInk = AuroraTheme.colors.isEInk,
+                                eInkColor = AuroraTheme.colors.cardBackground,
                             )
                             .clickable { openHub = if (openHub == HubMenu.MORE) HubMenu.NONE else HubMenu.MORE },
                         contentAlignment = Alignment.Center,

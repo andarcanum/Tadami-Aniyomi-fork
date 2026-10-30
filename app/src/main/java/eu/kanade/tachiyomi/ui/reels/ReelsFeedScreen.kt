@@ -2,15 +2,21 @@ package eu.kanade.tachiyomi.ui.reels
 
 import android.app.Activity
 import android.app.PictureInPictureParams
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
+import android.provider.DocumentsContract
 import android.text.format.Formatter
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -119,6 +125,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedCategory
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestionKind
+import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.SourceFilterAnimeDialog
 import eu.kanade.tachiyomi.ui.reels.ReelsFeedScreenModel.OfflineCopyResult
 import eu.kanade.tachiyomi.ui.reels.components.CfBootstrapWebView
@@ -136,6 +143,7 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsWebLoginDialog
 import eu.kanade.tachiyomi.ui.reels.player.clearReelsVideoCache
 import eu.kanade.tachiyomi.ui.reels.player.prewarmReelHead
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -151,9 +159,43 @@ import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.Serializable
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import androidx.compose.foundation.lazy.grid.items as gridItems
+
+internal fun reelsDownloadKey(sourceId: Long, videoId: String): String = "$sourceId:$videoId"
+
+internal enum class ReelsDownloadTap { Start, Cancel, Resume, Open }
+
+/** The single download pod means four things depending on its state; kept pure so it is testable. */
+internal fun resolveReelsDownloadTap(
+    inProgress: Boolean,
+    hasDestination: Boolean,
+    isPartial: Boolean,
+): ReelsDownloadTap = when {
+    inProgress -> ReelsDownloadTap.Cancel
+    !hasDestination -> ReelsDownloadTap.Start
+    isPartial -> ReelsDownloadTap.Resume
+    else -> ReelsDownloadTap.Open
+}
+
+private data class ReelsExportRequest(
+    val item: ShortVideoItem,
+    val sourceId: Long,
+    val headers: Map<String, String>,
+) : Serializable {
+    val key: String get() = reelsDownloadKey(sourceId, item.id)
+}
+
+private data class ReelsExportState(
+    val bytes: Long = 0L,
+    val total: Long? = null,
+    val inProgress: Boolean = true,
+    val uri: Uri? = null,
+    val operation: Any? = null,
+    val partial: Boolean = false,
+)
 
 data class ReelsFeedScreen(
     val sourceId: Long,
@@ -319,6 +361,221 @@ data class ReelsFeedScreen(
         val offlineQuotaMessage = stringResource(MR.strings.reels_offline_failed_quota)
         val offlineNetworkMessage = stringResource(MR.strings.reels_offline_failed_network)
         val offlineUnsupportedMessage = stringResource(MR.strings.reels_offline_failed_unsupported)
+        val downloadSavedMessage = stringResource(MR.strings.reels_download_saved)
+        val downloadFileSavedMessage = stringResource(MR.strings.reels_download_file_saved)
+        val downloadFailedMessage = stringResource(MR.strings.reels_download_failed)
+        val downloadUnsupportedMessage = stringResource(MR.strings.reels_download_unsupported)
+        val downloadPausedMessage = stringResource(MR.strings.reels_download_paused)
+        val downloads = remember(context) { ReelsDownloads(context.applicationContext) }
+        val exportStates = remember { mutableStateMapOf<String, ReelsExportState>() }
+        val downloadJobs = remember { mutableStateMapOf<String, Job>() }
+
+        // Forgetting a partial without deleting it would leave an unpublished MediaStore row
+        // holding the user's storage.
+        fun clearDownload(key: String) {
+            val forgotten = exportStates.remove(key)
+            val uri = forgotten?.takeIf { it.partial }?.uri ?: return
+            coroutineScope.launch(Dispatchers.IO) { downloads.discard(uri) }
+        }
+
+        // Resume lives only as long as this screen: leaving it cancels running transfers (whose own
+        // finally removes the destination) and discards partials, so no pending row survives.
+        DisposableEffect(Unit) {
+            onDispose {
+                exportStates.values.filter { it.partial }.forEach { state ->
+                    state.uri?.let { uri -> runCatching { context.contentResolver.delete(uri, null, null) } }
+                }
+                downloadJobs.values.forEach { it.cancel() }
+                downloadJobs.clear()
+            }
+        }
+        var pendingDownload by rememberSaveable { mutableStateOf<ReelsExportRequest?>(null) }
+
+        fun performDownload(
+            request: ReelsExportRequest,
+            destination: Uri? = null,
+            resumeFrom: Long = 0L,
+            resumeUri: Uri? = null,
+        ) {
+            val operation = Any()
+            exportStates[request.key] = ReelsExportState(
+                operation = operation,
+                bytes = resumeFrom,
+                uri = resumeUri,
+                total = exportStates[request.key]?.total,
+            )
+            downloadJobs[request.key] = coroutineScope.launch {
+                val result = try {
+                    downloads.download(
+                        request.item,
+                        request.sourceId,
+                        request.headers,
+                        destination,
+                        resumeFrom,
+                        resumeUri,
+                        // Only the native Downloads entry is resumable: a caller-chosen document
+                        // has no append semantics we can trust across providers.
+                        keepPartial = destination == null,
+                    ) { bytes, total ->
+                        coroutineScope.launch(Dispatchers.Main.immediate) {
+                            val current = exportStates[request.key]
+                            if (current?.inProgress == true && current.operation === operation) {
+                                exportStates[request.key] = current.copy(bytes = bytes, total = total)
+                            }
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    clearDownload(request.key)
+                    throw e
+                } finally {
+                    if (downloadJobs[request.key]?.isActive != true) downloadJobs.remove(request.key)
+                }
+                val message = when (result) {
+                    is ReelsDownloadResult.Saved -> {
+                        exportStates[request.key] = ReelsExportState(
+                            bytes = result.bytes,
+                            inProgress = false,
+                            uri = result.uri,
+                        )
+                        if (destination == null) downloadSavedMessage else downloadFileSavedMessage
+                    }
+                    is ReelsDownloadResult.Partial -> {
+                        exportStates[request.key] = ReelsExportState(
+                            bytes = result.bytes,
+                            total = exportStates[request.key]?.total,
+                            inProgress = false,
+                            uri = result.uri,
+                            partial = true,
+                        )
+                        downloadPausedMessage
+                    }
+                    ReelsDownloadResult.Failed -> {
+                        clearDownload(request.key)
+                        downloadFailedMessage
+                    }
+                    ReelsDownloadResult.Unsupported -> {
+                        clearDownload(request.key)
+                        downloadUnsupportedMessage
+                    }
+                }
+                snackbarHostState.showSnackbar(message)
+            }
+        }
+
+        // Android 9 and older need a user-granted document, not a new broad storage permission.
+        val legacyDownloadPicker = rememberLauncherForActivityResult(
+            remember {
+                object : ActivityResultContracts.CreateDocument("*/*") {
+                    override fun createIntent(context: Context, input: String): Intent =
+                        super.createIntent(context, input).putExtra(
+                            DocumentsContract.EXTRA_INITIAL_URI,
+                            DocumentsContract.buildRootUri("com.android.providers.downloads.documents", "downloads"),
+                        )
+                }
+            },
+        ) { uri ->
+            val request = pendingDownload
+            pendingDownload = null
+            if (request != null) {
+                if (uri == null) clearDownload(request.key) else performDownload(request, uri)
+            }
+        }
+
+        fun handleDownload(item: ShortVideoItem, itemIndex: Int, hd: Boolean) {
+            val sourceId = if (state.isOffline) {
+                state.offlineSourceIds.getOrNull(itemIndex) ?: return
+            } else {
+                state.currentSourceId
+            }
+            val key = reelsDownloadKey(sourceId, item.id)
+            val previous = exportStates[key]
+            val resumable = previous?.takeIf { it.partial && it.uri != null }
+            val resumeFrom = resumable?.bytes ?: 0L
+            val resumeUri = resumable?.uri
+            // The pod doubles as the stop button while a transfer runs: no second control to tap.
+            if (resolveReelsDownloadTap(
+                    previous?.inProgress == true,
+                    previous?.uri != null,
+                    resumable != null,
+                ) == ReelsDownloadTap.Cancel
+            ) {
+                downloadJobs.remove(key)?.cancel()
+                clearDownload(key)
+                return
+            }
+            if (previous?.inProgress == true || pendingDownload != null ||
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && exportStates.values.any { it.inProgress })
+            ) {
+                return
+            }
+            exportStates[key] = previous?.copy(inProgress = true, partial = false) ?: ReelsExportState()
+            val headers = HashMap(screenModel.downloadHeaders(sourceId))
+            val descriptor = screenModel.mediaDescriptor(item, sourceId)
+            coroutineScope.launch {
+                if (previous != null && previous.uri != null && resumeUri == null) {
+                    val uri = previous.uri
+                    val exists = withContext(Dispatchers.IO) {
+                        try {
+                            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+                        } catch (_: Exception) {
+                            false
+                        }
+                    }
+                    if (exists) {
+                        exportStates[key] = previous
+                        try {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW)
+                                    .setDataAndType(uri, context.contentResolver.getType(uri) ?: "video/*")
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                            )
+                        } catch (_: ActivityNotFoundException) {
+                            snackbarHostState.showSnackbar(downloadFileSavedMessage)
+                        } catch (_: SecurityException) {
+                            snackbarHostState.showSnackbar(downloadFailedMessage)
+                        }
+                        return@launch
+                    }
+                }
+                exportStates[key] = ReelsExportState()
+                try {
+                    if (!item.videoUrl.startsWith("file://") && descriptor?.offlineSupported == false) {
+                        clearDownload(key)
+                        snackbarHostState.showSnackbar(downloadUnsupportedMessage)
+                        return@launch
+                    }
+                    val url = (if (hd) item.videoUrlHd?.takeIf { it.isNotBlank() } ?: item.videoUrl else item.videoUrl)
+                        .takeIf { it.isNotBlank() }
+                        ?: screenModel.resolvePlaybackUrl(item, hd, sourceId)
+                    if (url.isNullOrBlank()) {
+                        clearDownload(key)
+                        snackbarHostState.showSnackbar(downloadFailedMessage)
+                        return@launch
+                    }
+                    val extension = Uri.parse(url).lastPathSegment?.substringAfterLast('.', "")?.lowercase()
+                    if (extension == "m3u8" || extension == "mpd") {
+                        clearDownload(key)
+                        snackbarHostState.showSnackbar(downloadUnsupportedMessage)
+                        return@launch
+                    }
+                    val request = ReelsExportRequest(item.copy(videoUrl = url, videoUrlHd = null), sourceId, headers)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        performDownload(request, resumeFrom = resumeFrom, resumeUri = resumeUri)
+                    } else {
+                        pendingDownload = request
+                        legacyDownloadPicker.launch(downloads.fileName(request.item, sourceId))
+                    }
+                } catch (e: CancellationException) {
+                    clearDownload(key)
+                    throw e
+                } catch (_: Exception) {
+                    pendingDownload = null
+                    clearDownload(key)
+                    snackbarHostState.showSnackbar(downloadFailedMessage)
+                }
+            }
+        }
+
         val undoLabel = stringResource(MR.strings.action_undo)
         fun notifyHidden() {
             // Capture THIS hide's token: with two rapid hides the older snackbar's undo must
@@ -892,6 +1149,12 @@ data class ReelsFeedScreen(
                             // Contract v25: the source's per-item media verdict; remembered
                             // per item so re-composition does not re-run plugin code.
                             val mediaDescriptor = remember(item) { screenModel.mediaDescriptor(item) }
+                            val exportSourceId = if (state.isOffline) {
+                                state.offlineSourceIds.getOrNull(page) ?: state.currentSourceId
+                            } else {
+                                state.currentSourceId
+                            }
+                            val export = exportStates[reelsDownloadKey(exportSourceId, item.id)]
                             ReelsVideoPage(
                                 item = item,
                                 // Activate only the settled page: during fast flings intermediate
@@ -909,10 +1172,19 @@ data class ReelsFeedScreen(
                                 isCropMode = state.isCropMode,
                                 chromeVisible = chromeVisible && page == pagerState.settledPage,
                                 isLandscape = windowIsLandscape,
+                                showSearch = state.supportsTags &&
+                                    state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                                isSearchBarOpen = state.isSearchBarOpen,
+                                onToggleSearch = { screenModel.toggleSearchBar(!state.isSearchBarOpen) },
                                 landscape = landscape,
                                 onToggleLandscape = {
                                     if (activity != null) {
                                         ReelsOrientationLock.setLandscape(activity, !landscape)
+                                    }
+                                },
+                                onExitLandscape = {
+                                    if (activity != null) {
+                                        ReelsOrientationLock.setLandscape(activity, false)
                                     }
                                 },
                                 isInPictureInPicture = inPictureInPicture,
@@ -999,6 +1271,17 @@ data class ReelsFeedScreen(
                                         }
                                     }
                                 },
+                                isDownloaded = export?.uri != null,
+                                isDownloading = export?.inProgress == true,
+                                isPartial = export?.partial == true,
+                                downloadSizeText = export?.bytes
+                                    ?.takeIf { it > 0L }?.let { Formatter.formatFileSize(context, it) },
+                                downloadProgress = export?.let { export ->
+                                    export.total?.takeIf { it > 0L }?.let { total ->
+                                        (export.bytes.toFloat() / total).coerceIn(0f, 1f)
+                                    }
+                                },
+                                onDownload = { handleDownload(item, page, effectiveHd) },
                                 // Contract v18 creator surfaces: capability + author gated.
                                 showFollowAction = state.isCreatorCapable && !state.isOffline && item.author != null,
                                 isFollowingCreator = item.author?.let { it in state.followingCreators } == true,

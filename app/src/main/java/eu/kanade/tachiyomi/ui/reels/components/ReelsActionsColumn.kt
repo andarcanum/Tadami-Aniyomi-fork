@@ -3,8 +3,6 @@ package eu.kanade.tachiyomi.ui.reels.components
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -26,6 +25,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,12 +35,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
@@ -71,6 +74,14 @@ fun ReelsActionsColumn(
     // bar, and it sits right after Like so it reads as a view mode, not as a media action.
     landscape: Boolean = false,
     onToggleLandscape: () -> Unit = {},
+    // Export-to-Downloads slot (portrait): same four meanings as the landscape rail pod —
+    // idle starts, running cancels, partial continues, finished opens. Null hides the slot.
+    onDownload: (() -> Unit)? = null,
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    isPartial: Boolean = false,
+    downloadSizeText: String? = null,
+    downloadProgress: Float? = null,
     // A rotated window has width but not enough height for the portrait column: the same
     // slots are laid out in one horizontal row.
     isLandscapeLayout: Boolean = false,
@@ -93,7 +104,9 @@ fun ReelsActionsColumn(
     fun LikeItem() {
         ActionIconItem(
             icon = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-            label = if (isLiked) "unlike" else "like",
+            label = stringResource(
+                if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like,
+            ),
             tint = if (isLiked) HeartColor else Color.White,
             modifier = Modifier.scale(scaleHeart),
             stateDescription = stringResource(
@@ -108,13 +121,41 @@ fun ReelsActionsColumn(
     fun LandscapeItem() {
         ActionIconItem(
             icon = if (landscape) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-            label = "full",
+            label = stringResource(if (landscape) MR.strings.reels_action_portrait else MR.strings.reels_action_rotate),
             stateDescription = stringResource(
                 if (landscape) MR.strings.reels_landscape_exit else MR.strings.reels_landscape_fullscreen,
             ),
             tint = if (landscape) AuroraTheme.colors.accent else Color.White,
             showLabel = showLabels,
             onClick = onToggleLandscape,
+        )
+    }
+
+    @Composable
+    fun DownloadItem() {
+        val download = onDownload ?: return
+        val downloadLabel = stringResource(MR.strings.reels_download_video)
+        val runningLabel = stringResource(MR.strings.reels_download_cancel)
+        val resumableLabel = stringResource(MR.strings.reels_download_resume)
+        ActionIconItem(
+            icon = if (isDownloaded || isPartial) Icons.Filled.DownloadDone else Icons.Outlined.Download,
+            label = resolveDownloadActionLabel(
+                isDownloading,
+                downloadSizeText,
+                downloadLabel,
+                stringResource(MR.strings.reels_download_in_progress),
+            ),
+            stateDescription = when {
+                isDownloading -> runningLabel
+                isPartial -> resumableLabel
+                isDownloaded -> stringResource(MR.strings.reels_download_saved)
+                else -> downloadLabel
+            },
+            tint = if (isDownloaded || isPartial) AuroraTheme.colors.accent else Color.White,
+            showLabel = showLabels,
+            isLoading = isDownloading,
+            progress = downloadProgress,
+            onClick = download,
         )
     }
 
@@ -141,7 +182,7 @@ fun ReelsActionsColumn(
     fun SoundItem() {
         ActionIconItem(
             icon = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-            label = if (isMuted) "unmute" else "mute",
+            label = stringResource(MR.strings.reels_feed_action_sound),
             // TalkBack needs the CURRENT state, not only a static label.
             stateDescription = stringResource(
                 if (isMuted) MR.strings.reels_sound_off else MR.strings.reels_sound_on,
@@ -156,7 +197,7 @@ fun ReelsActionsColumn(
     fun ShareItem() {
         ActionIconItem(
             icon = Icons.Filled.Share,
-            label = "share",
+            label = stringResource(MR.strings.reels_feed_action_share),
             tint = Color.White,
             showLabel = showLabels,
             onClick = onShare,
@@ -181,7 +222,10 @@ fun ReelsActionsColumn(
     fun OfflineItem() {
         // B3.3 offline copy: download / remove the real local file.
         if (onToggleOffline != null) {
-            val offlineLabel = resolveOfflineActionLabel(isOfflineStored, offlineSizeText)
+            val offlineLabel = offlineSizeText?.takeIf { it.isNotBlank() }
+                ?: stringResource(
+                    if (isOfflineStored) MR.strings.reels_download_saved_short else MR.strings.reels_download_video,
+                )
             ActionIconItem(
                 icon = if (isOfflineStored) Icons.Filled.OfflinePin else Icons.Outlined.Download,
                 label = offlineLabel,
@@ -233,6 +277,7 @@ fun ReelsActionsColumn(
             LikeItem()
             LandscapeItem()
             FollowItem()
+            DownloadItem()
             ShareItem()
             OfflineItem()
             SoundItem()
@@ -249,6 +294,8 @@ private fun ActionIconItem(
     modifier: Modifier = Modifier,
     stateDescription: String? = null,
     showLabel: Boolean = true,
+    isLoading: Boolean = false,
+    progress: Float? = null,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -271,33 +318,52 @@ private fun ActionIconItem(
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .background(Color.Black.copy(alpha = 0.45f), CircleShape)
-                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape),
+                    .reelsGlassSurface(
+                        eInk = AuroraTheme.colors.isEInk,
+                        eInkColor = AuroraTheme.colors.cardBackground,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = tint,
-                    modifier = Modifier.size(18.dp),
-                )
+                if (isLoading) {
+                    if (progress == null) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
+                    } else {
+                        CircularProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.size(18.dp),
+                            color = tint,
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = tint,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
         if (showLabel) {
             Text(
                 text = label,
-                fontSize = 10.sp,
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.92f),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    shadow = Shadow(color = Color.Black, offset = Offset(0f, 1f), blurRadius = 4f),
+                ),
                 maxLines = 1,
             )
         }
     }
 }
 
-internal fun resolveOfflineActionLabel(isOfflineStored: Boolean, offlineSizeText: String?): String =
-    when {
-        isOfflineStored -> "✓"
-        !offlineSizeText.isNullOrBlank() -> offlineSizeText
-        else -> "24 МБ"
-    }
+internal fun resolveDownloadActionLabel(
+    isDownloading: Boolean,
+    sizeText: String?,
+    downloadLabel: String,
+    downloadingLabel: String,
+): String = sizeText?.takeIf { it.isNotBlank() } ?: if (isDownloading) downloadingLabel else downloadLabel

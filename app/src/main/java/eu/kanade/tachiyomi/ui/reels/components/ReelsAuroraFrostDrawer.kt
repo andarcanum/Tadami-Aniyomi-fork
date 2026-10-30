@@ -56,6 +56,8 @@ import eu.kanade.presentation.components.AuroraCapsuleTabs
 import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.roundToInt
 
 /**
@@ -82,8 +84,11 @@ fun ReelsAuroraFrostDrawer(
     onCycleSleepTimer: () -> Unit = {},
     isIncognito: Boolean = false,
     onToggleIncognito: () -> Unit = {},
-    isOfflineStored: Boolean = false,
-    onToggleOfflineCurrent: () -> Unit = {},
+    isDownloaded: Boolean = false,
+    isDownloading: Boolean = false,
+    isPartial: Boolean = false,
+    downloadSizeText: String? = null,
+    onDownloadCurrent: (() -> Unit)? = null,
     preloadWifiOnly: Boolean = false,
     onTogglePreloadWifiOnly: () -> Unit = {},
     dataSaverEnabled: Boolean = false,
@@ -140,8 +145,11 @@ fun ReelsAuroraFrostDrawer(
             )
             1 -> NetworkOfflineTabContent(
                 currentItem = currentItem,
-                isOfflineStored = isOfflineStored,
-                onToggleOfflineCurrent = onToggleOfflineCurrent,
+                isDownloaded = isDownloaded,
+                isDownloading = isDownloading,
+                isPartial = isPartial,
+                downloadSizeText = downloadSizeText,
+                onDownloadCurrent = onDownloadCurrent,
                 preloadWifiOnly = preloadWifiOnly,
                 onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
                 dataSaverEnabled = dataSaverEnabled,
@@ -312,8 +320,11 @@ private fun PlayerTabContent(
 @Composable
 private fun NetworkOfflineTabContent(
     currentItem: ShortVideoItem?,
-    isOfflineStored: Boolean,
-    onToggleOfflineCurrent: () -> Unit,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    isPartial: Boolean,
+    downloadSizeText: String?,
+    onDownloadCurrent: (() -> Unit)?,
     preloadWifiOnly: Boolean,
     onTogglePreloadWifiOnly: () -> Unit,
     dataSaverEnabled: Boolean,
@@ -329,7 +340,7 @@ private fun NetworkOfflineTabContent(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // Card: Текущий видеоролик
-        FrostCard(title = "ТЕКУЩИЙ ВИДЕОРОЛИК") {
+        FrostCard(title = stringResource(MR.strings.reels_download_current)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -337,36 +348,48 @@ private fun NetworkOfflineTabContent(
             ) {
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
-                        text = currentItem?.title ?: currentItem?.author ?: "Видеоролик Tadami",
+                        text =
+                        currentItem?.title ?: currentItem?.author
+                            ?: stringResource(MR.strings.reels_download_current),
                         color = Color.White,
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = "Размер: ~24.8 МБ • 1080p HD",
-                        color = Color.White.copy(alpha = 0.55f),
-                        fontSize = 11.sp,
-                    )
+                    if (!downloadSizeText.isNullOrBlank()) {
+                        Text(
+                            text = downloadSizeText,
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontSize = 11.sp,
+                        )
+                    }
                 }
                 Button(
-                    onClick = onToggleOfflineCurrent,
+                    onClick = { onDownloadCurrent?.invoke() },
+                    enabled = onDownloadCurrent != null,
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isOfflineStored) {
+                        containerColor = if (isDownloaded) {
                             Color(
                                 0xFFFF3366,
                             ).copy(alpha = 0.22f)
                         } else {
                             AuroraTheme.colors.accent
                         },
-                        contentColor = if (isOfflineStored) Color(0xFFFF3366) else Color.Black,
+                        contentColor = if (isDownloaded) Color(0xFFFF3366) else Color.Black,
                     ),
                     modifier = Modifier.height(32.dp),
                 ) {
                     Text(
-                        text = if (isOfflineStored) "Удалить" else "Скачать",
+                        text = stringResource(
+                            when {
+                                isDownloading -> MR.strings.reels_download_cancel
+                                isPartial -> MR.strings.reels_download_resume
+                                isDownloaded -> MR.strings.reels_download_open
+                                else -> MR.strings.reels_download_video
+                            },
+                        ),
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                     )

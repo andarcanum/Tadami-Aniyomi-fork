@@ -1,12 +1,12 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -50,6 +51,10 @@ fun ReelsLandscapeTopBar(
     isCropMode: Boolean = false,
     onCycleSpeed: () -> Unit = {},
     onToggleCropMode: () -> Unit = {},
+    // Search parity with portrait: landscape used to have no way to open the search bar at all.
+    showSearch: Boolean = false,
+    isSearchOpen: Boolean = false,
+    onToggleSearch: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -77,9 +82,10 @@ fun ReelsLandscapeTopBar(
                 Box(
                     modifier = Modifier
                         .size(38.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF0F141E).copy(alpha = 0.72f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape),
+                        .reelsGlassSurface(
+                            eInk = AuroraTheme.colors.isEInk,
+                            eInkColor = AuroraTheme.colors.cardBackground,
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -94,13 +100,21 @@ fun ReelsLandscapeTopBar(
             // Source Pill (Clickable -> Opens Playlist Tab in Aurora Frost Drawer)
             Box(
                 modifier = Modifier
+                    .weight(1f, fill = false)
+                    .height(44.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF0F141E).copy(alpha = 0.72f), CircleShape)
-                    .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
-                    .clickable(onClick = onOpenPlaylist)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .clickable(role = Role.Button, onClick = onOpenPlaylist),
+                contentAlignment = Alignment.Center,
             ) {
                 Row(
+                    modifier = Modifier
+                        .height(38.dp)
+                        .reelsGlassSurface(
+                            CircleShape,
+                            eInk = AuroraTheme.colors.isEInk,
+                            eInkColor = AuroraTheme.colors.cardBackground,
+                        )
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
@@ -116,9 +130,11 @@ fun ReelsLandscapeTopBar(
                         text = if (sourceName.isNotBlank()) "$sourceName • $sectionTitle" else sectionTitle,
                         color = Color.White,
                         fontSize = 12.5.sp,
+                        lineHeight = 16.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                     Icon(
                         imageVector = Icons.Filled.ArrowDropDown,
@@ -129,30 +145,65 @@ fun ReelsLandscapeTopBar(
                 }
             }
 
-            // Clear Display (Whisper / Clean Viewing Mode): hides the chrome WITHOUT
-            // pausing — the only path to a clean screen now that tap pauses playback.
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .semantics { role = Role.Button }
-                    .clip(CircleShape)
-                    .clickable(onClick = onClearDisplay),
-                contentAlignment = Alignment.Center,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (showSearch) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .semantics { role = Role.Button }
+                            .clip(CircleShape)
+                            .clickable(onClick = onToggleSearch),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .reelsGlassSurface(
+                                    active = isSearchOpen,
+                                    eInk = AuroraTheme.colors.isEInk,
+                                    eInkColor = AuroraTheme.colors.cardBackground,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = stringResource(MR.strings.action_search),
+                                tint = if (isSearchOpen) AuroraTheme.colors.accent else Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+
+                // Clear Display (Whisper / Clean Viewing Mode): hides the chrome WITHOUT
+                // pausing — the only path to a clean screen now that tap pauses playback.
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(44.dp)
+                        .semantics { role = Role.Button }
                         .clip(CircleShape)
-                        .background(Color(0xFF0F141E).copy(alpha = 0.72f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape),
+                        .clickable(onClick = onClearDisplay),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.VisibilityOff,
-                        contentDescription = stringResource(MR.strings.reels_clear_display),
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .reelsGlassSurface(
+                                eInk = AuroraTheme.colors.isEInk,
+                                eInkColor = AuroraTheme.colors.cardBackground,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.VisibilityOff,
+                            contentDescription = stringResource(MR.strings.reels_clear_display),
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
         }

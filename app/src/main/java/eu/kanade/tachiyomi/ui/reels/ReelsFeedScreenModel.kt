@@ -3163,6 +3163,16 @@ class ReelsFeedScreenModel(
         }
     }
 
+    /** Export requests keep the owning source's headers even in a mixed-source playlist. */
+    fun downloadHeaders(sourceId: Long): Map<String, String> =
+        if (!state.value.isOffline && sourceId == state.value.currentSourceId) {
+            state.value.sourceHeaders
+        } else {
+            (sourceManager.get(sourceId) as? AnimeHttpSource)?.headers
+                ?.associate { it.first to it.second }
+                .orEmpty()
+        }
+
     // --- B3.3 offline copies ---
 
     enum class OfflineCopyResult { SAVED, REMOVED, FAILED_QUOTA, FAILED_NETWORK, FAILED_UNSUPPORTED }
