@@ -18,21 +18,17 @@ internal const val GENRE_SOURCE_TIMEOUT_MS = 30_000L
 
 /**
  * How many accepted cards one row may take from a single productive source per
- * pass. Required mode pages past the first page up to this target and stops
- * sources without matches after [MAX_EMPTY_REQUIRED_PAGES] empty pages.
+ * pass. Required mode keeps paging under the shared deadline and page budget;
+ * filtered or retired pages do not prove catalogue exhaustion.
  */
 internal const val RICH_SOURCE_TARGET = 30
 private const val MIN_GENRE_SOURCE_TIMEOUT_MS = 5_000L
 
 /** A required genre may legitimately span many catalogue pages. */
 private const val MAX_REQUIRED_SOURCE_PAGES = 20
-private const val MAX_EMPTY_REQUIRED_PAGES = 2
 
 /** First-wave probe: enough to prove a source can match without owning the pool. */
 private const val REQUIRED_PROBE_DETAILS = 6
-
-/** Second-wave cap per productive source; a rich source may verify down to its target. */
-private const val REQUIRED_REFILL_DETAILS = 60
 
 internal enum class GenreSourceFailure { TIMEOUT, METADATA_UNAVAILABLE, SOURCE_ERROR }
 
@@ -163,69 +159,40 @@ internal suspend fun queryDiscoveryGenreSources(
     }
     val permits = Semaphore(maxConcurrency)
 
-    if (!required || !hydrate || budget == null) {
-        // Cheap and legacy paths keep their single-pass shape.
-        val allowance = if (hydrate && budget != null) {
-            allocateDetailAllowance(ids, budget.remainingDetails)
-        } else {
-            emptyMap()
+    var wave = 0
+    while (true) {
+        val active = states.filter { it.canContinue() }
+        if (active.isEmpty()) break
+        if (hydrate && budget?.isExpired() == true) {
+            active.forEach { it.budgetExpired = true }
+            break
         }
-        states.map { state ->
+        wave++
+        val remaining = if (hydrate) budget?.remainingDetails ?: 0 else 0
+        val allowance = allocateDetailAllowance(
+            active.map { it.sourceId },
+            minOf(remaining, REQUIRED_PROBE_DETAILS * active.size),
+        )
+        val before = active.sumOf { it.pagesFetched + it.verified + it.detailsUsed + it.admitted.size } to
+            active.sumOf { it.pendingItems.size }
+        // One page or one hydration batch per source and round: late selected
+        // sources get their probe before an early source can own the deadline.
+        active.map { state ->
             async {
                 permits.withPermit {
                     runWaveSafely(
                         state, catalog, media, genres, releaseStatuses, policy, timeoutMs, hydrate, budget,
-                        allowance[state.sourceId] ?: 0, wave = 1,
+                        allowance[state.sourceId] ?: 0, wave,
                     )
                 }
             }
         }.awaitAll()
-        return@supervisorScope states.toVerifications()
-    }
-
-    // Wave 1: a bounded probe of every source. Equal shares are only the entry
-    // ticket; the probe is what separates rich sources from empty ones.
-    val probeTotal = minOf(budget.remainingDetails, REQUIRED_PROBE_DETAILS * ids.size)
-    val probe = allocateDetailAllowance(ids, probeTotal)
-    states.map { state ->
-        async {
-            permits.withPermit {
-                runWaveSafely(
-                    state, catalog, media, genres, releaseStatuses, policy, timeoutMs, hydrate, budget,
-                    probe[state.sourceId] ?: 0, wave = 1,
-                )
-            }
+        val after = active.sumOf { it.pagesFetched + it.verified + it.detailsUsed + it.admitted.size } to
+            active.sumOf { it.pendingItems.size }
+        if (before == after) {
+            active.forEach { it.budgetExpired = true }
+            break
         }
-    }.awaitAll()
-
-    // Wave 2: only sources that already admitted a match may spend the rest.
-    // A zero-match source does not get another 30 details just for participating.
-    val refillIds = states.filter { it.canContinue() }
-        .sortedByDescending { it.admitted.size }
-        .map { it.sourceId }
-    if (refillIds.isNotEmpty() && budget.remainingDetails > 0 && !budget.isExpired()) {
-        val pool = minOf(budget.remainingDetails, REQUIRED_REFILL_DETAILS * refillIds.size)
-        val refill = allocateDetailAllowance(refillIds, pool)
-        val byId = states.associateBy { it.sourceId }
-        refillIds.map { id ->
-            async {
-                permits.withPermit {
-                    runWaveSafely(
-                        byId.getValue(id),
-                        catalog,
-                        media,
-                        genres,
-                        releaseStatuses,
-                        policy,
-                        timeoutMs,
-                        hydrate,
-                        budget,
-                        refill[id] ?: 0,
-                        wave = 2,
-                    )
-                }
-            }
-        }.awaitAll()
     }
     states.toVerifications()
 }
@@ -289,7 +256,6 @@ private class SourceQueryState(
     var nextPage = startPage
     var pagesFetched = 0
     var successfulPages = 0
-    var emptyPages = 0
     var hasNextPage = true
     var exhausted = false
     var pagesStopped = false
@@ -303,7 +269,7 @@ private class SourceQueryState(
      */
     fun canContinue(): Boolean =
         failure == null &&
-            admitted.isNotEmpty() &&
+            !timedOut && !budgetExpired &&
             admitted.size < target &&
             (
                 pendingItems.isNotEmpty() ||
@@ -317,6 +283,7 @@ private class SourceQueryState(
             unattemptedCount = unattempted,
             metadataUnavailableCount = metadataUnavailable,
             failedCount = transientFailures,
+            hasIncompletePages = (timedOut || budgetExpired || !exhausted) && admitted.size < target,
         )
         val effectiveFailure = failure ?: when {
             timedOut && successfulPages == 0 -> GenreSourceException(sourceId, GenreSourceFailure.TIMEOUT)
@@ -375,171 +342,117 @@ private suspend fun advanceSource(
     wave: Int,
 ) {
     var allowanceLeft = allowance.coerceAtLeast(0)
-
-    // A previous wave may have left the last page's cards unverified. Fetching
-    // the next page before settling them would waste the richest opportunity.
-    if (hydrate && budget != null && allowanceLeft > 0 && state.pendingItems.isNotEmpty()) {
-        val pending = state.pendingItems
-        val refilled = try {
-            catalog.hydrateGenres(
-                mediaType = media,
-                sourceId = state.sourceId,
-                items = pending,
-                budget = budget,
-                maxDetails = allowanceLeft,
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
-        }
-        if (refilled != null) {
+    if (hydrate && budget != null && state.pendingItems.isNotEmpty()) {
+        val oldPending = state.pendingItems
+        val pending = oldPending.filterNot { it.isExcludedBy(state.excludedKeys, media) }
+        state.unattempted = (state.unattempted - oldPending.size).coerceAtLeast(0)
+        state.pendingItems = pending
+        if (pending.isNotEmpty()) {
+            val remaining = if (hydrate) budget.remainingMs() else timeoutMs
+            val refilled = withTimeoutOrNull(minOf(timeoutMs, remaining.coerceAtLeast(1L))) {
+                catalog.hydrateGenres(media, state.sourceId, pending, budget, allowanceLeft)
+            }
+            if (refilled == null) {
+                state.transientFailures++
+                state.timedOut = true
+                state.unattempted += pending.size
+                return
+            }
             allowanceLeft = (allowanceLeft - refilled.detailsUsed).coerceAtLeast(0)
             state.detailsUsed += refilled.detailsUsed
             state.verified += refilled.verified
             state.metadataUnavailable += refilled.metadataUnavailable
             state.transientFailures += refilled.transientFailures
-            val stillPending = LinkedHashMap<String, DiscoveryRowItem>()
-            for (item in refilled.items) {
-                if (item.genres.isNotEmpty()) {
-                    val candidate = policy.filterRowCandidates(listOf(item), { it.genres }).firstOrNull()
-                    if (candidate != null && state.admitted.size < state.target) {
-                        state.admitted.putIfAbsent(candidate.collectionKey(), candidate)
-                    }
-                } else if (!item.sourceUrl.isNullOrBlank()) {
-                    stillPending[item.collectionKey()] = item
-                }
+            state.unattempted += refilled.unattempted
+            state.pendingItems = refilled.pending.filterNot { it.isExcludedBy(state.excludedKeys, media) }
+            val verified = policy.filterRowCandidates(refilled.items, { it.genres })
+                .filterNot { it.isExcludedBy(state.excludedKeys, media) }
+            for (candidate in verified) {
+                if (state.admitted.size >= state.target) break
+                state.admitted.putIfAbsent(candidate.collectionKey(), candidate)
             }
-            state.pendingItems = stillPending.values.toList()
-            genreQueryLog.logcat {
-                "[DiscoveryGenreQuery] source=${state.sourceId} wave=$wave refill=" +
-                    "pending=${pending.size} verified=${refilled.verified} " +
-                    "details=${refilled.detailsUsed} total=${state.admitted.size} " +
-                    "pendingAfter=${state.pendingItems.size}"
+            // Settle pending cards without discarding them for a later page.
+            if ((state.pendingItems.isNotEmpty() && budget.remainingDetails > 0) ||
+                state.admitted.size >= state.target
+            ) {
+                return
             }
         }
     }
-
-    while (state.hasNextPage && !state.pagesStopped && state.pagesFetched < state.pageLimit) {
-        // The first page still runs without an allowance: list metadata may
-        // already satisfy the query, and cached details are free. Further pages
-        // without details cannot admit new cards under a required filter.
-        if (hydrate && budget != null && allowanceLeft <= 0 && state.successfulPages > 0) {
-            state.budgetExpired = true
-            break
-        }
-        val remaining = if (hydrate) budget?.remainingMs() ?: timeoutMs else timeoutMs
-        if (remaining <= 0L) {
-            state.unattempted += 1
-            state.budgetExpired = true
-            break
-        }
-        val page = state.nextPage
-        val pageResult = withTimeoutOrNull(minOf(timeoutMs, remaining)) {
-            if (hydrate) {
-                catalog.popularWithGenresAllocated(
-                    mediaType = media,
-                    sourceId = state.sourceId,
-                    genres = genres,
-                    page = page,
-                    releaseStatuses = releaseStatuses,
-                    budget = budget,
-                    maxDetails = allowanceLeft,
-                )
-            } else {
-                val items = catalog.popularWithGenres(
-                    mediaType = media,
-                    sourceId = state.sourceId,
-                    genres = genres,
-                    page = page,
-                    releaseStatuses = releaseStatuses,
-                )
-                DiscoveryGenrePage(
-                    items = items,
-                    verified = items.count { it.genres.isNotEmpty() },
-                    unattempted = items.count { it.genres.isEmpty() },
-                    metadataUnavailable = 0,
-                    transientFailures = 0,
-                    page = page,
-                    queryKey = state.queryKey,
-                )
-            }
-        }
-        if (pageResult == null) {
-            state.timedOut = true
-            state.transientFailures += 1
-            state.pagesStopped = true
-            break
-        }
-        // A page can report coverage without returning rows (every card was
-        // rejected upstream). The counters are the evidence we paid for, so they
-        // must be accumulated before any early exit.
-        state.pagesFetched++
-        state.nextPage = page + 1
-        state.successfulPages++
-        state.verified += pageResult.verified
-        state.unattempted += pageResult.unattempted
-        state.metadataUnavailable += pageResult.metadataUnavailable
-        state.transientFailures += pageResult.transientFailures
-        state.detailsUsed += pageResult.detailsUsed
-        allowanceLeft = (allowanceLeft - pageResult.detailsUsed).coerceAtLeast(0)
-        state.pendingItems = pageResult.pending
-        state.hasNextPage = pageResult.hasNextPage
-        if (!pageResult.hasNextPage) {
-            state.exhausted = true
-            state.pagesStopped = true
-        }
-
-        val unique = pageResult.items.filter {
-            state.seen.add(it.sourceUrl?.takeIf(String::isNotBlank) ?: it.cleanTitle)
-        }
-        val pageAdmitted = policy.filterRowCandidates(unique, { it.genres })
-        val pageEligible = pageAdmitted.filterNot { it.isExcludedBy(state.excludedKeys) }
-        for (candidate in pageEligible) {
-            if (state.admitted.size >= state.target) break
-            state.admitted.putIfAbsent(candidate.collectionKey(), candidate)
-        }
-        genreQueryLog.logcat {
-            "[DiscoveryGenreQuery] source=${state.sourceId} wave=$wave page=$page " +
-                "fetched=${pageResult.items.size} verified=${pageResult.verified} " +
-                "unattempted=${pageResult.unattempted} unavailable=${pageResult.metadataUnavailable} " +
-                "failures=${pageResult.transientFailures} admitted=${pageAdmitted.size} " +
-                "eligible=${pageEligible.size} total=${state.admitted.size} target=${state.target} " +
-                "details=${pageResult.detailsUsed} pending=${pageResult.pending.size} " +
-                "hasNext=${pageResult.hasNextPage} required=${policy.requiredGenres} " +
-                "sampleGenres=${unique.take(3).map { it.genres.take(8) }}"
-        }
-        if (state.admitted.size >= state.target) {
-            state.pagesStopped = true
-            break
-        }
-        if (!pageResult.hasNextPage) break
-        // Nothing matching genres/status on the very first page means this query
-        // shape is dead for the source: paging deeper cannot help. Cards whose
-        // genres are still unknown stay pending for hydration, so they do not
-        // count as "no match".
-        if (state.successfulPages == 1 && pageAdmitted.isEmpty() &&
-            pageResult.pending.isEmpty() && pageResult.unattempted == 0
-        ) {
-            state.pagesStopped = true
-            break
-        }
-        // Genre matches exist but were all retired/shown: keep paging, using the
-        // same grace budget so duplicate-only tails do not loop forever.
-        if (pageAdmitted.isEmpty() || pageEligible.isEmpty()) {
-            state.emptyPages++
-        } else {
-            state.emptyPages = 0
-        }
-        if (state.emptyPages >= MAX_EMPTY_REQUIRED_PAGES) {
-            state.pagesStopped = true
-            break
-        }
+    if (!state.hasNextPage || state.pagesStopped || state.pagesFetched >= state.pageLimit) return
+    val remaining = if (hydrate) budget?.remainingMs() ?: timeoutMs else timeoutMs
+    if (remaining <= 0L) {
+        state.budgetExpired = true
+        return
+    }
+    val page = state.nextPage
+    val pageResult = withTimeoutOrNull(minOf(timeoutMs, remaining)) {
+        catalog.popularWithGenresAllocated(
+            mediaType = media,
+            sourceId = state.sourceId,
+            genres = genres,
+            page = page,
+            releaseStatuses = releaseStatuses,
+            budget = if (hydrate) budget else null,
+            maxDetails = if (hydrate) allowanceLeft else 0,
+            excludedKeys = state.excludedKeys,
+        )
+    }
+    if (pageResult == null) {
+        state.transientFailures++
+        state.timedOut = true
+        state.pagesStopped = true
+        return
+    }
+    state.pagesFetched++
+    state.successfulPages++
+    state.nextPage = page + 1
+    state.verified += pageResult.verified
+    state.metadataUnavailable += pageResult.metadataUnavailable
+    state.transientFailures += pageResult.transientFailures
+    state.detailsUsed += pageResult.detailsUsed
+    val pending = pageResult.pending.filterNot { it.isExcludedBy(state.excludedKeys, media) }
+    val existingPending = state.pendingItems.mapTo(HashSet()) { it.collectionKey() }
+    val newPending = pending.filterNot { it.collectionKey() in existingPending }
+    state.unattempted += (pageResult.unattempted - pageResult.pending.size).coerceAtLeast(0) + newPending.size
+    state.pendingItems += newPending
+    state.hasNextPage = pageResult.hasNextPage
+    state.exhausted = !pageResult.hasNextPage
+    val unique = pageResult.items.filter {
+        state.seen.add(it.sourceUrl?.takeIf(String::isNotBlank) ?: it.cleanTitle)
+    }
+    val eligible = policy.filterRowCandidates(unique, { it.genres })
+        .filterNot { it.isExcludedBy(state.excludedKeys, media) }
+    for (candidate in eligible) {
+        if (state.admitted.size >= state.target) break
+        state.admitted.putIfAbsent(candidate.collectionKey(), candidate)
+    }
+    genreQueryLog.logcat {
+        "[DiscoveryGenreQuery] source=" + state.sourceId + " wave=" + wave + " page=" + page +
+            " fetched=" + pageResult.items.size + " verified=" + pageResult.verified +
+            " eligible=" + eligible.size + " total=" + state.admitted.size + " target=" + state.target +
+            " pending=" + state.pendingItems.size + " hasNext=" + state.hasNextPage
     }
 }
 
-internal fun DiscoveryRowItem.isExcludedBy(keys: Set<String>): Boolean =
-    keys.isNotEmpty() && (cleanTitle in keys || altCleanTitles.any { it in keys })
+internal fun GenreSourceVerification.toExhaustionEvidence() = tachiyomi.domain.discovery.model.DiscoveryQueryEvidence(
+    queryKey = queryKey,
+    transportOk = failure == null && stopReason != DiscoveryFillStopReason.RETRY_AFTER,
+    rawEnd = exhausted,
+    pending = pending,
+    unattempted = summary.unattemptedCount,
+    metadataFailures = summary.metadataUnavailableCount + summary.failedCount,
+    budgetStopped = stopReason == DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED ||
+        stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED,
+    duplicatePageStopped = false,
+)
+
+internal fun DiscoveryRowItem.isExcludedBy(keys: Set<String>, media: DiscoveryMediaType): Boolean =
+    keys.isNotEmpty() && (
+        cleanTitle in keys || altCleanTitles.any { it in keys } ||
+            tachiyomi.domain.discovery.model.canonicalDiscoveryKey(media, sourceId, sourceUrl, cleanTitle) in keys ||
+            altCleanTitles.any { tachiyomi.domain.discovery.model.legacyDiscoveryKey(media, it) in keys }
+        )
 
 private fun DiscoveryRowItem.collectionKey(): String =
     sourceUrl?.takeIf(String::isNotBlank) ?: cleanTitle

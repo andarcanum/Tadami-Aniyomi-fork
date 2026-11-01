@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 
 data class DiscoveryRowItem(
@@ -77,11 +79,13 @@ data class DiscoveryBuildContext(
      * coordinator's cross-row dedupe cannot empty SOURCE.
      */
     val sharedGenreQuery: SharedRequiredGenreQuery? = null,
+    val eligibilitySnapshot: DiscoveryEligibilitySnapshot? = null,
 ) {
     /** Titles that must not consume row slots: known, shown, and the previous pool. */
     val exclusionKeys: Set<String>
         get() = libraryCleanTitles + historyCleanTitles + hiddenCleanTitles +
-            recentCleanTitles + currentFeedCleanTitles
+            recentCleanTitles + currentFeedCleanTitles +
+            eligibilitySnapshot?.excludedIdentityKeys.orEmpty() + eligibilitySnapshot?.excludedLookupKeys.orEmpty()
 
     val candidatePolicy: DiscoveryCandidatePolicy
         get() {
@@ -106,5 +110,8 @@ data class DiscoveryBuildContext(
 interface DiscoveryRowBuilder {
     val rowType: DiscoveryRowType
     val isDegraded: Boolean get() = false
+
+    /** Null means the builder cannot prove an exhaustive catalogue result. */
+    val exhaustionEvidence: List<DiscoveryQueryEvidence>? get() = null
     suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem>
 }

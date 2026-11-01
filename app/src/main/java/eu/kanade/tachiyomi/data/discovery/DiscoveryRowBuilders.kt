@@ -42,7 +42,14 @@ class DiscoveryLikeRowBuilder(
     override var isDegraded: Boolean = false
         private set
 
+    override var exhaustionEvidence: List<tachiyomi.domain.discovery.model.DiscoveryQueryEvidence>? = null
+        private set
+
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+        if (context.seeds.isEmpty() && context.feedbackSeeds.isEmpty()) {
+            exhaustionEvidence = emptyList()
+            return emptyList()
+        }
         val mediaType = when (context.mediaType) {
             DiscoveryMediaType.ANIME -> SuggestionMediaType.ANIME
             DiscoveryMediaType.MANGA -> SuggestionMediaType.MANGA
@@ -142,7 +149,10 @@ class DiscoveryLikeRowBuilder(
                 context.feedbackSeeds.map { it.title to it.genres } +
                     context.seeds.map { it.title to it.genres }
                 ).filter { it.second.isNotEmpty() }
-            if (allSeeds.isEmpty()) return emptyList()
+            if (allSeeds.isEmpty()) {
+                exhaustionEvidence = emptyList()
+                return emptyList()
+            }
 
             val perSeed = supervisorScope {
                 allSeeds.mapIndexed { seedIndex, (seedTitle, genres) ->
@@ -317,11 +327,17 @@ class DiscoveryTasteRowBuilder(
     override var isDegraded: Boolean = false
         private set
 
+    override var exhaustionEvidence: List<tachiyomi.domain.discovery.model.DiscoveryQueryEvidence>? = null
+        private set
+
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
         isDegraded = false
         val policy = context.candidatePolicy
         val activeProfile = resolveDiscoveryTasteProfile(context.tasteProfile, policy)
-        if (activeProfile.isEmpty()) return emptyList()
+        if (activeProfile.isEmpty()) {
+            exhaustionEvidence = emptyList()
+            return emptyList()
+        }
         val required = policy.requiredGenres.isNotEmpty()
 
         // A required query must not be narrowed by unrelated priority/library genres.
@@ -414,10 +430,17 @@ class DiscoveryTasteRowBuilder(
         } else {
             emptyList()
         }
+        exhaustionEvidence = if (includeExternal) null else sourceResults.map { it.toExhaustionEvidence() }
         // In the cheap path cards without genres were never going to be hydrated,
         // so an "unattempted" count there is by design and not a degraded row.
         isDegraded = sourceResults.any {
-            it.failure != null || (required && it.summary.outcome == GenreVerificationOutcome.INCOMPLETE)
+            it.failure != null || (
+                required && (
+                    it.summary.hasCoverageGap ||
+                        it.stopReason == DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED ||
+                        it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED
+                    )
+                )
         }
         val fromTrending = filteredTrending.map { item ->
             DiscoveryRowItem(
@@ -495,6 +518,9 @@ class DiscoverySourceRowBuilder(
     override var isDegraded: Boolean = false
         private set
 
+    override var exhaustionEvidence: List<tachiyomi.domain.discovery.model.DiscoveryQueryEvidence>? = null
+        private set
+
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
         isDegraded = false
         val ids = context.sourceIds.filter { it > 0 }
@@ -527,8 +553,11 @@ class DiscoverySourceRowBuilder(
                     excludedKeys = context.exclusionKeys,
                 )
             }
+            exhaustionEvidence = results.map { it.toExhaustionEvidence() }
             isDegraded = results.any {
-                it.failure != null || it.summary.outcome == GenreVerificationOutcome.INCOMPLETE
+                it.failure != null || it.summary.hasCoverageGap ||
+                    it.stopReason == DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED ||
+                    it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED
             }
             val merged = interleaveSourceParts(results.map { it.summary.items }, rowCap)
                 .distinctBy { it.cleanTitle }
@@ -547,129 +576,149 @@ class DiscoverySourceRowBuilder(
         val slotAllocations = allocateSourceSlots(ordered, context.sourceWeights, rowCap)
         val activeSources = ordered.filter { (slotAllocations[it] ?: 0) > 0 }
         if (activeSources.isEmpty()) return emptyList()
-
+        class Harvest(val id: Long) {
+            val latest = mutableListOf<DiscoveryRowItem>()
+            val popular = mutableListOf<DiscoveryRowItem>()
+            var latestNext: Boolean? = true
+            var popularNext: Boolean? = true
+            var latestFailed = false
+            var popularFailed = false
+            var queried = false
+            fun finished() = (latestNext == false || latestFailed) && (popularNext == false || popularFailed)
+            fun hasFresh() = latest.isNotEmpty() || popular.isNotEmpty()
+        }
+        val states = activeSources.map { Harvest(it) }
         val semaphore = Semaphore(maxConcurrency)
-        val results = supervisorScope {
-            ordered.map { id ->
-                async {
-                    val perSource = slotAllocations[id] ?: 0
-                    if (perSource <= 0) {
-                        return@async Triple(emptyList<DiscoveryRowItem>(), emptyList<DiscoveryRowItem>(), false)
-                    }
-                    semaphore.withPermit {
-                        val latestQuota = perSource - perSource / 5
-                        val latestFetched = mutableListOf<DiscoveryRowItem>()
-                        val popularFetched = mutableListOf<DiscoveryRowItem>()
-                        var popularSucceeded = false
-                        var emptyStreak = 0
-                        val pageCount = context.harvestPages.coerceAtLeast(1)
-                        for (offset in 0 until pageCount) {
+        val pageCount = context.harvestPages.coerceAtLeast(1)
+        for (offset in 0 until pageCount) {
+            val active = states.filterNot { it.finished() }
+            if (active.isEmpty() || context.verificationBudget?.isExpired() == true) break
+            supervisorScope {
+                active.map { state ->
+                    async {
+                        semaphore.withPermit {
+                            // A source may wait for a permit past the shared deadline; a timeout
+                            // computed before the wait would let it start work after expiry.
+                            val timeout = minOf(
+                                sourceTimeoutMs,
+                                context.verificationBudget?.remainingMs() ?: sourceTimeoutMs,
+                            )
+                            if (timeout <= 0L) return@withPermit
                             val page = context.pageOffset + offset
-                            val latestDeferred = async {
-                                runCatchingUnlessCancelled {
-                                    withTimeoutOrNull(sourceTimeoutMs) {
-                                        catalog.latest(
-                                            context.mediaType,
-                                            id,
-                                            page = page,
-                                            releaseStatuses = context.releaseStatuses,
-                                        )
+                            state.queried = true
+                            val latest = async {
+                                if (state.latestNext == false ||
+                                    state.latestFailed
+                                ) {
+                                    null
+                                } else {
+                                    runCatchingUnlessCancelled {
+                                        withTimeoutOrNull(timeout) {
+                                            catalog.latestPage(
+                                                context.mediaType,
+                                                state.id,
+                                                page,
+                                                context.releaseStatuses,
+                                                context.verificationBudget,
+                                            )
+                                        }
                                     }
                                 }
                             }
-                            val popularDeferred = async {
-                                runCatchingUnlessCancelled {
-                                    withTimeoutOrNull(sourceTimeoutMs) {
-                                        catalog.popular(
-                                            context.mediaType,
-                                            id,
-                                            page = page,
-                                            releaseStatuses = context.releaseStatuses,
-                                        )
+                            val popular = async {
+                                if (state.popularNext == false ||
+                                    state.popularFailed
+                                ) {
+                                    null
+                                } else {
+                                    runCatchingUnlessCancelled {
+                                        withTimeoutOrNull(timeout) {
+                                            catalog.popularPage(
+                                                context.mediaType,
+                                                state.id,
+                                                page,
+                                                context.releaseStatuses,
+                                                context.verificationBudget,
+                                                context.exclusionKeys,
+                                            )
+                                        }
                                     }
                                 }
                             }
-
-                            val latestResult = latestDeferred.await()
-                            val popularResult = popularDeferred.await()
-                            val latestPage = latestResult.getOrNull().orEmpty()
-                            val popularPage = popularResult.getOrNull().orEmpty()
-                            if (popularResult.isSuccess) popularSucceeded = true
-
-                            val genreMatches = context.candidatePolicy
-                                .filterRowCandidates(latestPage + popularPage, { it.genres })
-                            // No candidate passes genre/status on the first page:
-                            // deeper pages cannot change that for this query shape.
-                            if (offset == 0 && genreMatches.isEmpty()) break
-
-                            val latestEligible = context.candidatePolicy
-                                .filterRowCandidates(latestPage, { it.genres })
-                                .filterNot { it.isExcludedBy(context.exclusionKeys) }
-                            val popularEligible = context.candidatePolicy
-                                .filterRowCandidates(popularPage, { it.genres })
-                                .filterNot { it.isExcludedBy(context.exclusionKeys) }
-
-                            val before = latestFetched.size + popularFetched.size
-                            latestFetched += latestEligible
-                            popularFetched += popularEligible
-                            val added = latestFetched.size + popularFetched.size - before
-                            // Genre matches exist but were all retired/shown: keep
-                            // paging; stop only after two consecutive dry pages.
-                            emptyStreak = if (added == 0) emptyStreak + 1 else 0
-                            if (emptyStreak >= 2) break
-
-                            val latestSize = latestFetched.distinctBy { it.cleanTitle }.size
-                            val popularSize = popularFetched.distinctBy { it.cleanTitle }.size
-                            if (latestSize >= latestQuota && popularSize >= perSource) break
-                            if (latestPage.isEmpty() && popularPage.isEmpty()) break
+                            val latestResult = latest.await()
+                            val popularResult = popular.await()
+                            if (latestResult != null) {
+                                val response = latestResult.getOrNull()
+                                if (response == null) {
+                                    state.latestFailed = true
+                                } else {
+                                    state.latestNext = response.hasNextPage
+                                    state.latest += policy.filterRowCandidates(response.items, { it.genres })
+                                        .filterNot { it.isExcludedBy(context.exclusionKeys, context.mediaType) }
+                                }
+                            }
+                            if (popularResult != null) {
+                                val response = popularResult.getOrNull()
+                                if (response == null) {
+                                    state.popularFailed = true
+                                } else {
+                                    state.popularNext = response.hasNextPage
+                                    state.popular += policy.filterRowCandidates(response.items, { it.genres })
+                                        .filterNot { it.isExcludedBy(context.exclusionKeys, context.mediaType) }
+                                }
+                            }
                         }
-
-                        val latestItems = latestFetched.distinctBy { it.cleanTitle }.take(latestQuota)
-                        val latestTitles = latestItems.mapTo(HashSet()) { it.cleanTitle }
-
-                        val popularItems = popularFetched
-                            .distinctBy { it.cleanTitle }
-                            .filterNot { it.cleanTitle in latestTitles }
-                            .take(perSource - latestItems.size)
-
-                        val isFailed = !popularSucceeded && latestItems.isEmpty()
-
-                        val selected = latestItems + popularItems
-
-                        val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
-                        val surplus = (latestFetched + popularFetched)
-                            .filterNot { it.cleanTitle in selectedTitles }
-                            .distinctBy { it.cleanTitle }
-                            .take(rowCap)
-
-                        Triple(selected, surplus, isFailed)
                     }
-                }
-            }.awaitAll()
+                }.awaitAll()
+            }
+            val freshCount = states.flatMap { it.latest + it.popular }.distinctBy { it.cleanTitle }.size
+            // A full row from one producer must not end another selected source's probe.
+            if (freshCount >= rowCap && states.all { it.hasFresh() || it.finished() }) break
         }
-
-        val failures = results.count { it.third }
-        if (failures == activeSources.size) {
-            throw IOException("all source catalog fetches failed")
+        exhaustionEvidence = states.flatMap { state ->
+            listOf("latest" to state.latestNext, "popular" to state.popularNext).map { (family, next) ->
+                val failed = if (family == "latest") state.latestFailed else state.popularFailed
+                tachiyomi.domain.discovery.model.DiscoveryQueryEvidence(
+                    queryKey =
+                    discoveryGenreQueryKey(
+                        context.mediaType,
+                        state.id,
+                        emptyList(),
+                        context.releaseStatuses,
+                    ) + "|" +
+                        family,
+                    transportOk = state.queried && !failed,
+                    rawEnd = next == false && !failed,
+                    pending = 0,
+                    unattempted = 0,
+                    metadataFailures = 0,
+                    budgetStopped = next != false && !failed,
+                    duplicatePageStopped = false,
+                )
+            }
         }
-
-        val parts = results.map { it.first }
-        val surplusParts = results.map { it.second }
-
-        val selected = interleaveSourceParts(parts, rowCap).distinctBy { it.cleanTitle }
-        val filteredSelected = context.candidatePolicy.filterRowCandidates(selected, { it.genres })
-        if (filteredSelected.size >= rowCap) return filteredSelected
-        val selectedTitles = filteredSelected.mapTo(HashSet()) { it.cleanTitle }
-        val backfill = interleaveSourceParts(
-            surplusParts.map { items -> items.filterNot { it.cleanTitle in selectedTitles } },
-            rowCap,
-        ).distinctBy { it.cleanTitle }
-        val filteredBackfill = context.candidatePolicy.filterRowCandidates(backfill, { it.genres })
-        val fresh = (filteredSelected + filteredBackfill).take(rowCap)
+        val failures = states.count { !it.hasFresh() && (it.latestFailed || it.popularFailed) }
+        if (failures == states.size) throw IOException("all source catalog fetches failed")
+        val parts = states.map { state ->
+            val quota = slotAllocations.getValue(state.id)
+            val latest = state.latest.distinctBy { it.cleanTitle }.take(quota - quota / 5)
+            val latestTitles = latest.mapTo(HashSet()) { it.cleanTitle }
+            latest + state.popular.distinctBy { it.cleanTitle }
+                .filterNot { it.cleanTitle in latestTitles }.take(quota - latest.size)
+        }
+        val selected = policy.filterRowCandidates(interleaveSourceParts(parts, rowCap), { it.genres })
+        val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
+        val surplus = states.map { state ->
+            (state.latest + state.popular).filterNot { it.cleanTitle in selectedTitles }.distinctBy { it.cleanTitle }
+        }
+        val backfill = policy.filterRowCandidates(interleaveSourceParts(surplus, rowCap - selected.size), { it.genres })
+        val fresh = (selected + backfill).take(rowCap)
+        isDegraded = states.any { it.latestFailed || it.popularFailed } ||
+            (fresh.size < rowCap && states.any { !it.finished() })
         return mergeExistingRowItems(
             existing = context.existingRowItems[DiscoveryRowType.SOURCE].orEmpty(),
             fresh = fresh,
-            policy = context.candidatePolicy,
+            policy = policy,
             cap = rowCap,
             sourceIds = ordered.toSet(),
         )
@@ -718,14 +767,18 @@ internal fun interleaveSourceParts(
 ): List<DiscoveryRowItem> {
     val queues = parts.filter { it.isNotEmpty() }.map { ArrayDeque(it) }
     val out = mutableListOf<DiscoveryRowItem>()
+    val seen = HashSet<String>()
     var progressed = true
     while (out.size < cap && progressed) {
         progressed = false
         for (queue in queues) {
             if (out.size >= cap) break
-            if (queue.isNotEmpty()) {
-                out += queue.removeFirst()
+            while (queue.isNotEmpty()) {
+                val candidate = queue.removeFirst()
                 progressed = true
+                if (!seen.add(candidate.cleanTitle)) continue
+                out += candidate
+                break
             }
         }
     }

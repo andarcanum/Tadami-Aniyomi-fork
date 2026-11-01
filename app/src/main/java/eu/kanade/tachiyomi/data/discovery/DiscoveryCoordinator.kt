@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 
 data class DiscoveryFeed(
@@ -16,6 +17,7 @@ data class DiscoveryFeed(
     val generatedAt: Long,
     /** Builder output before coordinator filtering; diagnostics only. */
     val rawCandidates: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
+    val exhaustionEvidence: List<DiscoveryQueryEvidence>? = null,
 )
 
 /**
@@ -131,6 +133,11 @@ class DiscoveryCoordinator(
             degradedRows = degraded,
             generatedAt = System.currentTimeMillis(),
             rawCandidates = rawCandidates.toMap(),
+            exhaustionEvidence = if (rowBuilders.all { it.exhaustionEvidence != null }) {
+                rowBuilders.flatMap { it.exhaustionEvidence.orEmpty() }.distinctBy { it.queryKey }
+            } else {
+                null
+            },
         )
     }
 

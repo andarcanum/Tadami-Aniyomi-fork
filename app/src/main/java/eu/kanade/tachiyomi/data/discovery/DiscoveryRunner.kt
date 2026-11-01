@@ -280,6 +280,7 @@ class DiscoveryRunner(
         val previousPool = runCatching { repository.publication(mediaType) }.getOrNull()
         val previousPoolTitles = previousPool?.suggestions.orEmpty().mapTo(HashSet()) { it.cleanTitle }
         val expectedGeneration = previousPool?.generation ?: 0L
+        val eligibilitySnapshot = repository.eligibility(mediaType)
         val configurationKey = discoveryConfigurationKey(mediaType)
         val harvestPages = if (isManualRefresh) MAX_MANUAL_HARVEST_PAGES else 1
         val resumeCursor = previousPool?.cursors.orEmpty()
@@ -482,6 +483,7 @@ class DiscoveryRunner(
             pageOffset = pageOffset,
             harvestPages = harvestPages,
             verificationBudget = verificationBudget,
+            eligibilitySnapshot = eligibilitySnapshot,
         )
         // TASTE and SOURCE otherwise run the same required-genre catalogue pass
         // twice and then the coordinator dedupes one of them away. Share the
@@ -637,8 +639,13 @@ class DiscoveryRunner(
                 )
             }
         }
+        val exhaustionEvidence = feed.exhaustionEvidence.orEmpty()
         val conclusiveEmpty = feed.failedRows.isEmpty() && feed.degradedRows.isEmpty() &&
-            feed.rows.values.all { it.isEmpty() } && attemptedRows.isNotEmpty()
+            feed.rows.values.all { it.isEmpty() } && exhaustionEvidence.isNotEmpty() &&
+            exhaustionEvidence.all {
+                it.transportOk && it.rawEnd && it.pending == 0 && it.unattempted == 0 &&
+                    it.metadataFailures == 0 && !it.budgetStopped && !it.duplicatePageStopped
+            }
         val nextCursorPage = when {
             isManualRefresh -> 1
             pageOffset + 1 > MAX_HARVEST_PAGE -> 1
@@ -660,19 +667,8 @@ class DiscoveryRunner(
                 cursors = nextCursors,
             )
             conclusiveEmpty -> DiscoveryPreparedPool.VerifiedEmpty(
-                expectedQueryKeys = attemptedRows.mapTo(HashSet()) { it.key },
-                evidence = attemptedRows.map { rowType ->
-                    DiscoveryQueryEvidence(
-                        queryKey = rowType.key,
-                        transportOk = true,
-                        rawEnd = true,
-                        pending = 0,
-                        unattempted = 0,
-                        metadataFailures = 0,
-                        budgetStopped = false,
-                        duplicatePageStopped = false,
-                    )
-                },
+                expectedQueryKeys = exhaustionEvidence.mapTo(HashSet()) { it.queryKey },
+                evidence = exhaustionEvidence,
                 cursors = nextCursors,
             )
             else -> null
@@ -701,6 +697,8 @@ class DiscoveryRunner(
             publishReceipt is DiscoveryPublishReceipt.Superseded -> DiscoveryRunStatus.SKIPPED
             allExecutedFailed -> DiscoveryRunStatus.FAILED
             publishReceipt is DiscoveryPublishReceipt.NoAdmissibleItems -> DiscoveryRunStatus.FAILED
+            prepared == null -> if (hasPartialFailures) DiscoveryRunStatus.PARTIAL else DiscoveryRunStatus.FAILED
+            token == null -> DiscoveryRunStatus.SKIPPED
             published?.snapshot?.outcome == DiscoveryPublicationOutcome.PARTIAL -> DiscoveryRunStatus.PARTIAL
             hasPartialFailures -> DiscoveryRunStatus.PARTIAL
             else -> DiscoveryRunStatus.SUCCESS

@@ -127,6 +127,22 @@ class DiscoveryConfigurationPipelineTest {
         val sourceBuilder = object : DiscoveryRowBuilder {
             override val rowType = targetRow
             override val isDegraded = degraded
+            override val exhaustionEvidence = if (degraded || failed) {
+                null
+            } else {
+                listOf(
+                    tachiyomi.domain.discovery.model.DiscoveryQueryEvidence(
+                        queryKey = "fixture-finite-catalogue",
+                        transportOk = true,
+                        rawEnd = true,
+                        pending = 0,
+                        unattempted = 0,
+                        metadataFailures = 0,
+                        budgetStopped = false,
+                        duplicatePageStopped = false,
+                    ),
+                )
+            }
             override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
                 captured += context
                 if (failed) throw IOException("source failed")

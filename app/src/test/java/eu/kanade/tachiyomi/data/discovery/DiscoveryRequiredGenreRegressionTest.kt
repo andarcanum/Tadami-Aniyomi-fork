@@ -26,6 +26,7 @@ class DiscoveryRequiredGenreRegressionTest {
         metadataUnavailable: Int = 0,
         failures: Int = 0,
         pending: List<DiscoveryRowItem> = emptyList(),
+        hasNextPage: Boolean = true,
     ) = DiscoveryGenrePage(
         items = items,
         verified = verified,
@@ -33,6 +34,7 @@ class DiscoveryRequiredGenreRegressionTest {
         metadataUnavailable = metadataUnavailable,
         transientFailures = failures,
         pending = pending,
+        hasNextPage = hasNextPage,
     )
 
     private class Catalog(
@@ -379,7 +381,7 @@ class DiscoveryRequiredGenreRegressionTest {
         val catalog = Catalog { _, pageNumber ->
             when (pageNumber) {
                 1 -> page((1..20).map { item("Retired$it", listOf("Fantasy")) })
-                2 -> page((1..5).map { item("Fresh$it", listOf("Fantasy")) })
+                2 -> page((1..5).map { item("Fresh$it", listOf("Fantasy")) }, hasNextPage = false)
                 else -> page(emptyList())
             }
         }
@@ -398,7 +400,7 @@ class DiscoveryRequiredGenreRegressionTest {
 
         result.summary.items.map { it.cleanTitle }.toSet() shouldBe
             (1..5).mapTo(HashSet()) { "fresh$it" }
-        catalog.genrePages.map { it.second } shouldBe listOf(1, 2, 3, 4)
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2)
     }
 
     @Test
@@ -453,10 +455,11 @@ class DiscoveryRequiredGenreRegressionTest {
     }
 
     @Test
-    fun `two consecutive dry pages stop a productive source`() = runTest {
+    fun `two filtered empty pages do not hide productive continuation`() = runTest {
         val catalog = Catalog { _, pageNumber ->
             when (pageNumber) {
                 1 -> page(listOf(item("First", listOf("Fantasy"))))
+                4 -> page(listOf(item("Second", listOf("Fantasy"))), hasNextPage = false)
                 else -> page(emptyList())
             }
         }
@@ -472,13 +475,13 @@ class DiscoveryRequiredGenreRegressionTest {
             pages = 10,
         )
 
-        catalog.genrePages.map { it.second } shouldBe listOf(1, 2, 3)
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2, 3, 4)
     }
 
     @Test
-    fun `first page without genre matches stops paging immediately`() = runTest {
+    fun `filtered pages continue until the source reports its end`() = runTest {
         val catalog = Catalog { _, pageNumber ->
-            page(listOf(item("Drama$pageNumber", listOf("Drama"))))
+            page(listOf(item("Drama$pageNumber", listOf("Drama"))), hasNextPage = pageNumber == 1)
         }
 
         queryDiscoveryGenreSources(
@@ -492,13 +495,13 @@ class DiscoveryRequiredGenreRegressionTest {
             pages = 5,
         )
 
-        catalog.genrePages.map { it.second } shouldBe listOf(1)
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2)
     }
 
     @Test
     fun `verified empty with full coverage stays an honest empty result`() = runTest {
         val result = queryDiscoveryGenreSources(
-            Catalog { _, _ -> page((1..20).map { item("wrong$it", listOf("Drama")) }) },
+            Catalog { _, _ -> page((1..20).map { item("wrong$it", listOf("Drama")) }, hasNextPage = false) },
             media,
             listOf(7L),
             listOf("Fantasy"),
@@ -590,12 +593,12 @@ class DiscoveryRequiredGenreRegressionTest {
     }
 
     @Test
-    fun `first page without genre matches stops before a matching second page`() = runTest {
+    fun `first page without genre matches continues to a matching second page`() = runTest {
         val catalog = Catalog { _, pageNumber ->
             if (pageNumber == 1) {
                 page(listOf(item("Wrong", listOf("Drama"))))
             } else {
-                page(listOf(item("Match", listOf("Fantasy"))))
+                page(listOf(item("Match", listOf("Fantasy"))), hasNextPage = false)
             }
         }
         val result = queryDiscoveryGenreSources(
@@ -607,8 +610,8 @@ class DiscoveryRequiredGenreRegressionTest {
             emptySet(),
             policy,
         ).single().summary
-        result.items.isEmpty() shouldBe true
-        catalog.genrePages.map { it.second } shouldBe listOf(1)
+        result.items.map { it.title } shouldBe listOf("Match")
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2)
     }
 
     @Test

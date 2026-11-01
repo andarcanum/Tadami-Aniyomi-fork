@@ -204,14 +204,14 @@ class DiscoveryAdaptiveRefillTest {
     }
 
     @Test
-    fun `an empty first page stops the source immediately`() = runTest {
-        val catalog = Catalog { _, _ -> page(emptyList()) }
+    fun `an empty page stops only when the source reports no continuation`() = runTest {
+        val catalog = Catalog { _, _ -> page(emptyList(), hasNextPage = false) }
 
         val result = query(catalog, targetItems = 50).single()
 
         catalog.pageCalls.map { it.second } shouldBe listOf(1)
-        result.stopReason shouldBe DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED
-        result.exhausted shouldBe false
+        result.stopReason shouldBe DiscoveryFillStopReason.SOURCE_EXHAUSTED
+        result.exhausted shouldBe true
     }
 
     @Test
@@ -225,33 +225,27 @@ class DiscoveryAdaptiveRefillTest {
 
         results.map { it.sourceId } shouldBe listOf(1L)
         catalog.allocations.keys shouldBe setOf(1L)
-        // One source gets the probe allowance on every page it opens; the probe
-        // is only widened to the whole pool in the refill wave.
-        catalog.allocations.getValue(1L) shouldBe listOf(6, 6, 6)
+        catalog.allocations.getValue(1L).all { it <= budget.detailsAllowance.toInt() } shouldBe true
         catalog.pageCalls.map { it.first }.distinct() shouldBe listOf(1L)
     }
 
     @Test
-    fun `productive source gets a refill beyond the equal probe`() = runTest {
+    fun productiveSourceContinuesAfterOtherSourcesExhaust() = runTest {
         val budget = DiscoveryVerificationBudget(maxDetails = 48)
         val catalog = Catalog { id, pageNumber ->
             if (id == 1L) {
-                page(listOf(item("card$pageNumber", listOf("Fantasy"))), detailsUsed = 10)
+                page(listOf(item("card$pageNumber", listOf("Fantasy"))), hasNextPage = pageNumber < 6)
             } else {
-                page(emptyList(), detailsUsed = 10)
+                page(emptyList(), hasNextPage = false)
             }
         }
 
-        val results = query(catalog, sourceIds = listOf(1L, 2L, 3L), budget = budget)
+        val results = query(catalog, sourceIds = listOf(1L, 2L, 3L), budget = budget, targetItems = 6)
 
-        catalog.allocations.getValue(1L).first() shouldBe 6
-        catalog.allocations.getValue(2L) shouldBe listOf(6)
-        catalog.allocations.getValue(3L) shouldBe listOf(6)
-        // The refill wave opens with the whole pool; later pages spend what the
-        // fake page reports as used.
-        catalog.allocations.getValue(1L)[1] shouldBe 48
-        results.first().summary.items.size shouldBe 6
-        results.first().summary.items.map { it.title }.distinct().size shouldBe 6
+        catalog.pageCalls.filter { it.first == 2L || it.first == 3L }.map { it.second } shouldBe listOf(1, 1)
+        results.first().summary.items.map { it.title } shouldBe
+            listOf("card1", "card2", "card3", "card4", "card5", "card6")
+        budget.detailsUsed shouldBe 0
     }
 
     @Test

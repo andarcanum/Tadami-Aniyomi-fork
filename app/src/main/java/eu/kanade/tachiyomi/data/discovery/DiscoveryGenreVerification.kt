@@ -34,6 +34,7 @@ data class GenreVerificationSummary(
     val unattemptedCount: Int,
     val metadataUnavailableCount: Int,
     val failedCount: Int,
+    val hasIncompletePages: Boolean = false,
 ) {
     val outcome: GenreVerificationOutcome
         get() = when {
@@ -41,13 +42,13 @@ data class GenreVerificationSummary(
             failedCount > 0 && verifiedCount == 0 &&
                 metadataUnavailableCount == 0 && unattemptedCount == 0 -> GenreVerificationOutcome.FAILED
             failedCount > 0 || metadataUnavailableCount > 0 ||
-                unattemptedCount > 0 -> GenreVerificationOutcome.INCOMPLETE
+                unattemptedCount > 0 || hasIncompletePages -> GenreVerificationOutcome.INCOMPLETE
             else -> GenreVerificationOutcome.VERIFIED_EMPTY
         }
 
     /** True when the row can be shown but its coverage is not complete. */
     val hasCoverageGap: Boolean
-        get() = unattemptedCount > 0 || metadataUnavailableCount > 0 || failedCount > 0
+        get() = unattemptedCount > 0 || metadataUnavailableCount > 0 || failedCount > 0 || hasIncompletePages
 
     companion object {
         fun empty(

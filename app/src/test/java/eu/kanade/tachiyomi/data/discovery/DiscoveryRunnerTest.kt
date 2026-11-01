@@ -252,6 +252,88 @@ class DiscoveryRunnerTest {
         repo.lastPublishedCursors.single().nextPage shouldBe 1
     }
 
+    @Test
+    fun completeEligibilityReachesSourceAdmissionBeforePublication() = runTest {
+        val key = tachiyomi.domain.discovery.model.canonicalDiscoveryKey(
+            DiscoveryMediaType.NOVEL,
+            1L,
+            "/retired",
+            "retired",
+        )
+        val repository = object : FakeRepository() {
+            override suspend fun eligibility(media: DiscoveryMediaType) =
+                tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot(media, 0L, setOf(key), emptySet())
+        }
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext) = listOf(
+                DiscoveryRowItem(
+                    "Retired", "retired", null, null, null, "s", 1.0,
+                    sourceId = 1L, sourceUrl = "/retired",
+                ),
+                DiscoveryRowItem("Fresh", "fresh", null, null, null, "s", 1.0, sourceId = 1L, sourceUrl = "/fresh"),
+            ).filterNot { it.isExcludedBy(context.exclusionKeys, context.mediaType) }
+        }
+        val runner = DiscoveryRunner(
+            repository = repository,
+            preferences = discoveryPrefs(
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", false, false),
+            ),
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { emptyList() },
+            fallbackSourceIdProvider = { 1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+
+        repository.publishedPools.single().map { it.title } shouldBe listOf("Fresh")
+    }
+
+    @Test
+    fun emptyRowsWithoutSourceEndEvidenceDoNotRetireThePreviousPool() = runTest {
+        val repository = FakeRepository()
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext) = emptyList<DiscoveryRowItem>()
+        }
+        val runner = DiscoveryRunner(
+            repository = repository,
+            preferences = discoveryPrefs(
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", false, false),
+            ),
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { emptyList() },
+            fallbackSourceIdProvider = { 1L },
+        )
+
+        val outcome = runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+            .getValue(DiscoveryMediaType.NOVEL)
+
+        repository.publishedPools shouldBe emptyList()
+        outcome.status shouldBe DiscoveryRunStatus.FAILED
+    }
+
+    private fun finiteEndEvidence(queryKey: String) = listOf(
+        tachiyomi.domain.discovery.model.DiscoveryQueryEvidence(
+            queryKey = queryKey,
+            transportOk = true,
+            rawEnd = true,
+            pending = 0,
+            unattempted = 0,
+            metadataFailures = 0,
+            budgetStopped = false,
+            duplicatePageStopped = false,
+        ),
+    )
+
     private open class FakeRepository(
         val initialSignals: List<DiscoverySignal> = emptyList(),
         initialSuggestions: List<DiscoverySuggestion> = emptyList(),
@@ -617,11 +699,12 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `successful run with empty candidates produces SUCCESS status and updates preferences`() = runTest {
+    fun `verified empty source result produces SUCCESS status and updates preferences`() = runTest {
         val repo = FakeRepository()
         val emptyBuilders = listOf(
             object : DiscoveryRowBuilder {
                 override val rowType = DiscoveryRowType.LIKE
+                override val exhaustionEvidence = finiteEndEvidence("fixture-like-ended")
                 override suspend fun build(context: DiscoveryBuildContext) = emptyList<DiscoveryRowItem>()
             },
         )
@@ -644,6 +727,83 @@ class DiscoveryRunnerTest {
         outcome.persistedRows.isEmpty() shouldBe true
         prefs.lastGenerationStatus(DiscoveryMediaType.NOVEL).get() shouldBe DiscoveryRunStatus.SUCCESS.name
         (prefs.lastGenerationAt(DiscoveryMediaType.NOVEL).get() > 0L) shouldBe true
+    }
+
+    @Test
+    fun `source native empty end publishes a verified empty pool through the runner`() = runTest {
+        val repo = FakeRepository()
+        var latestCalls = 0
+        var popularCalls = 0
+        val catalog = object : DiscoverySourceCatalog {
+            override suspend fun popular(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun popularPage(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+                budget: DiscoveryVerificationBudget?,
+            ): DiscoveryBrowsePage {
+                popularCalls++
+                return DiscoveryBrowsePage(emptyList(), hasNextPage = false)
+            }
+
+            override suspend fun latestPage(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+                budget: DiscoveryVerificationBudget?,
+            ): DiscoveryBrowsePage {
+                latestCalls++
+                return DiscoveryBrowsePage(emptyList(), hasNextPage = false)
+            }
+
+            override suspend fun popularWithGenres(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                genres: List<String>,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun latest(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+        }
+        val prefs = discoveryPrefs(
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_source", true, true),
+        )
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = prefs,
+            seedSources = weightedSeedSources(),
+            coordinatorFactory = {
+                DiscoveryCoordinator(listOf(DiscoverySourceRowBuilder(catalog, rowCap = 20)))
+            },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { listOf(DiscoveryInstalledPlugin("p1", listOf(11L))) },
+        )
+
+        val outcome = runner.run(listOf(DiscoveryMediaType.NOVEL)).getValue(DiscoveryMediaType.NOVEL)
+
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+        outcome.persistedRows shouldBe emptySet()
+        outcome.degradedRows shouldBe emptySet()
+        latestCalls shouldBe 1
+        popularCalls shouldBe 1
+        repo.publishedPools.size shouldBe 1
     }
 
     @Test
@@ -1070,6 +1230,7 @@ class DiscoveryRunnerTest {
                 listOf(
                     likeBuilder ?: object : DiscoveryRowBuilder {
                         override val rowType = DiscoveryRowType.LIKE
+                        override val exhaustionEvidence = finiteEndEvidence("fixture-similar-ended")
                         override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
                             context.seeds.size shouldBe 1
                             if (failLike) throw IOException("provider unavailable")
@@ -1106,6 +1267,7 @@ class DiscoveryRunnerTest {
                     builders.map { b ->
                         object : DiscoveryRowBuilder {
                             override val rowType = b.rowType
+                            override val exhaustionEvidence = finiteEndEvidence("fixture-ended-" + b.rowType.key)
                             override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
                                 seenStatuses += context.releaseStatuses
                                 return emptyList()
@@ -1384,10 +1546,11 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `manual refresh count is incremented when builders run even if rows empty`() = runTest {
+    fun `manual refresh count increments after a verified empty publication`() = runTest {
         val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
         val emptyBuilder = object : DiscoveryRowBuilder {
             override val rowType = DiscoveryRowType.TREND
+            override val exhaustionEvidence = finiteEndEvidence("fixture-trend-ended")
             override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = emptyList()
         }
         val runner = DiscoveryRunner(
@@ -1402,7 +1565,7 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `like row cache cleared when seeds empty and row honestly empty`() = runTest {
+    fun `an unqueried empty like row is not proof of catalogue exhaustion`() = runTest {
         val repo = FakeRepository()
         val runner = DiscoveryRunner(
             repository = repo,
@@ -1423,7 +1586,7 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = false)
-        repo.publishedPools.isNotEmpty() shouldBe true
+        repo.publishedPools shouldBe emptyList()
         repo.flow.value.isEmpty() shouldBe true
     }
 
