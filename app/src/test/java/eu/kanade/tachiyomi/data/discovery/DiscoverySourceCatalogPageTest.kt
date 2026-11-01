@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.discovery
 
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.MangaSource
+import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SManga
@@ -23,9 +24,14 @@ class DiscoverySourceCatalogPageTest {
     private val media = DiscoveryMediaType.MANGA
     private val sourceId = 7L
 
+    private class GenreOption(name: String) : Filter.CheckBox(name)
+    private class GenreGroup(options: List<Filter.CheckBox>) :
+        Filter.Group<Filter.CheckBox>("Genres", options)
+
     private fun source(supportsLatest: Boolean = true): CatalogueSource = mockk<CatalogueSource>().also { source ->
         every { source.id } returns sourceId
         every { source.name } returns "Fixture"
+        every { source.lang } returns "en"
         every { source.supportsLatest } returns supportsLatest
         every { source.getFilterList() } returns FilterList()
     }
@@ -283,6 +289,83 @@ class DiscoverySourceCatalogPageTest {
         budget.detailsUsed shouldBe 1
         coVerify(exactly = 1) { source.getMangaUpdate(match { it.url == "/completed" }, emptyList(), true, false) }
         coVerify(exactly = 0) { source.getMangaUpdate(match { it.url == "/unattempted" }, any(), any(), any()) }
+    }
+
+    @Test
+    fun `genre search query uses the source language`() {
+        discoveryGenreSearchQuery(listOf("milf"), "en") shouldBe "milf"
+        discoveryGenreSearchQuery(listOf("milf"), "ru") shouldBe "милфы"
+        discoveryGenreSearchQuery(listOf("milf", "romance"), "en") shouldBe "milf romance"
+    }
+
+    @Test
+    fun `filterless source falls back to a genre text search instead of browsing`(): Unit = runTest {
+        val source = source()
+        coEvery { source.getSearchManga(1, "milf", any()) } returns MangasPage(
+            listOf(manga("Milf One", "/milf", genre = "MILF")),
+            hasNextPage = true,
+        )
+
+        val result = catalog(source).popularWithGenresAllocated(
+            media,
+            sourceId,
+            genres = listOf("milf"),
+            budget = budget(maxDetails = 0),
+            maxDetails = 0,
+        )
+
+        result.genreFilterApplied shouldBe false
+        result.items.map { it.sourceUrl } shouldBe listOf("/milf")
+        result.hasNextPage shouldBe true
+        coVerify(exactly = 1) { source.getSearchManga(1, "milf", any()) }
+        coVerify(exactly = 0) { source.getPopularManga(any()) }
+    }
+
+    @Test
+    fun `russian filterless source searches the localized genre name`(): Unit = runTest {
+        val source = source()
+        every { source.lang } returns "ru"
+        coEvery { source.getSearchManga(1, "милфы", any()) } returns MangasPage(
+            listOf(manga("Милфы", "/milfy", genre = "Милфы")),
+            hasNextPage = false,
+        )
+
+        val result = catalog(source).popularWithGenresAllocated(
+            media,
+            sourceId,
+            genres = listOf("milf"),
+            budget = budget(maxDetails = 0),
+            maxDetails = 0,
+        )
+
+        result.items.map { it.sourceUrl } shouldBe listOf("/milfy")
+        coVerify(exactly = 1) { source.getSearchManga(1, "милфы", any()) }
+        coVerify(exactly = 0) { source.getPopularManga(any()) }
+    }
+
+    @Test
+    fun `genre query reports whether the source filter was applied`(): Unit = runTest {
+        val source = source()
+        every { source.getFilterList() } returns FilterList(
+            GenreGroup(listOf(GenreOption("MILF"), GenreOption("Drama"))),
+        )
+        coEvery { source.getSearchManga(1, "", any()) } returns MangasPage(
+            listOf(manga("Milf One", "/milf")),
+            hasNextPage = true,
+        )
+
+        val result = catalog(source).popularWithGenresAllocated(
+            media,
+            sourceId,
+            genres = listOf("milf"),
+            budget = budget(maxDetails = 0),
+            maxDetails = 0,
+        )
+
+        result.genreFilterApplied shouldBe true
+        result.items.map { it.sourceUrl } shouldBe listOf("/milf")
+        coVerify(exactly = 1) { source.getSearchManga(1, "", any()) }
+        coVerify(exactly = 0) { source.getPopularManga(any()) }
     }
 
     @Test

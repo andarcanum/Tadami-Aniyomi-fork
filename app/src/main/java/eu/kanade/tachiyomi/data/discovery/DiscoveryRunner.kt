@@ -536,7 +536,9 @@ class DiscoveryRunner(
         logcat {
             "[Discovery] refresh media=$mediaType manual=$isManualRefresh " +
                 "configuration=$isConfigurationRefresh page=$pageOffset " +
-                "statuses=${context.releaseStatuses} sources=${context.sourceIds} primary=${context.sourceId}"
+                "statuses=${context.releaseStatuses} sources=${context.sourceIds} primary=${context.sourceId} " +
+                "required=${genreFilterSpec.requiredGenres} enforcement=${genreFilterSpec.requiredEnforcement} " +
+                "match=${genreFilterSpec.requiredMatchMode}"
         }
         val builders = buildList {
             if (preferences.rowLikeEnabled().get()) {

@@ -89,6 +89,8 @@ data class DiscoveryGenrePage(
     val detailsUsed: Int = 0,
     val page: Int = 1,
     val queryKey: String = "",
+    /** Null when the caller did not ask for a genre query; true when the source filter accepted it. */
+    val genreFilterApplied: Boolean? = null,
 )
 
 /** Verification result for a single selected source. */

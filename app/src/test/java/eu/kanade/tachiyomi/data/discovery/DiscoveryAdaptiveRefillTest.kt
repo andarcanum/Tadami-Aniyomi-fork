@@ -161,7 +161,7 @@ class DiscoveryAdaptiveRefillTest {
         catalog.allocations.size shouldBe 10
         // The productive source is queried again for its next page, so compare initial shares.
         catalog.allocations.values.map { it.first() }.sum() shouldBe 48
-        catalog.allocations.values.flatten().all { it in 4..5 } shouldBe true
+        catalog.allocations.values.map { it.first() }.all { it in 4..5 } shouldBe true
         results.last().summary.items.single().title shouldBe "Late"
     }
 
@@ -369,6 +369,47 @@ class DiscoveryAdaptiveRefillTest {
 
         catalog.pageCalls.map { it.second } shouldBe listOf(5)
         result.stopReason shouldBe DiscoveryFillStopReason.SOURCE_EXHAUSTED
+    }
+
+    @Test
+    fun `details exhaustion stops page fetches instead of walking the catalogue`() = runTest {
+        val budget = DiscoveryVerificationBudget(maxDetails = 2)
+        val unknown = (1..5).map { item("unknown$it") }
+        val catalog = Catalog { _, _ ->
+            budget.tryAcquireDetail()
+            page(
+                items = emptyList(),
+                unattempted = unknown.size,
+                pending = unknown,
+                hasNextPage = true,
+                detailsUsed = 1,
+            )
+        }
+
+        val results = query(catalog, sourceIds = listOf(1L, 2L), budget = budget)
+
+        catalog.pageCalls.size shouldBe 4
+        catalog.pageCalls.map { it.second }.distinct().sorted() shouldBe listOf(1, 2)
+        budget.remainingDetails shouldBe 0
+        results.all { it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED } shouldBe true
+    }
+
+    @Test
+    fun `productive source gets the refill pool while a dry source stops probing`() = runTest {
+        val budget = DiscoveryVerificationBudget(maxDetails = 24)
+        val catalog = Catalog { id, pageNumber ->
+            if (id == 1L) {
+                page(listOf(item("match$pageNumber", listOf("Fantasy"))))
+            } else {
+                page(listOf(item("dry$pageNumber", listOf("Drama"))))
+            }
+        }
+
+        val results = query(catalog, sourceIds = listOf(1L, 2L), budget = budget, targetItems = 10)
+
+        catalog.pageCalls.filter { it.first == 2L }.map { it.second } shouldBe listOf(1)
+        results.first().summary.items.size shouldBe 10
+        results.last().summary.items shouldBe emptyList()
     }
 
     @Test

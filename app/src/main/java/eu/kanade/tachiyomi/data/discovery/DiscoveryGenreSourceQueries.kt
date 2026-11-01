@@ -27,8 +27,14 @@ private const val MIN_GENRE_SOURCE_TIMEOUT_MS = 5_000L
 /** A required genre may legitimately span many catalogue pages. */
 private const val MAX_REQUIRED_SOURCE_PAGES = 20
 
+/** Once the shared details are gone, list metadata may justify at most this many pages. */
+private const val MAX_DETAIL_FREE_PAGES = 2
+
 /** First-wave probe: enough to prove a source can match without owning the pool. */
 private const val REQUIRED_PROBE_DETAILS = 6
+
+/** Per-wave cap once a source has admitted a match; it may verify down to its target. */
+private const val REQUIRED_REFILL_DETAILS = 60
 
 internal enum class GenreSourceFailure { TIMEOUT, METADATA_UNAVAILABLE, SOURCE_ERROR }
 
@@ -169,9 +175,23 @@ internal suspend fun queryDiscoveryGenreSources(
         }
         wave++
         val remaining = if (hydrate) budget?.remainingDetails ?: 0 else 0
+        val productive = active.filter { it.admitted.isNotEmpty() }
+        // Probe every source once; afterwards the remaining allowance belongs to
+        // sources that already proved they can match, so a rich source can fill
+        // its row instead of every dry source taking an equal share.
+        val recipients = when {
+            wave == 1 -> active
+            productive.isNotEmpty() -> productive
+            else -> active
+        }
+        val perSource = if (wave > 1 && productive.isNotEmpty()) {
+            REQUIRED_REFILL_DETAILS
+        } else {
+            REQUIRED_PROBE_DETAILS
+        }
         val allowance = allocateDetailAllowance(
-            active.map { it.sourceId },
-            minOf(remaining, REQUIRED_PROBE_DETAILS * active.size),
+            recipients.map { it.sourceId },
+            minOf(remaining, perSource * recipients.size),
         )
         val before = active.sumOf { it.pagesFetched + it.verified + it.detailsUsed + it.admitted.size } to
             active.sumOf { it.pendingItems.size }
@@ -342,6 +362,15 @@ private suspend fun advanceSource(
     wave: Int,
 ) {
     var allowanceLeft = allowance.coerceAtLeast(0)
+    // A dry source already had its fair probe; do not let it keep fetching
+    // pages while the refill pool is reserved for sources that matched. Once
+    // the pool is gone, the bounded detail-free page grace still applies.
+    if (wave > 1 && hydrate && budget != null && allowanceLeft <= 0 &&
+        state.admitted.isEmpty() && budget.remainingDetails > 0
+    ) {
+        state.budgetExpired = true
+        return
+    }
     if (hydrate && budget != null && state.pendingItems.isNotEmpty()) {
         val oldPending = state.pendingItems
         val pending = oldPending.filterNot { it.isExcludedBy(state.excludedKeys, media) }
@@ -380,6 +409,15 @@ private suspend fun advanceSource(
         }
     }
     if (!state.hasNextPage || state.pagesStopped || state.pagesFetched >= state.pageLimit) return
+    // Without details a required-genre query can only use the list metadata it
+    // already sees; walking the whole catalogue spends time without finding
+    // anything new. Two pages keep a chance for sources that expose genres in lists.
+    if (hydrate && budget != null && budget.remainingDetails == 0 &&
+        state.pagesFetched >= MAX_DETAIL_FREE_PAGES
+    ) {
+        state.budgetExpired = true
+        return
+    }
     val remaining = if (hydrate) budget?.remainingMs() ?: timeoutMs else timeoutMs
     if (remaining <= 0L) {
         state.budgetExpired = true
@@ -431,7 +469,10 @@ private suspend fun advanceSource(
         "[DiscoveryGenreQuery] source=" + state.sourceId + " wave=" + wave + " page=" + page +
             " fetched=" + pageResult.items.size + " verified=" + pageResult.verified +
             " eligible=" + eligible.size + " total=" + state.admitted.size + " target=" + state.target +
-            " pending=" + state.pendingItems.size + " hasNext=" + state.hasNextPage
+            " pending=" + state.pendingItems.size + " hasNext=" + state.hasNextPage +
+            " genreFilter=" + pageResult.genreFilterApplied +
+            " required=" + policy.requiredGenres +
+            " sampleGenres=" + unique.take(3).map { it.genres.take(8) }
     }
 }
 
