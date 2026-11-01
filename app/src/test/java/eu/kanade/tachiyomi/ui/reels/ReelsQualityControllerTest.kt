@@ -9,12 +9,16 @@ import eu.kanade.tachiyomi.animesource.model.FeedVideoQualitiesResult
 import eu.kanade.tachiyomi.animesource.model.FeedVideoQualityResult
 import eu.kanade.tachiyomi.animesource.model.FeedVideoQualityVariant
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
@@ -258,10 +262,203 @@ class ReelsQualityControllerTest {
         controller.supports(item.id) shouldBe false
     }
 
+    @Test
+    fun `prepare window covers the active page and four forward items in order`(): Unit = runBlocking {
+        val resolveOrder = mutableListOf<String>()
+        val items = (0..6).map { index -> item.copy(id = "tdlib:-100123/$index") }
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            catalogByItem = { id -> availableFor(id, sourceVariant, hd720) },
+            resolve = { id, variantId ->
+                resolveOrder += id
+                resolved(id, hd720, variantId)
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+        controller.setGlobal(owner, ReelsQualityPreference.Resolution(720))
+
+        controller.prepareWindow(owner, items, fromIndex = 0, toIndex = 4, forceSd = false)
+
+        resolveOrder shouldBe items.take(5).map { it.id }
+        items.take(5).forEach { controller.playback(it.id) shouldNotBe null }
+        controller.playback(items[5].id) shouldBe null
+        controller.playback(items[6].id) shouldBe null
+    }
+
+    @Test
+    fun `prepare window stops at the end of the loaded items`(): Unit = runBlocking {
+        val resolveOrder = mutableListOf<String>()
+        val items = (0..2).map { index -> item.copy(id = "tdlib:-100123/$index") }
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            catalogByItem = { id -> availableFor(id, sourceVariant, hd720) },
+            resolve = { id, variantId ->
+                resolveOrder += id
+                resolved(id, hd720, variantId)
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+        controller.setGlobal(owner, ReelsQualityPreference.Resolution(720))
+
+        controller.prepareWindow(owner, items, fromIndex = 0, toIndex = 4, forceSd = false)
+
+        resolveOrder shouldBe items.map { it.id }
+    }
+
+    @Test
+    fun `prepare window reuses already resolved bindings without another resolve`(): Unit = runBlocking {
+        val resolveOrder = mutableListOf<String>()
+        val items = (0..4).map { index -> item.copy(id = "tdlib:-100123/$index") }
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            catalogByItem = { id -> availableFor(id, sourceVariant, hd720) },
+            resolve = { id, variantId ->
+                resolveOrder += id
+                resolved(id, hd720, variantId)
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+        controller.setGlobal(owner, ReelsQualityPreference.Resolution(720))
+        controller.prepare(owner, items[0], forceSd = false, recheckOnActivation = false) shouldNotBe null
+        resolveOrder.clear()
+
+        controller.prepareWindow(owner, items, fromIndex = 0, toIndex = 4, forceSd = false)
+
+        resolveOrder shouldBe items.drop(1).map { it.id }
+    }
+
+    @Test
+    fun `prepare window skips items without the quality capability`(): Unit = runBlocking {
+        val resolveOrder = mutableListOf<String>()
+        val items = listOf(
+            item.copy(id = "tdlib:-100123/0"),
+            item.copy(id = "web:1"),
+            item.copy(id = "tdlib:-100123/2"),
+        )
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            catalogByItem = { id -> availableFor(id, sourceVariant, hd720) },
+            resolve = { id, variantId ->
+                resolveOrder += id
+                resolved(id, hd720, variantId)
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+        controller.setGlobal(owner, ReelsQualityPreference.Resolution(720))
+
+        controller.prepareWindow(owner, items, fromIndex = 0, toIndex = 4, forceSd = false)
+
+        resolveOrder shouldBe listOf("tdlib:-100123/0", "tdlib:-100123/2")
+    }
+
+    @Test
+    fun `prepare window refuses a foreign owner`(): Unit = runBlocking {
+        val resolveOrder = mutableListOf<String>()
+        val items = (0..4).map { index -> item.copy(id = "tdlib:-100123/$index") }
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            catalogByItem = { id -> availableFor(id, sourceVariant, hd720) },
+            resolve = { id, variantId ->
+                resolveOrder += id
+                resolved(id, hd720, variantId)
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+
+        controller.prepareWindow(
+            expectedOwner = owner.copy(token = "other"),
+            items = items,
+            fromIndex = 0,
+            toIndex = 4,
+            forceSd = false,
+        )
+
+        resolveOrder.shouldBeEmpty()
+    }
+
+    @Test
+    fun `prepare window applies the automatic SD request to every prepared item`(): Unit = runBlocking {
+        val items = (0..2).map { index -> item.copy(id = "tdlib:-100123/$index") }
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, sd480),
+            catalogByItem = { id -> availableFor(id, sourceVariant, sd480) },
+            resolve = { id, variantId -> resolved(id, sd480, variantId) },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+
+        controller.prepareWindow(owner, items, fromIndex = 0, toIndex = 2, forceSd = true)
+
+        items.forEach { prepared ->
+            controller.playback(prepared.id)!!.decision.requested shouldBe
+                ReelsQualityPreference.Resolution(480)
+        }
+    }
+
+    @Test
+    fun `changing the global preference re resolves an already bound item`(): Unit = runBlocking {
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            resolve = { id, variantId ->
+                resolved(id, if (variantId == hd720.id) hd720 else sourceVariant)
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+
+        val first = controller.prepare(owner, item, false, false)!!
+        first.decision.variant shouldBe sourceVariant
+
+        controller.setGlobal(owner, ReelsQualityPreference.Resolution(720))
+        val actual = controller.prepare(owner, item, false, false)
+
+        actual shouldNotBe null
+        actual!!.decision.variant shouldBe hd720
+    }
+
+    @Test
+    fun `cancelled prepare is retried and clears switching`(): Unit = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            resolve = { id, _ ->
+                started.complete(Unit)
+                gate.await()
+                resolved(id, hd720)
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+        controller.setGlobal(owner, ReelsQualityPreference.Resolution(720))
+
+        val job = launch { controller.prepare(owner, item, false, false) }
+        started.await()
+        controller.itemState(item.id)!!.switching shouldBe true
+        job.cancelAndJoin()
+        controller.itemState(item.id)!!.switching shouldBe true
+        controller.itemState(item.id)!!.actual shouldBe null
+
+        gate.complete(Unit)
+        val actual = controller.prepare(owner, item, false, false)
+
+        actual shouldNotBe null
+        controller.itemState(item.id)!!.switching shouldBe false
+        controller.itemState(item.id)!!.actual shouldBe actual
+    }
+
     private fun controller() = ReelsQualityController(SourcePreferences(MapPreferenceStore())) { true }
 
     private fun available(vararg variants: FeedVideoQualityVariant) =
         FeedVideoQualitiesResult.Available(item.id, "42", variants.toList())
+
+    private fun availableFor(itemId: String, vararg variants: FeedVideoQualityVariant) =
+        FeedVideoQualitiesResult.Available(itemId, "42", variants.toList())
 
     private fun resolved(
         itemId: String,
@@ -295,6 +492,7 @@ class ReelsQualityControllerTest {
         private val resolve: suspend (itemId: String, variantId: String) -> FeedVideoQualityResult = { _, _ ->
             FeedVideoQualityResult.Unavailable
         },
+        private val catalogByItem: ((String) -> FeedVideoQualitiesResult)? = null,
     ) : AnimeFeedVideoQualitySource {
         override fun accountScopeId(): String = "42"
         override val replayContextChanges: Flow<FeedReplayContext?> =
@@ -309,7 +507,7 @@ class ReelsQualityControllerTest {
         override suspend fun getVideoQualities(
             itemId: String,
             expectedAccountId: String,
-        ): FeedVideoQualitiesResult = catalog
+        ): FeedVideoQualitiesResult = catalogByItem?.invoke(itemId) ?: catalog
         override suspend fun resolveVideoQuality(
             itemId: String,
             variantId: String,

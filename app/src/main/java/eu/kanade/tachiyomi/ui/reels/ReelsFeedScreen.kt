@@ -1009,13 +1009,12 @@ data class ReelsFeedScreen(
                             reelsForcesSd(state.dataSaverMetered, networkStatus.metered),
                         )
                     }
-                    LaunchedEffect(
-                        pagerState.settledPage,
-                        state.items.size,
-                        state.qualityState?.owner?.accountId,
-                        state.qualityState?.selectionRevision,
-                    ) {
-                        screenModel.prepareQualityForIndex(pagerState.settledPage)
+                    // Quality bindings must exist before the player preload (+1) and the head-prewarm
+                    // loop (+2..+4) can warm bytes. Page settles are handled by onPageChanged; this
+                    // effect covers data readiness, feed replacement and a new quality owner. It is a
+                    // background refresh, so an already-bound active reel is not retuned.
+                    LaunchedEffect(state.items.size, state.feedGeneration, state.qualityState?.owner?.token) {
+                        screenModel.prepareQualityWindow(state.activeIndex, skipBoundStart = true)
                     }
 
                     // C-intermediate (audit): heads of the reels BEYOND the player preload window

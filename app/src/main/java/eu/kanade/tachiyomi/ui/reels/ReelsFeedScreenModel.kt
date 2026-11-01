@@ -240,6 +240,11 @@ class ReelsFeedScreenModel(
         // endless feed); manual pagination past the budget stays available.
         const val RESUME_SEEK_MAX_PAGES = 10
 
+        // Forward quality window. The player preload (+1) and the head-prewarm loop (+2..+4)
+        // can only warm reels whose quality binding already exists; this window matches that span.
+        // Metadata/URI only — media bytes stay behind the existing preload switches.
+        const val QUALITY_PREPARE_AHEAD = 4
+
         // Audit H6: word-boundary status match — a reel id or message that merely CONTAINS
         // "403"/"401" must not mount the bootstrap WebView.
         private val HTTP_SESSION_ERROR_REGEX = Regex("\\b(?:401|403)\\b")
@@ -264,6 +269,13 @@ class ReelsFeedScreenModel(
 
     private val qualityController = ReelsQualityController(sourcePreferences)
     private var qualitySessionJob: Job? = null
+
+    // @Volatile: cancelled/replaced from main (page activation, quality toggles, screen
+    // effect) AND from IO (bindQualitySession/attachQuality and the null-context detach).
+    // Without it the cancel-then-assign can lose visibility across threads and leave two
+    // overlapping window loops (duplicate Telegram round-trips).
+    @Volatile
+    private var qualityPrepareJob: Job? = null
     private var qualityForceSd = false
 
     // Guards against a stale in-flight load completing after a reset/source switch and
@@ -4449,7 +4461,7 @@ class ReelsFeedScreenModel(
             }
         }
         loadNextPageIfNeeded(index)
-        prepareQualityForIndex(index)
+        prepareQualityWindow(index)
     }
 
     fun qualityItemState(itemId: String): ReelsQualityItemState? = qualityController.itemState(itemId)
@@ -4501,17 +4513,23 @@ class ReelsFeedScreenModel(
         qualityForceSd = forceSd
         if (!changed) return
         val index = state.value.activeIndex
-        val item = state.value.items.getOrNull(index) ?: return
-        if (qualityController.playback(item.id) == null) {
-            prepareQualityForIndex(index)
-        }
+        // Never retune the reel that is already playing: the new automatic-SD verdict applies
+        // at the next activation, so only the forward window is re-resolved here. A reel with
+        // no binding yet (error/pending) is included.
+        val activeIsBound = state.value.items.getOrNull(index)
+            ?.let { qualityController.playback(it.id) } != null
+        prepareQualityRange(
+            fromIndex = if (activeIsBound) index + 1 else index,
+            toIndex = index + QUALITY_PREPARE_AHEAD,
+        )
     }
 
     fun prepareQualityForIndex(index: Int) {
         val item = state.value.items.getOrNull(index) ?: return
         val owner = qualityController.state.value.owner ?: return
         if (!qualityController.supports(item.id)) return
-        screenModelScope.launch(ioDispatcher) {
+        qualityPrepareJob?.cancel()
+        qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
             qualityController.prepare(
                 expectedOwner = owner,
                 item = item,
@@ -4521,8 +4539,42 @@ class ReelsFeedScreenModel(
         }
     }
 
+    /**
+     * Prepares quality bindings for [startIndex] and the [QUALITY_PREPARE_AHEAD] reels after it.
+     *
+     * [skipBoundStart] separates the two callers:
+     * - activation (`onPageChanged`) deliberately passes `false` — the newly active reel must be
+     *   re-evaluated under the current automatic-SD/global verdict even if a neighbor prepared it
+     *   earlier under a different one;
+     * - background refreshes (items/owner changes, owner re-attach) pass `true` — a reel that is
+     *   already playing keeps its actual binding and only the forward window is re-resolved.
+     */
+    fun prepareQualityWindow(startIndex: Int, skipBoundStart: Boolean = false) {
+        val boundStart = state.value.items.getOrNull(startIndex)
+            ?.let { qualityController.playback(it.id) } != null
+        val fromIndex = if (skipBoundStart && boundStart) startIndex + 1 else startIndex
+        prepareQualityRange(fromIndex, startIndex + QUALITY_PREPARE_AHEAD)
+    }
+
+    private fun prepareQualityRange(fromIndex: Int, toIndex: Int) {
+        if (fromIndex < 0 || toIndex < fromIndex) return
+        val owner = qualityController.state.value.owner ?: return
+        val items = state.value.items
+        qualityPrepareJob?.cancel()
+        qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
+            qualityController.prepareWindow(
+                expectedOwner = owner,
+                items = items,
+                fromIndex = fromIndex,
+                toIndex = toIndex,
+                forceSd = qualityForceSd,
+            )
+        }
+    }
+
     private fun bindQualitySession(rawSource: AnimeFeedSource, sourceId: Long) {
         qualitySessionJob?.cancel()
+        qualityPrepareJob?.cancel()
         qualityController.detach()
         if (rawSource !is AnimeFeedVideoQualitySource || state.value.isOffline) return
         qualitySessionJob = screenModelScope.launch(ioDispatcher) {
@@ -4532,6 +4584,7 @@ class ReelsFeedScreenModel(
             rawSource.replayContextChanges.collectLatest { context ->
                 if (state.value.currentSourceId != sourceId) return@collectLatest
                 if (context == null) {
+                    qualityPrepareJob?.cancel()
                     qualityController.detach()
                 } else {
                     attachQuality(rawSource, sourceId, context.accountId)
@@ -4553,12 +4606,15 @@ class ReelsFeedScreenModel(
             ReelsQualityOwner(UUID.randomUUID().toString(), sourceId, accountId)
         }
         qualityController.attach(rawSource, owner)
-        prepareQualityForIndex(state.value.activeIndex)
+        // Owner setup / re-attach is a background refresh: never retune an already-bound reel.
+        prepareQualityWindow(state.value.activeIndex, skipBoundStart = true)
     }
 
     private fun stopQualitySession() {
         qualitySessionJob?.cancel()
         qualitySessionJob = null
+        qualityPrepareJob?.cancel()
+        qualityPrepareJob = null
         qualityController.detach()
     }
 

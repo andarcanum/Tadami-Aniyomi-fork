@@ -7,6 +7,8 @@ import eu.kanade.tachiyomi.animesource.model.FeedVideoQualityResult
 import eu.kanade.tachiyomi.animesource.model.FeedVideoQualityVariant
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -160,14 +162,17 @@ class ReelsQualityController(
             current.global
         }
         val existing = current.items[item.id]
+        val bound = existing?.actual
         if (
             !recheckOnActivation &&
-            existing?.actual != null &&
-            existing.requested == requested &&
+            existing != null &&
+            bound != null &&
+            bound.decision.requested == requested &&
             existing.forceSd == forceSd &&
-            existing.catalogStatus in CACHED_CATALOG_STATUSES
+            existing.catalogStatus in CACHED_CATALOG_STATUSES &&
+            !existing.switching
         ) {
-            return existing.actual
+            return bound
         }
 
         val revision = (existing?.revision ?: 0L) + 1L
@@ -326,6 +331,33 @@ class ReelsQualityController(
                 fail(expectedOwner, item.id, revision, ReelsQualityFailure.Unsupported)
                 null
             }
+        }
+    }
+
+    /**
+     * Prepares the bounded forward window in feed order: each item gets a catalog and a resolved
+     * URI so the player preload and the head-prewarm can warm real bytes before activation.
+     * Metadata only — no media download is started here.
+     */
+    suspend fun prepareWindow(
+        expectedOwner: ReelsQualityOwner,
+        items: List<ShortVideoItem>,
+        fromIndex: Int,
+        toIndex: Int,
+        forceSd: Boolean,
+    ) {
+        if (fromIndex < 0 || toIndex < fromIndex) return
+        for (index in fromIndex..minOf(toIndex, items.lastIndex)) {
+            currentCoroutineContext().ensureActive()
+            if (_state.value.owner != expectedOwner) return
+            val item = items.getOrNull(index) ?: return
+            if (!supports(item.id)) continue
+            prepare(
+                expectedOwner = expectedOwner,
+                item = item,
+                forceSd = forceSd,
+                recheckOnActivation = false,
+            )
         }
     }
 
