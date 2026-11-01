@@ -17,6 +17,7 @@ import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
@@ -279,6 +280,10 @@ class DiscoveryRunner(
         val previousPool = runCatching { repository.publication(mediaType) }.getOrNull()
         val previousPoolTitles = previousPool?.suggestions.orEmpty().mapTo(HashSet()) { it.cleanTitle }
         val expectedGeneration = previousPool?.generation ?: 0L
+        val configurationKey = discoveryConfigurationKey(mediaType)
+        val harvestPages = if (isManualRefresh) MAX_MANUAL_HARVEST_PAGES else 1
+        val resumeCursor = previousPool?.cursors.orEmpty()
+            .firstOrNull { it.queryKey == configurationKey && !it.exhausted }
         val feedbackSeeds = selectFeedbackSeeds(allSignals, mediaType, limit = minOf(2, totalSeedBudget))
         val librarySeedBudget = (totalSeedBudget - feedbackSeeds.size).coerceAtLeast(0)
         val feedbackCleanTitles = feedbackSeeds.mapTo(HashSet()) { it.cleanTitle }
@@ -401,7 +406,10 @@ class DiscoveryRunner(
         val recentCleanTitles = shownTitles
         val pageOffset = when {
             isConfigurationRefresh -> 1
-            isManualRefresh -> manualPageOffset(candidateRefreshCount)
+            // A manual refresh scans from the top until enough genuinely new
+            // titles are collected; the persisted cursor is for background cycles.
+            isManualRefresh -> 1
+            resumeCursor != null -> resumeCursor.nextPage.coerceAtLeast(1)
             else -> backgroundPageOffset(candidateBackgroundCycle)
         }
 
@@ -472,6 +480,7 @@ class DiscoveryRunner(
             currentFeedCleanTitles = previousPoolTitles,
             existingRowItems = existingRowItems,
             pageOffset = pageOffset,
+            harvestPages = harvestPages,
             verificationBudget = verificationBudget,
         )
         // TASTE and SOURCE otherwise run the same required-genre catalogue pass
@@ -497,6 +506,7 @@ class DiscoveryRunner(
                         sourceIds = ordered,
                         genres = requiredGenres.toList(),
                         page = pageOffset,
+                        pages = harvestPages,
                         releaseStatuses = baseContext.releaseStatuses,
                         policy = baseContext.candidatePolicy,
                         maxConcurrency = 4,
@@ -509,6 +519,7 @@ class DiscoveryRunner(
                         targetItems = RICH_SOURCE_TARGET * 2,
                         perSourceCap = RICH_SOURCE_TARGET * 2,
                         budget = verificationBudget,
+                        excludedKeys = baseContext.exclusionKeys,
                     )
                 }
             }
@@ -628,12 +639,25 @@ class DiscoveryRunner(
         }
         val conclusiveEmpty = feed.failedRows.isEmpty() && feed.degradedRows.isEmpty() &&
             feed.rows.values.all { it.isEmpty() } && attemptedRows.isNotEmpty()
+        val nextCursorPage = when {
+            isManualRefresh -> 1
+            pageOffset + 1 > MAX_HARVEST_PAGE -> 1
+            else -> pageOffset + 1
+        }
+        val nextCursors = listOf(
+            DiscoverySourceCursor(
+                sourceId = 0L,
+                queryKey = configurationKey,
+                nextPage = nextCursorPage,
+                exhausted = false,
+            ),
+        )
         val prepared = when {
             allExecutedFailed -> null
             pooledItems.isNotEmpty() -> DiscoveryPreparedPool.Fresh(
                 suggestions = pooledItems,
                 partial = hasPartialFailures,
-                cursors = emptyList(),
+                cursors = nextCursors,
             )
             conclusiveEmpty -> DiscoveryPreparedPool.VerifiedEmpty(
                 expectedQueryKeys = attemptedRows.mapTo(HashSet()) { it.key },
@@ -649,12 +673,11 @@ class DiscoveryRunner(
                         duplicatePageStopped = false,
                     )
                 },
-                cursors = emptyList(),
+                cursors = nextCursors,
             )
             else -> null
         }
 
-        val configurationKey = discoveryConfigurationKey(mediaType)
         repository.installConfigurationKey(mediaType, configurationKey)
         val requestId = java.util.UUID.randomUUID().toString()
         val token = if (prepared != null) {
@@ -711,26 +734,8 @@ class DiscoveryRunner(
             persistedRows = persistedRows,
         )
     }
-    private fun discoveryConfigurationKey(mediaType: DiscoveryMediaType): String {
-        val spec = preferences.genreFilterSpec()
-        val parts = listOf(
-            mediaType.key,
-            "rows", preferences.rowLikeEnabled().get(), preferences.rowTasteEnabled().get(),
-            preferences.rowTrendEnabled().get(), preferences.rowSourceEnabled().get(),
-            "seeds", preferences.seedCount().get(), preferences.seedCompleted().get(),
-            preferences.seedActive14().get(), preferences.seedAdded().get(), preferences.seedRated().get(),
-            preferences.seedCompletedDays().get(), preferences.seedActiveDays().get(),
-            "trend", preferences.trendSeason().get(), preferences.trendSort().get(),
-            "status", preferences.releaseStatusFilter().get(),
-            "genres", spec.ignoredGenres.sorted(), spec.requiredGenres.sorted(), spec.priorityGenres.sorted(),
-            spec.requiredMatchMode.name, spec.requiredEnforcement.name, spec.unknownGenrePolicy.name,
-            "sources", preferences.externalProvidersEnabled().get(),
-            preferences.discoverySourceMode(mediaType).get(),
-            preferences.discoverySourceExcluded(mediaType).get(),
-            "nsfw", preferences.filterNsfw().get(),
-        )
-        return parts.joinToString("|").hashCode().toUInt().toString(16)
-    }
+    private fun discoveryConfigurationKey(mediaType: DiscoveryMediaType): String =
+        computeDiscoveryConfigurationKey(preferences, mediaType)
 }
 
 /**
@@ -764,3 +769,33 @@ internal fun manualPageOffset(refreshCount: Int): Int = ((refreshCount - 1) % 10
  * (совпадает с прежним поведением), далее каждый цикл уходит глубже выдачи провайдера.
  */
 internal fun backgroundPageOffset(cycleCount: Int): Int = ((cycleCount - 1).mod(10)) + 1
+
+internal fun computeDiscoveryConfigurationKey(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+): String {
+    val spec = preferences.genreFilterSpec()
+    val parts = listOf(
+        mediaType.key,
+        "rows", preferences.rowLikeEnabled().get(), preferences.rowTasteEnabled().get(),
+        preferences.rowTrendEnabled().get(), preferences.rowSourceEnabled().get(),
+        "seeds", preferences.seedCount().get(), preferences.seedCompleted().get(),
+        preferences.seedActive14().get(), preferences.seedAdded().get(), preferences.seedRated().get(),
+        preferences.seedCompletedDays().get(), preferences.seedActiveDays().get(),
+        "trend", preferences.trendSeason().get(), preferences.trendSort().get(),
+        "status", preferences.releaseStatusFilter().get(),
+        "genres", spec.ignoredGenres.sorted(), spec.requiredGenres.sorted(), spec.priorityGenres.sorted(),
+        spec.requiredMatchMode.name, spec.requiredEnforcement.name, spec.unknownGenrePolicy.name,
+        "sources", preferences.externalProvidersEnabled().get(),
+        preferences.discoverySourceMode(mediaType).get(),
+        preferences.discoverySourceExcluded(mediaType).get(),
+        "nsfw", preferences.filterNsfw().get(),
+    )
+    return parts.joinToString("|").hashCode().toUInt().toString(16)
+}
+
+/** Page budget for a manual refresh: the loop stops as soon as enough fresh titles are collected. */
+private const val MAX_MANUAL_HARVEST_PAGES = 20
+
+/** Page depth at which the persisted cursor wraps back to the first page. */
+private const val MAX_HARVEST_PAGE = 30

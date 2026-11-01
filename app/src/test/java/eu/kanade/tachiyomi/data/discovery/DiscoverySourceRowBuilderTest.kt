@@ -15,6 +15,7 @@ class DiscoverySourceRowBuilderTest {
         private val latestBySource: Map<Long, List<DiscoveryRowItem>> = emptyMap(),
         private val failing: Set<Long> = emptySet(),
         private val failingLatest: Set<Long> = emptySet(),
+        private val itemsByPage: Map<Pair<Long, Int>, List<DiscoveryRowItem>> = emptyMap(),
     ) : DiscoverySourceCatalog {
         val requested = mutableListOf<Long>()
         val requestedPopular = mutableListOf<Pair<Long, Int>>()
@@ -29,7 +30,7 @@ class DiscoverySourceRowBuilderTest {
             requested += sourceId
             requestedPopular += sourceId to page
             if (sourceId in failing) throw IOException("boom $sourceId")
-            return itemsBySource[sourceId].orEmpty()
+            return itemsByPage[sourceId to page] ?: itemsBySource[sourceId].orEmpty()
         }
 
         override suspend fun popularWithGenres(
@@ -48,7 +49,7 @@ class DiscoverySourceRowBuilderTest {
         ): List<DiscoveryRowItem> {
             requestedLatest += sourceId to page
             if (sourceId in failingLatest) throw IOException("latest boom $sourceId")
-            return latestBySource[sourceId].orEmpty()
+            return itemsByPage[sourceId to page] ?: latestBySource[sourceId].orEmpty()
         }
     }
 
@@ -70,6 +71,21 @@ class DiscoverySourceRowBuilderTest {
         sourceIds = sourceIds,
         pageOffset = pageOffset,
     )
+
+    @Test
+    fun `harvest pages fetch consecutive catalogue pages per source`() = runTest {
+        val catalog = FakeCatalog(
+            itemsBySource = mapOf(1L to items("S1", 10)),
+            latestBySource = mapOf(1L to items("S1", 10)),
+        )
+
+        DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 5).copy(harvestPages = 3),
+        )
+
+        catalog.requestedPopular.map { it.second }.distinct().sorted() shouldBe listOf(5, 6, 7)
+        catalog.requestedLatest.map { it.second }.distinct().sorted() shouldBe listOf(5, 6, 7)
+    }
 
     @Test
     fun `failed dominant source slots are backfilled from fetched surplus`() = runTest {
@@ -223,6 +239,117 @@ class DiscoverySourceRowBuilderTest {
             DiscoverySourceRowBuilder(catalog).build(context(sourceIds = listOf(1L, 2L)))
         }
         result.isFailure shouldBe true
+    }
+
+    @Test
+    fun `source row stops after the first page without genre matches`() = runTest {
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(
+                1L to 1 to listOf(
+                    DiscoveryRowItem(
+                        "Drama", "drama", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/drama", genres = listOf("Drama"),
+                    ),
+                ),
+                1L to 2 to listOf(
+                    DiscoveryRowItem(
+                        "Fantasy", "fantasy", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/fantasy", genres = listOf("Fantasy"),
+                    ),
+                ),
+            ),
+        )
+
+        DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(
+                genreFilterSpec = GenreFilterSpec(ignoredGenres = setOf("Drama")),
+                harvestPages = 5,
+            ),
+        )
+
+        catalog.requestedPopular.map { it.second }.distinct() shouldBe listOf(1)
+        catalog.requestedLatest.map { it.second }.distinct() shouldBe listOf(1)
+    }
+
+    @Test
+    fun `source row pages past retired matches and admits the next page`() = runTest {
+        val retired = (1..10).map {
+            DiscoveryRowItem(
+                "Retired $it", "retired $it", null, null, null, "s", 1.0,
+                sourceId = 1L, sourceUrl = "/retired-$it", genres = listOf("Fantasy"),
+            )
+        }
+        val fresh = (1..5).map {
+            DiscoveryRowItem(
+                "Fresh $it", "fresh $it", null, null, null, "s", 1.0,
+                sourceId = 1L, sourceUrl = "/fresh-$it", genres = listOf("Fantasy"),
+            )
+        }
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(1L to 1 to retired, 1L to 2 to fresh),
+        )
+
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(
+                harvestPages = 5,
+                recentCleanTitles = retired.mapTo(HashSet()) { it.cleanTitle },
+            ),
+        )
+
+        catalog.requestedPopular.map { it.second }.contains(2) shouldBe true
+        result.map { it.cleanTitle }.toSet() shouldBe
+            (1..5).mapTo(HashSet()) { "fresh $it" }
+    }
+
+    @Test
+    fun `an empty page stops the source immediately`() = runTest {
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(
+                1L to 1 to listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh", genres = listOf("Fantasy"),
+                    ),
+                ),
+            ),
+        )
+
+        DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(harvestPages = 10),
+        )
+
+        catalog.requestedPopular.map { it.second } shouldBe listOf(1, 2)
+        catalog.requestedLatest.map { it.second } shouldBe listOf(1, 2)
+    }
+
+    @Test
+    fun `two pages of retired matches stop the source`() = runTest {
+        fun retired(number: Int) = DiscoveryRowItem(
+            "Retired $number", "retired $number", null, null, null, "s", 1.0,
+            sourceId = 1L, sourceUrl = "/retired-$number", genres = listOf("Fantasy"),
+        )
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(
+                1L to 1 to listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh", genres = listOf("Fantasy"),
+                    ),
+                ),
+                1L to 2 to listOf(retired(2)),
+                1L to 3 to listOf(retired(3)),
+            ),
+        )
+
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(
+                harvestPages = 10,
+                recentCleanTitles = setOf("retired 2", "retired 3"),
+            ),
+        )
+
+        catalog.requestedPopular.map { it.second } shouldBe listOf(1, 2, 3)
+        result.map { it.cleanTitle } shouldBe listOf("fresh")
     }
 
     @Test

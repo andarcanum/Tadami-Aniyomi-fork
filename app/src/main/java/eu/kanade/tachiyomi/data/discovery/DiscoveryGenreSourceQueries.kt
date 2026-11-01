@@ -133,6 +133,8 @@ internal suspend fun queryDiscoveryGenreSources(
     targetItems: Int = Int.MAX_VALUE,
     perSourceCap: Int = RICH_SOURCE_TARGET,
     budget: DiscoveryVerificationBudget? = null,
+    pages: Int = 1,
+    excludedKeys: Set<String> = emptySet(),
 ): List<GenreSourceVerification> = supervisorScope {
     require(maxConcurrency > 0 && timeoutMs > 0L && targetItems > 0 && perSourceCap > 0)
     val requestedIds = sourceIds.filter { it > 0L }.distinct()
@@ -147,7 +149,7 @@ internal suspend fun queryDiscoveryGenreSources(
 
     val required = policy.requiredGenres.isNotEmpty()
     val target = if (required) minOf(targetItems, perSourceCap) else targetItems
-    val pageBudget = if (required) MAX_REQUIRED_SOURCE_PAGES else 1
+    val pageBudget = if (required) MAX_REQUIRED_SOURCE_PAGES else pages.coerceAtLeast(1)
     val states = ids.map { id ->
         SourceQueryState(
             sourceId = id,
@@ -156,6 +158,7 @@ internal suspend fun queryDiscoveryGenreSources(
             target = target,
             pageLimit = pageBudget,
             required = required,
+            excludedKeys = excludedKeys,
         )
     }
     val permits = Semaphore(maxConcurrency)
@@ -273,6 +276,7 @@ private class SourceQueryState(
     val target: Int,
     val pageLimit: Int,
     val required: Boolean,
+    val excludedKeys: Set<String>,
 ) {
     val seen = HashSet<String>()
     val admitted = LinkedHashMap<String, DiscoveryRowItem>()
@@ -490,7 +494,8 @@ private suspend fun advanceSource(
             state.seen.add(it.sourceUrl?.takeIf(String::isNotBlank) ?: it.cleanTitle)
         }
         val pageAdmitted = policy.filterRowCandidates(unique, { it.genres })
-        for (candidate in pageAdmitted) {
+        val pageEligible = pageAdmitted.filterNot { it.isExcludedBy(state.excludedKeys) }
+        for (candidate in pageEligible) {
             if (state.admitted.size >= state.target) break
             state.admitted.putIfAbsent(candidate.collectionKey(), candidate)
         }
@@ -499,7 +504,7 @@ private suspend fun advanceSource(
                 "fetched=${pageResult.items.size} verified=${pageResult.verified} " +
                 "unattempted=${pageResult.unattempted} unavailable=${pageResult.metadataUnavailable} " +
                 "failures=${pageResult.transientFailures} admitted=${pageAdmitted.size} " +
-                "total=${state.admitted.size} target=${state.target} " +
+                "eligible=${pageEligible.size} total=${state.admitted.size} target=${state.target} " +
                 "details=${pageResult.detailsUsed} pending=${pageResult.pending.size} " +
                 "hasNext=${pageResult.hasNextPage} required=${policy.requiredGenres} " +
                 "sampleGenres=${unique.take(3).map { it.genres.take(8) }}"
@@ -509,17 +514,32 @@ private suspend fun advanceSource(
             break
         }
         if (!pageResult.hasNextPage) break
-        if (state.required) {
-            // Empty and duplicate pages are a grace budget, not an instant stop:
-            // a productive source may still have new matches on the next page.
-            if (pageAdmitted.isEmpty()) state.emptyPages++ else state.emptyPages = 0
-            if (state.emptyPages >= MAX_EMPTY_REQUIRED_PAGES) {
-                state.pagesStopped = true
-                break
-            }
+        // Nothing matching genres/status on the very first page means this query
+        // shape is dead for the source: paging deeper cannot help. Cards whose
+        // genres are still unknown stay pending for hydration, so they do not
+        // count as "no match".
+        if (state.successfulPages == 1 && pageAdmitted.isEmpty() &&
+            pageResult.pending.isEmpty() && pageResult.unattempted == 0
+        ) {
+            state.pagesStopped = true
+            break
+        }
+        // Genre matches exist but were all retired/shown: keep paging, using the
+        // same grace budget so duplicate-only tails do not loop forever.
+        if (pageAdmitted.isEmpty() || pageEligible.isEmpty()) {
+            state.emptyPages++
+        } else {
+            state.emptyPages = 0
+        }
+        if (state.emptyPages >= MAX_EMPTY_REQUIRED_PAGES) {
+            state.pagesStopped = true
+            break
         }
     }
 }
+
+internal fun DiscoveryRowItem.isExcludedBy(keys: Set<String>): Boolean =
+    keys.isNotEmpty() && (cleanTitle in keys || altCleanTitles.any { it in keys })
 
 private fun DiscoveryRowItem.collectionKey(): String =
     sourceUrl?.takeIf(String::isNotBlank) ?: cleanTitle

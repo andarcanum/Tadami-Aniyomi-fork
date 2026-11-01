@@ -23,6 +23,7 @@ import tachiyomi.domain.discovery.model.DiscoveryPublicationOutcome
 import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
@@ -250,6 +251,29 @@ class DiscoveryPublicationTest {
         val keys = (batch as DiscoveryBatchReceipt.Available).snapshot.homeBatchKeys
         ("key:1" in keys) shouldBe false
         keys.size shouldBe 20
+    }
+
+    @Test
+    fun `publication round-trips source cursors through storage`() = runTest {
+        val cursors = listOf(
+            DiscoverySourceCursor(
+                sourceId = 0L,
+                queryKey = "cfg-1",
+                nextPage = 7,
+                exhausted = false,
+            ),
+        )
+        val receipt = publish(
+            "req-1",
+            DiscoveryPreparedPool.Fresh(
+                suggestions = listOf(suggestion(1)),
+                partial = false,
+                cursors = cursors,
+            ),
+        )
+
+        (receipt as DiscoveryPublishReceipt.Published).snapshot.cursors shouldBe cursors
+        repository.publication(media).cursors shouldBe cursors
     }
 
     private fun keyOf(number: Int): String = "key:$number"

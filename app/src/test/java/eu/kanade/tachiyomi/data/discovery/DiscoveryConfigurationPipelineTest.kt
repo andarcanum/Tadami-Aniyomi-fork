@@ -165,6 +165,7 @@ class DiscoveryConfigurationPipelineTest {
         f.stored.value shouldBe emptyList()
         f.captured.single().currentFeedCleanTitles shouldBe setOf("cached match")
         f.captured.single().pageOffset shouldBe 1
+        f.captured.single().harvestPages shouldBe 1
         f.preferences.manualRefreshCount(media).get() shouldBe 7
         f.preferences.backgroundCycleCount(media).get() shouldBe 9
     }
@@ -174,7 +175,7 @@ class DiscoveryConfigurationPipelineTest {
         val f = fixture()
         f.runner.run(listOf(media), isManualRefresh = true)
         f.captured.single().currentFeedCleanTitles shouldBe setOf("cached match")
-        f.captured.single().pageOffset shouldBe manualPageOffset(8)
+        f.captured.single().pageOffset shouldBe 1
         // The old title is filtered out at selection time, so the honest result is an
         // exhausted (empty) pool rather than a stale backfill.
         f.stored.value shouldBe emptyList()

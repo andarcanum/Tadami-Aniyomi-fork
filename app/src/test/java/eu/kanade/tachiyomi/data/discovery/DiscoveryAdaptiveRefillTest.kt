@@ -204,12 +204,12 @@ class DiscoveryAdaptiveRefillTest {
     }
 
     @Test
-    fun `two empty required pages stop the source before the page cap`() = runTest {
+    fun `an empty first page stops the source immediately`() = runTest {
         val catalog = Catalog { _, _ -> page(emptyList()) }
 
         val result = query(catalog, targetItems = 50).single()
 
-        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2)
+        catalog.pageCalls.map { it.second } shouldBe listOf(1)
         result.stopReason shouldBe DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED
         result.exhausted shouldBe false
     }

@@ -397,6 +397,7 @@ class DiscoveryTasteRowBuilder(
                     sourceIds = toQuery,
                     genres = sourceGenreNames,
                     page = context.pageOffset,
+                    pages = context.harvestPages,
                     releaseStatuses = context.releaseStatuses,
                     policy = policy,
                     timeoutMs = if (required) {
@@ -407,6 +408,7 @@ class DiscoveryTasteRowBuilder(
                     hydrate = required,
                     targetItems = 50,
                     budget = context.verificationBudget,
+                    excludedKeys = context.exclusionKeys,
                 )
             }
         } else {
@@ -514,6 +516,7 @@ class DiscoverySourceRowBuilder(
                     sourceIds = ordered,
                     genres = policy.requiredGenres.toList(),
                     page = context.pageOffset,
+                    pages = context.harvestPages,
                     releaseStatuses = context.releaseStatuses,
                     policy = policy,
                     maxConcurrency = maxConcurrency,
@@ -521,6 +524,7 @@ class DiscoverySourceRowBuilder(
                     hydrate = true,
                     targetItems = rowCap,
                     budget = context.verificationBudget,
+                    excludedKeys = context.exclusionKeys,
                 )
             }
             isDegraded = results.any {
@@ -554,45 +558,81 @@ class DiscoverySourceRowBuilder(
                     }
                     semaphore.withPermit {
                         val latestQuota = perSource - perSource / 5
-                        val latestDeferred = async {
-                            runCatchingUnlessCancelled {
-                                withTimeoutOrNull(sourceTimeoutMs) {
-                                    catalog.latest(
-                                        context.mediaType,
-                                        id,
-                                        page = context.pageOffset,
-                                        releaseStatuses = context.releaseStatuses,
-                                    )
+                        val latestFetched = mutableListOf<DiscoveryRowItem>()
+                        val popularFetched = mutableListOf<DiscoveryRowItem>()
+                        var popularSucceeded = false
+                        var emptyStreak = 0
+                        val pageCount = context.harvestPages.coerceAtLeast(1)
+                        for (offset in 0 until pageCount) {
+                            val page = context.pageOffset + offset
+                            val latestDeferred = async {
+                                runCatchingUnlessCancelled {
+                                    withTimeoutOrNull(sourceTimeoutMs) {
+                                        catalog.latest(
+                                            context.mediaType,
+                                            id,
+                                            page = page,
+                                            releaseStatuses = context.releaseStatuses,
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        val popularDeferred = async {
-                            runCatchingUnlessCancelled {
-                                withTimeoutOrNull(sourceTimeoutMs) {
-                                    catalog.popular(
-                                        context.mediaType,
-                                        id,
-                                        page = context.pageOffset,
-                                        releaseStatuses = context.releaseStatuses,
-                                    )
+                            val popularDeferred = async {
+                                runCatchingUnlessCancelled {
+                                    withTimeoutOrNull(sourceTimeoutMs) {
+                                        catalog.popular(
+                                            context.mediaType,
+                                            id,
+                                            page = page,
+                                            releaseStatuses = context.releaseStatuses,
+                                        )
+                                    }
                                 }
                             }
+
+                            val latestResult = latestDeferred.await()
+                            val popularResult = popularDeferred.await()
+                            val latestPage = latestResult.getOrNull().orEmpty()
+                            val popularPage = popularResult.getOrNull().orEmpty()
+                            if (popularResult.isSuccess) popularSucceeded = true
+
+                            val genreMatches = context.candidatePolicy
+                                .filterRowCandidates(latestPage + popularPage, { it.genres })
+                            // No candidate passes genre/status on the first page:
+                            // deeper pages cannot change that for this query shape.
+                            if (offset == 0 && genreMatches.isEmpty()) break
+
+                            val latestEligible = context.candidatePolicy
+                                .filterRowCandidates(latestPage, { it.genres })
+                                .filterNot { it.isExcludedBy(context.exclusionKeys) }
+                            val popularEligible = context.candidatePolicy
+                                .filterRowCandidates(popularPage, { it.genres })
+                                .filterNot { it.isExcludedBy(context.exclusionKeys) }
+
+                            val before = latestFetched.size + popularFetched.size
+                            latestFetched += latestEligible
+                            popularFetched += popularEligible
+                            val added = latestFetched.size + popularFetched.size - before
+                            // Genre matches exist but were all retired/shown: keep
+                            // paging; stop only after two consecutive dry pages.
+                            emptyStreak = if (added == 0) emptyStreak + 1 else 0
+                            if (emptyStreak >= 2) break
+
+                            val latestSize = latestFetched.distinctBy { it.cleanTitle }.size
+                            val popularSize = popularFetched.distinctBy { it.cleanTitle }.size
+                            if (latestSize >= latestQuota && popularSize >= perSource) break
+                            if (latestPage.isEmpty() && popularPage.isEmpty()) break
                         }
 
-                        val latestResult = latestDeferred.await()
-                        val popularResult = popularDeferred.await()
-
-                        val latestFetched = latestResult.getOrNull().orEmpty()
-                        val latestItems = latestFetched.take(latestQuota)
+                        val latestItems = latestFetched.distinctBy { it.cleanTitle }.take(latestQuota)
                         val latestTitles = latestItems.mapTo(HashSet()) { it.cleanTitle }
 
-                        val popularFetched = popularResult.getOrNull().orEmpty()
                         val popularItems = popularFetched
+                            .distinctBy { it.cleanTitle }
                             .filterNot { it.cleanTitle in latestTitles }
                             .take(perSource - latestItems.size)
 
-                        val popularFailed = popularResult.isFailure || popularResult.getOrNull() == null
-                        val isFailed = popularFailed && latestItems.isEmpty()
+                        val isFailed = !popularSucceeded && latestItems.isEmpty()
 
                         val selected = latestItems + popularItems
 

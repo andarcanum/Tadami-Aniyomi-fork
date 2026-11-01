@@ -64,6 +64,8 @@ data class DiscoveryBuildContext(
      */
     val existingRowItems: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
     val pageOffset: Int = 1,
+    /** Consecutive catalogue pages harvested from each source, starting at [pageOffset]. */
+    val harvestPages: Int = 1,
     /**
      * Shared deadline and details allowance for this media run. Rows must not
      * create their own budgets: TASTE and SOURCE consume the same one.
@@ -76,6 +78,11 @@ data class DiscoveryBuildContext(
      */
     val sharedGenreQuery: SharedRequiredGenreQuery? = null,
 ) {
+    /** Titles that must not consume row slots: known, shown, and the previous pool. */
+    val exclusionKeys: Set<String>
+        get() = libraryCleanTitles + historyCleanTitles + hiddenCleanTitles +
+            recentCleanTitles + currentFeedCleanTitles
+
     val candidatePolicy: DiscoveryCandidatePolicy
         get() {
             val effectiveIgnored =

@@ -23,6 +23,7 @@ import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import java.io.IOException
@@ -73,6 +74,182 @@ class DiscoveryRunnerTest {
         outcomes[DiscoveryMediaType.NOVEL]?.cause shouldBe failure
         outcomes[DiscoveryMediaType.ANIME]?.status shouldBe DiscoveryRunStatus.PARTIAL
         outcomes[DiscoveryMediaType.ANIME]?.persistedRows shouldBe setOf(DiscoveryRowType.LIKE)
+    }
+
+    @Test
+    fun `manual refresh scans from the first page with a deep page budget`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val cursorKey = computeDiscoveryConfigurationKey(preferences, DiscoveryMediaType.NOVEL)
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = cursorKey,
+                    nextPage = 7,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        var usedHarvest = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                usedHarvest = context.harvestPages
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { emptyList() },
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+
+        usedPage shouldBe 1
+        usedHarvest shouldBe 20
+        repo.lastPublishedCursors.single().nextPage shouldBe 1
+    }
+
+    @Test
+    fun `background refresh resumes the persisted page cursor`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val cursorKey = computeDiscoveryConfigurationKey(preferences, DiscoveryMediaType.NOVEL)
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = cursorKey,
+                    nextPage = 7,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        var usedHarvest = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                usedHarvest = context.harvestPages
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { emptyList() },
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+
+        usedPage shouldBe 7
+        usedHarvest shouldBe 1
+        repo.lastPublishedCursors.single().nextPage shouldBe 8
+    }
+
+    @Test
+    fun `a cursor from another configuration is ignored`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = "some-other-configuration",
+                    nextPage = 9,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { emptyList() },
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+
+        usedPage shouldBe backgroundPageOffset(1)
+    }
+
+    @Test
+    fun `background cursor wraps to the first page at the depth cap`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val cursorKey = computeDiscoveryConfigurationKey(preferences, DiscoveryMediaType.NOVEL)
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = cursorKey,
+                    nextPage = 30,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { emptyList() },
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+
+        usedPage shouldBe 30
+        repo.lastPublishedCursors.single().nextPage shouldBe 1
     }
 
     private open class FakeRepository(
@@ -171,10 +348,12 @@ class DiscoveryRunnerTest {
         override suspend fun hasUnboundSourceRows(): Boolean = false
 
         var generation = 0L
+        var cursors: List<DiscoverySourceCursor> = emptyList()
+        var lastPublishedCursors: List<DiscoverySourceCursor> = emptyList()
         val publishedPools = mutableListOf<List<DiscoverySuggestion>>()
 
         override suspend fun publication(media: DiscoveryMediaType) =
-            emptyPublication(media).copy(generation = generation)
+            emptyPublication(media).copy(generation = generation, cursors = cursors)
 
         override suspend fun reserveGeneration(
             media: DiscoveryMediaType,
@@ -197,6 +376,10 @@ class DiscoveryRunnerTest {
             generation = token.expectedGeneration + 1
             val suggestions = (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
                 ?.suggestions.orEmpty()
+            lastPublishedCursors = when (prepared) {
+                is tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh -> prepared.cursors
+                is tachiyomi.domain.discovery.model.DiscoveryPreparedPool.VerifiedEmpty -> prepared.cursors
+            }
             publishedPools += suggestions
             flow.value = flow.value.filterNot { it.mediaType == token.mediaType } + suggestions
             suggestions.groupBy { it.rowType }.forEach { (row, items) ->
