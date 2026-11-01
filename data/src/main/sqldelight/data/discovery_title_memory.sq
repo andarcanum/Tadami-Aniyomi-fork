@@ -1,0 +1,71 @@
+CREATE TABLE discovery_title_memory (
+    media_type TEXT NOT NULL,
+    identity_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    primary_clean_title TEXT NOT NULL,
+    source_id INTEGER,
+    source_url TEXT,
+    trusted_aliases TEXT NOT NULL DEFAULT '',
+    metadata_changed_at INTEGER NOT NULL DEFAULT 0,
+    opened_active INTEGER NOT NULL DEFAULT 0,
+    opened_changed_at INTEGER NOT NULL DEFAULT 0,
+    started_active INTEGER NOT NULL DEFAULT 0,
+    started_changed_at INTEGER NOT NULL DEFAULT 0,
+    consumed_active INTEGER NOT NULL DEFAULT 0,
+    consumed_changed_at INTEGER NOT NULL DEFAULT 0,
+    blocked_until INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (media_type, identity_key)
+);
+
+CREATE INDEX discovery_title_memory_blocked ON discovery_title_memory(media_type, blocked_until);
+
+selectAllByMedia:
+SELECT * FROM discovery_title_memory WHERE media_type = ?;
+
+selectActiveBlocked:
+SELECT * FROM discovery_title_memory WHERE media_type = ? AND blocked_until > ?;
+
+upsertIdentity:
+INSERT INTO discovery_title_memory(
+    media_type, identity_key, title, primary_clean_title, source_id, source_url, trusted_aliases, metadata_changed_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(media_type, identity_key) DO UPDATE SET
+    title = excluded.title,
+    primary_clean_title = excluded.primary_clean_title,
+    source_id = COALESCE(excluded.source_id, discovery_title_memory.source_id),
+    source_url = COALESCE(excluded.source_url, discovery_title_memory.source_url),
+    trusted_aliases = CASE
+        WHEN excluded.trusted_aliases = '' THEN discovery_title_memory.trusted_aliases
+        ELSE excluded.trusted_aliases
+    END,
+    metadata_changed_at = MAX(discovery_title_memory.metadata_changed_at, excluded.metadata_changed_at);
+
+ensureRow:
+INSERT OR IGNORE INTO discovery_title_memory(
+    media_type, identity_key, title, primary_clean_title, source_id, source_url, trusted_aliases, metadata_changed_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+setOpenedFact:
+UPDATE discovery_title_memory
+SET opened_active = ?, opened_changed_at = ?
+WHERE media_type = ? AND identity_key = ? AND opened_changed_at <= ?;
+
+setStartedFact:
+UPDATE discovery_title_memory
+SET started_active = ?, started_changed_at = ?
+WHERE media_type = ? AND identity_key = ? AND started_changed_at <= ?;
+
+setConsumedFact:
+UPDATE discovery_title_memory
+SET consumed_active = ?, consumed_changed_at = ?
+WHERE media_type = ? AND identity_key = ? AND consumed_changed_at <= ?;
+
+retireBlocked:
+UPDATE discovery_title_memory
+SET blocked_until = MAX(blocked_until, ?)
+WHERE media_type = ? AND identity_key = ?;
+
+deleteAllByMedia:
+DELETE FROM discovery_title_memory WHERE media_type = ?;

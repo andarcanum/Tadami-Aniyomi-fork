@@ -7,6 +7,8 @@ import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementEvent
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.service.DiscoveryMutationFence
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaUpdate
 import tachiyomi.domain.entries.manga.repository.MangaRepository
@@ -99,7 +101,11 @@ class MangaRepositoryImpl(
         }
     }
 
-    override suspend fun insertNetworkMangas(mangas: List<Manga>, autoFavorite: Boolean): List<Manga> {
+    override suspend fun insertNetworkMangas(mangas: List<Manga>, autoFavorite: Boolean): List<Manga> = fenced {
+        insertNetworkMangasDirect(mangas, autoFavorite)
+    }
+
+    private suspend fun insertNetworkMangasDirect(mangas: List<Manga>, autoFavorite: Boolean): List<Manga> {
         if (mangas.isEmpty()) return emptyList()
         return handler.await(inTransaction = true) { db ->
             mangas.map { manga ->
@@ -261,7 +267,9 @@ class MangaRepositoryImpl(
         }
     }
 
-    override suspend fun insertManga(manga: Manga): Long? {
+    override suspend fun insertManga(manga: Manga): Long? = fenced { insertMangaDirect(manga) }
+
+    private suspend fun insertMangaDirect(manga: Manga): Long? {
         return handler.await(inTransaction = true) { db ->
             val existing = db.mangasQueries
                 .getMangaByUrlAndSource(manga.url, manga.source, MangaMapper::mapManga)
@@ -320,7 +328,11 @@ class MangaRepositoryImpl(
         }
     }
 
-    private suspend fun partialUpdateManga(vararg mangaUpdates: MangaUpdate) {
+    private suspend fun partialUpdateManga(vararg mangaUpdates: MangaUpdate) = fenced {
+        partialUpdateMangaDirect(*mangaUpdates)
+    }
+
+    private suspend fun partialUpdateMangaDirect(vararg mangaUpdates: MangaUpdate) {
         // E-M6: events were emitted unconditionally (whenever favorite != null, regardless of an
         // actual flip - the comment claimed otherwise) and INSIDE the open transaction: the
         // achievement handler on another dispatcher could re-read the DB before the commit (stale
@@ -388,6 +400,26 @@ class MangaRepositoryImpl(
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+    ): Boolean = fenced {
+        updateMangaMetadataDirect(
+            mangaId,
+            customTitle,
+            customArtist,
+            customAuthor,
+            customDescription,
+            customGenre,
+            customStatus,
+        )
+    }
+
+    private suspend fun updateMangaMetadataDirect(
+        mangaId: Long,
+        customTitle: String?,
+        customArtist: String?,
+        customAuthor: String?,
+        customDescription: String?,
+        customGenre: List<String>?,
+        customStatus: Long?,
     ): Boolean {
         return try {
             handler.await { db ->
@@ -407,4 +439,6 @@ class MangaRepositoryImpl(
             false
         }
     }
+    private suspend fun <T> fenced(block: suspend () -> T): T =
+        DiscoveryMutationFence.withMutation(DiscoveryMediaType.MANGA, block)
 }

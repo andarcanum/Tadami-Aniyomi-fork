@@ -8,6 +8,8 @@ import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementEvent
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.service.DiscoveryMutationFence
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeUpdate
 import tachiyomi.domain.entries.anime.repository.AnimeRepository
@@ -113,7 +115,11 @@ class AnimeRepositoryImpl(
         }
     }
 
-    override suspend fun insertNetworkAnimes(animes: List<Anime>, autoFavorite: Boolean): List<Anime> {
+    override suspend fun insertNetworkAnimes(animes: List<Anime>, autoFavorite: Boolean): List<Anime> = fenced {
+        insertNetworkAnimesDirect(animes, autoFavorite)
+    }
+
+    private suspend fun insertNetworkAnimesDirect(animes: List<Anime>, autoFavorite: Boolean): List<Anime> {
         if (animes.isEmpty()) return emptyList()
         return handler.await(inTransaction = true) { db ->
             animes.map { anime ->
@@ -293,7 +299,9 @@ class AnimeRepositoryImpl(
         }
     }
 
-    override suspend fun insertAnime(anime: Anime): Long? {
+    override suspend fun insertAnime(anime: Anime): Long? = fenced { insertAnimeDirect(anime) }
+
+    private suspend fun insertAnimeDirect(anime: Anime): Long? {
         return handler.await(inTransaction = true) { db ->
             val existing = db.animesQueries
                 .getAnimeByUrlAndSource(anime.url, anime.source, AnimeMapper::mapAnime)
@@ -395,6 +403,26 @@ class AnimeRepositoryImpl(
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+    ): Boolean = fenced {
+        updateAnimeMetadataDirect(
+            animeId,
+            customTitle,
+            customArtist,
+            customAuthor,
+            customDescription,
+            customGenre,
+            customStatus,
+        )
+    }
+
+    private suspend fun updateAnimeMetadataDirect(
+        animeId: Long,
+        customTitle: String?,
+        customArtist: String?,
+        customAuthor: String?,
+        customDescription: String?,
+        customGenre: List<String>?,
+        customStatus: Long?,
     ): Boolean {
         return try {
             handler.await { db ->
@@ -415,7 +443,11 @@ class AnimeRepositoryImpl(
         }
     }
 
-    private suspend fun partialUpdateAnime(vararg animeUpdates: AnimeUpdate) {
+    private suspend fun partialUpdateAnime(vararg animeUpdates: AnimeUpdate) = fenced {
+        partialUpdateAnimeDirect(*animeUpdates)
+    }
+
+    private suspend fun partialUpdateAnimeDirect(vararg animeUpdates: AnimeUpdate) {
         // E-M6 (anime mirror): emit only REAL favorite flips, after the transaction commits.
         val pendingEvents = mutableListOf<AchievementEvent>()
         handler.await(inTransaction = true) { db ->
@@ -473,4 +505,6 @@ class AnimeRepositoryImpl(
         }
         pendingEvents.forEach { eventBus.tryEmit(it) }
     }
+    private suspend fun <T> fenced(block: suspend () -> T): T =
+        DiscoveryMutationFence.withMutation(DiscoveryMediaType.ANIME, block)
 }

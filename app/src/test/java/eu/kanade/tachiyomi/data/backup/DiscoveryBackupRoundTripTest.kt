@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.data.backup.models.toBackupDiscoveryTag
 import eu.kanade.tachiyomi.data.backup.models.toDomainEntry
 import eu.kanade.tachiyomi.data.backup.models.toDomainSignal
 import eu.kanade.tachiyomi.data.backup.restore.restorers.DiscoveryRestorer
+import eu.kanade.tachiyomi.data.discovery.FakeDiscoveryRepositoryBase
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -175,7 +176,7 @@ class DiscoveryBackupRoundTripTest {
     }
 }
 
-private class FakeDiscoveryRepository : DiscoveryRepository {
+private class FakeDiscoveryRepository : FakeDiscoveryRepositoryBase() {
     val restoredHidden = mutableMapOf<DiscoveryMediaType, List<DiscoveryHiddenEntry>>()
     val restoredTags = mutableMapOf<DiscoveryMediaType, List<DiscoveryBlacklistEntry>>()
 

@@ -13,7 +13,11 @@ CREATE TABLE discovery_suggestions (
     created_at INTEGER NOT NULL,
     source_id INTEGER,
     source_url TEXT,
-    genres TEXT
+    genres TEXT,
+    identity_key TEXT,
+    trusted_aliases TEXT,
+    release_status TEXT,
+    metadata_verified_at INTEGER
 );
 
 CREATE INDEX discovery_media_row ON discovery_suggestions(media_type, row_type);
@@ -23,13 +27,25 @@ SELECT * FROM discovery_suggestions
 WHERE media_type = ?
 ORDER BY position ASC, id ASC;
 
+selectByKey:
+SELECT * FROM discovery_suggestions
+WHERE media_type = ? AND COALESCE(identity_key, 'title:' || media_type || ':' || clean_title) = ?;
+
 deleteByMediaAndRow:
 DELETE FROM discovery_suggestions
 WHERE media_type = ? AND row_type = ?;
 
+deleteAllByMedia:
+DELETE FROM discovery_suggestions
+WHERE media_type = ?;
+
 insert:
-INSERT INTO discovery_suggestions(media_type, row_type, title, clean_title, cover_url, reason, seed_title, provider, score, position, created_at, source_id, source_url, genres)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO discovery_suggestions(
+    media_type, row_type, title, clean_title, cover_url, reason, seed_title, provider,
+    score, position, created_at, source_id, source_url, genres,
+    identity_key, trusted_aliases, release_status, metadata_verified_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 lastUpdatedAt:
 SELECT IFNULL(MAX(created_at), 0) FROM discovery_suggestions

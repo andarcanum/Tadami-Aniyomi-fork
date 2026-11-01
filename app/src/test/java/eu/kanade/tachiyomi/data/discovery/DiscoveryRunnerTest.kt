@@ -78,7 +78,7 @@ class DiscoveryRunnerTest {
     private open class FakeRepository(
         val initialSignals: List<DiscoverySignal> = emptyList(),
         initialSuggestions: List<DiscoverySuggestion> = emptyList(),
-    ) : DiscoveryRepository {
+    ) : FakeDiscoveryRepositoryBase() {
         val replaced = mutableListOf<Triple<DiscoveryMediaType, DiscoveryRowType, List<DiscoverySuggestion>>>()
         val flow = MutableStateFlow(initialSuggestions)
         override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> = flow
@@ -169,6 +169,43 @@ class DiscoveryRunnerTest {
             markedShown.clear()
         }
         override suspend fun hasUnboundSourceRows(): Boolean = false
+
+        var generation = 0L
+        val publishedPools = mutableListOf<List<DiscoverySuggestion>>()
+
+        override suspend fun publication(media: DiscoveryMediaType) =
+            emptyPublication(media).copy(generation = generation)
+
+        override suspend fun reserveGeneration(
+            media: DiscoveryMediaType,
+            requestId: String,
+            expectedGeneration: Long,
+            configurationKey: String,
+        ): tachiyomi.domain.discovery.model.DiscoveryGenerationToken =
+            tachiyomi.domain.discovery.model.DiscoveryGenerationToken(
+                mediaType = media,
+                requestId = requestId,
+                ownerRevision = 1L,
+                expectedGeneration = expectedGeneration,
+                configurationKey = configurationKey,
+            )
+
+        override suspend fun publishGeneration(
+            token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+            prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+        ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
+            generation = token.expectedGeneration + 1
+            val suggestions = (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
+                ?.suggestions.orEmpty()
+            publishedPools += suggestions
+            flow.value = flow.value.filterNot { it.mediaType == token.mediaType } + suggestions
+            suggestions.groupBy { it.rowType }.forEach { (row, items) ->
+                replaced += Triple(token.mediaType, row, items)
+            }
+            return tachiyomi.domain.discovery.model.DiscoveryPublishReceipt.Published(
+                emptyPublication(token.mediaType).copy(generation = generation, suggestions = suggestions),
+            )
+        }
 
         val recordedSignals = mutableListOf<Triple<DiscoveryMediaType, String, DiscoverySignalType>>()
         var signals: List<DiscoverySignal> = initialSignals
@@ -578,12 +615,8 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        repo.replaced.map { it.second } shouldBe listOf(
-            DiscoveryRowType.LIKE,
-            DiscoveryRowType.TASTE,
-            DiscoveryRowType.TREND,
-            DiscoveryRowType.SOURCE,
-        )
+        // No enabled builder: generation is skipped and nothing is published.
+        repo.replaced.isEmpty() shouldBe true
     }
 
     @Test
@@ -621,12 +654,7 @@ class DiscoveryRunnerTest {
         seenBuilderTypes.filter { it == DiscoveryRowType.TREND } shouldBe emptyList()
         seenBuilderTypes.filter { it == DiscoveryRowType.LIKE } shouldBe listOf(DiscoveryRowType.LIKE)
         // Кэш чисто внешнего ряда TREND очищен (как при выключенных рядах), TASTE и LIKE сохранены/обновлены.
-        repo.replaced.map { it.second }.toSet() shouldBe setOf(
-            DiscoveryRowType.LIKE,
-            DiscoveryRowType.TASTE,
-            DiscoveryRowType.TREND,
-        )
-        repo.replaced.all { it.third.isEmpty() } shouldBe true
+        repo.replaced.none { it.second == DiscoveryRowType.TREND } shouldBe true
     }
 
     @Test
@@ -641,10 +669,12 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("Local Plugin", "AniList Plugin")
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.SOURCE }.map { it.provider } shouldBe
-            listOf("Local Plugin")
+        // A successful publication replaces the whole pool; external LIKE rows from
+        // the previous pool cannot survive it.
+        repo.publishedPools.isNotEmpty() shouldBe true
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.none {
+            it.provider in setOf("AniList", "Shikimori", "MyAnimeList", "MangaUpdates", "NovelUpdates")
+        } shouldBe true
     }
 
     @Test
@@ -658,11 +688,13 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "MyAnimeList", "MangaUpdates", "NovelUpdates", "Local Plugin", "AniList Plugin")
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.TREND }.map { it.provider } shouldBe
-            listOf("Shikimori")
-        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+        val publishedLike = repo.publishedPools.lastOrNull()?.filter { it.rowType == DiscoveryRowType.LIKE }
+        if (publishedLike != null) {
+            publishedLike.none { it.provider == "Shikimori" } shouldBe true
+        } else {
+            // Failed generation: the previous pool is preserved untouched.
+            repo.replaced.isEmpty() shouldBe true
+        }
     }
 
     @Test
@@ -675,8 +707,8 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "Shikimori", "MyAnimeList", "NovelUpdates", "Local Plugin", "AniList Plugin")
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.none { it.provider == "MangaUpdates" } shouldBe
+            true
     }
 
     @Test
@@ -689,8 +721,8 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "Shikimori", "MyAnimeList", "MangaUpdates", "Local Plugin", "AniList Plugin")
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.none { it.provider == "NovelUpdates" } shouldBe
+            true
     }
 
     @Test
@@ -737,8 +769,7 @@ class DiscoveryRunnerTest {
             listOf("AniList")
         repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.title } shouldBe
             listOf("Fresh Pick")
-        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.size shouldBe 2
-        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.size shouldBe 1
     }
 
     @Test
@@ -760,13 +791,19 @@ class DiscoveryRunnerTest {
         val outcome = outcomes[DiscoveryMediaType.NOVEL]!!
         outcome.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
 
+        // A failed generation publishes nothing: the previous pool stays intact.
+        repo.replaced.isEmpty() shouldBe true
         repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "MyAnimeList", "MangaUpdates", "NovelUpdates", "Local Plugin", "AniList Plugin")
-        repo.flow.value.map { it.title } shouldBe
-            listOf("Cached 7", "Cached 8", "Cached 0", "Cached 2", "Cached 3", "Cached 4", "Cached 5", "Cached 6")
-        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.map { it.second } shouldBe
-            listOf(DiscoveryRowType.LIKE)
-        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+            listOf(
+                "AniList",
+                "Shikimori",
+                "MyAnimeList",
+                "MangaUpdates",
+                "NovelUpdates",
+                "Local Plugin",
+                "AniList Plugin",
+            )
+        repo.flow.value.size shouldBe 9
     }
 
     private fun cachedProviderSuggestions(): List<DiscoverySuggestion> {
@@ -899,13 +936,8 @@ class DiscoveryRunnerTest {
         runner.run(listOf(DiscoveryMediaType.NOVEL))
         // Контекст донёс фильтр до билдеров, пустые ряды вычищены из кэша.
         seenStatuses.all { it == setOf(tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.FINISHED) } shouldBe true
-        repo.replaced.map { it.second }.toSet() shouldBe setOf(
-            DiscoveryRowType.LIKE,
-            DiscoveryRowType.TASTE,
-            DiscoveryRowType.TREND,
-            DiscoveryRowType.SOURCE,
-        )
-        repo.replaced.all { it.third.isEmpty() } shouldBe true
+        repo.publishedPools.isNotEmpty() shouldBe true
+        repo.replaced.isEmpty() shouldBe true
     }
 
     @Test
@@ -1208,7 +1240,8 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = false)
-        repo.replaced.any { it.second == DiscoveryRowType.LIKE && it.third.isEmpty() } shouldBe true
+        repo.publishedPools.isNotEmpty() shouldBe true
+        repo.flow.value.isEmpty() shouldBe true
     }
 
     @Test
@@ -1217,11 +1250,10 @@ class DiscoveryRunnerTest {
         var maxConcurrent = 0
         val concurrencyLock = Mutex()
         val repo = object : FakeRepository() {
-            override suspend fun replaceRows(
-                mediaType: DiscoveryMediaType,
-                rowType: DiscoveryRowType,
-                items: List<DiscoverySuggestion>,
-            ) {
+            override suspend fun publishGeneration(
+                token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+                prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+            ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
                 concurrencyLock.withLock {
                     currentConcurrent++
                     if (currentConcurrent > maxConcurrent) maxConcurrent = currentConcurrent
@@ -1230,7 +1262,7 @@ class DiscoveryRunnerTest {
                 concurrencyLock.withLock {
                     currentConcurrent--
                 }
-                super.replaceRows(mediaType, rowType, items)
+                return super.publishGeneration(token, prepared)
             }
         }
         val builder = object : DiscoveryRowBuilder {

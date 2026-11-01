@@ -421,23 +421,9 @@ internal class DiscoveryFeedScreenModel(
         manualRefreshFlow(context.workManager, state.value.mediaType)
 
     fun refreshNow(): Long {
-        val now = System.currentTimeMillis()
-        val media = state.value.mediaType
-        val remaining = remainingCooldownSeconds(
-            preferences.manualRefreshAt(media).get().takeIf { it > 0L },
-            now,
-        )
-        when (resolveManualRefreshAction(state.value.isRefreshing, remaining)) {
-            ManualRefreshAction.CANCEL -> cancelRefresh()
-            ManualRefreshAction.ROTATE -> return remaining
-            ManualRefreshAction.REFRESH -> {
-                if (!preferences.tryStartManualRefresh(media, now)) {
-                    return remainingCooldownSeconds(preferences.manualRefreshAt(media).get(), now)
-                }
-                mutableState.update { it.copy(isRefreshing = true) }
-                DiscoveryUpdateJob.refreshNow(context, media)
-            }
-        }
+        if (state.value.isRefreshing) return 0L
+        mutableState.update { it.copy(isRefreshing = true) }
+        DiscoveryUpdateJob.refreshNow(context, state.value.mediaType)
         return 0L
     }
 
@@ -462,44 +448,11 @@ internal class DiscoveryFeedScreenModel(
 
     fun rotateOrRefreshFeed(currentTab: FeedSignalTab): Long {
         val currentState = state.value
-        val pool = itemsForTab(currentState, currentTab)
-        val currentOffset = currentState.tabOffsets[currentTab] ?: 0
-        val now = System.currentTimeMillis()
-        val media = currentState.mediaType
-        val remaining = remainingCooldownSeconds(
-            preferences.manualRefreshAt(media).get().takeIf { it > 0L },
-            now,
-        )
-        val action = resolveManualRefreshAction(currentState.isRefreshing, remaining)
-        if (action == ManualRefreshAction.CANCEL) {
-            cancelRefresh()
-            return 0L
-        }
-        val canNetworkRefresh = action == ManualRefreshAction.REFRESH
-        val (nextOffset, shouldNetworkRefresh) = resolveNextFeedOffset(
-            currentOffset = currentOffset,
-            poolSize = pool.size,
-            windowSize = FEED_WINDOW_SIZE,
-            canNetworkRefresh = canNetworkRefresh,
-        )
-
-        if (shouldNetworkRefresh) {
-            mutableState.update { it.copy(tabOffsets = emptyMap(), activeWindows = emptyMap()) }
-            return refreshNow()
-        }
-
-        if (pool.size <= FEED_WINDOW_SIZE && remaining > 0L) {
-            return remaining
-        }
-
-        val newWindow = sliceFeedWindow(pool, nextOffset, FEED_WINDOW_SIZE)
-        mutableState.update {
-            it.copy(
-                tabOffsets = it.tabOffsets + (currentTab to nextOffset),
-                activeWindows = it.activeWindows + (currentTab to newWindow),
-            )
-        }
-        return 0L
+        if (currentState.isRefreshing) return 0L
+        // Full screen: every accepted tap requests a fresh source pool; local
+        // window rotation is not a substitute for refresh.
+        mutableState.update { it.copy(tabOffsets = emptyMap(), activeWindows = emptyMap()) }
+        return refreshNow()
     }
 
     private suspend fun backfillRemovedItem(removed: DiscoverySuggestion, tab: FeedSignalTab) {

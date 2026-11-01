@@ -108,16 +108,11 @@ class TasteSignalRecorderAltKeyTest {
         success shouldBe true
 
         val failingRepo = object : RecordingFakeRepository() {
-            override suspend fun recordSignal(
-                mediaType: DiscoveryMediaType,
-                cleanTitle: String,
-                title: String,
-                signalType: DiscoverySignalType,
-                genres: List<String>,
-                provider: String?,
-                sourceKey: String?,
-                timestamp: Long,
-            ) {
+            override suspend fun recordTaste(
+                identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+                kind: DiscoverySignalType,
+                metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
+            ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
                 throw java.io.IOException("db failed")
             }
         }
@@ -286,6 +281,29 @@ class TasteSignalRecorderAltKeyTest {
                 return persistedReceipt
             }
 
+            override suspend fun recordTaste(
+                identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+                kind: DiscoverySignalType,
+                metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
+            ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
+                persistedReceipt = metadata.changedAt + 10L
+                return tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt(
+                    identityKey = identity.identityKey,
+                    effectiveKind = kind,
+                    positiveCreatedAt = persistedReceipt!!,
+                )
+            }
+
+            override suspend fun enrichTasteMetadata(
+                media: DiscoveryMediaType,
+                identityKey: String,
+                expectedPositiveAt: Long,
+                metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
+            ): Boolean {
+                expectedByEnrichment = expectedPositiveAt
+                return true
+            }
+
             override suspend fun enrichSignalMetadataIfCurrent(
                 mediaType: DiscoveryMediaType,
                 cleanTitle: String,
@@ -334,9 +352,33 @@ private fun suggestionOf(title: String) = DiscoverySuggestion(
     createdAt = 0L,
 )
 
-private open class RecordingFakeRepository : DiscoveryRepository {
+private open class RecordingFakeRepository : FakeDiscoveryRepositoryBase() {
     val recorded = mutableListOf<Triple<DiscoveryMediaType, String, DiscoverySignalType>>()
     val recordedGenres = mutableListOf<List<String>>()
+
+    override suspend fun recordTaste(
+        identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+        kind: DiscoverySignalType,
+        metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
+    ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
+        recorded += Triple(identity.mediaType, identity.primaryCleanTitle, kind)
+        recordedGenres += metadata.genres
+        return tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt(
+            identityKey = identity.identityKey,
+            effectiveKind = kind,
+            positiveCreatedAt = System.currentTimeMillis(),
+        )
+    }
+
+    override suspend fun enrichTasteMetadata(
+        media: DiscoveryMediaType,
+        identityKey: String,
+        expectedPositiveAt: Long,
+        metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
+    ): Boolean {
+        recordedGenres += metadata.genres
+        return true
+    }
 
     override suspend fun recordSignal(
         mediaType: DiscoveryMediaType,

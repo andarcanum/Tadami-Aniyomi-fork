@@ -43,7 +43,10 @@ class DiscoverySignalsMigrationTest {
             columns shouldContain "genres"
             columns shouldContain "source_key"
             columns shouldContain "created_at"
-            columns.size shouldBe 9
+            columns shouldContain "identity_key"
+            columns shouldContain "positive_signal"
+            columns shouldContain "positive_created_at"
+            columns.size shouldBe 17
         } finally {
             driver.close()
         }
@@ -89,13 +92,11 @@ class DiscoverySignalsMigrationTest {
     }
 
     @Test
-    fun `fresh schema discovery_shown has shown_count column`() {
+    fun `fresh schema no longer contains legacy discovery_shown table`() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         try {
             Database.Schema.create(driver)
-            val columns = tableColumns(driver, "discovery_shown")
-            columns shouldContain "shown_count"
-            columns.size shouldBe 4
+            tableColumns(driver, "discovery_shown").isEmpty() shouldBe true
         } finally {
             driver.close()
         }

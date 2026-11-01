@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import eu.kanade.tachiyomi.data.discovery.FakeDiscoveryRepositoryBase
 import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -38,12 +39,25 @@ class HomeDiscoveryControllerTest {
         createdAt = 0L,
     )
 
-    private class TestDiscoveryRepo : DiscoveryRepository {
+    private class TestDiscoveryRepo : FakeDiscoveryRepositoryBase() {
         val poolFlow = MutableStateFlow<List<DiscoverySuggestion>>(emptyList())
         val hiddenFlow = MutableStateFlow<Set<String>>(emptySet())
         val consumedFlow = MutableStateFlow<Set<String>>(emptySet())
         val blacklistFlow = MutableStateFlow<Set<String>>(emptySet())
         val recordedSignals = mutableListOf<Triple<String, DiscoverySignalType, List<String>>>()
+
+        override suspend fun recordTaste(
+            identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+            kind: DiscoverySignalType,
+            metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
+        ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
+            recordedSignals += Triple(identity.primaryCleanTitle, kind, metadata.genres)
+            return tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt(
+                identityKey = identity.identityKey,
+                effectiveKind = kind,
+                positiveCreatedAt = System.currentTimeMillis(),
+            )
+        }
         val unhiddenTitles = mutableListOf<String>()
         val removedSignalTitles = mutableListOf<String>()
         val markedShownTitles = mutableListOf<String>()
@@ -173,7 +187,7 @@ class HomeDiscoveryControllerTest {
     }
 
     @Test
-    fun `likeDiscoveryItem records signal, dismisses card from pool and updates teaser`() {
+    fun `likeDiscoveryItem records taste and keeps the card in the batch`() {
         runBlocking {
             val repo = TestDiscoveryRepo()
             val prefs = DiscoveryPreferences(PersistingPreferenceStore())
@@ -211,14 +225,15 @@ class HomeDiscoveryControllerTest {
 
             controller.likeDiscoveryItem(testSuggestion("Card 1").toHomeHubDiscoveryItem())
 
-            waitUntil { repo.recordedSignals.isNotEmpty() && currentState.discovery.none { it.title == "Card 1" } }
+            waitUntil { repo.recordedSignals.isNotEmpty() }
 
             repo.recordedSignals.size shouldBe 1
             repo.recordedSignals[0].first shouldBe "card 1"
             repo.recordedSignals[0].second shouldBe DiscoverySignalType.LIKE
 
-            currentState.discovery.map { it.title } shouldBe listOf("Card 3", "Card 2")
-            currentState.discoveryPool.map { it.title } shouldBe listOf("Card 2", "Card 3")
+            // Taste feedback only: the liked card stays in the active batch.
+            currentState.discovery.map { it.title } shouldBe listOf("Card 1", "Card 2")
+            currentState.discoveryPool.map { it.title } shouldBe listOf("Card 1", "Card 2", "Card 3")
         }
     }
 
@@ -513,7 +528,7 @@ class HomeDiscoveryControllerTest {
     }
 
     @Test
-    fun `dismissed card does not re-enter teaser or pool when repository re-emits`() {
+    fun `liked card stays in teaser and pool when repository re-emits`() {
         runBlocking {
             val repo = TestDiscoveryRepo()
             val prefs = DiscoveryPreferences(PersistingPreferenceStore())
@@ -551,7 +566,8 @@ class HomeDiscoveryControllerTest {
             currentState.discovery.map { it.title } shouldBe listOf("Card 1", "Card 2", "Card 3")
 
             controller.likeDiscoveryItem(testSuggestion("Card 1").toHomeHubDiscoveryItem())
-            waitUntil { currentState.discovery.none { it.cleanTitle == "card 1" } }
+            waitUntil { repo.recordedSignals.isNotEmpty() }
+            currentState.discovery.any { it.cleanTitle == "card 1" } shouldBe true
 
             repo.poolFlow.value = listOf(
                 testSuggestion("Card 1"),
@@ -562,8 +578,8 @@ class HomeDiscoveryControllerTest {
 
             waitUntil { currentState.discoveryPool.any { it.cleanTitle == "card 4" } }
 
-            currentState.discovery.none { it.cleanTitle == "card 1" } shouldBe true
-            currentState.discoveryPool.none { it.cleanTitle == "card 1" } shouldBe true
+            currentState.discovery.any { it.cleanTitle == "card 1" } shouldBe true
+            currentState.discoveryPool.any { it.cleanTitle == "card 1" } shouldBe true
         }
     }
 

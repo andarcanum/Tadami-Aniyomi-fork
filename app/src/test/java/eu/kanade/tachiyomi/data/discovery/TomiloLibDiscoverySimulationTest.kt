@@ -293,16 +293,65 @@ class TomiloLibDiscoverySimulationTest {
             ),
         )
 
-        val repository = mockk<DiscoveryRepository>(relaxed = true)
-        every { repository.subscribe(media) } returns stored
-        coEvery { repository.getSignals(media) } returns emptyList()
-        coEvery { repository.getHiddenTitles(media) } returns emptySet()
-        coEvery { repository.getBlacklistedTags(media) } returns emptySet()
-        coEvery { repository.getRecentExclusionsWithTimestamp(media, any()) } returns emptyMap()
-        coEvery { repository.getShownWithCount(media, any()) } returns emptyList()
-        coEvery { repository.replaceRows(any(), any(), any()) } coAnswers {
-            val items = thirdArg<List<DiscoverySuggestion>>()
-            stored.value = items
+        var generation = 0L
+        val repository = object : FakeDiscoveryRepositoryBase() {
+            override fun subscribe(
+                mediaType: DiscoveryMediaType,
+            ): kotlinx.coroutines.flow.Flow<List<DiscoverySuggestion>> =
+                stored
+
+            override suspend fun getSignals(mediaType: DiscoveryMediaType) =
+                emptyList<tachiyomi.domain.discovery.model.DiscoverySignal>()
+
+            override suspend fun getHiddenTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            override suspend fun getBlacklistedTags(mediaType: DiscoveryMediaType) = emptySet<String>()
+            override suspend fun getRecentExclusionsWithTimestamp(
+                mediaType: DiscoveryMediaType,
+                windowMillis: Long,
+            ): Map<String, Long> = emptyMap()
+            override suspend fun getShownWithCount(
+                mediaType: DiscoveryMediaType,
+                windowMillis: Long,
+            ): List<Triple<String, Long, Int>> = emptyList()
+            override suspend fun lastUpdatedAt(mediaType: DiscoveryMediaType): Long? = null
+
+            override suspend fun publication(media: DiscoveryMediaType) =
+                emptyPublication(media).copy(generation = generation, suggestions = stored.value)
+
+            override suspend fun reserveGeneration(
+                media: DiscoveryMediaType,
+                requestId: String,
+                expectedGeneration: Long,
+                configurationKey: String,
+            ): tachiyomi.domain.discovery.model.DiscoveryGenerationToken =
+                tachiyomi.domain.discovery.model.DiscoveryGenerationToken(
+                    mediaType = media,
+                    requestId = requestId,
+                    ownerRevision = 1L,
+                    expectedGeneration = expectedGeneration,
+                    configurationKey = configurationKey,
+                )
+
+            override suspend fun publishGeneration(
+                token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+                prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+            ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
+                generation = token.expectedGeneration + 1
+                val oldKeys = stored.value.flatMap {
+                    listOf(it.identityKey ?: it.cleanTitle) + it.trustedAliases
+                }.toSet()
+                val suggestions =
+                    (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
+                        ?.suggestions.orEmpty()
+                        .filterNot { candidate ->
+                            (listOf(candidate.identityKey ?: candidate.cleanTitle) + candidate.trustedAliases)
+                                .any { it in oldKeys }
+                        }
+                stored.value = suggestions
+                return tachiyomi.domain.discovery.model.DiscoveryPublishReceipt.Published(
+                    emptyPublication(token.mediaType).copy(generation = generation, suggestions = suggestions),
+                )
+            }
         }
 
         val capturedContexts = mutableListOf<DiscoveryBuildContext>()
@@ -334,12 +383,12 @@ class TomiloLibDiscoverySimulationTest {
         outcome.status shouldBe DiscoveryRunStatus.SUCCESS
         outcome.persistedRows shouldBe setOf(DiscoveryRowType.SOURCE)
 
-        // Контекст запроса: страница 1, старое окно не исключается
+        // Контекст запроса: страница 1, прежний пул исключён из новой выдачи.
         capturedContexts.single().pageOffset shouldBe 1
-        capturedContexts.single().currentFeedCleanTitles shouldBe emptySet()
+        capturedContexts.single().currentFeedCleanTitles shouldBe setOf(evolutionWorlds.cleanTitle)
 
-        // В базе сохранены все подходящие тайтлы с "Система"
-        stored.value.map { it.title } shouldContain evolutionWorlds.title
+        // Старый тайтл уходит вместе с предыдущим пулом; новые проходят.
+        stored.value.map { it.title } shouldNotContain evolutionWorlds.title
         stored.value.map { it.title } shouldContain autoCultivation.title
         stored.value.map { it.title } shouldContain netherworldTrillions.title
         stored.value.map { it.title } shouldNotContain treeEvolution.title

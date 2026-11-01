@@ -10,6 +10,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
+import tachiyomi.domain.discovery.model.DiscoveryPublicationOutcome
+import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
+import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
@@ -272,6 +276,9 @@ class DiscoveryRunner(
         // feedback-сиды, и на source-аффинити участия плагинов, и на fold/merge вкуса,
         // и на «просмотрено»-исключение ниже.
         val allSignals = runCatching { repository.getSignals(mediaType) }.getOrDefault(emptyList())
+        val previousPool = runCatching { repository.publication(mediaType) }.getOrNull()
+        val previousPoolTitles = previousPool?.suggestions.orEmpty().mapTo(HashSet()) { it.cleanTitle }
+        val expectedGeneration = previousPool?.generation ?: 0L
         val feedbackSeeds = selectFeedbackSeeds(allSignals, mediaType, limit = minOf(2, totalSeedBudget))
         val librarySeedBudget = (totalSeedBudget - feedbackSeeds.size).coerceAtLeast(0)
         val feedbackCleanTitles = feedbackSeeds.mapTo(HashSet()) { it.cleanTitle }
@@ -382,52 +389,16 @@ class DiscoveryRunner(
                 if (!sourcePreferences.suggestionsUseNovelUpdates().get()) add("NovelUpdates")
             }
         }
-        val cachedSuggestions = runCatching { repository.subscribe(mediaType).firstOrNull() }.getOrNull().orEmpty()
-        val currentSuggestions = cachedSuggestions.filterNot {
-            (it.rowType == DiscoveryRowType.LIKE && it.provider in disabledLikeProviders) ||
-                (
-                    !useExternal && it.rowType == DiscoveryRowType.TASTE &&
-                        ((it.sourceId ?: 0L) <= 0L || it.sourceUrl.isNullOrBlank())
-                    )
-        }
-        val existingRowItems = currentSuggestions
-            .groupBy { it.rowType }
-            .mapValues { (_, items) ->
-                items.map { suggestion ->
-                    DiscoveryRowItem(
-                        title = suggestion.title,
-                        cleanTitle = suggestion.cleanTitle,
-                        coverUrl = suggestion.coverUrl,
-                        reason = suggestion.reason,
-                        seedTitle = suggestion.seedTitle,
-                        provider = suggestion.provider,
-                        score = suggestion.score,
-                        sourceId = suggestion.sourceId,
-                        sourceUrl = suggestion.sourceUrl,
-                        genres = suggestion.genres,
-                    )
-                }
-            }
-        // Explicit opt-outs still apply when an incomplete replacement preserves the compatible cache.
-        val cachedLike = cachedSuggestions.filter { it.rowType == DiscoveryRowType.LIKE }
-        val currentLike = currentSuggestions.filter { it.rowType == DiscoveryRowType.LIKE }
-        if (preferences.rowLikeEnabled().get() && currentLike != cachedLike) {
-            repository.replaceRows(mediaType, DiscoveryRowType.LIKE, currentLike)
-        }
-        val cachedTaste = cachedSuggestions.filter { it.rowType == DiscoveryRowType.TASTE }
-        val currentTaste = currentSuggestions.filter { it.rowType == DiscoveryRowType.TASTE }
-        if (!useExternal && preferences.rowTasteEnabled().get() && currentTaste != cachedTaste) {
-            repository.replaceRows(mediaType, DiscoveryRowType.TASTE, currentTaste)
-        }
+        // Full generation replaces the published pool atomically. Cache-first
+        // merging, per-row writes and stale backfill are no longer part of the
+        // refresh path.
+        val currentSuggestions = emptyList<DiscoverySuggestion>()
+        val existingRowItems = emptyMap<DiscoveryRowType, List<DiscoveryRowItem>>()
         val shownCutoffMap = runCatching {
             repository.getRecentExclusionsWithTimestamp(mediaType)
         }.getOrDefault(emptyMap())
         val shownTitles = shownCutoffMap.keys
-        val recentCleanTitles = if (isManualRefresh) {
-            currentSuggestions.mapTo(HashSet()) { it.cleanTitle } + shownTitles
-        } else {
-            shownTitles
-        }
+        val recentCleanTitles = shownTitles
         val pageOffset = when {
             isConfigurationRefresh -> 1
             isManualRefresh -> manualPageOffset(candidateRefreshCount)
@@ -498,11 +469,7 @@ class DiscoveryRunner(
             shownCutoffMap = shownCutoffMap,
             // Ручной рефреш: тайтлы текущей ленты не возвращаются stale-добором —
             // наполнение ряда реально сменяется, а не «новые + всё старое».
-            currentFeedCleanTitles = if (isManualRefresh) {
-                currentSuggestions.mapTo(HashSet()) { it.cleanTitle }
-            } else {
-                emptySet()
-            },
+            currentFeedCleanTitles = previousPoolTitles,
             existingRowItems = existingRowItems,
             pageOffset = pageOffset,
             verificationBudget = verificationBudget,
@@ -557,20 +524,6 @@ class DiscoveryRunner(
             "[Discovery] refresh media=$mediaType manual=$isManualRefresh " +
                 "configuration=$isConfigurationRefresh page=$pageOffset " +
                 "statuses=${context.releaseStatuses} sources=${context.sourceIds} primary=${context.sourceId}"
-        }
-        // Выключенные в настройках ряды: чистим их записи в БД, чтобы UI не показывал «зомби».
-        // TREND — чисто внешний ряд; LIKE при выключенных внешних провайдерах строится из плагинов.
-        if (!preferences.rowLikeEnabled().get()) {
-            repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.LIKE, emptyList())
-        }
-        if (!preferences.rowTasteEnabled().get()) {
-            repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE, emptyList())
-        }
-        if (!preferences.rowTrendEnabled().get() || !useExternal) {
-            repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.TREND, emptyList())
-        }
-        if (!preferences.rowSourceEnabled().get()) {
-            repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.SOURCE, emptyList())
         }
         val builders = buildList {
             if (preferences.rowLikeEnabled().get()) {
@@ -630,40 +583,9 @@ class DiscoveryRunner(
         }
 
         val attemptedRows = builders.map { it.rowType }.toSet()
-        val persistedRows = mutableSetOf<DiscoveryRowType>()
         val coordinator = coordinatorFactory(builders)
-        val feed = coordinator.streamFeed(context) { rowType, items ->
-            // Пустой ряд НЕ перезаписывает кэш: прежняя подборка живёт до следующего
-            // успешного непустого результата (защита от «всё пропало» при деградации провайдеров).
-            if (items.isEmpty()) {
-                logcat { "[DiscoveryRunner] $mediaType row $rowType empty — cache preserved" }
-                return@streamFeed
-            }
-            persistedRows += rowType
-            repository.replaceRows(
-                mediaType = mediaType,
-                rowType = rowType,
-                items = items.map { item ->
-                    DiscoverySuggestion(
-                        id = 0L,
-                        mediaType = mediaType,
-                        rowType = rowType,
-                        title = item.title,
-                        cleanTitle = item.cleanTitle,
-                        coverUrl = item.coverUrl,
-                        reason = item.reason,
-                        seedTitle = item.seedTitle,
-                        provider = item.provider,
-                        score = item.score,
-                        // Перезаписывается индексом списка внутри replaceRows.
-                        position = 0L,
-                        createdAt = System.currentTimeMillis(),
-                        sourceId = item.sourceId,
-                        sourceUrl = item.sourceUrl,
-                        genres = item.genres,
-                    )
-                },
-            )
+        val feed = coordinator.streamFeed(context) { _, _ ->
+            // The whole pool is published once, after every row has settled.
         }
         val fillAudit = buildDiscoveryFillAudit(
             mediaType = mediaType,
@@ -677,53 +599,91 @@ class DiscoveryRunner(
         logcat {
             "[DiscoveryRunner] $mediaType done: rows=${feed.rows.mapValues { it.value.size }} failed=${feed.failedRows}"
         }
-        // «Только плагины»: пустой TASTE-ряд (нет подходящих плагин-тайтлов) не должен
-        // оставлять в кэше внешние тайтлы — «пустой ряд не перезаписывает» здесь
-        // мешает явному выбору пользователя, чистим вручную. НО: упавший ряд (network)
-        // — не «честно пустой», его кэш не трогаем (feed.rows[T]=null при падении).
-        if (!useExternal && feed.isConclusiveEmpty(DiscoveryRowType.TASTE)) {
-            repository.replaceRows(mediaType, DiscoveryRowType.TASTE, emptyList())
-        }
-        // Статус-фильтр активен: пустой ряд (нет тайтлов выбранного статуса) не должен
-        // жить старым кэшем с НЕсоответствующими статусами — иначе «выбран Завершённый,
-        // а показывается всякое» из старой генерации. Чистим явно. НО: упавший ряд
-        // (провайдер/сеть отвалились) — не «честно пустой», его кэш сохраняем, иначе
-        // при отвале сети с включённым фильтром пропадала бы вся лента.
-        if (context.releaseStatuses.isNotEmpty() || context.requiredGenres.isNotEmpty()) {
-            tachiyomi.domain.discovery.model.DiscoveryRowType.entries.forEach { rowType ->
-                if (feed.isConclusiveEmpty(rowType)) {
-                    repository.replaceRows(mediaType, rowType, emptyList())
-                }
-            }
-        }
-        // Замороженные ряды: «честно пустой» LIKE при пустых сидах и TASTE при пустом профиле
-        // не должны вечно таскать кэш прошлых генераций.
-        if (feed.isConclusiveEmpty(DiscoveryRowType.LIKE) &&
-            context.seeds.isEmpty()
-        ) {
-            repository.replaceRows(mediaType, DiscoveryRowType.LIKE, emptyList())
-        }
-        if (feed.isConclusiveEmpty(DiscoveryRowType.TASTE) &&
-            context.tasteProfile.isEmpty() &&
-            context.requiredGenres.isEmpty() &&
-            context.priorityGenres.isEmpty()
-        ) {
-            repository.replaceRows(mediaType, DiscoveryRowType.TASTE, emptyList())
-        }
-
         val actualExecutedRows = feed.rows.keys + feed.failedRows
         val allExecutedFailed = actualExecutedRows.isNotEmpty() && feed.failedRows.containsAll(actualExecutedRows)
         val hasPartialFailures = feed.failedRows.isNotEmpty() ||
             feed.degradedRows.isNotEmpty() ||
             (attemptedRows.isNotEmpty() && actualExecutedRows.size < attemptedRows.size)
 
+        val pooledItems = feed.rows.flatMap { (rowType, items) ->
+            items.map { item ->
+                DiscoverySuggestion(
+                    id = 0L,
+                    mediaType = mediaType,
+                    rowType = rowType,
+                    title = item.title,
+                    cleanTitle = item.cleanTitle,
+                    coverUrl = item.coverUrl,
+                    reason = item.reason,
+                    seedTitle = item.seedTitle,
+                    provider = item.provider,
+                    score = item.score,
+                    position = 0L,
+                    createdAt = System.currentTimeMillis(),
+                    sourceId = item.sourceId,
+                    sourceUrl = item.sourceUrl,
+                    genres = item.genres,
+                )
+            }
+        }
+        val conclusiveEmpty = feed.failedRows.isEmpty() && feed.degradedRows.isEmpty() &&
+            feed.rows.values.all { it.isEmpty() } && attemptedRows.isNotEmpty()
+        val prepared = when {
+            allExecutedFailed -> null
+            pooledItems.isNotEmpty() -> DiscoveryPreparedPool.Fresh(
+                suggestions = pooledItems,
+                partial = hasPartialFailures,
+                cursors = emptyList(),
+            )
+            conclusiveEmpty -> DiscoveryPreparedPool.VerifiedEmpty(
+                expectedQueryKeys = attemptedRows.mapTo(HashSet()) { it.key },
+                evidence = attemptedRows.map { rowType ->
+                    DiscoveryQueryEvidence(
+                        queryKey = rowType.key,
+                        transportOk = true,
+                        rawEnd = true,
+                        pending = 0,
+                        unattempted = 0,
+                        metadataFailures = 0,
+                        budgetStopped = false,
+                        duplicatePageStopped = false,
+                    )
+                },
+                cursors = emptyList(),
+            )
+            else -> null
+        }
+
+        val configurationKey = discoveryConfigurationKey(mediaType)
+        repository.installConfigurationKey(mediaType, configurationKey)
+        val requestId = java.util.UUID.randomUUID().toString()
+        val token = if (prepared != null) {
+            repository.reserveGeneration(mediaType, requestId, expectedGeneration, configurationKey)
+        } else {
+            null
+        }
+        val publishReceipt = if (prepared != null && token != null) {
+            repository.publishGeneration(token, prepared)
+        } else {
+            null
+        }
+        val published = publishReceipt as? DiscoveryPublishReceipt.Published
+        val persistedRows = if (published != null) {
+            feed.rows.filterValues { it.isNotEmpty() }.keys
+        } else {
+            emptySet()
+        }
+
         val status = when {
+            publishReceipt is DiscoveryPublishReceipt.Superseded -> DiscoveryRunStatus.SKIPPED
             allExecutedFailed -> DiscoveryRunStatus.FAILED
+            publishReceipt is DiscoveryPublishReceipt.NoAdmissibleItems -> DiscoveryRunStatus.FAILED
+            published?.snapshot?.outcome == DiscoveryPublicationOutcome.PARTIAL -> DiscoveryRunStatus.PARTIAL
             hasPartialFailures -> DiscoveryRunStatus.PARTIAL
             else -> DiscoveryRunStatus.SUCCESS
         }
 
-        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed) {
+        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed && published != null) {
             if (isManualRefresh) {
                 preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
             } else if (!isConfigurationRefresh) {
@@ -750,6 +710,26 @@ class DiscoveryRunner(
             degradedRows = feed.degradedRows,
             persistedRows = persistedRows,
         )
+    }
+    private fun discoveryConfigurationKey(mediaType: DiscoveryMediaType): String {
+        val spec = preferences.genreFilterSpec()
+        val parts = listOf(
+            mediaType.key,
+            "rows", preferences.rowLikeEnabled().get(), preferences.rowTasteEnabled().get(),
+            preferences.rowTrendEnabled().get(), preferences.rowSourceEnabled().get(),
+            "seeds", preferences.seedCount().get(), preferences.seedCompleted().get(),
+            preferences.seedActive14().get(), preferences.seedAdded().get(), preferences.seedRated().get(),
+            preferences.seedCompletedDays().get(), preferences.seedActiveDays().get(),
+            "trend", preferences.trendSeason().get(), preferences.trendSort().get(),
+            "status", preferences.releaseStatusFilter().get(),
+            "genres", spec.ignoredGenres.sorted(), spec.requiredGenres.sorted(), spec.priorityGenres.sorted(),
+            spec.requiredMatchMode.name, spec.requiredEnforcement.name, spec.unknownGenrePolicy.name,
+            "sources", preferences.externalProvidersEnabled().get(),
+            preferences.discoverySourceMode(mediaType).get(),
+            preferences.discoverySourceExcluded(mediaType).get(),
+            "nsfw", preferences.filterNsfw().get(),
+        )
+        return parts.joinToString("|").hashCode().toUInt().toString(16)
     }
 }
 

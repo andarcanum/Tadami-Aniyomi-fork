@@ -24,6 +24,8 @@ class DiscoveryMapperTest {
             seed_title = "Re:Zero", provider = "anilist", score = 0.9, position = 0, created_at = 42L,
             source_id = 77L, source_url = "/manga/77",
             genres = null,
+            identity_key = null, trusted_aliases = null,
+            release_status = null, metadata_verified_at = null,
         )
         val mapped: DiscoverySuggestion = DiscoveryMapper.map(row)
         mapped.mediaType shouldBe DiscoveryMediaType.NOVEL
@@ -43,6 +45,8 @@ class DiscoveryMapperTest {
             seed_title = null, provider = "p", score = 0.0, position = 0, created_at = 0L,
             source_id = null, source_url = null,
             genres = "harem, drama, ",
+            identity_key = null, trusted_aliases = null,
+            release_status = null, metadata_verified_at = null,
         )
         val mapped = DiscoveryMapper.map(row)
         mapped.genres shouldBe listOf("harem", "drama")

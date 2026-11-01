@@ -1,0 +1,78 @@
+CREATE TABLE discovery_publication (
+    media_type TEXT NOT NULL PRIMARY KEY,
+    generation INTEGER NOT NULL DEFAULT 0,
+    projection_version INTEGER NOT NULL DEFAULT 0,
+    configuration_key TEXT NOT NULL DEFAULT '',
+    desired_configuration_key TEXT NOT NULL DEFAULT '',
+    published_by_request_id TEXT,
+    committed_at INTEGER NOT NULL DEFAULT 0,
+    outcome TEXT,
+    owner_request_id TEXT,
+    owner_revision INTEGER NOT NULL DEFAULT 0,
+    active_keys TEXT NOT NULL DEFAULT '',
+    issued_keys TEXT NOT NULL DEFAULT '',
+    cursors TEXT NOT NULL DEFAULT '',
+    home_batch_version INTEGER NOT NULL DEFAULT 0,
+    taste_reset_at INTEGER NOT NULL DEFAULT 0,
+    backfill_version INTEGER NOT NULL DEFAULT 0,
+    traversal TEXT NOT NULL DEFAULT 'VALID'
+);
+
+selectByMedia:
+SELECT * FROM discovery_publication WHERE media_type = ?;
+
+ensureRow:
+INSERT OR IGNORE INTO discovery_publication(media_type) VALUES (?);
+
+bumpProjection:
+UPDATE discovery_publication SET projection_version = projection_version + 1 WHERE media_type = ?;
+
+reserveOwner:
+UPDATE discovery_publication
+SET owner_request_id = ?, owner_revision = ?
+WHERE media_type = ? AND generation = ?;
+
+revokeOwner:
+UPDATE discovery_publication
+SET owner_request_id = NULL
+WHERE media_type = ? AND owner_request_id = ?;
+
+commitPublication:
+UPDATE discovery_publication
+SET generation = generation + 1,
+    projection_version = projection_version + 1,
+    configuration_key = ?,
+    committed_at = ?,
+    outcome = ?,
+    published_by_request_id = ?,
+    owner_request_id = NULL,
+    active_keys = '',
+    issued_keys = '',
+    cursors = ?,
+    home_batch_version = home_batch_version + 1,
+    traversal = 'VALID'
+WHERE media_type = ? AND owner_request_id = ? AND owner_revision = ? AND generation = ?;
+
+updateHomeBatch:
+UPDATE discovery_publication
+SET active_keys = ?,
+    issued_keys = ?,
+    home_batch_version = home_batch_version + 1
+WHERE media_type = ?;
+
+installConfigurationKey:
+UPDATE discovery_publication SET desired_configuration_key = ? WHERE media_type = ?;
+
+installConfigurationKeyIfChanged:
+UPDATE discovery_publication
+SET desired_configuration_key = ?, projection_version = projection_version + 1
+WHERE media_type = ? AND desired_configuration_key != ?;
+
+setTasteResetAt:
+UPDATE discovery_publication SET taste_reset_at = ? WHERE media_type = ?;
+
+setBackfillVersion:
+UPDATE discovery_publication SET backfill_version = ? WHERE media_type = ?;
+
+resetTraversal:
+UPDATE discovery_publication SET traversal = 'CORRUPT', active_keys = '', issued_keys = '' WHERE media_type = ?;

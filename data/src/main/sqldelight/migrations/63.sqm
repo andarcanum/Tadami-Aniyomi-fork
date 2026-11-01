@@ -1,0 +1,80 @@
+-- Migration 63: publication/generation state, independent title memory and canonical identity columns.
+
+CREATE TABLE discovery_publication (
+    media_type TEXT NOT NULL PRIMARY KEY,
+    generation INTEGER NOT NULL DEFAULT 0,
+    projection_version INTEGER NOT NULL DEFAULT 0,
+    configuration_key TEXT NOT NULL DEFAULT '',
+    desired_configuration_key TEXT NOT NULL DEFAULT '',
+    published_by_request_id TEXT,
+    committed_at INTEGER NOT NULL DEFAULT 0,
+    outcome TEXT,
+    owner_request_id TEXT,
+    owner_revision INTEGER NOT NULL DEFAULT 0,
+    active_keys TEXT NOT NULL DEFAULT '',
+    issued_keys TEXT NOT NULL DEFAULT '',
+    cursors TEXT NOT NULL DEFAULT '',
+    home_batch_version INTEGER NOT NULL DEFAULT 0,
+    taste_reset_at INTEGER NOT NULL DEFAULT 0,
+    backfill_version INTEGER NOT NULL DEFAULT 0,
+    traversal TEXT NOT NULL DEFAULT 'VALID'
+);
+
+CREATE TABLE discovery_title_memory (
+    media_type TEXT NOT NULL,
+    identity_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    primary_clean_title TEXT NOT NULL,
+    source_id INTEGER,
+    source_url TEXT,
+    trusted_aliases TEXT NOT NULL DEFAULT '',
+    metadata_changed_at INTEGER NOT NULL DEFAULT 0,
+    opened_active INTEGER NOT NULL DEFAULT 0,
+    opened_changed_at INTEGER NOT NULL DEFAULT 0,
+    started_active INTEGER NOT NULL DEFAULT 0,
+    started_changed_at INTEGER NOT NULL DEFAULT 0,
+    consumed_active INTEGER NOT NULL DEFAULT 0,
+    consumed_changed_at INTEGER NOT NULL DEFAULT 0,
+    blocked_until INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (media_type, identity_key)
+);
+
+CREATE INDEX discovery_title_memory_blocked ON discovery_title_memory(media_type, blocked_until);
+
+ALTER TABLE discovery_suggestions ADD COLUMN identity_key TEXT;
+ALTER TABLE discovery_suggestions ADD COLUMN trusted_aliases TEXT;
+ALTER TABLE discovery_suggestions ADD COLUMN release_status TEXT;
+ALTER TABLE discovery_suggestions ADD COLUMN metadata_verified_at INTEGER;
+
+ALTER TABLE discovery_signals ADD COLUMN primary_clean_title TEXT NOT NULL DEFAULT '';
+ALTER TABLE discovery_signals ADD COLUMN identity_key TEXT;
+ALTER TABLE discovery_signals ADD COLUMN source_id INTEGER;
+ALTER TABLE discovery_signals ADD COLUMN source_url TEXT;
+ALTER TABLE discovery_signals ADD COLUMN trusted_aliases TEXT;
+ALTER TABLE discovery_signals ADD COLUMN metadata_changed_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE discovery_signals ADD COLUMN positive_signal TEXT;
+ALTER TABLE discovery_signals ADD COLUMN positive_created_at INTEGER NOT NULL DEFAULT 0;
+
+UPDATE discovery_signals
+SET primary_clean_title = clean_title,
+    metadata_changed_at = created_at;
+
+UPDATE discovery_signals
+SET positive_signal = CASE
+        WHEN signal IN ('click', 'like', 'add') THEN signal
+        WHEN signal = 'consumed_liked' THEN 'like'
+        WHEN signal = 'consumed_added' THEN 'add'
+        ELSE NULL
+    END,
+    positive_created_at = CASE
+        WHEN signal IN ('click', 'like', 'add', 'consumed_liked', 'consumed_added') THEN created_at
+        ELSE 0
+    END;
+
+ALTER TABLE discovery_hidden ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE discovery_hidden ADD COLUMN changed_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE discovery_hidden ADD COLUMN primary_clean_title TEXT NOT NULL DEFAULT '';
+
+UPDATE discovery_hidden
+SET changed_at = hidden_at,
+    primary_clean_title = clean_title;

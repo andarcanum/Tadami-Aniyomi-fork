@@ -8,6 +8,14 @@ CREATE TABLE discovery_signals (
     provider TEXT,
     source_key TEXT,
     created_at INTEGER NOT NULL,
+    primary_clean_title TEXT NOT NULL DEFAULT '',
+    identity_key TEXT,
+    source_id INTEGER,
+    source_url TEXT,
+    trusted_aliases TEXT,
+    metadata_changed_at INTEGER NOT NULL DEFAULT 0,
+    positive_signal TEXT,
+    positive_created_at INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (media_type, clean_title)
 );
 
@@ -20,8 +28,12 @@ selectByTitle:
 SELECT * FROM discovery_signals WHERE media_type = ? AND clean_title = ?;
 
 upsert:
-INSERT INTO discovery_signals(media_type, clean_title, title, signal, weight, genres, provider, source_key, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO discovery_signals(
+    media_type, clean_title, title, signal, weight, genres, provider, source_key, created_at,
+    primary_clean_title, identity_key, source_id, source_url, trusted_aliases, metadata_changed_at,
+    positive_signal, positive_created_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(media_type, clean_title) DO UPDATE SET
     title = excluded.title,
     signal = excluded.signal,
@@ -29,7 +41,18 @@ ON CONFLICT(media_type, clean_title) DO UPDATE SET
     genres = excluded.genres,
     provider = excluded.provider,
     source_key = excluded.source_key,
-    created_at = excluded.created_at;
+    created_at = excluded.created_at,
+    primary_clean_title = excluded.primary_clean_title,
+    identity_key = COALESCE(excluded.identity_key, discovery_signals.identity_key),
+    source_id = COALESCE(excluded.source_id, discovery_signals.source_id),
+    source_url = COALESCE(excluded.source_url, discovery_signals.source_url),
+    trusted_aliases = CASE
+        WHEN excluded.trusted_aliases IS NULL OR excluded.trusted_aliases = '' THEN discovery_signals.trusted_aliases
+        ELSE excluded.trusted_aliases
+    END,
+    metadata_changed_at = MAX(discovery_signals.metadata_changed_at, excluded.metadata_changed_at),
+    positive_signal = COALESCE(excluded.positive_signal, discovery_signals.positive_signal),
+    positive_created_at = MAX(discovery_signals.positive_created_at, excluded.positive_created_at);
 
 delete:
 DELETE FROM discovery_signals WHERE media_type = ? AND clean_title = ?;
@@ -79,8 +102,13 @@ UPDATE discovery_signals
 SET
     genres = ?,
     provider = ?,
-    source_key = ?
+    source_key = ?,
+    trusted_aliases = ?,
+    source_id = ?,
+    source_url = ?,
+    identity_key = ?,
+    metadata_changed_at = ?
 WHERE media_type = ?
   AND clean_title = ?
-  AND created_at = ?
-  AND signal = 'like';
+  AND positive_created_at = ?
+  AND positive_signal IS NOT NULL;

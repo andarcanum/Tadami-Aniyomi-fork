@@ -66,4 +66,11 @@ data class DiscoverySignal(
     val provider: String?,
     val sourceKey: String?,
     val createdAt: Long,
+    val identityKey: String? = null,
+    val trustedAliases: Set<String> = emptySet(),
+    val sourceId: Long? = null,
+    val sourceUrl: String? = null,
+    val metadataChangedAt: Long = createdAt,
+    val positiveKind: DiscoverySignalType? = null,
+    val positiveCreatedAt: Long = 0L,
 )

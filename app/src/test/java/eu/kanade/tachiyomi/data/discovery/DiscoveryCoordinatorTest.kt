@@ -67,7 +67,7 @@ class DiscoveryCoordinatorTest {
     }
 
     @Test
-    fun `stale backfill is ordered by least recently shown, untimestamped last`() = runTest {
+    fun `no stale backfill is added to a fresh row`() = runTest {
         val like = builder(
             DiscoveryRowType.LIKE,
             listOf(item("Fresh"), item("ShownRecent"), item("NoTimestamp"), item("ShownOld")),
@@ -81,15 +81,13 @@ class DiscoveryCoordinatorTest {
                 ),
             ),
         )
-        feed.rows[DiscoveryRowType.LIKE]?.map { it.title } shouldBe
-            listOf("Fresh", "ShownOld", "ShownRecent", "NoTimestamp")
+        feed.rows[DiscoveryRowType.LIKE]?.map { it.title } shouldBe listOf("Fresh")
     }
 
     @Test
-    fun `manual refresh stale backfill excludes current feed titles`() = runTest {
-        // Ручной рефреш: B — тайтл ТЕКУЩЕЙ ленты (и «показанный»), C — показан раньше,
-        // но из ленты уже выпал. Добор обязан вернуть C и НЕ вернуть B —
-        // наполнение ряда реально сменяется, а не «новые + всё старое».
+    fun `manual refresh never backfills previously shown titles`() = runTest {
+        // Previously shown titles are excluded, not backfilled: a full generation
+        // only keeps genuinely fresh candidates.
         val like = builder(
             DiscoveryRowType.LIKE,
             listOf(item("Fresh A"), item("Current B"), item("Fallen C")),
@@ -101,7 +99,7 @@ class DiscoveryCoordinatorTest {
                 currentFeedCleanTitles = setOf("current b"),
             ),
         )
-        feed.rows[DiscoveryRowType.LIKE]?.map { it.title } shouldBe listOf("Fresh A", "Fallen C")
+        feed.rows[DiscoveryRowType.LIKE]?.map { it.title } shouldBe listOf("Fresh A")
 
         // Фон (currentFeed пуст): прежнее поведение — добор возвращает обоих.
         val backgroundFeed = DiscoveryCoordinator(listOf(like), rowLimit = 10).buildFeed(
@@ -110,8 +108,7 @@ class DiscoveryCoordinatorTest {
                 shownCutoffMap = mapOf("current b" to 2_000L, "fallen c" to 1_000L),
             ),
         )
-        backgroundFeed.rows[DiscoveryRowType.LIKE]?.map { it.title } shouldBe
-            listOf("Fresh A", "Fallen C", "Current B")
+        backgroundFeed.rows[DiscoveryRowType.LIKE]?.map { it.title } shouldBe listOf("Fresh A")
     }
 
     @Test

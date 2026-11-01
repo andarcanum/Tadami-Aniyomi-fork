@@ -8,10 +8,7 @@ import eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder
 import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.isBlacklisted
-import eu.kanade.tachiyomi.ui.discovery.ManualRefreshAction
 import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
-import eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds
-import eu.kanade.tachiyomi.ui.discovery.resolveManualRefreshAction
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -20,9 +17,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.discovery.model.DiscoveryBatchReceipt
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.identityKeys
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 
 /**
@@ -286,56 +286,62 @@ internal class HomeDiscoveryController(
         if (now - lastRefreshClickTime < 500L) return
         lastRefreshClickTime = now
 
-        val cooldown = remainingCooldownSeconds(
-            preferences.manualRefreshAt(mediaType).get().takeIf { it > 0L },
-            now,
-        )
-        val action = resolveManualRefreshAction(currentState().isDiscoveryRefreshing, cooldown)
-        if (action == ManualRefreshAction.CANCEL) {
-            DiscoveryUpdateJob.stop(context, mediaType)
-            onStateUpdate { it.copy(isDiscoveryRefreshing = false) }
-            return
-        }
+        if (currentState().isDiscoveryRefreshing) return
 
-        if (action == ManualRefreshAction.ROTATE || !preferences.tryStartManualRefresh(mediaType, now)) {
-            scope.launchIO {
-                mutex.withLock {
-                    updateDiscoveryTeaserLocked(advanceOffset = true, forceUpdate = true, notifyIfLimited = true)
+        scope.launchIO {
+            mutex.withLock {
+                val snapshot = runCatching { repository.publication(mediaType) }.getOrNull()
+                val rankedKeys = cachedDiscoveryPool
+                    .flatMap { suggestion -> suggestion.identityKeys().toList() }
+                val receipt = if (snapshot == null) {
+                    null
+                } else {
+                    repository.nextHomeBatch(mediaType, snapshot.generation, rankedKeys)
+                }
+                when (receipt) {
+                    is DiscoveryBatchReceipt.Available -> {
+                        applyHomeBatch(receipt.snapshot)
+                    }
+
+                    is DiscoveryBatchReceipt.Superseded -> {
+                        updateDiscoveryTeaserLocked(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
+                    }
+
+                    is DiscoveryBatchReceipt.NeedsSourceRefresh, null -> {
+                        onStateUpdate { it.copy(isDiscoveryRefreshing = true) }
+                        DiscoveryUpdateJob.refreshNow(context, mediaType)
+                    }
                 }
             }
+        }
+    }
+
+    private suspend fun applyHomeBatch(snapshot: DiscoveryPublicationSnapshot) {
+        val byKey = HashMap<String, DiscoverySuggestion>()
+        snapshot.eligibleSuggestions.forEach { suggestion ->
+            suggestion.identityKeys().forEach { key -> byKey.putIfAbsent(key, suggestion) }
+        }
+        val selected = snapshot.homeBatchKeys.mapNotNull { byKey[it] }.distinctBy { it.cleanTitle }
+        if (selected.isEmpty()) {
+            updateDiscoveryTeaserLocked(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
             return
         }
-
-        onStateUpdate { it.copy(isDiscoveryRefreshing = true) }
-        DiscoveryUpdateJob.refreshNow(context, mediaType)
+        val selectedKeys = selected.mapTo(HashSet()) { it.cleanTitle }
+        cachedDiscoveryPool = selected + cachedDiscoveryPool.filterNot { it.cleanTitle in selectedKeys }
+        discoveryOffset = 0
+        updateDiscoveryTeaserLocked(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
     }
 
     fun likeDiscoveryItem(item: HomeHubDiscoveryItem) {
         if (item.cleanTitle.isBlank()) return
         scope.launchIO {
             val suggestion = item.toDiscoverySuggestion()
-            val recorded = TasteSignalRecorder.record(
+            // Taste feedback only: the card stays in place, no dismissal, no retirement.
+            TasteSignalRecorder.record(
                 repository,
                 suggestion,
                 DiscoverySignalType.LIKE,
             )
-            if (recorded) {
-                mutex.withLock {
-                    dismissedSessionTitles += item.cleanTitle
-                    dismissedSessionTitles = pruneDismissedSessionTitles(dismissedSessionTitles).toMutableSet()
-                    val dismissedTitles = dismissedSessionTitles.toSet()
-                    cachedDiscoveryPool = cachedDiscoveryPool.filterNot { it.cleanTitle == item.cleanTitle }
-                    onStateUpdate { current ->
-                        val updated = current.reduceDismissTeaserCard(
-                            likedCleanTitle = item.cleanTitle,
-                            targetCount = current.discovery.size,
-                            dismissedTitles = dismissedTitles,
-                        )
-                        val updatedPool = current.discoveryPool.filterNot { it.cleanTitle == item.cleanTitle }
-                        updated.copy(discoveryPool = updatedPool)
-                    }
-                }
-            }
         }
     }
 

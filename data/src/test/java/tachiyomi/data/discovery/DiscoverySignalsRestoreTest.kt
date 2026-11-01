@@ -48,6 +48,8 @@ class DiscoverySignalsRestoreTest {
                 queryDispatcher = Dispatchers.Default,
                 transactionDispatcher = Dispatchers.Default,
             ),
+            knownTitlesProvider = MutableKnownTitlesProvider(),
+            candidateValidator = AllowAllCandidateValidator,
         )
     }
 

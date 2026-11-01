@@ -146,7 +146,7 @@ class DiscoveryRefreshRoutingTest {
         }
         Injekt.addSingleton(
             DiscoveryRunner(
-                repository = mockk(relaxed = true),
+                repository = TestPublicationRepository(),
                 preferences = preferences,
                 seedSources = object : DiscoverySeedSources {
                     override suspend fun candidates(mediaType: DiscoveryMediaType) = emptyList<DiscoverySeedInput>()
@@ -185,5 +185,59 @@ class DiscoveryRefreshRoutingTest {
             ),
         ).getValue(media)
         outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+    }
+
+    private class TestPublicationRepository : FakeDiscoveryRepositoryBase() {
+        private var generation = 0L
+
+        override fun subscribe(
+            mediaType: DiscoveryMediaType,
+        ): kotlinx.coroutines.flow.Flow<List<tachiyomi.domain.discovery.model.DiscoverySuggestion>> =
+            kotlinx.coroutines.flow.MutableStateFlow(emptyList())
+
+        override suspend fun getSignals(
+            mediaType: DiscoveryMediaType,
+        ) = emptyList<tachiyomi.domain.discovery.model.DiscoverySignal>()
+        override suspend fun getHiddenTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+        override suspend fun getBlacklistedTags(mediaType: DiscoveryMediaType) = emptySet<String>()
+        override suspend fun getRecentExclusionsWithTimestamp(
+            mediaType: DiscoveryMediaType,
+            windowMillis: Long,
+        ): Map<String, Long> = emptyMap()
+        override suspend fun getShownWithCount(
+            mediaType: DiscoveryMediaType,
+            windowMillis: Long,
+        ): List<Triple<String, Long, Int>> = emptyList()
+        override suspend fun getShownTitles(mediaType: DiscoveryMediaType, windowMillis: Long) = emptySet<String>()
+        override suspend fun lastUpdatedAt(mediaType: DiscoveryMediaType): Long? = null
+
+        override suspend fun publication(media: DiscoveryMediaType) =
+            emptyPublication(media).copy(generation = generation)
+
+        override suspend fun reserveGeneration(
+            media: DiscoveryMediaType,
+            requestId: String,
+            expectedGeneration: Long,
+            configurationKey: String,
+        ): tachiyomi.domain.discovery.model.DiscoveryGenerationToken =
+            tachiyomi.domain.discovery.model.DiscoveryGenerationToken(
+                mediaType = media,
+                requestId = requestId,
+                ownerRevision = 1L,
+                expectedGeneration = expectedGeneration,
+                configurationKey = configurationKey,
+            )
+
+        override suspend fun publishGeneration(
+            token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+            prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+        ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
+            generation = token.expectedGeneration + 1
+            val suggestions = (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
+                ?.suggestions.orEmpty()
+            return tachiyomi.domain.discovery.model.DiscoveryPublishReceipt.Published(
+                emptyPublication(token.mediaType).copy(generation = generation, suggestions = suggestions),
+            )
+        }
     }
 }

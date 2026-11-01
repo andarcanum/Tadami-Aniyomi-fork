@@ -71,19 +71,58 @@ class DiscoveryConfigurationPipelineTest {
         )
         val stored = MutableStateFlow(listOf(initial))
         val captured = mutableListOf<DiscoveryBuildContext>()
-        val repository = mockk<DiscoveryRepository>(relaxed = true)
-        every { repository.subscribe(media) } returns stored
-        coEvery { repository.getSignals(media) } returns emptyList()
-        coEvery { repository.getHiddenTitles(media) } returns emptySet()
-        coEvery { repository.getBlacklistedTags(media) } returns emptySet()
-        coEvery { repository.getRecentExclusionsWithTimestamp(media, any()) } returns
-            mapOf("cached match" to 1L)
-        coEvery { repository.getShownWithCount(media, any()) } returns emptyList()
-        coEvery { repository.replaceRows(any(), any(), any()) } coAnswers {
-            val targetMedia = firstArg<DiscoveryMediaType>()
-            val targetRow = secondArg<DiscoveryRowType>()
-            val items = thirdArg<List<DiscoverySuggestion>>()
-            stored.value = stored.value.filterNot { it.mediaType == targetMedia && it.rowType == targetRow } + items
+        var generation = 0L
+        val repository = object : FakeDiscoveryRepositoryBase() {
+            override fun subscribe(
+                mediaType: DiscoveryMediaType,
+            ): kotlinx.coroutines.flow.Flow<List<DiscoverySuggestion>> =
+                stored
+
+            override suspend fun getSignals(mediaType: DiscoveryMediaType) =
+                emptyList<tachiyomi.domain.discovery.model.DiscoverySignal>()
+
+            override suspend fun getHiddenTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            override suspend fun getBlacklistedTags(mediaType: DiscoveryMediaType) = emptySet<String>()
+            override suspend fun getRecentExclusionsWithTimestamp(
+                mediaType: DiscoveryMediaType,
+                windowMillis: Long,
+            ): Map<String, Long> = mapOf("cached match" to 1L)
+            override suspend fun getShownWithCount(
+                mediaType: DiscoveryMediaType,
+                windowMillis: Long,
+            ): List<Triple<String, Long, Int>> = emptyList()
+            override suspend fun lastUpdatedAt(mediaType: DiscoveryMediaType): Long? = null
+
+            override suspend fun publication(media: DiscoveryMediaType) =
+                emptyPublication(media).copy(generation = generation, suggestions = stored.value)
+
+            override suspend fun reserveGeneration(
+                media: DiscoveryMediaType,
+                requestId: String,
+                expectedGeneration: Long,
+                configurationKey: String,
+            ): tachiyomi.domain.discovery.model.DiscoveryGenerationToken =
+                tachiyomi.domain.discovery.model.DiscoveryGenerationToken(
+                    mediaType = media,
+                    requestId = requestId,
+                    ownerRevision = 1L,
+                    expectedGeneration = expectedGeneration,
+                    configurationKey = configurationKey,
+                )
+
+            override suspend fun publishGeneration(
+                token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+                prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+            ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
+                generation = token.expectedGeneration + 1
+                val suggestions =
+                    (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
+                        ?.suggestions.orEmpty()
+                stored.value = suggestions
+                return tachiyomi.domain.discovery.model.DiscoveryPublishReceipt.Published(
+                    emptyPublication(token.mediaType).copy(generation = generation, suggestions = suggestions),
+                )
+            }
         }
         val sourceBuilder = object : DiscoveryRowBuilder {
             override val rowType = targetRow
@@ -117,13 +156,14 @@ class DiscoveryConfigurationPipelineTest {
     }
 
     @Test
-    fun `configuration retains an already cached title after successful required verification`(): Unit = runTest {
+    fun `configuration refresh replaces the old pool instead of retaining it`(): Unit = runTest {
         val f = fixture(cachedGenres = emptyList())
         val outcome = f.runner.run(listOf(media), isConfigurationRefresh = true).getValue(media)
+        // The only candidate is the old pool title, so the honest new pool is empty.
         outcome.status shouldBe DiscoveryRunStatus.SUCCESS
-        outcome.persistedRows shouldBe setOf(row)
-        f.stored.value.single().genres shouldBe listOf("Fantasy")
-        f.captured.single().currentFeedCleanTitles shouldBe emptySet()
+        outcome.persistedRows shouldBe emptySet()
+        f.stored.value shouldBe emptyList()
+        f.captured.single().currentFeedCleanTitles shouldBe setOf("cached match")
         f.captured.single().pageOffset shouldBe 1
         f.preferences.manualRefreshCount(media).get() shouldBe 7
         f.preferences.backgroundCycleCount(media).get() shouldBe 9
@@ -135,6 +175,8 @@ class DiscoveryConfigurationPipelineTest {
         f.runner.run(listOf(media), isManualRefresh = true)
         f.captured.single().currentFeedCleanTitles shouldBe setOf("cached match")
         f.captured.single().pageOffset shouldBe manualPageOffset(8)
+        // The old title is filtered out at selection time, so the honest result is an
+        // exhausted (empty) pool rather than a stale backfill.
         f.stored.value shouldBe emptyList()
         f.preferences.manualRefreshCount(media).get() shouldBe 8
     }
@@ -158,10 +200,11 @@ class DiscoveryConfigurationPipelineTest {
     }
 
     @Test
-    fun `preserving incomplete taste does not retain opted-out external cache`(): Unit = runTest {
+    fun `incomplete generation keeps the atomic pool unchanged`(): Unit = runTest {
         val f = fixture(degraded = true, empty = true, targetRow = DiscoveryRowType.TASTE, cacheBound = false)
+        val before = f.stored.value
         f.runner.run(listOf(media), isConfigurationRefresh = true)
-        f.stored.value shouldBe emptyList()
+        f.stored.value shouldBe before
     }
 
     @Test

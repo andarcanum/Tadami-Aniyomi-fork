@@ -4,6 +4,8 @@ import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.service.DiscoveryMutationFence
 import tachiyomi.domain.history.novel.model.NovelHistory
 import tachiyomi.domain.history.novel.model.NovelHistoryUpdate
 import tachiyomi.domain.history.novel.model.NovelHistoryWithRelations
@@ -37,7 +39,7 @@ class NovelHistoryRepositoryImpl(
 
     override suspend fun resetNovelHistory(historyId: Long) {
         try {
-            handler.await { db -> db.novel_historyQueries.resetHistoryById(historyId) }
+            fenced { handler.await { db -> db.novel_historyQueries.resetHistoryById(historyId) } }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -45,7 +47,7 @@ class NovelHistoryRepositoryImpl(
 
     override suspend fun resetHistoryByNovelId(novelId: Long) {
         try {
-            handler.await { db -> db.novel_historyQueries.resetHistoryByNovelId(novelId) }
+            fenced { handler.await { db -> db.novel_historyQueries.resetHistoryByNovelId(novelId) } }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -53,7 +55,7 @@ class NovelHistoryRepositoryImpl(
 
     override suspend fun deleteAllNovelHistory(): Boolean {
         return try {
-            handler.await { db -> db.novel_historyQueries.removeAllHistory() }
+            fenced { handler.await { db -> db.novel_historyQueries.removeAllHistory() } }
             true
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
@@ -63,15 +65,20 @@ class NovelHistoryRepositoryImpl(
 
     override suspend fun upsertNovelHistory(historyUpdate: NovelHistoryUpdate) {
         try {
-            handler.await { db ->
-                db.novel_historyQueries.upsert(
-                    historyUpdate.chapterId,
-                    historyUpdate.readAt,
-                    historyUpdate.sessionReadDuration,
-                )
+            fenced {
+                handler.await { db ->
+                    db.novel_historyQueries.upsert(
+                        historyUpdate.chapterId,
+                        historyUpdate.readAt,
+                        historyUpdate.sessionReadDuration,
+                    )
+                }
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
     }
+
+    private suspend fun <T> fenced(block: suspend () -> T): T =
+        DiscoveryMutationFence.withMutation(DiscoveryMediaType.NOVEL, block)
 }

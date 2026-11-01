@@ -154,21 +154,8 @@ class DiscoveryCoordinator(
 
         val clustered = filterFranchiseClustering(valid, maxPerSeries = 2)
 
-        return if (recentCleanTitles.isNotEmpty()) {
-            val fresh = clustered.filterNot { it.cleanTitle in recentCleanTitles }
-            if (fresh.size >= rowLimit) {
-                fresh.take(rowLimit)
-            } else {
-                // Добираем показанными: дольше всего не показанные первыми; без таймстампа — в конец.
-                // Тайтлы ТЕКУЩЕЙ ленты (ручной рефреш) в добор не возвращаются —
-                // наполнение ряда реально сменяется, а не «новые + всё старое».
-                val stale = clustered
-                    .filter { it.cleanTitle in recentCleanTitles && it.cleanTitle !in currentFeedCleanTitles }
-                    .sortedBy { shownCutoffMap[it.cleanTitle] ?: Long.MAX_VALUE }
-                (fresh + stale).take(rowLimit)
-            }
-        } else {
-            clustered.take(rowLimit)
-        }
+        return clustered
+            .filterNot { it.cleanTitle in recentCleanTitles }
+            .take(rowLimit)
     }
 }
