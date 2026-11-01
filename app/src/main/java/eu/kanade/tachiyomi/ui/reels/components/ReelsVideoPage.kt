@@ -85,12 +85,16 @@ import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedMediaKind
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.ui.reels.ReelsForYou
+import eu.kanade.tachiyomi.ui.reels.ReelsQualityItemState
+import eu.kanade.tachiyomi.ui.reels.ReelsQualityPlayback
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import tachiyomi.domain.reels.anime.model.ReelsQualityPreference
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -102,6 +106,16 @@ fun ReelsVideoPage(
     isMuted: Boolean,
     isLiked: Boolean,
     isHdQuality: Boolean,
+    // Contract v29: this item is owned by the quality controller. While the actual binding
+    // is null the page must not fall back to the item's Source hint on its own.
+    qualityModeEnabled: Boolean = false,
+    qualityPlayback: ReelsQualityPlayback? = null,
+    qualityItemState: ReelsQualityItemState? = null,
+    qualityGlobal: ReelsQualityPreference = ReelsQualityPreference.Source,
+    onSetQualityGlobal: (ReelsQualityPreference) -> Unit = {},
+    onSetQualityOverride: (String, ReelsQualityPreference) -> Unit = { _, _ -> },
+    onClearQualityOverride: (String) -> Unit = {},
+    onQualityDialogOpenChanged: (Boolean) -> Unit = {},
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isLastPage: Boolean = false,
@@ -232,6 +246,13 @@ fun ReelsVideoPage(
     var isBuffering by remember { mutableStateOf(false) }
     var drawerOpen by remember { mutableStateOf(false) }
     var drawerTab by remember { mutableIntStateOf(0) }
+    var qualityDialogMode by remember(item.id) { mutableStateOf<ReelsQualityDialogMode?>(null) }
+    LaunchedEffect(qualityDialogMode != null) {
+        onQualityDialogOpenChanged(qualityDialogMode != null)
+    }
+    DisposableEffect(Unit) {
+        onDispose { onQualityDialogOpenChanged(false) }
+    }
     val seekNotice = rememberReelsSeekNotice(item.id, isActive, isInPictureInPicture)
     val currentSeekNotice by rememberUpdatedState(seekNotice)
     // Measured height of the portrait caption block: the action rail's bottom sits at the
@@ -375,7 +396,8 @@ fun ReelsVideoPage(
     // active clip never rebuilds its player mid-playback.
     var pinnedHd by remember(item.id) { mutableStateOf(isHdQuality) }
     var qualityPinned by remember(item.id) { mutableStateOf(false) }
-    LaunchedEffect(isActive, isPreload, isHdQuality) {
+    LaunchedEffect(isActive, isPreload, isHdQuality, qualityModeEnabled) {
+        if (qualityModeEnabled) return@LaunchedEffect
         if (isActive || isPreload) {
             if (!qualityPinned) {
                 qualityPinned = true
@@ -390,17 +412,24 @@ fun ReelsVideoPage(
         }
     }
 
-    val rawUrl = remember(item, pinnedHd) {
-        // A blank HD variant is absent, not a stream: falling back to the base URL here keeps
-        // the playable-base guarantee instead of asking the resolver for an empty URL.
-        if (pinnedHd) {
+    val qualityUrl = qualityPlayback?.videoUrl.orEmpty()
+    val rawUrl = remember(item, pinnedHd, qualityModeEnabled, qualityUrl) {
+        if (qualityModeEnabled) {
+            qualityUrl
+        } else if (pinnedHd) {
+            // A blank HD variant is absent, not a stream: falling back to the base URL here keeps
+            // the playable-base guarantee instead of asking the resolver for an empty URL.
             item.videoUrlHd?.takeIf { it.isNotBlank() } ?: item.videoUrl
         } else {
             item.videoUrl
         }
     }
-    val mediaPlan = remember(rawUrl, item.id, mediaDescriptor?.lazyResolution, resolveUrl != null) {
-        reelMediaPlan(rawUrl, resolveUrl != null, mediaDescriptor?.lazyResolution != false)
+    val mediaPlan = remember(rawUrl, item.id, mediaDescriptor?.lazyResolution, resolveUrl != null, qualityModeEnabled) {
+        if (qualityModeEnabled && rawUrl.isBlank()) {
+            ReelMediaPlan.WAIT
+        } else {
+            reelMediaPlan(rawUrl, resolveUrl != null, mediaDescriptor?.lazyResolution != false)
+        }
     }
     // Lazy signing: a blank url resolves just-in-time; the player is only built once a real
     // url exists (a blank MediaItem would surface a playback error before signing finishes).
@@ -408,6 +437,7 @@ fun ReelsVideoPage(
     LaunchedEffect(rawUrl, item.id, retrySignal, mediaPlan) {
         when (mediaPlan) {
             ReelMediaPlan.READY -> videoUrl = rawUrl
+            ReelMediaPlan.WAIT -> Unit
             ReelMediaPlan.RESOLVE -> {
                 val resolved = try {
                     resolveUrl?.invoke(item)
@@ -442,7 +472,29 @@ fun ReelsVideoPage(
         FeedMediaKind.VIDEO -> false
         null -> null
     }
-    val cacheKey = cachePrefix?.let { prefix -> "$prefix:${item.id}:${if (pinnedHd) "hd" else "sd"}" }
+    val cacheKey = if (qualityModeEnabled) {
+        qualityPlayback?.cacheKey
+    } else {
+        cachePrefix?.let { prefix -> "$prefix:${item.id}:${if (pinnedHd) "hd" else "sd"}" }
+    }
+    val clipIdentity = if (qualityModeEnabled) {
+        qualityPlayback?.let { "${it.owner.token}:${it.itemId}" }
+    } else {
+        null
+    }
+    val mediaIdentity = if (qualityModeEnabled) qualityPlayback?.cacheKey else null
+    val qualityEntryLabel = qualityPlayback?.decision?.variant?.let { variant ->
+        val shortEdge = listOfNotNull(variant.width, variant.height).minOrNull()?.takeIf { it > 0 }
+        if (variant.isSource) {
+            if (shortEdge != null) {
+                stringResource(AYMR.strings.reels_quality_source_resolution, "${shortEdge}p")
+            } else {
+                stringResource(AYMR.strings.reels_quality_missing_source)
+            }
+        } else {
+            shortEdge?.let { "${it}p" }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -581,6 +633,8 @@ fun ReelsVideoPage(
             isMediaUnplayable = mediaPlan == ReelMediaPlan.UNPLAYABLE,
             isLastPage = isLastPage,
             cacheKey = cacheKey,
+            clipIdentity = clipIdentity,
+            mediaIdentity = mediaIdentity,
             videoDescription = listOfNotNull(item.author, item.title).joinToString(" — ").ifBlank { null },
             seekToFraction = seekFraction,
             seekToPositionMs = if (isActive && !initialSeekPositionApplied) initialSeekPositionMs else null,
@@ -796,6 +850,26 @@ fun ReelsVideoPage(
                         },
                     ),
             ) {
+                qualityDialogMode?.let { mode ->
+                    ReelsVideoQualityDialog(
+                        mode = mode,
+                        itemState = qualityItemState,
+                        global = qualityGlobal,
+                        onSelect = { preference ->
+                            if (mode == ReelsQualityDialogMode.VIDEO) {
+                                onSetQualityOverride(item.id, preference)
+                            } else {
+                                onSetQualityGlobal(preference)
+                            }
+                            qualityDialogMode = null
+                        },
+                        onUseDefault = {
+                            onClearQualityOverride(item.id)
+                            qualityDialogMode = null
+                        },
+                        onDismiss = { qualityDialogMode = null },
+                    )
+                }
                 if (isLandscape) {
                     // Landscape TopBar
                     AnimatedVisibility(
@@ -891,6 +965,12 @@ fun ReelsVideoPage(
                             isMuted = isMuted,
                             onToggleMute = onToggleMute,
                             onLockScreen = onToggleTouchLock,
+                            qualityLabel = qualityEntryLabel?.let { "$it ▾" },
+                            onQualityClick = {
+                                if (qualityModeEnabled) {
+                                    qualityDialogMode = ReelsQualityDialogMode.VIDEO
+                                }
+                            },
                             posterUrl = item.posterUrlVertical ?: item.posterUrl,
                             onSeek = { frac ->
                                 seekFraction = frac
@@ -915,6 +995,10 @@ fun ReelsVideoPage(
                             currentPlaylistIndex = playlistIndex,
                             isHdQuality = isHdQuality,
                             onToggleQuality = onToggleQuality,
+                            qualityModeEnabled = qualityModeEnabled,
+                            qualityLabel = qualityEntryLabel,
+                            onOpenQualityVideo = { qualityDialogMode = ReelsQualityDialogMode.VIDEO },
+                            onOpenQualityDefault = { qualityDialogMode = ReelsQualityDialogMode.GLOBAL },
                             isCropMode = isCropMode,
                             onToggleCropMode = onToggleCropMode,
                             playbackSpeed = playbackSpeed,
@@ -1184,6 +1268,7 @@ internal fun reelsHoldCancelledByDrift(
 internal enum class ReelMediaPlan {
     READY,
     RESOLVE,
+    WAIT,
     UNPLAYABLE,
 }
 

@@ -108,6 +108,11 @@ fun ReelsPlayerView(
     // Stable progressive-stream cache key (sourceId:videoId:quality) so re-watches hit the
     // disk cache even after signed CDN URLs rotate.
     cacheKey: String? = null,
+    // Contract v29: identity of the clip (dwell/visit) and of the actual media bytes. A
+    // quality switch must replace the player source even when the URL string is unchanged;
+    // the clip identity keeps dwell/visit scoped to the item, not the rendition.
+    clipIdentity: String? = null,
+    mediaIdentity: String? = null,
     // TalkBack description of the playing video (title/author from the item).
     videoDescription: String? = null,
     onDurationKnown: (Float) -> Unit = {},
@@ -267,7 +272,7 @@ fun ReelsPlayerView(
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
     // P05: playback visibility time for the minimum-dwell rule — wall clock, pauses and
     // buffering no longer count (see reelsEndHold).
-    val dwellClock = remember(videoUrl) { ReelsWatchClock() }
+    val dwellClock = remember(clipIdentity ?: videoUrl) { ReelsWatchClock() }
     // Non-null while holding a finished still/short reel on screen before advancing.
     var endHold by remember(videoUrl) { mutableStateOf<ReelsEndHold?>(null) }
     var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
@@ -287,6 +292,7 @@ fun ReelsPlayerView(
     // toggle) is handled explicitly inside the lifecycle effect instead of via the
     // DisposableEffect disposal order.
     var createdForUrl by remember { mutableStateOf<String?>(null) }
+    var createdForMediaIdentity by remember { mutableStateOf<String?>(null) }
 
     fun updateMatrix(tv: TextureView?, vw: Int, vh: Int, crop: Boolean) {
         if (tv == null || vw <= 0 || vh <= 0) return
@@ -326,7 +332,7 @@ fun ReelsPlayerView(
     }
 
     // Player lifecycle: create for active or preloaded pages, release otherwise.
-    LaunchedEffect(videoUrl, isActive, isPreload) {
+    LaunchedEffect(videoUrl, isActive, isPreload, mediaIdentity) {
         val needed = isActive || isPreload
         if (!needed) {
             dwellClock.stop(SystemClock.elapsedRealtime())
@@ -336,12 +342,16 @@ fun ReelsPlayerView(
             }
             player = null
             createdForUrl = null
+            createdForMediaIdentity = null
             isFirstFrameRendered = false
             endHold = null
             return@LaunchedEffect
         }
 
-        if (createdForUrl != null && createdForUrl != videoUrl) {
+        if (
+            createdForUrl != null &&
+            (createdForUrl != videoUrl || createdForMediaIdentity != mediaIdentity)
+        ) {
             // Quality switch within the page: capture the position BEFORE releasing so it
             // seeks back once the new source reaches STATE_READY.
             player?.let { p ->
@@ -517,6 +527,7 @@ fun ReelsPlayerView(
                 }
             player = exoPlayer
             createdForUrl = videoUrl
+            createdForMediaIdentity = mediaIdentity
             // P03: a fresh instance has not confirmed playback yet. Without this the feed
             // would keep the previous reel's running state while the new one buffers.
             onPlaybackRunningChanged(false)

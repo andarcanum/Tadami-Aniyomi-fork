@@ -57,6 +57,7 @@ import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.roundToInt
 
@@ -74,6 +75,10 @@ fun ReelsAuroraFrostDrawer(
     currentPlaylistIndex: Int = 0,
     isHdQuality: Boolean = true,
     onToggleQuality: () -> Unit = {},
+    qualityModeEnabled: Boolean = false,
+    qualityLabel: String? = null,
+    onOpenQualityVideo: () -> Unit = {},
+    onOpenQualityDefault: () -> Unit = {},
     isCropMode: Boolean = false,
     onToggleCropMode: () -> Unit = {},
     playbackSpeed: Float = 1f,
@@ -131,6 +136,10 @@ fun ReelsAuroraFrostDrawer(
             0 -> PlayerTabContent(
                 isHdQuality = isHdQuality,
                 onToggleQuality = onToggleQuality,
+                qualityModeEnabled = qualityModeEnabled,
+                qualityLabel = qualityLabel,
+                onOpenQualityVideo = onOpenQualityVideo,
+                onOpenQualityDefault = onOpenQualityDefault,
                 isCropMode = isCropMode,
                 onToggleCropMode = onToggleCropMode,
                 playbackSpeed = playbackSpeed,
@@ -173,6 +182,10 @@ fun ReelsAuroraFrostDrawer(
 private fun PlayerTabContent(
     isHdQuality: Boolean,
     onToggleQuality: () -> Unit,
+    qualityModeEnabled: Boolean,
+    qualityLabel: String?,
+    onOpenQualityVideo: () -> Unit,
+    onOpenQualityDefault: () -> Unit,
     isCropMode: Boolean,
     onToggleCropMode: () -> Unit,
     playbackSpeed: Float,
@@ -194,13 +207,32 @@ private fun PlayerTabContent(
     ) {
         // Card: Видео и Качество
         FrostCard(title = "ВИДЕО И КАЧЕСТВО") {
-            FrostSwitchRow(
-                icon = Icons.Filled.HighQuality,
-                title = "Высокое качество (HD)",
-                subtitle = if (isHdQuality) "1080p 60fps • Максимальный битрейт" else "480p SD • Экономия трафика",
-                checked = isHdQuality,
-                onCheckedChange = onToggleQuality,
-            )
+            if (qualityModeEnabled) {
+                FrostNavRow(
+                    icon = Icons.Filled.HighQuality,
+                    title = stringResource(AYMR.strings.reels_quality_video),
+                    subtitle = qualityLabel ?: stringResource(AYMR.strings.reels_quality_loading),
+                    onClick = onOpenQualityVideo,
+                )
+                FrostNavRow(
+                    icon = Icons.Outlined.AspectRatio,
+                    title = stringResource(AYMR.strings.reels_quality_default),
+                    subtitle = stringResource(AYMR.strings.reels_quality_global_description),
+                    onClick = onOpenQualityDefault,
+                )
+            } else {
+                FrostSwitchRow(
+                    icon = Icons.Filled.HighQuality,
+                    title = "Высокое качество (HD)",
+                    subtitle = if (isHdQuality) {
+                        "1080p 60fps • Максимальный битрейт"
+                    } else {
+                        "480p SD • Экономия трафика"
+                    },
+                    checked = isHdQuality,
+                    onCheckedChange = onToggleQuality,
+                )
+            }
             FrostSwitchRow(
                 icon = Icons.Outlined.AspectRatio,
                 title = "Режим масштаба кадра",
@@ -621,6 +653,48 @@ private fun FrostCard(
             letterSpacing = 0.5.sp,
         )
         content()
+    }
+}
+
+@Composable
+private fun FrostNavRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = AuroraTheme.colors.accent,
+            modifier = Modifier.size(16.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = subtitle,
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 11.sp,
+            )
+        }
+        Text(
+            text = "›",
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 18.sp,
+        )
     }
 }
 

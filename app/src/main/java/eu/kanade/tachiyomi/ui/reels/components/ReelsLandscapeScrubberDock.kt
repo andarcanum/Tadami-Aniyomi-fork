@@ -75,6 +75,8 @@ fun ReelsLandscapeScrubberDock(
     isMuted: Boolean,
     onToggleMute: () -> Unit,
     onLockScreen: () -> Unit,
+    qualityLabel: String? = null,
+    onQualityClick: (() -> Unit)? = null,
     onSeek: (Float) -> Unit,
     onScrubStart: () -> Unit = {},
     bufferFraction: Float = 0f,
@@ -283,11 +285,15 @@ fun ReelsLandscapeScrubberDock(
         // Total Time Badge
         TimeBadge(timeText = formatSeconds(totalSec))
 
-        // Quick Thumb Dock Actions (Mute & Lock)
+        // Quick Thumb Dock Actions (Quality, Mute & Lock)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            if (qualityLabel != null && onQualityClick != null) {
+                QualityDockButton(label = qualityLabel, onClick = onQualityClick)
+            }
+
             // Mute Button
             DockCircularButton(
                 icon = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
@@ -304,6 +310,26 @@ fun ReelsLandscapeScrubberDock(
                 onClick = onLockScreen,
             )
         }
+    }
+}
+
+@Composable
+private fun QualityDockButton(label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.45f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

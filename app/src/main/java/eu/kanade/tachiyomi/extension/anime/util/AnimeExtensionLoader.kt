@@ -56,13 +56,13 @@ internal object AnimeExtensionLoader {
     /**
      * Highest `tachiyomix.extensionLib` the host accepts.
      *
-     * Raised to 28.0 by the reels feed-contract v28 capability
-     * (`AnimeFeedRoundRobinSource`): a plugin that *implements* a new interface links
+     * Raised to 29.0 by the reels feed-contract v29 capability
+     * (`AnimeFeedVideoQualitySource`): a plugin that *implements* a new interface links
      * against it, so an older host must refuse that plugin instead of failing to load its
      * class. Raising the ceiling is non-breaking for every already-published plugin — their
-     * declared lib versions stay inside `12.0..28.0`.
+     * declared lib versions stay inside `12.0..29.0`.
      */
-    const val LIB_VERSION_MAX = 28.0
+    const val LIB_VERSION_MAX = 29.0
 
     val SUPPORTED_LIB_VERSIONS: ClosedFloatingPointRange<Double> = LIB_VERSION_MIN..LIB_VERSION_MAX
 

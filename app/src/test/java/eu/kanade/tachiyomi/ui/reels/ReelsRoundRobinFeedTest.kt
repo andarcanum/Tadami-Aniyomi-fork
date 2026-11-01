@@ -689,11 +689,15 @@ class ReelsRoundRobinFeedTest {
     private class FakeOfflineStore : ReelsOfflineStore {
         override fun isStored(sourceId: Long, videoId: String): Boolean = false
         override fun localUrl(sourceId: Long, videoId: String): String? = null
+        override fun storedQuality(sourceId: Long, videoId: String): ReelsStoredVideoQuality? = null
         override fun storedPairs(): Set<Pair<Long, String>> = emptySet()
         override fun usedBytes(): Long = 0L
         override suspend fun download(
             item: ShortVideoItem,
             sourceId: Long,
+        ): ReelsOfflineStore.DownloadResult = ReelsOfflineStore.DownloadResult.SAVED
+        override suspend fun downloadSelected(
+            snapshot: ReelsQualityDownloadSnapshot,
         ): ReelsOfflineStore.DownloadResult = ReelsOfflineStore.DownloadResult.SAVED
         override suspend fun delete(sourceId: Long, videoId: String): Boolean = false
         override suspend fun deleteBySource(sourceId: Long): Int = 0

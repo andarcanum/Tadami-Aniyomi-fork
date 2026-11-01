@@ -21,10 +21,13 @@ interface ReelsOfflineStore {
     /** Playable file:// URL of a stored copy, or null. */
     fun localUrl(sourceId: Long, videoId: String): String?
 
+    /** Quality of a completed local copy, or null when unknown/stale. */
+    fun storedQuality(sourceId: Long, videoId: String): ReelsStoredVideoQuality?
+
     /** All stored (sourceId, videoId) pairs. */
     fun storedPairs(): Set<Pair<Long, String>>
 
-    /** Total bytes occupied by stored copies (quota visibility, audit H8). */
+    /** Total bytes occupied by media, quality sidecars and retained transfer files. */
     fun usedBytes(): Long
 
     /**
@@ -35,9 +38,12 @@ interface ReelsOfflineStore {
      */
     suspend fun download(item: ShortVideoItem, sourceId: Long): DownloadResult
 
+    /** Downloads the frozen quality selection (contract v29) with its sidecar metadata. */
+    suspend fun downloadSelected(snapshot: ReelsQualityDownloadSnapshot): DownloadResult
+
     suspend fun delete(sourceId: Long, videoId: String): Boolean
 
-    /** Removes every copy of one source; returns the deleted file count (cleanup cascade). */
+    /** Removes every media copy and its metadata subtree; returns the media-copy count. */
     suspend fun deleteBySource(sourceId: Long): Int
 
     /** Removes ALL copies; returns the freed bytes (user-initiated storage cleanup). */

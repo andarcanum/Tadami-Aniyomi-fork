@@ -106,6 +106,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestion
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -117,6 +118,10 @@ fun ReelsTopBar(
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isHdQuality: Boolean,
+    qualityModeEnabled: Boolean = false,
+    qualityLabel: String? = null,
+    onOpenQualityVideo: () -> Unit = {},
+    onOpenQualityDefault: () -> Unit = {},
     dataSaverEnabled: Boolean,
     preloadEnabled: Boolean,
     preloadWifiOnly: Boolean,
@@ -576,6 +581,10 @@ fun ReelsTopBar(
                             isAutoAdvance = isAutoAdvance,
                             isCropMode = isCropMode,
                             isHdQuality = isHdQuality,
+                            qualityModeEnabled = qualityModeEnabled,
+                            qualityLabel = qualityLabel,
+                            onOpenQualityVideo = onOpenQualityVideo,
+                            onOpenQualityDefault = onOpenQualityDefault,
                             dataSaverEnabled = dataSaverEnabled,
                             preloadEnabled = preloadEnabled,
                             preloadWifiOnly = preloadWifiOnly,
@@ -1014,6 +1023,10 @@ private fun ReelsMoreMenu(
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isHdQuality: Boolean,
+    qualityModeEnabled: Boolean = false,
+    qualityLabel: String? = null,
+    onOpenQualityVideo: () -> Unit = {},
+    onOpenQualityDefault: () -> Unit = {},
     dataSaverEnabled: Boolean,
     preloadEnabled: Boolean,
     preloadWifiOnly: Boolean,
@@ -1206,28 +1219,65 @@ private fun ReelsMoreMenu(
                 onClick = onToggleCropMode,
             )
             MoreMenuSection(stringResource(MR.strings.reels_menu_section_quality))
-            MoreMenuRow(
-                icon = {
-                    Icon(
-                        Icons.Outlined.HighQuality,
-                        null,
-                        tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-                label = stringResource(MR.strings.reels_quality),
-                // Audit H11: show the EFFECTIVE quality — with data saver on, HD silently
-                // downgrades to SD on mobile networks and the menu must not lie about it.
-                value = stringResource(
-                    when {
-                        isHdQuality && dataSaverEnabled -> MR.strings.reels_quality_hd_saver
-                        isHdQuality -> MR.strings.reels_quality_hd
-                        else -> MR.strings.reels_quality_sd
+            if (qualityModeEnabled) {
+                MoreMenuRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.HighQuality,
+                            null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp),
+                        )
                     },
-                ),
-                checked = null,
-                onClick = onToggleQuality,
-            )
+                    label = stringResource(AYMR.strings.reels_quality_video),
+                    value = qualityLabel,
+                    checked = null,
+                    onClick = {
+                        onOpenQualityVideo()
+                        onDismiss()
+                    },
+                )
+                MoreMenuRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.AspectRatio,
+                            null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    label = stringResource(AYMR.strings.reels_quality_default),
+                    value = null,
+                    checked = null,
+                    onClick = {
+                        onOpenQualityDefault()
+                        onDismiss()
+                    },
+                )
+            } else {
+                MoreMenuRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.HighQuality,
+                            null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    label = stringResource(MR.strings.reels_quality),
+                    // Audit H11: show the EFFECTIVE quality — with data saver on, HD silently
+                    // downgrades to SD on mobile networks and the menu must not lie about it.
+                    value = stringResource(
+                        when {
+                            isHdQuality && dataSaverEnabled -> MR.strings.reels_quality_hd_saver
+                            isHdQuality -> MR.strings.reels_quality_hd
+                            else -> MR.strings.reels_quality_sd
+                        },
+                    ),
+                    checked = null,
+                    onClick = onToggleQuality,
+                )
+            }
             MoreMenuRow(
                 icon = {
                     Icon(

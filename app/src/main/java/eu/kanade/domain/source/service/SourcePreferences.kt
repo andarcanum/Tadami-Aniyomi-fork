@@ -187,6 +187,13 @@ class SourcePreferences(
     fun reelsCropMode() = preferenceStore.getBoolean("pref_reels_crop_mode", false)
     fun reelsMuted() = preferenceStore.getBoolean("pref_reels_muted", false)
     fun reelsHdQuality() = preferenceStore.getBoolean("pref_reels_hd_quality", true)
+
+    // Telegram quality preference (contract v29). Stored per source; Source is the initial
+    // value and the global preference is not a ceiling.
+    fun reelsVideoQuality(sourceId: Long) = preferenceStore.getString(
+        "pref_reels_video_quality_$sourceId",
+        "source",
+    )
     fun reelsDataSaverMetered() = preferenceStore.getBoolean("pref_reels_data_saver_metered", true)
     fun reelsPreloadEnabled() = preferenceStore.getBoolean("pref_reels_preload", true)
     fun reelsPreloadWifiOnly() = preferenceStore.getBoolean("pref_reels_preload_wifi_only", false)

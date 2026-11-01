@@ -3312,5 +3312,19 @@
     <string name="debug_info_profile_pending">Ожидает компиляции</string>
     <string name="debug_info_profile_not_embedded">Встроенный профиль отсутствует</string>
     <string name="debug_info_profile_unknown">Неизвестный код %1$d</string>
+    <string name="reels_quality_default">Качество по умолчанию</string>
+    <string name="reels_quality_video">Качество видео</string>
+    <string name="reels_quality_use_default">Использовать по умолчанию</string>
+    <string name="reels_quality_source_resolution">Source · %1$s</string>
+    <string name="reels_quality_missing_source">Source (разрешение неизвестно)</string>
+    <string name="reels_quality_loading">Загрузка вариантов…</string>
+    <string name="reels_quality_switch_failed">Не удалось переключить качество</string>
+    <string name="reels_quality_offline_unknown">Качество офлайн-копии неизвестно</string>
+    <string name="reels_quality_manual">Выбрано для этого ролика</string>
+    <string name="reels_quality_global_description">Применяется ко всем роликам Telegram</string>
+    <string name="reels_quality_source_only">Доступен только Source</string>
+    <string name="reels_quality_unavailable">Качество недоступно</string>
+    <string name="reels_quality_cancel">Отмена</string>
+    <string name="reels_quality_source">Source</string>
 </resources>
 

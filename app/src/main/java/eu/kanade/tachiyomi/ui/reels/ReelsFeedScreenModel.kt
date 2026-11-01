@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedReplaySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedRoundRobinSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedVideoQualitySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeReelsFeedbackSource
@@ -88,6 +89,7 @@ import tachiyomi.domain.reels.anime.model.ReelsCandidate
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.model.ReelsHiddenEntry
+import tachiyomi.domain.reels.anime.model.ReelsQualityPreference
 import tachiyomi.domain.reels.anime.model.ReelsRoundRobinStop
 import tachiyomi.domain.reels.anime.model.ReelsSessionKey
 import tachiyomi.domain.reels.anime.model.ReelsWatchEntry
@@ -259,6 +261,10 @@ class ReelsFeedScreenModel(
     }
 
     private var source: AnimeFeedSource? = null
+
+    private val qualityController = ReelsQualityController(sourcePreferences)
+    private var qualitySessionJob: Job? = null
+    private var qualityForceSd = false
 
     // Guards against a stale in-flight load completing after a reset/source switch and
     // appending old videos (or overwriting the cursor) on top of the freshly reset feed.
@@ -926,6 +932,11 @@ class ReelsFeedScreenModel(
     }
 
     init {
+        screenModelScope.launch(Dispatchers.Main.immediate) {
+            qualityController.state.collectLatest { qualityState ->
+                mutableState.update { it.copy(qualityState = qualityState) }
+            }
+        }
         // Reactive albums-collection marks (report fix): saves from any screen (search cards,
         // album screen, niche row) update the saved set everywhere without manual reloads.
         startSavedAlbumsSubscription()
@@ -1069,6 +1080,7 @@ class ReelsFeedScreenModel(
 
     fun switchSource(newSourceId: Long) {
         if (state.value.isOffline) return
+        stopQualitySession()
         // A source switch replaces the whole feed: stop the round-robin actor and drop its
         // projection before the new source (which may not even implement v28) takes over.
         stopRoundRobin(clearProjection = true)
@@ -1247,6 +1259,7 @@ class ReelsFeedScreenModel(
             loadPersistedHidden(newSourceId)
             loadSearchHints()
             if (mode == FeedMode.NICHE) loadSubscribedCategoryState()
+            bindQualitySession(rawSource, newSourceId)
             buildFiltersAndStartFeed(rawSource, newSourceId)
         } else {
             mutableState.update {
@@ -4436,6 +4449,117 @@ class ReelsFeedScreenModel(
             }
         }
         loadNextPageIfNeeded(index)
+        prepareQualityForIndex(index)
+    }
+
+    fun qualityItemState(itemId: String): ReelsQualityItemState? = qualityController.itemState(itemId)
+
+    fun qualityPlayback(itemId: String): ReelsQualityPlayback? = qualityController.playback(itemId)
+
+    fun captureQualityDownload(
+        item: ShortVideoItem,
+        sourceId: Long,
+        headers: Map<String, String>,
+    ): ReelsQualityDownloadSnapshot? {
+        val owner = qualityController.state.value.owner ?: return null
+        if (owner.sourceId != sourceId) return null
+        return qualityController.captureDownload(owner, item, headers)
+    }
+
+    suspend fun rehydrateQualityDownload(
+        snapshot: ReelsQualityDownloadSnapshot,
+        resumeFrom: Long,
+    ): ReelsQualityDownloadSnapshot? = qualityController.rehydrateDownload(snapshot, resumeFrom)
+
+    fun setQualityGlobal(value: ReelsQualityPreference) {
+        val owner = qualityController.state.value.owner ?: return
+        qualityController.setGlobal(owner, value)
+        prepareQualityForIndex(state.value.activeIndex)
+    }
+
+    fun setQualityOverride(itemId: String, value: ReelsQualityPreference) {
+        val owner = qualityController.state.value.owner ?: return
+        qualityController.setOverride(owner, itemId, value)
+        prepareQualityForIndex(state.value.activeIndex)
+    }
+
+    fun clearQualityOverride(itemId: String) {
+        val owner = qualityController.state.value.owner ?: return
+        qualityController.clearOverride(owner, itemId)
+        prepareQualityForIndex(state.value.activeIndex)
+    }
+
+    fun isQualityModeItem(itemId: String): Boolean {
+        val quality = state.value.qualityState ?: return false
+        if (quality.owner == null) return false
+        if (quality.items[itemId]?.catalogStatus == ReelsQualityCatalogStatus.UNSUPPORTED) return false
+        return qualityController.supports(itemId)
+    }
+
+    fun onQualityForceSdChanged(forceSd: Boolean) {
+        val changed = qualityForceSd != forceSd
+        qualityForceSd = forceSd
+        if (!changed) return
+        val index = state.value.activeIndex
+        val item = state.value.items.getOrNull(index) ?: return
+        if (qualityController.playback(item.id) == null) {
+            prepareQualityForIndex(index)
+        }
+    }
+
+    fun prepareQualityForIndex(index: Int) {
+        val item = state.value.items.getOrNull(index) ?: return
+        val owner = qualityController.state.value.owner ?: return
+        if (!qualityController.supports(item.id)) return
+        screenModelScope.launch(ioDispatcher) {
+            qualityController.prepare(
+                expectedOwner = owner,
+                item = item,
+                forceSd = qualityForceSd,
+                recheckOnActivation = false,
+            )
+        }
+    }
+
+    private fun bindQualitySession(rawSource: AnimeFeedSource, sourceId: Long) {
+        qualitySessionJob?.cancel()
+        qualityController.detach()
+        if (rawSource !is AnimeFeedVideoQualitySource || state.value.isOffline) return
+        qualitySessionJob = screenModelScope.launch(ioDispatcher) {
+            val initial = runCatching { rawSource.prepareReplay() }.getOrNull()
+            if (state.value.currentSourceId != sourceId) return@launch
+            if (initial != null) attachQuality(rawSource, sourceId, initial.accountId)
+            rawSource.replayContextChanges.collectLatest { context ->
+                if (state.value.currentSourceId != sourceId) return@collectLatest
+                if (context == null) {
+                    qualityController.detach()
+                } else {
+                    attachQuality(rawSource, sourceId, context.accountId)
+                }
+            }
+        }
+    }
+
+    private fun attachQuality(
+        rawSource: AnimeFeedVideoQualitySource,
+        sourceId: Long,
+        accountId: String,
+    ) {
+        if (accountId.isBlank()) return
+        val current = qualityController.state.value.owner
+        val owner = if (current?.sourceId == sourceId && current.accountId == accountId) {
+            current
+        } else {
+            ReelsQualityOwner(UUID.randomUUID().toString(), sourceId, accountId)
+        }
+        qualityController.attach(rawSource, owner)
+        prepareQualityForIndex(state.value.activeIndex)
+    }
+
+    private fun stopQualitySession() {
+        qualitySessionJob?.cancel()
+        qualitySessionJob = null
+        qualityController.detach()
     }
 
     fun onPageErrorShown() {
@@ -4492,6 +4616,7 @@ class ReelsFeedScreenModel(
      * RR/session state: re-entering the same context resumes the round.
      */
     override fun onDispose() {
+        stopQualitySession()
         stopRoundRobin(clearProjection = false)
         super.onDispose()
     }
@@ -4621,6 +4746,9 @@ class ReelsFeedScreenModel(
         // every legacy route. The View captures it from the same State version and passes
         // it back with every player callback; the pager keys pages by owner.token + item.id.
         val roundRobinOwner: ReelsRoundRobinRenderOwner? = null,
+        // Contract v29 quality projection for the current source/session. Null before a
+        // quality-capable source is attached; items are keyed by their stable item id.
+        val qualityState: ReelsQualityState? = null,
         val searchQuery: String = "",
         // Contract v23 album search: the source answers search with a paginated album
         // directory; the screen renders album cards instead of the video pager.

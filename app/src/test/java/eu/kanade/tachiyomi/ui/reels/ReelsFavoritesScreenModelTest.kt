@@ -235,6 +235,8 @@ class ReelsFavoritesScreenModelTest {
 
         override fun localUrl(sourceId: Long, videoId: String): String? = stored[sourceId to videoId]
 
+        override fun storedQuality(sourceId: Long, videoId: String): ReelsStoredVideoQuality? = null
+
         override fun storedPairs(): Set<Pair<Long, String>> = stored.keys
 
         override fun usedBytes(): Long = stored.size * 1024L
@@ -243,6 +245,10 @@ class ReelsFavoritesScreenModelTest {
             stored[sourceId to item.id] = "file:///offline/${sourceId}_${item.id}.mp4"
             return ReelsOfflineStore.DownloadResult.SAVED
         }
+
+        override suspend fun downloadSelected(
+            snapshot: ReelsQualityDownloadSnapshot,
+        ): ReelsOfflineStore.DownloadResult = download(snapshot.item, snapshot.owner.sourceId)
 
         override suspend fun delete(sourceId: Long, videoId: String): Boolean =
             stored.remove(sourceId to videoId) != null

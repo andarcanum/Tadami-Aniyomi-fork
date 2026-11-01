@@ -136,9 +136,11 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsEmptySearchState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsLoginDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsNextPageLoader
+import eu.kanade.tachiyomi.ui.reels.components.ReelsQualityDialogMode
 import eu.kanade.tachiyomi.ui.reels.components.ReelsSourcePickerSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsTopBar
 import eu.kanade.tachiyomi.ui.reels.components.ReelsVideoPage
+import eu.kanade.tachiyomi.ui.reels.components.ReelsVideoQualityDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsWebLoginDialog
 import eu.kanade.tachiyomi.ui.reels.player.clearReelsVideoCache
 import eu.kanade.tachiyomi.ui.reels.player.prewarmReelHead
@@ -152,6 +154,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.domain.reels.anime.model.ReelsQualityPreference
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -184,6 +187,7 @@ private data class ReelsExportRequest(
     val item: ShortVideoItem,
     val sourceId: Long,
     val headers: Map<String, String>,
+    val qualitySnapshot: ReelsQualityDownloadSnapshot? = null,
 ) : Serializable {
     val key: String get() = reelsDownloadKey(sourceId, item.id)
 }
@@ -195,6 +199,7 @@ private data class ReelsExportState(
     val uri: Uri? = null,
     val operation: Any? = null,
     val partial: Boolean = false,
+    val qualitySnapshot: ReelsQualityDownloadSnapshot? = null,
 )
 
 data class ReelsFeedScreen(
@@ -403,6 +408,7 @@ data class ReelsFeedScreen(
                 bytes = resumeFrom,
                 uri = resumeUri,
                 total = exportStates[request.key]?.total,
+                qualitySnapshot = request.qualitySnapshot,
             )
             downloadJobs[request.key] = coroutineScope.launch {
                 val result = try {
@@ -436,6 +442,7 @@ data class ReelsFeedScreen(
                             bytes = result.bytes,
                             inProgress = false,
                             uri = result.uri,
+                            qualitySnapshot = request.qualitySnapshot,
                         )
                         if (destination == null) downloadSavedMessage else downloadFileSavedMessage
                     }
@@ -446,6 +453,7 @@ data class ReelsFeedScreen(
                             inProgress = false,
                             uri = result.uri,
                             partial = true,
+                            qualitySnapshot = request.qualitySnapshot,
                         )
                         downloadPausedMessage
                     }
@@ -510,8 +518,29 @@ data class ReelsFeedScreen(
             }
             exportStates[key] = previous?.copy(inProgress = true, partial = false) ?: ReelsExportState()
             val headers = HashMap(screenModel.downloadHeaders(sourceId))
+            val baseSnapshot = if (resumeUri != null) {
+                previous?.qualitySnapshot
+            } else {
+                screenModel.captureQualityDownload(item, sourceId, headers)
+            }
             val descriptor = screenModel.mediaDescriptor(item, sourceId)
             coroutineScope.launch {
+                val qualitySnapshot = if (resumeFrom > 0L && baseSnapshot != null) {
+                    val rehydrated = screenModel.rehydrateQualityDownload(baseSnapshot, resumeFrom)
+                    if (rehydrated == null) {
+                        exportStates[key] = previous ?: ReelsExportState()
+                        snackbarHostState.showSnackbar(downloadFailedMessage)
+                        return@launch
+                    }
+                    rehydrated
+                } else {
+                    baseSnapshot
+                }
+                if (qualitySnapshot == null && screenModel.isQualityModeItem(item.id)) {
+                    exportStates[key] = previous ?: ReelsExportState()
+                    snackbarHostState.showSnackbar(downloadFailedMessage)
+                    return@launch
+                }
                 if (previous != null && previous.uri != null && resumeUri == null) {
                     val uri = previous.uri
                     val exists = withContext(Dispatchers.IO) {
@@ -544,8 +573,9 @@ data class ReelsFeedScreen(
                         snackbarHostState.showSnackbar(downloadUnsupportedMessage)
                         return@launch
                     }
-                    val url = (if (hd) item.videoUrlHd?.takeIf { it.isNotBlank() } ?: item.videoUrl else item.videoUrl)
-                        .takeIf { it.isNotBlank() }
+                    val url = qualitySnapshot?.item?.videoUrl?.takeIf { it.isNotBlank() }
+                        ?: (if (hd) item.videoUrlHd?.takeIf { it.isNotBlank() } ?: item.videoUrl else item.videoUrl)
+                            .takeIf { it.isNotBlank() }
                         ?: screenModel.resolvePlaybackUrl(item, hd, sourceId)
                     if (url.isNullOrBlank()) {
                         clearDownload(key)
@@ -558,7 +588,12 @@ data class ReelsFeedScreen(
                         snackbarHostState.showSnackbar(downloadUnsupportedMessage)
                         return@launch
                     }
-                    val request = ReelsExportRequest(item.copy(videoUrl = url, videoUrlHd = null), sourceId, headers)
+                    val request = ReelsExportRequest(
+                        item = qualitySnapshot?.item ?: item.copy(videoUrl = url, videoUrlHd = null),
+                        sourceId = sourceId,
+                        headers = headers,
+                        qualitySnapshot = qualitySnapshot,
+                    )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         performDownload(request, resumeFrom = resumeFrom, resumeUri = resumeUri)
                     } else {
@@ -653,6 +688,10 @@ data class ReelsFeedScreen(
         var chromeVisible by rememberSaveable { mutableStateOf(true) }
         // Device UX: the ⋮ settings block holds playback and pins the chrome while open.
         var moreMenuOpen by rememberSaveable { mutableStateOf(false) }
+        var qualityDialogOpen by remember { mutableStateOf(false) }
+        var portraitQualityDialogMode by remember { mutableStateOf<ReelsQualityDialogMode?>(null) }
+        var portraitQualityItemId by remember { mutableStateOf<String?>(null) }
+        val qualityDialogVisible = qualityDialogOpen || portraitQualityDialogMode != null
         // The HOME-gesture handler runs outside composition: this ref keeps the PiP params
         // tied to the live crop mode.
         val currentCropMode by rememberUpdatedState(state.isCropMode)
@@ -681,6 +720,7 @@ data class ReelsFeedScreen(
         val systemChromeVisible = reelsSystemChromeVisible(
             chromeVisible = chromeVisible,
             moreMenuOpen = moreMenuOpen,
+            qualityDialogOpen = qualityDialogVisible,
             isSearchBarOpen = state.isSearchBarOpen,
             isFilterDialogOpen = state.isFilterDialogOpen,
             isSourcePickerOpen = state.isSourcePickerOpen,
@@ -824,9 +864,10 @@ data class ReelsFeedScreen(
         // Device UX: opening the ⋮ settings block pauses playback and pins the chrome;
         // closing resumes playback (unless the user paused deliberately) and the auto-hide
         // countdown starts again on the next effect pass.
-        LaunchedEffect(moreMenuOpen) {
-            screenModel.setSettingsHold(moreMenuOpen)
-            if (moreMenuOpen) chromeVisible = true
+        LaunchedEffect(moreMenuOpen, qualityDialogVisible) {
+            val hold = moreMenuOpen || qualityDialogVisible
+            screenModel.setSettingsHold(hold)
+            if (hold) chromeVisible = true
         }
 
         // A fresh full-feed error surfaces the chrome immediately: retry and the source
@@ -958,9 +999,23 @@ data class ReelsFeedScreen(
                     // PiP shape follows the settled reel, including one whose player already
                     // reported its frame while the page was only preloaded.
                     LaunchedEffect(pagerState.settledPage, state.items) {
-                        val settledId = state.items.getOrNull(pagerState.settledPage)?.id
+                        val settledId = state.items.getOrNull(state.activeIndex)?.id
                         activeVideoLandscape = settledId?.let(videoOrientations::get)
                         activeVideoSize = settledId?.let(videoSizes::get)
+                    }
+
+                    LaunchedEffect(state.dataSaverMetered, networkStatus.metered) {
+                        screenModel.onQualityForceSdChanged(
+                            reelsForcesSd(state.dataSaverMetered, networkStatus.metered),
+                        )
+                    }
+                    LaunchedEffect(
+                        pagerState.settledPage,
+                        state.items.size,
+                        state.qualityState?.owner?.accountId,
+                        state.qualityState?.selectionRevision,
+                    ) {
+                        screenModel.prepareQualityForIndex(pagerState.settledPage)
                     }
 
                     // C-intermediate (audit): heads of the reels BEYOND the player preload window
@@ -970,7 +1025,14 @@ data class ReelsFeedScreen(
                     // decoders competed for bandwidth). Same gate as the player preload and the
                     // same cache-key scheme as the page; a key mismatch (a quality toggle
                     // mid-flight) can only cost a cache miss, never corrupt.
-                    LaunchedEffect(pagerState.settledPage, state.items, preloadAllowed, effectiveHd) {
+                    LaunchedEffect(
+                        pagerState.settledPage,
+                        state.items,
+                        preloadAllowed,
+                        effectiveHd,
+                        state.qualityState?.selectionRevision,
+                        state.qualityState?.items?.values?.count { it.actual != null },
+                    ) {
                         if (!preloadAllowed) return@LaunchedEffect
                         val settled = pagerState.settledPage
                         val items = state.items
@@ -985,7 +1047,10 @@ data class ReelsFeedScreen(
                             for (index in settled + 2..settled + 4) {
                                 if (prewarmJob?.isActive == false) break
                                 val item = items.getOrNull(index) ?: break
-                                val url = if (effectiveHd) item.videoUrlHd ?: item.videoUrl else item.videoUrl
+                                val quality = screenModel.qualityPlayback(item.id)
+                                if (screenModel.isQualityModeItem(item.id) && quality == null) continue
+                                val url = quality?.videoUrl
+                                    ?: if (effectiveHd) item.videoUrlHd ?: item.videoUrl else item.videoUrl
                                 val prefix = if (offline) {
                                     offlineSourceIds.getOrNull(index)?.toString() ?: "offline"
                                 } else {
@@ -994,7 +1059,8 @@ data class ReelsFeedScreen(
                                 prewarmReelHead(
                                     context = context,
                                     url = url,
-                                    cacheKey = "$prefix:${item.id}:${if (effectiveHd) "hd" else "sd"}",
+                                    cacheKey = quality?.cacheKey
+                                        ?: "$prefix:${item.id}:${if (effectiveHd) "hd" else "sd"}",
                                     headers = headers,
                                     webUrl = item.webUrl,
                                     isCancelled = { prewarmJob?.isActive == false },
@@ -1182,6 +1248,14 @@ data class ReelsFeedScreen(
                                 isMuted = state.isMuted,
                                 isLiked = state.isLiked(item.id, page),
                                 isHdQuality = effectiveHd,
+                                qualityModeEnabled = screenModel.isQualityModeItem(item.id),
+                                qualityPlayback = screenModel.qualityPlayback(item.id),
+                                qualityItemState = state.qualityState?.items?.get(item.id),
+                                qualityGlobal = state.qualityState?.global ?: ReelsQualityPreference.Source,
+                                onSetQualityGlobal = screenModel::setQualityGlobal,
+                                onSetQualityOverride = screenModel::setQualityOverride,
+                                onClearQualityOverride = screenModel::clearQualityOverride,
+                                onQualityDialogOpenChanged = { qualityDialogOpen = it },
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
                                 chromeVisible = chromeVisible && page == pagerState.settledPage,
@@ -1554,6 +1628,29 @@ data class ReelsFeedScreen(
                     isAutoAdvance = state.isAutoAdvance,
                     isCropMode = state.isCropMode,
                     isHdQuality = state.isHdQuality,
+                    qualityModeEnabled = state.items.getOrNull(state.activeIndex)
+                        ?.let { screenModel.isQualityModeItem(it.id) } == true,
+                    qualityLabel = state.items.getOrNull(state.activeIndex)
+                        ?.let { screenModel.qualityPlayback(it.id) }
+                        ?.decision?.variant?.let { variant ->
+                            val shortEdge = listOfNotNull(variant.width, variant.height)
+                                .minOrNull()?.takeIf { it > 0 }
+                            if (variant.isSource) "Source" else shortEdge?.let { "${it}p" }
+                        },
+                    onOpenQualityVideo = {
+                        val item = state.items.getOrNull(state.activeIndex)
+                        if (item != null) {
+                            portraitQualityItemId = item.id
+                            portraitQualityDialogMode = ReelsQualityDialogMode.VIDEO
+                        }
+                    },
+                    onOpenQualityDefault = {
+                        val item = state.items.getOrNull(state.activeIndex)
+                        if (item != null) {
+                            portraitQualityItemId = item.id
+                            portraitQualityDialogMode = ReelsQualityDialogMode.GLOBAL
+                        }
+                    },
                     dataSaverEnabled = state.dataSaverMetered,
                     preloadEnabled = state.preloadEnabled,
                     preloadWifiOnly = state.preloadWifiOnly,
@@ -1694,6 +1791,30 @@ data class ReelsFeedScreen(
                     onSearch = screenModel::search,
                     onClearSearch = screenModel::clearSearch,
                     modifier = Modifier,
+                )
+            }
+
+            portraitQualityDialogMode?.let { mode ->
+                val itemId = portraitQualityItemId
+                ReelsVideoQualityDialog(
+                    mode = mode,
+                    itemState = itemId?.let { state.qualityState?.items?.get(it) },
+                    global = state.qualityState?.global ?: ReelsQualityPreference.Source,
+                    onSelect = { preference ->
+                        if (itemId != null) {
+                            if (mode == ReelsQualityDialogMode.VIDEO) {
+                                screenModel.setQualityOverride(itemId, preference)
+                            } else {
+                                screenModel.setQualityGlobal(preference)
+                            }
+                        }
+                        portraitQualityDialogMode = null
+                    },
+                    onUseDefault = {
+                        itemId?.let(screenModel::clearQualityOverride)
+                        portraitQualityDialogMode = null
+                    },
+                    onDismiss = { portraitQualityDialogMode = null },
                 )
             }
 
@@ -2301,11 +2422,12 @@ internal fun reelsChromeShouldAutoHide(
 internal fun reelsSystemChromeVisible(
     chromeVisible: Boolean,
     moreMenuOpen: Boolean,
+    qualityDialogOpen: Boolean = false,
     isSearchBarOpen: Boolean,
     isFilterDialogOpen: Boolean,
     isSourcePickerOpen: Boolean,
     isLoginDialogOpen: Boolean,
     isCustomFeedsOpen: Boolean,
     isWebLoginDialogOpen: Boolean,
-): Boolean = chromeVisible || moreMenuOpen || isSearchBarOpen || isFilterDialogOpen ||
+): Boolean = chromeVisible || moreMenuOpen || qualityDialogOpen || isSearchBarOpen || isFilterDialogOpen ||
     isSourcePickerOpen || isLoginDialogOpen || isCustomFeedsOpen || isWebLoginDialogOpen

@@ -3273,4 +3273,18 @@
     <string name="debug_info_profile_pending">Pending compilation</string>
     <string name="debug_info_profile_not_embedded">No profile embedded</string>
     <string name="debug_info_profile_unknown">Unknown code %1$d</string>
+    <string name="reels_quality_default">Default quality</string>
+    <string name="reels_quality_video">Video quality</string>
+    <string name="reels_quality_use_default">Use default</string>
+    <string name="reels_quality_source_resolution">Source · %1$s</string>
+    <string name="reels_quality_missing_source">Source (resolution unknown)</string>
+    <string name="reels_quality_loading">Loading variants…</string>
+    <string name="reels_quality_switch_failed">Could not switch quality</string>
+    <string name="reels_quality_offline_unknown">Offline quality unknown</string>
+    <string name="reels_quality_manual">Selected for this reel</string>
+    <string name="reels_quality_global_description">Applies to every Telegram reel</string>
+    <string name="reels_quality_source_only">Only Source is available</string>
+    <string name="reels_quality_unavailable">Quality unavailable</string>
+    <string name="reels_quality_cancel">Cancel</string>
+    <string name="reels_quality_source">Source</string>
 </resources>
