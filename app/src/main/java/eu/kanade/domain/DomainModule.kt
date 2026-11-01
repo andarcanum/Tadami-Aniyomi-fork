@@ -156,6 +156,7 @@ import tachiyomi.data.reels.anime.ReelsConsumptionRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFavoriteRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFollowRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsHiddenRepositoryImpl
+import tachiyomi.data.reels.anime.ReelsRoundRobinRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsSessionRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsWatchRepositoryImpl
 import tachiyomi.data.release.ReleaseServiceImpl
@@ -309,6 +310,7 @@ import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
+import tachiyomi.domain.reels.anime.repository.ReelsRoundRobinRepository
 import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.release.interactor.GetApplicationRelease
@@ -714,6 +716,7 @@ class DomainModule : InjektModule {
         addSingletonFactory<ReelsConsumptionRepository> { ReelsConsumptionRepositoryImpl(get()) }
         addSingletonFactory<ReelsCandidateRepository> { ReelsCandidateRepositoryImpl(get()) }
         addSingletonFactory<ReelsSessionRepository> { ReelsSessionRepositoryImpl(get()) }
+        addSingletonFactory<ReelsRoundRobinRepository> { ReelsRoundRobinRepositoryImpl(get()) }
         addSingletonFactory<ReelsOfflineStore> { ReelsOfflineStoreImpl() }
         addFactory { GetEnabledAnimeSources(get(), get()) }
         addFactory { GetLanguagesWithAnimeSources(get(), get()) }

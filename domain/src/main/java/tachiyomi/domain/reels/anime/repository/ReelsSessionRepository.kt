@@ -21,6 +21,13 @@ interface ReelsSessionRepository {
     ): ReelsSessionHandle
 
     /**
+     * Read-only context key of the persisted session row, or null when no row exists. Never
+     * claims the session: callers use it to avoid replacing another feed mode's context with
+     * a plain [open] before the round-robin repository can migrate it with `preserveCheckpoint`.
+     */
+    suspend fun persistedContext(scope: String, sourceId: Long): String?
+
+    /**
      * Retrieves the active checkpoint for the session if valid.
      * Excludes consumed (watched or skipped) and hidden items: a clip that was already
      * consumed has nothing to resume, and letting it lead the restored feed made every

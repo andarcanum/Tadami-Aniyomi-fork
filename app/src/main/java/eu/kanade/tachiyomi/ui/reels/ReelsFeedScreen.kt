@@ -1087,8 +1087,13 @@ data class ReelsFeedScreen(
                         key = { index ->
                             val item = state.items.getOrNull(index)
                             val offlineSourceId = state.offlineSourceIds.getOrNull(index)
+                            val roundRobinOwner = state.roundRobinOwner
                             when {
                                 item == null -> index
+                                // Round-robin pages belong to the published owner generation:
+                                // a recontext/account change must rebuild page state even when
+                                // the same item id is served again.
+                                roundRobinOwner != null -> "${roundRobinOwner.token}:${item.id}"
                                 state.isOffline && offlineSourceId != null -> "$offlineSourceId:${item.id}"
                                 else -> item.id
                             }
@@ -1145,6 +1150,15 @@ data class ReelsFeedScreen(
                             },
                     ) { page ->
                         val item = state.items.getOrNull(page)
+                        // The render owner is part of this page's identity, exactly like the
+                        // pager key above. A player disposed by an owner change can still
+                        // deliver a late callback; it must speak for the generation this card
+                        // was composed under (where the model rejects it as stale), never for
+                        // whichever owner the state holds when the callback finally arrives.
+                        val pageOwner = state.roundRobinOwner
+                        val pageCallbacks = remember(pageOwner) {
+                            ReelsRoundRobinPageCallbacks(screenModel, pageOwner)
+                        }
                         if (item != null) {
                             // Contract v25: the source's per-item media verdict; remembered
                             // per item so re-composition does not re-run plugin code.
@@ -1325,7 +1339,7 @@ data class ReelsFeedScreen(
                                     null
                                 },
                                 onVideoCompleted = {
-                                    screenModel.onVideoCompleted(item.id)
+                                    pageCallbacks.onVideoCompleted(item.id)
                                     // B2 sleep timer: "after this video" pauses the feed
                                     // (sticky) instead of auto-advancing to the next reel.
                                     if (!screenModel.consumeSleepAtVideoEnd()) {
@@ -1360,10 +1374,10 @@ data class ReelsFeedScreen(
                                     }
                                 },
                                 onScrubStart = { chromeVisible = true },
-                                onVisitStarted = screenModel::onVisitStarted,
-                                onFirstFramePresented = screenModel::onFirstFramePresented,
-                                onPlaybackSample = screenModel::onPlaybackSample,
-                                onVisitEnded = screenModel::onVisitEnded,
+                                onVisitStarted = pageCallbacks::onVisitStarted,
+                                onFirstFramePresented = pageCallbacks::onFirstFramePresented,
+                                onPlaybackSample = pageCallbacks::onPlaybackSample,
+                                onVisitEnded = pageCallbacks::onVisitEnded,
                                 onVisitSuspendedForConfiguration = screenModel::onVisitSuspendedForConfiguration,
                                 isForeground = isForeground,
                                 onPlayingStateChanged = screenModel::setPlaybackRunning,

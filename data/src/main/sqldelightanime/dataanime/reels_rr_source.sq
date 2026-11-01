@@ -1,0 +1,56 @@
+-- One roster member of the host-owned round-robin projection. state_json is a
+-- ReelsRoundRobinSourceState; key/order/present duplicate the indexed columns so a strict read
+-- can detect a JSON/row mismatch instead of guessing.
+CREATE TABLE reels_rr_source (
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    source_key TEXT NOT NULL,
+    source_order INTEGER NOT NULL,
+    present INTEGER NOT NULL,
+    state_json TEXT NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id, source_key),
+    UNIQUE (account_scope_id, source_id, source_order),
+    FOREIGN KEY (account_scope_id, source_id)
+        REFERENCES reels_rr_state(account_scope_id, source_id) ON DELETE CASCADE
+);
+
+all:
+SELECT *
+FROM reels_rr_source
+WHERE account_scope_id = :scope AND source_id = :sourceId
+ORDER BY source_order;
+
+countForSource:
+SELECT COUNT(*)
+FROM reels_rr_source
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+upsert:
+INSERT INTO reels_rr_source(
+    account_scope_id, source_id, source_key, source_order, present, state_json
+)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(account_scope_id, source_id, source_key)
+DO UPDATE SET
+    source_order = excluded.source_order,
+    present = excluded.present,
+    state_json = excluded.state_json;
+
+-- Clears the order uniqueness space before a catalog merge/order update reuses a previous order.
+-- Old orders are non-negative, so the mapping keeps them unique and negative.
+freezeOrders:
+UPDATE reels_rr_source
+SET source_order = -1 - source_order
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+deleteForScope:
+DELETE FROM reels_rr_source
+WHERE account_scope_id = :scope;
+
+deleteForSource:
+DELETE FROM reels_rr_source
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+deleteForKey:
+DELETE FROM reels_rr_source
+WHERE account_scope_id = :scope AND source_id = :sourceId AND source_key = :sourceKey;

@@ -51,6 +51,12 @@ SELECT item_id
 FROM reels_candidate
 WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN :itemIds;
 
+-- Whole-page payload lookup for the round-robin projection: one query for up to 300 sources.
+getByItems:
+SELECT *
+FROM reels_candidate
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN :itemIds;
+
 -- Unseen backlog: durable rows that carry no qualifying interaction. Batch anti-join, one
 -- statement for the whole page.
 unconsumed:
@@ -117,6 +123,16 @@ UPDATE reels_candidate
 SET video_url = '', video_url_hd = NULL, poster_url = NULL, poster_url_vertical = NULL
 WHERE account_scope_id = :scope AND source_id = :sourceId;
 
+-- Show-watched protection lifetime (T3 contract; the queries below rely on it):
+-- * Protection exists only while a reels_rr_state row exists with unseen_only = 0, an active
+--   session owner (owner_nonce IS NOT NULL) and se.context_key = st.context_key. It covers the
+--   active anchor and unplayed reserved RR turns only.
+-- * Round-robin mode claims the dedicated context key `storageKey + ':rr:1'`. Legacy/other feed
+--   modes must never claim that key: any other claim rewrites se.context_key, breaks the join
+--   and therefore inherits no protection.
+-- * History reset, account switch and mode switch must delete the scoped RR rows
+--   (reels_rr_item -> reels_rr_source -> reels_rr_state) in the same transaction that changes
+--   the generation or clears the inbox (owned by T4/T7). release alone keeps the projection.
 pruneConsumedRemnants:
 DELETE FROM reels_candidate
 WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN (
@@ -127,11 +143,50 @@ WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN (
      AND k.item_id = c.item_id
     WHERE c.account_scope_id = :scope AND c.source_id = :sourceId
       AND (k.watched_qualified_at IS NOT NULL OR k.skipped_forward_at IS NOT NULL)
+      -- Show-watched protection: while a live RR session with unseen_only = 0 still needs this
+      -- item (active anchor or an unplayed future slot), the consumption summary must not delete
+      -- the payload out from under the reservation. Release/context change drops the join.
+      AND NOT EXISTS (
+          SELECT 1
+          FROM reels_rr_item AS rr
+          JOIN reels_rr_state AS st
+            ON st.account_scope_id = rr.account_scope_id
+           AND st.source_id = rr.source_id
+          JOIN reels_session AS se
+            ON se.account_scope_id = rr.account_scope_id
+           AND se.source_id = rr.source_id
+          WHERE rr.account_scope_id = c.account_scope_id
+            AND rr.source_id = c.source_id
+            AND rr.item_id = c.item_id
+            AND st.unseen_only = 0
+            AND se.owner_nonce IS NOT NULL
+            AND se.context_key = st.context_key
+            AND (st.anchor_item_id = rr.item_id OR rr.reserved_round IS NOT NULL)
+      )
 );
 
+-- Direct removal uses the same protection lifetime as pruneConsumedRemnants above: only the
+-- anchor and unplayed reservations of an active, context-matching RR session are kept.
 remove:
 DELETE FROM reels_candidate
-WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN :itemIds;
+WHERE account_scope_id = :scope AND source_id = :sourceId AND item_id IN :itemIds
+  AND NOT EXISTS (
+      SELECT 1
+      FROM reels_rr_item AS rr
+      JOIN reels_rr_state AS st
+        ON st.account_scope_id = rr.account_scope_id
+       AND st.source_id = rr.source_id
+      JOIN reels_session AS se
+        ON se.account_scope_id = rr.account_scope_id
+       AND se.source_id = rr.source_id
+      WHERE rr.account_scope_id = reels_candidate.account_scope_id
+        AND rr.source_id = reels_candidate.source_id
+        AND rr.item_id = reels_candidate.item_id
+        AND st.unseen_only = 0
+        AND se.owner_nonce IS NOT NULL
+        AND se.context_key = st.context_key
+        AND (st.anchor_item_id = rr.item_id OR rr.reserved_round IS NOT NULL)
+  );
 
 deleteForScope:
 DELETE FROM reels_candidate

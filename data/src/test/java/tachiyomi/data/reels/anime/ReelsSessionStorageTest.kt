@@ -508,6 +508,55 @@ class ReelsSessionStorageTest {
     }
 
     @Test
+    fun `shared claim helper copies the checkpoint only when explicitly preserved`() = runBlocking {
+        val (driver, handler) = createDb(File(tempDir, "claim-preserve.db"))
+        AnimeDatabase.Schema.create(driver)
+        val repo = ReelsSessionRepositoryImpl(handler)
+        val key = ReelsSessionKey(accountScopeId = "acc:901:12", sourceId = 901L, contextKey = "old-context")
+        val handle = repo.open(key, ownerNonce = "owner-1", historyGeneration = 1L, reset = false)
+        val item = candidate(key.accountScopeId, key.sourceId, "current")
+        try {
+            repo.appendPage(handle, listOf(item)) shouldBe 1
+            repo.checkpoint(
+                handle,
+                ReelsActiveCheckpoint(item = item, positionMs = 4_321L, completed = false, sequence = 1L),
+            ) shouldBe true
+
+            val preserved = handler.await(inTransaction = true) { db ->
+                ReelsRoundRobinStorage.claimSession(
+                    db = db,
+                    key = key.copy(contextKey = "new-context"),
+                    ownerNonce = "owner-2",
+                    historyGeneration = 1L,
+                    reset = true,
+                    preserveCheckpoint = true,
+                    nowMs = 2_000L,
+                )
+            }
+            preserved.sessionId shouldNotBe handle.sessionId
+            val active = repo.active(preserved)
+            active?.item?.itemId shouldBe "current"
+            active?.positionMs shouldBe 4_321L
+
+            val dropped = handler.await(inTransaction = true) { db ->
+                ReelsRoundRobinStorage.claimSession(
+                    db = db,
+                    key = key.copy(contextKey = "third-context"),
+                    ownerNonce = "owner-3",
+                    historyGeneration = 1L,
+                    reset = true,
+                    preserveCheckpoint = false,
+                    nowMs = 3_000L,
+                )
+            }
+            repo.active(dropped) shouldBe null
+            Unit
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun `foreign keys ON and OFF both leave no session orphans on clearScope`() = runBlocking {
         for (fk in listOf(true, false)) {
             val dbFile = File(tempDir, "session_test_fk_$fk.db")

@@ -13,7 +13,6 @@ import tachiyomi.domain.reels.anime.model.ReelsSessionStaleException
 import tachiyomi.domain.reels.anime.model.ReelsSessionWindow
 import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import java.util.Date
-import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
 class ReelsSessionRepositoryImpl(
@@ -27,66 +26,23 @@ class ReelsSessionRepositoryImpl(
         reset: Boolean,
     ): ReelsSessionHandle {
         return handler.await(inTransaction = true) { db ->
-            val existing = db.reels_sessionQueries.getSession(key.accountScopeId, key.sourceId).executeAsOneOrNull()
+            ReelsRoundRobinStorage.claimSession(
+                db = db,
+                key = key,
+                ownerNonce = ownerNonce,
+                historyGeneration = historyGeneration,
+                reset = reset,
+                preserveCheckpoint = false,
+                nowMs = System.currentTimeMillis(),
+            )
+        }
+    }
 
-            // Sanitize transport hints for this capable scope/source
-            db.reels_candidateQueries.clearTransportHintsForScope(key.accountScopeId, key.sourceId)
-
-            val canReuse = !reset && existing != null &&
-                existing.context_key == key.contextKey &&
-                existing.history_generation == historyGeneration
-
-            if (canReuse && existing != null) {
-                db.reels_sessionQueries.updateOwnerNonce(
-                    ownerNonce = ownerNonce,
-                    updatedAtMs = System.currentTimeMillis(),
-                    scope = key.accountScopeId,
-                    sourceId = key.sourceId,
-                )
-                ReelsSessionHandle(
-                    key = key,
-                    sessionId = existing.session_id,
-                    ownerNonce = ownerNonce,
-                    historyGeneration = historyGeneration,
-                )
-            } else {
-                val newSessionId = UUID.randomUUID().toString()
-                // Explicitly delete child queue rows to avoid orphans regardless of foreign_keys pragma
-                db.reels_session_queueQueries.deleteForSource(key.accountScopeId, key.sourceId)
-
-                val nowMs = System.currentTimeMillis()
-                db.reels_sessionQueries.claimSession(
-                    account_scope_id = key.accountScopeId,
-                    source_id = key.sourceId,
-                    context_key = key.contextKey,
-                    session_id = newSessionId,
-                    owner_nonce = ownerNonce,
-                    history_generation = historyGeneration,
-                    checkpoint_sequence = 0L,
-                    active_item_id = null,
-                    active_position_ms = 0L,
-                    active_completed = 0L,
-                    active_title = null,
-                    active_author = null,
-                    active_duration_sec = null,
-                    active_has_audio = 0L,
-                    active_tags_json = "[]",
-                    active_web_url = null,
-                    active_created_at_epoch_sec = null,
-                    active_views_count = null,
-                    active_likes_count = null,
-                    active_is_author_verified = 0L,
-                    active_metadata_schema_version = 2L,
-                    updated_at_ms = nowMs,
-                )
-
-                ReelsSessionHandle(
-                    key = key,
-                    sessionId = newSessionId,
-                    ownerNonce = ownerNonce,
-                    historyGeneration = historyGeneration,
-                )
-            }
+    override suspend fun persistedContext(scope: String, sourceId: Long): String? {
+        return handler.await { db ->
+            db.reels_sessionQueries.getSession(scope, sourceId)
+                .executeAsOneOrNull()
+                ?.context_key
         }
     }
 
@@ -432,8 +388,7 @@ class ReelsSessionRepositoryImpl(
     override suspend fun clearScope(scope: String) {
         try {
             handler.await(inTransaction = true) { db ->
-                db.reels_session_queueQueries.deleteForScope(scope)
-                db.reels_sessionQueries.deleteForScope(scope)
+                ReelsRoundRobinStorage.clearScope(db, scope)
             }
         } catch (e: CancellationException) {
             throw e

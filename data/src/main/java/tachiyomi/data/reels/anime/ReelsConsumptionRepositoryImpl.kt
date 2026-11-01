@@ -143,8 +143,9 @@ class ReelsConsumptionRepositoryImpl(
         return try {
             handler.await(inTransaction = true) { db ->
                 db.reels_consumptionQueries.deleteForScope(scope)
-                db.reels_session_queueQueries.deleteForScope(scope)
-                db.reels_sessionQueries.deleteForScope(scope)
+                // The round-robin projection is derived state: drop it together with the session
+                // in the same transaction that bumps the generation.
+                ReelsRoundRobinStorage.clearScope(db, scope)
                 db.reels_for_you_stateQueries.bumpGeneration(scope, policyVersion.toLong())
                 db.reels_for_you_stateQueries.getGeneration(scope).executeAsOne()
             }

@@ -376,6 +376,18 @@ class ReelsFeedScreenModelTest {
     }
 
     @Test
+    fun `legacy source keeps the round robin owner unset`() = runTest(testDispatcher) {
+        // T8 added an optional RR repository and a nullable state owner. The old constructor
+        // (no RR repository) must keep the legacy route byte-identical.
+        val source = RecordingFeedSource(904L) { FeedPage(listOf(videoItem("legacy-1")), hasNextPage = false) }
+        val model = buildModel(sourceId = 904L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.roundRobinOwner shouldBe null
+        model.state.value.items.map { it.id } shouldBe listOf("legacy-1")
+    }
+
+    @Test
     fun `does not persist reels history while incognito`() = runTest(testDispatcher) {
         val incognitoItem = ShortVideoItem(
             id = "vid-x",

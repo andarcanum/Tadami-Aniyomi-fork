@@ -1,0 +1,59 @@
+-- Telegram For You round-robin projection (host-side, contract-independent).
+--
+-- Additive only: three new tables persist the round-robin state, its source roster and the
+-- candidate associations. Candidate payloads, consumption and history stay in their existing
+-- tables; this migration does not rewrite any of them.
+
+CREATE TABLE reels_rr_state (
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    context_key TEXT NOT NULL,
+    state_version INTEGER NOT NULL,
+    revision INTEGER NOT NULL,
+    unseen_only INTEGER NOT NULL,
+    bootstrap_complete INTEGER NOT NULL,
+    catalog_revision TEXT,
+    frames_json TEXT NOT NULL,
+    anchor_round INTEGER,
+    anchor_source_key TEXT,
+    anchor_item_id TEXT,
+    legacy_head_id TEXT,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id)
+);
+
+CREATE TABLE reels_rr_source (
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    source_key TEXT NOT NULL,
+    source_order INTEGER NOT NULL,
+    present INTEGER NOT NULL,
+    state_json TEXT NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id, source_key),
+    UNIQUE (account_scope_id, source_id, source_order),
+    FOREIGN KEY (account_scope_id, source_id)
+        REFERENCES reels_rr_state(account_scope_id, source_id) ON DELETE CASCADE
+);
+
+CREATE TABLE reels_rr_item (
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    order_key INTEGER NOT NULL,
+    content_key TEXT,
+    checked_context TEXT,
+    validation TEXT NOT NULL,
+    reserved_round INTEGER,
+    ordinal INTEGER,
+    PRIMARY KEY (account_scope_id, source_id, item_id),
+    UNIQUE (account_scope_id, source_id, reserved_round, source_key),
+    FOREIGN KEY (account_scope_id, source_id, item_id)
+        REFERENCES reels_candidate(account_scope_id, source_id, item_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_scope_id, source_id, source_key)
+        REFERENCES reels_rr_source(account_scope_id, source_id, source_key) ON DELETE CASCADE,
+    CHECK ((reserved_round IS NULL AND ordinal IS NULL) OR
+           (reserved_round IS NOT NULL AND ordinal IS NOT NULL))
+);
+
+CREATE INDEX reels_rr_pending ON reels_rr_item(account_scope_id, source_id, source_key, reserved_round, order_key DESC);

@@ -27,6 +27,7 @@ import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedReplaySource
+import eu.kanade.tachiyomi.animesource.AnimeFeedRoundRobinSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
@@ -43,6 +44,7 @@ import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.FeedReplayContext
 import eu.kanade.tachiyomi.animesource.model.FeedReplayItemResult
+import eu.kanade.tachiyomi.animesource.model.FeedRoundRobinReadiness
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
@@ -79,8 +81,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.reels.anime.model.ReelsAlbum
@@ -88,6 +88,7 @@ import tachiyomi.domain.reels.anime.model.ReelsCandidate
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.model.ReelsHiddenEntry
+import tachiyomi.domain.reels.anime.model.ReelsRoundRobinStop
 import tachiyomi.domain.reels.anime.model.ReelsSessionKey
 import tachiyomi.domain.reels.anime.model.ReelsWatchEntry
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
@@ -96,6 +97,7 @@ import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
+import tachiyomi.domain.reels.anime.repository.ReelsRoundRobinRepository
 import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
@@ -103,6 +105,7 @@ import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
@@ -165,6 +168,10 @@ class ReelsFeedScreenModel(
     private val reelsConsumptionRepository: ReelsConsumptionRepository = Injekt.get(),
     private val reelsCandidateRepository: ReelsCandidateRepository = Injekt.get(),
     private val reelsSessionRepository: ReelsSessionRepository? = null,
+    // Round-robin (contract v28) is a separate durable projection with its own repository.
+    // Nullable like the session repository: legacy-only tests never touch it and the lazy
+    // Injekt lookup happens only when a round-robin source is actually attached.
+    private val reelsRoundRobinRepository: ReelsRoundRobinRepository? = null,
     // Injectable monotonic clock (the watch accumulator must never use wall time) and wall
     // clock (the durable summary stores real timestamps).
     private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
@@ -209,6 +216,12 @@ class ReelsFeedScreenModel(
         // shape their own messages, so this is best-effort), Retry-After is honored when present.
         const val RATE_LIMIT_MAX_RETRIES = 3
         const val RATE_LIMIT_DEFAULT_RETRY_SEC = 30
+
+        // Pending round-robin readiness is a waiting state: retry the attach automatically
+        // after the source's hint (or this default when it has none), capped so startup and
+        // recovery stay responsive even if the hint is far in the future.
+        const val ROUND_ROBIN_PENDING_RETRY_MS = 1_500L
+        const val ROUND_ROBIN_PENDING_RETRY_MAX_MS = 5_000L
 
         // Debounce window for the categorized-search tabs (contract v20): the request is a
         // network call per query, so the tabs refresh once typing pauses, not per keystroke.
@@ -440,24 +453,113 @@ class ReelsFeedScreenModel(
         }
     }
 
-    // Pinned account scope per source. The identity can arrive AFTER the first feed request
-    // (TDLib is still authorizing), and a scope that silently follows it would strand every
-    // watched/skipped row written a second earlier under the fallback scope — exactly the
-    // reels that then come back. The first PROVEN identity wins for this model's lifetime.
+    // ---------------------------------------------------------------------------
+    // Round-robin For You (contract v28)
+    //
+    // Exactly one owner is published at a time. Every player callback carries the owner the
+    // View captured from the same State version; a callback from an older owner is dropped
+    // BEFORE it can touch the interaction tracker, the checkpoint writer or history.
+    // ---------------------------------------------------------------------------
+
+    private val roundRobinCoordinator by lazy {
+        ReelsRoundRobinCoordinator(
+            scope = screenModelScope,
+            ioDispatcher = ioDispatcher,
+            repository = reelsRoundRobinRepository ?: Injekt.get(),
+            sessionRepository = reelsSessionRepository ?: Injekt.get(),
+            consumptionRepository = reelsConsumptionRepository,
+            hiddenRepository = reelsHiddenRepository,
+            candidateRepository = reelsCandidateRepository,
+            publish = ::publishRoundRobinPage,
+            nowMs = nowMs,
+            wallClock = wallClock,
+            // The first publication of a new attach has no owner in State yet; the expected
+            // source/incognito pair is the fence that rejects a stale actor from the previous
+            // source. Account/filter replacement is fenced by the coordinator's own session.
+            isCurrentGeneration = { owner ->
+                roundRobinExpectedSourceId == owner.sourceId &&
+                    roundRobinExpectedIncognito == !owner.persistEligible
+            },
+            mainDispatcher = Dispatchers.Main.immediate,
+        )
+    }
+
+    private class RoundRobinVisit(
+        val owner: ReelsRoundRobinRenderOwner,
+        val item: ShortVideoItem,
+    )
+
+    @Volatile
+    private var roundRobinExpectedSourceId: Long? = null
+
+    @Volatile
+    private var roundRobinExpectedIncognito: Boolean = false
+
+    // True from the moment an attach is launched until the session is stopped or the source
+    // reports Pending/SignedOut. Distinguishes "refresh the running feed" from "open a feed".
+    @Volatile
+    private var roundRobinAttached: Boolean = false
+
+    private var roundRobinAttachJob: Job? = null
+
+    // Pending readiness waits and re-runs the attach once TDLib/identity is expected to be
+    // ready. Cancelled by stop/source switch/dispose and by any new non-retry build.
+    private var roundRobinReadinessRetryJob: Job? = null
+
+    // Restore inputs of the current attach: the anchored card is resolved lazily from these
+    // when the first page says its frontier is not in the host projection yet.
+    @Volatile
+    private var roundRobinReplayContext: FeedReplayContext? = null
+
+    @Volatile
+    private var roundRobinFrozenFilters: AnimeFilterList? = null
+
+    // One at a time: the first page (and any later page arriving while the anchored card is
+    // being resolved) is held until the anchor payload is known, so the pager never starts on
+    // an item that then shifts down by one.
+    private var roundRobinRestoreJob: Job? = null
+    private var roundRobinPendingPage: ReelsRoundRobinUiPage? = null
+    private var roundRobinRestoreOwner: ReelsRoundRobinRenderOwner? = null
+    private var roundRobinRestoredAnchor: ShortVideoItem? = null
+    private var roundRobinRestoreAttempted: Pair<String, String>? = null
+    private var roundRobinPendingOwnerChanged: Boolean = false
+
+    private var roundRobinVisit: RoundRobinVisit? = null
+
+    // Consumption dedupe by history identity (account scope + source + item), NOT by render
+    // owner: a reconnect of the same account must not write twice, while account B may still
+    // record the same item id that account A already watched.
+    private val roundRobinWatchedCommitted = mutableSetOf<String>()
+    private val roundRobinSkippedCommitted = mutableSetOf<String>()
+
+    private fun roundRobinCommitKey(owner: ReelsRoundRobinRenderOwner, itemId: String): String =
+        "${owner.accountScope}:${owner.sourceId}:${owner.historyGeneration}:$itemId"
+
+    // Written by scope resolution and owner publication (main), read by the IO attach/reset
+    // path, so the reference must be visible across threads.
+    @Volatile
     private var pinnedScope: Pair<Long, String>? = null
 
-    private fun accountScopeFor(sourceId: Long): String {
+    /**
+     * [knownIdentity] lets a caller that already holds the capability instance (the RR route)
+     * prove the identity without a second `sourceManager` lookup. It is only a shortcut: the
+     * pin established below always wins over any later observation.
+     */
+    private fun accountScopeFor(sourceId: Long, knownIdentity: String? = null): String {
         // A proven identity, once seen, outranks a later `null` (TDLib restarting, a web
         // session losing its uid): dropping back to the fallback scope would hide the
         // history that is already stored under the account.
         pinnedScope?.let { (pinnedSourceId, scope) -> if (pinnedSourceId == sourceId) return scope }
         // A capability lookup on plugin bytecode: never let a broken extension break history.
-        val identity = runCatching {
-            (sourceManager.get(sourceId) as? AnimeFeedAccountIdentitySource)?.accountScopeId()
-        }.getOrNull()
-        val proven = identity?.trim()?.takeIf { it.isNotEmpty() }
+        val identity = (
+            knownIdentity ?: runCatching {
+                (sourceManager.get(sourceId) as? AnimeFeedAccountIdentitySource)?.accountScopeId()
+            }.getOrNull()
+            )
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
             ?: return ReelsForYou.accountScope(sourceId, null)
-        val scope = ReelsForYou.accountScope(sourceId, proven)
+        val scope = ReelsForYou.accountScope(sourceId, identity)
         pinnedScope = sourceId to scope
         return scope
     }
@@ -561,6 +663,10 @@ class ReelsFeedScreenModel(
 
     /** Foreground loss: persist the latest position of the active visit before it can be lost. */
     fun onForegroundLost() {
+        if (state.value.roundRobinOwner != null) {
+            roundRobinCoordinator.foregroundLost()
+            return
+        }
         if (isReplaySurface()) sessionContinuity.flushActiveVisit()
     }
 
@@ -680,7 +786,7 @@ class ReelsFeedScreenModel(
         watchedCommitted.clear()
         skippedCommitted.clear()
         mutableState.update { it.copy(unseenOnly = enabled) }
-        loadFeed(reset = true)
+        restartFeedForContextChange()
     }
 
     /**
@@ -690,22 +796,117 @@ class ReelsFeedScreenModel(
      */
     fun resetForYouHistory() {
         invalidateReplay(dropCheckpoint = true)
+        // Stop the round-robin actor BEFORE the generation transaction, so no old-generation
+        // write can land after the reset and no stale owner stays on screen.
+        stopRoundRobin(clearProjection = true)
+        roundRobinWatchedCommitted.clear()
+        roundRobinSkippedCommitted.clear()
         val sourceId = state.value.currentSourceId
+        val src = source
         watchedCommitted.clear()
         skippedCommitted.clear()
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val scope = accountScopeFor(sourceId)
+            // The reset must target the pinned scope the restore read and the next attach use,
+            // never a freshly re-derived identity that may have vanished in between.
+            val scope = if (src is AnimeFeedRoundRobinSource && isRoundRobinRoute(src)) {
+                roundRobinAccountScope(src, sourceId)
+            } else {
+                accountScopeFor(sourceId)
+            }
             val generation = reelsConsumptionRepository.resetHistory(scope, ReelsForYou.POLICY_VERSION)
             forYouScope = scope
             forYouGeneration = generation
-            withContext(Dispatchers.Main.immediate) { loadFeed(reset = true) }
+            withContext(Dispatchers.Main.immediate) {
+                if (state.value.currentSourceId != sourceId) return@withContext
+                if (src is AnimeFeedRoundRobinSource && isRoundRobinRoute(src)) {
+                    buildFiltersAndStartFeed(src, sourceId)
+                } else {
+                    loadFeed(reset = true)
+                }
+            }
+        }
+    }
+
+    /**
+     * Same pinned scope the legacy path uses. The RR route must not re-derive the identity on
+     * every restore/reset/attach: a source that transiently loses it between those steps
+     * would read the checkpoint under the fallback scope and then open the session under
+     * another (or reset a scope the actor never writes). An explicit source/login change
+     * clears the pin, so a real account switch still resolves a new scope.
+     */
+    private fun roundRobinAccountScope(source: AnimeFeedRoundRobinSource, sourceId: Long): String {
+        // The pin is authoritative: do not even re-ask the plugin once it is established.
+        pinnedScope?.let { (pinnedSourceId, scope) -> if (pinnedSourceId == sourceId) return scope }
+        return accountScopeFor(sourceId, runCatching { source.accountScopeId() }.getOrNull())
+    }
+
+    /**
+     * Reads the session active checkpoint under the SAME RR key the coordinator is about to
+     * open (account scope + frozen-filter context + `storageKey:rr:1`). Only the host can
+     * carry that card across the frontier, because [ReelsRoundRobinUiPage.suffix] is strictly
+     * after it. The active payload is re-resolved like the legacy restore does; on Deferred
+     * the stored metadata is used. Incognito has no persistent checkpoint at all.
+     *
+     * [accountScope] is resolved once by the caller and reused for the attach, so the read and
+     * the opened session cannot land in different scopes.
+     */
+    private suspend fun restoreRoundRobinCheckpoint(
+        source: AnimeFeedRoundRobinSource,
+        sourceId: Long,
+        accountScope: String,
+        readiness: FeedRoundRobinReadiness.Ready,
+        frozen: FrozenReelsFilters,
+        unseenOnly: Boolean,
+        incognito: Boolean,
+    ): Pair<ShortVideoItem, Long>? {
+        if (incognito) return null
+        val scope = accountScope
+        adoptFallbackHistory(sourceId, scope)
+        val generation = reelsConsumptionRepository.ensureScope(scope, ReelsForYou.POLICY_VERSION)
+        val key = ReelsSessionKey(
+            accountScopeId = scope,
+            sourceId = sourceId,
+            contextKey = ReelsSessionContext.computeContextKey(
+                sourceId = sourceId,
+                route = "main",
+                query = "",
+                unseenOnly = unseenOnly,
+                filterFingerprint = frozen.fingerprint,
+                continuityKey = readiness.storageKey + ":rr:1",
+            ),
+        )
+        val repository = reelsSessionRepository ?: Injekt.get()
+        // A legacy (v27) session row is about to be migrated by the coordinator's preserving
+        // open. Claiming it here first with the generic path would replace its context with
+        // preserveCheckpoint=false and null the active card, so the legacy head would be lost.
+        // The pre-read is therefore skipped whenever the persisted context is not the RR key.
+        val persistedContext = repository.persistedContext(scope, sourceId)
+        if (persistedContext != null && persistedContext != key.contextKey) return null
+        val handle = repository.open(key, UUID.randomUUID().toString(), generation, reset = false)
+        return try {
+            val active = repository.active(handle) ?: return null
+            val item = when (
+                val result = runCatching {
+                    source.resolveReplayItem(active.item.itemId, readiness.context, frozen.filters)
+                }.getOrNull()
+            ) {
+                is FeedReplayItemResult.Available -> result.item
+                is FeedReplayItemResult.Deferred -> with(ReelsCandidateMapper) {
+                    active.item.toShortVideoItem()
+                }
+                else -> return null
+            }
+            item to active.positionMs
+        } finally {
+            // The checkpoint restore only reads; the coordinator's attach claims its own owner.
+            repository.invalidate(handle, dropCheckpoint = false)
         }
     }
 
     private suspend fun persistForYouPage(scope: String, sourceId: Long, items: List<ShortVideoItem>) {
         if (items.isEmpty() || isIncognito(sourceId)) return
         val now = wallClock()
-        val candidates = items.map { it.toCandidate(scope, sourceId, now) }
+        val candidates = items.map { with(ReelsCandidateMapper) { it.toCandidate(scope, sourceId, now) } }
         if (isReplaySurface() && sessionContinuity.activeHandle?.key?.accountScopeId == scope) {
             val contextKey = sessionContinuity.activeHandle?.key?.contextKey
             sessionContinuity.persistPage(
@@ -722,50 +923,6 @@ class ReelsFeedScreenModel(
         } else {
             reelsCandidateRepository.ingest(scope, sourceId, candidates)
         }
-    }
-
-    private fun ShortVideoItem.toCandidate(scope: String, sourceId: Long, now: Date): ReelsCandidate {
-        return ReelsCandidate(
-            accountScopeId = scope,
-            sourceId = sourceId,
-            itemId = id,
-            title = title,
-            author = author,
-            videoUrl = videoUrl,
-            videoUrlHd = videoUrlHd,
-            posterUrl = posterUrl,
-            posterUrlVertical = posterUrlVertical,
-            webUrl = webUrl,
-            durationSec = durationSec?.toDouble(),
-            hasAudio = hasAudio,
-            createdAtEpochSec = createdAtEpochSec,
-            discoveredAt = now,
-            lastValidatedAt = now,
-            availability = ReelsCandidate.AVAILABILITY_AVAILABLE,
-            retryAfter = null,
-            resumePositionMs = null,
-            metadataSchemaVersion = ReelsForYou.METADATA_SCHEMA_VERSION,
-            tagsJson = Json.encodeToString(tags),
-            viewsCount = viewsCount, likesCount = likesCount, isAuthorVerified = isAuthorVerified,
-        )
-    }
-
-    private fun ReelsCandidate.toShortVideoItem(): ShortVideoItem {
-        return ShortVideoItem(
-            id = itemId,
-            title = title,
-            author = author,
-            videoUrl = videoUrl,
-            videoUrlHd = videoUrlHd,
-            posterUrl = posterUrl.orEmpty(),
-            posterUrlVertical = posterUrlVertical,
-            durationSec = durationSec?.toFloat(),
-            hasAudio = hasAudio,
-            tags = runCatching { Json.decodeFromString<List<String>>(tagsJson) }.getOrDefault(emptyList()),
-            viewsCount = viewsCount, likesCount = likesCount, isAuthorVerified = isAuthorVerified,
-            webUrl = webUrl,
-            createdAtEpochSec = createdAtEpochSec,
-        )
     }
 
     init {
@@ -912,6 +1069,9 @@ class ReelsFeedScreenModel(
 
     fun switchSource(newSourceId: Long) {
         if (state.value.isOffline) return
+        // A source switch replaces the whole feed: stop the round-robin actor and drop its
+        // projection before the new source (which may not even implement v28) takes over.
+        stopRoundRobin(clearProjection = true)
         invalidateReplay()
         val previousSourceId = state.value.currentSourceId
         val rawSource = sourceManager.get(newSourceId)
@@ -969,6 +1129,10 @@ class ReelsFeedScreenModel(
             // same id in a different source's history.
             watchedCommitted.clear()
             skippedCommitted.clear()
+            // An explicit switch starts a new feed lifetime: the previous pin must not outrank
+            // an identity that legitimately changed with it (a real account switch, not the
+            // transient loss the pin protects against).
+            pinnedScope = null
             unseenRefillPages = 0
             // A manual switch to a DIFFERENT source voids any pending deep-link seek from the
             // entry point; the entry switch itself (same id) keeps it.
@@ -1101,8 +1265,18 @@ class ReelsFeedScreenModel(
      * behind [AnimeFeedSource.getFilterList] must not run there), then starts the first feed
      * generation back on the main dispatcher. Skipped when the user already switched away.
      */
-    private fun buildFiltersAndStartFeed(rawSource: AnimeFeedSource, sourceId: Long, resetReplay: Boolean = false) {
+    private fun buildFiltersAndStartFeed(
+        rawSource: AnimeFeedSource,
+        sourceId: Long,
+        resetReplay: Boolean = false,
+        keepRoundRobinProjection: Boolean = false,
+    ) {
         invalidateReplay()
+        // A new build (user retry, filter change, source switch) supersedes a scheduled
+        // readiness retry. A retry firing into this method has already released the slot, so
+        // it never cancels itself here.
+        roundRobinReadinessRetryJob?.cancel()
+        roundRobinReadinessRetryJob = null
         loadJob?.cancel()
         val entryGeneration = loadGeneration.incrementAndGet()
         loadJob = screenModelScope.launch(ioDispatcher) {
@@ -1118,6 +1292,107 @@ class ReelsFeedScreenModel(
             }
             if (mode == FeedMode.GLOBAL) {
                 restoreFilters(filters, sourcePreferences.lastReelsFilter(sourceId).get())
+            }
+
+            // Round-robin is selected AFTER the frozen filters and BEFORE the legacy v27
+            // replay/restore, so the web feed and the RR projection never own the screen at
+            // the same time. Only the global For You surface with a blank search and the
+            // source's own mode-0 option is eligible; every other route is untouched.
+            val roundRobin = (rawSource as? AnimeFeedRoundRobinSource)?.takeIf { rr ->
+                mode == FeedMode.GLOBAL &&
+                    state.value.searchQuery.isBlank() &&
+                    !state.value.isOffline &&
+                    resumeVideoId == null &&
+                    runCatching { rr.isRoundRobinEnabled(filters) }.getOrDefault(false)
+            }
+            if (roundRobin != null) {
+                val frozen = ReelsSessionContext.freezeFilters(rawSource, filters)
+                val readiness = try {
+                    roundRobin.prepareRoundRobin()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    null
+                }
+                ensureActive()
+                if (loadGeneration.get() != entryGeneration || state.value.currentSourceId != sourceId) {
+                    return@launch
+                }
+                if (readiness is FeedRoundRobinReadiness.Ready && readiness.storageKey.isNotBlank()) {
+                    val unseenOnly = filtersUnseen("")
+                    val incognito = isIncognito(sourceId)
+                    // One pinned scope for the checkpoint read, the reset target and the
+                    // coordinator attach: a transient identity loss between them must not
+                    // split the screen across the account and fallback scopes.
+                    val accountScope = roundRobinAccountScope(roundRobin, sourceId)
+                    // A cold reopen has no host prefix yet: read the session active checkpoint
+                    // (same key the coordinator is about to open) and restore that anchored
+                    // card separately from the suffix, which always starts AFTER the frontier.
+                    val restored = if (!keepRoundRobinProjection && state.value.items.isEmpty()) {
+                        restoreRoundRobinCheckpoint(
+                            source = roundRobin,
+                            sourceId = sourceId,
+                            accountScope = accountScope,
+                            readiness = readiness,
+                            frozen = frozen,
+                            unseenOnly = unseenOnly,
+                            incognito = incognito,
+                        )
+                    } else {
+                        null
+                    }
+                    withContext(Dispatchers.Main.immediate) {
+                        if (loadGeneration.get() != entryGeneration ||
+                            state.value.currentSourceId != sourceId
+                        ) {
+                            return@withContext
+                        }
+                        mutableState.update { it.copy(filters = filters, loggedInAccount = account) }
+                        startRoundRobinFeed(
+                            source = roundRobin,
+                            sourceId = sourceId,
+                            filters = filters,
+                            unseenOnly = unseenOnly,
+                            incognito = incognito,
+                            readiness = readiness,
+                            frozen = frozen,
+                            accountScope = accountScope,
+                            keepProjection = keepRoundRobinProjection,
+                            restored = restored,
+                        )
+                    }
+                    return@launch
+                }
+                // Pending is a transient identity/TDLib resolution: it must never fall back to
+                // the legacy web feed. SignedOut is the only state that keeps that fallback.
+                if (readiness !is FeedRoundRobinReadiness.SignedOut) {
+                    val pending = readiness as? FeedRoundRobinReadiness.Pending
+                    withContext(Dispatchers.Main.immediate) {
+                        if (loadGeneration.get() != entryGeneration ||
+                            state.value.currentSourceId != sourceId
+                        ) {
+                            return@withContext
+                        }
+                        stopRoundRobin(clearProjection = true)
+                        // Waiting, not terminal: keep the loading surface and retry the whole
+                        // build when the readiness hint (or the default) is due.
+                        mutableState.update {
+                            it.copy(
+                                filters = filters,
+                                loggedInAccount = account,
+                                isLoading = true,
+                                canLoadMore = false,
+                                error = null,
+                                errorRes = null,
+                            )
+                        }
+                        scheduleRoundRobinReadinessRetry(
+                            sourceId = sourceId,
+                            retryAtEpochMillis = pending?.retryAtEpochMillis,
+                        )
+                    }
+                    return@launch
+                }
             }
 
             var restoredSession: RestoredReelsSession? = null
@@ -1199,6 +1474,500 @@ class ReelsFeedScreenModel(
                     applyRestoredSession(restoredSession)
                 } else {
                     loadFeedInternal(reset = true)
+                }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Round-robin route lifecycle
+    // ---------------------------------------------------------------------------
+
+    private fun startRoundRobinFeed(
+        source: AnimeFeedRoundRobinSource,
+        sourceId: Long,
+        filters: AnimeFilterList,
+        unseenOnly: Boolean,
+        incognito: Boolean,
+        readiness: FeedRoundRobinReadiness.Ready,
+        frozen: FrozenReelsFilters,
+        accountScope: String,
+        keepProjection: Boolean,
+        restored: Pair<ShortVideoItem, Long>?,
+    ) {
+        roundRobinAttachJob?.cancel()
+        roundRobinRestoreJob?.cancel()
+        roundRobinRestoreJob = null
+        roundRobinRestoreOwner = null
+        roundRobinPendingPage = null
+        roundRobinRestoredAnchor = restored?.first
+        roundRobinRestoreAttempted = null
+        roundRobinReplayContext = readiness.context
+        roundRobinFrozenFilters = frozen.filters
+        roundRobinExpectedSourceId = sourceId
+        roundRobinExpectedIncognito = incognito
+        roundRobinAttached = true
+        mutableState.update { current ->
+            current.copy(
+                roundRobinOwner = null,
+                isLoading = true,
+                error = null,
+                errorRes = null,
+                errorCounts = null,
+                pageError = null,
+                canLoadMore = true,
+                unseenScanStopped = false,
+                replayLocalHasMore = false,
+                items = if (keepProjection) current.items else persistentListOf(),
+                seenIds = if (keepProjection) current.seenIds else persistentSetOf(),
+                activeIndex = if (keepProjection) current.activeIndex else 0,
+                feedGeneration = if (keepProjection) current.feedGeneration else current.feedGeneration + 1,
+                targetPageIndex = if (keepProjection) current.targetPageIndex else 0,
+                pendingSeekItemId = if (keepProjection) current.pendingSeekItemId else null,
+                pendingSeekPositionMs = if (keepProjection) current.pendingSeekPositionMs else null,
+            )
+        }
+        roundRobinAttachJob = screenModelScope.launch {
+            roundRobinCoordinator.attach(
+                source = source,
+                sourceId = sourceId,
+                filters = filters,
+                unseenOnly = unseenOnly,
+                incognito = incognito,
+                accountScope = accountScope,
+            )
+        }
+    }
+
+    /**
+     * Waiting counterpart of a terminal error: re-runs the full build once the source's
+     * readiness hint is due. The hint is absolute wall-clock time; a missing hint falls back
+     * to a short default and every wait is capped so recovery stays responsive.
+     */
+    private fun scheduleRoundRobinReadinessRetry(sourceId: Long, retryAtEpochMillis: Long?) {
+        val hintDelay = retryAtEpochMillis?.let { (it - wallClock().time).coerceAtLeast(0L) }
+        val delayMs = (hintDelay ?: ROUND_ROBIN_PENDING_RETRY_MS)
+            .coerceAtMost(ROUND_ROBIN_PENDING_RETRY_MAX_MS)
+        roundRobinReadinessRetryJob?.cancel()
+        roundRobinReadinessRetryJob = screenModelScope.launch {
+            delay(delayMs)
+            // Release the slot before rebuilding: a still-pending source schedules its next
+            // retry from inside buildFiltersAndStartFeed, and that must not cancel this job.
+            roundRobinReadinessRetryJob = null
+            val currentSource = source ?: return@launch
+            if (state.value.currentSourceId != sourceId) return@launch
+            buildFiltersAndStartFeed(currentSource, sourceId)
+        }
+    }
+
+    /**
+     * Detaches the RR actor and finishes its active visit with the OLD owner's immutable
+     * scope. [clearProjection] is false only for dispose, where the durable RR/session state
+     * must survive but the screen is gone.
+     */
+    private fun stopRoundRobin(clearProjection: Boolean) {
+        roundRobinReadinessRetryJob?.cancel()
+        roundRobinReadinessRetryJob = null
+        val coordinatorWasUsed = roundRobinAttached || roundRobinExpectedSourceId != null
+        roundRobinAttached = false
+        roundRobinExpectedSourceId = null
+        roundRobinAttachJob?.cancel()
+        roundRobinAttachJob = null
+        roundRobinRestoreJob?.cancel()
+        roundRobinRestoreJob = null
+        roundRobinRestoreOwner = null
+        roundRobinPendingPage = null
+        roundRobinRestoredAnchor = null
+        roundRobinRestoreAttempted = null
+        roundRobinVisit?.let { finishRoundRobinVisit(it.owner) }
+        roundRobinVisit = null
+        if (coordinatorWasUsed) roundRobinCoordinator.stop()
+        mutableState.update {
+            if (clearProjection) {
+                it.copy(
+                    roundRobinOwner = null,
+                    items = persistentListOf(),
+                    seenIds = persistentSetOf(),
+                    activeIndex = 0,
+                    isLoading = false,
+                    canLoadMore = false,
+                    pendingSeekItemId = null,
+                    pendingSeekPositionMs = null,
+                )
+            } else {
+                it.copy(roundRobinOwner = null)
+            }
+        }
+    }
+
+    private fun publishRoundRobinPage(page: ReelsRoundRobinUiPage) {
+        val owner = page.owner
+        if (owner == null) {
+            handleRoundRobinNotReady(page)
+            return
+        }
+        val previousOwner = state.value.roundRobinOwner
+        val ownerChanged = previousOwner != owner
+        if (ownerChanged) {
+            // An in-place recontext proves a new account and publishes the owner under its
+            // scope while this host still holds the previous pin. Adopt the proven scope, or
+            // a later reset/filter/search-clear re-attaches under the old account. A fallback
+            // `src:` scope is never adopted over the pin.
+            val pinned = pinnedScope
+            if (
+                pinned != null &&
+                pinned.first == owner.sourceId &&
+                owner.accountScope.isNotBlank() &&
+                owner.accountScope != pinned.second &&
+                owner.accountScope != ReelsForYou.fallbackScope(owner.sourceId)
+            ) {
+                pinnedScope = owner.sourceId to owner.accountScope
+            }
+            if (previousOwner != null) {
+                finishRoundRobinVisit(previousOwner)
+                // A replacement owner without a ScreenModel stop is a coordinator-internal
+                // recontext: the pre-attach checkpoint read does not apply to it.
+                roundRobinRestoredAnchor = null
+            }
+            roundRobinRestoreJob?.cancel()
+            roundRobinRestoreJob = null
+            roundRobinRestoreOwner = null
+            roundRobinPendingPage = null
+            roundRobinRestoreAttempted = null
+            mutableState.update { if (it.roundRobinOwner == owner) it else it.copy(roundRobinOwner = owner) }
+        }
+        if (roundRobinRestoreJob != null && roundRobinRestoreOwner == owner) {
+            roundRobinPendingPage = mergePendingRoundRobinPage(roundRobinPendingPage, page)
+            return
+        }
+        val anchorId = roundRobinAnchorToRestore(page)
+        if (anchorId != null) {
+            roundRobinPendingPage = page
+            roundRobinPendingOwnerChanged = ownerChanged
+            restoreRoundRobinAnchor(owner, anchorId)
+            return
+        }
+        applyRoundRobinPage(page, restoredAnchor = null, ownerChanged = ownerChanged)
+    }
+
+    private fun mergePendingRoundRobinPage(
+        existing: ReelsRoundRobinUiPage?,
+        incoming: ReelsRoundRobinUiPage,
+    ): ReelsRoundRobinUiPage {
+        if (existing == null) return incoming
+        return incoming.copy(
+            playbackItemId = incoming.playbackItemId ?: existing.playbackItemId,
+            pendingSeekPositionMs = incoming.pendingSeekPositionMs ?: existing.pendingSeekPositionMs,
+        )
+    }
+
+    /**
+     * Fallback anchor restore: when no checkpoint card was read before the attach (or the
+     * read was fenced), the card named by the playback hint is resolved once before the
+     * first projection is applied. The pre-attach read normally makes this a no-op.
+     */
+    private fun roundRobinAnchorToRestore(page: ReelsRoundRobinUiPage): String? {
+        val frontier = page.frontierItemId ?: return null
+        val items = state.value.items
+        if (items.any { it.id == frontier }) return null
+        val anchorId = page.playbackItemId ?: frontier
+        if (items.any { it.id == anchorId }) return null
+        if (page.suffix.any { it.id == anchorId }) return null
+        // Already restored from the session active checkpoint before the attach: no second
+        // network resolve for the same card.
+        if (roundRobinRestoredAnchor?.id == anchorId) return null
+        val owner = page.owner ?: return null
+        if (roundRobinRestoreAttempted?.let { it.first == owner.token && it.second == anchorId } == true) {
+            return null
+        }
+        return anchorId
+    }
+
+    private fun restoreRoundRobinAnchor(owner: ReelsRoundRobinRenderOwner, itemId: String) {
+        val replaySource = source as? AnimeFeedReplaySource
+        val context = roundRobinReplayContext
+        val filters = roundRobinFrozenFilters ?: AnimeFilterList()
+        if (replaySource == null || context == null) {
+            roundRobinRestoreAttempted = owner.token to itemId
+            val pending = roundRobinPendingPage
+            roundRobinPendingPage = null
+            if (pending != null) {
+                applyRoundRobinPage(pending, restoredAnchor = null, ownerChanged = roundRobinPendingOwnerChanged)
+            }
+            return
+        }
+        roundRobinRestoreOwner = owner
+        if (!state.value.isLoading) mutableState.update { it.copy(isLoading = true) }
+        roundRobinRestoreJob = screenModelScope.launch(ioDispatcher) {
+            val anchor = try {
+                when (val result = replaySource.resolveReplayItem(itemId, context, filters)) {
+                    is FeedReplayItemResult.Available -> result.item
+                    else -> null
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+            withContext(Dispatchers.Main.immediate) {
+                if (state.value.roundRobinOwner != owner) return@withContext
+                roundRobinRestoreJob = null
+                roundRobinRestoreOwner = null
+                roundRobinRestoreAttempted = owner.token to itemId
+                roundRobinRestoredAnchor = anchor
+                val pending = roundRobinPendingPage ?: return@withContext
+                roundRobinPendingPage = null
+                applyRoundRobinPage(pending, restoredAnchor = anchor, ownerChanged = roundRobinPendingOwnerChanged)
+            }
+        }
+    }
+
+    private fun applyRoundRobinPage(
+        page: ReelsRoundRobinUiPage,
+        restoredAnchor: ShortVideoItem?,
+        ownerChanged: Boolean,
+    ) {
+        val owner = page.owner ?: return
+        val frontier = page.frontierItemId
+        mutableState.update { current ->
+            val frontierIndex = if (frontier != null) {
+                current.items.indexOfFirst { it.id == frontier }
+            } else {
+                -1
+            }
+            val anchor = restoredAnchor ?: roundRobinRestoredAnchor
+            val prefix = when {
+                frontierIndex >= 0 -> current.items.take(frontierIndex + 1)
+                anchor != null -> listOf(anchor)
+                else -> emptyList()
+            }
+            val items = (prefix + page.suffix).distinctBy { it.id }
+            val replaced = prefix.isEmpty() && items.isNotEmpty()
+            val seekId = page.pendingSeekPositionMs
+                ?.let { page.playbackItemId ?: frontier }
+                ?.takeIf { id -> items.any { it.id == id } }
+            current.copy(
+                roundRobinOwner = owner,
+                items = items.toImmutableList(),
+                seenIds = items.map { it.id }.toImmutableSet(),
+                isLoading = page.loading,
+                canLoadMore = page.stop != ReelsRoundRobinStop.EMPTY,
+                activeIndex = if (frontierIndex >= 0) {
+                    current.activeIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                } else {
+                    0
+                },
+                feedGeneration = if (replaced) current.feedGeneration + 1 else current.feedGeneration,
+                targetPageIndex = if (replaced) 0 else current.targetPageIndex,
+                pageError = if (items.isEmpty()) null else page.error?.userMessage(),
+                error = if (items.isEmpty()) page.error?.userMessage() ?: current.error else null,
+                pendingSeekItemId = seekId ?: if (ownerChanged) null else current.pendingSeekItemId,
+                pendingSeekPositionMs = if (seekId != null) {
+                    page.pendingSeekPositionMs
+                } else if (ownerChanged) {
+                    null
+                } else {
+                    current.pendingSeekPositionMs
+                },
+            )
+        }
+    }
+
+    private fun handleRoundRobinNotReady(page: ReelsRoundRobinUiPage) {
+        val readiness = (page.error as? ReelsRoundRobinNotReadyException)?.readiness
+        // Tear the actor down first (it may still hold a paused session after a context
+        // loss); this also clears the stale owner before the fallback/reload decision.
+        stopRoundRobin(clearProjection = true)
+        if (readiness is FeedRoundRobinReadiness.SignedOut) {
+            // Confirmed unauthorized is the one state that keeps the legacy web fallback.
+            val source = source
+            if (source != null) buildFiltersAndStartFeed(source, state.value.currentSourceId)
+            return
+        }
+        // Pending (or an unknown pre-owner failure) must never be answered with the legacy
+        // feed: the web fallback would resurrect the very algorithm this route replaced.
+        // It is a waiting state, so keep the loading surface and retry automatically.
+        mutableState.update {
+            it.copy(
+                isLoading = true,
+                canLoadMore = false,
+                error = null,
+                errorRes = null,
+            )
+        }
+        scheduleRoundRobinReadinessRetry(
+            sourceId = state.value.currentSourceId,
+            retryAtEpochMillis = (readiness as? FeedRoundRobinReadiness.Pending)?.retryAtEpochMillis,
+        )
+    }
+
+    private fun Throwable.userMessage(): String =
+        localizedMessage?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
+
+    // ---------------------------------------------------------------------------
+    // Round-robin callbacks (owner-checked before ANY tracker/queue effect)
+    // ---------------------------------------------------------------------------
+
+    private fun isCurrentRoundRobinOwner(owner: ReelsRoundRobinRenderOwner): Boolean =
+        state.value.roundRobinOwner == owner
+
+    fun onRoundRobinVisitStarted(owner: ReelsRoundRobinRenderOwner, item: ShortVideoItem) {
+        if (!isCurrentRoundRobinOwner(owner)) return
+        val activeVisit = roundRobinVisit
+        if (activeVisit != null && activeVisit.owner == owner && activeVisit.item.id == item.id) return
+        if (activeVisit != null && activeVisit.owner != owner) finishRoundRobinVisit(activeVisit.owner)
+        interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
+        roundRobinVisit = RoundRobinVisit(owner, item)
+        // Advances the monotonic frontier and seeds the checkpoint writer for this card.
+        roundRobinCoordinator.activate(item.id)
+    }
+
+    fun onRoundRobinFirstFrame(owner: ReelsRoundRobinRenderOwner, itemId: String) {
+        if (!isCurrentRoundRobinOwner(owner)) return
+        interactionTracker.onFirstFrame(itemId)
+    }
+
+    fun onRoundRobinPlaybackSample(
+        owner: ReelsRoundRobinRenderOwner,
+        itemId: String,
+        positionMs: Long,
+        eligible: Boolean,
+    ) {
+        if (!isCurrentRoundRobinOwner(owner)) return
+        val visit = roundRobinVisit
+        if (visit != null && (visit.owner != owner || visit.item.id != itemId)) return
+        roundRobinCoordinator.sample(itemId, positionMs, eligible)
+        val event = interactionTracker.onSample(itemId, nowMs(), positionMs, eligible) ?: return
+        commitRoundRobinWatched(owner, event.itemId)
+    }
+
+    fun onRoundRobinVisitEnded(
+        owner: ReelsRoundRobinRenderOwner,
+        item: ShortVideoItem,
+        positionMs: Long,
+        positionFraction: Float,
+        durationSec: Float,
+    ) {
+        if (!isCurrentRoundRobinOwner(owner)) return
+        val visit = roundRobinVisit
+        if (visit == null || visit.owner != owner || visit.item.id != item.id) return
+        roundRobinVisit = null
+        roundRobinCoordinator.positionBoundary(item.id, positionMs)
+        val snapshot = interactionTracker.endVisit(item.id, nowMs(), positionMs) ?: return
+        if (owner.persistEligible) {
+            reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec)
+            recordWatchHistory(item, positionFraction, durationSec)
+        }
+        commitRoundRobinConsumption(owner, item, snapshot, positionMs)
+    }
+
+    fun onRoundRobinVideoCompleted(owner: ReelsRoundRobinRenderOwner, itemId: String) {
+        if (!isCurrentRoundRobinOwner(owner)) return
+        val visit = roundRobinVisit
+        if (visit != null && (visit.owner != owner || visit.item.id != itemId)) return
+        roundRobinCoordinator.videoCompleted(itemId)
+    }
+
+    /**
+     * Ends a visit whose owner is being detached (new owner, stop, source switch). It is
+     * committed exactly once with the OLD owner's captured scope, so a new visit of the same
+     * item id never inherits the old accumulator and never writes the new account's history.
+     */
+    private fun finishRoundRobinVisit(owner: ReelsRoundRobinRenderOwner) {
+        val visit = roundRobinVisit ?: return
+        if (visit.owner != owner) return
+        roundRobinVisit = null
+        val lastPosition = interactionTracker.snapshot(visit.item.id)?.positionMs ?: 0L
+        val snapshot = interactionTracker.endVisit(visit.item.id, nowMs(), lastPosition) ?: return
+        commitRoundRobinConsumption(owner, visit.item, snapshot, lastPosition)
+    }
+
+    private fun commitRoundRobinConsumption(
+        owner: ReelsRoundRobinRenderOwner,
+        item: ShortVideoItem,
+        snapshot: ReelsInteractionTracker.Snapshot,
+        positionMs: Long,
+    ) {
+        if (snapshot.qualified || snapshot.watchedMs >= ReelsForYou.WATCH_THRESHOLD_MS) {
+            commitRoundRobinWatched(owner, item.id)
+        } else {
+            commitRoundRobinSkipped(owner, item.id)
+        }
+        if (!owner.persistEligible || positionMs <= 0L) return
+        // Capture the immutable identity BEFORE the coroutine: a later ensureForYouScope (or
+        // an account switch) must never redirect this write to another scope.
+        val scope = owner.accountScope
+        val sourceId = owner.sourceId
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            reelsCandidateRepository.saveResumePosition(scope, sourceId, item.id, positionMs)
+        }
+    }
+
+    private fun commitRoundRobinWatched(owner: ReelsRoundRobinRenderOwner, itemId: String) {
+        if (!owner.persistEligible) return
+        val key = roundRobinCommitKey(owner, itemId)
+        if (!roundRobinWatchedCommitted.add(key)) return
+        val scope = owner.accountScope
+        val sourceId = owner.sourceId
+        val generation = owner.historyGeneration
+        val surface = currentSurface().key
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val at = wallClock()
+            var ok = reelsConsumptionRepository.markWatched(
+                scope,
+                sourceId,
+                itemId,
+                at,
+                surface,
+                ReelsForYou.POLICY_VERSION,
+                generation,
+            )
+            // A stale generation means a history reset deleted this row: never retry it.
+            if (!ok && reelsConsumptionRepository.generation(scope) == generation) {
+                ok = reelsConsumptionRepository.markWatched(
+                    scope,
+                    sourceId,
+                    itemId,
+                    at,
+                    surface,
+                    ReelsForYou.POLICY_VERSION,
+                    generation,
+                )
+            }
+            if (ok) {
+                reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
+            } else {
+                logcat(LogPriority.WARN) {
+                    "Round-robin watch for $itemId was not persisted (generation $generation)"
+                }
+            }
+        }
+    }
+
+    private fun commitRoundRobinSkipped(owner: ReelsRoundRobinRenderOwner, itemId: String) {
+        if (!owner.persistEligible) return
+        val key = roundRobinCommitKey(owner, itemId)
+        if (roundRobinWatchedCommitted.contains(key)) return
+        if (!roundRobinSkippedCommitted.add(key)) return
+        val scope = owner.accountScope
+        val sourceId = owner.sourceId
+        val generation = owner.historyGeneration
+        val surface = currentSurface().key
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val ok = reelsConsumptionRepository.markSkipped(
+                scope,
+                sourceId,
+                itemId,
+                wallClock(),
+                surface,
+                ReelsForYou.POLICY_VERSION,
+                generation,
+            )
+            if (ok) {
+                reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
+            } else {
+                logcat(LogPriority.WARN) {
+                    "Round-robin skip for $itemId was not persisted (generation $generation)"
                 }
             }
         }
@@ -1308,7 +2077,9 @@ class ReelsFeedScreenModel(
                         return@withContext
                     }
                     mutableState.update { current ->
-                        val added = window.entries.map { it.candidate.toShortVideoItem() }.filterHidden()
+                        val added = window.entries
+                            .map { entry -> with(ReelsCandidateMapper) { entry.candidate.toShortVideoItem() } }
+                            .filterHidden()
                             .filterNot { it.id in current.seenIds }
                         current.copy(
                             items = (current.items + added).toImmutableList(),
@@ -1333,7 +2104,47 @@ class ReelsFeedScreenModel(
         return true
     }
 
+    /** True only for the global For You surface with a blank search on a mode-0 source. */
+    private fun isRoundRobinRoute(source: AnimeFeedSource): Boolean {
+        if (mode != FeedMode.GLOBAL) return false
+        if (state.value.isOffline) return false
+        if (state.value.searchQuery.isNotBlank()) return false
+        if (resumeVideoId != null) return false
+        val roundRobin = source as? AnimeFeedRoundRobinSource ?: return false
+        return runCatching { roundRobin.isRoundRobinEnabled(state.value.filters) }.getOrDefault(false)
+    }
+
+    /**
+     * Filter/unseen changes are a new eligibility context: stop the actor, drop the old UI
+     * prefix and let buildFiltersAndStartFeed pick RR or the legacy route for the new filters.
+     */
+    private fun restartFeedForContextChange() {
+        val src = source
+        if (src is AnimeFeedRoundRobinSource && mode == FeedMode.GLOBAL && !state.value.isOffline) {
+            stopRoundRobin(clearProjection = true)
+            buildFiltersAndStartFeed(src, state.value.currentSourceId, resetReplay = true)
+        } else {
+            loadFeed(reset = true)
+        }
+    }
+
     fun loadFeed(reset: Boolean = false) {
+        val src = source
+        if (!state.value.isOffline && src is AnimeFeedRoundRobinSource && isRoundRobinRoute(src)) {
+            if (!reset) {
+                // Pages are a full forward projection owned by the coordinator; the runway
+                // only asks it for more, never a legacy page.
+                roundRobinCoordinator.loadNext()
+                return
+            }
+            if (roundRobinAttached) {
+                // A normal refresh is a catalog/head/eligibility pass, never open(reset=true).
+                roundRobinCoordinator.refresh()
+                return
+            }
+            buildFiltersAndStartFeed(src, state.value.currentSourceId)
+            return
+        }
         if (reset) {
             val replaySource = source
             if (replaySource != null && isReplaySurface()) {
@@ -1524,7 +2335,7 @@ class ReelsFeedScreenModel(
                 val backlog = if (reset && forYou != null) {
                     reelsCandidateRepository
                         .unconsumed(forYou.first, sourceIdAtStart, ReelsForYou.BACKLOG_SEED_LIMIT)
-                        .map { it.toShortVideoItem() }
+                        .map { candidate -> with(ReelsCandidateMapper) { candidate.toShortVideoItem() } }
                 } else {
                     emptyList()
                 }
@@ -2211,6 +3022,10 @@ class ReelsFeedScreenModel(
         persistUnlessIncognito(state.value.currentSourceId) {
             sourcePreferences.lastReelsQuery(state.value.currentSourceId).set(trimmed)
         }
+        if (trimmed.isNotBlank()) {
+            // A search is an explicit non-RR surface: stop polling, keep the durable RR state.
+            stopRoundRobin(clearProjection = true)
+        }
         mutableState.update { current ->
             current.copy(
                 searchQuery = trimmed,
@@ -2297,6 +3112,16 @@ class ReelsFeedScreenModel(
                     targetPageIndex = basePosition.coerceIn(0, (baseItems.size - 1).coerceAtLeast(0)),
                 )
             }
+            // The search stopped the RR actor; reattach it without dropping the restored
+            // prefix (the frontier merge in the first page keeps the cards already shown).
+            val src = source
+            if (src is AnimeFeedRoundRobinSource && isRoundRobinRoute(src)) {
+                buildFiltersAndStartFeed(
+                    src,
+                    state.value.currentSourceId,
+                    keepRoundRobinProjection = true,
+                )
+            }
         } else {
             mutableState.update { it.copy(searchQuery = "", isSearchBarOpen = false, searchSuggestions = null) }
             loadFeed(reset = true)
@@ -2316,7 +3141,7 @@ class ReelsFeedScreenModel(
             sourcePreferences.lastReelsFilter(state.value.currentSourceId).set(serialized)
         }
         mutableState.update { it.copy(isFilterDialogOpen = false) }
-        loadFeed(reset = true)
+        restartFeedForContextChange()
     }
 
     fun resetFilters() {
@@ -2342,7 +3167,7 @@ class ReelsFeedScreenModel(
             withContext(Dispatchers.Main.immediate) {
                 if (state.value.currentSourceId != sourceId) return@withContext
                 mutableState.update { it.copy(filters = freshFilters) }
-                loadFeed(reset = true)
+                restartFeedForContextChange()
             }
         }
     }
@@ -2529,6 +3354,8 @@ class ReelsFeedScreenModel(
         // A re-lifted session must refresh whatever account sheet is open right now.
         if (state.value.isContentPreferencesOpen) loadContentPreferences()
         if (state.value.isBlockedTagsOpen) loadBlockedTags()
+        // Web login can change the account: drop the old RR owner/projection before reload.
+        stopRoundRobin(clearProjection = true)
         loadFeed(reset = true)
     }
 
@@ -2750,6 +3577,14 @@ class ReelsFeedScreenModel(
         invalidateReplay()
         val next = !sourcePreferences.reelsIncognitoMode().get()
         sourcePreferences.reelsIncognitoMode().set(next)
+        // The published owner and its session freeze persistEligible/incognito at attach, so
+        // flipping the switch mid-feed must re-attach: otherwise turning incognito ON keeps
+        // writing watches/checkpoints/RR rows (and OFF keeps the feed ephemeral).
+        val src = source
+        if (roundRobinAttached && src is AnimeFeedRoundRobinSource) {
+            stopRoundRobin(clearProjection = true)
+            buildFiltersAndStartFeed(src, state.value.currentSourceId)
+        }
     }
 
     // --- B2 sleep timer ---
@@ -2986,7 +3821,12 @@ class ReelsFeedScreenModel(
             pinnedScope = null
             watchedCommitted.clear()
             skippedCommitted.clear()
-            if (ok) loadFeed(reset = true)
+            if (ok) {
+                withContext(Dispatchers.Main.immediate) {
+                    stopRoundRobin(clearProjection = true)
+                    loadFeed(reset = true)
+                }
+            }
         }
     }
 
@@ -2994,6 +3834,9 @@ class ReelsFeedScreenModel(
     fun logout() {
         val loginSource = source as? AnimeFeedLoginSource ?: return
         val webLoginSource = source as? AnimeFeedWebLoginSource
+        // The explicit logout request clears the old UI projection and stops the actor
+        // immediately; the account-scoped reload happens after the session is gone.
+        stopRoundRobin(clearProjection = true)
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             runCatching { loginSource.logout() }
             if (webLoginSource != null) {
@@ -3560,8 +4403,17 @@ class ReelsFeedScreenModel(
         // the flown-over reels unconsumed, so they came back in the next generation.
         if (cause == ReelsTransitionCause.USER_FORWARD && index > previousIndex && previousItem != null) {
             val items = state.value.items
+            // Manual-forward skips are consumption, so they must use the ACTIVE RR owner's
+            // immutable scope; the legacy path keeps its previous provenance.
+            val roundRobinOwner = state.value.roundRobinOwner
             for (position in previousIndex until minOf(index, items.size)) {
-                items.getOrNull(position)?.let { commitSkipped(it.id) }
+                items.getOrNull(position)?.let { item ->
+                    if (roundRobinOwner != null) {
+                        commitRoundRobinSkipped(roundRobinOwner, item.id)
+                    } else {
+                        commitSkipped(item.id)
+                    }
+                }
             }
         }
         mutableState.update {
@@ -3633,6 +4485,15 @@ class ReelsFeedScreenModel(
                 }
             } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * Leaving the screen stops the round-robin polling but deliberately keeps the durable
+     * RR/session state: re-entering the same context resumes the round.
+     */
+    override fun onDispose() {
+        stopRoundRobin(clearProjection = false)
+        super.onDispose()
     }
 
     @Immutable
@@ -3756,6 +4617,10 @@ class ReelsFeedScreenModel(
         // Page the pager should scroll to after a feedGeneration bump: 0 on fresh loads,
         // the remembered position when a cleared search restores the base feed.
         val targetPageIndex: Int = 0,
+        // Immutable owner of the current round-robin generation (contract v28). Null on
+        // every legacy route. The View captures it from the same State version and passes
+        // it back with every player callback; the pager keys pages by owner.token + item.id.
+        val roundRobinOwner: ReelsRoundRobinRenderOwner? = null,
         val searchQuery: String = "",
         // Contract v23 album search: the source answers search with a paginated album
         // directory; the screen renders album cards instead of the video pager.

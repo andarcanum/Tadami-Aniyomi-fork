@@ -1,7 +1,7 @@
 # Reels Feed Contract
 
-**Current version: 27** (`extensionLib` 12.0–27.0 accepted by the host; v24–v26 are
-purely additive and stay below the v27 ceiling) ·
+**Current version: 28** (`extensionLib` 12.0–28.0 accepted by the host; v24–v28 are
+purely additive) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
@@ -38,6 +38,8 @@ API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/anime
 [`AnimeFeedReplaySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedReplaySource.kt),
 [`FeedReplayContext`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayContext.kt),
 [`FeedReplayItemResult`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayItemResult.kt),
+[`AnimeFeedRoundRobinSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedRoundRobinSource.kt),
+[`FeedRoundRobin`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedRoundRobin.kt),
 [`ContentPreferenceOption`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ContentPreferenceOption.kt)
 
 This document is the standalone reference for authors of short-video feed
@@ -310,7 +312,87 @@ Rules for the source:
   for playable URLs and re-resolves before playback; never require a persisted secret or a
   process-local token to resolve an item.
 - All members are abstract. Implementing the capability requires `extensionLib` 27.0;
-  `LIB_VERSION_MAX` is 27.0, and older plugins inside `12.0..27.0` keep loading.
+  `LIB_VERSION_MAX` became 27.0 in that release, and older plugins inside `12.0..27.0` keep
+  loading.
+
+## Round-robin scanning (v28 capability interface)
+
+`AnimeFeedRoundRobinSource` is an optional capability for feeds that rotate over many chats/sources
+instead of one backend stream. It extends `AnimeFeedReplaySource`, so the v26 account scope and the
+v27 replay-context checks stay in force; hosts detect it with
+`rawSource is AnimeFeedRoundRobinSource` and keep the ordinary feed for every source without it.
+All members are abstract, no default members are added to older interfaces, and the v28
+request/result models are transport values — they are never stored as a whole in the database.
+
+```kotlin
+interface AnimeFeedRoundRobinSource : AnimeFeedReplaySource {
+    fun isRoundRobinEnabled(filters: AnimeFilterList): Boolean
+    suspend fun prepareRoundRobin(): FeedRoundRobinReadiness
+    fun identifyRoundRobinItem(itemId: String): FeedRoundRobinIdentity?
+    suspend fun getRoundRobinCatalog(
+        expectedContext: FeedReplayContext,
+        forceRefresh: Boolean,
+    ): FeedRoundRobinCatalogResult
+    suspend fun scanRoundRobinSource(request: FeedRoundRobinScanRequest): FeedRoundRobinScanResult
+}
+```
+
+`FeedRoundRobinReadiness` has exactly three states:
+
+- `SignedOut` — confirmed unauthorized: the source has no authorized session. This is not an
+  empty feed, must not be reported as a chat `Unavailable`, and is not `Pending`. Only this
+  state keeps the legacy unauthenticated web feed as the host fallback.
+- `Pending(retryAtEpochMillis)` — identity/TDLib is still resolving, not signed out. The host
+  must not fall back to the legacy/web feed while pending; null lets the host use its default
+  backoff.
+- `Ready(context, storageKey)` — a scan may run. `context` is the ordinary v27
+  `FeedReplayContext`; `storageKey` is a **separate** stable, non-secret identifier of the
+  round-robin backend/format (Telegram: `tdlib-rr-v1`) without the subscription list, ports, epochs
+  or timestamps. It is independent from the mutable v27 context: it stays stable when the context
+  changes, so two `Ready` values with different contexts can carry the same storage key.
+
+Host keys: account scope is still `accountScopeId()`. The host derives its session context key with
+the existing `ReelsSessionContext.computeContextKey` from the frozen filters/unseen set and uses
+`storageKey + ':rr:1'` as the round-robin continuity key. The source checkpoint is bound to
+`storageKey`, `accountId`, `sourceKey` and the filter fingerprint — never to the mutable v27
+continuity key. When `replayContextChanges` emits, the host calls `prepareRoundRobin()` again on
+IO: the same account/storage key refreshes the expected transport/replay context and the catalog
+without resetting the round; a different account/storage key fences the old scan stream and opens
+the new context safely.
+
+`getRoundRobinCatalog` returns `Snapshot(catalog)`, `Deferred(retryAtEpochMillis)` or
+`ContextChanged`. A 401 or any context loss is `ContextChanged` (readiness is redone), never a
+provider-wide outage. `FeedRoundRobinCatalog` carries the context, a `revision`, `complete`, the
+source list and an optional `retryAtEpochMillis`. Each `FeedRoundRobinSourceRef` has `key`, `title`,
+`author`, `contentRevision`, `excluded` and `previousKeys` (former keys that still identify the same
+chat).
+
+Scans are bounded and per chat:
+
+- `FeedRoundRobinScanRequest.maxCandidates` is always in `1..2`; with zero free slots the host does
+  not call the scanner at all. A returned page contains at most that many candidates, every
+  identity uses the requested `sourceKey`, item ids are non-empty and order keys are positive.
+- `Page.checkpoint` is opaque and non-empty even when `historyExhausted` is true; later head checks
+  pass it back. The same empty checkpoint without exhaustion or a retry window is a protocol stall,
+  not a reason for a tight retry loop.
+- `Deferred(reason, retryAtEpochMillis, providerWide)` uses `NETWORK`, `RATE_LIMIT`, `TIME_BUDGET`
+  or `UPSTREAM_PENDING`. Telegram 420/429 is `RATE_LIMIT` with `providerWide = true`; even a manual
+  refresh must not cancel `retryAtEpochMillis`.
+- `Unavailable` means this chat cannot be scanned (deleted/left); it is not an outage of the whole
+  provider. If a message disappears during the separate head recovery, drop that head from the
+  cursor and continue scanning the chat.
+- `ContextChanged` repeats the v27 rule: redo readiness instead of failing every chat.
+  `InvalidCheckpoint` restarts that chat's scan from a fresh checkpoint.
+
+Telegram identity and content rules: `sourceKey` is `chatId.toString()` (never an `@username`),
+`orderKey` is the TDLib `message.id` compared descending inside one chat, and the stable item id
+stays `tdlib:chatId/messageId`. Video/animation items and explicitly allowed rounds are merged by
+`message.id`; documents and private chats are not included. A null duration still follows the
+existing `DurationRange` policy. `contentKey` is a durable stable TDLib remote unique file id when
+available, otherwise null; a local `file.id` is not a durable global identity.
+
+Implementing the capability requires `extensionLib` 28.0; the host ceiling (`LIB_VERSION_MAX`)
+is 28.0, and every plugin inside `12.0..28.0` keeps loading unchanged.
 
 ## Delivery is not consumption (what a feed source must NOT infer)
 
@@ -518,6 +600,7 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 28 | Optional capability `AnimeFeedRoundRobinSource` (`isRoundRobinEnabled`, `prepareRoundRobin`, `identifyRoundRobinItem`, `getRoundRobinCatalog`, `scanRoundRobinSource`): per-chat round-robin scanning with a stable `storageKey` independent from the mutable v27 replay context and bounded 1..2 candidate scans. Models `FeedRoundRobinReadiness` (`SignedOut`/`Pending`/`Ready`), `FeedRoundRobinIdentity`, `FeedRoundRobinSourceRef`, `FeedRoundRobinCatalog`, `FeedRoundRobinCatalogResult`, `FeedRoundRobinCandidate`, `FeedRoundRobinScanRequest`, `FeedRoundRobinDeferral`, `FeedRoundRobinScanResult`. All members abstract, no default members added to existing interfaces; the v27 interfaces and model descriptors are unchanged. Implementing requires `extensionLib` 28.0; `LIB_VERSION_MAX` becomes 28.0, while older plugins inside `12.0..27.0` keep loading. |
 | 27 | Optional capability `AnimeFeedReplaySource` (`replayContextChanges: Flow<FeedReplayContext?>`, `prepareReplay()`, `resolveReplayItem(itemId, expectedContext, filters)`): session continuity and safe item rehydration without process tokens. Models `FeedReplayContext` (accountId, continuityKey) and `FeedReplayItemResult` (`Available`, `FilteredOut`, `Unavailable`, `Deferred`, `ContextChanged`). All members abstract, no default methods on existing interfaces. `LIB_VERSION_MAX` becomes 27.0; older plugins stay inside `12.0..27.0` and keep loading. |
 | 26 | Optional capability `AnimeFeedAccountIdentitySource.accountScopeId()`: a stable, non-secret account id so the host can key its durable watched/skipped summary per account instead of per source (display labels and session tokens are explicitly rejected). `null` = unproven identity → source-scoped history. Also documents the host-side For You rules a source must not violate: delivery (proxy `Range`, `DownloadFile`, prefetch, decode) is never a view, replay caches are not history, an empty cache is not EOF, `id` must be delivery-independent, and the source never pre-filters seen items. Instanceof-detected, no default members, existing constructors unchanged. A plugin that implements it declares `extensionLib` 26.0 and the host's `LIB_VERSION_MAX` becomes 26.0 (older plugins stay inside `12.0..26.0` and keep loading). |
 | 25 | Optional capabilities `AnimeFeedMediaDescriptorSource` (per-item `FeedMediaDescriptor`: media kind, lazy-resolution permission, HD fallback, offline support) and `AnimeFeedErrorClassifierSource` (typed `FeedError` verdicts: `ExpiredCursor`, `AuthRequired`, `RateLimited(retryAtEpochMillis)`, `Transient`, `Terminal`). Both instanceof-detected, no default members, existing constructors unchanged; `null` verdicts and absent capabilities keep the legacy host behavior. Additive: `LIB_VERSION_MAX` stays at 23.0. |
@@ -531,3 +614,22 @@ class MyFeed : AnimeFeedSource {
 | 18 | Optional creator-feed capability: `AnimeCreatorFeedSource.getCreatorFeed(creator, page, cursor)` and optional feedback capability `AnimeReelsFeedbackSource` (both instanceof-detected, no default members added to existing interfaces). Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 18.0 as the discipline stamp. |
 | 17 | Sticky cursor pagination (`FeedPage.nextCursor`, `cursor` parameters), `getSearchFeed` default, URL semantics flip (`videoUrl` base + optional `videoUrlHd`). Breaking: all feed plugins rebuild. |
 | ≤16 | Initial feed contract (page-int pagination, `videoUrlHd` required). |
+
+### v28 build artifacts (2026-11-01)
+
+Built from this worktree with `LIB_VERSION_MAX = 28.0`. Sizes and hashes below are the actual
+files produced by the final gate; a rebuild will produce different hashes. The `:source-api` row is
+the current compile jar (the `bundleAndroidMainClassesToCompileJar` task reported `UP-TO-DATE` on
+that gate), copied byte-identically into the plugin. The plugin APK was last rebuilt at
+2026-11-01 02:21 (+05:00); the host APKs by the final-gate `assembleDebug` at
+2026-11-01 02:42 (+05:00).
+
+| Artifact | Version | Size | SHA-256 |
+|---|---|---|---|
+| `:source-api` compile jar (`source-api/build/intermediates/compile_library_classes_jar/androidMain/bundleAndroidMainClassesToCompileJar/classes.jar`) | contract 28 | 1,234,061 B | `4570dcd793c6b50ec6348ccd692fe439fa9ebdfe41a74c6b64f9a4919ab49987` |
+| Host `app-arm64-v8a-debug.apk` | versionCode 219 / `0.63.2-10422` | 171,033,881 B | `2317a8fb383541cccc2028138a8f2adbac45ac92b542cb6f86c40c181c7d0d69` |
+| Telegram plugin `telegram-debug.apk` | versionCode 27 / `28.0.27`, `extensionLib` 28.0 | 21,806,020 B | `1e15b7e5deb0c5dde31692a5e1b218ae6affc7c631e4fe0398343dd5bb74f795` |
+
+The same `assembleDebug` run also produced `app-armeabi-v7a-debug.apk`, `app-x86-debug.apk`,
+`app-x86_64-debug.apk` and `app-universal-debug.apk` (universal SHA-256
+`3bfb6b411567d71b3ac103a44a78d41e5f3431bfdcd282bc39b0b8652c3481e7`).

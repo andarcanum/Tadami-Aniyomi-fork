@@ -80,8 +80,11 @@ class ReelsCandidateRepositoryImpl(
     override suspend fun remove(scope: String, sourceId: Long, itemIds: Collection<String>) {
         if (itemIds.isEmpty()) return
         try {
-            handler.await { db ->
+            handler.await(inTransaction = true) { db ->
+                // The SQL delete is protected for live RR show-watched references; the orphan
+                // cleanup keeps FK OFF databases consistent with the cascade FK ON performs.
                 db.reels_candidateQueries.remove(scope, sourceId, itemIds)
+                db.reels_rr_itemQueries.deleteOrphans(scope, sourceId)
             }
         } catch (e: CancellationException) {
             throw e
@@ -98,7 +101,13 @@ class ReelsCandidateRepositoryImpl(
 
     override suspend fun clear(scope: String) {
         try {
-            handler.await { db ->
+            handler.await(inTransaction = true) { db ->
+                // The RR projection is keyed to these payloads; deleting them separately would
+                // leave orphan associations under FK OFF. Item -> source -> state is the only
+                // order that works with foreign keys both ON and OFF.
+                db.reels_rr_itemQueries.deleteForScope(scope)
+                db.reels_rr_sourceQueries.deleteForScope(scope)
+                db.reels_rr_stateQueries.deleteForScope(scope)
                 db.reels_candidateQueries.deleteForScope(scope)
             }
         } catch (e: CancellationException) {

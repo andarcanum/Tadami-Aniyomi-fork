@@ -26,6 +26,8 @@ object ReelsCandidateWriter {
 
         // Safely prune authoritative consumed rows to free capacity before checking cap
         queries.pruneConsumedRemnants(scope, sourceId)
+        // FK OFF leaves the round-robin association behind; keep both pragma modes consistent.
+        db.reels_rr_itemQueries.deleteOrphans(scope, sourceId)
 
         // Deduplicate input items by itemId
         val distinct = candidates.distinctBy { it.itemId }
