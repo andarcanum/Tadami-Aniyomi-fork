@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.browse.manga.extension
 
 import android.app.Application
 import androidx.compose.runtime.Immutable
+import androidx.lifecycle.asFlow
+import androidx.work.WorkInfo
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import dev.icerock.moko.resources.StringResource
@@ -9,7 +11,9 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.extension.manga.interactor.GetMangaExtensionsByType
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.tachiyomi.data.updater.ExtensionUpdateJob
 import eu.kanade.tachiyomi.extension.InstallStep
+import eu.kanade.tachiyomi.extension.installer.ApkExtensionKind
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.extension.manga.model.newestByVersion
@@ -18,7 +22,9 @@ import eu.kanade.tachiyomi.extension.manga.model.selectMangaReinstallCandidates
 import eu.kanade.tachiyomi.extension.manga.toInstalledMangaExtensionPkgName
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +51,7 @@ class MangaExtensionsScreenModel(
     basePreferences: BasePreferences = Injekt.get(),
     private val extensionManager: MangaExtensionManager = Injekt.get(),
     private val getExtensions: GetMangaExtensionsByType = Injekt.get(),
+    private val context: Application = Injekt.get(),
 ) : StateScreenModel<MangaExtensionsScreenModel.State>(State()) {
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
@@ -53,7 +60,6 @@ class MangaExtensionsScreenModel(
     private val updateExtensionVariants = MutableStateFlow<Map<String, List<MangaExtension.Available>>>(emptyMap())
 
     init {
-        val context = Injekt.get<Application>()
         val extensionMapper: (
             Map<String, InstallStep>,
             Map<String, Int>,
@@ -206,6 +212,35 @@ class MangaExtensionsScreenModel(
                 }
             }
             .launchIn(screenModelScope)
+
+        runCatching {
+            context.workManager.getWorkInfosForUniqueWorkLiveData(
+                ExtensionUpdateJob.getWorkName(ApkExtensionKind.MANGA),
+            ).asFlow()
+        }.getOrNull()
+            ?.onEach { list ->
+                val workInfo = list.firstOrNull()
+                if (workInfo?.state == WorkInfo.State.CANCELLED && updateAllJob?.isActive == true) {
+                    cancelUpdateAll()
+                    return@onEach
+                }
+                if (updateAllJob?.isActive == true) {
+                    return@onEach
+                }
+                val isRunning = workInfo != null && (
+                    workInfo.state == WorkInfo.State.RUNNING ||
+                        workInfo.state == WorkInfo.State.ENQUEUED
+                    )
+                val current = workInfo?.progress?.getInt(ExtensionUpdateJob.KEY_CURRENT, 0) ?: 0
+                val total = workInfo?.progress?.getInt(ExtensionUpdateJob.KEY_TOTAL, 0) ?: 0
+                mutableState.update { state ->
+                    state.copy(
+                        isUpdatingAll = isRunning,
+                        updatingAllProgress = if (isRunning && total > 0) current to total else null,
+                    )
+                }
+            }
+            ?.launchIn(screenModelScope)
     }
 
     fun reinstallAfterSignatureMismatch() {
@@ -238,22 +273,92 @@ class MangaExtensionsScreenModel(
         }
     }
 
+    private var updateAllJob: Job? = null
+
+    @Volatile
+    private var currentUpdatingExtension: MangaExtension.Installed? = null
+
     fun updateAllExtensions() {
-        screenModelScope.launchIO {
-            // Source candidates from the manager flow, not the rendered list: search filters
-            // and collapsed language sections hide items whose updates still must be applied.
-            extensionManager.installedExtensionsFlow.value
-                .filter { it.hasUpdate }
-                .forEach { extension ->
-                    if (extension.needsReinstall) {
-                        // Never skip silently (B5): pause the queue until the user resolves
-                        // the reinstall dialog for this extension; null = dismissed → skip.
-                        resolveQueuedReinstall(extension)
-                    } else {
-                        updateExtensionNow(extension)
-                    }
-                }
+        if (updateAllJob?.isActive == true) return
+        val extensionsToUpdate = extensionManager.installedExtensionsFlow.value
+            .filter { it.hasUpdate }
+        val total = extensionsToUpdate.size
+        mutableState.update {
+            it.copy(
+                isUpdatingAll = true,
+                updatingAllProgress = if (total > 0) 0 to total else null,
+            )
         }
+        ExtensionUpdateJob.onBatchStarted(ApkExtensionKind.MANGA, total) {
+            cancelUpdateAll()
+        }
+        ExtensionUpdateJob.start(context, ApkExtensionKind.MANGA)
+        updateAllJob = screenModelScope.launchIO {
+            try {
+                // Source candidates from the manager flow, not the rendered list: search filters
+                // and collapsed language sections hide items whose updates still must be applied.
+                for ((index, extension) in extensionsToUpdate.withIndex()) {
+                    mutableState.update {
+                        it.copy(
+                            isUpdatingAll = true,
+                            updatingAllProgress = index to total,
+                        )
+                    }
+                    ExtensionUpdateJob.onBatchProgress(ApkExtensionKind.MANGA, index, total)
+                    currentUpdatingExtension = extension
+                    try {
+                        if (extension.needsReinstall) {
+                            // Never skip silently (B5): pause the queue until the user resolves
+                            // the reinstall dialog for this extension; null = dismissed → skip.
+                            resolveQueuedReinstall(extension)
+                        } else {
+                            updateExtensionNow(extension)
+                        }
+                    } finally {
+                        currentUpdatingExtension = null
+                    }
+                    val completed = index + 1
+                    mutableState.update {
+                        it.copy(
+                            isUpdatingAll = true,
+                            updatingAllProgress = completed to total,
+                        )
+                    }
+                    ExtensionUpdateJob.onBatchProgress(ApkExtensionKind.MANGA, completed, total)
+                }
+            } finally {
+                currentUpdatingExtension = null
+                ExtensionUpdateJob.onBatchFinished(context, ApkExtensionKind.MANGA)
+                mutableState.update {
+                    it.copy(
+                        isUpdatingAll = false,
+                        updatingAllProgress = null,
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelUpdateAll() {
+        val job = updateAllJob
+        updateAllJob = null
+        job?.cancel()
+        currentUpdatingExtension?.let { ext ->
+            currentUpdatingExtension = null
+            extensionManager.cancelInstallUpdateExtension(ext)
+            removeDownloadState(ext)
+        }
+        queuedReinstallResolution?.complete(null)
+        queuedReinstallResolution = null
+        mutableState.update {
+            it.copy(
+                isUpdatingAll = false,
+                updatingAllProgress = null,
+                queuedReinstallExtension = null,
+                queuedReinstallCandidates = emptyList(),
+            )
+        }
+        ExtensionUpdateJob.stop(context, ApkExtensionKind.MANGA)
     }
 
     /** Set while the update-all queue waits for a reinstall decision on this extension. */
@@ -435,6 +540,8 @@ class MangaExtensionsScreenModel(
         /** Set while the update-all queue is paused on an extension needing reinstall (B5). */
         val queuedReinstallExtension: MangaExtension.Installed? = null,
         val queuedReinstallCandidates: List<MangaExtension.Available> = emptyList(),
+        val isUpdatingAll: Boolean = false,
+        val updatingAllProgress: Pair<Int, Int>? = null, // Pair(current, total)
     ) {
         val isEmpty = items.isEmpty()
     }

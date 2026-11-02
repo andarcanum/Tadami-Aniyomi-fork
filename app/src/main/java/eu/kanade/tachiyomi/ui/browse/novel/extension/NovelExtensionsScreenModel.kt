@@ -3,12 +3,16 @@ package eu.kanade.tachiyomi.ui.browse.novel.extension
 import android.app.Application
 import android.widget.Toast
 import androidx.compose.runtime.Immutable
+import androidx.lifecycle.asFlow
+import androidx.work.WorkInfo
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.tachiyomi.data.updater.ExtensionUpdateJob
 import eu.kanade.tachiyomi.extension.InstallStep
+import eu.kanade.tachiyomi.extension.installer.ApkExtensionKind
 import eu.kanade.tachiyomi.extension.installer.ExtensionApkFileStore
 import eu.kanade.tachiyomi.extension.installer.ExtensionInstallDiagnostic
 import eu.kanade.tachiyomi.extension.installer.UnifiedApkExtensionInstaller
@@ -17,6 +21,7 @@ import eu.kanade.tachiyomi.extension.novel.NovelPluginId
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
@@ -267,6 +272,35 @@ class NovelExtensionsScreenModel(
             .launchIn(screenModelScope)
 
         observeInstallStates()
+
+        runCatching {
+            context.workManager.getWorkInfosForUniqueWorkLiveData(
+                ExtensionUpdateJob.getWorkName(ApkExtensionKind.NOVEL_KOTLIN),
+            ).asFlow()
+        }.getOrNull()
+            ?.onEach { list ->
+                val workInfo = list.firstOrNull()
+                if (workInfo?.state == WorkInfo.State.CANCELLED && updateAllJob?.isActive == true) {
+                    cancelUpdateAll()
+                    return@onEach
+                }
+                if (updateAllJob?.isActive == true) {
+                    return@onEach
+                }
+                val isRunning = workInfo != null && (
+                    workInfo.state == WorkInfo.State.RUNNING ||
+                        workInfo.state == WorkInfo.State.ENQUEUED
+                    )
+                val current = workInfo?.progress?.getInt(ExtensionUpdateJob.KEY_CURRENT, 0) ?: 0
+                val total = workInfo?.progress?.getInt(ExtensionUpdateJob.KEY_TOTAL, 0) ?: 0
+                mutableState.update { state ->
+                    state.copy(
+                        isUpdatingAll = isRunning,
+                        updatingAllProgress = if (isRunning && total > 0) current to total else null,
+                    )
+                }
+            }
+            ?.launchIn(screenModelScope)
     }
 
     fun refresh() {
@@ -341,32 +375,110 @@ class NovelExtensionsScreenModel(
         return ExtensionInstallDiagnostic.getInstallerDiagnosticString(context, basePreferences)
     }
 
+    private var updateAllJob: Job? = null
+
+    @Volatile
+    private var currentUpdatingPlugin: NovelPlugin? = null
+
     fun updateAllExtensions() {
-        screenModelScope.launchIO {
-            // Full installed set, not the rendered list: search filters and collapsed language
-            // sections hide items whose updates still must be applied (parity with c344dcc09).
-            // Sequential awaited queue: each update finishes (or fails into row diagnostics)
-            // before the next starts, and the loop suspends while a signature-mismatch
-            // dialog is open so the user resolves it before the queue moves on.
-            installedPluginsSnapshot.value.forEach { installed ->
-                val updateState = NovelPluginUpdateClassifier.classify(
-                    installed = installed,
-                    variants = allPluginVariants.value[installed.id].orEmpty(),
-                )
-                when {
-                    updateState.sameRepoUpdate != null -> {
-                        installAwaiting(updateState.sameRepoUpdate)
-                        awaitSignatureResolution()
+        if (updateAllJob?.isActive == true) return
+        val candidates = installedPluginsSnapshot.value.mapNotNull { installed ->
+            val updateState = NovelPluginUpdateClassifier.classify(
+                installed = installed,
+                variants = allPluginVariants.value[installed.id].orEmpty(),
+            )
+            if (updateState.sameRepoUpdate != null || updateState.hasOtherRepoUpdate) {
+                installed to updateState
+            } else {
+                null
+            }
+        }
+        val total = candidates.size
+        mutableState.update {
+            it.copy(
+                isUpdatingAll = true,
+                updatingAllProgress = if (total > 0) 0 to total else null,
+            )
+        }
+        ExtensionUpdateJob.onBatchStarted(ApkExtensionKind.NOVEL_KOTLIN, total) {
+            cancelUpdateAll()
+        }
+        ExtensionUpdateJob.start(context, ApkExtensionKind.NOVEL_KOTLIN)
+        updateAllJob = screenModelScope.launchIO {
+            try {
+                // Full installed set, not the rendered list: search filters and collapsed language
+                // sections hide items whose updates still must be applied (parity with c344dcc09).
+                // Sequential awaited queue: each update finishes (or fails into row diagnostics)
+                // before the next starts, and the loop suspends while a signature-mismatch
+                // dialog is open so the user resolves it before the queue moves on.
+                for ((index, entry) in candidates.withIndex()) {
+                    val (installed, updateState) = entry
+                    mutableState.update {
+                        it.copy(
+                            isUpdatingAll = true,
+                            updatingAllProgress = index to total,
+                        )
                     }
-                    // Never silently skip a reinstall-needing plugin (B5, parity with manga/anime):
-                    // pause the queue until the user resolves the reinstall dialog for this
-                    // plugin; dismissing it skips it.
-                    updateState.hasOtherRepoUpdate -> {
-                        resolveQueuedReinstall(installed, updateState.otherRepoUpdates)
+                    ExtensionUpdateJob.onBatchProgress(ApkExtensionKind.NOVEL_KOTLIN, index, total)
+                    currentUpdatingPlugin = updateState.sameRepoUpdate ?: installed
+                    try {
+                        when {
+                            updateState.sameRepoUpdate != null -> {
+                                installAwaiting(updateState.sameRepoUpdate)
+                                awaitSignatureResolution()
+                            }
+                            // Never silently skip a reinstall-needing plugin (B5, parity with manga/anime):
+                            // pause the queue until the user resolves the reinstall dialog for this
+                            // plugin; dismissing it skips it.
+                            updateState.hasOtherRepoUpdate -> {
+                                resolveQueuedReinstall(installed, updateState.otherRepoUpdates)
+                            }
+                        }
+                    } finally {
+                        currentUpdatingPlugin = null
                     }
+                    val completed = index + 1
+                    mutableState.update {
+                        it.copy(
+                            isUpdatingAll = true,
+                            updatingAllProgress = completed to total,
+                        )
+                    }
+                    ExtensionUpdateJob.onBatchProgress(ApkExtensionKind.NOVEL_KOTLIN, completed, total)
+                }
+            } finally {
+                currentUpdatingPlugin = null
+                ExtensionUpdateJob.onBatchFinished(context, ApkExtensionKind.NOVEL_KOTLIN)
+                mutableState.update {
+                    it.copy(
+                        isUpdatingAll = false,
+                        updatingAllProgress = null,
+                    )
                 }
             }
         }
+    }
+
+    fun cancelUpdateAll() {
+        val job = updateAllJob
+        updateAllJob = null
+        job?.cancel()
+        currentUpdatingPlugin?.let { plugin ->
+            currentUpdatingPlugin = null
+            cancelInstall(plugin)
+        }
+        queuedReinstallResolution?.complete(null)
+        queuedReinstallResolution = null
+        signatureResolutionSignal.complete(Unit)
+        mutableState.update {
+            it.copy(
+                isUpdatingAll = false,
+                updatingAllProgress = null,
+                queuedReinstallPlugin = null,
+                queuedReinstallCandidates = emptyList(),
+            )
+        }
+        ExtensionUpdateJob.stop(context, ApkExtensionKind.NOVEL_KOTLIN)
     }
 
     /** Set while the update-all queue is waiting for a reinstall decision on this plugin (B5). */
@@ -689,6 +801,8 @@ class NovelExtensionsScreenModel(
         /** Set while the update-all queue is paused on a plugin needing reinstall (B5). */
         val queuedReinstallPlugin: NovelPlugin.Installed? = null,
         val queuedReinstallCandidates: List<NovelPlugin.Available> = emptyList(),
+        val isUpdatingAll: Boolean = false,
+        val updatingAllProgress: Pair<Int, Int>? = null, // Pair(current, total)
     )
 
     private companion object {

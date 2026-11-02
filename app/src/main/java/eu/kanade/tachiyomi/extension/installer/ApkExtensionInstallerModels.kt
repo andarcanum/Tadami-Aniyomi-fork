@@ -30,6 +30,11 @@ enum class ApkExtensionKind {
     MANGA,
     ANIME,
     NOVEL_KOTLIN,
+    ;
+
+    companion object {
+        val NOVEL: ApkExtensionKind get() = NOVEL_KOTLIN
+    }
 }
 
 data class ApkDownloadRequest(

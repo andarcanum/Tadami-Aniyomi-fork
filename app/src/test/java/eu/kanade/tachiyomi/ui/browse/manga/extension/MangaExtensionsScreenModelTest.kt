@@ -1,19 +1,31 @@
 package eu.kanade.tachiyomi.ui.browse.manga.extension
 
 import android.app.Application
+import androidx.lifecycle.asFlow
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.base.ExtensionInstallerPreference
 import eu.kanade.domain.extension.manga.interactor.GetMangaExtensionsByType
 import eu.kanade.domain.extension.manga.model.MangaExtensions
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.data.updater.ExtensionUpdateJob
 import eu.kanade.tachiyomi.extension.InstallStep
+import eu.kanade.tachiyomi.extension.installer.ApkExtensionKind
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.source.MangaSource
+import eu.kanade.tachiyomi.util.system.workManager
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkObject
+import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -175,6 +187,90 @@ class MangaExtensionsScreenModelTest {
             }
 
             updateCalls shouldBe listOf(normalUpdate)
+        }
+    }
+
+    @Test
+    fun `updateAllExtensions delegates to ExtensionUpdateJob start`() {
+        runBlocking {
+            mockkObject(ExtensionUpdateJob.Companion)
+            every { ExtensionUpdateJob.start(any(), ApkExtensionKind.MANGA) } returns true
+
+            val screenModel = createScreenModel(
+                installed = emptyList<MangaExtension.Installed>(),
+                available = emptyList<MangaExtension.Available>(),
+                rawAvailable = emptyList<MangaExtension.Available>(),
+            )
+            waitUntilLoaded(screenModel)
+
+            screenModel.updateAllExtensions()
+
+            verify(exactly = 1) {
+                ExtensionUpdateJob.start(any(), ApkExtensionKind.MANGA)
+            }
+            unmockkObject(ExtensionUpdateJob.Companion)
+        }
+    }
+
+    @Test
+    fun `cancelUpdateAll delegates to ExtensionUpdateJob stop`() {
+        runBlocking {
+            mockkObject(ExtensionUpdateJob.Companion)
+            every { ExtensionUpdateJob.stop(any(), ApkExtensionKind.MANGA) } returns Unit
+
+            val screenModel = createScreenModel(
+                installed = emptyList<MangaExtension.Installed>(),
+                available = emptyList<MangaExtension.Available>(),
+                rawAvailable = emptyList<MangaExtension.Available>(),
+            )
+            waitUntilLoaded(screenModel)
+
+            screenModel.cancelUpdateAll()
+
+            verify(exactly = 1) {
+                ExtensionUpdateJob.stop(any(), ApkExtensionKind.MANGA)
+            }
+            unmockkObject(ExtensionUpdateJob.Companion)
+        }
+    }
+
+    @Test
+    fun `isUpdatingAll and updatingAllProgress reflect WorkManager progress`() {
+        runBlocking {
+            mockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
+            mockkStatic("androidx.lifecycle.FlowLiveDataConversions")
+            val workManager = mockk<WorkManager>(relaxed = true)
+            every { any<android.content.Context>().workManager } returns workManager
+
+            val runningWorkInfo = mockk<WorkInfo> {
+                every { state } returns WorkInfo.State.RUNNING
+                every { progress } returns workDataOf(
+                    ExtensionUpdateJob.KEY_CURRENT to 2,
+                    ExtensionUpdateJob.KEY_TOTAL to 5,
+                )
+            }
+            val liveData = mockk<androidx.lifecycle.LiveData<List<WorkInfo>>>(relaxed = true)
+            every { workManager.getWorkInfosForUniqueWorkLiveData(ExtensionUpdateJob.WORK_NAME_MANGA) } returns liveData
+            every { liveData.asFlow() } returns flowOf(listOf(runningWorkInfo))
+
+            val screenModel = createScreenModel(
+                installed = emptyList<MangaExtension.Installed>(),
+                available = emptyList<MangaExtension.Available>(),
+                rawAvailable = emptyList<MangaExtension.Available>(),
+            )
+            waitUntilLoaded(screenModel)
+
+            withTimeout(1_000) {
+                while (!screenModel.state.value.isUpdatingAll) {
+                    yield()
+                }
+            }
+
+            screenModel.state.value.isUpdatingAll shouldBe true
+            screenModel.state.value.updatingAllProgress shouldBe Pair(2, 5)
+
+            unmockkStatic("androidx.lifecycle.FlowLiveDataConversions")
+            unmockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
         }
     }
 

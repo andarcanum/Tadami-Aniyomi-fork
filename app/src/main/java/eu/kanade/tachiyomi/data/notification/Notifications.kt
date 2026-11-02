@@ -150,6 +150,7 @@ object Notifications {
     const val ID_UPDATES_TO_ANIME_EXTS = -405
     const val ID_EXTENSION_INSTALLER = -402
     const val ID_EXTENSION_INSTALLER_PENDING = -404
+    const val ID_EXTENSION_BATCH_UPDATE_PROGRESS = -406
 
     private val deprecatedChannels = listOf(
         "downloader_channel",

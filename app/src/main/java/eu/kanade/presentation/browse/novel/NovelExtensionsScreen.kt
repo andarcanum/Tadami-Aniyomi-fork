@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.browse.novel
+package eu.kanade.presentation.browse.novel
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
@@ -188,6 +188,7 @@ fun NovelExtensionScreen(
     onUninstallUntrustedExtension: (NovelPlugin.Untrusted) -> Unit,
     onTrustExtension: (NovelPlugin.Untrusted) -> Unit,
     onUpdateAll: () -> Unit,
+    onCancelUpdateAll: () -> Unit,
     onRefresh: () -> Unit,
     onToggleSection: (String) -> Unit,
     onCopyDiagnostic: (NovelPlugin) -> Unit,
@@ -244,6 +245,7 @@ fun NovelExtensionScreen(
                     onUninstallUntrustedExtension = onUninstallUntrustedExtension,
                     onTrustExtension = onTrustExtension,
                     onUpdateAll = onUpdateAll,
+                    onCancelUpdateAll = onCancelUpdateAll,
                     onToggleSection = onToggleSection,
                     onCopyDiagnostic = onCopyDiagnostic,
                     onShareApk = onShareApk,
@@ -267,6 +269,7 @@ private fun NovelExtensionContent(
     onUninstallUntrustedExtension: (NovelPlugin.Untrusted) -> Unit,
     onTrustExtension: (NovelPlugin.Untrusted) -> Unit,
     onUpdateAll: () -> Unit,
+    onCancelUpdateAll: () -> Unit,
     onToggleSection: (String) -> Unit,
     onCopyDiagnostic: (NovelPlugin) -> Unit,
     onShareApk: (NovelPlugin) -> Unit,
@@ -285,24 +288,43 @@ private fun NovelExtensionContent(
                 ExtensionHeader(
                     textRes = MR.strings.ext_updates_pending,
                     action = {
-                        if (updates.any { it.hasUpdate }) {
-                            // Parity with the manga/anime extensions header: a labeled
-                            // "Update all" button, not a bare download-looking icon.
-                            // Aurora-стиль: чистая accent-пилла вместо M3 Button.
-                            Box(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(AuroraTheme.colors.accent)
-                                    .clickable(onClick = onUpdateAll)
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(MR.strings.ext_update_all),
-                                    style = MaterialTheme.typography.labelLarge.copy(
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                )
+                        if (state.isUpdatingAll || updates.any { it.hasUpdate }) {
+                            if (state.isUpdatingAll) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error)
+                                        .clickable(onClick = onCancelUpdateAll)
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(MR.strings.ai_translator_action_stop) +
+                                            (state.updatingAllProgress?.let { " (${it.first}/${it.second})" } ?: ""),
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            color = MaterialTheme.colorScheme.onError,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                    )
+                                }
+                            } else {
+                                // Parity with the manga/anime extensions header: a labeled
+                                // "Update all" button, not a bare download-looking icon.
+                                // Aurora-стиль: чистая accent-пилла вместо M3 Button.
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(AuroraTheme.colors.accent)
+                                        .clickable(onClick = onUpdateAll)
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(MR.strings.ext_update_all),
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     },
