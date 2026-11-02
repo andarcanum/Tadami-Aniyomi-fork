@@ -682,31 +682,6 @@ class AppDiscoverySourceCatalog(
         releaseStatuses: Set<DiscoveryReleaseStatus>,
     ): List<DiscoveryRowItem> = fetchPage(mediaType, sourceId, genres, page, releaseStatuses).items
 
-    /**
-     * Sources may expose genres only as free-text tags or not at all. When no
-     * checkbox filter matched, search the genre name instead of browsing.
-     */
-    private suspend fun <F, P> searchByGenreQuery(
-        sourceId: Long,
-        genres: List<String>?,
-        lang: String,
-        page: Int,
-        filters: F,
-        search: suspend (String, F) -> P?,
-        hasItems: (P) -> Boolean,
-    ): P? {
-        if (genres == null) return null
-        val query = discoveryGenreSearchQuery(genres, lang)
-        if (query.isBlank()) return null
-        val result = runCatchingUnlessCancelled { search(query, filters) }
-        val outcome = result.getOrNull()?.let { page -> if (hasItems(page)) "hit" else "empty" } ?: "failed"
-        logcat {
-            "[DiscoverySourceCatalog] genreSearchFallback source=$sourceId query=$query " +
-                "page=$page result=$outcome"
-        }
-        return result.getOrNull()?.takeIf(hasItems)
-    }
-
     private suspend fun fetchPage(
         mediaType: DiscoveryMediaType,
         sourceId: Long,
@@ -741,21 +716,7 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
-                val genreSearch = if (!genreFilterApplied) {
-                    searchByGenreQuery(
-                        sourceId = sourceId,
-                        genres = genres,
-                        lang = source.lang,
-                        page = page,
-                        filters = filters ?: FilterList(),
-                        search = { query, searchFilters -> source.getSearchManga(page, query, searchFilters) },
-                        hasItems = { it.mangas.isNotEmpty() },
-                    )
-                } else {
-                    null
-                }
                 val rawPage = when {
-                    genreSearch != null -> genreSearch
                     filters != null -> runCatching { source.getSearchManga(page, "", filters) }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
                     else -> runCatching {
@@ -830,21 +791,7 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
-                val genreSearch = if (!genreFilterApplied) {
-                    searchByGenreQuery(
-                        sourceId = sourceId,
-                        genres = genres,
-                        lang = source.lang,
-                        page = page,
-                        filters = filters ?: AnimeFilterList(),
-                        search = { query, searchFilters -> source.getSearchAnime(page, query, searchFilters) },
-                        hasItems = { it.animes.isNotEmpty() },
-                    )
-                } else {
-                    null
-                }
                 val rawPage = when {
-                    genreSearch != null -> genreSearch
                     filters != null -> runCatching { source.getSearchAnime(page, "", filters) }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
                     else -> runCatching {
@@ -917,21 +864,7 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
-                val genreSearch = if (!genreFilterApplied) {
-                    searchByGenreQuery(
-                        sourceId = sourceId,
-                        genres = genres,
-                        lang = source.lang,
-                        page = page,
-                        filters = filters ?: NovelFilterList(),
-                        search = { query, searchFilters -> source.getSearchNovels(page, query, searchFilters) },
-                        hasItems = { it.novels.isNotEmpty() },
-                    )
-                } else {
-                    null
-                }
                 val rawPage = when {
-                    genreSearch != null -> genreSearch
                     filters != null -> runCatching { source.getSearchNovels(page, "", filters) }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
                     else -> runCatching {
@@ -1310,24 +1243,11 @@ class AppDiscoverySourceCatalog(
 
 internal val GENRE_GROUP_ALIASES = listOf(
     "genre", "жанр", "tag", "тег", "categor", "категор", "género", "genero", "ジャンル",
+    "theme", "тем", "метк", "demograph", "демограф", "format", "формат",
 )
 
 internal fun isGenreGroupName(name: String): Boolean =
     GENRE_GROUP_ALIASES.any { name.contains(it, ignoreCase = true) }
-
-/**
- * Text query for sources that cannot express a genre as a checkbox filter.
- * English/all sources search the canonical genre, Russian sources search the
- * localized synonym (e.g. milf → милфы) that their catalogue exposes.
- */
-internal fun discoveryGenreSearchQuery(genres: List<String>, lang: String): String {
-    val chosen = if (lang.startsWith("ru", ignoreCase = true)) {
-        genres.map { genre -> MultilingualQueryHelper.getGenreTranslations(genre).firstOrNull() ?: genre }
-    } else {
-        genres
-    }
-    return chosen.joinToString(" ").trim()
-}
 
 /**
  * Identity of a source continuation: changing genres or statuses starts a new

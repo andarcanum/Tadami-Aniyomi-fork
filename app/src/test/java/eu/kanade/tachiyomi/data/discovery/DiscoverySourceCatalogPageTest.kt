@@ -292,17 +292,10 @@ class DiscoverySourceCatalogPageTest {
     }
 
     @Test
-    fun `genre search query uses the source language`() {
-        discoveryGenreSearchQuery(listOf("milf"), "en") shouldBe "milf"
-        discoveryGenreSearchQuery(listOf("milf"), "ru") shouldBe "милфы"
-        discoveryGenreSearchQuery(listOf("milf", "romance"), "en") shouldBe "milf romance"
-    }
-
-    @Test
-    fun `filterless source falls back to a genre text search instead of browsing`(): Unit = runTest {
+    fun `filterless source falls back to browsing popular manga`(): Unit = runTest {
         val source = source()
-        coEvery { source.getSearchManga(1, "milf", any()) } returns MangasPage(
-            listOf(manga("Milf One", "/milf", genre = "MILF")),
+        coEvery { source.getPopularManga(1) } returns MangasPage(
+            listOf(manga("Popular One", "/popular", genre = "MILF")),
             hasNextPage = true,
         )
 
@@ -315,32 +308,9 @@ class DiscoverySourceCatalogPageTest {
         )
 
         result.genreFilterApplied shouldBe false
-        result.items.map { it.sourceUrl } shouldBe listOf("/milf")
+        result.items.map { it.sourceUrl } shouldBe listOf("/popular")
         result.hasNextPage shouldBe true
-        coVerify(exactly = 1) { source.getSearchManga(1, "milf", any()) }
-        coVerify(exactly = 0) { source.getPopularManga(any()) }
-    }
-
-    @Test
-    fun `russian filterless source searches the localized genre name`(): Unit = runTest {
-        val source = source()
-        every { source.lang } returns "ru"
-        coEvery { source.getSearchManga(1, "милфы", any()) } returns MangasPage(
-            listOf(manga("Милфы", "/milfy", genre = "Милфы")),
-            hasNextPage = false,
-        )
-
-        val result = catalog(source).popularWithGenresAllocated(
-            media,
-            sourceId,
-            genres = listOf("milf"),
-            budget = budget(maxDetails = 0),
-            maxDetails = 0,
-        )
-
-        result.items.map { it.sourceUrl } shouldBe listOf("/milfy")
-        coVerify(exactly = 1) { source.getSearchManga(1, "милфы", any()) }
-        coVerify(exactly = 0) { source.getPopularManga(any()) }
+        coVerify(exactly = 1) { source.getPopularManga(1) }
     }
 
     @Test
@@ -366,6 +336,16 @@ class DiscoverySourceCatalogPageTest {
         result.items.map { it.sourceUrl } shouldBe listOf("/milf")
         coVerify(exactly = 1) { source.getSearchManga(1, "", any()) }
         coVerify(exactly = 0) { source.getPopularManga(any()) }
+    }
+
+    @Test
+    fun `isGenreGroupName recognizes themes tags and demographics`() {
+        isGenreGroupName("Themes") shouldBe true
+        isGenreGroupName("Темы") shouldBe true
+        isGenreGroupName("Метки") shouldBe true
+        isGenreGroupName("Демография") shouldBe true
+        isGenreGroupName("Demographics") shouldBe true
+        isGenreGroupName("Формат") shouldBe true
     }
 
     @Test

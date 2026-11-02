@@ -176,15 +176,15 @@ internal suspend fun queryDiscoveryGenreSources(
         wave++
         val remaining = if (hydrate) budget?.remainingDetails ?: 0 else 0
         val productive = active.filter { it.admitted.isNotEmpty() }
+        val eligible = active.filter { it.admitted.isNotEmpty() || it.pendingItems.isNotEmpty() }
         // Probe every source once; afterwards the remaining allowance belongs to
-        // sources that already proved they can match, so a rich source can fill
-        // its row instead of every dry source taking an equal share.
+        // sources that already proved they can match or that have pending items to settle.
         val recipients = when {
             wave == 1 -> active
-            productive.isNotEmpty() -> productive
+            eligible.isNotEmpty() -> eligible
             else -> active
         }
-        val perSource = if (wave > 1 && productive.isNotEmpty()) {
+        val perSource = if (wave > 1 && eligible.isNotEmpty()) {
             REQUIRED_REFILL_DETAILS
         } else {
             REQUIRED_PROBE_DETAILS
@@ -366,9 +366,9 @@ private suspend fun advanceSource(
     // pages while the refill pool is reserved for sources that matched. Once
     // the pool is gone, the bounded detail-free page grace still applies.
     if (wave > 1 && hydrate && budget != null && allowanceLeft <= 0 &&
-        state.admitted.isEmpty() && budget.remainingDetails > 0
+        state.admitted.isEmpty() && state.pendingItems.isEmpty() && budget.remainingDetails > 0
     ) {
-        state.budgetExpired = true
+        state.pagesStopped = true
         return
     }
     if (hydrate && budget != null && state.pendingItems.isNotEmpty()) {
@@ -377,34 +377,39 @@ private suspend fun advanceSource(
         state.unattempted = (state.unattempted - oldPending.size).coerceAtLeast(0)
         state.pendingItems = pending
         if (pending.isNotEmpty()) {
-            val remaining = if (hydrate) budget.remainingMs() else timeoutMs
-            val refilled = withTimeoutOrNull(minOf(timeoutMs, remaining.coerceAtLeast(1L))) {
-                catalog.hydrateGenres(media, state.sourceId, pending, budget, allowanceLeft)
-            }
-            if (refilled == null) {
-                state.transientFailures++
-                state.timedOut = true
-                state.unattempted += pending.size
+            if (allowanceLeft <= 0 && budget.remainingDetails > 0) {
                 return
             }
-            allowanceLeft = (allowanceLeft - refilled.detailsUsed).coerceAtLeast(0)
-            state.detailsUsed += refilled.detailsUsed
-            state.verified += refilled.verified
-            state.metadataUnavailable += refilled.metadataUnavailable
-            state.transientFailures += refilled.transientFailures
-            state.unattempted += refilled.unattempted
-            state.pendingItems = refilled.pending.filterNot { it.isExcludedBy(state.excludedKeys, media) }
-            val verified = policy.filterRowCandidates(refilled.items, { it.genres })
-                .filterNot { it.isExcludedBy(state.excludedKeys, media) }
-            for (candidate in verified) {
-                if (state.admitted.size >= state.target) break
-                state.admitted.putIfAbsent(candidate.collectionKey(), candidate)
-            }
-            // Settle pending cards without discarding them for a later page.
-            if ((state.pendingItems.isNotEmpty() && budget.remainingDetails > 0) ||
-                state.admitted.size >= state.target
-            ) {
-                return
+            if (allowanceLeft > 0) {
+                val remaining = if (hydrate) budget.remainingMs() else timeoutMs
+                val refilled = withTimeoutOrNull(minOf(timeoutMs, remaining.coerceAtLeast(1L))) {
+                    catalog.hydrateGenres(media, state.sourceId, pending, budget, allowanceLeft)
+                }
+                if (refilled == null) {
+                    state.transientFailures++
+                    state.timedOut = true
+                    state.unattempted += pending.size
+                    return
+                }
+                allowanceLeft = (allowanceLeft - refilled.detailsUsed).coerceAtLeast(0)
+                state.detailsUsed += refilled.detailsUsed
+                state.verified += refilled.verified
+                state.metadataUnavailable += refilled.metadataUnavailable
+                state.transientFailures += refilled.transientFailures
+                state.unattempted += refilled.unattempted
+                state.pendingItems = refilled.pending.filterNot { it.isExcludedBy(state.excludedKeys, media) }
+                val verified = policy.filterRowCandidates(refilled.items, { it.genres })
+                    .filterNot { it.isExcludedBy(state.excludedKeys, media) }
+                for (candidate in verified) {
+                    if (state.admitted.size >= state.target) break
+                    state.admitted.putIfAbsent(candidate.collectionKey(), candidate)
+                }
+                // Settle pending cards without discarding them for a later page.
+                if ((state.pendingItems.isNotEmpty() && budget.remainingDetails > 0) ||
+                    state.admitted.size >= state.target
+                ) {
+                    return
+                }
             }
         }
     }

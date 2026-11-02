@@ -312,4 +312,28 @@ class DiscoveryRefillRegressionTest {
         } shouldBe
             listOf("Fresh")
     }
+
+    @Test
+    fun sourceWithPendingCardsRefillsEvenIfAnotherSourceMatchedFirst() = runTest {
+        val wrong = (1..6).map { item("Wrong$it", source = 1L, genres = emptyList()) }
+        val pending =
+            listOf(
+                item("PendingAlpha", source = 1L, genres = emptyList()),
+                item("PendingBeta", source = 1L, genres = emptyList()),
+            )
+        val c = Catalog(
+            pages = { sourceId, _ ->
+                if (sourceId == 1L) {
+                    page(wrong + pending)
+                } else {
+                    page(listOf(item("Instant", source = 2L, genres = listOf("Fantasy"))), next = true)
+                }
+            },
+            details = { if (it.startsWith("/Wrong")) listOf("Drama") else listOf("Fantasy") },
+        )
+        val results = query(c, sources = listOf(1L, 2L))
+        results.first { it.sourceId == 1L }.summary.items.map { it.title } shouldBe
+            listOf("PendingAlpha", "PendingBeta")
+        results.first { it.sourceId == 2L }.summary.items.map { it.title } shouldBe listOf("Instant")
+    }
 }
