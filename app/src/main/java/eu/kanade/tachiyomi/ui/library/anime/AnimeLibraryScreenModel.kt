@@ -75,6 +75,7 @@ import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.anime.interactor.GetVisibleAnimeCategories
 import tachiyomi.domain.category.anime.interactor.SetAnimeCategories
 import tachiyomi.domain.category.model.Category
@@ -181,6 +182,11 @@ class AnimeLibraryScreenModel(
         getAnimelibItemPreferencesFlow()
             .distinctUntilChanged()
             .shareIn(screenModelScope, SharingStarted.Eagerly, replay = 1)
+
+    // D-M3: all-categories interactor for membership edits (setAnimeCategories). Lazy property
+    // rather than a constructor default: the constructor injection list is pinned by the test
+    // harnesses, and this dependency is only needed on the category-edit path.
+    private val getAllCategories: GetAnimeCategories by lazy { Injekt.get() }
 
     private val libraryPipelineActive = MutableStateFlow(startActive)
 
@@ -1101,9 +1107,6 @@ class AnimeLibraryScreenModel(
         seriesIds: List<Long> = emptyList(),
     ) {
         screenModelScope.launchNonCancellable {
-            seriesIds.forEach { seriesId ->
-                deleteAnimeSeries.await(seriesId)
-            }
             val animeToDelete = animeList.distinctBy { it.id }
 
             if (deleteFromLibrary) {
@@ -1116,6 +1119,12 @@ class AnimeLibraryScreenModel(
                     )
                 }
                 updateAnime.awaitAll(toDelete)
+                animeToDelete.forEach {
+                    removeAnimeFromSeries.await(it.id)
+                }
+                seriesIds.forEach {
+                    deleteAnimeSeries.await(it)
+                }
             }
 
             if (deleteEpisodes) {
@@ -1199,7 +1208,7 @@ class AnimeLibraryScreenModel(
     ) {
         screenModelScope.launchNonCancellable {
             animeList.forEach { anime ->
-                val categoryIds = getCategories.await(anime.id)
+                val categoryIds = getAllCategories.await(anime.id)
                     .map { it.id }
                     .subtract(removeCategories.toSet())
                     .plus(addCategories)

@@ -370,7 +370,7 @@ private fun MangaLibraryAuroraList(
                                 )
                             } else if (libraryItem.sourceLanguage.isNotBlank()) {
                                 Badge(
-                                    text = libraryItem.sourceLanguage.uppercase(),
+                                    text = libraryItem.sourceLanguage.uppercase(java.util.Locale.ROOT),
                                     color = colors.accent,
                                     textColor = colors.textOnAccent,
                                     shape = RoundedCornerShape(4.dp),
@@ -694,7 +694,7 @@ private fun MangaAuroraBadgeGroup(
             )
         } else if (item.sourceLanguage.isNotBlank()) {
             Badge(
-                text = item.sourceLanguage.uppercase(),
+                text = item.sourceLanguage.uppercase(java.util.Locale.ROOT),
                 color = badgeContainerColor,
                 textColor = badgeTextColor,
                 shape = RoundedCornerShape(4.dp),

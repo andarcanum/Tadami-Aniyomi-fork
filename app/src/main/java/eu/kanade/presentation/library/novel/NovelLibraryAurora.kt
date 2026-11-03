@@ -96,6 +96,7 @@ import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.series.model.SeriesCoverMode
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
@@ -481,6 +482,18 @@ private fun NovelLibraryCompactGridItem(
         onClick = { onNovelClicked(item) },
         onLongClick = { onLongClickNovel?.invoke(item) },
         isSelected = selectedIds.contains(item.id),
+        customCover = if (item is NovelLibraryItem.Series &&
+            item.librarySeries.series.coverMode == SeriesCoverMode.AUTO
+        ) {
+            {
+                SeriesStackedCoverCard(
+                    covers = item.covers,
+                    isSelected = selectedIds.contains(item.id),
+                )
+            }
+        } else {
+            null
+        },
 
         onClickContinueViewing = if (onClickContinueReading != null && item.unreadCount > 0) {
             { onClickContinueReading(item) }
@@ -610,7 +623,9 @@ private fun NovelLibraryAuroraCard(
             isSelected = isSelected,
             gridColumns = gridColumns,
             seriesHeaderText = seriesHeaderText,
-            customCover = if (item is NovelLibraryItem.Series) {
+            customCover = if (item is NovelLibraryItem.Series &&
+                item.librarySeries.series.coverMode == SeriesCoverMode.AUTO
+            ) {
                 { SeriesStackedCoverCard(covers = item.covers, isSelected = isSelected) }
             } else {
                 null
@@ -647,7 +662,9 @@ private fun NovelLibraryAuroraCard(
             titleMaxLines = if (showMetadata) 1 else 2,
             gridColumns = gridColumns,
             seriesHeaderText = seriesHeaderText,
-            customCover = if (item is NovelLibraryItem.Series) {
+            customCover = if (item is NovelLibraryItem.Series &&
+                item.librarySeries.series.coverMode == SeriesCoverMode.AUTO
+            ) {
                 { SeriesStackedCoverCard(covers = item.covers, isSelected = isSelected) }
             } else {
                 null
@@ -669,7 +686,9 @@ private fun NovelLibraryAuroraCard(
             },
             onClick = onNovelClicked,
             onLongClick = onLongClick,
-            customCover = if (item is NovelLibraryItem.Series) {
+            customCover = if (item is NovelLibraryItem.Series &&
+                item.librarySeries.series.coverMode == SeriesCoverMode.AUTO
+            ) {
                 { SeriesStackedCoverCard(covers = item.covers, isSelected = isSelected) }
             } else {
                 null

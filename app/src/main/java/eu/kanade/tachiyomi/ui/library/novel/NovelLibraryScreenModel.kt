@@ -102,6 +102,7 @@ import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
 import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 import tachiyomi.domain.series.novel.model.NovelSeries
+import tachiyomi.domain.series.novel.repository.NovelSeriesRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.domain.track.novel.interactor.GetTracksPerNovel
@@ -209,6 +210,8 @@ class NovelLibraryScreenModel(
         getBadgePreferencesFlow()
             .distinctUntilChanged()
             .shareIn(screenModelScope, SharingStarted.Eagerly, replay = 1)
+
+    private val novelSeriesRepository: NovelSeriesRepository by lazy { Injekt.get() }
 
     private val libraryPipelineActive = MutableStateFlow(startActive)
 
@@ -527,10 +530,7 @@ class NovelLibraryScreenModel(
         openChangeCategoryDialog(novels)
     }
     fun openDeleteNovelsDialog() {
-        val novels = state.value.selection.selectedNovels()
-        if (novels.isNotEmpty()) {
-            mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novels)) }
-        }
+        openDeleteNovelDialog()
     }
     fun openChangeCategoryDialog(novel: Novel) {
         openChangeCategoryDialog(listOf(novel))
@@ -587,9 +587,13 @@ class NovelLibraryScreenModel(
     }
 
     fun openDeleteNovelDialog() {
-        val novels = state.value.selection.selectedNovels()
-        if (novels.isEmpty()) return
-        mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novels)) }
+        val novelList = state.value.selection.selectedNovels()
+        val seriesIds = state.value.selection
+            .filterIsInstance<NovelLibraryItem.Series>()
+            .map { it.librarySeries.id }
+        if (novelList.isNotEmpty() || seriesIds.isNotEmpty()) {
+            mutableState.update { it.copy(dialog = Dialog.DeleteNovels(novelList, seriesIds)) }
+        }
     }
 
     fun updateNovelCategories(
@@ -644,6 +648,7 @@ class NovelLibraryScreenModel(
         novels: List<Novel>,
         deleteFromLibrary: Boolean,
         deleteChapters: Boolean,
+        seriesIds: List<Long> = emptyList(),
     ) {
         // D2: non-cancellable - cancellation between the unfavorite batch and the download
         // cleanup used to orphan downloaded files on disk.
@@ -658,6 +663,12 @@ class NovelLibraryScreenModel(
                         )
                     },
                 )
+                toDelete.forEach {
+                    novelSeriesRepository.deleteEntry(it.id)
+                }
+                seriesIds.forEach {
+                    novelSeriesRepository.deleteSeries(it)
+                }
             }
             if (deleteChapters) {
                 toDelete.forEach { novel ->
@@ -698,9 +709,7 @@ class NovelLibraryScreenModel(
         amount: Int = 0,
         format: NovelTranslatedDownloadFormat,
     ): Int {
-        val selected = state.value.selection.mapNotNull {
-            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel
-        }.distinctBy { it.id }
+        val selected = state.value.selection.selectedNovels()
         if (selected.isEmpty()) return 0
         var totalAdded = 0
         selected.forEach { novel ->
@@ -1866,7 +1875,7 @@ class NovelLibraryScreenModel(
         // D3: capture the ids and clear the selection synchronously - clearing only after the
         // DB inserts left a window where a re-opened dialog passed the guard again and created
         // a duplicate series. D2: non-cancellable so navigation cannot cut the writes in half.
-        val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
+        val novelIds = selection.selectedNovelEntries().map { it.novel.id }
         clearSelection()
         if (novelIds.isEmpty()) return
         screenModelScope.launchNonCancellable {
@@ -1879,7 +1888,7 @@ class NovelLibraryScreenModel(
         if (selection.isEmpty()) return
 
         // D3/D2: see createSeries.
-        val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
+        val novelIds = selection.selectedNovelEntries().map { it.novel.id }
         clearSelection()
         if (novelIds.isEmpty()) return
         screenModelScope.launchNonCancellable {
@@ -1932,7 +1941,7 @@ class NovelLibraryScreenModel(
             val novels: List<Novel>,
             val initialSelection: ImmutableList<CheckboxState<Category>>,
         ) : Dialog
-        data class DeleteNovels(val novels: List<Novel>) : Dialog
+        data class DeleteNovels(val novels: List<Novel>, val seriesIds: List<Long> = emptyList()) : Dialog
         data object CreateSeries : Dialog
         data class AddToSeries(val series: List<NovelSeries>) : Dialog
     }

@@ -139,6 +139,7 @@ import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.manga.MangaLibraryAuroraContent
 import eu.kanade.presentation.library.manga.MangaLibrarySettingsDialog
 import eu.kanade.presentation.library.novel.NovelLibraryAuroraContent
+import eu.kanade.presentation.library.novel.NovelLibraryItem
 import eu.kanade.presentation.library.novel.NovelLibrarySettingsDialog
 import eu.kanade.presentation.library.novel.components.AddToSeriesDialog
 import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
@@ -600,8 +601,8 @@ data object AnimeLibraryTab : Tab {
             showLibraryUpdateFeedback(started, updatingMangaMessage)
             started
         }
-        val onClickRefreshNovel: suspend () -> Boolean = {
-            val started = NovelLibraryUpdateJob.startNow(context)
+        val onClickRefreshNovel: suspend (Category?) -> Boolean = { category ->
+            val started = NovelLibraryUpdateJob.startNow(context, category?.id)
             showLibraryUpdateFeedback(started, updatingNovelMessage)
             started
         }
@@ -956,16 +957,23 @@ data object AnimeLibraryTab : Tab {
                         contentPadding = contentPadding,
                         hasActiveFilters = novelState.hasActiveFilters,
                         onFilterClicked = activeNovelScreenModel::showSettingsDialog,
-                        onRefresh = { scope.launch { onClickRefreshNovel() } },
-                        onGlobalUpdate = { scope.launch { onClickRefreshNovel() } },
+                        onRefresh = {
+                            scope.launch { onClickRefreshNovel(novelState.categories.getOrNull(novelCategoryIndex)) }
+                        },
+                        onGlobalUpdate = { scope.launch { onClickRefreshNovel(null) } },
                         onOpenRandomEntry = {
                             scope.launch {
-                                val randomItem = novelState.items.randomOrNull()
+                                val currentCategory = novelState.categories.getOrNull(novelCategoryIndex)
+                                val items = currentCategory?.let {
+                                    novelState.getLibraryItemsByCategoryId(it.id)
+                                }.orEmpty()
+                                val randomItem = items.randomOrNull()
                                 if (randomItem != null) {
-                                    if (randomItem is eu.kanade.presentation.library.novel.NovelLibraryItem.Series) {
-                                        navigator.push(NovelSeriesScreen(randomItem.librarySeries.id))
-                                    } else {
-                                        navigator.push(NovelScreen(randomItem.id))
+                                    when (randomItem) {
+                                        is NovelLibraryItem.Single ->
+                                            navigator.push(NovelScreen(randomItem.libraryNovel.novel.id))
+                                        is NovelLibraryItem.Series ->
+                                            navigator.push(NovelSeriesScreen(randomItem.librarySeries.id))
                                     }
                                 } else {
                                     snackbarHostState.showSnackbar(
@@ -1153,7 +1161,7 @@ data object AnimeLibraryTab : Tab {
                 Section.Novel -> shouldShowAuroraLibraryCategoryTabsRow(
                     section = Section.Novel,
                     categoryCount = novelState.categories.size,
-                    showCategoryTabs = showCategoryTabs,
+                    showCategoryTabs = novelState.showCategoryTabs,
                     searchQuery = novelState.searchQuery,
                 )
                 null -> false
@@ -1225,7 +1233,7 @@ data object AnimeLibraryTab : Tab {
                 when (auroraCurrentSection) {
                     Section.Anime -> onClickRefresh(state.categories.getOrNull(animeCategoryIndex))
                     Section.Manga -> onClickRefreshManga(mangaState.categories.getOrNull(mangaCategoryIndex))
-                    Section.Novel -> onClickRefreshNovel()
+                    Section.Novel -> onClickRefreshNovel(novelState.categories.getOrNull(novelCategoryIndex))
                     null -> Unit
                 }
             }
@@ -1235,7 +1243,7 @@ data object AnimeLibraryTab : Tab {
                 when (auroraCurrentSection) {
                     Section.Anime -> onClickRefresh(null)
                     Section.Manga -> onClickRefreshManga(null)
-                    Section.Novel -> onClickRefreshNovel()
+                    Section.Novel -> onClickRefreshNovel(null)
                     null -> Unit
                 }
             }
@@ -1276,12 +1284,15 @@ data object AnimeLibraryTab : Tab {
                 }
                 Section.Novel -> {
                     scope.launch {
-                        val randomItem = novelState.items.randomOrNull()
+                        val currentCategory = novelState.categories.getOrNull(novelCategoryIndex)
+                        val items = currentCategory?.let { novelState.getLibraryItemsByCategoryId(it.id) }.orEmpty()
+                        val randomItem = items.randomOrNull()
                         if (randomItem != null) {
-                            if (randomItem is eu.kanade.presentation.library.novel.NovelLibraryItem.Series) {
-                                navigator.push(NovelSeriesScreen(randomItem.librarySeries.id))
-                            } else {
-                                navigator.push(NovelScreen(randomItem.coverNovel!!.id))
+                            when (randomItem) {
+                                is NovelLibraryItem.Single ->
+                                    navigator.push(NovelScreen(randomItem.libraryNovel.novel.id))
+                                is NovelLibraryItem.Series ->
+                                    navigator.push(NovelSeriesScreen(randomItem.librarySeries.id))
                             }
                         } else {
                             snackbarHostState.showSnackbar(
@@ -1429,6 +1440,7 @@ data object AnimeLibraryTab : Tab {
                         )
                     }
                     auroraCurrentSection == Section.Novel -> {
+                        val hasDownloadableSelection = novelState.selection.any { !it.isLocal() }
                         LibraryBottomActionMenu(
                             visible = novelState.selectionMode,
                             onChangeCategoryClicked = { novelScreenModel?.openChangeCategoryDialog() },
@@ -1439,15 +1451,30 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsViewedClicked = { novelScreenModel?.markReadSelection(true) },
                             onMarkAsUnviewedClicked = { novelScreenModel?.markReadSelection(false) },
                             onDownloadClicked = null,
-                            onOpenDownloadDialog = { novelPickerDialogState.showBatchDownload = true },
+                            onOpenDownloadDialog = if (hasDownloadableSelection) {
+                                { novelPickerDialogState.showBatchDownload = true }
+                            } else {
+                                null
+                            },
                             onMigrateClicked = {
-                                val selectionIds = novelState.selection.map { it.id }
+                                val selectionIds = novelState.selection
+                                    .flatMap { selected ->
+                                        when (selected) {
+                                            is NovelLibraryItem.Single -> listOf(selected.id)
+                                            is NovelLibraryItem.Series -> selected.librarySeries.entries.map { it.id }
+                                        }
+                                    }
+                                    .distinct()
                                 novelScreenModel?.clearSelection()
-                                navigator.push(NovelMigrationConfigScreen(selectionIds))
+                                if (selectionIds.isNotEmpty()) {
+                                    navigator.push(NovelMigrationConfigScreen(selectionIds))
+                                }
                             }.takeIf { novelState.selection.isNotEmpty() },
-                            onTranslatedDownloadClicked = {
-                                novelPickerDialogState.showTranslatedDownload = true
-                            }.takeIf { isNovelTranslatorEnabled },
+                            onTranslatedDownloadClicked = if (hasDownloadableSelection && isNovelTranslatorEnabled) {
+                                { novelPickerDialogState.showTranslatedDownload = true }
+                            } else {
+                                null
+                            },
                             onSeriesClicked = { novelScreenModel?.openAddToSeries() },
                             onDeleteClicked = { novelScreenModel?.openDeleteNovelsDialog() },
                             isManga = true,
@@ -1551,15 +1578,7 @@ data object AnimeLibraryTab : Tab {
                                         when (auroraCurrentSection) {
                                             Section.Anime -> state.getAnimeCountForCategory(category)
                                             Section.Manga -> mangaState.getMangaCountForCategory(category)
-                                            Section.Novel -> {
-                                                if (showCategoryNumberOfItems ||
-                                                    !novelState.searchQuery.isNullOrEmpty()
-                                                ) {
-                                                    novelState.library[category]?.size ?: 0
-                                                } else {
-                                                    null
-                                                }
-                                            }
+                                            Section.Novel -> novelState.getNovelCountForCategory(category)
                                             null -> null
                                         }
                                     },
@@ -1656,7 +1675,7 @@ data object AnimeLibraryTab : Tab {
                     containsLocalEntry = dialog.anime.any(Anime::isLocal),
                     onDismissRequest = onDismissRequest,
                     onConfirm = { deleteAnime, deleteEpisode ->
-                        screenModel.removeAnimes(dialog.anime, deleteAnime, deleteEpisode)
+                        screenModel.removeAnimes(dialog.anime, deleteAnime, deleteEpisode, dialog.seriesIds)
                         screenModel.clearSelection()
                     },
                     entryType = DeleteLibraryEntryType.Anime,
@@ -1711,7 +1730,7 @@ data object AnimeLibraryTab : Tab {
                     containsLocalEntry = dialog.manga.any(Manga::isLocal),
                     onDismissRequest = onDismissMangaRequest,
                     onConfirm = { deleteManga, deleteChapter ->
-                        mangaScreenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
+                        mangaScreenModel.removeMangas(dialog.manga, deleteManga, deleteChapter, dialog.seriesIds)
                         mangaScreenModel.clearSelection()
                     },
                     entryType = DeleteLibraryEntryType.Manga,
@@ -1765,7 +1784,12 @@ data object AnimeLibraryTab : Tab {
                         containsLocalEntry = dialog.novels.any { it.isLocal() },
                         onDismissRequest = activeNovelScreenModel::closeDialog,
                         onConfirm = { deleteFromLibrary, deleteChapters ->
-                            activeNovelScreenModel.removeNovels(dialog.novels, deleteFromLibrary, deleteChapters)
+                            activeNovelScreenModel.removeNovels(
+                                dialog.novels,
+                                deleteFromLibrary,
+                                deleteChapters,
+                                dialog.seriesIds,
+                            )
                             activeNovelScreenModel.clearSelection()
                         },
                         entryType = DeleteLibraryEntryType.Novel,
@@ -2907,4 +2931,11 @@ internal fun shouldSyncAuroraLibraryCategoryIndex(
 ): Boolean {
     if (categoryCount <= 0) return false
     return currentIndex != targetIndex
+}
+
+private fun NovelLibraryItem.isLocal(): Boolean {
+    return when (this) {
+        is NovelLibraryItem.Single -> libraryNovel.novel.isLocal()
+        is NovelLibraryItem.Series -> librarySeries.entries.all { it.novel.isLocal() }
+    }
 }
