@@ -69,3 +69,10 @@ WHERE media_type = ? AND identity_key = ?;
 
 deleteAllByMedia:
 DELETE FROM discovery_title_memory WHERE media_type = ?;
+
+clearAllBlocks:
+UPDATE discovery_title_memory SET blocked_until = 0 WHERE blocked_until > 0;
+
+countActiveBlocked:
+SELECT COUNT(*) FROM discovery_title_memory WHERE media_type = ? AND blocked_until > ?;
+

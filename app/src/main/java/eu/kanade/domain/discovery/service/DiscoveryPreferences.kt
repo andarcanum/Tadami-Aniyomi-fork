@@ -208,6 +208,12 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun lastGenerationAt(mediaType: DiscoveryMediaType): Preference<Long> =
         preferenceStore.getLong("discovery_last_gen_at_" + mediaType.key, 0L)
 
+    fun lastTopUpAt(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("discovery_last_top_up_at_" + mediaType.key, 0L)
+
+    fun lastTopUpAdded(mediaType: DiscoveryMediaType): Preference<Int> =
+        preferenceStore.getInt("discovery_last_top_up_added_" + mediaType.key, -1)
+
     /** Режим участия плагинов в подборках: "auto" (топ-3 по весу библиотеки) | "manual" (свой набор). */
     fun discoverySourceMode(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString("discovery_source_mode_" + mediaType.key, "auto")
@@ -227,6 +233,9 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
      */
     fun bindingBackfillVersion(): Preference<Int> =
         preferenceStore.getInt("discovery_binding_backfill_version", 0)
+
+    fun retirementResetVersion(): Preference<Int> =
+        preferenceStore.getInt("discovery_retirement_reset_version", 0)
 
     fun teaserCount(): Preference<Int> = preferenceStore.getInt("discovery_teaser_count", 16)
     fun showReasons(): Preference<Boolean> = preferenceStore.getBoolean("discovery_show_reasons", true)
@@ -249,5 +258,6 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
         private val manualRefreshLock = Any()
 
         const val MANUAL_REFRESH_COOLDOWN_MS = 5 * 60_000L
+        const val CURRENT_RETIREMENT_RESET_VERSION = 1
     }
 }

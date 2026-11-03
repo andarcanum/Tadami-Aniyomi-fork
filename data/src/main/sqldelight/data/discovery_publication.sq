@@ -76,3 +76,7 @@ UPDATE discovery_publication SET backfill_version = ? WHERE media_type = ?;
 
 resetTraversal:
 UPDATE discovery_publication SET traversal = 'CORRUPT', active_keys = '', issued_keys = '' WHERE media_type = ?;
+
+updateCursors:
+UPDATE discovery_publication SET cursors = ? WHERE media_type = ?;
+

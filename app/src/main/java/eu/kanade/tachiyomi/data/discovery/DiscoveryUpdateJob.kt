@@ -90,7 +90,8 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         val preferences = Injekt.get<DiscoveryPreferences>()
         if (!preferences.discoveryEnabled().get()) return Result.success()
         val isConfiguration = inputData.getBoolean(KEY_CONFIGURATION_REFRESH, false)
-        val isManual = tags.contains(TAG_MANUAL) && !isConfiguration
+        val isTopUp = inputData.getBoolean(KEY_TOP_UP, false)
+        val isManual = tags.contains(TAG_MANUAL) && !isConfiguration && !isTopUp
         if (isManual) {
             setForegroundSafely()
         }
@@ -130,6 +131,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                             isManualRefresh = isManual,
                             totalBudgetMs = WORKER_TIMEOUT_MS,
                             isConfigurationRefresh = isConfiguration,
+                            topUp = isTopUp,
                         )
                     }
                     if (completed != null) {
@@ -239,6 +241,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
 
         const val KEY_TARGET_MEDIA_TYPE = "target_media_type"
         const val KEY_CONFIGURATION_REFRESH = "configuration_refresh"
+        const val KEY_TOP_UP = "top_up"
 
         fun configurationWorkName(mediaType: DiscoveryMediaType): String =
             "DiscoveryUpdateConfiguration:${mediaType.key}"
@@ -349,7 +352,10 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                 .setInitialDelay(10, TimeUnit.MINUTES)
                 .addTag(TAG_AFTER_CONSUMED)
                 .setInputData(
-                    Data.Builder().putString(KEY_TARGET_MEDIA_TYPE, mediaType.key).build(),
+                    Data.Builder()
+                        .putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)
+                        .putBoolean(KEY_TOP_UP, true)
+                        .build(),
                 )
                 .setConstraints(
                     Constraints.Builder()

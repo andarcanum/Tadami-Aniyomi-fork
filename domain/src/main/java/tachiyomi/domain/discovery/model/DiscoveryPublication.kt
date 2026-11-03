@@ -98,3 +98,23 @@ sealed interface DiscoveryBatchReceipt {
 
     data class Superseded(val generation: Long) : DiscoveryBatchReceipt
 }
+
+enum class DiscoveryRetirementPolicy { RETIRE_ALL, SEEN_ONLY }
+
+const val DISCOVERY_RETIRE_MS = 48 * 3_600_000L
+
+fun DiscoveryRetirementPolicy.blockedUntil(committedAt: Long, seen: Boolean): Long? = when (this) {
+    DiscoveryRetirementPolicy.RETIRE_ALL -> committedAt + DISCOVERY_RETIRE_MS
+    DiscoveryRetirementPolicy.SEEN_ONLY -> if (seen) committedAt + DISCOVERY_RETIRE_MS else null
+}
+
+sealed interface DiscoveryTopUpReceipt {
+    data class ToppedUp(
+        val added: Int,
+        val eligibleAfter: Int,
+        val snapshot: DiscoveryPublicationSnapshot,
+    ) : DiscoveryTopUpReceipt
+    data class Superseded(val generation: Long) : DiscoveryTopUpReceipt
+    data object Busy : DiscoveryTopUpReceipt
+    data object NothingToAdd : DiscoveryTopUpReceipt
+}

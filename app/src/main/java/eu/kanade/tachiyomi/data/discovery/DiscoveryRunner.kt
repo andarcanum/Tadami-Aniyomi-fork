@@ -15,10 +15,12 @@ import tachiyomi.domain.discovery.model.DiscoveryPublicationOutcome
 import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
+import tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import uy.kohesive.injekt.Injekt
@@ -175,6 +177,7 @@ class DiscoveryRunner(
         isManualRefresh: Boolean = false,
         totalBudgetMs: Long? = null,
         isConfigurationRefresh: Boolean = false,
+        topUp: Boolean = false,
     ): Map<DiscoveryMediaType, DiscoveryRunOutcome> {
         if (!preferences.discoveryEnabled().get()) {
             return mediaTypes.associateWith { mediaType ->
@@ -198,6 +201,7 @@ class DiscoveryRunner(
                     isManualRefresh = isManualRefresh && !isConfigurationRefresh,
                     mediaBudgetMs = perMediaBudgetMs,
                     isConfigurationRefresh = isConfigurationRefresh,
+                    topUp = topUp,
                 )
                 outcomes[mediaType] = outcome
             } catch (e: CancellationException) {
@@ -237,11 +241,12 @@ class DiscoveryRunner(
         isManualRefresh: Boolean = false,
         mediaBudgetMs: Long? = null,
         isConfigurationRefresh: Boolean = false,
+        topUp: Boolean = false,
     ): DiscoveryRunOutcome =
         mediaRunLocks.getOrPut(mediaType) { Mutex() }
             .withLock {
                 try {
-                    runForLocked(mediaType, isManualRefresh, mediaBudgetMs, isConfigurationRefresh)
+                    runForLocked(mediaType, isManualRefresh, mediaBudgetMs, isConfigurationRefresh, topUp)
                 } finally {
                     DiscoveryProgressTracker.reset(mediaType)
                 }
@@ -252,6 +257,7 @@ class DiscoveryRunner(
         isManualRefresh: Boolean = false,
         mediaBudgetMs: Long? = null,
         isConfigurationRefresh: Boolean = false,
+        topUp: Boolean = false,
     ): DiscoveryRunOutcome {
         DiscoveryProgressTracker.update(
             isRunning = true,
@@ -280,6 +286,21 @@ class DiscoveryRunner(
         val previousPool = runCatching { repository.publication(mediaType) }.getOrNull()
         val previousPoolTitles = previousPool?.suggestions.orEmpty().mapTo(HashSet()) { it.cleanTitle }
         val expectedGeneration = previousPool?.generation ?: 0L
+        val need = if (topUp) topUpNeed(previousPool?.eligibleSuggestions.orEmpty().size) else 0
+        if (topUp) {
+            val now = System.currentTimeMillis()
+            val lastTopUp = preferences.lastTopUpAt(mediaType).get()
+            val lastAdded = preferences.lastTopUpAdded(mediaType).get()
+            if (need == 0 || !shouldAttemptTopUp(now, lastTopUp, lastAdded)) {
+                logcat { "[DiscoveryTopUp] skipped need=$need lastTopUp=$lastTopUp lastAdded=$lastAdded" }
+                preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+                return DiscoveryRunOutcome(
+                    mediaType = mediaType,
+                    status = DiscoveryRunStatus.SKIPPED,
+                    attemptedRows = emptySet(),
+                )
+            }
+        }
         val eligibilitySnapshot = repository.eligibility(mediaType)
         val configurationKey = discoveryConfigurationKey(mediaType)
         val harvestPages = if (isManualRefresh) MAX_MANUAL_HARVEST_PAGES else 1
@@ -518,8 +539,14 @@ class DiscoveryRunner(
                             maxConcurrency = 4,
                         ),
                         hydrate = true,
-                        targetItems = RICH_SOURCE_TARGET * 2,
-                        perSourceCap = if (ordered.size > 1) SHARED_MULTI_SOURCE_CAP else RICH_SOURCE_TARGET * 2,
+                        targetItems = if (topUp) need * 3 / 2 else RICH_SOURCE_TARGET * 2,
+                        perSourceCap = if (ordered.size >
+                            1
+                        ) {
+                            SHARED_MULTI_SOURCE_CAP
+                        } else {
+                            (if (topUp) need * 3 / 2 else RICH_SOURCE_TARGET * 2)
+                        },
                         budget = verificationBudget,
                         excludedKeys = baseContext.exclusionKeys,
                     )
@@ -583,7 +610,7 @@ class DiscoveryRunner(
                 )
             }
             if (preferences.rowSourceEnabled().get()) {
-                add(DiscoverySourceRowBuilder(sourceCatalog, rowCap = 50))
+                add(DiscoverySourceRowBuilder(sourceCatalog, rowCap = DISCOVERY_POOL_TARGET))
             }
         }
         if (builders.isEmpty()) {
@@ -676,6 +703,74 @@ class DiscoveryRunner(
             else -> null
         }
 
+        if (topUp) {
+            val topUpReceipt = repository.topUpPool(
+                media = mediaType,
+                expectedGeneration = expectedGeneration,
+                additions = pooledItems,
+                cursors = nextCursors,
+                maxPoolSize = DISCOVERY_POOL_TARGET,
+            )
+            val now = System.currentTimeMillis()
+            when (topUpReceipt) {
+                is DiscoveryTopUpReceipt.ToppedUp -> {
+                    preferences.lastTopUpAdded(mediaType).set(topUpReceipt.added)
+                    preferences.lastTopUpAt(mediaType).set(now)
+                    preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SUCCESS.name)
+                    preferences.lastGenerationAt(mediaType).set(now)
+                    val eligibleBefore = previousPool?.eligibleSuggestions.orEmpty().size
+                    logcat {
+                        "[DiscoveryTopUp] media=$mediaType eligibleBefore=$eligibleBefore " +
+                            "need=$need added=${topUpReceipt.added} eligibleAfter=${topUpReceipt.eligibleAfter}"
+                    }
+                    return DiscoveryRunOutcome(
+                        mediaType = mediaType,
+                        status = DiscoveryRunStatus.SUCCESS,
+                        attemptedRows = attemptedRows,
+                        failedRows = feed.failedRows,
+                        degradedRows = feed.degradedRows,
+                        persistedRows = feed.rows.filterValues { it.isNotEmpty() }.keys,
+                    )
+                }
+                is DiscoveryTopUpReceipt.NothingToAdd -> {
+                    preferences.lastTopUpAdded(mediaType).set(0)
+                    preferences.lastTopUpAt(mediaType).set(now)
+                    if (previousPool?.eligibleSuggestions.isNullOrEmpty()) {
+                        logcat {
+                            "[DiscoveryTopUp] pool empty and top-up had nothing to add, falling back to full generation"
+                        }
+                        return runForLocked(
+                            mediaType = mediaType,
+                            isManualRefresh = false,
+                            mediaBudgetMs = mediaBudgetMs,
+                            isConfigurationRefresh = isConfigurationRefresh,
+                            topUp = false,
+                        )
+                    }
+                    preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SUCCESS.name)
+                    preferences.lastGenerationAt(mediaType).set(now)
+                    return DiscoveryRunOutcome(
+                        mediaType = mediaType,
+                        status = DiscoveryRunStatus.SUCCESS,
+                        attemptedRows = attemptedRows,
+                        failedRows = feed.failedRows,
+                        degradedRows = feed.degradedRows,
+                        persistedRows = emptySet(),
+                    )
+                }
+                is DiscoveryTopUpReceipt.Superseded,
+                is DiscoveryTopUpReceipt.Busy,
+                -> {
+                    preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+                    return DiscoveryRunOutcome(
+                        mediaType = mediaType,
+                        status = DiscoveryRunStatus.SKIPPED,
+                        attemptedRows = attemptedRows,
+                    )
+                }
+            }
+        }
+
         repository.installConfigurationKey(mediaType, configurationKey)
         val requestId = java.util.UUID.randomUUID().toString()
         val token = if (prepared != null) {
@@ -684,7 +779,12 @@ class DiscoveryRunner(
             null
         }
         val publishReceipt = if (prepared != null && token != null) {
-            repository.publishGeneration(token, prepared)
+            val retirement = if (isManualRefresh) {
+                DiscoveryRetirementPolicy.RETIRE_ALL
+            } else {
+                DiscoveryRetirementPolicy.SEEN_ONLY
+            }
+            repository.publishGeneration(token, prepared, retirement)
         } else {
             null
         }

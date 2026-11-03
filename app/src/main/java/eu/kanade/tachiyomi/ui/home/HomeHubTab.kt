@@ -984,6 +984,15 @@ object HomeHubTab : Tab {
                     eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.backfillRefresh(context)
                 }
             }
+            if (discoveryPreferences.retirementResetVersion().get() <
+                eu.kanade.domain.discovery.service.DiscoveryPreferences.CURRENT_RETIREMENT_RESET_VERSION
+            ) {
+                val cleared = discoveryRepository.clearRetirementBlocks()
+                logcat { "[DiscoveryReset] cleared $cleared blocked titles" }
+                discoveryPreferences.retirementResetVersion().set(
+                    eu.kanade.domain.discovery.service.DiscoveryPreferences.CURRENT_RETIREMENT_RESET_VERSION,
+                )
+            }
         }
         // Per-media bootstrap: если лента активной вкладки никогда не генерировалась —
         // one-shot сразу (фикс дыры: после успеха аниме манга/новеллы ждали бы до 24ч).

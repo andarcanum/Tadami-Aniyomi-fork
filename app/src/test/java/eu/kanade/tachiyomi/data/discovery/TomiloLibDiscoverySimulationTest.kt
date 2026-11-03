@@ -335,6 +335,7 @@ class TomiloLibDiscoverySimulationTest {
             override suspend fun publishGeneration(
                 token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
                 prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+                retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
             ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
                 generation = token.expectedGeneration + 1
                 val oldKeys = stored.value.flatMap {

@@ -454,6 +454,7 @@ class DiscoveryRunnerTest {
         override suspend fun publishGeneration(
             token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
             prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+            retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
         ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
             generation = token.expectedGeneration + 1
             val suggestions = (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
@@ -1599,6 +1600,7 @@ class DiscoveryRunnerTest {
             override suspend fun publishGeneration(
                 token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
                 prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+                retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
             ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
                 concurrencyLock.withLock {
                     currentConcurrent++
@@ -1608,7 +1610,7 @@ class DiscoveryRunnerTest {
                 concurrencyLock.withLock {
                     currentConcurrent--
                 }
-                return super.publishGeneration(token, prepared)
+                return super.publishGeneration(token, prepared, retirement)
             }
         }
         val builder = object : DiscoveryRowBuilder {

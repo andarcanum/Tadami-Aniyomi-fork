@@ -25,6 +25,7 @@ import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
 import tachiyomi.domain.discovery.model.DiscoveryPublicationOutcome
 import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
+import tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
@@ -34,7 +35,9 @@ import tachiyomi.domain.discovery.model.DiscoveryTasteMetadata
 import tachiyomi.domain.discovery.model.DiscoveryTasteRecord
 import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
+import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 import tachiyomi.domain.discovery.model.DiscoveryTraversalState
+import tachiyomi.domain.discovery.model.blockedUntil
 import tachiyomi.domain.discovery.model.canonicalDiscoveryKey
 import tachiyomi.domain.discovery.model.canonicalStorageKey
 import tachiyomi.domain.discovery.model.identityKeys
@@ -742,6 +745,7 @@ class DiscoveryRepositoryImpl(
     override suspend fun publishGeneration(
         token: DiscoveryGenerationToken,
         prepared: DiscoveryPreparedPool,
+        retirement: DiscoveryRetirementPolicy,
     ): DiscoveryPublishReceipt = DiscoveryMutationFence.withMutation(token.mediaType) {
         val known = knownTitlesProvider.snapshot(token.mediaType)
         handler.await(inTransaction = true) { db ->
@@ -791,20 +795,38 @@ class DiscoveryRepositoryImpl(
                 return@await DiscoveryPublishReceipt.NoAdmissibleItems
             }
 
-            val blockedUntil = committedAt + RETIREMENT_MILLIS
+            val activeKeys = decodeKeys(publication.active_keys)
+            val issuedKeys = decodeKeys(publication.issued_keys)
+            val seenKeys = activeKeys + issuedKeys
+            val exposedTitles = db.discovery_exposuresQueries
+                .selectExposedWithTimeSince(token.mediaType.key, publication.committed_at) { clean_title, _ ->
+                    clean_title
+                }
+                .executeAsList()
+                .toSet()
+
             oldRows.forEach { old ->
-                val identity = identityOf(token.mediaType, old)
-                db.discovery_title_memoryQueries.upsertIdentity(
-                    media_type = identity.mediaType.key,
-                    identity_key = identity.identityKey,
-                    title = identity.title,
-                    primary_clean_title = identity.primaryCleanTitle,
-                    source_id = identity.sourceId,
-                    source_url = identity.sourceUrl,
-                    trusted_aliases = identity.trustedAliases.joinToString("\n"),
-                    metadata_changed_at = identity.metadataChangedAt,
-                )
-                db.discovery_title_memoryQueries.retireBlocked(blockedUntil, token.mediaType.key, identity.identityKey)
+                // Insurance: Home teaser writes exposures on focus/interaction, but items in active/issued batch count as seen to guarantee unseen titles are never retired in background.
+                val seen = old.cleanTitle in exposedTitles || old.identityKeys().any { it in seenKeys }
+                val blockedUntil = retirement.blockedUntil(committedAt, seen)
+                if (blockedUntil != null) {
+                    val identity = identityOf(token.mediaType, old)
+                    db.discovery_title_memoryQueries.upsertIdentity(
+                        media_type = identity.mediaType.key,
+                        identity_key = identity.identityKey,
+                        title = identity.title,
+                        primary_clean_title = identity.primaryCleanTitle,
+                        source_id = identity.sourceId,
+                        source_url = identity.sourceUrl,
+                        trusted_aliases = identity.trustedAliases.joinToString("\n"),
+                        metadata_changed_at = identity.metadataChangedAt,
+                    )
+                    db.discovery_title_memoryQueries.retireBlocked(
+                        blockedUntil,
+                        token.mediaType.key,
+                        identity.identityKey,
+                    )
+                }
             }
 
             db.discovery_suggestionsQueries.deleteAllByMedia(token.mediaType.key)
@@ -978,6 +1000,114 @@ class DiscoveryRepositoryImpl(
         }
     }
 
+    override suspend fun topUpPool(
+        media: DiscoveryMediaType,
+        expectedGeneration: Long,
+        additions: List<DiscoverySuggestion>,
+        cursors: List<DiscoverySourceCursor>,
+        maxPoolSize: Int,
+    ): DiscoveryTopUpReceipt = DiscoveryMutationFence.withMutation(media) {
+        val known = knownTitlesProvider.snapshot(media)
+        handler.await(inTransaction = true) { db ->
+            db.discovery_publicationQueries.ensureRow(media.key)
+            val publication = db.discovery_publicationQueries.selectByMedia(media.key).executeAsOne()
+            if (publication.generation != expectedGeneration) {
+                return@await DiscoveryTopUpReceipt.Superseded(publication.generation)
+            }
+            if (publication.owner_request_id != null) {
+                return@await DiscoveryTopUpReceipt.Busy
+            }
+
+            val memory = readMemory(db, media)
+            val hidden = readHidden(db, media)
+            val blacklist = readBlacklist(db, media)
+            val eligibility = buildEligibility(media, known, memory, hidden)
+
+            val rows = db.discovery_suggestionsQueries.selectAllMapped(media.key)
+            val eligible = eligibleSuggestions(media, rows, known, memory, hidden, blacklist)
+            val room = maxPoolSize - eligible.size
+            if (room <= 0) {
+                return@await DiscoveryTopUpReceipt.NothingToAdd
+            }
+
+            // Prune rows from discovery_suggestions that are consumed or known (not hidden/blocked)
+            val knownKeys = known.flatMap { it.asTitleKeys() }.toSet()
+            val memoryByKey = memory.associateBy { it.identity.identityKey }
+            val prunableRows = rows.filter { row ->
+                val mem = row.identityKey?.let { memoryByKey[it] }
+                val isConsumed = mem?.consumed?.active == true
+                val isKnown = row.identityKeys().any { it in knownKeys }
+                isConsumed || isKnown
+            }
+            prunableRows.forEach { row ->
+                db.discovery_suggestionsQueries.deleteById(row.id)
+            }
+            val remainingRows = if (prunableRows.isEmpty()) {
+                rows
+            } else {
+                rows.filterNot {
+                    it.id in
+                        prunableRows.map { p -> p.id }
+                }
+            }
+
+            val oldPoolKeys = remainingRows.flatMap { it.identityKeys() }.toSet()
+            val accepted = prepareCandidates(
+                media = media,
+                suggestions = additions,
+                oldPoolKeys = oldPoolKeys,
+                eligibility = eligibility,
+                blacklist = blacklist,
+            ).take(room)
+
+            if (accepted.isEmpty()) {
+                return@await DiscoveryTopUpReceipt.NothingToAdd
+            }
+
+            val maxPosition = remainingRows.maxOfOrNull { it.position } ?: 0L
+            accepted.forEachIndexed { index, item ->
+                db.discovery_suggestionsQueries.insert(
+                    media_type = media.key,
+                    row_type = item.rowType.key,
+                    title = item.title,
+                    clean_title = item.cleanTitle,
+                    cover_url = item.coverUrl,
+                    reason = item.reason,
+                    seed_title = item.seedTitle,
+                    provider = item.provider,
+                    score = item.score,
+                    position = maxPosition + 1L + index,
+                    created_at = item.createdAt,
+                    source_id = item.sourceId,
+                    source_url = item.sourceUrl,
+                    genres = item.genres.joinToString(","),
+                    identity_key = item.identityKey,
+                    trusted_aliases = item.trustedAliases.joinToString("\n"),
+                    release_status = item.releaseStatus?.key,
+                    metadata_verified_at = item.metadataVerifiedAt,
+                )
+            }
+
+            val existingCursors = decodeCursors(publication.cursors)
+            val mergedCursors = (
+                existingCursors.associateBy { "${it.sourceId}:${it.queryKey}" } +
+                    cursors.associateBy { "${it.sourceId}:${it.queryKey}" }
+                ).values.toList()
+
+            db.discovery_publicationQueries.updateCursors(encodeCursors(mergedCursors), media.key)
+            bumpProjection(db, media)
+
+            val updatedRows = db.discovery_suggestionsQueries.selectAllMapped(media.key)
+            val updatedPub = db.discovery_publicationQueries.selectByMedia(media.key).executeAsOne()
+            val snapshot = buildSnapshot(media, updatedPub, updatedRows, known, memory, hidden, blacklist)
+            DiscoveryTopUpReceipt.ToppedUp(
+                added = accepted.size,
+                eligibleAfter = snapshot.eligibleSuggestions.size,
+                snapshot = snapshot,
+            )
+        }
+    }
+
     override suspend fun recordTaste(
         identity: DiscoveryTitleIdentity,
         kind: DiscoverySignalType,
@@ -1127,6 +1257,18 @@ class DiscoveryRepositoryImpl(
         }
     }
 
+    override suspend fun clearRetirementBlocks(): Int = handler.await(inTransaction = true) { db ->
+        val currentTime = now()
+        val totalBlocked = DiscoveryMediaType.entries.sumOf { media ->
+            db.discovery_title_memoryQueries.countActiveBlocked(media.key, currentTime).executeAsOne()
+        }.toInt()
+        db.discovery_title_memoryQueries.clearAllBlocks()
+        DiscoveryMediaType.entries.forEach { media ->
+            bumpProjection(db, media)
+        }
+        totalBlocked
+    }
+
     override suspend fun restoreTitleMemory(records: List<DiscoveryTitleMemory>) {
         if (records.isEmpty()) return
         handler.await(inTransaction = true) { db ->
@@ -1152,8 +1294,12 @@ class DiscoveryRepositoryImpl(
                     record.consumed.changedAt,
                 )
                 if (record.blockedUntil > 0L) {
-                    db.discovery_title_memoryQueries.retireBlocked(
+                    val clampedBlockedUntil = minOf(
                         record.blockedUntil,
+                        now() + tachiyomi.domain.discovery.model.DISCOVERY_RETIRE_MS,
+                    )
+                    db.discovery_title_memoryQueries.retireBlocked(
+                        clampedBlockedUntil,
                         identity.mediaType.key,
                         identity.identityKey,
                     )
@@ -1545,7 +1691,6 @@ class DiscoveryRepositoryImpl(
     private companion object {
         const val SIGNALS_CAP_PER_MEDIA = 500L
         const val CONSUMED_CAP_PER_MEDIA = 5000L
-        const val RETIREMENT_MILLIS = 604_800_000L
         const val STORAGE_PREFIX = "@D2/"
         val POSITIVE_KINDS = setOf(DiscoverySignalType.CLICK, DiscoverySignalType.LIKE, DiscoverySignalType.ADD)
     }

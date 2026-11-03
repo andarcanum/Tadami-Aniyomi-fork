@@ -39,6 +39,11 @@ deleteAllByMedia:
 DELETE FROM discovery_suggestions
 WHERE media_type = ?;
 
+deleteById:
+DELETE FROM discovery_suggestions
+WHERE id = ?;
+
+
 insert:
 INSERT INTO discovery_suggestions(
     media_type, row_type, title, clean_title, cover_url, reason, seed_title, provider,

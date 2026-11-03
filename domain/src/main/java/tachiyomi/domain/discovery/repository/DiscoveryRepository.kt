@@ -12,14 +12,17 @@ import tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt
 import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
 import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
+import tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTasteMetadata
 import tachiyomi.domain.discovery.model.DiscoveryTasteRecord
 import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
+import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 
 interface DiscoveryRepository {
     fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>>
@@ -193,6 +196,7 @@ interface DiscoveryRepository {
     suspend fun publishGeneration(
         token: DiscoveryGenerationToken,
         prepared: DiscoveryPreparedPool,
+        retirement: DiscoveryRetirementPolicy = DiscoveryRetirementPolicy.RETIRE_ALL,
     ): DiscoveryPublishReceipt
 
     suspend fun nextHomeBatch(
@@ -206,6 +210,14 @@ interface DiscoveryRepository {
         generation: Long,
         rankedKeys: List<String>,
     ): DiscoveryBatchReceipt
+
+    suspend fun topUpPool(
+        media: DiscoveryMediaType,
+        expectedGeneration: Long,
+        additions: List<DiscoverySuggestion>,
+        cursors: List<DiscoverySourceCursor>,
+        maxPoolSize: Int,
+    ): DiscoveryTopUpReceipt
 
     suspend fun recordTaste(
         identity: DiscoveryTitleIdentity,
@@ -224,6 +236,7 @@ interface DiscoveryRepository {
     suspend fun recordFact(identity: DiscoveryTitleIdentity, kind: DiscoveryFactKind)
     suspend fun clearFact(media: DiscoveryMediaType, key: String, kind: DiscoveryFactKind)
     suspend fun clearTaste(media: DiscoveryMediaType?)
+    suspend fun clearRetirementBlocks(): Int
     suspend fun restoreTitleMemory(records: List<DiscoveryTitleMemory>)
     suspend fun restoreTasteRecords(records: List<DiscoveryTasteRecord>)
     suspend fun restoreTasteResetEpochs(epochs: Map<DiscoveryMediaType, Long>)

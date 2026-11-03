@@ -12,10 +12,13 @@ import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
 import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourceCursor
+import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTasteMetadata
 import tachiyomi.domain.discovery.model.DiscoveryTasteRecord
 import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
+import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 import tachiyomi.domain.discovery.model.DiscoveryTraversalState
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 
@@ -75,6 +78,7 @@ abstract class FakeDiscoveryRepositoryBase : DiscoveryRepository {
     override suspend fun publishGeneration(
         token: DiscoveryGenerationToken,
         prepared: DiscoveryPreparedPool,
+        retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
     ): DiscoveryPublishReceipt = DiscoveryPublishReceipt.NoAdmissibleItems
 
     override suspend fun nextHomeBatch(
@@ -88,6 +92,14 @@ abstract class FakeDiscoveryRepositoryBase : DiscoveryRepository {
         generation: Long,
         rankedKeys: List<String>,
     ): DiscoveryBatchReceipt = DiscoveryBatchReceipt.NeedsSourceRefresh(generation)
+
+    override suspend fun topUpPool(
+        media: DiscoveryMediaType,
+        expectedGeneration: Long,
+        additions: List<DiscoverySuggestion>,
+        cursors: List<DiscoverySourceCursor>,
+        maxPoolSize: Int,
+    ): DiscoveryTopUpReceipt = DiscoveryTopUpReceipt.NothingToAdd
 
     override suspend fun recordTaste(
         identity: DiscoveryTitleIdentity,
@@ -109,6 +121,8 @@ abstract class FakeDiscoveryRepositoryBase : DiscoveryRepository {
     override suspend fun clearFact(media: DiscoveryMediaType, key: String, kind: DiscoveryFactKind) = Unit
 
     override suspend fun clearTaste(media: DiscoveryMediaType?) = Unit
+
+    override suspend fun clearRetirementBlocks(): Int = 0
 
     override suspend fun restoreTitleMemory(records: List<DiscoveryTitleMemory>) = Unit
 
