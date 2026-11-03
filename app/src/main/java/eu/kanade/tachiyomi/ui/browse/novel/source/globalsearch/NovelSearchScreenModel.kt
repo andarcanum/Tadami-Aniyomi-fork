@@ -202,6 +202,11 @@ abstract class NovelSearchScreenModel(
                         if (isActive) {
                             updateItem(source, NovelSearchItemResult.Error(e))
                         }
+                    } catch (e: LinkageError) {
+                        // Incompatible extension bytecode or missing ABI method should not crash global search
+                        if (isActive) {
+                            updateItem(source, NovelSearchItemResult.Error(e))
+                        }
                     } catch (e: OutOfMemoryError) {
                         // OOM — это Error, не Exception: без этого catch «тяжёлый» источник
                         // (напр. Hitomi с in-memory индексом всех галерей) убивает весь процесс.

@@ -208,6 +208,11 @@ abstract class MangaSearchScreenModel(
                         if (isActive) {
                             updateItem(source, MangaSearchItemResult.Error(e))
                         }
+                    } catch (e: LinkageError) {
+                        // Incompatible extension bytecode or missing ABI method should not crash global search
+                        if (isActive) {
+                            updateItem(source, MangaSearchItemResult.Error(e))
+                        }
                     } catch (e: OutOfMemoryError) {
                         // OOM — это Error, не Exception: без этого catch «тяжёлый» источник
                         // (напр. Hitomi, строящий in-memory индекс всех галерей при поиске)
