@@ -314,26 +314,61 @@ class DiscoveryRefillRegressionTest {
     }
 
     @Test
-    fun sourceWithPendingCardsRefillsEvenIfAnotherSourceMatchedFirst() = runTest {
-        val wrong = (1..6).map { item("Wrong$it", source = 1L, genres = emptyList()) }
-        val pending =
-            listOf(
-                item("PendingAlpha", source = 1L, genres = emptyList()),
-                item("PendingBeta", source = 1L, genres = emptyList()),
-            )
+    fun drySourceWithPendingCardsDoesNotStealRefillFromProductiveSource() = runTest {
+        val dryWrong = (1..20).map { item("DryWrong$it", source = 1L, genres = emptyList()) }
+        val prodPage1 = listOf(item("ProdMatch1", source = 2L, genres = listOf("Fantasy"))) +
+            (1..10).map { item("ProdPending$it", source = 2L, genres = emptyList()) }
         val c = Catalog(
             pages = { sourceId, _ ->
                 if (sourceId == 1L) {
-                    page(wrong + pending)
+                    page(dryWrong, next = false)
                 } else {
-                    page(listOf(item("Instant", source = 2L, genres = listOf("Fantasy"))), next = true)
+                    page(prodPage1, next = false)
                 }
             },
-            details = { if (it.startsWith("/Wrong")) listOf("Drama") else listOf("Fantasy") },
+            details = { if (it.startsWith("/DryWrong")) listOf("Drama") else listOf("Fantasy") },
         )
         val results = query(c, sources = listOf(1L, 2L))
-        results.first { it.sourceId == 1L }.summary.items.map { it.title } shouldBe
-            listOf("PendingAlpha", "PendingBeta")
-        results.first { it.sourceId == 2L }.summary.items.map { it.title } shouldBe listOf("Instant")
+        results.first { it.sourceId == 1L }.summary.items shouldBe emptyList()
+        results.first { it.sourceId == 2L }.summary.items.size shouldBe 11
+    }
+
+    @Test
+    fun sourceMatchingRequiredButRejectedByIgnoredOnFirstPageContinuesToSecondPage() = runTest {
+        val policyWithIgnored = DiscoveryCandidatePolicy(
+            GenreFilterSpec(
+                requiredGenres = setOf("Fantasy"),
+                ignoredGenres = setOf("Horror"),
+            ),
+        )
+        val c = Catalog(
+            pages = { sourceId, pageNum ->
+                if (sourceId == 1L) {
+                    if (pageNum == 1) {
+                        page(
+                            listOf(item("IgnoredMatch", source = 1L, genres = listOf("Fantasy", "Horror"))),
+                            next = true,
+                        )
+                    } else {
+                        page(listOf(item("CleanMatch", source = 1L, genres = listOf("Fantasy"))), next = false)
+                    }
+                } else {
+                    page(listOf(item("OtherSourceMatch", source = 2L, genres = listOf("Fantasy"))), next = false)
+                }
+            },
+        )
+        val results = queryDiscoveryGenreSources(
+            catalog = c,
+            media = media,
+            sourceIds = listOf(1L, 2L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policyWithIgnored,
+            budget = DiscoveryVerificationBudget(maxDetails = 160),
+            targetItems = 30,
+            perSourceCap = 30,
+        )
+        results.first { it.sourceId == 1L }.summary.items.map { it.title } shouldBe listOf("CleanMatch")
     }
 }

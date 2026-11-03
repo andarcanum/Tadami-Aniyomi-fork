@@ -154,6 +154,15 @@ class DiscoveryLikeRowBuilder(
                 return emptyList()
             }
 
+            val policy = context.candidatePolicy
+            if (policy.requiredGenres.isNotEmpty() && policy.isStrictRequired) {
+                // Local LIKE queries do not hydrate item details; under strict
+                // required genres unverified list cards are always rejected while
+                // competing with TASTE/SOURCE for the same extension connections.
+                exhaustionEvidence = emptyList()
+                return emptyList()
+            }
+
             val perSeed = supervisorScope {
                 allSeeds.mapIndexed { seedIndex, (seedTitle, genres) ->
                     async {

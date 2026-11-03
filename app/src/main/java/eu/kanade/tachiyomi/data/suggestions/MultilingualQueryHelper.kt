@@ -102,7 +102,11 @@ object MultilingualQueryHelper {
         "revenge" to listOf("месть"),
         "friendship" to listOf("дружба"),
         "family" to listOf("семья"),
-        "milf" to listOf("милфы", "милфа", "милф", "мамочки", "зрелые женщины", "взрослые женщины"),
+        "milf" to listOf(
+            "милфы", "милфа", "милф", "мамочки", "зрелые женщины", "взрослые женщины",
+            "mature", "mature women", "mother", "mom", "mom-son",
+            "зрелые", "зрелая", "мама", "мамаши", "мать", "mature woman", "mommy", "stepmom", "older woman", "cougar",
+        ),
         "love triangle" to listOf("любовный треугольник"),
         "slow romance" to listOf("медленная романтика", "медленное развитие отношений"),
         "forced marriage" to listOf("брак по расчету", "вынужденный брак"),

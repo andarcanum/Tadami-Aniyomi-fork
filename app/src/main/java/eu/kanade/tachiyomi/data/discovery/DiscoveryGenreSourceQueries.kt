@@ -22,6 +22,13 @@ internal const val GENRE_SOURCE_TIMEOUT_MS = 30_000L
  * filtered or retired pages do not prove catalogue exhaustion.
  */
 internal const val RICH_SOURCE_TARGET = 30
+
+/**
+ * Per-source cap when TASTE and SOURCE share one required-genre pass across
+ * multiple selected sources: prevents a single fast source from consuming 60
+ * details while other matching sources still have pending cards.
+ */
+internal const val SHARED_MULTI_SOURCE_CAP = 24
 private const val MIN_GENRE_SOURCE_TIMEOUT_MS = 5_000L
 
 /** A required genre may legitimately span many catalogue pages. */
@@ -32,6 +39,9 @@ private const val MAX_DETAIL_FREE_PAGES = 2
 
 /** First-wave probe: enough to prove a source can match without owning the pool. */
 private const val REQUIRED_PROBE_DETAILS = 6
+
+/** Detail-free pages a source without any match may still walk after its probe. */
+private const val MAX_DRY_PAGES = 5
 
 /** Per-wave cap once a source has admitted a match; it may verify down to its target. */
 private const val REQUIRED_REFILL_DETAILS = 60
@@ -175,24 +185,53 @@ internal suspend fun queryDiscoveryGenreSources(
         }
         wave++
         val remaining = if (hydrate) budget?.remainingDetails ?: 0 else 0
-        val productive = active.filter { it.admitted.isNotEmpty() }
-        val eligible = active.filter { it.admitted.isNotEmpty() || it.pendingItems.isNotEmpty() }
+        val productive = active.filter {
+            it.admitted.isNotEmpty() || it.genreFilterApplied == true || it.matchedRequired > 0
+        }
+        val unprobed = active.filter {
+            it.verified == 0 && it.pendingItems.isNotEmpty() && !it.detailsUseless()
+        }
         // Probe every source once; afterwards the remaining allowance belongs to
-        // sources that already proved they can match or that have pending items to settle.
+        // sources that already proved they can match (or whose native genre filter
+        // was applied), while sources that had 0 verified cards in wave 1 get one
+        // bounded probe retry instead of a 60-detail refill.
         val recipients = when {
             wave == 1 -> active
-            eligible.isNotEmpty() -> eligible
+            productive.isNotEmpty() -> (productive + unprobed).distinctBy { it.sourceId }
+            unprobed.isNotEmpty() -> unprobed
             else -> active
         }
-        val perSource = if (wave > 1 && eligible.isNotEmpty()) {
-            REQUIRED_REFILL_DETAILS
+        val allowance = if (wave == 1 || productive.isEmpty()) {
+            allocateDetailAllowance(
+                recipients.map { it.sourceId },
+                minOf(remaining, REQUIRED_PROBE_DETAILS * recipients.size),
+            )
         } else {
-            REQUIRED_PROBE_DETAILS
+            val probeRecipients = unprobed.filterNot { p -> productive.any { it.sourceId == p.sourceId } }
+            val probeCap = minOf(remaining, REQUIRED_PROBE_DETAILS * probeRecipients.size)
+            val probeAlloc = allocateDetailAllowance(probeRecipients.map { it.sourceId }, probeCap)
+            val refillRemaining = (remaining - probeAlloc.values.sum()).coerceAtLeast(0)
+            // Prioritize productive sources that have not yet contributed a fair share
+            // so a single source that already reached 20+ items does not starve a source
+            // with 1-5 admitted items and dozens of pending cards.
+            val hungryProductive = productive.filter { it.admitted.size < 12 }
+                .ifEmpty { productive }
+            val refillAlloc = allocateDetailAllowance(
+                hungryProductive.map { it.sourceId },
+                minOf(refillRemaining, REQUIRED_REFILL_DETAILS * hungryProductive.size),
+            )
+            val leftover = (refillRemaining - refillAlloc.values.sum()).coerceAtLeast(0)
+            val saturatedProductive = productive.filterNot { p -> hungryProductive.any { it.sourceId == p.sourceId } }
+            val saturatedAlloc = if (leftover > 0 && saturatedProductive.isNotEmpty()) {
+                allocateDetailAllowance(
+                    saturatedProductive.map { it.sourceId },
+                    minOf(leftover, REQUIRED_REFILL_DETAILS * saturatedProductive.size),
+                )
+            } else {
+                emptyMap()
+            }
+            probeAlloc + refillAlloc + saturatedAlloc
         }
-        val allowance = allocateDetailAllowance(
-            recipients.map { it.sourceId },
-            minOf(remaining, perSource * recipients.size),
-        )
         val before = active.sumOf { it.pagesFetched + it.verified + it.detailsUsed + it.admitted.size } to
             active.sumOf { it.pendingItems.size }
         // One page or one hydration batch per source and round: late selected
@@ -281,7 +320,21 @@ private class SourceQueryState(
     var pagesStopped = false
     var timedOut = false
     var budgetExpired = false
+    var genreFilterApplied: Boolean? = null
+    var matchedRequired = 0
+    var genreSearchApplied = false
     var failure: GenreSourceException? = null
+
+    /** A full probe produced no genres at all: more details requests would only burn the shared allowance. */
+    fun detailsUseless(): Boolean = verified == 0 && detailsUsed >= REQUIRED_PROBE_DETAILS
+
+    /**
+     * The source exposes no genres at all (probe returned empty metadata, not failures) and the
+     * cards came from a search for the required genre: nothing can be verified, so the search
+     * result itself is the only available evidence.
+     */
+    fun isGenreless(): Boolean =
+        genreSearchApplied && verified == 0 && metadataUnavailable >= REQUIRED_PROBE_DETAILS
 
     /**
      * Pending cards are still worth refilling even when the source has no next
@@ -362,13 +415,24 @@ private suspend fun advanceSource(
     wave: Int,
 ) {
     var allowanceLeft = allowance.coerceAtLeast(0)
+    if (hydrate && budget != null && state.detailsUseless()) {
+        if (state.isGenreless()) {
+            state.admitGenrelessPending(policy, media)
+        } else {
+            state.pendingItems = emptyList()
+            state.pagesStopped = true
+            return
+        }
+    }
     // A dry source already had its fair probe; do not let it keep fetching
     // pages while the refill pool is reserved for sources that matched. Once
     // the pool is gone, the bounded detail-free page grace still applies.
     if (wave > 1 && hydrate && budget != null && allowanceLeft <= 0 &&
-        state.admitted.isEmpty() && state.pendingItems.isEmpty() && budget.remainingDetails > 0
+        state.admitted.isEmpty() && state.genreFilterApplied != true && state.matchedRequired == 0 &&
+        budget.remainingDetails > 0 &&
+        (state.pendingItems.isNotEmpty() || state.pagesFetched >= MAX_DRY_PAGES)
     ) {
-        state.pagesStopped = true
+        state.budgetExpired = true
         return
     }
     if (hydrate && budget != null && state.pendingItems.isNotEmpty()) {
@@ -398,6 +462,11 @@ private suspend fun advanceSource(
                 state.transientFailures += refilled.transientFailures
                 state.unattempted += refilled.unattempted
                 state.pendingItems = refilled.pending.filterNot { it.isExcludedBy(state.excludedKeys, media) }
+                if (policy.requiredGenres.isNotEmpty()) {
+                    state.matchedRequired += refilled.items.count {
+                        it.genres.isNotEmpty() && policy.matchesRequired(it.genres)
+                    }
+                }
                 val verified = policy.filterRowCandidates(refilled.items, { it.genres })
                     .filterNot { it.isExcludedBy(state.excludedKeys, media) }
                 for (candidate in verified) {
@@ -459,10 +528,20 @@ private suspend fun advanceSource(
     val newPending = pending.filterNot { it.collectionKey() in existingPending }
     state.unattempted += (pageResult.unattempted - pageResult.pending.size).coerceAtLeast(0) + newPending.size
     state.pendingItems += newPending
+    if (pageResult.genreSearchApplied) state.genreSearchApplied = true
+    if (state.isGenreless()) state.admitGenrelessPending(policy, media)
     state.hasNextPage = pageResult.hasNextPage
     state.exhausted = !pageResult.hasNextPage
+    if (pageResult.genreFilterApplied == true) {
+        state.genreFilterApplied = true
+    }
     val unique = pageResult.items.filter {
         state.seen.add(it.sourceUrl?.takeIf(String::isNotBlank) ?: it.cleanTitle)
+    }
+    if (policy.requiredGenres.isNotEmpty()) {
+        state.matchedRequired += unique.count {
+            it.genres.isNotEmpty() && policy.matchesRequired(it.genres)
+        }
     }
     val eligible = policy.filterRowCandidates(unique, { it.genres })
         .filterNot { it.isExcludedBy(state.excludedKeys, media) }
@@ -479,6 +558,17 @@ private suspend fun advanceSource(
             " required=" + policy.requiredGenres +
             " sampleGenres=" + unique.take(3).map { it.genres.take(8) }
     }
+}
+
+private fun SourceQueryState.admitGenrelessPending(policy: DiscoveryCandidatePolicy, media: DiscoveryMediaType) {
+    val stamped = pendingItems
+        .filterNot { it.isExcludedBy(excludedKeys, media) }
+        .map { it.copy(genres = policy.requiredGenres.toList()) }
+    for (candidate in stamped) {
+        if (admitted.size >= target) break
+        admitted.putIfAbsent(candidate.collectionKey(), candidate)
+    }
+    pendingItems = emptyList()
 }
 
 internal fun GenreSourceVerification.toExhaustionEvidence() = tachiyomi.domain.discovery.model.DiscoveryQueryEvidence(

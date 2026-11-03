@@ -292,17 +292,41 @@ class DiscoverySourceCatalogPageTest {
     }
 
     @Test
-    fun `filterless source falls back to browsing popular manga`(): Unit = runTest {
+    fun `filterless source searches by genre query and falls back to popular when search is empty`(): Unit = runTest {
         val source = source()
+        coEvery { source.getSearchManga(1, "fantasy", any()) } returns MangasPage(
+            listOf(manga("Searched One", "/searched", genre = "Fantasy")),
+            hasNextPage = true,
+        )
+
+        val hit = catalog(source).popularWithGenresAllocated(
+            media,
+            sourceId,
+            genres = listOf("fantasy"),
+            budget = budget(maxDetails = 0),
+            maxDetails = 0,
+        )
+
+        hit.genreFilterApplied shouldBe false
+        hit.items.map { it.sourceUrl } shouldBe listOf("/searched")
+        hit.hasNextPage shouldBe true
+        coVerify(exactly = 1) { source.getSearchManga(1, "fantasy", any()) }
+        coVerify(exactly = 0) { source.getPopularManga(any()) }
+    }
+
+    @Test
+    fun `filterless source falls back to browsing popular manga when genre search is empty`(): Unit = runTest {
+        val source = source()
+        coEvery { source.getSearchManga(1, "fantasy", any()) } returns MangasPage(emptyList(), hasNextPage = false)
         coEvery { source.getPopularManga(1) } returns MangasPage(
-            listOf(manga("Popular One", "/popular", genre = "MILF")),
+            listOf(manga("Popular One", "/popular", genre = "Fantasy")),
             hasNextPage = true,
         )
 
         val result = catalog(source).popularWithGenresAllocated(
             media,
             sourceId,
-            genres = listOf("milf"),
+            genres = listOf("fantasy"),
             budget = budget(maxDetails = 0),
             maxDetails = 0,
         )
@@ -310,6 +334,7 @@ class DiscoverySourceCatalogPageTest {
         result.genreFilterApplied shouldBe false
         result.items.map { it.sourceUrl } shouldBe listOf("/popular")
         result.hasNextPage shouldBe true
+        coVerify(exactly = 1) { source.getSearchManga(1, "fantasy", any()) }
         coVerify(exactly = 1) { source.getPopularManga(1) }
     }
 
@@ -317,25 +342,48 @@ class DiscoverySourceCatalogPageTest {
     fun `genre query reports whether the source filter was applied`(): Unit = runTest {
         val source = source()
         every { source.getFilterList() } returns FilterList(
-            GenreGroup(listOf(GenreOption("MILF"), GenreOption("Drama"))),
+            GenreGroup(listOf(GenreOption("Fantasy"), GenreOption("Drama"))),
         )
         coEvery { source.getSearchManga(1, "", any()) } returns MangasPage(
-            listOf(manga("Milf One", "/milf")),
+            listOf(manga("Fantasy One", "/fantasy")),
             hasNextPage = true,
         )
 
         val result = catalog(source).popularWithGenresAllocated(
             media,
             sourceId,
-            genres = listOf("milf"),
+            genres = listOf("fantasy"),
             budget = budget(maxDetails = 0),
             maxDetails = 0,
         )
 
         result.genreFilterApplied shouldBe true
-        result.items.map { it.sourceUrl } shouldBe listOf("/milf")
+        result.items.map { it.sourceUrl } shouldBe listOf("/fantasy")
         coVerify(exactly = 1) { source.getSearchManga(1, "", any()) }
         coVerify(exactly = 0) { source.getPopularManga(any()) }
+    }
+
+    @Test
+    fun `genre select filter is applied when group filter is absent`(): Unit = runTest {
+        val source = source()
+        val select = object : Filter.Select<String>("Genre", arrayOf("All", "Fantasy", "Drama")) {}
+        every { source.getFilterList() } returns FilterList(select)
+        coEvery { source.getSearchManga(1, "", any()) } returns MangasPage(
+            listOf(manga("Selected Genre", "/selected")),
+            hasNextPage = false,
+        )
+
+        val result = catalog(source).popularWithGenresAllocated(
+            media,
+            sourceId,
+            genres = listOf("fantasy"),
+            budget = budget(maxDetails = 0),
+            maxDetails = 0,
+        )
+
+        result.genreFilterApplied shouldBe true
+        select.state shouldBe 1
+        result.items.map { it.sourceUrl } shouldBe listOf("/selected")
     }
 
     @Test
@@ -409,5 +457,51 @@ class DiscoverySourceCatalogPageTest {
         coVerify(exactly = 1) { source.getPopularManga(1) }
         coVerify(exactly = 0) { source.getMangaUpdate(match { it.url == "/excluded" }, any(), any(), any()) }
         coVerify(exactly = 1) { source.getMangaUpdate(match { it.url == "/eligible" }, emptyList(), true, false) }
+    }
+
+    @Test
+    fun `genre text filter is populated when group and select filters are absent`(): Unit = runTest {
+        val source = source()
+        val tagsText = object : Filter.Text("Tags") {}
+        every { source.getFilterList() } returns FilterList(tagsText)
+        coEvery { source.getSearchManga(1, "", any()) } returns MangasPage(
+            listOf(manga("Tagged One", "/tagged")),
+            hasNextPage = false,
+        )
+
+        val result = catalog(source).popularWithGenresAllocated(
+            media,
+            sourceId,
+            genres = listOf("fantasy"),
+            budget = budget(maxDetails = 0),
+            maxDetails = 0,
+        )
+
+        result.genreFilterApplied shouldBe true
+        tagsText.state shouldBe "fantasy"
+        result.items.map { it.sourceUrl } shouldBe listOf("/tagged")
+    }
+
+    @Test
+    fun `genre search fallback passes source filter list instead of empty filter list`(): Unit = runTest {
+        val source = source()
+        val sortFilter = object : Filter.Select<String>("Sort", arrayOf("Popular", "Latest")) {}
+        every { source.getFilterList() } returns FilterList(sortFilter)
+        coEvery {
+            source.getSearchManga(1, "fantasy", match { it.filterIsInstance<Filter.Select<*>>().isNotEmpty() })
+        } returns MangasPage(
+            listOf(manga("Searched With Default Filters", "/searched-default", genre = "Fantasy")),
+            hasNextPage = false,
+        )
+
+        val result = catalog(source).popularWithGenresAllocated(
+            media,
+            sourceId,
+            genres = listOf("fantasy"),
+            budget = budget(maxDetails = 0),
+            maxDetails = 0,
+        )
+
+        result.items.map { it.sourceUrl } shouldBe listOf("/searched-default")
     }
 }

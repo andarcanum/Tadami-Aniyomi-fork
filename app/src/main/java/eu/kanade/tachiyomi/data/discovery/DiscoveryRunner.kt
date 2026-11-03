@@ -519,7 +519,7 @@ class DiscoveryRunner(
                         ),
                         hydrate = true,
                         targetItems = RICH_SOURCE_TARGET * 2,
-                        perSourceCap = RICH_SOURCE_TARGET * 2,
+                        perSourceCap = if (ordered.size > 1) SHARED_MULTI_SOURCE_CAP else RICH_SOURCE_TARGET * 2,
                         budget = verificationBudget,
                         excludedKeys = baseContext.exclusionKeys,
                     )

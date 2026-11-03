@@ -395,7 +395,7 @@ class DiscoveryAdaptiveRefillTest {
     }
 
     @Test
-    fun `productive source gets the refill pool while a dry source stops probing`() = runTest {
+    fun `productive source gets the refill pool while a dry source only walks detail-free pages`() = runTest {
         val budget = DiscoveryVerificationBudget(maxDetails = 24)
         val catalog = Catalog { id, pageNumber ->
             if (id == 1L) {
@@ -407,9 +407,34 @@ class DiscoveryAdaptiveRefillTest {
 
         val results = query(catalog, sourceIds = listOf(1L, 2L), budget = budget, targetItems = 10)
 
-        catalog.pageCalls.filter { it.first == 2L }.map { it.second } shouldBe listOf(1)
+        catalog.pageCalls.filter { it.first == 2L }.map { it.second } shouldBe listOf(1, 2, 3, 4, 5)
         results.first().summary.items.size shouldBe 10
         results.last().summary.items shouldBe emptyList()
+    }
+
+    @Test
+    fun `genreless source admits its genre search results without verification`() = runTest {
+        val cards = (1..8).map { item("card$it") }
+        val searched = page(
+            items = cards,
+            metadataUnavailable = 6,
+            pending = cards,
+            detailsUsed = 6,
+            hasNextPage = false,
+        )
+
+        val viaSearch = query(
+            Catalog { _, _ -> searched.copy(genreSearchApplied = true) },
+            budget = DiscoveryVerificationBudget(maxDetails = 24),
+        ).single()
+        val viaBrowse = query(
+            Catalog { _, _ -> searched },
+            budget = DiscoveryVerificationBudget(maxDetails = 24),
+        ).single()
+
+        viaSearch.summary.items.size shouldBe 8
+        viaSearch.summary.items.all { it.genres == listOf("Fantasy") } shouldBe true
+        viaBrowse.summary.items shouldBe emptyList()
     }
 
     @Test

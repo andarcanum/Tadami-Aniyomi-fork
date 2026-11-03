@@ -91,6 +91,8 @@ data class DiscoveryGenrePage(
     val queryKey: String = "",
     /** Null when the caller did not ask for a genre query; true when the source filter accepted it. */
     val genreFilterApplied: Boolean? = null,
+    /** True when the cards came from a text search for the requested genre rather than a browse. */
+    val genreSearchApplied: Boolean = false,
 )
 
 /** Verification result for a single selected source. */

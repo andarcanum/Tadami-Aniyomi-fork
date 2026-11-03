@@ -309,7 +309,7 @@ class DiscoveryCandidatePolicy(
         }
     }
 
-    private fun matchesRequired(itemGenres: List<String>): Boolean {
+    internal fun matchesRequired(itemGenres: List<String>): Boolean {
         if (requiredGenres.isEmpty()) return true
         if (itemGenres.isEmpty()) return false
         return when (requiredMatchMode) {

@@ -5,10 +5,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Per-item outcome of a details lookup, reported separately from admission. */
@@ -34,10 +36,11 @@ internal data class HydrationResult(
  */
 internal class DiscoveryGenreHydrator(
     private val maxDetailsPerCall: Int = 8,
-    private val detailTimeoutMs: Long = 1_500L,
+    private val detailTimeoutMs: Long = 6_000L,
     private val positiveTtlMs: Long = 30 * 60_000L,
     private val metadataUnavailableTtlMs: Long = 10 * 60_000L,
     private val transientTtlMs: Long = 2 * 60_000L,
+    private val maxConcurrentPerSource: Int = 2,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
     private enum class Kind { RESOLVED, METADATA_UNAVAILABLE, TRANSIENT }
@@ -46,9 +49,10 @@ internal class DiscoveryGenreHydrator(
 
     private val cache = DiscoveryLruCache<Key, Entry>(256)
     private val locks = Array(32) { Mutex() }
+    private val sourcePermits = ConcurrentHashMap<Long, Semaphore>()
 
     init {
-        require(maxDetailsPerCall > 0 && detailTimeoutMs > 0L)
+        require(maxDetailsPerCall > 0 && detailTimeoutMs > 0L && maxConcurrentPerSource > 0)
         require(positiveTtlMs > 0L && metadataUnavailableTtlMs > 0L && transientTtlMs > 0L)
     }
 
@@ -84,6 +88,7 @@ internal class DiscoveryGenreHydrator(
             pending += url to key
         }
 
+        val perSourceSemaphore = sourcePermits.computeIfAbsent(sourceId) { Semaphore(maxConcurrentPerSource) }
         val fetched = pending.map { (url, key) ->
             async {
                 val mutex = locks[(key.hashCode() and Int.MAX_VALUE) % locks.size]
@@ -92,31 +97,33 @@ internal class DiscoveryGenreHydrator(
                     if (cached != null && isFresh(cached)) {
                         return@withLock url to cached
                     }
-                    val entry: Entry? = budget.detailPermits.withPermit {
-                        val remaining = budget.remainingMs()
-                        // Charge only the real lookup, after coalescing and after waiting for IO capacity.
-                        if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
-                        charged.incrementAndGet()
-                        val timeout = minOf(detailTimeoutMs, remaining)
-                        try {
-                            val observed = withTimeoutOrNull(timeout) { fetchDetails(url) }
-                            when {
-                                observed == null -> Entry(emptyList(), clock(), Kind.TRANSIENT)
-                                else -> {
-                                    val clean = observed.map { it.trim() }
-                                        .filter { it.isNotEmpty() }
-                                        .distinct()
-                                    if (clean.isEmpty()) {
-                                        Entry(emptyList(), clock(), Kind.METADATA_UNAVAILABLE)
-                                    } else {
-                                        Entry(clean, clock(), Kind.RESOLVED)
+                    val entry: Entry? = perSourceSemaphore.withPermit {
+                        budget.detailPermits.withPermit {
+                            val remaining = budget.remainingMs()
+                            // Charge only the real lookup, after coalescing and after waiting for IO capacity.
+                            if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
+                            charged.incrementAndGet()
+                            val timeout = minOf(detailTimeoutMs, remaining)
+                            try {
+                                val observed = withTimeoutOrNull(timeout) { fetchDetails(url) }
+                                when {
+                                    observed == null -> Entry(emptyList(), clock(), Kind.TRANSIENT)
+                                    else -> {
+                                        val clean = observed.map { it.trim() }
+                                            .filter { it.isNotEmpty() }
+                                            .distinct()
+                                        if (clean.isEmpty()) {
+                                            Entry(emptyList(), clock(), Kind.METADATA_UNAVAILABLE)
+                                        } else {
+                                            Entry(clean, clock(), Kind.RESOLVED)
+                                        }
                                     }
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                Entry(emptyList(), clock(), Kind.TRANSIENT)
                             }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Exception) {
-                            Entry(emptyList(), clock(), Kind.TRANSIENT)
                         }
                     }
                     if (entry != null) cache.put(key, entry)
