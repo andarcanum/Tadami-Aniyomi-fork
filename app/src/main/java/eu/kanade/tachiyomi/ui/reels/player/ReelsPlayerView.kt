@@ -275,6 +275,7 @@ fun ReelsPlayerView(
     var pending429Retry by remember(videoUrl) { mutableIntStateOf(0) }
     var autoRetryIoCount by remember(videoUrl) { mutableIntStateOf(0) }
     var pendingIoRetry by remember(videoUrl) { mutableIntStateOf(0) }
+    var lastSafePositionMs by remember(videoUrl) { mutableLongStateOf(0L) }
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
     // P05: playback visibility time for the minimum-dwell rule — wall clock, pauses and
     // buffering no longer count (see reelsEndHold).
@@ -375,11 +376,13 @@ fun ReelsPlayerView(
             pending429Retry = 0
             autoRetryIoCount = 0
             pendingIoRetry = 0
-            // Short clips: cap buffering so a preload player doesn't hoard tens of MB /
-            // compete with the active video for bandwidth (media3 default is ~50s).
-            // minBufferMs must be >= both playback thresholds (media3 assertion).
+            // Buffering window: active player buffers up to 50s so seeking within the watched portion
+            // hits the local disk cache without cold CDN Range requests (fixes 503 errors on seek);
+            // preload players stay capped to 15s to preserve bandwidth.
+            val minBuffer = if (isActive) 10_000 else 5_000
+            val maxBuffer = if (isActive) 50_000 else 15_000
             val loadControl = DefaultLoadControl.Builder()
-                .setBufferDurationsMs(5_000, 15_000, 2_500, 5_000)
+                .setBufferDurationsMs(minBuffer, maxBuffer, 2_500, 5_000)
                 .build()
             val exoPlayer = ExoPlayer.Builder(context)
                 // Request audio focus only while the reel is AUDIBLE (audit H4): a muted feed
@@ -431,6 +434,9 @@ fun ReelsPlayerView(
                                 Player.STATE_READY -> {
                                     autoRetry429Count = 0
                                     autoRetryIoCount = 0
+                                    if (currentPosition > 0) {
+                                        lastSafePositionMs = currentPosition
+                                    }
                                     val durSec = duration.toFloat() / 1000f
                                     if (durSec > 0) onDurationKnown(durSec)
                                     if (restorePositionMs > 0) {
@@ -499,6 +505,9 @@ fun ReelsPlayerView(
                             if (player !== owner) return
                             if (isPlaying && isFirstFrameRendered) {
                                 dwellClock.start(SystemClock.elapsedRealtime())
+                                if (owner.currentPosition > 0) {
+                                    lastSafePositionMs = owner.currentPosition
+                                }
                             } else {
                                 dwellClock.stop(SystemClock.elapsedRealtime())
                             }
@@ -509,42 +518,44 @@ fun ReelsPlayerView(
                             logcat(LogPriority.ERROR) {
                                 "Reels player error ${error.errorCodeName} on $videoUrl"
                             }
-                            // CDN rate limit (device logcat: HTTP 429 on the media GET with a
-                            // valid signed URL): back off and re-prepare silently a few times,
-                            // keeping the buffering spinner up, before surfacing the error.
-                            // Transient IO/seek errors (403/416/502/503/socket aborts on reconnect)
-                            // are similarly auto-retried with a brief pause.
-                            var cause: Throwable? = error
-                            var rateLimited = false
-                            var transientIo = false
-                            while (cause != null) {
-                                if (cause is HttpDataSource.InvalidResponseCodeException) {
-                                    if (cause.responseCode == 429) {
-                                        rateLimited = true
-                                        break
-                                    } else if (cause.responseCode in listOf(403, 408, 416, 500, 502, 503, 504)) {
-                                        transientIo = true
-                                        break
-                                    }
-                                } else if (cause is java.io.IOException ||
-                                    cause is HttpDataSource.HttpDataSourceException
-                                ) {
-                                    transientIo = true
-                                    break
-                                }
-                                cause = cause.cause
-                            }
-                            if (rateLimited && autoRetry429Count < MAX_PLAYBACK_429_RETRIES) {
+                            val category = classifyPlaybackError(error)
+                            if (category == PlaybackErrorCategory.RATE_LIMITED &&
+                                autoRetry429Count < MAX_PLAYBACK_429_RETRIES
+                            ) {
                                 autoRetry429Count++
                                 pending429Retry = autoRetry429Count
                                 onBufferingChanged(true)
                                 return
                             }
-                            if (transientIo && autoRetryIoCount < MAX_PLAYBACK_IO_RETRIES) {
-                                autoRetryIoCount++
-                                pendingIoRetry = autoRetryIoCount
-                                onBufferingChanged(true)
-                                return
+                            if (category == PlaybackErrorCategory.TRANSIENT_IO) {
+                                if (autoRetryIoCount < MAX_PLAYBACK_IO_RETRIES) {
+                                    autoRetryIoCount++
+                                    pendingIoRetry = autoRetryIoCount
+                                    onBufferingChanged(true)
+                                    return
+                                }
+                                val currentPos = player?.currentPosition ?: 0L
+                                val fallback = calculateIoFallbackPosition(currentPos, lastSafePositionMs)
+                                if (player != null && fallback != null) {
+                                    logcat(LogPriority.WARN) {
+                                        "Reels player IO error exhausted at ${currentPos}ms on $videoUrl; falling back to ${fallback}ms"
+                                    }
+                                    autoRetryIoCount = 0
+                                    pendingIoRetry = 0
+                                    networkClient.connectionPool.evictAll()
+                                    player?.let { p ->
+                                        p.seekTo(fallback)
+                                        p.prepare()
+                                        p.playWhenReady =
+                                            reelsShouldRunPlayback(
+                                                currentIsActive,
+                                                currentIsPlaying,
+                                                isLifecycleStarted,
+                                            )
+                                    }
+                                    onBufferingChanged(true)
+                                    return
+                                }
                             }
                             onPlaybackError(error.localizedMessage ?: error.errorCodeName)
                         }
@@ -681,6 +692,8 @@ fun ReelsPlayerView(
             onBufferingChanged(false)
             return@LaunchedEffect
         }
+        // Evict stale connections from the pool to break affinity with failing CDN edge nodes
+        networkClient.connectionPool.evictAll()
         delay(PLAYBACK_IO_BACKOFF_MS * attempt)
         val stillStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         if (player !== retryPlayer || !reelsShouldRunPlayback(currentIsActive, currentIsPlaying, stillStarted)) {
@@ -719,6 +732,9 @@ fun ReelsPlayerView(
             player?.let { p ->
                 val duration = p.duration
                 if (duration > 0) {
+                    if (p.isPlaying && p.currentPosition > 0) {
+                        lastSafePositionMs = p.currentPosition
+                    }
                     onProgressUpdate((p.currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
                     onBufferUpdate((p.bufferedPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
                 } else if (isFirstFrameRendered) {
@@ -856,8 +872,43 @@ private const val MAX_PLAYBACK_429_RETRIES = 3
 private const val PLAYBACK_429_BACKOFF_MS = 3_000L
 
 /** Transient IO / seek auto-recovery. */
-private const val MAX_PLAYBACK_IO_RETRIES = 2
-private const val PLAYBACK_IO_BACKOFF_MS = 600L
+private const val MAX_PLAYBACK_IO_RETRIES = 3
+private const val PLAYBACK_IO_BACKOFF_MS = 1_000L
+
+enum class PlaybackErrorCategory {
+    RATE_LIMITED,
+    TRANSIENT_IO,
+    FATAL,
+}
+
+internal fun classifyPlaybackError(error: Throwable?): PlaybackErrorCategory {
+    var cause: Throwable? = error
+    while (cause != null) {
+        if (cause is HttpDataSource.InvalidResponseCodeException) {
+            return when (cause.responseCode) {
+                429 -> PlaybackErrorCategory.RATE_LIMITED
+                403, 408, 416, 500, 502, 503, 504 -> PlaybackErrorCategory.TRANSIENT_IO
+                else -> PlaybackErrorCategory.FATAL
+            }
+        } else if (cause is java.io.IOException || cause is HttpDataSource.HttpDataSourceException) {
+            return PlaybackErrorCategory.TRANSIENT_IO
+        }
+        cause = cause.cause
+    }
+    return PlaybackErrorCategory.FATAL
+}
+
+internal fun calculateIoFallbackPosition(
+    currentPositionMs: Long,
+    lastSafePositionMs: Long,
+): Long? {
+    if (currentPositionMs <= 0L) return null
+    return if (lastSafePositionMs in 1L until (currentPositionMs - 5_000L)) {
+        lastSafePositionMs
+    } else {
+        0L
+    }
+}
 
 /** Minimum time a reel stays on screen before auto-advance moves on (stills/short clips). */
 const val REELS_MIN_DWELL_MS = 5_000L
