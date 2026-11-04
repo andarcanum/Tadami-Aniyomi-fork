@@ -86,4 +86,26 @@ class ReelsScrubGestureTest {
         gesture.progress shouldBe 1f
         gesture.end() shouldBe 1f
     }
+
+    @Test
+    fun `vertical movement after horizontal lock does not cancel the scrub`() {
+        val gesture = ReelsScrubGesture(slop)
+        gesture.start(x = 100f, width = width)
+
+        gesture.move(dx = 30f, dy = 0f, consumedByOther = false) shouldBe ReelsScrubOutcome.Owned
+        gesture.move(dx = 10f, dy = 50f, consumedByOther = false) shouldBe ReelsScrubOutcome.Owned
+        gesture.isActive shouldBe true
+        (gesture.end()!! * 1000f).roundToInt() shouldBe 140
+    }
+
+    @Test
+    fun `consumedByOther after horizontal lock does not cancel the scrub`() {
+        val gesture = ReelsScrubGesture(slop)
+        gesture.start(x = 100f, width = width)
+
+        gesture.move(dx = 30f, dy = 0f, consumedByOther = false) shouldBe ReelsScrubOutcome.Owned
+        gesture.move(dx = 10f, dy = 0f, consumedByOther = true) shouldBe ReelsScrubOutcome.Owned
+        gesture.isActive shouldBe true
+        (gesture.end()!! * 1000f).roundToInt() shouldBe 140
+    }
 }

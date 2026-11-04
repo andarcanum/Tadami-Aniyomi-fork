@@ -24,8 +24,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -1083,8 +1085,9 @@ fun ReelsVideoPage(
                     // author-name horizon (top edge of the caption block): the stack
                     // clears the description instead of interleaving with it.
                     val density = LocalDensity.current
+                    val navBarsBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                     val actionsBottomPadding =
-                        24.dp + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
+                        28.dp + navBarsBottomPadding + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
                     AnimatedVisibility(
                         visible = chromeVisible,
                         enter = fadeIn() + slideInHorizontally { it },
@@ -1155,7 +1158,7 @@ fun ReelsVideoPage(
                                 .padding(
                                     start = 16.dp,
                                     end = 76.dp,
-                                    bottom = 24.dp,
+                                    bottom = 28.dp + navBarsBottomPadding,
                                 )
                                 .onSizeChanged { portraitMetaHeightPx = it.height },
                         )
@@ -1165,6 +1168,9 @@ fun ReelsVideoPage(
                     ReelsProgressBar(
                         progressState = progressState,
                         durationSec = durationSec,
+                        bufferFraction = bufferFraction,
+                        posterUrl = item.posterUrlVertical ?: item.posterUrl,
+                        chromeVisible = chromeVisible,
                         onSeek = { frac ->
                             seekFraction = frac
                             progressState.floatValue = frac
@@ -1174,7 +1180,9 @@ fun ReelsVideoPage(
                             }
                         },
                         onScrubStart = onScrubStart,
-                        modifier = Modifier.align(Alignment.BottomCenter),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = navBarsBottomPadding + 6.dp),
                     )
                 }
             }

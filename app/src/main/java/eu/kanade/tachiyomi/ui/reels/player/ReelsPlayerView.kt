@@ -542,7 +542,7 @@ fun ReelsPlayerView(
                                     }
                                     autoRetryIoCount = 0
                                     pendingIoRetry = 0
-                                    networkClient.connectionPool.evictAll()
+                                    evictConnectionsAsync(networkClient)
                                     player?.let { p ->
                                         p.seekTo(fallback)
                                         p.prepare()
@@ -693,7 +693,7 @@ fun ReelsPlayerView(
             return@LaunchedEffect
         }
         // Evict stale connections from the pool to break affinity with failing CDN edge nodes
-        networkClient.connectionPool.evictAll()
+        evictConnectionsAsync(networkClient)
         delay(PLAYBACK_IO_BACKOFF_MS * attempt)
         val stillStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         if (player !== retryPlayer || !reelsShouldRunPlayback(currentIsActive, currentIsPlaying, stillStarted)) {
@@ -874,6 +874,11 @@ private const val PLAYBACK_429_BACKOFF_MS = 3_000L
 /** Transient IO / seek auto-recovery. */
 private const val MAX_PLAYBACK_IO_RETRIES = 3
 private const val PLAYBACK_IO_BACKOFF_MS = 1_000L
+
+/** ConnectionPool.evictAll() closes sockets (network IO): never call it on the main thread. */
+private fun evictConnectionsAsync(client: OkHttpClient) {
+    Thread { client.connectionPool.evictAll() }.start()
+}
 
 enum class PlaybackErrorCategory {
     RATE_LIMITED,

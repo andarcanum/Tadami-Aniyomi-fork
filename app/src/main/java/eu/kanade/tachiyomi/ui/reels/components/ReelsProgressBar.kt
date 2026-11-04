@@ -6,15 +6,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -27,17 +34,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import eu.kanade.presentation.theme.AuroraTheme
 import java.util.Locale
 import kotlin.math.abs
@@ -49,6 +63,9 @@ fun ReelsProgressBar(
     durationSec: Float,
     onSeek: (Float) -> Unit,
     onScrubStart: () -> Unit = {},
+    chromeVisible: Boolean = true,
+    bufferFraction: Float = 0f,
+    posterUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var isDragging by remember { mutableStateOf(false) }
@@ -59,9 +76,16 @@ fun ReelsProgressBar(
     // bar, not the whole video page.
     val currentFraction = if (isDragging) dragProgress else progressState.value.coerceIn(0f, 1f)
     val barHeight by animateDpAsState(
-        targetValue = if (isDragging) 6.dp else 3.dp,
+        targetValue = if (isDragging) {
+            6.dp
+        } else if (chromeVisible) {
+            4.dp
+        } else {
+            3.dp
+        },
         label = "progress_bar_height",
     )
+    val accentColor = AuroraTheme.colors.accent
 
     Box(
         modifier = modifier
@@ -110,32 +134,86 @@ fun ReelsProgressBar(
             },
         contentAlignment = Alignment.BottomCenter,
     ) {
-        // Floating Time Indicator when dragging (bottom-anchored so the taller touch box
-        // does not shift it relative to the bar).
+        val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
+        val currentSec = (currentFraction * durationSec).coerceAtLeast(0f).roundToInt()
+
+        // Compact Time Badge when chrome is visible and user is not actively scrubbing
+        AnimatedVisibility(
+            visible = chromeVisible && !isDragging && durationSec > 0f,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut() + slideOutVertically { it },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 12.dp, end = 12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "${formatSeconds(currentSec)} / ${formatSeconds(totalSec)}",
+                    color = Color.White.copy(alpha = 0.95f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
+        // Floating Precision Preview Card when scrubbing (drag)
         AnimatedVisibility(
             visible = isDragging,
             enter = fadeIn() + scaleIn(initialScale = 0.85f),
             exit = fadeOut() + scaleOut(targetScale = 0.85f),
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
+                .align(Alignment.BottomStart)
+                .offset {
+                    val cardWidthPx = 116.dp.roundToPx()
+                    val rawCenterPx = (currentFraction * barWidthPx).toInt()
+                    val halfWidthPx = cardWidthPx / 2
+                    val clampedX = rawCenterPx.coerceIn(
+                        halfWidthPx,
+                        (barWidthPx - halfWidthPx).toInt().coerceAtLeast(halfWidthPx),
+                    )
+                    IntOffset(x = clampedX - halfWidthPx, y = -74.dp.roundToPx())
+                },
         ) {
-            val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
-            val currentSec = (currentFraction * durationSec).coerceAtLeast(0f).roundToInt()
-
-            val currentFormatted = formatSeconds(currentSec)
-            val totalFormatted = formatSeconds(totalSec)
-
-            Box(
+            Column(
                 modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
-                    .border(1.dp, AuroraTheme.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                    .width(116.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF0F141E).copy(alpha = 0.95f))
+                    .border(1.dp, accentColor.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(5.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
+                if (!posterUrl.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black),
+                    ) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(posterUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
                 Text(
-                    text = "$currentFormatted / $totalFormatted",
+                    text = "${formatSeconds(currentSec)} / ${formatSeconds(totalSec)}",
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -146,15 +224,28 @@ fun ReelsProgressBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(barHeight)
-                .background(Color.White.copy(alpha = 0.25f)),
+                .clip(RoundedCornerShape(barHeight / 2))
+                .background(Color.White.copy(alpha = 0.22f)),
             contentAlignment = Alignment.CenterStart,
         ) {
-            // Active Progress Fill
+            // Buffered Progress Fill
+            if (bufferFraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction = bufferFraction.coerceIn(0f, 1f))
+                        .height(barHeight)
+                        .clip(RoundedCornerShape(barHeight / 2))
+                        .background(Color.White.copy(alpha = 0.35f)),
+                )
+            }
+
+            // Active Progress Fill (using dynamic Aurora Theme Accent!)
             Box(
                 modifier = Modifier
                     .fillMaxWidth(fraction = currentFraction)
                     .height(barHeight)
-                    .background(AuroraTheme.colors.accent),
+                    .clip(RoundedCornerShape(barHeight / 2))
+                    .background(accentColor),
             )
 
             // Scrubber Thumb on Drag
@@ -166,9 +257,9 @@ fun ReelsProgressBar(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(12.dp)
+                            .size(14.dp)
                             .background(Color.White, CircleShape)
-                            .border(2.dp, AuroraTheme.colors.accent, CircleShape),
+                            .border(2.5.dp, accentColor, CircleShape),
                     )
                 }
             }
@@ -213,7 +304,7 @@ internal class ReelsScrubGesture(private val touchSlop: Float) {
 
     fun move(dx: Float, dy: Float, consumedByOther: Boolean): ReelsScrubOutcome {
         if (!isActive) return ReelsScrubOutcome.Cancelled
-        if (consumedByOther) return cancel()
+        if (!horizontal && consumedByOther) return cancel()
         if (!horizontal) {
             totalDx += dx
             totalDy += dy
