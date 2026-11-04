@@ -98,8 +98,12 @@ fun ReelsAuroraFrostDrawer(
     onTogglePreloadWifiOnly: () -> Unit = {},
     dataSaverEnabled: Boolean = false,
     onToggleDataSaver: () -> Unit = {},
-    offlineUsedText: String = "148.6 МБ",
+    offlineUsedText: String = "",
+    offlineUsedFraction: Float = 0f,
+    canClearOffline: Boolean = false,
     onClearVideoCache: () -> Unit = {},
+    onClearOffline: () -> Unit = {},
+    onOpenHide: (() -> Unit)? = null,
     onSelectClip: (Int) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
@@ -151,6 +155,7 @@ fun ReelsAuroraFrostDrawer(
                 onCycleSleepTimer = onCycleSleepTimer,
                 isIncognito = isIncognito,
                 onToggleIncognito = onToggleIncognito,
+                onOpenHide = onOpenHide,
             )
             1 -> NetworkOfflineTabContent(
                 currentItem = currentItem,
@@ -164,7 +169,10 @@ fun ReelsAuroraFrostDrawer(
                 dataSaverEnabled = dataSaverEnabled,
                 onToggleDataSaver = onToggleDataSaver,
                 offlineUsedText = offlineUsedText,
+                offlineUsedFraction = offlineUsedFraction,
+                canClearOffline = canClearOffline,
                 onClearVideoCache = onClearVideoCache,
+                onClearOffline = onClearOffline,
             )
             2 -> PlaylistTabContent(
                 items = playlistItems,
@@ -197,6 +205,7 @@ private fun PlayerTabContent(
     onCycleSleepTimer: () -> Unit,
     isIncognito: Boolean,
     onToggleIncognito: () -> Unit,
+    onOpenHide: (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -343,6 +352,14 @@ private fun PlayerTabContent(
                 checked = isIncognito,
                 onCheckedChange = onToggleIncognito,
             )
+            if (onOpenHide != null) {
+                FrostNavRow(
+                    icon = Icons.Filled.VisibilityOff,
+                    title = stringResource(MR.strings.reels_hide_menu),
+                    subtitle = stringResource(MR.strings.reels_hide_dialog_title),
+                    onClick = onOpenHide,
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -362,7 +379,10 @@ private fun NetworkOfflineTabContent(
     dataSaverEnabled: Boolean,
     onToggleDataSaver: () -> Unit,
     offlineUsedText: String,
+    offlineUsedFraction: Float,
+    canClearOffline: Boolean,
     onClearVideoCache: () -> Unit,
+    onClearOffline: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -454,12 +474,12 @@ private fun NetworkOfflineTabContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "Занято кэшем Reels:",
+                    text = stringResource(MR.strings.reels_offline_storage),
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 12.sp,
                 )
                 Text(
-                    text = offlineUsedText,
+                    text = offlineUsedText.ifBlank { "0 B" },
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -475,7 +495,7 @@ private fun NetworkOfflineTabContent(
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.28f)
+                        .fillMaxWidth(offlineUsedFraction.coerceIn(0f, 1f))
                         .fillMaxHeight()
                         .clip(CircleShape)
                         .background(AuroraTheme.colors.accent),
@@ -502,10 +522,39 @@ private fun NetworkOfflineTabContent(
                         modifier = Modifier.size(16.dp),
                     )
                     Text(
-                        text = "Очистить кэш видео",
+                        text = stringResource(MR.strings.reels_clear_video_cache),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
+                }
+            }
+            if (canClearOffline) {
+                Spacer(Modifier.height(4.dp))
+                Button(
+                    onClick = onClearOffline,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.08f),
+                        contentColor = Color.White,
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DeleteSweep,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stringResource(MR.strings.reels_offline_storage),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }

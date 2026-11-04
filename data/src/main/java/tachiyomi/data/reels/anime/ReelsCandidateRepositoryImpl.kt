@@ -83,7 +83,9 @@ class ReelsCandidateRepositoryImpl(
             handler.await(inTransaction = true) { db ->
                 // The SQL delete is protected for live RR show-watched references; the orphan
                 // cleanup keeps FK OFF databases consistent with the cascade FK ON performs.
-                db.reels_candidateQueries.remove(scope, sourceId, itemIds)
+                for (chunk in itemIds.chunked(SQLITE_IN_CHUNK_SIZE)) {
+                    db.reels_candidateQueries.remove(scope, sourceId, chunk)
+                }
                 db.reels_rr_itemQueries.deleteOrphans(scope, sourceId)
             }
         } catch (e: CancellationException) {
@@ -115,5 +117,9 @@ class ReelsCandidateRepositoryImpl(
         } catch (e: SQLiteException) {
             logcat(LogPriority.ERROR, throwable = e) { "Failed to clear the reels inbox for $scope" }
         }
+    }
+
+    private companion object {
+        const val SQLITE_IN_CHUNK_SIZE = 500
     }
 }

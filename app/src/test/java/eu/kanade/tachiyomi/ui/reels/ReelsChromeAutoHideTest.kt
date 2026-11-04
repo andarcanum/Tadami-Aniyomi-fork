@@ -22,6 +22,18 @@ class ReelsChromeAutoHideTest {
     }
 
     @Test
+    fun `chrome stays reachable whenever a blocking surface is open`() {
+        reelsChromeShouldAutoHide(
+            visible = true,
+            actuallyPlaying = true,
+            hasItems = true,
+            hasError = false,
+            isLoading = false,
+            blockingSurfaceOpen = true,
+        ) shouldBe false
+    }
+
+    @Test
     fun `chrome stays reachable while the feed is errored empty stalled or paused`() {
         // Full-feed error: retry and source switch must be reachable.
         reelsChromeShouldAutoHide(

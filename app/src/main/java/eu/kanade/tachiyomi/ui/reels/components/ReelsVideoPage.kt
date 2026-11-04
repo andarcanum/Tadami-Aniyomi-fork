@@ -116,6 +116,7 @@ fun ReelsVideoPage(
     onSetQualityOverride: (String, ReelsQualityPreference) -> Unit = { _, _ -> },
     onClearQualityOverride: (String) -> Unit = {},
     onQualityDialogOpenChanged: (Boolean) -> Unit = {},
+    onRetryQuality: () -> Unit = {},
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isLastPage: Boolean = false,
@@ -220,9 +221,13 @@ fun ReelsVideoPage(
     onTogglePreloadWifiOnly: () -> Unit = {},
     dataSaverEnabled: Boolean = false,
     onToggleDataSaver: () -> Unit = {},
+    playbackSpeed: Float = 1f,
+    onPlaybackSpeedChange: ((Float) -> Unit)? = null,
     sleepTimerValue: String = "Выкл",
     onCycleSleepTimer: () -> Unit = {},
     offlineUsedText: String = "",
+    offlineUsedFraction: Float = 0f,
+    canClearOffline: Boolean = false,
     onClearVideoCache: () -> Unit = {},
     isIncognito: Boolean = false,
     onToggleIncognito: () -> Unit = {},
@@ -247,8 +252,15 @@ fun ReelsVideoPage(
     var drawerOpen by remember { mutableStateOf(false) }
     var drawerTab by remember { mutableIntStateOf(0) }
     var qualityDialogMode by remember(item.id) { mutableStateOf<ReelsQualityDialogMode?>(null) }
-    LaunchedEffect(qualityDialogMode != null) {
-        onQualityDialogOpenChanged(qualityDialogMode != null)
+    LaunchedEffect(isActive) {
+        if (!isActive) {
+            drawerOpen = false
+            showHideDialog = false
+        }
+    }
+    val pageOverlayOpen = qualityDialogMode != null || drawerOpen || showHideDialog
+    LaunchedEffect(pageOverlayOpen) {
+        onQualityDialogOpenChanged(pageOverlayOpen)
     }
     DisposableEffect(Unit) {
         onDispose { onQualityDialogOpenChanged(false) }
@@ -271,7 +283,15 @@ fun ReelsVideoPage(
     // Starts false: time must not accrue before the player confirms it is actually running
     // (a still reel reports its own eligibility).
     var actuallyPlaying by remember(item.id) { mutableStateOf(false) }
-    var playbackSpeed by remember { mutableFloatStateOf(1f) }
+    var localPlaybackSpeed by remember { mutableFloatStateOf(1f) }
+    val effectivePlaybackSpeed = if (onPlaybackSpeedChange != null) playbackSpeed else localPlaybackSpeed
+    val updatePlaybackSpeed: (Float) -> Unit = { newSpeed ->
+        if (onPlaybackSpeedChange != null) {
+            onPlaybackSpeedChange(newSpeed)
+        } else {
+            localPlaybackSpeed = newSpeed
+        }
+    }
     // Rate while a finger is held down at an edge. Kept apart from playbackSpeed on purpose:
     // playbackSpeed is the user's *chosen* rate (button, drawer) and must survive the finger lift.
     var heldRate by remember { mutableStateOf<Float?>(null) }
@@ -293,7 +313,7 @@ fun ReelsVideoPage(
     val seekForwardLabel = stringResource(MR.strings.reels_a11y_seek_forward)
     val likeLabel = stringResource(MR.strings.reels_feed_action_like)
     val speedLabel = stringResource(
-        if (playbackSpeed == 1f) MR.strings.reels_a11y_speed_2x else MR.strings.reels_a11y_speed_normal,
+        if (effectivePlaybackSpeed == 1f) MR.strings.reels_a11y_speed_2x else MR.strings.reels_a11y_speed_normal,
     )
     fun seekBy(deltaSec: Float) {
         if (durationSec <= 0f) return
@@ -306,7 +326,7 @@ fun ReelsVideoPage(
         }
     }
     fun toggleSpeed() {
-        playbackSpeed = if (playbackSpeed == 1f) 2f else 1f
+        updatePlaybackSpeed(if (effectivePlaybackSpeed == 1f) 2f else 1f)
     }
 
     // A preloaded page can discover its orientation before it settles; the host needs the
@@ -424,12 +444,25 @@ fun ReelsVideoPage(
             item.videoUrl
         }
     }
-    val mediaPlan = remember(rawUrl, item.id, mediaDescriptor?.lazyResolution, resolveUrl != null, qualityModeEnabled) {
-        if (qualityModeEnabled && rawUrl.isBlank()) {
-            ReelMediaPlan.WAIT
-        } else {
-            reelMediaPlan(rawUrl, resolveUrl != null, mediaDescriptor?.lazyResolution != false)
-        }
+    val qualitySwitching = qualityItemState?.switching == true
+    val qualityHasFailure = qualityItemState?.failure != null
+    val mediaPlan = remember(
+        rawUrl,
+        item.id,
+        mediaDescriptor?.lazyResolution,
+        resolveUrl != null,
+        qualityModeEnabled,
+        qualitySwitching,
+        qualityHasFailure,
+    ) {
+        reelMediaPlan(
+            rawUrl = rawUrl,
+            hasResolver = resolveUrl != null,
+            lazyResolution = mediaDescriptor?.lazyResolution != false,
+            qualityModeEnabled = qualityModeEnabled,
+            qualitySwitching = qualitySwitching,
+            qualityHasFailure = qualityHasFailure,
+        )
     }
     // Lazy signing: a blank url resolves just-in-time; the player is only built once a real
     // url exists (a blank MediaItem would surface a playback error before signing finishes).
@@ -452,6 +485,7 @@ fun ReelsVideoPage(
                     videoUrl = resolved
                 } else {
                     onPlaybackError("Failed to load video stream") {
+                        if (qualityModeEnabled) onRetryQuality()
                         retrySignal++
                     }
                 }
@@ -460,6 +494,7 @@ fun ReelsVideoPage(
                 // A blank URL the host cannot sign would otherwise show the poster spinner
                 // forever; fail terminally so the user gets the error affordance.
                 onPlaybackError("Failed to load video stream") {
+                    if (qualityModeEnabled) onRetryQuality()
                     retrySignal++
                 }
             }
@@ -659,13 +694,18 @@ fun ReelsVideoPage(
                 videoSize = width to height
                 onVideoSizeKnown(width, height)
             },
-            onPlaybackError = { msg -> onPlaybackError(msg) { retrySignal++ } },
+            onPlaybackError = { msg ->
+                onPlaybackError(msg) {
+                    if (qualityModeEnabled) onRetryQuality()
+                    retrySignal++
+                }
+            },
             onBufferingChanged = { isBuffering = it },
             onPlaybackRunningChanged = { playing ->
                 actuallyPlaying = playing
                 if (currentIsActive) onPlayingStateChanged(playing)
             },
-            playbackSpeed = heldRate ?: playbackSpeed,
+            playbackSpeed = heldRate ?: effectivePlaybackSpeed,
             retrySignal = retrySignal,
             headers = headers,
             webUrl = item.webUrl,
@@ -750,8 +790,8 @@ fun ReelsVideoPage(
         // the pill shows that temporary rate with a direction chevron; a rate chosen from the
         // button or drawer stays on screen without the chevron.
         val holdingRate = heldRate
-        val pillRate = holdingRate ?: playbackSpeed
-        val pillFast = (holdingRate ?: playbackSpeed) > 1f
+        val pillRate = holdingRate ?: effectivePlaybackSpeed
+        val pillFast = (holdingRate ?: effectivePlaybackSpeed) > 1f
         val auroraColors = AuroraTheme.colors
         AnimatedVisibility(
             visible = pillRate != 1f && !isInPictureInPicture,
@@ -1001,8 +1041,8 @@ fun ReelsVideoPage(
                             onOpenQualityDefault = { qualityDialogMode = ReelsQualityDialogMode.GLOBAL },
                             isCropMode = isCropMode,
                             onToggleCropMode = onToggleCropMode,
-                            playbackSpeed = playbackSpeed,
-                            onSetPlaybackSpeed = { playbackSpeed = it },
+                            playbackSpeed = effectivePlaybackSpeed,
+                            onSetPlaybackSpeed = { updatePlaybackSpeed(it) },
                             isAutoAdvance = isAutoAdvance,
                             onToggleAutoAdvance = onToggleAutoAdvance,
                             sleepTimerValue = sleepTimerValue,
@@ -1018,7 +1058,18 @@ fun ReelsVideoPage(
                             onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
                             dataSaverEnabled = dataSaverEnabled,
                             onToggleDataSaver = onToggleDataSaver,
-                            offlineUsedText = offlineUsedText.ifBlank { "148.6 МБ" },
+                            offlineUsedText = offlineUsedText,
+                            offlineUsedFraction = offlineUsedFraction,
+                            canClearOffline = canClearOffline,
+                            onClearOffline = onClearOffline,
+                            onOpenHide = if (showHideAction) {
+                                {
+                                    drawerOpen = false
+                                    showHideDialog = true
+                                }
+                            } else {
+                                null
+                            },
                             onClearVideoCache = onClearVideoCache,
                             onSelectClip = { idx ->
                                 drawerOpen = false
@@ -1056,7 +1107,11 @@ fun ReelsVideoPage(
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
                                 onToggleFollowCreator()
                             },
-                            onOpenHide = null,
+                            onOpenHide = if (showHideAction) {
+                                { showHideDialog = true }
+                            } else {
+                                null
+                            },
                             onToggleOffline = if (showOfflineAction) {
                                 onToggleOffline
                             } else {
@@ -1276,8 +1331,16 @@ internal fun reelMediaPlan(
     rawUrl: String,
     hasResolver: Boolean,
     lazyResolution: Boolean,
+    qualityModeEnabled: Boolean = false,
+    qualitySwitching: Boolean = false,
+    qualityHasFailure: Boolean = false,
 ): ReelMediaPlan = when {
     rawUrl.isNotBlank() -> ReelMediaPlan.READY
+    qualityModeEnabled -> if (qualityHasFailure && !qualitySwitching) {
+        ReelMediaPlan.UNPLAYABLE
+    } else {
+        ReelMediaPlan.WAIT
+    }
     // A blank URL is playable only when the source opted into lazy signing AND the host
     // actually has a resolver to sign it with; otherwise no future event can fill it.
     hasResolver && lazyResolution -> ReelMediaPlan.RESOLVE

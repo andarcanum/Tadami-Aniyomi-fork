@@ -177,4 +177,42 @@ class ReelsOfflineStoreImplTest {
         result shouldBe ReelsOfflineStore.DownloadResult.UNSUPPORTED
         files().shouldBeEmpty()
     }
+
+    @Test
+    fun `custom headers are propagated and fallback referer applies only when referer missing`(): Unit = runBlocking {
+        server.enqueue(MockResponse().setBody("first"))
+        server.enqueue(MockResponse().setBody("second"))
+        val store = store()
+
+        val headersWithExplicitReferer = mapOf(
+            "Cookie" to "session=xyz",
+            "User-Agent" to "CustomUA/1.0",
+            "Referer" to "https://custom.example.com/stream",
+        )
+        val item1 = ShortVideoItem(
+            id = "with-ref",
+            videoUrl = server.url("/stream1.mp4").toString(),
+            webUrl = "https://origin.example.com/watch",
+            posterUrl = "https://example.com/poster.jpg",
+        )
+        store.download(item1, 1L, headersWithExplicitReferer) shouldBe ReelsOfflineStore.DownloadResult.SAVED
+        val recorded1 = server.takeRequest()
+        recorded1.getHeader("Cookie") shouldBe "session=xyz"
+        recorded1.getHeader("User-Agent") shouldBe "CustomUA/1.0"
+        recorded1.getHeader("Referer") shouldBe "https://custom.example.com/stream"
+
+        val headersWithoutReferer = mapOf(
+            "Authorization" to "Bearer 123",
+        )
+        val item2 = ShortVideoItem(
+            id = "fallback-ref",
+            videoUrl = server.url("/stream2.mp4").toString(),
+            webUrl = "https://origin.example.com/watch",
+            posterUrl = "https://example.com/poster.jpg",
+        )
+        store.download(item2, 1L, headersWithoutReferer) shouldBe ReelsOfflineStore.DownloadResult.SAVED
+        val recorded2 = server.takeRequest()
+        recorded2.getHeader("Authorization") shouldBe "Bearer 123"
+        recorded2.getHeader("Referer") shouldBe "https://origin.example.com/"
+    }
 }

@@ -140,6 +140,24 @@ class ReelsQualityDownloadTest {
         store.storedQuality(7L, item.id) shouldBe null
     }
 
+    @Test
+    fun `downloadSelected sends snapshot headers on the request`(): Unit = runBlocking {
+        server.enqueue(MockResponse().setBody("ABCDEF"))
+        val item = item()
+        val store = store()
+        val customHeaders = mapOf(
+            "Authorization" to "Bearer secret",
+            "X-Quality-Test" to "variant-7",
+        )
+        val snapshotWithHeaders = snapshot(item).copy(headers = customHeaders)
+
+        store.downloadSelected(snapshotWithHeaders) shouldBe ReelsOfflineStore.DownloadResult.SAVED
+
+        val recorded = server.takeRequest()
+        recorded.getHeader("Authorization") shouldBe "Bearer secret"
+        recorded.getHeader("X-Quality-Test") shouldBe "variant-7"
+    }
+
     private fun qualityFile(sourceId: Long, itemId: String): File {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(itemId.toByteArray())

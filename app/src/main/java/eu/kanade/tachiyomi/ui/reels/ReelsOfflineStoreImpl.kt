@@ -54,15 +54,21 @@ class ReelsOfflineStoreImpl(
     }
 
     override suspend fun download(item: ShortVideoItem, sourceId: Long): ReelsOfflineStore.DownloadResult =
-        withContext(ioDispatcher) {
-            writeMutex.withLock { downloadLocked(item, sourceId, null) }
-        }
+        download(item, sourceId, emptyMap())
+
+    override suspend fun download(
+        item: ShortVideoItem,
+        sourceId: Long,
+        headers: Map<String, String>,
+    ): ReelsOfflineStore.DownloadResult = withContext(ioDispatcher) {
+        writeMutex.withLock { downloadLocked(item, sourceId, headers, null) }
+    }
 
     override suspend fun downloadSelected(
         snapshot: ReelsQualityDownloadSnapshot,
     ): ReelsOfflineStore.DownloadResult = withContext(ioDispatcher) {
         writeMutex.withLock {
-            downloadLocked(snapshot.item, snapshot.owner.sourceId, snapshot)
+            downloadLocked(snapshot.item, snapshot.owner.sourceId, snapshot.headers, snapshot)
         }
     }
 
@@ -72,6 +78,7 @@ class ReelsOfflineStoreImpl(
     private suspend fun downloadLocked(
         item: ShortVideoItem,
         sourceId: Long,
+        headers: Map<String, String>,
         qualitySnapshot: ReelsQualityDownloadSnapshot?,
     ): ReelsOfflineStore.DownloadResult {
         if (storedFile(sourceId, item.id) != null) return ReelsOfflineStore.DownloadResult.SAVED
@@ -85,7 +92,14 @@ class ReelsOfflineStoreImpl(
         sweepStaleTransfers()
         val request = Request.Builder()
             .url(item.videoUrl)
-            .apply { sameOriginReferer(item.webUrl)?.let { header("Referer", it) } }
+            .apply {
+                headers.forEach { (name, value) ->
+                    if (name.isNotBlank()) header(name, value)
+                }
+                if (headers.keys.none { it.equals("Referer", ignoreCase = true) }) {
+                    sameOriginReferer(item.webUrl)?.let { header("Referer", it) }
+                }
+            }
             .build()
         val call = client.newCall(request)
         // A cancelled coroutine must abort the socket wait, not just return after it.

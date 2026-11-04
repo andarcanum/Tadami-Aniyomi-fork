@@ -238,7 +238,7 @@ class ReelsFeedScreenModel(
 
         // F07: ceiling on the SILENT deep-link seek (a missing target must not drain an
         // endless feed); manual pagination past the budget stays available.
-        const val RESUME_SEEK_MAX_PAGES = 10
+        const val RESUME_SEEK_MAX_PAGES = 50
 
         // Forward quality window. The player preload (+1) and the head-prewarm loop (+2..+4)
         // can only warm reels whose quality binding already exists; this window matches that span.
@@ -2183,6 +2183,52 @@ class ReelsFeedScreenModel(
 
     private fun loadFeedInternal(reset: Boolean = false) {
         if (state.value.isOffline) return
+        if (reset && mode == FeedMode.NICHE && nicheId != null) {
+            val seed = ReelsAlbumFeedSeedStore.consume(nicheId)
+            if (seed != null && seed.items.isNotEmpty()) {
+                loadJob?.cancel()
+                loadGeneration.incrementAndGet()
+                runway.reset()
+                lastPagerPage = 0
+                unseenRefillPages = 0
+                resumeSeekPages = 0
+                resumeNavPending = false
+                rateLimitRetries = 0
+
+                val targetIndex = if (seed.targetVideoId != null) {
+                    seed.items.indexOfFirst { it.id == seed.targetVideoId }.coerceAtLeast(0)
+                } else {
+                    0
+                }
+
+                mutableState.update { current ->
+                    current.copy(
+                        items = seed.items,
+                        seenIds = seed.items.map { it.id }.toImmutableSet(),
+                        isLoading = false,
+                        error = null,
+                        errorRes = null,
+                        pageError = null,
+                        nextPageIndex = seed.nextPage,
+                        nextCursor = seed.nextCursor,
+                        cursorMode = seed.cursorMode,
+                        canLoadMore = seed.canLoadMore,
+                        feedGeneration = current.feedGeneration + 1,
+                        targetPageIndex = targetIndex,
+                        activeIndex = targetIndex,
+                        albumSearchResults = persistentListOf(),
+                        albumSearchNextPage = 1,
+                        albumSearchNextCursor = null,
+                        albumSearchCursorMode = false,
+                        albumSearchCanLoadMore = true,
+                        unseenHidden = 0,
+                        unseenScanStopped = false,
+                    )
+                }
+                runway.onLoadFinished()
+                return
+            }
+        }
         if (!reset && loadLocalReplayWindow()) return
         val src = source ?: return
         if (!reset && state.value.isLoading) return
@@ -2309,31 +2355,6 @@ class ReelsFeedScreenModel(
                 } else {
                     0
                 }
-                // One-shot resume navigation (watch-history entry, album grid tap): the tapped
-                // clip outranks the saved position. Deep albums keep the clip beyond page 1,
-                // so the seek survives across appended pages until found (bounded).
-                val resumeTarget = if (resumeNavPending) {
-                    val pool = if (reset) {
-                        pageData.videos.distinctBy { it.id }.filterHidden()
-                    } else {
-                        state.value.items + pageData.videos.distinctBy { it.id }.filterHidden()
-                    }
-                    val hit = pool.indexOfFirst { it.id == resumeVideoId }
-                    if (hit >= 0) resumeNavPending = false
-                    hit
-                } else {
-                    -1
-                }
-
-                // Stall detection for the seek loop, evaluated BEFORE the CAS below updates
-                // seenIds: an append page that contributes nothing new ends the seek instead
-                // of looping forever on a broken source.
-                val seekStalled = !reset && resumeNavPending &&
-                    pageData.videos.distinctBy { it.id }.filterHidden()
-                        .all { it.id in state.value.seenIds }
-
-                val itemsBeforeAppend = state.value.items.size
-
                 // --- For You: filter BEFORE the page is published, never after ---
                 // Receiving, decoding and prefetching are transport facts: they never create
                 // a consumption row. Only an already recorded watch/skip removes a reel here.
@@ -2349,6 +2370,34 @@ class ReelsFeedScreenModel(
                     emptySet()
                 }
                 val incoming = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+
+                // One-shot resume navigation (watch-history entry, album grid tap): the tapped
+                // clip outranks the saved position. Deep albums keep the clip beyond page 1,
+                // so the seek survives across appended pages until found (bounded).
+                val candidateItems = if (reset) {
+                    incoming
+                } else {
+                    incoming.filterNot { it.id in state.value.seenIds }
+                }
+                val resumeTarget = if (resumeNavPending) {
+                    val pool = if (reset) {
+                        candidateItems
+                    } else {
+                        state.value.items + candidateItems
+                    }
+                    val hit = pool.indexOfFirst { it.id == resumeVideoId }
+                    if (hit >= 0) resumeNavPending = false
+                    hit
+                } else {
+                    -1
+                }
+
+                // Stall detection for the seek loop, evaluated BEFORE the CAS below updates
+                // seenIds: an append page that contributes nothing new ends the seek instead
+                // of looping forever on a broken source.
+                val seekStalled = !reset && resumeNavPending && candidateItems.isEmpty()
+
+                val itemsBeforeAppend = state.value.items.size
                 // Durable inbox: persisted BEFORE the UI publish, so a crash between the two
                 // still leaves the received candidates recoverable after reopening.
                 if (forYou != null && incoming.isNotEmpty()) {
@@ -2369,11 +2418,7 @@ class ReelsFeedScreenModel(
                     // Re-check inside the CAS: a reset may have landed between the outer guard
                     // and this update; writing a stale page would corrupt the newer feed.
                     if (loadGeneration.get() != generation) return@update current
-                    val newItems = if (reset) {
-                        incoming
-                    } else {
-                        incoming.filterNot { it.id in current.seenIds }
-                    }
+                    val newItems = candidateItems
                     val merged = when {
                         !reset -> current.items + newItems
                         backlog.isEmpty() -> newItems
@@ -2417,12 +2462,18 @@ class ReelsFeedScreenModel(
                         // non-zero targetPageIndex otherwise.
                         targetPageIndex = if (resumeTarget >= 0) {
                             resumeTarget
-                        } else if (reset) {
+                        } else if (reset && !resumeNavPending) {
                             restorePosition
                         } else {
                             current.targetPageIndex
                         },
-                        activeIndex = if (reset) 0 else current.activeIndex,
+                        activeIndex = if (resumeTarget >= 0) {
+                            resumeTarget
+                        } else if (reset) {
+                            0
+                        } else {
+                            current.activeIndex
+                        },
                         // A recovered append must not leave a stale transient error.
                         pageError = null,
                         unseenHidden = if (consumed.isEmpty()) {
@@ -4159,7 +4210,7 @@ class ReelsFeedScreenModel(
             item
         }
         val result = try {
-            offlineStore.download(downloadItem, sourceId)
+            offlineStore.download(downloadItem, sourceId, downloadHeaders(sourceId))
         } catch (e: CancellationException) {
             // A cancelled screen must not report the download as a network failure.
             throw e

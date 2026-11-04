@@ -96,9 +96,13 @@ class ReelsConsumptionRepositoryImpl(
     ): Set<String> {
         if (itemIds.isEmpty()) return emptySet()
         return try {
-            handler.awaitList { db ->
-                db.reels_consumptionQueries.consumedIds(scope, sourceId, itemIds)
-            }.toSet()
+            handler.await(inTransaction = true) { db ->
+                val result = HashSet<String>()
+                for (chunk in itemIds.chunked(SQLITE_IN_CHUNK_SIZE)) {
+                    result += db.reels_consumptionQueries.consumedIds(scope, sourceId, chunk).executeAsList()
+                }
+                result
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: SQLiteException) {
@@ -197,5 +201,9 @@ class ReelsConsumptionRepositoryImpl(
             policyVersion = row.policy_version.toInt(),
             historyGeneration = row.history_generation,
         )
+    }
+
+    private companion object {
+        const val SQLITE_IN_CHUNK_SIZE = 500
     }
 }

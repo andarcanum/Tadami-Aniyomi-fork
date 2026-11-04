@@ -340,6 +340,7 @@ data class ReelsFeedScreen(
         // B3 touch lock (Just Player pattern): blocks swipes/taps/gestures; long-press on the
         // full-screen overlay unlocks. Session state — deliberately not persisted.
         var touchLocked by rememberSaveable { mutableStateOf(false) }
+        var playbackSpeed by rememberSaveable { mutableFloatStateOf(1f) }
         // Device UX (sign-off): transient network failures must not stack snackbars over a
         // playing feed — the same message is coalesced within a cooldown window.
         var lastErrorSnackMsg by remember { mutableStateOf("") }
@@ -843,10 +844,11 @@ data class ReelsFeedScreen(
             state.errorRes,
             state.items.size,
             moreMenuOpen,
+            qualityDialogVisible,
         ) {
             // Device UX: an open settings block never auto-hides the chrome (the hide timer
             // must not race the user reading the menu); closing restarts the countdown.
-            if (moreMenuOpen) return@LaunchedEffect
+            if (moreMenuOpen || qualityDialogVisible) return@LaunchedEffect
             if (
                 reelsChromeShouldAutoHide(
                     visible = chromeVisible,
@@ -854,6 +856,7 @@ data class ReelsFeedScreen(
                     hasItems = state.items.isNotEmpty(),
                     hasError = state.error != null || state.errorRes != null,
                     isLoading = state.isLoading,
+                    blockingSurfaceOpen = moreMenuOpen || qualityDialogVisible,
                 )
             ) {
                 delay(3000)
@@ -1167,7 +1170,7 @@ data class ReelsFeedScreen(
                         // landscape fullscreen would land sideways; auto-advance still moves
                         // the feed programmatically (portrait reels exit fullscreen, see
                         // ReelsVideoPage).
-                        userScrollEnabled = !touchLocked,
+                        userScrollEnabled = !touchLocked && !qualityDialogVisible,
                         modifier = Modifier
                             .fillMaxSize()
                             .pointerInput(pagerState) {
@@ -1255,6 +1258,9 @@ data class ReelsFeedScreen(
                                 onSetQualityOverride = screenModel::setQualityOverride,
                                 onClearQualityOverride = screenModel::clearQualityOverride,
                                 onQualityDialogOpenChanged = { qualityDialogOpen = it },
+                                onRetryQuality = { screenModel.prepareQualityForIndex(page) },
+                                playbackSpeed = playbackSpeed,
+                                onPlaybackSpeedChange = { playbackSpeed = it },
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
                                 chromeVisible = chromeVisible && page == pagerState.settledPage,
@@ -1530,7 +1536,22 @@ data class ReelsFeedScreen(
                                     )
                                 },
                                 offlineUsedText = Formatter.formatFileSize(context, offlineUsedBytes),
-                                onClearVideoCache = { confirmClearOffline = true },
+                                offlineUsedFraction = (
+                                    offlineUsedBytes.toFloat() /
+                                        ReelsOfflineStore.MAX_OFFLINE_BYTES.toFloat()
+                                    ).coerceIn(0f, 1f),
+                                canClearOffline = offlineUsedBytes > 0L,
+                                onClearVideoCache = {
+                                    coroutineScope.launch {
+                                        val freed = withContext(Dispatchers.IO) { clearReelsVideoCache(context) }
+                                        snackbarHostState.showSnackbar(
+                                            context.stringResource(
+                                                MR.strings.reels_video_cache_cleared,
+                                                Formatter.formatFileSize(context, freed),
+                                            ),
+                                        )
+                                    }
+                                },
                                 isIncognito = isIncognito,
                                 onToggleIncognito = screenModel::toggleReelsIncognito,
                                 onClearOffline = { confirmClearOffline = true },
@@ -2410,7 +2431,8 @@ internal fun reelsChromeShouldAutoHide(
     hasItems: Boolean,
     hasError: Boolean,
     isLoading: Boolean,
-): Boolean = visible && actuallyPlaying && hasItems && !hasError && !isLoading
+    blockingSurfaceOpen: Boolean = false,
+): Boolean = !blockingSurfaceOpen && visible && actuallyPlaying && hasItems && !hasError && !isLoading
 
 /**
  * Status bar policy (device report): the system status icons follow the feed chrome. The

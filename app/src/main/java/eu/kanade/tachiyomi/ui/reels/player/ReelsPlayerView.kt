@@ -260,7 +260,11 @@ fun ReelsPlayerView(
         }
         return
     }
-    val networkClient = remember { Injekt.get<NetworkHelper>().client }
+    val networkClient = remember {
+        Injekt.get<NetworkHelper>().client.newBuilder()
+            .cache(null)
+            .build()
+    }
     // Listener and surface callbacks are created once with the player; they must read the
     // CURRENT composition values, not the ones captured on first composition.
     val currentCropMode by rememberUpdatedState(isCropMode)
@@ -269,6 +273,8 @@ fun ReelsPlayerView(
     // attempt belong to one media URL; replacing the player drops both.
     var autoRetry429Count by remember(videoUrl) { mutableIntStateOf(0) }
     var pending429Retry by remember(videoUrl) { mutableIntStateOf(0) }
+    var autoRetryIoCount by remember(videoUrl) { mutableIntStateOf(0) }
+    var pendingIoRetry by remember(videoUrl) { mutableIntStateOf(0) }
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
     // P05: playback visibility time for the minimum-dwell rule — wall clock, pauses and
     // buffering no longer count (see reelsEndHold).
@@ -367,6 +373,8 @@ fun ReelsPlayerView(
             // released instance must never fire against this one.
             autoRetry429Count = 0
             pending429Retry = 0
+            autoRetryIoCount = 0
+            pendingIoRetry = 0
             // Short clips: cap buffering so a preload player doesn't hoard tens of MB /
             // compete with the active video for bandwidth (media3 default is ~50s).
             // minBufferMs must be >= both playback thresholds (media3 assertion).
@@ -422,6 +430,7 @@ fun ReelsPlayerView(
                             when (playbackState) {
                                 Player.STATE_READY -> {
                                     autoRetry429Count = 0
+                                    autoRetryIoCount = 0
                                     val durSec = duration.toFloat() / 1000f
                                     if (durSec > 0) onDurationKnown(durSec)
                                     if (restorePositionMs > 0) {
@@ -503,13 +512,24 @@ fun ReelsPlayerView(
                             // CDN rate limit (device logcat: HTTP 429 on the media GET with a
                             // valid signed URL): back off and re-prepare silently a few times,
                             // keeping the buffering spinner up, before surfacing the error.
+                            // Transient IO/seek errors (403/416/502/503/socket aborts on reconnect)
+                            // are similarly auto-retried with a brief pause.
                             var cause: Throwable? = error
                             var rateLimited = false
+                            var transientIo = false
                             while (cause != null) {
-                                if (cause is HttpDataSource.InvalidResponseCodeException &&
-                                    cause.responseCode == 429
+                                if (cause is HttpDataSource.InvalidResponseCodeException) {
+                                    if (cause.responseCode == 429) {
+                                        rateLimited = true
+                                        break
+                                    } else if (cause.responseCode in listOf(403, 408, 416, 500, 502, 503, 504)) {
+                                        transientIo = true
+                                        break
+                                    }
+                                } else if (cause is java.io.IOException ||
+                                    cause is HttpDataSource.HttpDataSourceException
                                 ) {
-                                    rateLimited = true
+                                    transientIo = true
                                     break
                                 }
                                 cause = cause.cause
@@ -517,6 +537,12 @@ fun ReelsPlayerView(
                             if (rateLimited && autoRetry429Count < MAX_PLAYBACK_429_RETRIES) {
                                 autoRetry429Count++
                                 pending429Retry = autoRetry429Count
+                                onBufferingChanged(true)
+                                return
+                            }
+                            if (transientIo && autoRetryIoCount < MAX_PLAYBACK_IO_RETRIES) {
+                                autoRetryIoCount++
+                                pendingIoRetry = autoRetryIoCount
                                 onBufferingChanged(true)
                                 return
                             }
@@ -610,6 +636,8 @@ fun ReelsPlayerView(
         if (retrySignal > 0 && currentIsActive) {
             autoRetry429Count = 0
             pending429Retry = 0
+            autoRetryIoCount = 0
+            pendingIoRetry = 0
             player?.apply {
                 seekTo(0)
                 prepare()
@@ -642,6 +670,25 @@ fun ReelsPlayerView(
         retryPlayer.prepare()
         retryPlayer.playWhenReady = true
         pending429Retry = 0
+    }
+
+    // Transient IO / seek error recovery: re-prepare WITHOUT resetting the position.
+    LaunchedEffect(pendingIoRetry, player, isActive, isPlaying, isLifecycleStarted) {
+        val attempt = pendingIoRetry
+        val retryPlayer = player
+        if (attempt <= 0 || retryPlayer == null) return@LaunchedEffect
+        if (!reelsShouldRunPlayback(isActive, isPlaying, isLifecycleStarted)) {
+            onBufferingChanged(false)
+            return@LaunchedEffect
+        }
+        delay(PLAYBACK_IO_BACKOFF_MS * attempt)
+        val stillStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        if (player !== retryPlayer || !reelsShouldRunPlayback(currentIsActive, currentIsPlaying, stillStarted)) {
+            return@LaunchedEffect
+        }
+        retryPlayer.prepare()
+        retryPlayer.playWhenReady = true
+        pendingIoRetry = 0
     }
 
     // React to play / pause changes.
@@ -807,6 +854,10 @@ private const val POSTER_DECODE_SIZE = 480
 /** 429 auto-recovery: this many silent backoff re-prepares before the error surfaces. */
 private const val MAX_PLAYBACK_429_RETRIES = 3
 private const val PLAYBACK_429_BACKOFF_MS = 3_000L
+
+/** Transient IO / seek auto-recovery. */
+private const val MAX_PLAYBACK_IO_RETRIES = 2
+private const val PLAYBACK_IO_BACKOFF_MS = 600L
 
 /** Minimum time a reel stays on screen before auto-advance moves on (stills/short clips). */
 const val REELS_MIN_DWELL_MS = 5_000L
@@ -996,6 +1047,7 @@ internal fun prewarmReelHead(
  */
 private val prewarmNetworkClient: OkHttpClient by lazy {
     Injekt.get<NetworkHelper>().client.newBuilder()
+        .cache(null)
         .callTimeout(HEAD_PREWARM_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         .build()
 }

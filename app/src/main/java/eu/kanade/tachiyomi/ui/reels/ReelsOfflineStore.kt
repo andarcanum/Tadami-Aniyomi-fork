@@ -38,6 +38,12 @@ interface ReelsOfflineStore {
      */
     suspend fun download(item: ShortVideoItem, sourceId: Long): DownloadResult
 
+    suspend fun download(
+        item: ShortVideoItem,
+        sourceId: Long,
+        headers: Map<String, String>,
+    ): DownloadResult = download(item, sourceId)
+
     /** Downloads the frozen quality selection (contract v29) with its sidecar metadata. */
     suspend fun downloadSelected(snapshot: ReelsQualityDownloadSnapshot): DownloadResult
 

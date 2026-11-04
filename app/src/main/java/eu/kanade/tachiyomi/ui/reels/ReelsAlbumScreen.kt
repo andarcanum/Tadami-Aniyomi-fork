@@ -159,6 +159,17 @@ data class ReelsAlbumScreen(
                             // Report fix: start the album as a reels feed from the first video.
                             IconButton(
                                 onClick = {
+                                    if (state.items.isNotEmpty()) {
+                                        ReelsAlbumFeedSeedStore.pending = ReelsAlbumFeedSeed(
+                                            albumId = albumId,
+                                            items = state.items,
+                                            targetVideoId = null,
+                                            nextPage = state.nextPage,
+                                            nextCursor = state.nextCursor,
+                                            cursorMode = state.cursorMode,
+                                            canLoadMore = state.canLoadMore,
+                                        )
+                                    }
                                     navigator.push(
                                         ReelsFeedScreen(
                                             sourceId = sourceId,
@@ -239,6 +250,15 @@ data class ReelsAlbumScreen(
                             progress = progress,
                             watched = watched,
                             onClick = {
+                                ReelsAlbumFeedSeedStore.pending = ReelsAlbumFeedSeed(
+                                    albumId = albumId,
+                                    items = state.items,
+                                    targetVideoId = item.id,
+                                    nextPage = state.nextPage,
+                                    nextCursor = state.nextCursor,
+                                    cursorMode = state.cursorMode,
+                                    canLoadMore = state.canLoadMore,
+                                )
                                 navigator.push(
                                     ReelsFeedScreen(
                                         sourceId = sourceId,
