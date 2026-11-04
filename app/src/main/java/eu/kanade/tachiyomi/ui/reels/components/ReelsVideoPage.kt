@@ -1086,8 +1086,11 @@ fun ReelsVideoPage(
                     // clears the description instead of interleaving with it.
                     val density = LocalDensity.current
                     val navBarsBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    // Guarantee a safe margin of at least 26.dp even when system gesture bar is hidden (navBars == 0dp)
+                    val safeBottomInset = maxOf(navBarsBottomPadding, 26.dp)
+                    val metaBottomPadding = safeBottomInset + 28.dp
                     val actionsBottomPadding =
-                        28.dp + navBarsBottomPadding + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
+                        metaBottomPadding + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
                     AnimatedVisibility(
                         visible = chromeVisible,
                         enter = fadeIn() + slideInHorizontally { it },
@@ -1158,32 +1161,38 @@ fun ReelsVideoPage(
                                 .padding(
                                     start = 16.dp,
                                     end = 76.dp,
-                                    bottom = 28.dp + navBarsBottomPadding,
+                                    bottom = metaBottomPadding,
                                 )
                                 .onSizeChanged { portraitMetaHeightPx = it.height },
                         )
                     }
 
                     // Portrait Interactive Scrubber / Seek Bar (Aurora style)
-                    ReelsProgressBar(
-                        progressState = progressState,
-                        durationSec = durationSec,
-                        bufferFraction = bufferFraction,
-                        posterUrl = item.posterUrlVertical ?: item.posterUrl,
-                        chromeVisible = chromeVisible,
-                        onSeek = { frac ->
-                            seekFraction = frac
-                            progressState.floatValue = frac
-                            coroutineScope.launch {
-                                delay(50)
-                                seekFraction = null
-                            }
-                        },
-                        onScrubStart = onScrubStart,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = navBarsBottomPadding + 6.dp),
-                    )
+                    AnimatedVisibility(
+                        visible = chromeVisible,
+                        enter = fadeIn() + slideInVertically { it },
+                        exit = fadeOut() + slideOutVertically { it },
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    ) {
+                        ReelsProgressBar(
+                            progressState = progressState,
+                            durationSec = durationSec,
+                            bufferFraction = bufferFraction,
+                            posterUrl = item.posterUrlVertical ?: item.posterUrl,
+                            chromeVisible = chromeVisible,
+                            onSeek = { frac ->
+                                seekFraction = frac
+                                progressState.floatValue = frac
+                                coroutineScope.launch {
+                                    delay(50)
+                                    seekFraction = null
+                                }
+                            },
+                            onScrubStart = onScrubStart,
+                            modifier = Modifier
+                                .padding(bottom = safeBottomInset + 4.dp),
+                        )
+                    }
                 }
             }
         }
