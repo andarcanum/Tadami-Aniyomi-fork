@@ -39,6 +39,8 @@ import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.category.novel.model.NovelCategory
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.history.novel.model.NovelHistory
+import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.model.LibraryGroup
@@ -59,6 +61,7 @@ import tachiyomi.domain.track.novel.model.NovelTrack
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
+import java.util.Date
 
 class NovelLibraryScreenModelTest {
 
@@ -79,6 +82,7 @@ class NovelLibraryScreenModelTest {
     private lateinit var getLibraryNovelSeries: GetLibraryNovelSeries
     private lateinit var getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState
     private lateinit var getNovelIdsInAnySeries: GetNovelIdsInAnySeries
+    private lateinit var novelHistoryRepository: NovelHistoryRepository
     private lateinit var downloadCache: NovelDownloadCache
     private lateinit var downloadedIdsFlow: MutableStateFlow<Set<Long>>
     private lateinit var sourceManager: NovelSourceManager
@@ -107,6 +111,9 @@ class NovelLibraryScreenModelTest {
             coEvery { await(any()) } returns null
         }
         getNovelIdsInAnySeries = mockk()
+        novelHistoryRepository = mockk {
+            coEvery { getHistoryByNovelId(any()) } returns emptyList()
+        }
         downloadCache = mockk(relaxed = true)
         downloadedIdsFlow = MutableStateFlow(emptySet())
         every { downloadCache.downloadedIds } returns downloadedIdsFlow
@@ -602,6 +609,78 @@ class NovelLibraryScreenModelTest {
     }
 
     @Test
+    fun `series continue skips completed first volume`() = runTest(testDispatcher) {
+        val first = libraryNovel(id = 10L, title = "Volume 1", total = 2L, read = 2L)
+        val second = libraryNovel(id = 20L, title = "Volume 2", total = 3L, read = 1L)
+        val series = librarySeries(id = 50L, title = "Series", entries = listOf(first, second))
+        coEvery { chapterRepository.getChapterByNovelId(10L, true) } returns listOf(
+            novelChapter(id = 1L, novelId = 10L, sourceOrder = 0L, chapterNumber = 1.0, read = true),
+            novelChapter(id = 2L, novelId = 10L, sourceOrder = 1L, chapterNumber = 2.0, read = true),
+        )
+        coEvery { chapterRepository.getChapterByNovelId(20L, true) } returns listOf(
+            novelChapter(id = 11L, novelId = 20L, sourceOrder = 0L, chapterNumber = 1.0, read = true),
+            novelChapter(id = 12L, novelId = 20L, sourceOrder = 1L, chapterNumber = 2.0, read = false)
+                .copy(lastPageRead = 5L),
+            novelChapter(id = 13L, novelId = 20L, sourceOrder = 2L, chapterNumber = 3.0, read = false),
+        )
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+
+        val chapter = screenModel.getNextUnreadChapter(NovelLibraryItem.Series(series))
+
+        chapter?.novelId shouldBe 20L
+        chapter?.id shouldBe 12L
+    }
+
+    @Test
+    fun `series continue resumes exact history chapter regardless of volume progress`() = runTest(testDispatcher) {
+        val series = librarySeries(
+            id = 50L,
+            title = "Series",
+            entries = listOf(
+                libraryNovel(id = 10L, title = "Volume 1", total = 1L, read = 1L, lastRead = 100L),
+                libraryNovel(id = 20L, title = "Volume 2", total = 2L, read = 0L, lastRead = 300L),
+                libraryNovel(id = 30L, title = "Volume 3", total = 2L, read = 1L, lastRead = 200L),
+            ),
+        )
+        coEvery { chapterRepository.getChapterByNovelId(10L, true) } returns listOf(
+            novelChapter(id = 1L, novelId = 10L, sourceOrder = 0L, chapterNumber = 1.0, read = true),
+        )
+        coEvery { chapterRepository.getChapterByNovelId(20L, true) } returns listOf(
+            novelChapter(id = 11L, novelId = 20L, sourceOrder = 0L, chapterNumber = 1.0, read = false)
+                .copy(lastPageRead = 5L),
+            novelChapter(id = 12L, novelId = 20L, sourceOrder = 1L, chapterNumber = 2.0, read = false),
+        )
+        coEvery { chapterRepository.getChapterByNovelId(30L, true) } returns listOf(
+            novelChapter(id = 21L, novelId = 30L, sourceOrder = 0L, chapterNumber = 1.0, read = true),
+            novelChapter(id = 22L, novelId = 30L, sourceOrder = 1L, chapterNumber = 2.0, read = false),
+        )
+        coEvery { novelHistoryRepository.getHistoryByNovelId(20L) } returns listOf(
+            NovelHistory.create().copy(chapterId = 11L, readAt = Date(250L)),
+            NovelHistory.create().copy(chapterId = 12L, readAt = Date(300L)),
+        )
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+
+        val chapter = screenModel.getNextUnreadChapter(NovelLibraryItem.Series(series))
+
+        chapter?.novelId shouldBe 20L
+        chapter?.id shouldBe 12L
+    }
+
+    @Test
     fun `downloaded filter keeps series with any downloaded entry`() = runTest(testDispatcher) {
         libraryFlow.value = listOf(libraryNovel(id = 1L, title = "Standalone"))
         val series = librarySeries(
@@ -835,6 +914,7 @@ class NovelLibraryScreenModelTest {
             updateNovelSeries = updateNovelSeries,
             chapterRepository = chapterRepository,
             getNovelBookState = getNovelBookState,
+            novelHistoryRepository = novelHistoryRepository,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             sourceManager = sourceManager,

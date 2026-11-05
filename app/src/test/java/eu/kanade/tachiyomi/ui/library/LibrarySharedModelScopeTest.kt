@@ -255,6 +255,8 @@ class LibrarySharedModelScopeTest {
             createMangaSeries = mockk(relaxed = true),
             addMangasToSeries = mockk(relaxed = true),
             updateMangaSeries = mockk(relaxed = true),
+            deleteMangaSeries = mockk(relaxed = true),
+            removeMangaFromSeries = mockk(relaxed = true),
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -271,6 +273,10 @@ class LibrarySharedModelScopeTest {
         val animeFlow = MutableStateFlow(emptyList<tachiyomi.domain.library.anime.LibraryAnime>())
         val getLibraryAnime = mockk<GetLibraryAnime>()
         every { getLibraryAnime.subscribe() } returns animeFlow
+        val getLibraryAnimeSeries = mockk<tachiyomi.domain.series.anime.interactor.GetLibraryAnimeSeries>()
+        every { getLibraryAnimeSeries.subscribe() } returns MutableStateFlow(emptyList())
+        val getAnimeIdsInAnySeries = mockk<tachiyomi.domain.series.anime.interactor.GetAnimeIdsInAnySeries>()
+        every { getAnimeIdsInAnySeries.subscribe() } returns MutableStateFlow(emptySet())
         val getCategories = mockk<GetVisibleAnimeCategories>()
         every { getCategories.subscribe() } returns MutableStateFlow(listOf(category()))
         val getTracksPerAnime = mockk<GetTracksPerAnime>()
@@ -278,6 +284,8 @@ class LibrarySharedModelScopeTest {
 
         return AnimeLibraryScreenModel(
             getLibraryAnime = getLibraryAnime,
+            getLibraryAnimeSeries = getLibraryAnimeSeries,
+            getAnimeIdsInAnySeries = getAnimeIdsInAnySeries,
             getCategories = getCategories,
             getTracksPerAnime = getTracksPerAnime,
             getNextEpisodes = mockk(relaxed = true),
@@ -285,6 +293,11 @@ class LibrarySharedModelScopeTest {
             setSeenStatus = mockk(relaxed = true),
             updateAnime = mockk(relaxed = true),
             setAnimeCategories = mockk(relaxed = true),
+            createAnimeSeries = mockk(relaxed = true),
+            addAnimesToSeries = mockk(relaxed = true),
+            updateAnimeSeries = mockk(relaxed = true),
+            deleteAnimeSeries = mockk(relaxed = true),
+            removeAnimeFromSeries = mockk(relaxed = true),
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -332,6 +345,7 @@ class LibrarySharedModelScopeTest {
             updateNovel = mockk(relaxed = true),
             chapterRepository = chapterRepository,
             getNovelBookState = mockk { coEvery { await(any()) } returns null },
+            novelHistoryRepository = mockk(relaxed = true),
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             sourceManager = novelSourceManager,

@@ -19,6 +19,7 @@ import eu.kanade.domain.track.novel.MapNovelTrackStatusToLibrary
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
 import eu.kanade.presentation.library.novel.NovelLibraryItem
+import eu.kanade.presentation.series.novel.resolveNovelSeriesReadingTarget
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
@@ -87,6 +88,7 @@ import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.entries.novel.repository.NovelRepository
+import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
@@ -131,6 +133,7 @@ class NovelLibraryScreenModel(
     private val updateNovel: UpdateNovel = Injekt.get(),
     private val chapterRepository: NovelChapterRepository = Injekt.get(),
     private val getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState = Injekt.get(),
+    private val novelHistoryRepository: NovelHistoryRepository = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     val libraryPreferences: LibraryPreferences = Injekt.get(),
     val sourceManager: NovelSourceManager = Injekt.get(),
@@ -906,11 +909,25 @@ class NovelLibraryScreenModel(
         return when (item) {
             is NovelLibraryItem.Single -> getNextUnreadChapter(item.libraryNovel.novel)
             is NovelLibraryItem.Series -> {
-                for (novel in item.librarySeries.entries) {
-                    val chapter = getNextUnreadChapter(novel.novel)
-                    if (chapter != null) return chapter
+                val series = item.librarySeries
+                val resumeChapterId = series.entries.maxByOrNull { it.lastRead }
+                    ?.takeIf { it.lastRead > 0L }
+                    ?.let { entry ->
+                        novelHistoryRepository.getHistoryByNovelId(entry.id)
+                            .filter { (it.readAt?.time ?: 0L) > 0L }
+                            .maxByOrNull { it.readAt?.time ?: 0L }
+                            ?.chapterId
+                    }
+                val chapters = series.entries.map { entry ->
+                    entry to chapterRepository.getChapterByNovelId(entry.id, applyScanlatorFilter = true)
                 }
-                null
+                val bookStates = series.entries.associate { it.id to getNovelBookState.await(it.id) }
+                resolveNovelSeriesReadingTarget(
+                    series = series,
+                    chapters = chapters,
+                    resumeChapterId = resumeChapterId,
+                    bookStateOf = { bookStates[it] },
+                )?.chapter
             }
         }
     }

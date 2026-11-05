@@ -117,6 +117,77 @@ class MangaSeriesReadingTargetResolverTest {
         assertEquals(chapter2.id, target?.id)
     }
 
+    @Test
+    fun `resumes history chapter in later volume without completed chapters`() {
+        val series = series(
+            listOf(
+                libraryManga(id = 10L, title = "One", totalChapters = 2, readCount = 1),
+                libraryManga(id = 20L, title = "Two", totalChapters = 2, readCount = 0),
+            ),
+        )
+        val first = libraryMangaChapters(mangaId = 10L, chapterIds = listOf(1L, 2L), read = false)
+        val second = libraryMangaChapters(mangaId = 20L, chapterIds = listOf(11L, 12L), read = false)
+        val chapters = listOf(
+            first.first to first.second.map { it.copy(read = it.id == 1L) },
+            second.first to second.second.map { it.copy(lastPageRead = if (it.id == 11L) 5L else 0L) },
+        )
+
+        val target = resolveMangaSeriesReadingTarget(series, chapters, resumeChapterId = 11L)
+
+        assertEquals(20L, target?.manga?.manga?.id)
+        assertEquals(11L, target?.chapter?.id)
+    }
+
+    @Test
+    fun `history chapter wins over later volumes when rereading`() {
+        val series = series(
+            listOf(
+                libraryManga(id = 10L, title = "One", totalChapters = 2, readCount = 2),
+                libraryManga(id = 20L, title = "Two", totalChapters = 2, readCount = 1),
+            ),
+        )
+        val first = libraryMangaChapters(mangaId = 10L, chapterIds = listOf(1L, 2L), read = true)
+        val second = libraryMangaChapters(mangaId = 20L, chapterIds = listOf(11L, 12L), read = false)
+        val chapters = listOf(first, second.first to second.second.map { it.copy(read = it.id == 11L) })
+
+        val target = resolveMangaSeriesReadingTarget(series, chapters, resumeChapterId = 1L)
+
+        assertEquals(10L, target?.manga?.manga?.id)
+        assertEquals(1L, target?.chapter?.id)
+    }
+
+    @Test
+    fun `missing history chapter falls back to reading frontier`() {
+        val series = series(
+            listOf(
+                libraryManga(id = 10L, title = "One", totalChapters = 2, readCount = 2),
+                libraryManga(id = 20L, title = "Two", totalChapters = 2, readCount = 0),
+            ),
+        )
+        val chapters = listOf(
+            libraryMangaChapters(mangaId = 10L, chapterIds = listOf(1L, 2L), read = true),
+            libraryMangaChapters(mangaId = 20L, chapterIds = listOf(11L, 12L), read = false),
+        )
+
+        val target = resolveMangaSeriesReadingTarget(series, chapters, resumeChapterId = 999L)
+
+        assertEquals(20L, target?.manga?.manga?.id)
+        assertEquals(11L, target?.chapter?.id)
+    }
+
+    private fun series(entries: List<LibraryManga>) = LibraryMangaSeries(
+        series = MangaSeries(
+            id = 1L,
+            title = "Series",
+            description = null,
+            categoryId = 0L,
+            sortOrder = 0L,
+            dateAdded = 0L,
+            coverLastModified = 0L,
+        ),
+        entries = entries,
+    )
+
     private fun libraryManga(
         id: Long,
         title: String,

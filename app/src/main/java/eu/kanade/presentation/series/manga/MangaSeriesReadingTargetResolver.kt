@@ -12,7 +12,16 @@ data class MangaSeriesReadingTarget(
 fun resolveMangaSeriesReadingTarget(
     series: LibraryMangaSeries,
     chapters: List<Pair<LibraryManga, List<Chapter>>>,
+    resumeChapterId: Long? = null,
 ): MangaSeriesReadingTarget? {
+    if (resumeChapterId != null) {
+        for ((manga, mangaChapters) in chapters) {
+            if (series.entries.none { it.id == manga.id }) continue
+            val chapter = mangaChapters.firstOrNull { it.id == resumeChapterId } ?: continue
+            return MangaSeriesReadingTarget(manga, chapter)
+        }
+    }
+
     val activeManga = series.activeManga ?: return null
     val activeEntryIndex = chapters.indexOfFirst { it.first.manga.id == activeManga.id }
         .takeIf { it >= 0 }

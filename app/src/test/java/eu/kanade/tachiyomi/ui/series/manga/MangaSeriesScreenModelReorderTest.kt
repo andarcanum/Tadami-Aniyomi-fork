@@ -7,6 +7,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -21,6 +22,8 @@ import org.junit.jupiter.api.Test
 import tachiyomi.domain.category.manga.interactor.GetVisibleMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.history.manga.model.MangaHistory
+import tachiyomi.domain.history.manga.repository.MangaHistoryRepository
 import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
@@ -33,6 +36,8 @@ import tachiyomi.domain.series.manga.interactor.UpdateMangaSeries
 import tachiyomi.domain.series.manga.model.LibraryMangaSeries
 import tachiyomi.domain.series.manga.model.LibraryMangaSeriesWithEntryIds
 import tachiyomi.domain.series.manga.model.MangaSeries
+import java.util.Date
+import kotlin.test.assertEquals
 
 class MangaSeriesScreenModelReorderTest {
 
@@ -40,6 +45,8 @@ class MangaSeriesScreenModelReorderTest {
     private val testDispatcher = StandardTestDispatcher()
     private val activeScreenModels = mutableListOf<MangaSeriesScreenModel>()
     private val getMangaSeriesWithEntries: GetMangaSeriesWithEntries = mockk()
+    private lateinit var seriesFlow: MutableStateFlow<LibraryMangaSeriesWithEntryIds?>
+    private val mangaHistoryRepository: MangaHistoryRepository = mockk()
     private val updateMangaSeries: UpdateMangaSeries = mockk(relaxed = true)
     private val deleteMangaSeries: DeleteMangaSeries = mockk(relaxed = true)
     private val addMangasToSeries: AddMangasToSeries = mockk(relaxed = true)
@@ -78,7 +85,9 @@ class MangaSeriesScreenModelReorderTest {
             ),
         )
 
-        every { getMangaSeriesWithEntries.subscribe(seriesId) } returns flowOf(wrapper)
+        seriesFlow = MutableStateFlow(wrapper)
+        every { getMangaSeriesWithEntries.subscribe(seriesId) } returns seriesFlow
+        coEvery { mangaHistoryRepository.getHistoryByMangaId(any()) } returns emptyList()
         every { getVisibleMangaCategories.subscribe() } returns flowOf(emptyList())
         coEvery { getChaptersByMangaId.await(any()) } returns emptyList()
         coJustRun { reorderSeriesEntries.await(any()) }
@@ -94,19 +103,7 @@ class MangaSeriesScreenModelReorderTest {
 
     @Test
     fun `reorderEntries commits mapped order once per drop`() = runTest(testDispatcher) {
-        val screenModel = MangaSeriesScreenModel(
-            seriesId = seriesId,
-            getMangaSeriesWithEntries = getMangaSeriesWithEntries,
-            updateMangaSeries = updateMangaSeries,
-            deleteMangaSeries = deleteMangaSeries,
-            addMangasToSeries = addMangasToSeries,
-            removeMangaFromSeries = removeMangaFromSeries,
-            reorderSeriesEntries = reorderSeriesEntries,
-            getChaptersByMangaId = getChaptersByMangaId,
-            getVisibleMangaCategories = getVisibleMangaCategories,
-            setMangaCategories = setMangaCategories,
-            seriesCoverCache = seriesCoverCache,
-        ).also(activeScreenModels::add)
+        val screenModel = createScreenModel()
 
         // WhileSubscribed stateIn needs an active collector to drive the upstream flow
         val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -137,19 +134,7 @@ class MangaSeriesScreenModelReorderTest {
             chapter(id = 2L, sourceOrder = 2L, chapterNumber = 2.0),
         )
 
-        val screenModel = MangaSeriesScreenModel(
-            seriesId = seriesId,
-            getMangaSeriesWithEntries = getMangaSeriesWithEntries,
-            updateMangaSeries = updateMangaSeries,
-            deleteMangaSeries = deleteMangaSeries,
-            addMangasToSeries = addMangasToSeries,
-            removeMangaFromSeries = removeMangaFromSeries,
-            reorderSeriesEntries = reorderSeriesEntries,
-            getChaptersByMangaId = getChaptersByMangaId,
-            getVisibleMangaCategories = getVisibleMangaCategories,
-            setMangaCategories = setMangaCategories,
-            seriesCoverCache = seriesCoverCache,
-        ).also(activeScreenModels::add)
+        val screenModel = createScreenModel()
 
         // WhileSubscribed stateIn needs an active collector to drive the upstream flow
         val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -170,7 +155,55 @@ class MangaSeriesScreenModelReorderTest {
             chapter(id = 20L, sourceOrder = 2L, chapterNumber = 2.0),
         )
 
-        val screenModel = MangaSeriesScreenModel(
+        val screenModel = createScreenModel()
+
+        // WhileSubscribed stateIn needs an active collector to drive the upstream flow
+        val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            screenModel.state.collect()
+        }
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val chapters = screenModel.state.value.chapters.first().second
+        assert(chapters.map { it.id } == listOf(10L, 20L, 30L))
+    }
+
+    @Test
+    fun `resume follows latest history and updates when another volume is read`() = runTest(testDispatcher) {
+        val wrapper = requireNotNull(seriesFlow.value)
+        val entries = wrapper.series.entries.map {
+            it.copy(lastRead = if (it.id == 20L) 200L else 100L, readCount = if (it.id == 20L) 0L else 1L)
+        }
+        seriesFlow.value = wrapper.copy(series = wrapper.series.copy(entries = entries))
+        coEvery { mangaHistoryRepository.getHistoryByMangaId(20L) } returns listOf(
+            MangaHistory.create().copy(chapterId = 12L, readAt = Date(150L)),
+            MangaHistory.create().copy(chapterId = 11L, readAt = Date(200L)),
+            MangaHistory.create().copy(chapterId = 13L, readAt = null),
+        )
+        coEvery { mangaHistoryRepository.getHistoryByMangaId(10L) } returns listOf(
+            MangaHistory.create().copy(chapterId = 1L, readAt = Date(300L)),
+        )
+        val screenModel = createScreenModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { screenModel.state.collect() }
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(11L, screenModel.state.value.resumeChapterId)
+
+        seriesFlow.value = wrapper.copy(
+            series = wrapper.series.copy(entries = entries.map { if (it.id == 10L) it.copy(lastRead = 300L) else it }),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1L, screenModel.state.value.resumeChapterId)
+
+        seriesFlow.value = wrapper
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(null, screenModel.state.value.resumeChapterId)
+    }
+
+    private fun createScreenModel(): MangaSeriesScreenModel {
+        return MangaSeriesScreenModel(
             seriesId = seriesId,
             getMangaSeriesWithEntries = getMangaSeriesWithEntries,
             updateMangaSeries = updateMangaSeries,
@@ -182,17 +215,8 @@ class MangaSeriesScreenModelReorderTest {
             getVisibleMangaCategories = getVisibleMangaCategories,
             setMangaCategories = setMangaCategories,
             seriesCoverCache = seriesCoverCache,
+            mangaHistoryRepository = mangaHistoryRepository,
         ).also(activeScreenModels::add)
-
-        // WhileSubscribed stateIn needs an active collector to drive the upstream flow
-        val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            screenModel.state.collect()
-        }
-
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val chapters = screenModel.state.value.chapters.first().second
-        assert(chapters.map { it.id } == listOf(10L, 20L, 30L))
     }
 
     private fun libraryManga(

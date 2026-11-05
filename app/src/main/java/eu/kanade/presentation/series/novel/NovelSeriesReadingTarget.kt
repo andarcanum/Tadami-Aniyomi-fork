@@ -14,8 +14,19 @@ data class NovelSeriesReadingTarget(
 fun resolveNovelSeriesReadingTarget(
     series: LibraryNovelSeries,
     chapters: List<Pair<LibraryNovel, List<NovelChapter>>>,
+    resumeChapterId: Long? = null,
     bookStateOf: (Long) -> NovelBookState? = { null },
 ): NovelSeriesReadingTarget? {
+    if (resumeChapterId != null) {
+        for ((novel, novelChapters) in chapters) {
+            if (series.entries.none { it.id == novel.id }) continue
+            if (novelChapters.none { it.id == resumeChapterId }) continue
+            val chapter = resolveNovelResumeChapter(novelChapters, resumeChapterId, bookStateOf(novel.id))
+                ?: continue
+            return NovelSeriesReadingTarget(novel, chapter)
+        }
+    }
+
     val activeNovel = series.activeNovel ?: return null
     val activeEntryIndex = chapters.indexOfFirst { it.first.novel.id == activeNovel.id }
         .takeIf { it >= 0 }
