@@ -27,8 +27,16 @@ class NovelTtsAudioFocusManager(
     private val bridge: NovelTtsAudioFocusBridge,
     private val onPauseRequested: () -> Unit,
 ) : NovelTtsAudioFocusController {
+    private var hasPlaybackFocus = false
+
     override fun requestPlaybackFocus(): Boolean {
+        // Re-requesting with a new platform listener replaces this app's current focus owner.
+        // Android then reports focus loss to the replaced listener, which pauses the utterance
+        // that a skip action has just started.
+        if (hasPlaybackFocus) return true
+
         val granted = bridge.requestAudioFocus(::handleFocusChange)
+        hasPlaybackFocus = granted
         if (granted) {
             bridge.registerHeadsetDisconnectListener(onPauseRequested)
         }
@@ -36,6 +44,7 @@ class NovelTtsAudioFocusManager(
     }
 
     override fun abandonPlaybackFocus() {
+        hasPlaybackFocus = false
         bridge.unregisterHeadsetDisconnectListener()
         bridge.abandonAudioFocus()
     }
@@ -45,8 +54,11 @@ class NovelTtsAudioFocusManager(
             NovelTtsAudioFocusChange.LOSS,
             NovelTtsAudioFocusChange.LOSS_TRANSIENT,
             NovelTtsAudioFocusChange.LOSS_TRANSIENT_CAN_DUCK,
-            -> onPauseRequested()
-            NovelTtsAudioFocusChange.GAIN -> Unit
+            -> {
+                hasPlaybackFocus = false
+                onPauseRequested()
+            }
+            NovelTtsAudioFocusChange.GAIN -> hasPlaybackFocus = true
         }
     }
 }
