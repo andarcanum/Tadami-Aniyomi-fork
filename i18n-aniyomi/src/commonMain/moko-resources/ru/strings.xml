@@ -1971,6 +1971,9 @@
     <string name="pref_discovery_release_status_paused_desc">Пауза или неизвестно</string>
     <string name="pref_discovery_genre_filters">Жанровые подборки</string>
     <string name="pref_discovery_genre_filters_summary">Игнор · приоритет · обязательные</string>
+    <string name="pref_discovery_genre_filters_summary_per_media">Отдельно для аниме, манги и ранобэ</string>
+    <string name="pref_discovery_genre_media_label">Раздел</string>
+    <string name="pref_discovery_genre_mode_label">Как учитывать жанр</string>
     <string name="pref_discovery_genre_mode_ignored">Игнор</string>
     <string name="pref_discovery_genre_mode_priority">Приоритет</string>
     <string name="pref_discovery_genre_mode_required">Обязательные</string>

@@ -126,23 +126,23 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
      * тайтлы с этими жанрами поднимаются выше в миксе. Не отсекают остальное.
      * Формат: canonical|canonical|raw:«строка» — raw-жанры с префиксом.
      */
-    fun priorityGenres(): Preference<String> =
-        preferenceStore.getString("discovery_priority_genres", "")
+    fun priorityGenres(mediaType: DiscoveryMediaType): Preference<String> =
+        mediaGenrePreference(PRIORITY_GENRES_KEY, mediaType)
 
     /**
      * V3: CSV канонических ключей жанров из [GenreOntology] — «обязательные»:
      * только тайтлы с этими жанрами (best-effort: провайдер без жанров → обычная выдача).
      * Формат: canonical|canonical|raw:«строка» — raw-жанры с префиксом.
      */
-    fun requiredGenres(): Preference<String> =
-        preferenceStore.getString("discovery_required_genres", "")
+    fun requiredGenres(mediaType: DiscoveryMediaType): Preference<String> =
+        mediaGenrePreference(REQUIRED_GENRES_KEY, mediaType)
 
     /**
-     * V3: CSV игнорируемых жанров подборки (глобально, поверх per-media блэклиста тегов):
+     * V3: CSV игнорируемых жанров подборки (поверх per-media блэклиста тегов):
      * тайтлы с этими жанрами не проходят в ряды. Формат как у priority/required.
      */
-    fun ignoredGenres(): Preference<String> =
-        preferenceStore.getString("discovery_ignored_genres", "")
+    fun ignoredGenres(mediaType: DiscoveryMediaType): Preference<String> =
+        mediaGenrePreference(IGNORED_GENRES_KEY, mediaType)
 
     /** G01: Режим сопоставления обязательных жанров ("ALL" | "ANY"). По умолчанию "ALL". */
     fun requiredMatchMode(): Preference<String> =
@@ -152,42 +152,71 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun requiredEnforcement(): Preference<String> =
         preferenceStore.getString("discovery_required_enforcement", "STRICT")
 
-    fun genreFilterSpec(): GenreFilterSpec {
-        val (ignCanon, ignRaw) = parseGenreFilterCsv(ignoredGenres().get())
-        val (reqCanon, reqRaw) = parseGenreFilterCsv(requiredGenres().get())
-        val (priCanon, priRaw) = parseGenreFilterCsv(priorityGenres().get())
-        val matchMode = runCatching {
-            RequiredMatchMode.valueOf(requiredMatchMode().get())
-        }.getOrDefault(RequiredMatchMode.ALL)
-        val enforcement = runCatching {
-            RequiredEnforcement.valueOf(requiredEnforcement().get())
-        }.getOrDefault(RequiredEnforcement.STRICT)
-        return GenreFilterSpec(
-            ignoredGenres = ignCanon + ignRaw.toSet(),
-            requiredGenres = reqCanon + reqRaw.toSet(),
-            priorityGenres = priCanon + priRaw.toSet(),
-            requiredMatchMode = matchMode,
-            requiredEnforcement = enforcement,
-        )
-    }
+    fun genreFilterSpec(mediaType: DiscoveryMediaType): GenreFilterSpec = createGenreFilterSpec(
+        ignoredGenres(mediaType).get(),
+        requiredGenres(mediaType).get(),
+        priorityGenres(mediaType).get(),
+        requiredMatchMode().get(),
+        requiredEnforcement().get(),
+    )
 
-    fun observeGenreFilterSpec(): Flow<GenreFilterSpec> = combine(
-        ignoredGenres().changes(),
-        requiredGenres().changes(),
-        priorityGenres().changes(),
+    fun observeGenreFilterSpec(mediaType: DiscoveryMediaType): Flow<GenreFilterSpec> = combine(
+        ignoredGenres(mediaType).changes(),
+        requiredGenres(mediaType).changes(),
+        priorityGenres(mediaType).changes(),
         requiredMatchMode().changes(),
         requiredEnforcement().changes(),
-    ) { ignCsv, reqCsv, priCsv, matchModeStr, enforcementStr ->
-        val (ignCanon, ignRaw) = parseGenreFilterCsv(ignCsv)
-        val (reqCanon, reqRaw) = parseGenreFilterCsv(reqCsv)
-        val (priCanon, priRaw) = parseGenreFilterCsv(priCsv)
+        ::createGenreFilterSpec,
+    )
+
+    private fun mediaGenrePreference(
+        legacyKey: String,
+        mediaType: DiscoveryMediaType,
+    ): Preference<String> {
+        migrateGenrePreferencesIfNeeded()
+        return preferenceStore.getString("${legacyKey}_${mediaType.key}", "")
+    }
+
+    private fun migrateGenrePreferencesIfNeeded() = synchronized(genreFilterMigrationLock) {
+        val migrated = preferenceStore.getBoolean(
+            Preference.appStateKey(GENRE_FILTER_MIGRATION_MARKER),
+            false,
+        )
+        if (migrated.get()) return@synchronized
+
+        migrateGenrePreference(PRIORITY_GENRES_KEY)
+        migrateGenrePreference(REQUIRED_GENRES_KEY)
+        migrateGenrePreference(IGNORED_GENRES_KEY)
+        migrated.set(true)
+    }
+
+    private fun migrateGenrePreference(legacyKey: String) {
+        val legacyValue = preferenceStore.getString(legacyKey, "").get()
+        DiscoveryMediaType.entries.forEach { mediaType ->
+            val target = preferenceStore.getString("${legacyKey}_${mediaType.key}", "")
+            if (!target.isSet()) {
+                target.set(if (mediaType == DiscoveryMediaType.MANGA) legacyValue else "")
+            }
+        }
+    }
+
+    private fun createGenreFilterSpec(
+        ignoredCsv: String,
+        requiredCsv: String,
+        priorityCsv: String,
+        matchModeValue: String,
+        enforcementValue: String,
+    ): GenreFilterSpec {
+        val (ignCanon, ignRaw) = parseGenreFilterCsv(ignoredCsv)
+        val (reqCanon, reqRaw) = parseGenreFilterCsv(requiredCsv)
+        val (priCanon, priRaw) = parseGenreFilterCsv(priorityCsv)
         val matchMode = runCatching {
-            RequiredMatchMode.valueOf(matchModeStr)
+            RequiredMatchMode.valueOf(matchModeValue)
         }.getOrDefault(RequiredMatchMode.ALL)
         val enforcement = runCatching {
-            RequiredEnforcement.valueOf(enforcementStr)
+            RequiredEnforcement.valueOf(enforcementValue)
         }.getOrDefault(RequiredEnforcement.STRICT)
-        GenreFilterSpec(
+        return GenreFilterSpec(
             ignoredGenres = ignCanon + ignRaw.toSet(),
             requiredGenres = reqCanon + reqRaw.toSet(),
             priorityGenres = priCanon + priRaw.toSet(),
@@ -255,7 +284,13 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
         preferenceStore.getInt("stage_offset_" + mediaType.key, 0)
 
     companion object {
+        private const val PRIORITY_GENRES_KEY = "discovery_priority_genres"
+        private const val REQUIRED_GENRES_KEY = "discovery_required_genres"
+        private const val IGNORED_GENRES_KEY = "discovery_ignored_genres"
+        private const val GENRE_FILTER_MIGRATION_MARKER = "discovery_genre_filters_per_media_migrated"
+
         private val manualRefreshLock = Any()
+        private val genreFilterMigrationLock = Any()
 
         const val MANUAL_REFRESH_COOLDOWN_MS = 5 * 60_000L
         const val CURRENT_RETIREMENT_RESET_VERSION = 1

@@ -322,7 +322,7 @@ class HomeDiscoveryControllerTest {
             )
 
             // Policy now ignores "ecchi"
-            prefs.ignoredGenres().set("ecchi")
+            prefs.ignoredGenres(DiscoveryMediaType.ANIME).set("ecchi")
 
             val forbiddenItem = testSuggestion("Spicy Card").copy(genres = listOf("Ecchi")).toHomeHubDiscoveryItem()
             controller.restoreHiddenTeaserItem(forbiddenItem)
@@ -436,7 +436,7 @@ class HomeDiscoveryControllerTest {
     fun `undo evaluates current cached genres rather than the hidden snapshot`(): Unit = runBlocking {
         val repo = TestDiscoveryRepo()
         val prefs = DiscoveryPreferences(PersistingPreferenceStore())
-        prefs.ignoredGenres().set("fantasy")
+        prefs.ignoredGenres(DiscoveryMediaType.ANIME).set("fantasy")
         val old = testSuggestion("Changed Card").copy(genres = listOf("Action"))
         repo.poolFlow.value = listOf(old.copy(genres = listOf("Fantasy")))
         var current = HomeHubUiState(
@@ -612,6 +612,8 @@ class HomeDiscoveryControllerTest {
                 onEmitEffect = {},
             )
 
+            // A Manga-only exclusion must not leak into the Anime controller.
+            prefs.ignoredGenres(DiscoveryMediaType.MANGA).set("ecchi")
             repo.poolFlow.value = listOf(
                 testSuggestion("Safe 1").copy(genres = listOf("Action")),
                 testSuggestion("Spicy 2").copy(genres = listOf("Ecchi")),
@@ -624,7 +626,7 @@ class HomeDiscoveryControllerTest {
             currentState.discovery.map { it.title } shouldBe listOf("Safe 1", "Spicy 2", "Safe 3")
 
             // User dynamically adds Ecchi to ignored genres in settings
-            prefs.ignoredGenres().set("ecchi")
+            prefs.ignoredGenres(DiscoveryMediaType.ANIME).set("ecchi")
 
             // Spicy 2 should be immediately purged and replaced by Safe 4!
             waitUntil { currentState.discovery.any { it.title == "Safe 4" } }
@@ -673,7 +675,7 @@ class HomeDiscoveryControllerTest {
             waitUntil { currentState.discovery.size == 3 }
 
             // User dynamically sets required genres to Fantasy in settings
-            prefs.requiredGenres().set("fantasy")
+            prefs.requiredGenres(DiscoveryMediaType.ANIME).set("fantasy")
 
             // Only Fantasy Card matches; Action Card and Comedy Card are reactively purged!
             waitUntil { currentState.discovery.size == 1 }

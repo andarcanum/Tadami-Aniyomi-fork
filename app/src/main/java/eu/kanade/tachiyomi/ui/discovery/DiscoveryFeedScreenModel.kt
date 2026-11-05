@@ -320,7 +320,7 @@ internal class DiscoveryFeedScreenModel(
                 preferences.lastFailedRows(mediaType).changes(),
                 combine(
                     repository.subscribeBlacklist(mediaType),
-                    preferences.observeGenreFilterSpec(),
+                    preferences.observeGenreFilterSpec(mediaType),
                 ) { blacklist, filterSpec ->
                     DiscoveryCandidatePolicy(
                         spec = filterSpec,
@@ -524,7 +524,7 @@ internal class DiscoveryFeedScreenModel(
             if (consumed || item.cleanTitle in repository.getHiddenTitles(item.mediaType)) return@enqueue
             val blacklist = repository.getBlacklistedTags(item.mediaType)
             val policy = DiscoveryCandidatePolicy(
-                spec = preferences.genreFilterSpec(),
+                spec = preferences.genreFilterSpec(item.mediaType),
                 blacklistedTags = blacklist,
             )
             if (!preferences.discoveryEnabled().get() || !policy.isAllowed(freshItem)) return@enqueue

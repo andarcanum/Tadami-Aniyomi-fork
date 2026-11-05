@@ -72,6 +72,8 @@ import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.presentation.components.AuroraFrostCancel
 import eu.kanade.presentation.components.AuroraFrostConfirm
 import eu.kanade.presentation.components.AuroraFrostDialog
+import eu.kanade.presentation.components.AuroraTabRow
+import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.discovery.DiscoverySourcesScreen
@@ -389,14 +391,28 @@ object SettingsDiscoveryScreen : SearchableSettings {
             )
         }
 
-        // V3: диалог жанров (игнор / приоритет / обязательные).
+        // V3: диалог жанров (игнор / приоритет / обязательные), отдельно для каждого медиараздела.
         if (showGenreDialog) {
+            val initialFilters = DiscoveryMediaType.entries.associateWith { mediaType ->
+                DiscoveryGenreFilterValues(
+                    priorityCsv = discoveryPreferences.priorityGenres(mediaType).get(),
+                    requiredCsv = discoveryPreferences.requiredGenres(mediaType).get(),
+                    ignoredCsv = discoveryPreferences.ignoredGenres(mediaType).get(),
+                )
+            }
             GenreFilterDialog(
-                priorityCsv = discoveryPreferences.priorityGenres().get(),
-                requiredCsv = discoveryPreferences.requiredGenres().get(),
-                ignoredCsv = discoveryPreferences.ignoredGenres().get(),
-                onApply = { priCsv, reqCsv, ignCsv ->
-                    applyDiscoveryGenreFilters(context, discoveryPreferences, priCsv, reqCsv, ignCsv)
+                initialFilters = initialFilters,
+                onApply = { updatedFilters ->
+                    changedDiscoveryGenreFilters(initialFilters, updatedFilters).forEach { (mediaType, filters) ->
+                        applyDiscoveryGenreFilters(
+                            context = context,
+                            preferences = discoveryPreferences,
+                            mediaType = mediaType,
+                            priorityCsv = filters.priorityCsv,
+                            requiredCsv = filters.requiredCsv,
+                            ignoredCsv = filters.ignoredCsv,
+                        )
+                    }
                     showGenreDialog = false
                 },
                 onDismiss = { showGenreDialog = false },
@@ -723,17 +739,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                     // V3: жанры подборки — приоритетные/обязательные.
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.pref_discovery_genre_filters),
-                        subtitle = run {
-                            val priCsv = discoveryPreferences.priorityGenres().get()
-                                .splitToSequence(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.count()
-                            val reqCsv = discoveryPreferences.requiredGenres().get()
-                                .splitToSequence(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.count()
-                            if (priCsv == 0 && reqCsv == 0) {
-                                stringResource(AYMR.strings.pref_discovery_genre_filters_summary)
-                            } else {
-                                "$priCsv приорит · $reqCsv обязат"
-                            }
-                        },
+                        subtitle = stringResource(AYMR.strings.pref_discovery_genre_filters_summary_per_media),
                         onClick = { showGenreDialog = true },
                         enabled = enabled,
                     ),
@@ -969,10 +975,8 @@ private fun ReleaseStatusFilterDialog(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GenreFilterDialog(
-    priorityCsv: String,
-    requiredCsv: String,
-    ignoredCsv: String,
-    onApply: (priorityCsv: String, requiredCsv: String, ignoredCsv: String) -> Unit,
+    initialFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+    onApply: (Map<DiscoveryMediaType, DiscoveryGenreFilterValues>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = eu.kanade.presentation.theme.AuroraTheme.colors
@@ -991,20 +995,63 @@ private fun GenreFilterDialog(
             "romance", "sci-fi", "slice of life", "mystery", "thriller",
         ).mapNotNull { key -> allGenres.firstOrNull { it.key == key } }
     }
+    val mediaTypes = remember { DiscoveryMediaType.entries }
+    val mediaTabs = remember {
+        persistentListOf(
+            TabContent(titleRes = AYMR.strings.label_anime, content = { _, _ -> }),
+            TabContent(titleRes = AYMR.strings.label_manga, content = { _, _ -> }),
+            TabContent(titleRes = AYMR.strings.label_novel, content = { _, _ -> }),
+        )
+    }
 
+    var mediaType by remember { mutableStateOf(DiscoveryMediaType.ANIME) }
     var mode by remember { mutableStateOf(1) } // 0=ignored, 1=priority, 2=required
     var search by remember { mutableStateOf("") }
 
-    val (priCanonInit, priRawInit) = remember { parseGenreFilterCsv(priorityCsv) }
-    val (reqCanonInit, reqRawInit) = remember { parseGenreFilterCsv(requiredCsv) }
-    val (ignCanonInit, ignRawInit) = remember { parseGenreFilterCsv(ignoredCsv) }
-    // Snapshot-коллекции: add/remove триггерит рекомпозицию.
-    val priorityCan = remember { mutableStateSetOf<String>().apply { addAll(priCanonInit) } }
-    val priorityRaw = remember { priRawInit.toMutableStateList() }
-    val requiredCan = remember { mutableStateSetOf<String>().apply { addAll(reqCanonInit) } }
-    val requiredRaw = remember { reqRawInit.toMutableStateList() }
-    val ignoredCan = remember { mutableStateSetOf<String>().apply { addAll(ignCanonInit) } }
-    val ignoredRaw = remember { ignRawInit.toMutableStateList() }
+    // Каждый медиараздел владеет своими snapshot-коллекциями; переключение таба не теряет черновик.
+    val priorityCanByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (canonical, _) = parseGenreFilterCsv(initialFilters[media]?.priorityCsv.orEmpty())
+            mutableStateSetOf<String>().apply { addAll(canonical) }
+        }
+    }
+    val priorityRawByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (_, raw) = parseGenreFilterCsv(initialFilters[media]?.priorityCsv.orEmpty())
+            raw.toMutableStateList()
+        }
+    }
+    val requiredCanByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (canonical, _) = parseGenreFilterCsv(initialFilters[media]?.requiredCsv.orEmpty())
+            mutableStateSetOf<String>().apply { addAll(canonical) }
+        }
+    }
+    val requiredRawByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (_, raw) = parseGenreFilterCsv(initialFilters[media]?.requiredCsv.orEmpty())
+            raw.toMutableStateList()
+        }
+    }
+    val ignoredCanByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (canonical, _) = parseGenreFilterCsv(initialFilters[media]?.ignoredCsv.orEmpty())
+            mutableStateSetOf<String>().apply { addAll(canonical) }
+        }
+    }
+    val ignoredRawByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (_, raw) = parseGenreFilterCsv(initialFilters[media]?.ignoredCsv.orEmpty())
+            raw.toMutableStateList()
+        }
+    }
+
+    val priorityCan = priorityCanByMedia.getValue(mediaType)
+    val priorityRaw = priorityRawByMedia.getValue(mediaType)
+    val requiredCan = requiredCanByMedia.getValue(mediaType)
+    val requiredRaw = requiredRawByMedia.getValue(mediaType)
+    val ignoredCan = ignoredCanByMedia.getValue(mediaType)
+    val ignoredRaw = ignoredRawByMedia.getValue(mediaType)
 
     val activeCanon: MutableSet<String> = when (mode) {
         0 -> ignoredCan
@@ -1016,7 +1063,7 @@ private fun GenreFilterDialog(
         1 -> priorityRaw
         else -> requiredRaw
     }
-    // «Занят другим режимом»: жанр состоит в любом из двух прочих наборов.
+    // «Занят другим режимом»: жанр состоит в любом из двух прочих наборов текущего раздела.
     val othersCanon: Set<String> = when (mode) {
         0 -> priorityCan + requiredCan
         1 -> ignoredCan + requiredCan
@@ -1142,6 +1189,32 @@ private fun GenreFilterDialog(
                     }
                 }
                 Spacer(Modifier.height(14.dp))
+                Text(
+                    text = stringResource(AYMR.strings.pref_discovery_genre_media_label),
+                    color = colors.textSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                )
+                AuroraTabRow(
+                    tabs = mediaTabs,
+                    selectedIndex = mediaTypes.indexOf(mediaType).coerceAtLeast(0),
+                    onTabSelected = { index ->
+                        mediaTypes.getOrNull(index)?.let { selectedMedia ->
+                            mediaType = selectedMedia
+                        }
+                    },
+                    scrollable = false,
+                    compact = true,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = stringResource(AYMR.strings.pref_discovery_genre_mode_label),
+                    color = colors.textSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                )
 
                 // Табы режимов: эталон AuroraTabRow (scrollable=false) — капсула-желоб на
                 // всю ширину, табы weight(1f) по центру; активный — accent темы во всех режимах.
@@ -1605,9 +1678,22 @@ private fun GenreFilterDialog(
                     Button(
                         onClick = {
                             onApply(
-                                serializeGenreFilterCsv(priorityCan.toSet(), priorityRaw.toList()),
-                                serializeGenreFilterCsv(requiredCan.toSet(), requiredRaw.toList()),
-                                serializeGenreFilterCsv(ignoredCan.toSet(), ignoredRaw.toList()),
+                                mediaTypes.associateWith { media ->
+                                    DiscoveryGenreFilterValues(
+                                        priorityCsv = serializeGenreFilterCsv(
+                                            priorityCanByMedia.getValue(media).toSet(),
+                                            priorityRawByMedia.getValue(media).toList(),
+                                        ),
+                                        requiredCsv = serializeGenreFilterCsv(
+                                            requiredCanByMedia.getValue(media).toSet(),
+                                            requiredRawByMedia.getValue(media).toList(),
+                                        ),
+                                        ignoredCsv = serializeGenreFilterCsv(
+                                            ignoredCanByMedia.getValue(media).toSet(),
+                                            ignoredRawByMedia.getValue(media).toList(),
+                                        ),
+                                    )
+                                },
                             )
                         },
                         shape = CircleShape,

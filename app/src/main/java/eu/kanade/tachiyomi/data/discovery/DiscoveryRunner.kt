@@ -461,7 +461,7 @@ class DiscoveryRunner(
             .filter { it.signalType.excludesFromFeed }
             .mapTo(HashSet()) { it.cleanTitle }
 
-        val genreFilterSpec = preferences.genreFilterSpec()
+        val genreFilterSpec = preferences.genreFilterSpec(mediaType)
         // One budget for the whole media run: every row shares the deadline and
         // the details allowance, so rows cannot multiply the worker cost.
         // Genre-selected mode verifies deep pages of a few rich sources, so it
@@ -874,7 +874,7 @@ internal fun computeDiscoveryConfigurationKey(
     preferences: DiscoveryPreferences,
     mediaType: DiscoveryMediaType,
 ): String {
-    val spec = preferences.genreFilterSpec()
+    val spec = preferences.genreFilterSpec(mediaType)
     val parts = listOf(
         mediaType.key,
         "rows", preferences.rowLikeEnabled().get(), preferences.rowTasteEnabled().get(),

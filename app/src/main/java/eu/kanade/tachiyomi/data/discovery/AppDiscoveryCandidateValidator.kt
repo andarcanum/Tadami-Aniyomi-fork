@@ -15,7 +15,7 @@ class AppDiscoveryCandidateValidator(
 
     override fun isAllowed(candidate: DiscoverySuggestion, liveBlacklistedTags: Set<String>): Boolean {
         val policy = DiscoveryCandidatePolicy(
-            spec = preferences.genreFilterSpec(),
+            spec = preferences.genreFilterSpec(candidate.mediaType),
             blacklistedTags = liveBlacklistedTags,
         )
         return policy.isAllowed(candidate)

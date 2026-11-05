@@ -88,7 +88,7 @@ internal class HomeDiscoveryController(
                 ) { hidden, consumed -> hidden to consumed },
                 combine(
                     repository.subscribeBlacklist(mediaType),
-                    preferences.observeGenreFilterSpec(),
+                    preferences.observeGenreFilterSpec(mediaType),
                     preferences.lastFailedRows(mediaType).changes(),
                     preferences.lastGenerationStatus(mediaType).changes(),
                     preferences.lastGenerationAt(mediaType).changes(),
@@ -360,7 +360,7 @@ internal class HomeDiscoveryController(
                 val shownMap = repository.getRecentExclusionsWithTimestamp(mediaType)
                 // Read preferences after the suspend points, immediately before publishing.
                 val policy = DiscoveryCandidatePolicy(
-                    spec = preferences.genreFilterSpec(),
+                    spec = preferences.genreFilterSpec(mediaType),
                     blacklistedTags = blacklist,
                 )
                 if (!preferences.discoveryEnabled().get() || !policy.isAllowed(suggestion)) return@withLock

@@ -2337,6 +2337,9 @@
     <string name="pref_discovery_release_status_paused_desc">Paused or unknown</string>
     <string name="pref_discovery_genre_filters">Genre filters</string>
     <string name="pref_discovery_genre_filters_summary">Ignored · priority · required</string>
+    <string name="pref_discovery_genre_filters_summary_per_media">Configured separately for Anime, Manga, and Novel</string>
+    <string name="pref_discovery_genre_media_label">Section</string>
+    <string name="pref_discovery_genre_mode_label">How to use genre</string>
     <string name="pref_discovery_genre_mode_ignored">Ignored</string>
     <string name="pref_discovery_genre_mode_priority">Priority</string>
     <string name="pref_discovery_genre_mode_required">Required</string>

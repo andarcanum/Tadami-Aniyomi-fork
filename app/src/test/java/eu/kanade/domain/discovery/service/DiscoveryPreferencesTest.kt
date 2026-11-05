@@ -1,6 +1,8 @@
 package eu.kanade.domain.discovery.service
 
 import eu.kanade.domain.ui.model.HomeHeroMode
+import eu.kanade.tachiyomi.data.discovery.RequiredEnforcement
+import eu.kanade.tachiyomi.data.discovery.RequiredMatchMode
 import io.kotest.matchers.shouldBe
 import org.junit.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
@@ -162,6 +164,94 @@ class DiscoveryPreferencesTest {
         reloaded.manualRefreshWorkId(DiscoveryMediaType.NOVEL).get() shouldBe "novel-work"
         reloaded.manualRefreshWorkId(DiscoveryMediaType.ANIME).get() shouldBe "anime-work"
         reloaded.manualRefreshWorkId(DiscoveryMediaType.MANGA).get() shouldBe ""
+    }
+
+    @Test
+    fun `genre preferences persist independently per media`() {
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val values = mapOf(
+            DiscoveryMediaType.ANIME to Triple("action", "comedy", "horror"),
+            DiscoveryMediaType.MANGA to Triple("romance", "drama", "ecchi"),
+            DiscoveryMediaType.NOVEL to Triple("fantasy", "mystery", "harem"),
+        )
+
+        values.forEach { (media, csv) ->
+            prefs.priorityGenres(media).set(csv.first)
+            prefs.requiredGenres(media).set(csv.second)
+            prefs.ignoredGenres(media).set(csv.third)
+        }
+
+        values.forEach { (media, csv) ->
+            prefs.priorityGenres(media).get() shouldBe csv.first
+            prefs.requiredGenres(media).get() shouldBe csv.second
+            prefs.ignoredGenres(media).get() shouldBe csv.third
+        }
+    }
+
+    @Test
+    fun `legacy genre preferences migrate only to manga without deleting legacy values`() {
+        val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val prefs = DiscoveryPreferences(store)
+        store.getString("discovery_priority_genres", "").set("legacy-priority")
+        store.getString("discovery_required_genres", "").set("legacy-required")
+        store.getString("discovery_ignored_genres", "").set("legacy-ignored")
+
+        prefs.priorityGenres(DiscoveryMediaType.ANIME).get() shouldBe ""
+        prefs.requiredGenres(DiscoveryMediaType.ANIME).get() shouldBe ""
+        prefs.ignoredGenres(DiscoveryMediaType.ANIME).get() shouldBe ""
+        prefs.priorityGenres(DiscoveryMediaType.MANGA).get() shouldBe "legacy-priority"
+        prefs.requiredGenres(DiscoveryMediaType.MANGA).get() shouldBe "legacy-required"
+        prefs.ignoredGenres(DiscoveryMediaType.MANGA).get() shouldBe "legacy-ignored"
+        prefs.priorityGenres(DiscoveryMediaType.NOVEL).get() shouldBe ""
+        prefs.requiredGenres(DiscoveryMediaType.NOVEL).get() shouldBe ""
+        prefs.ignoredGenres(DiscoveryMediaType.NOVEL).get() shouldBe ""
+        store.getString("discovery_priority_genres", "").get() shouldBe "legacy-priority"
+        store.getString("discovery_required_genres", "").get() shouldBe "legacy-required"
+        store.getString("discovery_ignored_genres", "").get() shouldBe "legacy-ignored"
+
+        store.getString("discovery_priority_genres", "").set("changed-after-migration")
+        DiscoveryPreferences(store).priorityGenres(DiscoveryMediaType.MANGA).get() shouldBe "legacy-priority"
+    }
+
+    @Test
+    fun `legacy migration preserves already-set targets for every media`() {
+        val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val prefs = DiscoveryPreferences(store)
+        store.getString("discovery_priority_genres", "").set("legacy")
+        store.getString("discovery_priority_genres_anime", "").set("anime-specific")
+        store.getString("discovery_priority_genres_manga", "").set("manga-specific")
+        store.getString("discovery_priority_genres_novel", "").set("novel-specific")
+
+        prefs.priorityGenres(DiscoveryMediaType.ANIME).get() shouldBe "anime-specific"
+        prefs.priorityGenres(DiscoveryMediaType.MANGA).get() shouldBe "manga-specific"
+        prefs.priorityGenres(DiscoveryMediaType.NOVEL).get() shouldBe "novel-specific"
+    }
+
+    @Test
+    fun `genre filter spec reads media values and global required modes`() {
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        prefs.priorityGenres(DiscoveryMediaType.ANIME).set("action,raw:Space Opera")
+        prefs.requiredGenres(DiscoveryMediaType.ANIME).set("comedy")
+        prefs.ignoredGenres(DiscoveryMediaType.ANIME).set("horror")
+        prefs.priorityGenres(DiscoveryMediaType.NOVEL).set("fantasy")
+        prefs.requiredGenres(DiscoveryMediaType.NOVEL).set("mystery")
+        prefs.ignoredGenres(DiscoveryMediaType.NOVEL).set("harem")
+        prefs.requiredMatchMode().set(RequiredMatchMode.ANY.name)
+        prefs.requiredEnforcement().set(RequiredEnforcement.BEST_EFFORT.name)
+
+        val anime = prefs.genreFilterSpec(DiscoveryMediaType.ANIME)
+        anime.priorityGenres shouldBe setOf("action", "Space Opera")
+        anime.requiredGenres shouldBe setOf("comedy")
+        anime.ignoredGenres shouldBe setOf("horror")
+        anime.requiredMatchMode shouldBe RequiredMatchMode.ANY
+        anime.requiredEnforcement shouldBe RequiredEnforcement.BEST_EFFORT
+
+        val novel = prefs.genreFilterSpec(DiscoveryMediaType.NOVEL)
+        novel.priorityGenres shouldBe setOf("fantasy")
+        novel.requiredGenres shouldBe setOf("mystery")
+        novel.ignoredGenres shouldBe setOf("harem")
+        novel.requiredMatchMode shouldBe RequiredMatchMode.ANY
+        novel.requiredEnforcement shouldBe RequiredEnforcement.BEST_EFFORT
     }
 
     @Test

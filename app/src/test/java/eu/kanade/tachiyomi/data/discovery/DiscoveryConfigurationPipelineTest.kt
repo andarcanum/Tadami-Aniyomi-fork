@@ -59,7 +59,7 @@ class DiscoveryConfigurationPipelineTest {
         preferences.rowTasteEnabled().set(targetRow == DiscoveryRowType.TASTE)
         preferences.rowSourceEnabled().set(targetRow == DiscoveryRowType.SOURCE)
         preferences.externalProvidersEnabled().set(false)
-        preferences.requiredGenres().set("fantasy")
+        preferences.requiredGenres(media).set("fantasy")
         preferences.manualRefreshCount(media).set(7)
         preferences.backgroundCycleCount(media).set(9)
         val initial = cached().copy(

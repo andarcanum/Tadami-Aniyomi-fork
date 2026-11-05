@@ -269,7 +269,7 @@ class TomiloLibDiscoverySimulationTest {
         preferences.rowLikeEnabled().set(false)
         preferences.rowTasteEnabled().set(false)
         preferences.rowTrendEnabled().set(false)
-        preferences.requiredGenres().set("система")
+        preferences.requiredGenres(media).set("система")
 
         val stored = MutableStateFlow<List<DiscoverySuggestion>>(
             listOf(
