@@ -25,7 +25,21 @@ class UserProfileManagerTest {
             coEvery { getProfileSync(any()) } answers { currentProfile }
             coEvery { saveProfile(any()) } answers { currentProfile = firstArg() }
 
-            // Mock updateXP - вызывается из addXP()
+            coEvery { addXP(any(), any()) } answers {
+                val oldLevel = currentProfile.level
+                val total = currentProfile.totalXP + secondArg<Int>()
+                val fields = AchievementXp.fields(total.toLong())
+                currentProfile =
+                    currentProfile.copy(
+                        totalXP = total,
+                        currentXP = fields.current.toInt(),
+                        level = fields.level,
+                        xpToNextLevel = fields.next.toInt(),
+                    )
+                fields.level > oldLevel
+            }
+
+            // Explicit absolute update (restore paths).
             coEvery { updateXP(any(), any(), any(), any(), any()) } answers {
                 val totalXP = secondArg<Int>()
                 val currentXP = thirdArg<Int>()

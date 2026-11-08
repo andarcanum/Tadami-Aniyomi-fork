@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.ui.home
+package eu.kanade.tachiyomi.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -247,6 +247,7 @@ private fun HomeHubProfileHeaderCanvas(
     val textMeasurer = rememberTextMeasurer()
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        eu.kanade.presentation.easteregg.crystal.CrystalSilkBackdrop(Modifier.matchParentSize())
         val preMeasureWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
         val preMeasureScaleX = preMeasureWidthPx / layoutSpec.canvas.width.coerceAtLeast(1f)
         val greetingBaseWidthPx = elementSizes.getValue(HomeHeaderLayoutElement.Greeting).width
@@ -562,7 +563,9 @@ private fun HomeHubProfileHeaderCanvas(
                                 nicknameStyle = nicknameStyle,
                                 badgeStyleKey = homeBadgeStyleKey,
                             )
-                            if (profileTitleKey != "none") {
+                            if (profileTitleKey == tachiyomi.domain.easteregg.crystal.CrystalMemorialIds.TITLE) {
+                                eu.kanade.presentation.easteregg.crystal.CrystalProfileTitle()
+                            } else if (profileTitleKey != "none") {
                                 Text(
                                     text = homeProfileTitleDisplayName(profileTitleKey),
                                     style = MaterialTheme.typography.labelSmall,

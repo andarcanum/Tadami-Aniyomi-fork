@@ -1,0 +1,9 @@
+{
+  "source": "docs/prototypes/prototype_crystal_illustrated_v8.html",
+  "sourceSha256": "0f9c3aa319c77dc52d47f867206e04e070f595ba138cfe9c27e7ca9e3304662a",
+  "svgSha256": "4d9f3d6b810fabd4f6991528b7c3021be4157ec7bcd6df2686ad629288fcbf7c",
+  "nodes": 711,
+  "viewBox": "0 -110 640 530",
+  "base": "living_corner_v4.svg",
+  "texture": "knit_v8.png"
+}

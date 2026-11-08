@@ -504,12 +504,13 @@ class MainActivity : BaseActivity() {
 
                         HandleOnNewIntent(context = context, navigator = navigator)
 
-                        CheckForUpdates()
+                        val updatesSettled = CheckForUpdates()
                         ShowOnboarding()
 
                         // PERF: moved the migration/changelog inside the Navigator to lighten
                         // the outer setComposeContent composition (faster to HomeScreen.Content)
                         var showChangelog by remember { mutableStateOf(false) }
+                        var changelogSettled by remember { mutableStateOf(false) }
                         var installedRelease by remember { mutableStateOf<Release?>(null) }
                         LaunchedEffect(migrationReady.value) {
                             if (migrationReady.value) {
@@ -557,6 +558,7 @@ class MainActivity : BaseActivity() {
                                     showChangelog = true
                                 }
                             }
+                            changelogSettled = migrationReady.value
                         }
                         if (showChangelog) {
                             val release = installedRelease
@@ -568,6 +570,12 @@ class MainActivity : BaseActivity() {
                                 onDismiss = { showChangelog = false },
                             )
                         }
+                        eu.kanade.presentation.easteregg.crystal.CrystalCampaignHost(
+                            navigator = navigator,
+                            migrationsReady = migrationReady.value,
+                            startupSettled = updatesSettled && changelogSettled && !showChangelog,
+                            incognito = effectiveIncognito,
+                        )
                     } // end deferSideEffects
                 }
             }
@@ -695,9 +703,10 @@ class MainActivity : BaseActivity() {
     }
 
     @Composable
-    private fun CheckForUpdates() {
+    private fun CheckForUpdates(): Boolean {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
+        var checkSettled by remember { mutableStateOf(!updaterEnabled) }
 
         // App updates
         LaunchedEffect(Unit) {
@@ -728,7 +737,10 @@ class MainActivity : BaseActivity() {
                     }
                     updateScreen?.let(navigator::push)
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     logcat(LogPriority.ERROR, e)
+                } finally {
+                    checkSettled = true
                 }
             }
         }
@@ -764,6 +776,7 @@ class MainActivity : BaseActivity() {
                     }
             }
         }
+        return checkSettled
     }
 
     @Composable

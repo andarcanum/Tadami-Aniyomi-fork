@@ -22,32 +22,27 @@ class UserProfileRepositoryImpl(
             .getUserProfile(userId)
             .asFlow()
             .mapToOneOrNull(Dispatchers.IO)
-            .map { it?.toDomainModel() }
+            .map { it?.toDomainProfile() }
     }
 
     override suspend fun getProfileSync(userId: String): UserProfile? {
         return database.userProfileQueries
             .getUserProfile(userId)
             .executeAsOneOrNull()
-            ?.toDomainModel()
+            ?.toDomainProfile()
     }
 
     override suspend fun saveProfile(profile: UserProfile) {
-        database.userProfileQueries.upsertProfile(
-            user_id = profile.userId,
-            username = profile.username,
-            level = profile.level.toLong(),
-            current_xp = profile.currentXP.toLong(),
-            xp_to_next_level = profile.xpToNextLevel.toLong(),
-            total_xp = profile.totalXP.toLong(),
-            titles = json.encodeToString(profile.titles),
-            badges = json.encodeToString(profile.badges),
-            unlocked_themes = json.encodeToString(profile.unlockedThemes),
-            achievements_unlocked = profile.achievementsUnlocked.toLong(),
-            total_achievements = profile.totalAchievements.toLong(),
-            join_date = profile.joinDate,
-            last_updated = System.currentTimeMillis(),
-        )
+        database.withProfileMutation {
+            database.transaction { UserProfileStorage.write(database, profile, System.currentTimeMillis()) }
+        }
+    }
+
+    override suspend fun addXP(userId: String, amount: Int): Boolean {
+        if (amount <= 0) return false
+        return database.withProfileMutation {
+            database.transaction { AchievementXp.add(database, amount.toLong(), System.currentTimeMillis(), userId) }
+        }
     }
 
     override suspend fun updateXP(userId: String, totalXP: Int, currentXP: Int, level: Int, xpToNextLevel: Int) {
@@ -132,24 +127,5 @@ class UserProfileRepositoryImpl(
 
     override suspend fun deleteProfile(userId: String) {
         database.userProfileQueries.deleteProfile(userId)
-    }
-
-    private fun User_profile.toDomainModel(): UserProfile {
-        return UserProfile(
-            userId = user_id,
-            username = username,
-            level = level.toInt(),
-            currentXP = current_xp.toInt(),
-            xpToNextLevel = xp_to_next_level.toInt(),
-            totalXP = total_xp.toInt(),
-            titles = runCatching { json.decodeFromString<List<String>>(titles) }.getOrDefault(emptyList()),
-            badges = runCatching { json.decodeFromString<List<String>>(badges) }.getOrDefault(emptyList()),
-            unlockedThemes = runCatching {
-                json.decodeFromString<List<String>>(unlocked_themes)
-            }.getOrDefault(emptyList()),
-            achievementsUnlocked = achievements_unlocked.toInt(),
-            totalAchievements = total_achievements.toInt(),
-            joinDate = join_date,
-        )
     }
 }

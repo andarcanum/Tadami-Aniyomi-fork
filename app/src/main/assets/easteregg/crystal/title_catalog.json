@@ -1,0 +1,43 @@
+{
+  "source": "https://graphql.anilist.co",
+  "verifiedDate": "2026-11-06",
+  "query": "Media(id:13759,type:ANIME) and Media(id:103874,type:ANIME), fields id/idMal/title/relations.edges.node(id,idMal,type,format,title)",
+  "adaptations": [
+    {
+      "work": "SAKURASOU",
+      "media": "ANIME",
+      "anilist": 13759,
+      "myanimelist": 13759,
+      "title": "Sakurasou no Pet na Kanojo"
+    },
+    {
+      "work": "SAKURASOU",
+      "media": "MANGA",
+      "anilist": 58107,
+      "myanimelist": 28107,
+      "title": "Sakurasou no Pet na Kanojo"
+    },
+    {
+      "work": "SAKURASOU",
+      "media": "NOVEL",
+      "anilist": 60051,
+      "myanimelist": 30051,
+      "title": "Sakurasou no Pet na Kanojo"
+    },
+    {
+      "work": "ROOMMATE_CAT",
+      "media": "ANIME",
+      "anilist": 103874,
+      "myanimelist": 38145,
+      "title": "Doukyonin wa Hiza, Tokidoki, Atama no Ue."
+    },
+    {
+      "work": "ROOMMATE_CAT",
+      "media": "MANGA",
+      "anilist": 97363,
+      "myanimelist": 99391,
+      "title": "Doukyonin wa Hiza, Tokidoki, Atama no Ue."
+    }
+  ],
+  "notes": "AniList type MANGA plus format NOVEL is a separate NOVEL adaptation in Tadami. No Roommate novel was found. Shikimori IDs are not asserted by this fixture."
+}

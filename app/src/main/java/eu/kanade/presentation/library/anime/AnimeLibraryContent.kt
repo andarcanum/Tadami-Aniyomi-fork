@@ -1,9 +1,11 @@
 package eu.kanade.presentation.library.anime
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
@@ -128,23 +130,28 @@ fun AnimeLibraryContent(
             },
             enabled = notSelectionMode,
         ) {
-            AnimeLibraryPager(
-                state = pagerState,
-                categories = categories,
-                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
-                hasActiveFilters = hasActiveFilters,
-                selectedAnime = selection,
-                searchQuery = searchQuery,
-                onGlobalSearchClicked = onGlobalSearchClicked,
-                getDisplayMode = getDisplayMode,
-                getColumnsForOrientation = getColumnsForOrientation,
-                getLibraryForPage = getAnimeLibraryForPage,
-                onClickAnime = onClickItem,
-                onClickSeries = onSeriesClicked,
-                onLongClickAnime = onToggleRangeSelection,
-                onTogglePinned = onTogglePinned,
-                onClickContinueWatching = onContinueWatchingClicked,
-            )
+            Box(Modifier.fillMaxSize()) {
+                eu.kanade.presentation.easteregg.crystal.CrystalBackgroundOverlay(
+                    Modifier.matchParentSize().padding(bottom = contentPadding.calculateBottomPadding()),
+                )
+                AnimeLibraryPager(
+                    state = pagerState,
+                    categories = categories,
+                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                    hasActiveFilters = hasActiveFilters,
+                    selectedAnime = selection,
+                    searchQuery = searchQuery,
+                    onGlobalSearchClicked = onGlobalSearchClicked,
+                    getDisplayMode = getDisplayMode,
+                    getColumnsForOrientation = getColumnsForOrientation,
+                    getLibraryForPage = getAnimeLibraryForPage,
+                    onClickAnime = onClickItem,
+                    onClickSeries = onSeriesClicked,
+                    onLongClickAnime = onToggleRangeSelection,
+                    onTogglePinned = onTogglePinned,
+                    onClickContinueWatching = onContinueWatchingClicked,
+                )
+            }
         }
 
         // Write the active category only when the pager settles (not mid-fling), so the

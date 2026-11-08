@@ -163,6 +163,9 @@ data object MoreTab : Tab {
                 onSettingsClick = { navigator.push(SettingsScreen()) },
                 onAboutClick = { navigator.push(AboutScreen) },
                 onHelpClick = { navigator.push(HelpScreen) },
+                onDebugCrystalClick = {
+                    navigator.push(eu.kanade.presentation.easteregg.crystal.CrystalMemorialDebugScreen())
+                },
                 onDebugAppUpdatePreviewClick = { navigator.push(DebugAppUpdatePreviewScreen()) },
                 onDebugUpdatedChangelogPreviewClick = { navigator.push(DebugUpdatedChangelogPreviewScreen()) },
                 onDebugResetAuroraHeartClick = {
@@ -234,6 +237,9 @@ data object MoreTab : Tab {
                 onClickSettings = { navigator.push(SettingsScreen()) },
                 onClickAbout = { navigator.push(AboutScreen) },
                 onClickHelp = { navigator.push(HelpScreen) },
+                onClickDebugCrystal = {
+                    navigator.push(eu.kanade.presentation.easteregg.crystal.CrystalMemorialDebugScreen())
+                },
                 onClickDebugAppUpdatePreview = { navigator.push(DebugAppUpdatePreviewScreen()) },
                 onClickDebugUpdatedChangelogPreview = { navigator.push(DebugUpdatedChangelogPreviewScreen()) },
                 onClickDebugResetAuroraHeart = {

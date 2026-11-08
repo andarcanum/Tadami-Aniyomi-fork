@@ -118,6 +118,7 @@ import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.achievement.database.AchievementsDatabase
+import tachiyomi.data.easteregg.crystal.CrystalProgressDataSource
 import tachiyomi.data.extension.novel.AndroidNovelPluginKeyValueStore
 import tachiyomi.data.extension.novel.NetworkNovelPluginDownloader
 import tachiyomi.data.extension.novel.NovelPluginDownloader
@@ -917,6 +918,40 @@ class AppModule(val app: Application) : InjektModule {
                 get(),
             )
         }
+
+        addSingletonFactory<tachiyomi.domain.easteregg.crystal.CrystalMemorialRepository> {
+            val unlockables = get<tachiyomi.data.achievement.UnlockableManager>()
+            tachiyomi.data.easteregg.crystal.CrystalMemorialRepositoryImpl(
+                database = get(),
+                synchronizeCosmetics = { granted ->
+                    tachiyomi.domain.easteregg.crystal.CrystalMemorialIds.REWARDS.forEach { id ->
+                        if (granted) unlockables.setUnlockableUnlocked(id) else unlockables.removeUnlockable(id)
+                    }
+                },
+            )
+        }
+
+        addSingletonFactory<tachiyomi.domain.easteregg.crystal.CrystalProgressSource> {
+            CrystalProgressDataSource(get(), get(), get(), trackerCatalog = { trackerId ->
+                when (trackerId) {
+                    1L -> "myanimelist"
+                    TrackerManager.ANILIST -> "anilist"
+                    else -> null
+                }
+            })
+        }
+        addSingletonFactory {
+            eu.kanade.domain.easteregg.crystal.CrystalCampaignController(
+                repository = get(),
+                progressSource = get(),
+                versionCode = BuildConfig.VERSION_CODE,
+                productionRelease = eu.kanade.domain.easteregg.crystal.CrystalCampaignConfig.isProductionRelease,
+                releaseCodes = eu.kanade.domain.easteregg.crystal.CrystalCampaignConfig.targetReleaseCodes,
+                debugAllowed = BuildConfig.DEBUG && BuildConfig.BUILD_TYPE == "debug",
+            )
+        }
+        addSingletonFactory { eu.kanade.domain.easteregg.crystal.CrystalAppearancePreferences(get()) }
+        addSingletonFactory { eu.kanade.domain.easteregg.crystal.CrystalMemorialManager(get(), get(), get()) }
 
         // Sync preferences and Google Drive service
         addSingletonFactory { SyncPreferences(get()) }

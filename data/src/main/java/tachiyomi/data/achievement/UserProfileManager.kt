@@ -40,30 +40,7 @@ class UserProfileManager(
      */
     suspend fun addXP(amount: Int): Boolean {
         if (amount <= 0) return false
-        return mutationMutex.withLock {
-            val currentProfile = getCurrentProfile()
-            val newTotalXP = currentProfile.totalXP + amount
-            val newLevel = UserProfile.getLevelFromXP(newTotalXP)
-
-            val oldLevel = currentProfile.level
-            val levelUp = newLevel > oldLevel
-
-            repository.updateXP(
-                userId = userId,
-                totalXP = newTotalXP,
-                currentXP = calculateCurrentLevelXP(newTotalXP, newLevel),
-                level = newLevel,
-                xpToNextLevel = UserProfile.getXPForLevel(newLevel + 1),
-            )
-
-            if (levelUp) {
-                logcat(LogPriority.INFO) {
-                    "[ACHIEVEMENTS] LEVEL UP! $oldLevel -> $newLevel (Total XP: $newTotalXP)"
-                }
-            }
-
-            levelUp
-        }
+        return repository.addXP(userId, amount)
     }
 
     suspend fun addTitle(title: String) {
@@ -159,17 +136,6 @@ class UserProfileManager(
      */
     suspend fun updateAchievementsCount(unlocked: Int, total: Int) {
         repository.updateAchievementCounts(userId, unlocked, total)
-    }
-
-    /**
-     * Рассчитать XP для текущего уровня
-     */
-    private fun calculateCurrentLevelXP(totalXP: Int, level: Int): Int {
-        var xpNeeded = 0
-        for (l in 1 until level) {
-            xpNeeded += UserProfile.getXPForLevel(l)
-        }
-        return totalXP - xpNeeded
     }
 
     /**

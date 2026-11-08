@@ -1,6 +1,7 @@
 package eu.kanade.presentation.components
 
 import android.os.Build
+import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,6 +68,10 @@ fun AuroraFrostDialog(
     title: String,
     innerScroll: Boolean = true,
     footer: (@Composable RowScope.() -> Unit)? = null,
+    bottomAligned: Boolean = false,
+    headerContent: (@Composable () -> Unit)? = null,
+    surfaceOverlay: Brush? = null,
+    closeLabel: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AuroraTheme.colors
@@ -79,6 +84,7 @@ fun AuroraFrostDialog(
     ) {
         val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect {
+            dialogWindow?.setGravity(if (bottomAligned) Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.CENTER)
             if (!colors.isEInk && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 dialogWindow?.let { w ->
                     runCatching { w.setBackgroundBlurRadius(48) }
@@ -96,6 +102,7 @@ fun AuroraFrostDialog(
                 .fillMaxWidth(0.92f)
                 .widthIn(max = 520.dp)
                 .heightIn(max = 700.dp)
+                .then(if (bottomAligned) Modifier.padding(bottom = 12.dp) else Modifier)
                 .clip(shape)
                 .border(1.dp, auroraMenuRimLightBrush(colors), shape)
                 .background(
@@ -111,6 +118,15 @@ fun AuroraFrostDialog(
                         Color.White.copy(alpha = 0.78f)
                     },
                     shape,
+                )
+                .then(
+                    if (surfaceOverlay != null &&
+                        !colors.isEInk
+                    ) {
+                        Modifier.background(surfaceOverlay, shape)
+                    } else {
+                        Modifier
+                    },
                 ),
         ) {
             Column(
@@ -140,13 +156,18 @@ fun AuroraFrostDialog(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        title,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = colors.textPrimary,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Box(Modifier.weight(1f)) {
+                        if (headerContent != null) {
+                            headerContent()
+                        } else {
+                            Text(
+                                title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = colors.textPrimary,
+                            )
+                        }
+                    }
                     Box(
                         Modifier
                             .size(32.dp)
@@ -163,7 +184,7 @@ fun AuroraFrostDialog(
                     ) {
                         Icon(
                             Icons.Outlined.Close,
-                            contentDescription = null,
+                            contentDescription = closeLabel,
                             tint = colors.textSecondary,
                             modifier = Modifier.size(16.dp),
                         )
@@ -210,7 +231,7 @@ fun RowScope.AuroraFrostCancel(
         modifier = Modifier
             .background(
                 if (colors.isEInk) {
-                    Brush.verticalGradient(listOf(Color.White, Color.White))
+                    Brush.verticalGradient(listOf(colors.surface, colors.surface))
                 } else {
                     Brush.verticalGradient(
                         listOf(
@@ -245,11 +266,13 @@ fun RowScope.AuroraFrostConfirm(
     label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
     Button(
         onClick = onClick,
         enabled = enabled,
+        modifier = modifier,
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (colors.isEInk) colors.textPrimary else colors.accent,

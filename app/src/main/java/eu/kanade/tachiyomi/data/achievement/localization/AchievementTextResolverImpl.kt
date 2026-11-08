@@ -387,6 +387,8 @@ internal fun achievementTextResourceRefs(achievementId: String): AchievementText
             AYMR.strings.achievement_secret_weeb_awakening_hint_obvious,
         )
 
+        "crystal_memorial_v1" -> text(AYMR.strings.crystal_memorial_title, AYMR.strings.crystal_memorial_description)
+
         "save_5_quotes" -> text(
             AYMR.strings.achievement_save_5_quotes_title,
             AYMR.strings.achievement_save_5_quotes_desc,

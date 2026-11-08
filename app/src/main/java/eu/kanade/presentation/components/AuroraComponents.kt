@@ -56,8 +56,11 @@ fun AuroraBackground(
         enabled = animatedAuroraBackground && !colors.isEInk,
         specialBackgroundStyle = specialBackgroundStyle,
         modifier = modifier,
-        content = content,
-    )
+    ) {
+        // Independent additive cosmetic: the chosen base renders first, UI content last.
+        eu.kanade.presentation.easteregg.crystal.CrystalBackgroundOverlay(Modifier.matchParentSize())
+        content()
+    }
 }
 
 @Composable

@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSeries
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
+import eu.kanade.tachiyomi.data.backup.models.BackupCrystalMemorial
 import eu.kanade.tachiyomi.data.backup.models.BackupCustomButtons
 import eu.kanade.tachiyomi.data.backup.models.BackupDayActivity
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryHidden
@@ -80,6 +81,9 @@ internal object BackupPayloadEmitter {
             messageList(602, backup.backupActivityLog, BackupDayActivity.serializer(), proto)
             backup.backupStats?.let {
                 messageField(603, proto.encodeToByteArray(BackupStats.serializer(), it))
+            }
+            backup.backupCrystalMemorial?.let {
+                messageField(604, proto.encodeToByteArray(BackupCrystalMemorial.serializer(), it))
             }
             messageList(620, backup.backupMangaSeries, BackupMangaSeries.serializer(), proto)
             messageList(621, backup.backupNovelSeries, BackupNovelSeries.serializer(), proto)

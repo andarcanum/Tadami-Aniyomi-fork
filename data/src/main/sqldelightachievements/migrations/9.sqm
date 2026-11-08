@@ -1,0 +1,12 @@
+-- Crystal Memorial receipt: schema 9 -> 10. Additive; existing progress is unchanged.
+CREATE TABLE crystal_memorial (
+    campaign_key TEXT NOT NULL PRIMARY KEY,
+    eligibility_reason TEXT,
+    eligible_at INTEGER,
+    automatic_presentation_consumed_at INTEGER,
+    granted_at INTEGER,
+    granted_xp INTEGER NOT NULL DEFAULT 0 CHECK (granted_xp IN (0, 999)),
+    ceremony_acknowledged_at INTEGER,
+    generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+    CHECK ((granted_at IS NULL AND granted_xp = 0) OR (granted_at IS NOT NULL AND granted_xp = 999))
+);

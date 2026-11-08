@@ -126,22 +126,19 @@ class BackupRestorer(
     private var novelSourceMapping: Map<Long, String> = emptyMap()
 
     suspend fun restore(uri: Uri, options: RestoreOptions) {
-        val startTime = System.currentTimeMillis()
-
-        restoreFromFile(uri, options)
-        verifyCompleteness()
-
-        val time = System.currentTimeMillis() - startTime
-
-        val logFile = writeErrorLog()
-
-        notifier.showRestoreComplete(
-            time,
-            errors.size,
-            logFile.parent,
-            logFile.name,
-            isSync,
-        )
+        val monitor = eu.kanade.domain.easteregg.crystal.CrystalRestoreState.monitor
+        monitor.begin()
+        try {
+            val startTime = System.currentTimeMillis()
+            restoreFromFile(uri, options)
+            verifyCompleteness()
+            val time = System.currentTimeMillis() - startTime
+            val logFile = writeErrorLog()
+            notifier.showRestoreComplete(time, errors.size, logFile.parent, logFile.name, isSync)
+        } finally {
+            // restoreFromFile awaits its complete coroutineScope, including achievement restore.
+            monitor.end()
+        }
     }
 
     /**
@@ -368,6 +365,7 @@ class BackupRestorer(
                     userProfile = backup.backupUserProfile.takeIf { options.achievements },
                     activityLog = if (options.achievements) backup.backupActivityLog else emptyList(),
                     stats = backup.backupStats.takeIf { options.stats },
+                    memorial = backup.backupCrystalMemorial.takeIf { options.achievements },
                 )
             }
 
@@ -719,9 +717,14 @@ class BackupRestorer(
         userProfile: eu.kanade.tachiyomi.data.backup.models.BackupUserProfile?,
         activityLog: List<eu.kanade.tachiyomi.data.backup.models.BackupDayActivity>,
         stats: eu.kanade.tachiyomi.data.backup.models.BackupStats?,
+        memorial: eu.kanade.tachiyomi.data.backup.models.BackupCrystalMemorial?,
     ) = launch {
         ensureActive()
-        achievementRestorer.restoreAchievements(achievements, userProfile, activityLog, stats)
+        try {
+            achievementRestorer.restoreAchievements(achievements, userProfile, activityLog, stats, memorial)
+        } catch (e: tachiyomi.domain.easteregg.crystal.CrystalMemorialRestoreException) {
+            errors.add(Date() to (e.message ?: "Invalid Crystal memorial backup"))
+        }
     }
 
     private fun writeErrorLog(): File {

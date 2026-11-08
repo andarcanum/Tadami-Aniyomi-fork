@@ -1,5 +1,5 @@
 {
-  "version": 28,
+  "version": 30,
   "achievements": [
     {
       "id": "first_chapter",
@@ -3037,6 +3037,62 @@
         }
       ],
       "hint": "Some lines refuse to be forgotten."
+    },
+    {
+      "id": "crystal_memorial_v1",
+      "type": "event",
+      "category": "secret",
+      "threshold": 1,
+      "points": 999,
+      "title": "In Memory of Crystal",
+      "description": "The light remains. A warm trace, kept in your Treasury.",
+      "badge_icon": "ic_badge_crystal_memorial",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "mythic",
+      "tags": [
+        "secret",
+        "memorial"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "SPECIAL",
+          "id": "special_crystal_relic",
+          "title": "Crystal Star",
+          "description": "A permanent portal to the memory of Crystal"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_crystal_ears",
+          "title": "Quiet Ears",
+          "description": "Three sculpted frames of warm light"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_background_crystal_warm_paws",
+          "title": "Warm Pawprints",
+          "description": "An independent animated pawprint layer over any app background"
+        },
+        {
+          "type": "TITLE",
+          "id": "title_crystal_light_keeper",
+          "title": "Keeper of Light",
+          "description": "A quiet opalescent profile title"
+        },
+        {
+          "type": "BADGE",
+          "id": "home_badge_crystal_memory_paw",
+          "title": "Memory Paw",
+          "description": "A small keepsake of starlight"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_crystal_moon_silk",
+          "title": "Moon Silk",
+          "description": "Three spectral palettes for your keepsakes"
+        }
+      ]
     }
   ]
 }

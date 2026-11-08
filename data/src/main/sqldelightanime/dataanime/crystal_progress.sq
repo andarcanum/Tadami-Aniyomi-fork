@@ -1,0 +1,29 @@
+-- The EXISTS dependency deliberately observes saved child flags even when _id/title stay equal.
+getCandidates:
+SELECT P._id, P.title
+FROM animes P
+WHERE EXISTS (
+    SELECT 1 FROM episodes C
+    WHERE C.anime_id = P._id AND C.seen = 1
+);
+
+-- Re-read title and local bindings with the children in a per-entry transaction.
+getCandidate:
+SELECT _id, title
+FROM animes
+WHERE _id = :parentId;
+
+getLocalTracks:
+SELECT anime_id, sync_id, remote_id, title
+FROM anime_sync;
+
+getTracksForEntry:
+SELECT sync_id, remote_id, title
+FROM anime_sync
+WHERE anime_id = :parentId;
+
+-- Unread copies must remain available to connect duplicate logical identities.
+getItemsForEntry:
+SELECT _id, episode_number, url, seen
+FROM episodes
+WHERE anime_id = :parentId;

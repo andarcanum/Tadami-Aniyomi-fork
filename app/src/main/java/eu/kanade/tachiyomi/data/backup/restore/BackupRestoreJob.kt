@@ -17,8 +17,10 @@ import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.isRunning
+import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
@@ -105,6 +107,9 @@ class BackupRestoreJob(private val context: Context, workerParams: WorkerParamet
         fun isRunning(context: Context): Boolean {
             return context.workManager.isRunning(TAG)
         }
+
+        /** Includes the queued safety-backup stage before restore begins mutating media data. */
+        fun observeActive(context: Context): Flow<Boolean> = context.workManager.isRunningOrEnqueuedFlow(TAG)
 
         fun start(
             context: Context,

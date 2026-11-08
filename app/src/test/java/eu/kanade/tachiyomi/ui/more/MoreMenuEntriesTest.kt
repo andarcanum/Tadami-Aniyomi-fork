@@ -29,11 +29,12 @@ class MoreMenuEntriesTest {
         available shouldNotContain MoreEntryId.REELS
         available shouldNotContain MoreEntryId.LATTICE_GRID
         available shouldNotContain MoreEntryId.DEBUG_APP_UPDATE
+        available shouldNotContain MoreEntryId.DEBUG_CRYSTAL
         available.size shouldBe availableMoreEntryIds(
             showReelsEntry = true,
             latticeGridAvailable = true,
             isDebugBuild = true,
-        ).size - 7
+        ).size - 8
     }
 
     @Test

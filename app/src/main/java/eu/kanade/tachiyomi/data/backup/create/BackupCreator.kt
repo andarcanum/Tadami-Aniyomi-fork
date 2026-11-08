@@ -299,6 +299,7 @@ class BackupCreator(
                 backupUserProfile = if (options.sisterAppCompatible) null else achievementData.userProfile,
                 backupActivityLog = if (options.sisterAppCompatible) emptyList() else achievementData.activityLog,
                 backupStats = if (options.sisterAppCompatible) null else achievementData.stats,
+                backupCrystalMemorial = if (options.sisterAppCompatible) null else achievementData.crystalMemorial,
                 backupMangaSeries = if (options.sisterAppCompatible) emptyList() else backupMangaSeries,
                 backupNovelSeries = if (options.sisterAppCompatible) emptyList() else backupNovelSeries,
                 backupAnimeSeries = if (options.sisterAppCompatible) emptyList() else backupAnimeSeries,

@@ -63,6 +63,7 @@ internal fun MoreEntryTitle(
         MoreEntryId.DEBUG_RESET_HEART -> stringResource(AYMR.strings.debug_reset_aurora_heart)
         MoreEntryId.DEBUG_RESET_LATTICE -> stringResource(AYMR.strings.debug_reset_lattice_resonance)
         MoreEntryId.DEBUG_FORCE_BREACH -> stringResource(AYMR.strings.debug_force_lattice_breach)
+        MoreEntryId.DEBUG_CRYSTAL -> stringResource(AYMR.strings.crystal_debug_title)
         MoreEntryId.HELP -> stringResource(AYMR.strings.aurora_help)
     }
 }
@@ -96,6 +97,7 @@ internal fun moreEntryIcon(
         MoreEntryId.DEBUG_RESET_HEART -> Icons.Outlined.ReportProblem
         MoreEntryId.DEBUG_RESET_LATTICE -> Icons.Outlined.ReportProblem
         MoreEntryId.DEBUG_FORCE_BREACH -> Icons.Outlined.NewReleases
+        MoreEntryId.DEBUG_CRYSTAL -> Icons.Outlined.NewReleases
         MoreEntryId.HELP -> Icons.AutoMirrored.Filled.Help
     }
 }

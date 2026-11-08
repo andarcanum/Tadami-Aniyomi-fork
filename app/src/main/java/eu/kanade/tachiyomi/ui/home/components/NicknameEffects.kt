@@ -1259,6 +1259,22 @@ internal fun NicknameBadgeDecorator(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    if (badgeStyleKey == tachiyomi.domain.easteregg.crystal.CrystalMemorialIds.BADGE) {
+        val appearance = eu.kanade.presentation.easteregg.crystal.rememberCrystalAppearance()
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            if (appearance.badge) {
+                eu.kanade.presentation.easteregg.crystal.CrystalGlyphCanvas(
+                    eu.kanade.presentation.easteregg.crystal.CrystalGlyph.Badge,
+                    Modifier.size(22.dp),
+                    appearance.palette,
+                    animate = false,
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            content()
+        }
+        return
+    }
     if (badgeStyleKey == "none") {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             content()
@@ -1545,6 +1561,18 @@ internal fun AvatarFrameDecorations(
     styleKey: String,
     accentColor: Color,
 ) {
+    if (styleKey in eu.kanade.domain.easteregg.crystal.CrystalAppearancePreferences.FRAME_KEYS) {
+        val appearance = eu.kanade.presentation.easteregg.crystal.rememberCrystalAppearance()
+        if (appearance.receipt.isGranted) {
+            eu.kanade.presentation.easteregg.crystal.CrystalAvatarFrame(
+                eu.kanade.presentation.easteregg.crystal.CrystalFrameVariant.fromKey(styleKey),
+                appearance.palette,
+                Modifier.fillMaxSize(),
+                !appearance.reduced,
+            )
+        }
+        return
+    }
     if (styleKey == "none") return
 
     val transition = rememberInfiniteTransition(label = "avatar_frame")
