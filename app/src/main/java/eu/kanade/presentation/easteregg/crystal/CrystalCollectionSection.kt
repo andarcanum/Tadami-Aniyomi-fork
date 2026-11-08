@@ -60,7 +60,6 @@ import eu.kanade.domain.easteregg.crystal.CrystalMemorialManager
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.components.AuroraAmbientBackground
-import eu.kanade.presentation.components.AuroraFrostCancel
 import eu.kanade.presentation.components.AuroraFrostConfirm
 import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
@@ -591,7 +590,6 @@ private fun CrystalItemDialog(item: CrystalItem, appearance: CrystalEquippedAppe
         },
         closeLabel = stringResource(AYMR.strings.crystal_cancel),
         footer = {
-            AuroraFrostCancel(stringResource(AYMR.strings.crystal_cancel), onDismiss)
             AuroraFrostConfirm(action, { apply(true) }, enabled = !busy, modifier = Modifier.weight(1f))
         },
     ) {
@@ -602,9 +600,15 @@ private fun CrystalItemDialog(item: CrystalItem, appearance: CrystalEquippedAppe
             } else {
                 val shape = RoundedCornerShape(22.dp)
                 Box(
-                    Modifier.fillMaxWidth().height(if (item == CrystalItem.Paws) 220.dp else 180.dp)
-                        .clip(shape).background(resolveAuroraControlContainerColor(colors))
-                        .border(1.dp, resolveAuroraMoreCardBorderColor(colors), shape),
+                    Modifier.fillMaxWidth().then(
+                        if (item == CrystalItem.Paws) {
+                            Modifier.height(220.dp).clip(shape)
+                                .background(resolveAuroraControlContainerColor(colors))
+                                .border(1.dp, resolveAuroraMoreCardBorderColor(colors), shape)
+                        } else {
+                            Modifier.heightIn(min = 156.dp)
+                        },
+                    ),
                     contentAlignment = Alignment.Center,
                 ) {
                     when (item) {
@@ -699,19 +703,10 @@ private fun CrystalItemDialog(item: CrystalItem, appearance: CrystalEquippedAppe
                 CrystalScopeNote(stringResource(AYMR.strings.crystal_palette_scope))
                 if (colors.isEInk) CrystalScopeNote(stringResource(AYMR.strings.crystal_palette_eink_hint))
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                CrystalStateBadge(
-                    stringResource(
-                        if (appearance.equipped(item)) {
-                            AYMR.strings.crystal_equipped
-                        } else {
-                            AYMR.strings.crystal_owned
-                        },
-                    ),
-                    appearance.equipped(item),
-                )
-                Spacer(Modifier.weight(1f))
-                if (appearance.equipped(item)) {
+            if (appearance.equipped(item)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    CrystalStateBadge(stringResource(AYMR.strings.crystal_equipped), true)
+                    Spacer(Modifier.weight(1f))
                     CrystalSecondaryButton(
                         stringResource(
                             when (item) {
