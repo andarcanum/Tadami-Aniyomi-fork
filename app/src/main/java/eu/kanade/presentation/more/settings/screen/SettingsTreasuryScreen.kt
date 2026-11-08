@@ -779,7 +779,10 @@ object SettingsTreasuryScreen : SearchableSettings {
                                     label = "aura-rotation",
                                 )
 
-                                if (avatarFrameStyleKey != "none") {
+                                val isCrystalFrame =
+                                    avatarFrameStyleKey in
+                                        eu.kanade.domain.easteregg.crystal.CrystalAppearancePreferences.FRAME_KEYS
+                                if (avatarFrameStyleKey != "none" && !isCrystalFrame) {
                                     Canvas(
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -817,7 +820,7 @@ object SettingsTreasuryScreen : SearchableSettings {
                                 }
 
                                 val avatarModifier = Modifier
-                                    .size(if (avatarFrameStyleKey != "none") 62.dp else 70.dp)
+                                    .size(if (avatarFrameStyleKey != "none" && !isCrystalFrame) 62.dp else 70.dp)
                                     .clip(CircleShape)
                                     .avatarGlitch(avatarFrameStyleKey)
 

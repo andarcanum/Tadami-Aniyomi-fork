@@ -205,6 +205,11 @@ internal class CrystalJewelPainter {
         if (ink == null) {
             stroke(Color.WHITE, 0.55f * opacity, 2.2f)
             canvas.drawPath(svg("M23 33.5 C26 30.2,31 30.2,35 32.5"), paint)
+            stroke(0xFFFFF9EC.toInt(), 0.52f * opacity, 1.35f)
+            canvas.drawPath(
+                svg("M24 33.5 C28 30.2,36 30.2,40 33.5 M23 13.5 Q25.5 11.5,27.5 13.5 M36.5 13.5 Q38.5 11.5,41 13.5"),
+                paint,
+            )
         }
         canvas.restoreToCount(save)
     }
@@ -216,30 +221,58 @@ internal class CrystalJewelPainter {
         val scale = min(width, height) / 80f
         canvas.translate((width - 80 * scale) / 2, (height - 80 * scale) / 2)
         canvas.scale(scale, scale)
-        metal(0f, 0f, 80f, 80f)
-        val rim =
-            svg(
-                "M40 4 L47 8.5 L55.5 8.2 L60.2 15.2 L68 18.5 L69.5 26.8 L75.2 33 L73.2 41.2 L76 49.2 L70.5 55.8 L69.8 64.2 L62.2 68 L58 75.2 L49.5 75.2 L40 78 L30.5 75.2 L22 75.2 L17.8 68 L10.2 64.2 L9.5 55.8 L4 49.2 L6.8 41.2 L4.8 33 L10.5 26.8 L12 18.5 L19.8 15.2 L24.5 8.2 L33 8.5Z",
-            )
-        if (ink == null) canvas.drawPath(rim, paint)
-        stroke(0xFFFFF9EB.toInt(), 1f, 0.9f)
-        canvas.drawPath(rim, paint)
-        well(30f, 30f, 53f)
-        if (ink == null) canvas.drawCircle(40f, 41f, 30.5f, paint)
-        metal(10f, 10f, 70f, 70f)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2.2f
-        canvas.drawCircle(40f, 41f, 30.5f, paint)
-        stroke(0xFFFFF4DC.toInt(), 0.85f, 0.7f)
-        paint.pathEffect = DashPathEffect(floatArrayOf(2.2f, 3.2f), 0f)
-        canvas.drawCircle(40f, 41f, 27.5f, paint)
-        paint.pathEffect = null
-        paw(canvas, 18f, 19f, 44f, colors, 1f, inkColor)
-        fill(0xFFFFF8EA.toInt())
-        canvas.drawPath(svg("M40 8 L42.2 13.2 L47.5 15 L42.2 16.8 L40 22 L37.8 16.8 L32.5 15 L37.8 13.2Z"), paint)
         if (ink == null) {
-            fill(Color.WHITE, 0.22f)
-            canvas.drawPath(svg("M18 29 A26 26 0 0 1 58 21 A28 24 0 0 0 18 29Z"), paint)
+            glow(canvas, 40f, 42f, 38f, withAlpha(colors.gold, 0.34f), withAlpha(colors.rose, 0.12f))
+        }
+        // 16-petal gold rosette outer bezel
+        val rosette = svg(ROSETTE_16_PATH)
+        if (ink == null) {
+            fill(0xFF1A2230.toInt())
+            canvas.drawPath(rosette, paint)
+        }
+        metal(4f, 4f, 76f, 76f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.8f
+        paint.strokeJoin = Paint.Join.ROUND
+        canvas.drawPath(rosette, paint)
+
+        // Guilloché midnight-sapphire enamel dial
+        well(37f, 32f, 36f)
+        if (ink == null) canvas.drawCircle(40f, 42f, 29.5f, paint)
+        metal(10f, 12f, 70f, 72f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.7f
+        canvas.drawCircle(40f, 42f, 29.5f, paint)
+
+        // 12 radial sun-ray guilloché lines
+        if (ink == null) {
+            stroke(colors.gold, 0.16f, 0.65f)
+            canvas.drawPath(svg(GUILLOCHE_RAYS_PATH), paint)
+        }
+
+        // Rose-gold milgrain beaded inner ring
+        stroke(colors.rose, if (ink == null) 0.78f else 1f, 0.9f)
+        paint.pathEffect = DashPathEffect(floatArrayOf(1.5f, 2.3f), 0f)
+        canvas.drawCircle(40f, 42f, 26.2f, paint)
+        paint.pathEffect = null
+
+        // 3D sculpted paw cameo relief (drop shadow + warm gold/rose relief)
+        if (ink == null) {
+            paw(canvas, 20.5f, 22.8f, 39f, colors, 0.38f, 0xFF090E16.toInt())
+        }
+        paw(canvas, 20.5f, 21.3f, 39f, colors, 1f, inkColor)
+
+        // North Star crown jewel at 12 o'clock
+        metal(32f, 2.5f, 48f, 17.5f)
+        val star = svg("M40 2.5 L42.2 7.8 L47.5 10 L42.2 12.2 L40 17.5 L37.8 12.2 L32.5 10 L37.8 7.8 Z")
+        canvas.drawPath(star, paint)
+        stroke(0xFFFFFAF0.toInt(), 0.9f, 0.55f)
+        canvas.drawPath(star, paint)
+        if (ink == null) {
+            fill(Color.WHITE, 0.96f)
+            canvas.drawCircle(40f, 10f, 1.55f, paint)
+            fill(Color.WHITE, 0.16f)
+            canvas.drawPath(svg("M18 30 A25 25 0 0 1 58 22 A27 23 0 0 0 18 30 Z"), paint)
         }
         canvas.restoreToCount(s)
     }
@@ -261,98 +294,154 @@ internal class CrystalJewelPainter {
         val cx = width / 2
         val cy = height / 2
         val radius = min(width, height) / 2 - 1.3f
-        val photoRadius = (min(width, height) / 2 - avatarInset).coerceAtLeast(1f)
         val scale = radius / 42f
         val s = canvas.save()
         canvas.translate(cx - 64 * scale, cy - 70 * scale)
         canvas.scale(scale, scale)
-        if (ink == null) {
-            stroke(colors.rose, 0.16f, 5f)
-            canvas.drawCircle(64f, 70f, 44f, paint)
-            stroke(0xFF182032.toInt(), 1f, 4.2f)
-            canvas.drawCircle(64f, 70f, 42f, paint)
-        }
-        metal(22f, 28f, 106f, 112f)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2.6f
-        canvas.drawCircle(64f, 70f, 42f, paint)
-        if (variant == CrystalFrameVariant.Fold) {
-            stroke(0xFFFFF9EB.toInt(), 0.55f, 0.6f)
-            paint.pathEffect = DashPathEffect(floatArrayOf(3f, 4f), 0f)
-            canvas.drawCircle(64f, 70f, 39.2f, paint)
-            paint.pathEffect = null
-            ear(canvas, "M24 44 C17 33,21 19,35 20 C48 21,54 31,49 40 L39 36 C33 37,28 40,24 44Z", 35f)
-            ear(canvas, "M104 44 C111 33,107 19,93 20 C80 21,74 31,79 40 L89 36 C95 37,100 40,104 44Z", 93f)
-            stroke(0xFFFFF3DB.toInt(), 0.8f, 1.2f)
-            canvas.drawPath(svg("M25 31 C34 27,43 29,48 39 M103 31 C94 27,85 29,80 39"), paint)
-            fill(0xFFFFF8EA.toInt())
-            canvas.drawPath(
-                svg("M64 105 L66 110.5 L71.5 112.5 L66 114.5 L64 120 L62 114.5 L56.5 112.5 L62 110.5Z"),
-                paint,
-            )
-        } else if (variant == CrystalFrameVariant.Point) {
-            ear(canvas, "M24 46 L25 14 Q26 9,32 14 L52 34 L42 41Z", 32f)
-            ear(canvas, "M104 46 L103 14 Q102 9,96 14 L76 34 L86 41Z", 96f)
-            stroke(0xFFFFF6E0.toInt(), 0.85f, 0.9f)
-            canvas.drawPath(svg("M29 19 L33 35 L43 33 M99 19 L95 35 L85 33"), paint)
-            fill(Color.WHITE)
-            canvas.drawCircle(29f, 19f, 1.6f, paint)
-            canvas.drawCircle(99f, 19f, 1.6f, paint)
-        } else {
-            for (tilt in listOf(-25f, 25f)) {
+
+        // 1. Exterior elements (orbital threads & radially aligned ears) clipped strictly outside the photo circle
+        val extSave = canvas.save()
+        innerMask.reset()
+        innerMask.addCircle(64f, 70f, 41.4f, Path.Direction.CW)
+        canvas.clipOutPath(innerMask)
+
+        if (variant == CrystalFrameVariant.Thread) {
+            for (tilt in listOf(-24f, 24f)) {
                 val o = canvas.save()
                 canvas.rotate(tilt, 64f, 70f)
-                stroke(colors.mint, 0.65f, 1.4f)
-                rect.set(19f, 29f, 109f, 111f)
+                stroke(colors.mint, 0.72f, 1.2f)
+                rect.set(18.5f, 30.2f, 109.5f, 109.8f)
                 canvas.drawOval(rect, paint)
                 canvas.restoreToCount(o)
             }
-            well(64f, 108f, 15f)
-            if (ink == null) canvas.drawCircle(64f, 112f, 11f, paint)
-            metal(53f, 101f, 75f, 123f)
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.8f
-            canvas.drawCircle(64f, 112f, 11f, paint)
-            paw(canvas, 54f, 102f, 20f, colors, 1f, inkColor)
         }
-        canvas.restoreToCount(s)
-        if (ink == null) drawFrameOrbit(canvas, cx, cy, radius, photoRadius, if (reduced) 1.2f else seconds, variant)
-    }
 
-    private fun drawFrameOrbit(
-        canvas: Canvas,
-        cx: Float,
-        cy: Float,
-        radius: Float,
-        photoRadius: Float,
-        t: Float,
-        variant: CrystalFrameVariant,
-    ) {
-        val saved = canvas.save()
-        innerMask.reset()
-        innerMask.addCircle(cx, cy, photoRadius, Path.Direction.CW)
-        canvas.clipOutPath(innerMask) // API26 baseline: all particles are strictly outside the photo.
-        val count = if (variant == CrystalFrameVariant.Point) 7 else 5
-        for (i in 0 until count) {
-            val theta = t * (0.65f + i % 2 * 0.22f) + i * 2f * PI.toFloat() / count
-            val tilt = if (i % 2 == 0) -0.34f else 0.28f
-            for (step in 8 downTo 0) {
-                val angle = theta - step * 0.045f
-                val x = cos(angle) * radius * 1.18f
-                val y = sin(angle) * radius * 0.48f
-                val z = sin(angle)
-                val decay = 1 - step / 9f
-                val a = 0.22f + 0.78f * (z + 1) * 0.5f
-                fill(if (step == 0) 0xFFFFFAEE.toInt() else palette.gold, a * if (step == 0) 0.95f else decay * 0.42f)
-                canvas.drawCircle(
-                    cx + x * cos(tilt) - y * sin(tilt),
-                    cy + x * sin(tilt) + y * cos(tilt),
-                    (if (step == 0) 2.4f else 1.6f * decay) * (0.7f + 0.35f * (z + 1) * 0.5f),
-                    paint,
+        // Draw left (-38 deg) and right (+38 deg) ears strictly along the radial normal of the circle (64, 70)
+        for (side in listOf(-1, 1)) {
+            val earSave = canvas.save()
+            canvas.rotate(side * 38f, 64f, 70f)
+            when (variant) {
+                CrystalFrameVariant.Fold -> {
+                    earShell(
+                        canvas,
+                        "M49.8 31.8 C48.8 20.4,54.8 14.6,64.0 14.6 C73.2 14.6,79.2 20.4,78.2 31.8 Z",
+                        64f,
+                    )
+                    earConcha(
+                        canvas,
+                        "M53.6 31.2 C53.0 22.4,57.4 18.0,64.0 18.0 C70.6 18.0,75.0 22.4,74.4 31.2 Z",
+                        64f,
+                    )
+                }
+                CrystalFrameVariant.Point -> {
+                    earShell(
+                        canvas,
+                        "M50.2 31.8 C51.4 21.0,56.6 12.4,61.8 9.0 Q64.0 7.6,66.2 9.0 C71.4 12.4,76.6 21.0,77.8 31.8 Z",
+                        64f,
+                    )
+                    earConcha(
+                        canvas,
+                        "M54.0 31.2 C55.0 22.4,59.0 15.2,62.6 12.4 Q64.0 11.4,65.4 12.4 C69.0 15.2,73.0 22.4,74.0 31.2 Z",
+                        64f,
+                    )
+                }
+                CrystalFrameVariant.Thread -> {
+                    earAstral(
+                        canvas,
+                        "M50.2 31.8 C51.4 21.0,56.6 12.4,61.8 9.0 Q64.0 7.6,66.2 9.0 C71.4 12.4,76.6 21.0,77.8 31.8 Z",
+                        64f,
+                    )
+                    earConcha(
+                        canvas,
+                        "M54.0 31.2 C55.0 22.4,59.0 15.2,62.6 12.4 Q64.0 11.4,65.4 12.4 C69.0 15.2,73.0 22.4,74.0 31.2 Z",
+                        64f,
+                    )
+                    // Centered celestial emblem inside the violet-rose inner ear concha
+                    fill(0xFFFFF8EA.toInt())
+                    if (side == -1) {
+                        canvas.drawPath(
+                            svg(
+                                "M64 17.2 L65.3 20.7 L68.8 22.0 L65.3 23.3 L64 26.8 L62.7 23.3 L59.2 22.0 L62.7 20.7 Z",
+                            ),
+                            paint,
+                        )
+                    } else {
+                        canvas.drawPath(
+                            svg(
+                                "M66.2 17.6 C63.2 18.0,61.2 20.4,61.6 23.2 C62.0 25.6,64.5 27.0,67.0 26.5 C63.5 28.4,59.2 26.2,58.8 22.4 C58.4 18.8,62.2 16.0,66.2 17.6 Z",
+                            ),
+                            paint,
+                        )
+                    }
+                }
+            }
+            canvas.restoreToCount(earSave)
+        }
+        canvas.restoreToCount(extSave)
+
+        // 2. Smooth solid jewelry bezel around the avatar (cx=64, cy=70, r=42) — welds ear bases cleanly
+        if (ink == null) {
+            stroke(0xFF061018.toInt(), 0.45f, 4.4f)
+            canvas.drawCircle(64f, 71.0f, 42f, paint)
+        }
+        metal(22f, 28f, 106f, 112f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3.1f
+        canvas.drawCircle(64f, 70f, 42f, paint)
+        stroke(colors.rose, if (ink == null) 0.68f else 1f, 0.9f)
+        canvas.drawCircle(64f, 70f, 39.8f, paint)
+
+        // 3. Bottom clasp & side accents
+        when (variant) {
+            CrystalFrameVariant.Fold -> {
+                metal(55f, 104f, 73f, 119f)
+                val starClasp = svg(
+                    "M64 104.2 L66.1 109.8 L71.7 111.8 L66.1 113.8 L64 119.4 L61.9 113.8 L56.3 111.8 L61.9 109.8 Z",
                 )
+                canvas.drawPath(starClasp, paint)
+                stroke(0xFFFFF9EB.toInt(), 0.85f, 0.6f)
+                canvas.drawPath(starClasp, paint)
+                if (ink == null) {
+                    fill(0xFFFFFDF8.toInt())
+                    canvas.drawCircle(64f, 111.8f, 1.7f, paint)
+                }
+            }
+            CrystalFrameVariant.Point -> {
+                well(64f, 109f, 11f)
+                if (ink == null) canvas.drawCircle(64f, 111.5f, 8.0f, paint)
+                metal(55f, 103f, 73f, 120f)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1.6f
+                canvas.drawCircle(64f, 111.5f, 8.0f, paint)
+                paw(canvas, 57.4f, 104.9f, 13.2f, colors, 1f, inkColor)
+            }
+            CrystalFrameVariant.Thread -> {
+                fill(colors.gold)
+                canvas.drawCircle(19.5f, 65f, 1.6f, paint)
+                canvas.drawCircle(108.5f, 65f, 1.6f, paint)
+                val prism = svg("M64 103.5 L69.8 111.2 L64 119.5 L58.2 111.2 Z")
+                if (ink == null) {
+                    fill(colors.mint)
+                    paint.shader = LinearGradient(
+                        58f,
+                        103.5f,
+                        70f,
+                        119.5f,
+                        intArrayOf(0xFFF5FFFB.toInt(), colors.mint, colors.rose),
+                        floatArrayOf(0f, 0.52f, 1f),
+                        Shader.TileMode.CLAMP,
+                    )
+                    canvas.drawPath(prism, paint)
+                }
+                metal(58.2f, 103.5f, 69.8f, 119.5f)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1.45f
+                canvas.drawPath(prism, paint)
+                stroke(0xFFFFF9EB.toInt(), 0.72f, 0.8f)
+                canvas.drawPath(svg("M64 103.5 V119.5 M58.2 111.2 H69.8"), paint)
             }
         }
-        canvas.restoreToCount(saved)
+        canvas.restoreToCount(s)
     }
 
     fun titleGlyph(canvas: Canvas, width: Float, height: Float, colors: CrystalPalette, inkColor: Int? = null) {
@@ -522,23 +611,178 @@ internal class CrystalJewelPainter {
         canvas.restoreToCount(s)
     }
 
-    private fun ear(canvas: Canvas, data: String, center: Float) {
-        fill(palette.rose)
+    fun cameoPortrait(canvas: Canvas, width: Float, height: Float, colors: CrystalPalette, inkColor: Int? = null) {
+        palette = colors
+        ink = inkColor
+        val s = canvas.save()
+        val scale = min(width, height) / 80f
+        canvas.translate((width - 80f * scale) / 2f, (height - 80f * scale) / 2f)
+        canvas.scale(scale, scale)
+
+        innerMask.reset()
+        innerMask.addCircle(40f, 40f, 39.5f, Path.Direction.CW)
+        canvas.clipPath(innerMask)
+
         if (ink == null) {
+            fill(0xFF172834.toInt())
             paint.shader = RadialGradient(
-                center,
-                33f,
-                18f,
-                intArrayOf(0xB8F2C6D8.toInt(), 0x529E6D88, 0xEB192030.toInt()),
-                floatArrayOf(0f, 0.55f, 1f),
+                40f,
+                30f,
+                46f,
+                intArrayOf(0xFF2C4552.toInt(), 0xFF172834.toInt(), 0xFF0B151D.toInt()),
+                floatArrayOf(0f, 0.62f, 1f),
                 Shader.TileMode.CLAMP,
             )
+            canvas.drawCircle(40f, 40f, 40f, paint)
+            fill(colors.gold, 0.14f)
+            canvas.drawCircle(40f, 32f, 26f, paint)
         }
+
+        // Tabby bust & cream bib
+        val bust = svg("M11 82 C13 60,24 50,40 50 C56 50,67 60,69 82 Z")
+        if (ink == null) {
+            fill(0xFFC69F73.toInt())
+            paint.shader = LinearGradient(
+                18f,
+                50f,
+                62f,
+                82f,
+                intArrayOf(0xFFF2DFC1.toInt(), 0xFFC69F73.toInt(), 0xFF785B3F.toInt()),
+                floatArrayOf(0f, 0.48f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawPath(bust, paint)
+            fill(0xFFF5E6CC.toInt(), 0.92f)
+            canvas.drawPath(svg("M23 55 C29 51,51 51,57 55 C59 64,52 72,40 74 C28 72,21 64,23 55 Z"), paint)
+            stroke(0xFF6D5239.toInt(), 0.65f, 1.3f)
+            paint.pathEffect = DashPathEffect(floatArrayOf(2.5f, 3f), 0f)
+            canvas.drawPath(svg("M27 60 Q40 66,53 60"), paint)
+            paint.pathEffect = null
+        } else {
+            stroke(inkColor ?: Color.BLACK, 1f, 1.4f)
+            canvas.drawPath(bust, paint)
+        }
+
+        // Folded ears & round head
+        val ears = svg("M21 24 C19 17,25 12,32 15 L29 25 Z M59 24 C61 17,55 12,48 15 L51 25 Z")
+        if (ink == null) {
+            fill(0xFF8C6B4A.toInt())
+            canvas.drawPath(ears, paint)
+        }
+        stroke(ink ?: 0xFF5B432D.toInt(), 1f, 1f)
+        canvas.drawPath(ears, paint)
+
+        rect.set(20.5f, 16.8f, 59.5f, 51.2f)
+        if (ink == null) {
+            fill(0xFFC69F73.toInt())
+            paint.shader = LinearGradient(
+                22f,
+                17f,
+                58f,
+                51f,
+                intArrayOf(0xFFF2DFC1.toInt(), 0xFFC69F73.toInt(), 0xFF785B3F.toInt()),
+                floatArrayOf(0f, 0.48f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawOval(rect, paint)
+            fill(0xFFF6E8CF.toInt(), 0.90f)
+            canvas.drawPath(svg("M26 37 C31 34,49 34,54 37 C56 44,50 50,40 50 C30 50,24 44,26 37 Z"), paint)
+            stroke(0xFF4F3A27.toInt(), 0.82f, 1.5f)
+            canvas.drawPath(svg("M34 19 L36 26 M40 18 V25 M46 19 L44 26"), paint)
+        }
+        stroke(ink ?: 0xFF5E4630.toInt(), 1f, 1f)
+        rect.set(20.5f, 16.8f, 59.5f, 51.2f)
+        canvas.drawOval(rect, paint)
+
+        // Amber eyes & nose
+        for (ex in listOf(32.5f, 47.5f)) {
+            if (ink == null) {
+                fill(0xFFE5AF49.toInt())
+                rect.set(ex - 3.7f, 30.1f, ex + 3.7f, 36.9f)
+                canvas.drawOval(rect, paint)
+                stroke(0xFF43301F.toInt(), 1f, 0.8f)
+                canvas.drawOval(rect, paint)
+                fill(0xFF2B1E14.toInt())
+                rect.set(ex - 1.2f, 31f, ex + 1.2f, 36f)
+                canvas.drawOval(rect, paint)
+                fill(0xFFFFF9EB.toInt())
+                canvas.drawCircle(ex - 1.2f, 32.2f, 1f, paint)
+            } else {
+                stroke(inkColor ?: Color.BLACK, 1f, 1.2f)
+                canvas.drawCircle(ex, 33.5f, 3.2f, paint)
+            }
+        }
+        fill(ink ?: 0xFFD98286.toInt())
+        canvas.drawPath(svg("M37.8 38.2 Q40 37.2,42.2 38.2 L40 40.8 Z"), paint)
+        stroke(ink ?: 0xFF694E36.toInt(), 1f, 1.05f)
+        canvas.drawPath(svg("M40 40.8 V43.2 M40 43.2 Q36.5 45.2,34 43.5 M40 43.2 Q43.5 45.2,46 43.5"), paint)
+
+        if (ink == null) {
+            fill(Color.WHITE, 0.13f)
+            canvas.drawPath(svg("M6 24 C16 5,42 0,65 10 C47 6,22 13,9 32 Z"), paint)
+        }
+        canvas.restoreToCount(s)
+    }
+
+    private fun earShell(canvas: Canvas, data: String, center: Float) {
         val p = svg(data)
-        if (ink == null) canvas.drawPath(p, paint)
-        metal(center - 15, 15f, center + 15, 44f)
+        if (ink == null) {
+            fill(palette.gold)
+            paint.shader = LinearGradient(
+                center - 12f,
+                9f,
+                center + 12f,
+                32f,
+                intArrayOf(0xFFFFF6E4.toInt(), palette.gold, 0xFF6C5247.toInt()),
+                floatArrayOf(0f, 0.52f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawPath(p, paint)
+        }
+        metal(center - 14f, 9f, center + 14f, 32f)
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2.4f
+        paint.strokeWidth = 2.0f
+        paint.strokeJoin = Paint.Join.ROUND
+        canvas.drawPath(p, paint)
+    }
+
+    private fun earConcha(canvas: Canvas, data: String, center: Float) {
+        val p = svg(data)
+        if (ink == null) {
+            fill(palette.rose)
+            paint.shader = RadialGradient(
+                center,
+                24f,
+                14f,
+                intArrayOf(0xEBFFDCE8.toInt(), withAlpha(palette.rose, 0.82f), 0xDB4E3040.toInt()),
+                floatArrayOf(0f, 0.60f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawPath(p, paint)
+        }
+        stroke(palette.rose, if (ink == null) 0.72f else 1f, 0.8f)
+        canvas.drawPath(p, paint)
+    }
+
+    private fun earAstral(canvas: Canvas, data: String, center: Float) {
+        val p = svg(data)
+        if (ink == null) {
+            fill(palette.mint)
+            paint.shader = LinearGradient(
+                center - 12f,
+                9f,
+                center + 12f,
+                32f,
+                intArrayOf(0xE6F5FFFB.toInt(), withAlpha(palette.mint, 0.82f), withAlpha(palette.rose, 0.78f)),
+                floatArrayOf(0f, 0.52f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawPath(p, paint)
+        }
+        metal(center - 14f, 9f, center + 14f, 32f)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2.0f
+        paint.strokeJoin = Paint.Join.ROUND
         canvas.drawPath(p, paint)
     }
     private fun pad(x: Float, y: Float, radius: Float, opacity: Float) {
@@ -623,5 +867,9 @@ internal class CrystalJewelPainter {
     )
     companion object {
         private val RAD_TO_DEGREES = 180f / PI.toFloat()
+        private const val ROSETTE_16_PATH =
+            "M71.2 35.8 Q75.6 42.0 71.2 48.2 L71.2 48.2 Q72.9 55.6 66.4 59.7 L66.4 59.7 Q65.2 67.2 57.7 68.4 L57.7 68.4 Q53.6 74.9 46.2 73.2 L46.2 73.2 Q40.0 77.6 33.8 73.2 L33.8 73.2 Q26.4 74.9 22.3 68.4 L22.3 68.4 Q14.8 67.2 13.6 59.7 L13.6 59.7 Q7.1 55.6 8.8 48.2 L8.8 48.2 Q4.4 42.0 8.8 35.8 L8.8 35.8 Q7.1 28.4 13.6 24.3 L13.6 24.3 Q14.8 16.8 22.3 15.6 L22.3 15.6 Q26.4 9.1 33.8 10.8 L33.8 10.8 Q40.0 6.4 46.2 10.8 L46.2 10.8 Q53.6 9.1 57.7 15.6 L57.7 15.6 Q65.2 16.8 66.4 24.3 L66.4 24.3 Q72.9 28.4 71.2 35.8 Z"
+        private const val GUILLOCHE_RAYS_PATH =
+            "M40 42 L67 42 M40 42 L63.4 55.5 M40 42 L53.5 65.4 M40 42 L40 69 M40 42 L26.5 65.4 M40 42 L16.6 55.5 M40 42 L13 42 M40 42 L16.6 28.5 M40 42 L26.5 18.6 M40 42 L40 15 M40 42 L53.5 18.6 M40 42 L63.4 28.5"
     }
 }

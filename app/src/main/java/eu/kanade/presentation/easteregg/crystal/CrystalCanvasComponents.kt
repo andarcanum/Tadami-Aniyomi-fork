@@ -43,7 +43,7 @@ internal fun CrystalMemorialCanvas(
     }
 }
 
-internal enum class CrystalGlyph { Relic, Frame, Paw, Title, Badge, Palette, CatFace }
+internal enum class CrystalGlyph { Relic, Frame, Paw, Title, Badge, Palette, CatFace, Cameo }
 
 @Composable
 internal fun CrystalGlyphCanvas(
@@ -89,6 +89,7 @@ internal fun CrystalGlyphCanvas(
                 CrystalGlyph.Badge -> painter.medallion(canvas, width, height, palette, ink)
                 CrystalGlyph.Palette -> painter.paletteGlyph(canvas, width, height, palette, ink)
                 CrystalGlyph.CatFace -> painter.catFace(canvas, width, height, palette, ink)
+                CrystalGlyph.Cameo -> painter.cameoPortrait(canvas, width, height, palette, ink)
             }
             canvas.restoreToCount(saved)
         }

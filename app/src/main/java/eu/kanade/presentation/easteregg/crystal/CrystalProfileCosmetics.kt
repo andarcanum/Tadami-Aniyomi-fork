@@ -47,13 +47,37 @@ internal fun CrystalTitlePill(palette: CrystalPalette, animate: Boolean, modifie
             end = Offset(start + 180f * density, 45f * density),
         )
     }
+    val bgModifier = if (colors.isEInk) {
+        modifier
+            .background(colors.surface, RoundedCornerShape(50))
+            .border(1.dp, colors.textPrimary, RoundedCornerShape(50))
+    } else {
+        modifier
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        base.copy(alpha = 0.14f),
+                        Color(palette.rose).copy(alpha = 0.11f),
+                    ),
+                ),
+                RoundedCornerShape(50),
+            )
+            .border(
+                1.dp,
+                Brush.horizontalGradient(
+                    listOf(
+                        base.copy(alpha = 0.46f),
+                        Color(palette.rose).copy(alpha = 0.34f),
+                    ),
+                ),
+                RoundedCornerShape(50),
+            )
+    }
     Row(
-        modifier.background(if (colors.isEInk) colors.surface else base.copy(alpha = 0.09f), RoundedCornerShape(50))
-            .border(1.dp, if (colors.isEInk) colors.textPrimary else base.copy(alpha = 0.32f), RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+        bgModifier.padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Text(
-            stringResource(AYMR.strings.unlockable_title_crystal_light_keeper),
+            "✦ " + stringResource(AYMR.strings.unlockable_title_crystal_light_keeper),
             style = androidx.compose.ui.text.TextStyle(
                 fontSize = 10.5.sp,
                 lineHeight = 12.sp,

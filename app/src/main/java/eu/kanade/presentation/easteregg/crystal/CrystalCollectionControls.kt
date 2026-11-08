@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -141,13 +140,12 @@ internal fun CrystalAvatarPreview(
     animate: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val colors = AuroraTheme.colors
     Box(modifier.clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
         val photo = Modifier.fillMaxSize().padding(3.dp).clip(CircleShape)
         if (avatar.isNotBlank()) {
             AsyncImage(avatar, null, photo, contentScale = ContentScale.Crop)
         } else {
-            Icon(Icons.Default.AccountCircle, null, photo, tint = colors.textSecondary)
+            CrystalGlyphCanvas(CrystalGlyph.Cameo, photo, palette, animate = false)
         }
         CrystalAvatarFrame(frame, palette, Modifier.matchParentSize(), animate)
     }
