@@ -367,9 +367,7 @@ class WebtoonPageHolder(
                         if (reusable == null && dims != null) {
                             currentPage.imageDimensions = dims
                         }
-                        val isTall = dims?.let { it.height.toFloat() / it.width.toFloat() > 3F } ?: false
-                        val canUseHardware = dims?.let { ImageUtil.canUseHardwareBitmap(it.width, it.height) } ?: false
-                        PageImageData.Encoded(source, isAnimated, isTall, canUseHardware)
+                        PageImageData.Encoded(source, isAnimated)
                     }
                 }
             }
@@ -391,8 +389,6 @@ class WebtoonPageHolder(
                                 minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
                                 cropBorders = viewer.config.imageCropBorders,
                                 webtoonSmartFit = viewer.config.webtoonSmartFit,
-                                isTallImage = prepared.isTall,
-                                canUseHardwareBitmap = prepared.canUseHardware,
                             ),
                         )
                     }
@@ -408,8 +404,6 @@ class WebtoonPageHolder(
                                 minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
                                 cropBorders = viewer.config.imageCropBorders,
                                 webtoonSmartFit = viewer.config.webtoonSmartFit,
-                                isTallImage = bitmap.width > 0 &&
-                                    bitmap.height.toFloat() / bitmap.width.toFloat() > 3F,
                             ),
                         )
                     }
@@ -545,8 +539,6 @@ private sealed interface PageImageData {
     data class Encoded(
         val source: BufferedSource,
         val isAnimated: Boolean,
-        val isTall: Boolean,
-        val canUseHardware: Boolean,
     ) : PageImageData
 
     data class Decoded(val bitmap: android.graphics.Bitmap) : PageImageData

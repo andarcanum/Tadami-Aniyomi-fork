@@ -166,10 +166,6 @@ class PagerPageHolder(
                             isAnimated = isAnimated,
                             background = background,
                             dimensions = ImageUtil.getImageDimensions(source),
-                            // Sniff the header here so the UI thread does not have to instantiate a
-                            // native decoder per page (ReaderPageImageView falls back to parsing the
-                            // source on the main thread when the config value is absent).
-                            canUseHardwareBitmap = !isAnimated && ImageUtil.canUseHardwareBitmap(source),
                         )
                     }
                 }
@@ -182,7 +178,6 @@ class PagerPageHolder(
                     zoomStartPosition = viewer.config.imageZoomType,
                     landscapeZoom = viewer.config.landscapeZoom,
                     enablePinchToZoom = viewer.config.enablePinchToZoom,
-                    canUseHardwareBitmap = (prepared as? PageImageResult.Encoded)?.canUseHardwareBitmap,
                 )
                 when (prepared) {
                     is PageImageResult.Encoded -> {
@@ -227,7 +222,6 @@ class PagerPageHolder(
             val isAnimated: Boolean,
             val background: android.graphics.drawable.Drawable?,
             val dimensions: ImageUtil.ImageDimensions?,
-            val canUseHardwareBitmap: Boolean,
         ) : PageImageResult
 
         data class Decoded(val bitmap: Bitmap) : PageImageResult

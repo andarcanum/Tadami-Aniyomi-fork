@@ -18,7 +18,6 @@ import androidx.annotation.StyleRes
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.os.postDelayed
 import androidx.core.view.isVisible
-import coil3.BitmapImage
 import coil3.asDrawable
 import coil3.dispose
 import coil3.imageLoader
@@ -26,17 +25,12 @@ import coil3.request.CachePolicy
 import coil3.request.Disposable
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import coil3.size.Precision
-import coil3.size.ViewSizeResolver
 import com.davemorrissey.labs.subscaleview.ImageSource
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_IN_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE
 import com.github.chrisbanes.photoview.PhotoView
-import eu.kanade.domain.base.BasePreferences
-import eu.kanade.tachiyomi.data.coil.cropBorders
-import eu.kanade.tachiyomi.data.coil.customDecoder
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerSubsamplingImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
@@ -52,8 +46,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 /**
  * A wrapper view for showing page image.
@@ -70,10 +62,6 @@ open class ReaderPageImageView @JvmOverloads constructor(
     @StyleRes defStyleRes: Int = 0,
     private val isWebtoon: Boolean = false,
 ) : FrameLayout(context, attrs, defStyleAttrs, defStyleRes) {
-
-    private val alwaysDecodeLongStripWithSSIV by lazy {
-        Injekt.get<BasePreferences>().alwaysDecodeLongStripWithSSIV().get()
-    }
 
     private var pageView: View? = null
 
@@ -166,6 +154,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
                         }
 
                         override fun onImageLoadError(e: Exception) {
+                            onImageLoadError()
+                        }
+
+                        override fun onTileLoadError(e: Exception) {
                             onImageLoadError()
                         }
                     },
@@ -327,7 +319,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         } else {
             PagerSubsamplingImageView(context)
         }.apply {
-            setMaxTileSize(ImageUtil.hardwareBitmapThreshold)
+            setMaxTileSize(minOf(ImageUtil.hardwareBitmapThreshold, 1024))
             setDoubleTapZoomStyle(SubsamplingScaleImageView.ZOOM_FOCUS_CENTER)
             setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
             setMinimumTileDpi(180)
@@ -400,6 +392,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 override fun onImageLoadError(e: Exception) {
                     this@ReaderPageImageView.onImageLoadError()
                 }
+
+                override fun onTileLoadError(e: Exception) {
+                    this@ReaderPageImageView.onImageLoadError()
+                }
             },
         )
 
@@ -420,71 +416,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 }
             }
             is BufferedSource -> {
-                val supportsHardwareBitmap = config.canUseHardwareBitmap
-                    ?: ImageUtil.canUseHardwareBitmap(data)
-                if (
-                    !isWebtoon ||
-                    alwaysDecodeLongStripWithSSIV ||
-                    (config.isTallImage ?: ImageUtil.isTallImage(data)) ||
-                    !supportsHardwareBitmap
-                ) {
-                    setHardwareConfig(supportsHardwareBitmap)
-                    if (config.webtoonSmartFit && scope != null) {
-                        smartFitJob = scope?.launch {
-                            val bounds = withContext(Dispatchers.IO) {
-                                WebtoonBorderDetector.detectContentBounds(data.peek().inputStream())
-                            }
-                            // A-LOW (smartFit): the detector returns an EMPTY Rect on failure
-                            // (undecodable/odd stream); that zero-size region was passed to the
-                            // image source and blanked the page. Fall back to the full image.
-                            if (!bounds.isEmpty) {
-                                setImage(ImageSource.inputStream(data.inputStream()).region(bounds))
-                            } else {
-                                setImage(ImageSource.inputStream(data.inputStream()))
-                            }
-                            isVisible = true
+                // Preserve original pixels for zoom, even for short webtoon pages. A fixed Coil
+                // viewport bitmap cannot recover details when its RecyclerView parent is scaled.
+                if (config.webtoonSmartFit && scope != null) {
+                    smartFitJob = scope?.launch {
+                        val bounds = withContext(Dispatchers.IO) {
+                            WebtoonBorderDetector.detectContentBounds(data.peek().inputStream(), config.cropBorders)
                         }
-                    } else {
-                        setImage(ImageSource.inputStream(data.inputStream()))
+                        val image = ImageSource.inputStream(data.inputStream())
+                        if (!bounds.isEmpty) image.region(bounds)
+                        setImage(image)
                         isVisible = true
                     }
-                    return@apply
+                } else {
+                    setImage(ImageSource.inputStream(data.inputStream()))
+                    isVisible = true
                 }
-
-                ImageRequest.Builder(context)
-                    .data(data)
-                    .memoryCachePolicy(CachePolicy.DISABLED)
-                    .diskCachePolicy(CachePolicy.DISABLED)
-                    .target(
-                        onSuccess = { result ->
-                            val image = result as BitmapImage
-                            val bitmap = image.bitmap
-                            if (config.webtoonSmartFit && scope != null) {
-                                smartFitJob = scope?.launch {
-                                    val bounds = withContext(Dispatchers.Default) {
-                                        WebtoonBorderDetector.detectContentBounds(bitmap)
-                                    }
-                                    setImage(ImageSource.bitmap(bitmap).region(bounds))
-                                    isVisible = true
-                                }
-                            } else {
-                                setImage(ImageSource.bitmap(bitmap))
-                                isVisible = true
-                            }
-                        },
-                        onError = {
-                            onImageLoadError()
-                        },
-                    )
-                    .size(ViewSizeResolver(this@ReaderPageImageView))
-                    .precision(Precision.INEXACT)
-                    .cropBorders(config.cropBorders)
-                    .customDecoder(true)
-                    .crossfade(false)
-                    .build()
-                    .let { request ->
-                        coilDisposable = context.imageLoader.enqueue(request)
-                    }
             }
             else -> {
                 throw IllegalArgumentException("Not implemented for class ${data::class.simpleName}")
@@ -576,13 +523,6 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val zoomStartPosition: ZoomStartPosition = ZoomStartPosition.CENTER,
         val landscapeZoom: Boolean = false,
         val enablePinchToZoom: Boolean = true,
-        /**
-         * Image traits precomputed off the UI thread by callers that already inspect the image
-         * on IO. When null, they are computed on demand (which touches image headers on the
-         * calling thread).
-         */
-        val isTallImage: Boolean? = null,
-        val canUseHardwareBitmap: Boolean? = null,
     )
 
     enum class ZoomStartPosition {

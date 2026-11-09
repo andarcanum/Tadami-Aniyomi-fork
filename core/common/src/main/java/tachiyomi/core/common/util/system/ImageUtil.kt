@@ -26,8 +26,8 @@ import eu.kanade.tachiyomi.util.system.GLUtil
 import logcat.LogPriority
 import okio.Buffer
 import okio.BufferedSource
-import tachiyomi.decoder.Format
-import tachiyomi.decoder.ImageDecoder
+import tachiyomi.core.common.util.image.ImageHeader
+import tachiyomi.core.common.util.image.NativeImageDecoder
 import java.io.InputStream
 import java.util.Locale
 import kotlin.math.abs
@@ -49,14 +49,14 @@ object ImageUtil {
 
     fun findImageType(stream: InputStream): ImageType? {
         return try {
-            when (getImageType(stream)?.format) {
-                Format.Avif -> ImageType.AVIF
-                Format.Gif -> ImageType.GIF
-                Format.Heif -> ImageType.HEIF
-                Format.Jpeg -> ImageType.JPEG
-                Format.Jxl -> ImageType.JXL
-                Format.Png -> ImageType.PNG
-                Format.Webp -> ImageType.WEBP
+            when (ImageHeader.read(stream)?.format) {
+                ImageHeader.Format.AVIF -> ImageType.AVIF
+                ImageHeader.Format.GIF -> ImageType.GIF
+                ImageHeader.Format.HEIF -> ImageType.HEIF
+                ImageHeader.Format.JPEG -> ImageType.JPEG
+                ImageHeader.Format.JXL -> ImageType.JXL
+                ImageHeader.Format.PNG -> ImageType.PNG
+                ImageHeader.Format.WEBP -> ImageType.WEBP
                 else -> null
             }
         } catch (e: Exception) {
@@ -71,36 +71,19 @@ object ImageUtil {
 
     fun isAnimatedAndSupported(source: BufferedSource): Boolean {
         return try {
-            val type = getImageType(source.peek().inputStream()) ?: return false
+            val type = ImageHeader.read(source.peek().inputStream()) ?: return false
             // https://coil-kt.github.io/coil/getting_started/#supported-image-formats
             when (type.format) {
-                Format.Gif -> true
+                ImageHeader.Format.GIF -> true
                 // Animated WebP on Android 9+
-                Format.Webp -> type.isAnimated && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ImageHeader.Format.WEBP -> type.animated && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
                 // Animated Heif on Android 11+
-                Format.Heif -> type.isAnimated && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                ImageHeader.Format.HEIF -> type.animated && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                 else -> false
             }
         } catch (e: Exception) {
             false
         }
-    }
-
-    private fun getImageType(stream: InputStream): tachiyomi.decoder.ImageType? {
-        val bytes = ByteArray(32)
-
-        val length = if (stream.markSupported()) {
-            stream.mark(bytes.size)
-            stream.read(bytes, 0, bytes.size).also { stream.reset() }
-        } else {
-            stream.read(bytes, 0, bytes.size)
-        }
-
-        if (length == -1) {
-            return null
-        }
-
-        return ImageDecoder.findType(bytes)
     }
 
     enum class ImageType(val mime: String, val extension: String) {
@@ -212,19 +195,20 @@ object ImageUtil {
         return try {
             // Region-decode only the kept half: halves both decode cost and peak memory
             // (no full-size bitmap is ever materialized).
-            val decoder = newRegionDecoder(imageSource.inputStream()) ?: return null
+            val decoder = NativeImageDecoder.open(imageSource.inputStream())
             try {
                 val width = decoder.width
                 val height = decoder.height
                 if (width <= 0 || height <= 0) return null
                 val halfWidth = width / 2
+                if (halfWidth == 0) return null
                 val part = when (side) {
                     Side.RIGHT -> Rect(width - halfWidth, 0, width, height)
                     Side.LEFT -> Rect(0, 0, halfWidth, height)
                 }
-                decoder.decodeRegion(part, null)
+                decoder.decode(part)
             } finally {
-                decoder.recycle()
+                decoder.close()
             }
         } catch (e: Exception) {
             logcat(LogPriority.WARN, e) { "splitInHalfBitmap failed, falling back" }
@@ -268,14 +252,6 @@ object ImageUtil {
             null
         }
     }
-
-    private fun newRegionDecoder(stream: InputStream): BitmapRegionDecoder? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            BitmapRegionDecoder.newInstance(stream)
-        } else {
-            @Suppress("DEPRECATION")
-            BitmapRegionDecoder.newInstance(stream, false)
-        }
 
     enum class Side {
         RIGHT,
@@ -425,9 +401,7 @@ object ImageUtil {
      * Algorithm for determining what background to accompany a comic/manga page
      */
     fun chooseBackground(context: Context, imageStream: InputStream): Drawable {
-        val decoder = ImageDecoder.newInstance(imageStream)
-        val image = decoder?.decode()
-        decoder?.recycle()
+        val image = runCatching { NativeImageDecoder.open(imageStream).use { it.decode() } }.getOrNull()
 
         val whiteColor = Color.WHITE
         if (image == null) return ColorDrawable(whiteColor)
@@ -681,16 +655,15 @@ object ImageUtil {
      * Used to check an image's dimensions without loading it in the memory.
      */
     private fun extractImageOptions(imageSource: BufferedSource): BitmapFactory.Options {
-        val decoder = ImageDecoder.newInstance(imageSource.peek().inputStream(), false, null)
-        if (decoder != null) {
-            return try {
+        try {
+            return NativeImageDecoder.open(imageSource.peek().inputStream()).use { decoder ->
                 BitmapFactory.Options().apply {
                     outWidth = decoder.width
                     outHeight = decoder.height
                 }
-            } finally {
-                decoder.recycle()
             }
+        } catch (_: Exception) {
+            // Keep the platform fallback for formats outside the native build.
         }
 
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -708,11 +681,10 @@ object ImageUtil {
     }
 
     private fun decodeBitmapWithCustomDecoder(imageSource: BufferedSource): Bitmap? {
-        val decoder = ImageDecoder.newInstance(imageSource.inputStream(), false, null) ?: return null
         return try {
-            decoder.decode(sampleSize = 1)
-        } finally {
-            decoder.recycle()
+            NativeImageDecoder.open(imageSource.inputStream()).use { it.decode() }
+        } catch (_: Exception) {
+            null
         }
     }
 

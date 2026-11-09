@@ -11,39 +11,25 @@ import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import coil3.request.bitmapConfig
 import okio.BufferedSource
+import tachiyomi.core.common.util.image.NativeImageDecoder
 import tachiyomi.core.common.util.system.ImageUtil
-import tachiyomi.decoder.ImageDecoder
 
 /**
- * A [Decoder] that uses built-in [ImageDecoder] to decode images that is not supported by the system.
+ * A [Decoder] that uses built-in [NativeImageDecoder] to decode images that is not supported by the system.
  */
 class TachiyomiImageDecoder(private val resources: ImageSource, private val options: Options) : Decoder {
 
     override suspend fun decode(): DecodeResult {
-        val decoder = resources.sourceOrNull()?.use {
-            ImageDecoder.newInstance(it.inputStream(), options.cropBorders, displayProfile)
+        val source = checkNotNull(resources.sourceOrNull()) { "Missing image source" }
+        var sampleSize = 1
+        var bitmap = NativeImageDecoder.open(source.inputStream(), options.cropBorders).use { decoder ->
+            val srcWidth = decoder.width
+            val srcHeight = decoder.height
+            val dstWidth = options.size.widthPx(options.scale) { srcWidth }
+            val dstHeight = options.size.heightPx(options.scale) { srcHeight }
+            sampleSize = DecodeUtils.calculateInSampleSize(srcWidth, srcHeight, dstWidth, dstHeight, options.scale)
+            decoder.decode(sampleSize = sampleSize)
         }
-
-        check(decoder != null && decoder.width > 0 && decoder.height > 0) { "Failed to initialize decoder" }
-
-        val srcWidth = decoder.width
-        val srcHeight = decoder.height
-
-        val dstWidth = options.size.widthPx(options.scale) { srcWidth }
-        val dstHeight = options.size.heightPx(options.scale) { srcHeight }
-
-        val sampleSize = DecodeUtils.calculateInSampleSize(
-            srcWidth = srcWidth,
-            srcHeight = srcHeight,
-            dstWidth = dstWidth,
-            dstHeight = dstHeight,
-            scale = options.scale,
-        )
-
-        var bitmap = decoder.decode(sampleSize = sampleSize)
-        decoder.recycle()
-
-        check(bitmap != null) { "Failed to decode image" }
 
         if (options.bitmapConfig == Bitmap.Config.HARDWARE && ImageUtil.canUseHardwareBitmap(bitmap)) {
             val hwBitmap = bitmap.copy(Bitmap.Config.HARDWARE, false)
@@ -82,9 +68,5 @@ class TachiyomiImageDecoder(private val resources: ImageSource, private val opti
         override fun equals(other: Any?) = other is Factory
 
         override fun hashCode() = javaClass.hashCode()
-    }
-
-    companion object {
-        var displayProfile: ByteArray? = null
     }
 }

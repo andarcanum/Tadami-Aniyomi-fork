@@ -45,7 +45,13 @@ class OpenSourceLicensesScreen : Screen() {
                         OpenSourceLibraryLicenseScreen(
                             name = it.name,
                             website = it.website,
-                            license = it.licenses.firstOrNull()?.licenseContent?.replace("\n", "<br />").orEmpty(),
+                            license = if (it.uniqueId == "ca.mpreg:imagedecoder") {
+                                val notice = context.assets.open("licenses/image-reader-NOTICE.txt")
+                                    .bufferedReader().use { reader -> reader.readText() }
+                                android.text.TextUtils.htmlEncode(notice).replace("\n", "<br />")
+                            } else {
+                                it.licenses.firstOrNull()?.licenseContent?.replace("\n", "<br />").orEmpty()
+                            },
                         ),
                     )
                     true

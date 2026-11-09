@@ -1,11 +1,10 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.BitmapRegionDecoder
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Build
+import tachiyomi.core.common.util.image.NativeImageDecoder
 import java.io.InputStream
 
 object WebtoonBorderDetector {
@@ -45,7 +44,7 @@ object WebtoonBorderDetector {
                 // Scan from right
                 for (x in width - 6 downTo 5) {
                     if (isSignificantDifference(cleanBitmap.getPixel(x, y), rightColor)) {
-                        rightLimit = maxOf(rightLimit, x)
+                        rightLimit = maxOf(rightLimit, x + 1)
                         break
                     }
                 }
@@ -65,65 +64,45 @@ object WebtoonBorderDetector {
         }
     }
 
-    fun detectContentBounds(inputStream: InputStream): Rect {
+    fun detectContentBounds(inputStream: InputStream, cropBorders: Boolean = false): Rect {
         return try {
-            val decoder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                BitmapRegionDecoder.newInstance(inputStream)
-            } else {
-                @Suppress("DEPRECATION")
-                BitmapRegionDecoder.newInstance(inputStream, false)
-            } ?: return Rect()
-
-            val width = decoder.width
-            val height = decoder.height
-            if (width <= 20 || height <= 20) return Rect(0, 0, width, height)
-
-            val sampleY = listOf(height / 10, height / 3, height / 2, height * 2 / 3, height * 9 / 10)
-            var leftLimit = width
-            var rightLimit = 0
-
-            val options = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            }
-
-            for (y in sampleY) {
-                if (y >= height) continue
-                val rect = Rect(0, y, width, y + 1)
-                val rowBitmap = decoder.decodeRegion(rect, options) ?: continue
-
-                // Skip first/last 5 pixels to avoid 1-pixel borders or edge noise
-                val leftColor = rowBitmap.getPixel(5, 0)
-                val rightColor = rowBitmap.getPixel(width - 6, 0)
-
-                for (x in 5 until width - 5) {
-                    if (isSignificantDifference(rowBitmap.getPixel(x, 0), leftColor)) {
-                        leftLimit = minOf(leftLimit, x)
-                        break
+            NativeImageDecoder.open(inputStream, cropBorders).use { decoder ->
+                val width = decoder.width
+                val height = decoder.height
+                if (width <= 20 || height <= 20) return Rect(0, 0, width, height)
+                val sampleY = listOf(height / 10, height / 3, height / 2, height * 2 / 3, height * 9 / 10)
+                var leftLimit = width
+                var rightLimit = 0
+                for (y in sampleY) {
+                    val row = decoder.decode(Rect(0, y, width, y + 1))
+                    try {
+                        val leftColor = row.getPixel(5, 0)
+                        val rightColor = row.getPixel(width - 6, 0)
+                        for (x in 5 until width - 5) {
+                            if (isSignificantDifference(row.getPixel(x, 0), leftColor)) {
+                                leftLimit = minOf(leftLimit, x)
+                                break
+                            }
+                        }
+                        for (x in width - 6 downTo 5) {
+                            if (isSignificantDifference(row.getPixel(x, 0), rightColor)) {
+                                rightLimit = maxOf(rightLimit, x + 1)
+                                break
+                            }
+                        }
+                    } finally {
+                        row.recycle()
                     }
                 }
-
-                for (x in width - 6 downTo 5) {
-                    if (isSignificantDifference(rowBitmap.getPixel(x, 0), rightColor)) {
-                        rightLimit = maxOf(rightLimit, x)
-                        break
-                    }
+                val contentWidth = rightLimit - leftLimit
+                if (leftLimit < rightLimit && contentWidth < width * 0.95f && contentWidth > width * 0.10f) {
+                    Rect(leftLimit, 0, rightLimit, height)
+                } else {
+                    Rect(0, 0, width, height)
                 }
-                rowBitmap.recycle()
             }
-            decoder.recycle()
-
-            val contentWidth = rightLimit - leftLimit
-            if (leftLimit < rightLimit && contentWidth < width * 0.95f && contentWidth > width * 0.10f) {
-                Rect(leftLimit, 0, rightLimit, height)
-            } else {
-                Rect(0, 0, width, height)
-            }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Rect()
-        } finally {
-            try {
-                inputStream.close()
-            } catch (ignored: Exception) {}
         }
     }
 

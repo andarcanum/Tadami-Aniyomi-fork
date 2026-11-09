@@ -1,4 +1,4 @@
-﻿import mihon.buildlogic.Config
+import mihon.buildlogic.Config
 import mihon.buildlogic.generatedBuildDir
 import mihon.buildlogic.getBuildTime
 import mihon.buildlogic.getCommitCount
@@ -306,9 +306,6 @@ dependencies {
     // Image loading
     implementation(platform(libs.coil.bom))
     implementation(libs.bundles.coil)
-    implementation(libs.subsamplingscaleimageview) {
-        exclude(module = "image-decoder")
-    }
     implementation(libs.image.decoder)
 
     // UI libraries

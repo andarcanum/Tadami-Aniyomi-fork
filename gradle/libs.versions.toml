@@ -64,8 +64,8 @@ coil-gif = { module = "io.coil-kt.coil3:coil-gif" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp" }
 
-subsamplingscaleimageview = "com.github.tachiyomiorg:subsampling-scale-image-view:66e0db195d"
-image-decoder = "com.github.tachiyomiorg:image-decoder:41c059e540"
+# SSIV is source-pinned in app; see app/src/main/java/com/davemorrissey/labs/subscaleview/UPSTREAM.md.
+image-decoder = "ca.mpreg:imagedecoder:18"
 
 natural-comparator = "com.github.gpanther:java-nat-sort:natural-comparator-1.1"
 

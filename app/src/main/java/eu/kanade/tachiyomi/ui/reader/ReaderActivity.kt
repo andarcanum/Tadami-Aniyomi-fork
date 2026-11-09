@@ -66,9 +66,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.google.android.material.transition.platform.MaterialContainerTransform
-import com.hippo.unifile.UniFile
 import com.tadami.aurora.R
 import com.tadami.aurora.databinding.ReaderActivityBinding
 import eu.kanade.core.util.ifMangaSourcesLoaded
@@ -91,7 +89,6 @@ import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialOverlay
 import eu.kanade.presentation.reader.manga.ReaderFinaleOverlay
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.core.common.Constants
-import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
@@ -147,7 +144,6 @@ import tachiyomi.presentation.core.util.AppHapticsProvider
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.io.ByteArrayOutputStream
 import tachiyomi.presentation.core.i18n.stringResource as composeStringResource
 
 // Legacy bridge: this activity still hosts the reader while the Compose migration remains partial.
@@ -1370,10 +1366,6 @@ class ReaderActivity : BaseActivity() {
                 }
                 .launchIn(lifecycleScope)
 
-            preferences.displayProfile().changes()
-                .onEach { setDisplayProfile(it) }
-                .launchIn(lifecycleScope)
-
             merge(
                 readerPreferences.grayscale().changes(),
                 readerPreferences.invertedColors().changes(),
@@ -1436,25 +1428,6 @@ class ReaderActivity : BaseActivity() {
                 grayBackgroundColor
             } else {
                 Color.WHITE
-            }
-        }
-
-        /**
-         * Sets the display profile to [path].
-         */
-        private fun setDisplayProfile(path: String) {
-            val file = UniFile.fromUri(baseContext, path.toUri())
-            if (file != null && file.exists()) {
-                val inputStream = file.openInputStream()
-                val outputStream = ByteArrayOutputStream()
-                inputStream.use { input ->
-                    outputStream.use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                val data = outputStream.toByteArray()
-                SubsamplingScaleImageView.setDisplayProfile(data)
-                TachiyomiImageDecoder.displayProfile = data
             }
         }
 

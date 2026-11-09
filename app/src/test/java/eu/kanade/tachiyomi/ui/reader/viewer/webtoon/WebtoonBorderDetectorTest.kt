@@ -2,9 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.Rect
 import io.kotest.matchers.shouldBe
 import org.junit.Test
@@ -24,20 +22,11 @@ class WebtoonBorderDetectorTest {
         contentRight: Int,
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(backgroundColor)
-
-        val paint = Paint().apply {
-            color = Color.BLUE // Any color different from background
+        bitmap.eraseColor(backgroundColor)
+        // Use exact half-open pixels: Robolectric's legacy Canvas paints the right edge inclusively.
+        for (y in 0 until height) {
+            for (x in contentLeft until contentRight) bitmap.setPixel(x, y, Color.BLUE)
         }
-        // Draw content in the specified horizontal range
-        canvas.drawRect(
-            contentLeft.toFloat(),
-            0f,
-            contentRight.toFloat(),
-            height.toFloat(),
-            paint,
-        )
         return bitmap
     }
 
@@ -53,7 +42,7 @@ class WebtoonBorderDetectorTest {
         )
 
         val bounds = WebtoonBorderDetector.detectContentBounds(bitmap)
-        // Should detect left = 25, right = 75 (or 74 depending on exact pixel drawing)
+        // Right is exclusive: keep the content pixel at x=74.
         bounds.left shouldBe 25
         bounds.right shouldBe 75
         bounds.top shouldBe 0
