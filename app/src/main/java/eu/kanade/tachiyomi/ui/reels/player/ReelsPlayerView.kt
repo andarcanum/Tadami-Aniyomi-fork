@@ -204,20 +204,46 @@ fun ReelsPlayerView(
     if (isStill ?: isReelImageUrl(videoUrl)) {
         val photoClock = remember(videoUrl) { ReelsWatchClock() }
         var photoCompleted by remember(videoUrl) { mutableStateOf(false) }
+        // Bunkr photos are ~1 MB and can take seconds to arrive. The poster covers that gap
+        // (a black frame reads as a broken reel) and the dwell only starts once the photo —
+        // or the poster after a failed/slow request — is actually on screen.
+        var photoReady by remember(videoUrl) { mutableStateOf(false) }
+        LaunchedEffect(videoUrl) {
+            if (!photoReady) {
+                delay(STILL_READY_GRACE_MS)
+                photoReady = true
+            }
+        }
         // A still has no player: its playback state is the page intent gated by the same
         // foreground contract as a video (pause and background stop the dwell).
-        val photoEligible = isActive && isPlaying && isLifecycleStarted && !photoCompleted
+        val photoEligible = reelsStillDwellEligible(
+            isActive = isActive,
+            isPlaying = isPlaying,
+            lifecycleStarted = isLifecycleStarted,
+            completed = photoCompleted,
+            mediaReady = photoReady,
+        )
         Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(Color.Black),
             contentAlignment = androidx.compose.ui.Alignment.Center,
         ) {
+            if (posterUrl.isNotBlank()) {
+                AsyncImage(
+                    model = posterUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             AsyncImage(
                 model = videoUrl,
                 contentDescription = videoDescription,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
+                onSuccess = { photoReady = true },
+                onError = { photoReady = true },
             )
         }
         // Dwell accumulates only eligible time: 2 s of foreground playback followed by a
@@ -919,6 +945,12 @@ internal fun calculateIoFallbackPosition(
 const val REELS_MIN_DWELL_MS = 5_000L
 
 /**
+ * After this long a still's poster counts as the visible media even if the full-size photo
+ * request has not completed: a hung CDN call must not stall the feed's auto-advance.
+ */
+internal const val STILL_READY_GRACE_MS = 6_000L
+
+/**
  * What the player should do when the active reel reaches its natural end while
  * auto-advance is on: [remainingMs] of hold before advancing, and whether a real
  * video should loop meanwhile (stills have nothing to loop).
@@ -946,6 +978,20 @@ internal fun reelsShouldPauseOnStop(inPictureInPicture: Boolean): Boolean = !inP
 /** P02: the single playback-eligibility gate every retry path must derive its intent from. */
 internal fun reelsShouldRunPlayback(isActive: Boolean, isPlaying: Boolean, lifecycleStarted: Boolean): Boolean =
     isActive && isPlaying && lifecycleStarted
+
+/**
+ * A still's dwell runs only while the page is eligible AND its media is actually visible.
+ * A blank photo URL resolves first (the poster layer covers that wait), and a ~1 MB photo
+ * can still take seconds: counting that time towards the 5 s dwell advanced the feed
+ * before the picture ever appeared.
+ */
+internal fun reelsStillDwellEligible(
+    isActive: Boolean,
+    isPlaying: Boolean,
+    lifecycleStarted: Boolean,
+    completed: Boolean,
+    mediaReady: Boolean,
+): Boolean = isActive && isPlaying && lifecycleStarted && !completed && mediaReady
 
 private val reelsVideoCacheOwner = ReelsCacheOwner<SimpleCache>()
 

@@ -25,4 +25,23 @@ class ReelsPlaybackLifecycleTest {
         reelsShouldRunPlayback(isActive = true, isPlaying = false, lifecycleStarted = true) shouldBe false
         reelsShouldRunPlayback(isActive = true, isPlaying = true, lifecycleStarted = false) shouldBe false
     }
+
+    @Test
+    fun `still dwell waits until the photo or its poster is visible`() {
+        reelsStillDwellEligible(
+            isActive = true,
+            isPlaying = true,
+            lifecycleStarted = true,
+            completed = false,
+            mediaReady = true,
+        ) shouldBe true
+
+        // The photo is still downloading and the grace period has not elapsed yet.
+        reelsStillDwellEligible(true, true, true, completed = false, mediaReady = false) shouldBe false
+        // A completed still holds at full progress instead of restarting the dwell.
+        reelsStillDwellEligible(true, true, true, completed = true, mediaReady = true) shouldBe false
+        reelsStillDwellEligible(false, true, true, completed = false, mediaReady = true) shouldBe false
+        reelsStillDwellEligible(true, false, true, completed = false, mediaReady = true) shouldBe false
+        reelsStillDwellEligible(true, true, false, completed = false, mediaReady = true) shouldBe false
+    }
 }
