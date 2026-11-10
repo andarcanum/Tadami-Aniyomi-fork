@@ -18,6 +18,8 @@ data class DiscoveryFeed(
     /** Builder output before coordinator filtering; diagnostics only. */
     val rawCandidates: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
     val exhaustionEvidence: List<DiscoveryQueryEvidence>? = null,
+    val failedSourceIds: Set<Long> = emptySet(),
+    val degradedSourceIds: Set<Long> = emptySet(),
 )
 
 /**
@@ -138,6 +140,8 @@ class DiscoveryCoordinator(
             } else {
                 null
             },
+            failedSourceIds = rowBuilders.flatMap { it.failedSourceIds }.toSet(),
+            degradedSourceIds = rowBuilders.flatMap { it.degradedSourceIds }.toSet(),
         )
     }
 

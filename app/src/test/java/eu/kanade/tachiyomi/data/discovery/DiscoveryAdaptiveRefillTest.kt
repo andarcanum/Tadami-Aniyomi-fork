@@ -191,7 +191,7 @@ class DiscoveryAdaptiveRefillTest {
     }
 
     @Test
-    fun `rich required source fills thirty cards across pages`() = runTest {
+    fun `rich required source fills fifty cards across pages`() = runTest {
         val catalog = Catalog { _, pageNumber ->
             val start = (pageNumber - 1) * 10
             page((1..10).map { item("card${start + it}", listOf("Fantasy")) })
@@ -199,8 +199,8 @@ class DiscoveryAdaptiveRefillTest {
 
         val summary = query(catalog, targetItems = 50).single().summary
 
-        summary.items.size shouldBe RICH_SOURCE_TARGET
-        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2, 3)
+        summary.items.size shouldBe 50
+        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2, 3, 4, 5)
     }
 
     @Test
@@ -413,7 +413,7 @@ class DiscoveryAdaptiveRefillTest {
     }
 
     @Test
-    fun `genreless source admits its genre search results without verification`() = runTest {
+    fun `genreless source is not admitted without verification`() = runTest {
         val cards = (1..8).map { item("card$it") }
         val searched = page(
             items = cards,
@@ -423,18 +423,86 @@ class DiscoveryAdaptiveRefillTest {
             hasNextPage = false,
         )
 
-        val viaSearch = query(
+        val result = query(
             Catalog { _, _ -> searched.copy(genreSearchApplied = true) },
             budget = DiscoveryVerificationBudget(maxDetails = 24),
         ).single()
-        val viaBrowse = query(
-            Catalog { _, _ -> searched },
-            budget = DiscoveryVerificationBudget(maxDetails = 24),
-        ).single()
 
-        viaSearch.summary.items.size shouldBe 8
-        viaSearch.summary.items.all { it.genres == listOf("Fantasy") } shouldBe true
-        viaBrowse.summary.items shouldBe emptyList()
+        result.summary.items shouldBe emptyList()
+    }
+
+    @Test
+    fun `second probe verifies pending cards once and leaves coverage visible`() = runTest {
+        val pending = (1..13).map { item("pending$it") }
+        val firstPage = page(
+            items = (1..6).map { item("seen$it", listOf("Drama")) },
+            verified = 6,
+            unattempted = 13,
+            pending = pending,
+            detailsUsed = 6,
+            hasNextPage = true,
+        )
+        val catalog = Catalog(
+            hydrateAnswer = { items ->
+                page(
+                    items = emptyList(),
+                    verified = 6,
+                    unattempted = items.size - 6,
+                    pending = items.drop(6),
+                    detailsUsed = 6,
+                    hasNextPage = true,
+                )
+            },
+            answer = { _, _ -> firstPage },
+        )
+
+        val result = query(catalog, budget = DiscoveryVerificationBudget(maxDetails = 24)).single()
+
+        result.summary.verifiedCount shouldBe 12
+        result.pending shouldBe 7
+        result.detailsUsed shouldBe 12
+        result.summary.hasCoverageGap shouldBe true
+        catalog.hydrateCalls.size shouldBe 1
+    }
+
+    @Test
+    fun `no productive source bounds the retry to six plus six details`() = runTest {
+        val pending = (1..13).map { item("pending$it") }
+        val firstPage = page(
+            items = (1..6).map { item("seen$it", listOf("Drama")) },
+            verified = 6,
+            unattempted = 13,
+            pending = pending,
+            detailsUsed = 6,
+            hasNextPage = true,
+        )
+        val catalog = Catalog(
+            hydrateAnswer = { items ->
+                page(
+                    items = emptyList(),
+                    verified = 6,
+                    unattempted = items.size - 6,
+                    pending = items.drop(6),
+                    detailsUsed = 6,
+                    hasNextPage = true,
+                )
+            },
+            answer = { _, _ -> firstPage },
+        )
+
+        val results = query(
+            catalog,
+            sourceIds = listOf(1L, 2L),
+            budget = DiscoveryVerificationBudget(maxDetails = 160),
+            targetItems = 50,
+        )
+
+        results.forEach { result ->
+            result.detailsUsed shouldBe 12
+            result.pending shouldBe 7
+            result.summary.verifiedCount shouldBe 12
+        }
+        catalog.hydrateCalls.size shouldBe 2
     }
 
     @Test

@@ -259,6 +259,7 @@ class DiscoveryRunner(
         isConfigurationRefresh: Boolean = false,
         topUp: Boolean = false,
     ): DiscoveryRunOutcome {
+        preferences.lastSourceFailureCount(mediaType).set(0)
         DiscoveryProgressTracker.update(
             isRunning = true,
             mediaType = mediaType,
@@ -540,13 +541,6 @@ class DiscoveryRunner(
                         ),
                         hydrate = true,
                         targetItems = if (topUp) need * 3 / 2 else RICH_SOURCE_TARGET * 2,
-                        perSourceCap = if (ordered.size >
-                            1
-                        ) {
-                            SHARED_MULTI_SOURCE_CAP
-                        } else {
-                            (if (topUp) need * 3 / 2 else RICH_SOURCE_TARGET * 2)
-                        },
                         budget = verificationBudget,
                         excludedKeys = baseContext.exclusionKeys,
                     )
@@ -629,6 +623,9 @@ class DiscoveryRunner(
         val feed = coordinator.streamFeed(context) { _, _ ->
             // The whole pool is published once, after every row has settled.
         }
+        val sourceFailures = feed.failedSourceIds.size
+        val sourceDegraded = feed.degradedSourceIds.size
+        preferences.lastSourceFailureCount(mediaType).set(sourceFailures)
         val fillAudit = buildDiscoveryFillAudit(
             mediaType = mediaType,
             rawCandidates = feed.rawCandidates,
@@ -636,6 +633,8 @@ class DiscoveryRunner(
             context = context,
             detailsUsed = verificationBudget.detailsUsed,
             detailsAllowance = verificationBudget.detailsAllowance,
+            sourceFailures = sourceFailures,
+            sourceDegraded = sourceDegraded,
         )
         logcat { fillAudit.logLine() }
         logcat {
@@ -795,9 +794,56 @@ class DiscoveryRunner(
             emptySet()
         }
 
+        var keptTopUpReceipt: DiscoveryTopUpReceipt? = null
+        if (publishReceipt is DiscoveryPublishReceipt.KeptExisting) {
+            val additions = (prepared as? DiscoveryPreparedPool.Fresh)?.suggestions.orEmpty()
+            val cursors = when (prepared) {
+                is DiscoveryPreparedPool.Fresh -> prepared.cursors
+                is DiscoveryPreparedPool.VerifiedEmpty -> prepared.cursors
+                else -> emptyList()
+            }
+            val receipt = repository.topUpPool(
+                media = mediaType,
+                expectedGeneration = expectedGeneration,
+                additions = additions,
+                cursors = cursors,
+                maxPoolSize = DISCOVERY_POOL_TARGET,
+            )
+            keptTopUpReceipt = receipt
+            val now = System.currentTimeMillis()
+            when (receipt) {
+                is DiscoveryTopUpReceipt.ToppedUp -> {
+                    preferences.lastTopUpAdded(mediaType).set(receipt.added)
+                    preferences.lastTopUpAt(mediaType).set(now)
+                }
+                is DiscoveryTopUpReceipt.NothingToAdd -> {
+                    preferences.lastTopUpAdded(mediaType).set(0)
+                    preferences.lastTopUpAt(mediaType).set(now)
+                }
+                is DiscoveryTopUpReceipt.Superseded,
+                is DiscoveryTopUpReceipt.Busy,
+                -> Unit
+            }
+            logcat {
+                "[DiscoveryPublication] kept existing accepted=${publishReceipt.accepted} " +
+                    "oldEligible=${publishReceipt.oldEligible} topUp=$keptTopUpReceipt"
+            }
+        }
+        val topUpSkipped = keptTopUpReceipt is DiscoveryTopUpReceipt.Superseded ||
+            keptTopUpReceipt is DiscoveryTopUpReceipt.Busy
+        val topUpAdded = keptTopUpReceipt is DiscoveryTopUpReceipt.ToppedUp
+
         val status = when {
             publishReceipt is DiscoveryPublishReceipt.Superseded -> DiscoveryRunStatus.SKIPPED
             allExecutedFailed -> DiscoveryRunStatus.FAILED
+            publishReceipt is DiscoveryPublishReceipt.KeptExisting ->
+                if (topUpSkipped) {
+                    DiscoveryRunStatus.SKIPPED
+                } else if (hasPartialFailures) {
+                    DiscoveryRunStatus.PARTIAL
+                } else {
+                    DiscoveryRunStatus.SUCCESS
+                }
             publishReceipt is DiscoveryPublishReceipt.NoAdmissibleItems -> DiscoveryRunStatus.FAILED
             prepared == null -> if (hasPartialFailures) DiscoveryRunStatus.PARTIAL else DiscoveryRunStatus.FAILED
             token == null -> DiscoveryRunStatus.SKIPPED
@@ -806,7 +852,7 @@ class DiscoveryRunner(
             else -> DiscoveryRunStatus.SUCCESS
         }
 
-        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed && published != null) {
+        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed && (published != null || topUpAdded)) {
             if (isManualRefresh) {
                 preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
             } else if (!isConfigurationRefresh) {

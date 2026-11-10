@@ -1981,7 +1981,15 @@
     <string name="pref_discovery_genre_tab_required">Обязат.</string>
     <string name="pref_discovery_genre_hint_ignored">Жанры не попадают в подборку. Мгновенно для «по вкусу», с обновлением — для трендов.</string>
     <string name="pref_discovery_genre_hint_priority">Тайтлы с этими жанрами поднимаются выше и чаще попадают в «по вкусу». Ничего не отсекает.</string>
-    <string name="pref_discovery_genre_hint_required">Только тайтлы с этими жанрами. Источники без жанрового фильтра дают обычную выдачу — подборка не опустеет.</string>
+    <string name="pref_discovery_genre_hint_required">Только тайтлы с этими жанрами. Источники без жанрового фильтра могут не дать результатов для этой подборки — это ожидаемо.</string>
+    <string name="discovery_genre_move_hint">Нажмите на приглушённый жанр, чтобы перенести его в этот режим.</string>
+    <string name="discovery_enforcement_label">Строгость обязательных жанров</string>
+    <string name="discovery_enforcement_global">Для всех медиа</string>
+    <string name="discovery_enforcement_best_effort_hint">BEST_EFFORT не отсекает по обязательным жанрам; blacklist и игнорируемые жанры остаются строгими.</string>
+    <string name="discovery_match_mode_label">Совпадение жанров</string>
+    <string name="discovery_regeneration_warning">Смена режима пересоберёт текущую ленту.</string>
+    <string name="for_you_pool_status">%1$d из %2$d</string>
+    <string name="for_you_sources_unavailable">Недоступно источников: %1$d</string>
     <string name="pref_discovery_genre_search">Найти жанр…</string>
     <string name="pref_discovery_genre_empty">Ничего не найдено</string>
     <string name="pref_discovery_genre_add_custom">Добавить «%1$s»</string>

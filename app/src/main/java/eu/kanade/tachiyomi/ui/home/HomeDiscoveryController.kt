@@ -89,28 +89,32 @@ internal class HomeDiscoveryController(
                 combine(
                     repository.subscribeBlacklist(mediaType),
                     preferences.observeGenreFilterSpec(mediaType),
-                    preferences.lastFailedRows(mediaType).changes(),
-                    preferences.lastGenerationStatus(mediaType).changes(),
-                    preferences.lastGenerationAt(mediaType).changes(),
-                ) { blacklist, filterSpec, failedCsv, lastStatus, lastGenAt ->
-                    val policy = DiscoveryCandidatePolicy(
+                    combine(
+                        preferences.lastFailedRows(mediaType).changes(),
+                        preferences.lastGenerationStatus(mediaType).changes(),
+                        preferences.lastGenerationAt(mediaType).changes(),
+                        preferences.lastSourceFailureCount(mediaType).changes(),
+                    ) { failedCsv, lastStatus, lastGenAt, sourceFailureCount ->
+                        DiscoveryStatusSnapshot(failedCsv, lastStatus, lastGenAt, sourceFailureCount)
+                    },
+                ) { blacklist, filterSpec, status ->
+                    DiscoveryCandidatePolicy(
                         spec = filterSpec,
                         blacklistedTags = blacklist,
-                    )
-                    Triple(policy, failedCsv, lastStatus to lastGenAt)
+                    ) to status
                 },
-            ) { items, enabled, count, hiddenAndConsumed, (policy, failedCsv, statusAndAt) ->
+            ) { items, enabled, count, hiddenAndConsumed, (policy, status) ->
                 val (hidden, consumed) = hiddenAndConsumed
-                val (lastStatus, lastGenAt) = statusAndAt
                 val visible = items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed }
                 DiscoveryObservationState(
                     visible = visible,
                     enabled = enabled,
                     count = count,
                     policy = policy,
-                    failedCsv = failedCsv,
-                    lastStatus = lastStatus,
-                    lastGenAt = lastGenAt,
+                    failedCsv = status.failedCsv,
+                    lastStatus = status.lastStatus,
+                    lastGenAt = status.lastGenAt,
+                    sourceFailureCount = status.sourceFailureCount,
                 )
             }.collectLatest { obs ->
                 mutex.withLock {
@@ -122,6 +126,7 @@ internal class HomeDiscoveryController(
                                 discoveryEnabled = false,
                                 discoveryPool = emptyList(),
                                 isDiscoveryFailed = false,
+                                discoveryFailedSourceCount = 0,
                             )
                         }
                         return@collectLatest
@@ -150,6 +155,7 @@ internal class HomeDiscoveryController(
                             discoveryEnabled = true,
                             discoveryLastUpdated = lastUpdated,
                             isDiscoveryFailed = isFailed,
+                            discoveryFailedSourceCount = obs.sourceFailureCount,
                         )
                     }
 
@@ -410,6 +416,13 @@ internal class HomeDiscoveryController(
     }
 }
 
+private data class DiscoveryStatusSnapshot(
+    val failedCsv: String,
+    val lastStatus: String,
+    val lastGenAt: Long,
+    val sourceFailureCount: Int,
+)
+
 private data class DiscoveryObservationState(
     val visible: List<DiscoverySuggestion>,
     val enabled: Boolean,
@@ -418,4 +431,5 @@ private data class DiscoveryObservationState(
     val failedCsv: String,
     val lastStatus: String,
     val lastGenAt: Long,
+    val sourceFailureCount: Int,
 )

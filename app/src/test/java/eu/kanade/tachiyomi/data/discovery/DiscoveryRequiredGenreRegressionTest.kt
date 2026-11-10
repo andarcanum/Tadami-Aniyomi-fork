@@ -133,6 +133,28 @@ class DiscoveryRequiredGenreRegressionTest {
     }
 
     @Test
+    fun `multi-source required query is not capped at twenty four per source`() = runTest {
+        val catalog = Catalog { id, _ ->
+            page((1..30).map { item("${id}_$it", listOf("Fantasy")) }, hasNextPage = false)
+        }
+
+        val results = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(1L, 2L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policy,
+            targetItems = 60,
+            budget = DiscoveryVerificationBudget(maxDetails = 160),
+        )
+
+        results.forEach { it.summary.items.size shouldBe 30 }
+        results.sumOf { it.summary.items.size } shouldBe 60
+    }
+
+    @Test
     fun `taste row does not truncate the source list at six`() = runTest {
         val catalog = Catalog { id, _ ->
             if (id == 7L) page(listOf(item("Match", listOf("Fantasy")))) else page(emptyList())

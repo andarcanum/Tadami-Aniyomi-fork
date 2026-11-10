@@ -17,6 +17,7 @@ class DiscoverySourceRowBuilderTest {
         private val failingLatest: Set<Long> = emptySet(),
         private val continuation: Map<Pair<Long, Int>, Boolean> = emptyMap(),
         private val itemsByPage: Map<Pair<Long, Int>, List<DiscoveryRowItem>> = emptyMap(),
+        private val genreItemsBySource: Map<Long, List<DiscoveryRowItem>> = emptyMap(),
         private val beforePage: () -> Unit = {},
     ) : DiscoverySourceCatalog {
         val requested = mutableListOf<Long>()
@@ -84,7 +85,7 @@ class DiscoverySourceRowBuilderTest {
             genres: List<String>,
             page: Int,
             releaseStatuses: Set<DiscoveryReleaseStatus>,
-        ): List<DiscoveryRowItem> = emptyList()
+        ): List<DiscoveryRowItem> = genreItemsBySource[sourceId].orEmpty()
 
         override suspend fun latest(
             mediaType: DiscoveryMediaType,
@@ -133,6 +134,34 @@ class DiscoverySourceRowBuilderTest {
 
         catalog.requestedPopular.map { it.second }.distinct().sorted() shouldBe listOf(5, 6, 7)
         catalog.requestedLatest.map { it.second }.distinct().sorted() shouldBe listOf(5, 6, 7)
+    }
+
+    @Test
+    fun `required source target follows row cap instead of static thirty`() = runTest {
+        val cards = (1..60).map { number ->
+            DiscoveryRowItem(
+                title = "G$number",
+                cleanTitle = "g$number",
+                coverUrl = null,
+                reason = null,
+                seedTitle = null,
+                provider = "S1",
+                score = 1.0,
+                sourceId = 1L,
+                sourceUrl = "/g$number",
+                genres = listOf("Fantasy"),
+            )
+        }
+        val catalog = FakeCatalog(genreItemsBySource = mapOf(1L to cards))
+
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 60).build(
+            context(sourceIds = listOf(1L)).copy(
+                requiredGenres = setOf("Fantasy"),
+                genreFilterSpec = GenreFilterSpec(requiredGenres = setOf("Fantasy")),
+            ),
+        )
+
+        result.size shouldBe 60
     }
 
     @Test

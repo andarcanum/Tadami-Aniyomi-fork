@@ -112,6 +112,27 @@ class DiscoveryCoordinatorTest {
     }
 
     @Test
+    fun `feed unions source ids across rows without double counting`() = runTest {
+        val taste = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.TASTE
+            override val failedSourceIds = setOf(7L)
+            override val degradedSourceIds = setOf(8L)
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = emptyList()
+        }
+        val source = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override val failedSourceIds = setOf(7L)
+            override val degradedSourceIds = setOf(8L)
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = emptyList()
+        }
+
+        val feed = DiscoveryCoordinator(listOf(taste, source)).buildFeed(baseContext)
+
+        feed.failedSourceIds shouldBe setOf(7L)
+        feed.degradedSourceIds shouldBe setOf(8L)
+    }
+
+    @Test
     fun `failing builder yields empty row and failedRows marker, others survive`() = runTest {
         val like = builder(DiscoveryRowType.LIKE, emptyList(), fail = true)
         val trend = builder(DiscoveryRowType.TREND, listOf(item("Ok")))

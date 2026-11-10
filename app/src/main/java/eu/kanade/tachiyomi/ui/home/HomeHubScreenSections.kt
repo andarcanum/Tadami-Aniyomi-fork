@@ -806,6 +806,8 @@ private fun HomeHubScreen(
                             tracker = exposureTracker,
                             isSectionActive = isSectionActive,
                             isResumed = isResumed,
+                            poolSize = state.discoveryPool.size,
+                            failedSourceCount = state.discoveryFailedSourceCount,
                             emptyState = resolveForYouEmptyState(
                                 discoveryEnabled = state.discoveryEnabled,
                                 isRefreshing = state.isDiscoveryRefreshing,
@@ -842,6 +844,8 @@ private fun HomeHubScreen(
                                     tracker = exposureTracker,
                                     isSectionActive = isSectionActive,
                                     isResumed = isResumed,
+                                    poolSize = state.discoveryPool.size,
+                                    failedSourceCount = state.discoveryFailedSourceCount,
                                     emptyState = resolveForYouEmptyState(
                                         discoveryEnabled = state.discoveryEnabled,
                                         isRefreshing = state.isDiscoveryRefreshing,
@@ -961,6 +965,8 @@ private fun HomeHubScreen(
                             tracker = exposureTracker,
                             isSectionActive = isSectionActive,
                             isResumed = isResumed,
+                            poolSize = state.discoveryPool.size,
+                            failedSourceCount = state.discoveryFailedSourceCount,
                             emptyState = resolveForYouEmptyState(
                                 discoveryEnabled = state.discoveryEnabled,
                                 isRefreshing = state.isDiscoveryRefreshing,

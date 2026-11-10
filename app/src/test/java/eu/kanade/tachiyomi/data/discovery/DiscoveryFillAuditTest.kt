@@ -82,6 +82,23 @@ class DiscoveryFillAuditTest {
     }
 
     @Test
+    fun `source failure and degradation counts are rendered in the audit line`() {
+        val audit = buildDiscoveryFillAudit(
+            mediaType = media,
+            rawCandidates = emptyMap(),
+            finalRows = emptyMap(),
+            context = context(),
+            sourceFailures = 2,
+            sourceDegraded = 1,
+        )
+
+        audit.sourceFailures shouldBe 2
+        audit.sourceDegraded shouldBe 1
+        audit.logLine().contains("sourcesFailed=2") shouldBe true
+        audit.logLine().contains("sourcesDegraded=1") shouldBe true
+    }
+
+    @Test
     fun `fresh and stale cards are reported separately`() {
         val shown = item("Shown")
         val fresh = item("Fresh")

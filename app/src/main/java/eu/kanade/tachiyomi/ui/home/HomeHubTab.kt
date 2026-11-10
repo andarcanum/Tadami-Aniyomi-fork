@@ -685,6 +685,7 @@ internal data class HomeHubUiState(
     val discoveryEnabled: Boolean = false,
     val isDiscoveryRefreshing: Boolean = false,
     val isDiscoveryFailed: Boolean = false,
+    val discoveryFailedSourceCount: Int = 0,
     val discoveryLastUpdated: Long? = null,
     val userName: String,
     val userAvatar: String,

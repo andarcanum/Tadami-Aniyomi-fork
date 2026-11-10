@@ -791,6 +791,21 @@ class DiscoveryRepositoryImpl(
                 eligibility = eligibility,
                 blacklist = blacklist,
             )
+            val oldEligibleCount = eligibleSuggestions(
+                media = token.mediaType,
+                rows = oldRows,
+                known = known,
+                memory = memory,
+                hidden = hidden,
+                blacklist = blacklist,
+            ).size
+            if (token.configurationKey == publication.configuration_key &&
+                oldEligibleCount > 0 &&
+                accepted.size < oldEligibleCount
+            ) {
+                db.discovery_publicationQueries.revokeOwner(token.mediaType.key, token.requestId)
+                return@await DiscoveryPublishReceipt.KeptExisting(accepted.size, oldEligibleCount)
+            }
             if (prepared is DiscoveryPreparedPool.Fresh && accepted.isEmpty()) {
                 return@await DiscoveryPublishReceipt.NoAdmissibleItems
             }

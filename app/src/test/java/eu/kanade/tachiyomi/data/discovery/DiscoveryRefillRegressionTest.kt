@@ -109,7 +109,7 @@ class DiscoveryRefillRegressionTest {
     ) = queryDiscoveryGenreSources(
         catalog = catalog, media = media, sourceIds = sources, genres = listOf("Fantasy"), page = 1,
         releaseStatuses = emptySet(), policy = fantasy, budget = DiscoveryVerificationBudget(maxDetails = 160),
-        excludedKeys = excluded, targetItems = target, perSourceCap = target,
+        excludedKeys = excluded, targetItems = target,
     )
 
     @Test
@@ -367,7 +367,6 @@ class DiscoveryRefillRegressionTest {
             policy = policyWithIgnored,
             budget = DiscoveryVerificationBudget(maxDetails = 160),
             targetItems = 30,
-            perSourceCap = 30,
         )
         results.first { it.sourceId == 1L }.summary.items.map { it.title } shouldBe listOf("CleanMatch")
     }

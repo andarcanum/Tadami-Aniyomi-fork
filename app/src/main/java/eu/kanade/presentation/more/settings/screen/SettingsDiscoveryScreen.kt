@@ -402,6 +402,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
             }
             GenreFilterDialog(
                 initialFilters = initialFilters,
+                discoveryPreferences = discoveryPreferences,
                 onApply = { updatedFilters ->
                     changedDiscoveryGenreFilters(initialFilters, updatedFilters).forEach { (mediaType, filters) ->
                         applyDiscoveryGenreFilters(
@@ -976,12 +977,15 @@ private fun ReleaseStatusFilterDialog(
 @Composable
 private fun GenreFilterDialog(
     initialFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+    discoveryPreferences: DiscoveryPreferences,
     onApply: (Map<DiscoveryMediaType, DiscoveryGenreFilterValues>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = eu.kanade.presentation.theme.AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val shape = RoundedCornerShape(28.dp)
+    val enforcement by discoveryPreferences.requiredEnforcement().collectAsStateWithLifecycle()
+    val matchMode by discoveryPreferences.requiredMatchMode().collectAsStateWithLifecycle()
 
     val allGenres = remember {
         eu.kanade.tachiyomi.data.discovery.GenreOntology.displayNames.entries
@@ -1580,6 +1584,13 @@ private fun GenreFilterDialog(
                         }
                     }
 
+                    Text(
+                        stringResource(AYMR.strings.discovery_genre_move_hint),
+                        color = colors.textSecondary,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+
                     if (activeRaw.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
                         FlowRow(
@@ -1629,6 +1640,69 @@ private fun GenreFilterDialog(
                         }
                     }
                 }
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    stringResource(AYMR.strings.discovery_enforcement_label),
+                    color = colors.textPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    stringResource(AYMR.strings.discovery_enforcement_global),
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DiscoveryChoiceChip(
+                        label = "STRICT",
+                        selected = enforcement == "STRICT",
+                        selectedColor = selectedColor,
+                        onClick = { discoveryPreferences.requiredEnforcement().set("STRICT") },
+                    )
+                    DiscoveryChoiceChip(
+                        label = "BEST_EFFORT",
+                        selected = enforcement == "BEST_EFFORT",
+                        selectedColor = selectedColor,
+                        onClick = { discoveryPreferences.requiredEnforcement().set("BEST_EFFORT") },
+                    )
+                }
+                Text(
+                    stringResource(AYMR.strings.discovery_enforcement_best_effort_hint),
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    stringResource(AYMR.strings.discovery_match_mode_label),
+                    color = colors.textPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DiscoveryChoiceChip(
+                        label = "ALL",
+                        selected = matchMode == "ALL",
+                        selectedColor = selectedColor,
+                        onClick = { discoveryPreferences.requiredMatchMode().set("ALL") },
+                    )
+                    DiscoveryChoiceChip(
+                        label = "ANY",
+                        selected = matchMode == "ANY",
+                        selectedColor = selectedColor,
+                        onClick = { discoveryPreferences.requiredMatchMode().set("ANY") },
+                    )
+                }
+                Text(
+                    stringResource(AYMR.strings.discovery_regeneration_warning),
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
 
                 // Кнопки действий закреплены внутри окна (вне скролла).
                 Row(
@@ -1733,6 +1807,48 @@ private fun genreDisplayLabel(names: Pair<String, String?>): String {
  * точка-индикатор у выбранных; «занят другим режимом» — приглушён, без клика.
  */
 @Composable
+private fun DiscoveryChoiceChip(
+    label: String,
+    selected: Boolean,
+    selectedColor: Color,
+    onClick: () -> Unit,
+) {
+    val colors = eu.kanade.presentation.theme.AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    val shape = CircleShape
+    Row(
+        Modifier
+            .clip(shape)
+            .background(
+                when {
+                    selected -> selectedColor
+                    colors.isEInk -> Color.White
+                    else -> Color.White.copy(alpha = 0.06f)
+                },
+                shape,
+            )
+            .border(
+                1.dp,
+                if (selected) selectedColor.copy(alpha = 0.70f) else colors.divider,
+                shape,
+            )
+            .clickable {
+                appHaptics.tap()
+                onClick()
+            }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            color = if (selected) colors.textOnAccent else colors.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 private fun GenreFrostChip(
     label: String,
     selected: Boolean,
@@ -1822,7 +1938,7 @@ private fun GenreFrostChip(
             .background(bgBrush, shape)
             .border(1.dp, borderBrush, shape)
             .then(
-                if (occupied || !enabled) {
+                if (!enabled) {
                     Modifier
                 } else {
                     Modifier.clickable {

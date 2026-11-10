@@ -2347,7 +2347,15 @@
     <string name="pref_discovery_genre_tab_required">Required</string>
     <string name="pref_discovery_genre_hint_ignored">Genres excluded from picks. Instant for \"your taste\" row; applies to trends at the next refresh.</string>
     <string name="pref_discovery_genre_hint_priority">Titles with these genres rank higher and appear more often. Does not exclude anything.</string>
-    <string name="pref_discovery_genre_hint_required">Only titles with these genres. Sources without genre filters give their normal feed — picks don\'t starve.</string>
+    <string name="pref_discovery_genre_hint_required">Only titles with these genres. Sources without a genre filter may return nothing for this pick — that is expected.</string>
+    <string name="discovery_genre_move_hint">Tap a dimmed genre to move it into this mode.</string>
+    <string name="discovery_enforcement_label">Required genre strictness</string>
+    <string name="discovery_enforcement_global">Applies to all media</string>
+    <string name="discovery_enforcement_best_effort_hint">BEST_EFFORT does not filter by required genres; blacklist and ignored genres stay strict.</string>
+    <string name="discovery_match_mode_label">Genre match</string>
+    <string name="discovery_regeneration_warning">Changing a mode rebuilds the current feed.</string>
+    <string name="for_you_pool_status">%1$d of %2$d</string>
+    <string name="for_you_sources_unavailable">Unavailable sources: %1$d</string>
     <string name="pref_discovery_genre_search">Find a genre…</string>
     <string name="pref_discovery_genre_empty">Nothing found</string>
     <string name="pref_discovery_genre_add_custom">Add \"%1$s\"</string>

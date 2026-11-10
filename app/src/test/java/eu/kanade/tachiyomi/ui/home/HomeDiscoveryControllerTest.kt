@@ -731,6 +731,42 @@ class HomeDiscoveryControllerTest {
     }
 
     @Test
+    fun `controller exposes the number of unavailable sources`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            prefs.lastSourceFailureCount(DiscoveryMediaType.ANIME).set(2)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = true,
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            controller.startObserving()
+
+            waitUntil { currentState.discoveryFailedSourceCount == 2 }
+            currentState.discoveryFailedSourceCount shouldBe 2
+        }
+    }
+
+    @Test
     fun `controller flags NO_CANDIDATES when pool is empty but generation completed successfully`() {
         runBlocking {
             val repo = TestDiscoveryRepo()

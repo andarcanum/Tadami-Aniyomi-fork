@@ -336,11 +336,19 @@ class DiscoveryTasteRowBuilder(
     override var isDegraded: Boolean = false
         private set
 
+    override var failedSourceIds: Set<Long> = emptySet()
+        private set
+
+    override var degradedSourceIds: Set<Long> = emptySet()
+        private set
+
     override var exhaustionEvidence: List<tachiyomi.domain.discovery.model.DiscoveryQueryEvidence>? = null
         private set
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
         isDegraded = false
+        failedSourceIds = emptySet()
+        degradedSourceIds = emptySet()
         val policy = context.candidatePolicy
         val activeProfile = resolveDiscoveryTasteProfile(context.tasteProfile, policy)
         if (activeProfile.isEmpty()) {
@@ -439,6 +447,14 @@ class DiscoveryTasteRowBuilder(
         } else {
             emptyList()
         }
+        failedSourceIds = sourceResults.filter { it.failure != null }.map { it.sourceId }.toSet()
+        degradedSourceIds = sourceResults.filter {
+            it.failure == null && required && (
+                it.summary.hasCoverageGap ||
+                    it.stopReason == DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED ||
+                    it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED
+                )
+        }.map { it.sourceId }.toSet()
         exhaustionEvidence = if (includeExternal) null else sourceResults.map { it.toExhaustionEvidence() }
         // In the cheap path cards without genres were never going to be hydrated,
         // so an "unattempted" count there is by design and not a degraded row.
@@ -527,11 +543,19 @@ class DiscoverySourceRowBuilder(
     override var isDegraded: Boolean = false
         private set
 
+    override var failedSourceIds: Set<Long> = emptySet()
+        private set
+
+    override var degradedSourceIds: Set<Long> = emptySet()
+        private set
+
     override var exhaustionEvidence: List<tachiyomi.domain.discovery.model.DiscoveryQueryEvidence>? = null
         private set
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
         isDegraded = false
+        failedSourceIds = emptySet()
+        degradedSourceIds = emptySet()
         val ids = context.sourceIds.filter { it > 0 }
             .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
         if (ids.isEmpty()) return emptyList()
@@ -562,6 +586,14 @@ class DiscoverySourceRowBuilder(
                     excludedKeys = context.exclusionKeys,
                 )
             }
+            failedSourceIds = results.filter { it.failure != null }.map { it.sourceId }.toSet()
+            degradedSourceIds = results.filter {
+                it.failure == null && (
+                    it.summary.hasCoverageGap ||
+                        it.stopReason == DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED ||
+                        it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED
+                    )
+            }.map { it.sourceId }.toSet()
             exhaustionEvidence = results.map { it.toExhaustionEvidence() }
             isDegraded = results.any {
                 it.failure != null || it.summary.hasCoverageGap ||

@@ -86,6 +86,8 @@ sealed interface DiscoveryPreparedPool {
 sealed interface DiscoveryPublishReceipt {
     data class Published(val snapshot: DiscoveryPublicationSnapshot) : DiscoveryPublishReceipt
 
+    data class KeptExisting(val accepted: Int, val oldEligible: Int) : DiscoveryPublishReceipt
+
     data class Superseded(val generation: Long) : DiscoveryPublishReceipt
 
     data object NoAdmissibleItems : DiscoveryPublishReceipt

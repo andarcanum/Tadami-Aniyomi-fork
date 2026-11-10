@@ -96,9 +96,10 @@ class DiscoveryPublicationTest {
         pool: DiscoveryPreparedPool,
         expectedGeneration: Long? = null,
         retirement: DiscoveryRetirementPolicy = DiscoveryRetirementPolicy.RETIRE_ALL,
+        configurationKey: String = "cfg",
     ): DiscoveryPublishReceipt {
         val expected = expectedGeneration ?: repository.publication(media).generation
-        val token = repository.reserveGeneration(media, requestId, expected, "cfg")!!
+        val token = repository.reserveGeneration(media, requestId, expected, configurationKey)!!
         return repository.publishGeneration(token, pool, retirement)
     }
 
@@ -113,7 +114,11 @@ class DiscoveryPublicationTest {
         val batchSnapshot = (batch as DiscoveryBatchReceipt.Available).snapshot
         batchSnapshot.homeBatchKeys.size shouldBe 20
 
-        val second = publish("req-2", DiscoveryPreparedPool.Fresh((26..30).map(::suggestion), partial = false))
+        val second = publish(
+            "req-2",
+            DiscoveryPreparedPool.Fresh((26..30).map(::suggestion), partial = false),
+            configurationKey = "cfg2",
+        )
         val secondSnapshot = (second as DiscoveryPublishReceipt.Published).snapshot
         secondSnapshot.suggestions.all { it.identityKey in (26..30).map(::keyOf) } shouldBe true
 
@@ -141,7 +146,7 @@ class DiscoveryPublicationTest {
                 ),
             ),
         )
-        val receipt = publish("req-2", empty)
+        val receipt = publish("req-2", empty, configurationKey = "cfg2")
 
         val snapshot = (receipt as DiscoveryPublishReceipt.Published).snapshot
         snapshot.outcome shouldBe DiscoveryPublicationOutcome.EXHAUSTED
@@ -176,6 +181,59 @@ class DiscoveryPublicationTest {
 
         receipt shouldBe DiscoveryPublishReceipt.NoAdmissibleItems
         repository.publication(media).generation shouldBe before.generation
+    }
+
+    @Test
+    fun `same configuration keeps a smaller pool and allows top-up append`() = runTest {
+        val first = publish("req-1", DiscoveryPreparedPool.Fresh((1..25).map(::suggestion), partial = false))
+        val before = (first as DiscoveryPublishReceipt.Published).snapshot
+
+        val receipt = publish(
+            "req-2",
+            DiscoveryPreparedPool.Fresh((26..30).map(::suggestion), partial = false),
+            expectedGeneration = before.generation,
+        )
+
+        receipt shouldBe DiscoveryPublishReceipt.KeptExisting(accepted = 5, oldEligible = 25)
+        repository.publication(media).generation shouldBe before.generation
+        repository.publication(media).suggestions.size shouldBe 25
+
+        val topUp = repository.topUpPool(
+            media = media,
+            expectedGeneration = before.generation,
+            additions = (26..30).map(::suggestion),
+            cursors = emptyList(),
+            maxPoolSize = 60,
+        )
+        (topUp as DiscoveryTopUpReceipt.ToppedUp).added shouldBe 5
+        topUp.snapshot.suggestions.size shouldBe 30
+    }
+
+    @Test
+    fun `same configuration keeps the pool on verified empty`() = runTest {
+        val first = publish("req-1", DiscoveryPreparedPool.Fresh((1..3).map(::suggestion), partial = false))
+        val before = (first as DiscoveryPublishReceipt.Published).snapshot
+        val empty = DiscoveryPreparedPool.VerifiedEmpty(
+            expectedQueryKeys = setOf("source:1:popular"),
+            evidence = listOf(
+                DiscoveryQueryEvidence(
+                    queryKey = "source:1:popular",
+                    transportOk = true,
+                    rawEnd = true,
+                    pending = 0,
+                    unattempted = 0,
+                    metadataFailures = 0,
+                    budgetStopped = false,
+                    duplicatePageStopped = false,
+                ),
+            ),
+        )
+
+        val receipt = publish("req-2", empty, expectedGeneration = before.generation)
+
+        receipt shouldBe DiscoveryPublishReceipt.KeptExisting(accepted = 0, oldEligible = 3)
+        repository.publication(media).generation shouldBe before.generation
+        repository.publication(media).suggestions.size shouldBe 3
     }
 
     @Test

@@ -1547,6 +1547,97 @@ class DiscoveryRunnerTest {
     }
 
     @Test
+    fun `kept existing appends through top up and advances the refresh counter`() = runTest {
+        var appended = 0
+        val repo = object : FakeRepository() {
+            override suspend fun publishGeneration(
+                token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+                prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+                retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
+            ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt =
+                tachiyomi.domain.discovery.model.DiscoveryPublishReceipt.KeptExisting(
+                    accepted = 6,
+                    oldEligible = 24,
+                )
+
+            override suspend fun topUpPool(
+                media: DiscoveryMediaType,
+                expectedGeneration: Long,
+                additions: List<DiscoverySuggestion>,
+                cursors: List<DiscoverySourceCursor>,
+                maxPoolSize: Int,
+            ): tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt {
+                appended = additions.size
+                return tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt.ToppedUp(
+                    added = additions.size,
+                    eligibleAfter = 30,
+                    snapshot = emptyPublication(media).copy(
+                        generation = expectedGeneration,
+                        suggestions = additions,
+                    ),
+                )
+            }
+        }
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.LIKE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> =
+                (1..6).map { number ->
+                    DiscoveryRowItem(
+                        title = "Kept$number",
+                        cleanTitle = "kept$number",
+                        coverUrl = null,
+                        reason = null,
+                        seedTitle = null,
+                        provider = "fixture",
+                        score = 1.0,
+                    )
+                }
+        }
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        prefs.rowTasteEnabled().set(false)
+        prefs.rowTrendEnabled().set(false)
+        prefs.rowSourceEnabled().set(false)
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = true)
+
+        appended shouldBe 6
+        prefs.manualRefreshCount(DiscoveryMediaType.MANGA).get() shouldBe 1
+        prefs.lastTopUpAdded(DiscoveryMediaType.MANGA).get() shouldBe 6
+        prefs.lastGenerationStatus(DiscoveryMediaType.MANGA).get() shouldBe
+            DiscoveryRunStatus.SUCCESS.name
+    }
+
+    @Test
+    fun `source failure ids from feed are persisted as the source failure count`() = runTest {
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.LIKE
+            override val failedSourceIds = setOf(7L)
+            override val degradedSourceIds = setOf(8L)
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> =
+                listOf(DiscoveryRowItem("Source Count", "source count", null, null, null, "fixture", 1.0))
+        }
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.MANGA))
+
+        prefs.lastSourceFailureCount(DiscoveryMediaType.MANGA).get() shouldBe 1
+    }
+
+    @Test
     fun `manual refresh count increments after a verified empty publication`() = runTest {
         val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
         val emptyBuilder = object : DiscoveryRowBuilder {

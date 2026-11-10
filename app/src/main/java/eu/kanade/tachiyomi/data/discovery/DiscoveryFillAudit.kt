@@ -24,6 +24,8 @@ internal data class DiscoveryFillAudit(
     val staleBackfilled: Int,
     val detailsUsed: Int,
     val detailsAllowance: Int,
+    val sourceFailures: Int = 0,
+    val sourceDegraded: Int = 0,
 ) {
     fun logLine(): String = buildString {
         append("[DiscoveryAudit] media=").append(mediaType)
@@ -31,6 +33,8 @@ internal data class DiscoveryFillAudit(
         append(" fresh=").append(freshUnique)
         append(" stale=").append(staleBackfilled)
         append(" details=").append(detailsUsed).append('/').append(detailsAllowance)
+        append(" sourcesFailed=").append(sourceFailures)
+        append(" sourcesDegraded=").append(sourceDegraded)
         for (row in rows) {
             append(' ').append(row.rowType).append('(')
             append("raw=").append(row.listFetched)
@@ -61,6 +65,8 @@ internal fun buildDiscoveryFillAudit(
     context: DiscoveryBuildContext,
     detailsUsed: Int = 0,
     detailsAllowance: Int = 0,
+    sourceFailures: Int = 0,
+    sourceDegraded: Int = 0,
 ): DiscoveryFillAudit {
     val excludedKnown = context.libraryCleanTitles + context.historyCleanTitles + context.hiddenCleanTitles
     val seen = HashSet<String>()
@@ -104,6 +110,8 @@ internal fun buildDiscoveryFillAudit(
         staleBackfilled = allFinal.size - freshAll.size,
         detailsUsed = detailsUsed,
         detailsAllowance = detailsAllowance,
+        sourceFailures = sourceFailures,
+        sourceDegraded = sourceDegraded,
     )
 }
 
