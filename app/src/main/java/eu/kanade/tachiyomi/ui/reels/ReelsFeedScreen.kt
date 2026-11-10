@@ -1568,8 +1568,12 @@ data class ReelsFeedScreen(
                         }
                     }
 
-                    // Next-page loading indicator (the PiP frame shows only the reel).
-                    if (state.isLoading && state.items.isNotEmpty() && !inPictureInPicture) {
+                    // Next-page loading indicator (the PiP frame shows only the reel). Only the
+                    // tail of the loaded list can actually wait for it: the adaptive runway
+                    // prefetches in the background and must not flicker over the reel on screen.
+                    if (state.isLoading && state.items.isNotEmpty() && !inPictureInPicture &&
+                        state.canLoadMore && pagerState.currentPage >= state.items.lastIndex
+                    ) {
                         ReelsNextPageLoader(modifier = Modifier.align(Alignment.BottomCenter))
                     }
                 }
