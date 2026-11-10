@@ -8,7 +8,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.core.app.ActivityCompat
+import androidx.core.view.OneShotPreDrawListener
 import androidx.core.view.doOnLayout
+import androidx.core.view.doOnPreDraw
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
@@ -83,6 +85,8 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
      * Currently active item. It can be a chapter page or a chapter transition.
      */
     private var currentPage: Any? = null
+    private var lastCompletionPage: ReaderPage? = null
+    private var boundarySelectionRetry: OneShotPreDrawListener? = null
 
     /**
      * Until this uptime timestamp a programmatic chapter switch is still settling: relayouts caused
@@ -370,6 +374,9 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
     override fun destroy() {
         super.destroy()
         stopPendingRelativeRestoreLoop()
+        boundarySelectionRetry?.removeListener()
+        boundarySelectionRetry = null
+        lastCompletionPage = null
         autoScrollManager.destroy()
         // Detaching the recycler from the window does NOT call onViewRecycled; without this the
         // bound holders of a swapped-out viewer keep collecting page status flows (duplicate
@@ -457,6 +464,9 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
     private fun onPageSelected(page: ReaderPage, allowPreload: Boolean) {
         val pages = page.chapter.pages ?: return
         logcat { "onPageSelected: ${page.number}/${pages.size}" }
+        lastCompletionPage = page.takeIf {
+            it.status == Page.State.READY && it === pages.lastOrNull()
+        }
         activity.onPageSelected(page)
 
         checkAndPreload(page, allowPreload)
@@ -570,7 +580,22 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         }
     }
 
+    private fun retryBoundarySelectionAfterLayout() {
+        if (currentPage !is ChapterTransition.Next) return
+        boundarySelectionRetry?.removeListener()
+        // Image decode can resize the final page. Re-check the boundary only AFTER that layout,
+        // never against the old placeholder geometry in a pre-traversal animation callback.
+        boundarySelectionRetry = recycler.doOnPreDraw {
+            boundarySelectionRetry = null
+            onScrolled()
+        }
+        recycler.postInvalidateOnAnimation()
+    }
+
     internal fun onPageImageReady(page: ReaderPage) {
+        if (page === adapter.currentChapter?.pages?.lastOrNull()) {
+            retryBoundarySelectionAfterLayout()
+        }
         if (switchSettleUntilMs != 0L && page.index == 0 && page.chapter == adapter.currentChapter) {
             // The new chapter's first page has its final height: the switch is settled.
             switchSettleUntilMs = 0L
@@ -638,6 +663,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
             // fit-width scaling, which overshot the page (or the whole chapter) and read as
             // "progress reset". moveToPage prefers the ratio whenever it is set.
             item.chapter.requestedPageOffsetRatioPpm = pending.ratioPpm
+            retryBoundarySelectionAfterLayout()
         }
         return true
     }
@@ -759,12 +785,25 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
             reanchorDuringSwitchSettle()
             return
         }
-        if (item != null && currentPage != item) {
+        if (item != null) {
+            val selectionChanged = currentPage != item
             currentPage = item
-            when (item) {
-                is ReaderPage -> onPageSelected(item, allowPreload)
-                is ChapterTransition -> onTransitionSelected(item)
-            }
+            val readerState = activity.viewModel.state.value
+            val viewerChapters = readerState.viewerChapters
+            dispatchWebtoonSelection(
+                item = item,
+                currentChapter = adapter.currentChapter,
+                nextChapter = viewerChapters?.nextChapter,
+                // A restore or toolbar switch is not a forward scroll across the old chapter.
+                // The adapter can briefly lag behind the VM while the activity collects state.
+                allowChapterCompletion = pendingRelativeRestore == null &&
+                    !isSwitchSettling() && !readerState.isLoadingAdjacentChapter &&
+                    adapter.currentChapter === viewerChapters?.currChapter,
+                lastCompletionPage = lastCompletionPage,
+                selectionChanged = selectionChanged,
+                onPageSelected = { onPageSelected(it, allowPreload) },
+                onTransitionSelected = ::onTransitionSelected,
+            )
         }
     }
 
