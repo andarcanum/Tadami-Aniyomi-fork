@@ -16,8 +16,8 @@ import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.items.chapter.interactor.ShouldUpdateDbChapter
 import tachiyomi.domain.items.chapter.interactor.UpdateChapter
 import tachiyomi.domain.items.chapter.model.Chapter
+import tachiyomi.domain.items.chapter.model.ChapterUpdate
 import tachiyomi.domain.items.chapter.model.NoChaptersException
-import tachiyomi.domain.items.chapter.model.toChapterUpdate
 import tachiyomi.domain.items.chapter.repository.ChapterRepository
 import tachiyomi.domain.items.chapter.service.ChapterRecognition
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -72,7 +72,7 @@ class SyncChaptersWithSource(
         val dbChapters = getChaptersByMangaId.await(manga.id)
 
         val newChapters = mutableListOf<Chapter>()
-        val updatedChapters = mutableListOf<Chapter>()
+        val updatedChapters = mutableListOf<ChapterUpdate>()
         val sourceUrls = sourceChapters.mapTo(HashSet(sourceChapters.size)) { it.url }
         val removedChapters = dbChapters.filterNot { it.url in sourceUrls }
         val dbChaptersByUrl = dbChapters.associateBy { it.url }
@@ -131,17 +131,18 @@ class SyncChaptersWithSource(
                     if (shouldRenameChapter) {
                         downloadManager.renameChapter(source, manga, dbChapter, chapter)
                     }
-                    var toChangeChapter = dbChapter.copy(
-                        name = chapter.name,
-                        chapterNumber = chapter.chapterNumber,
-                        scanlator = chapter.scanlator,
-                        sourceOrder = chapter.sourceOrder,
-                        memo = if (memoChanged) chapter.memo else dbChapter.memo,
+                    // Source metadata must not replay user state or its version from dbChapters.
+                    updatedChapters.add(
+                        ChapterUpdate(
+                            id = dbChapter.id,
+                            name = chapter.name,
+                            chapterNumber = chapter.chapterNumber,
+                            scanlator = chapter.scanlator,
+                            sourceOrder = chapter.sourceOrder,
+                            dateUpload = chapter.dateUpload.takeIf { it != 0L },
+                            memo = chapter.memo.takeIf { memoChanged },
+                        ),
                     )
-                    if (chapter.dateUpload != 0L) {
-                        toChangeChapter = toChangeChapter.copy(dateUpload = chapter.dateUpload)
-                    }
-                    updatedChapters.add(toChangeChapter)
                 }
             }
         }
@@ -220,8 +221,7 @@ class SyncChaptersWithSource(
         }
 
         if (updatedChapters.isNotEmpty()) {
-            val chapterUpdates = updatedChapters.map { it.toChapterUpdate() }
-            updateChapter.awaitAll(chapterUpdates)
+            updateChapter.awaitAll(updatedChapters)
         }
         updateManga.awaitUpdateFetchInterval(manga, now, fetchWindow)
 

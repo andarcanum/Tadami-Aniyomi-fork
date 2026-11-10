@@ -8,6 +8,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -205,7 +207,7 @@ class SyncNovelChaptersWithSourceTest {
                 source = FakeNovelSource(),
             )
 
-            repository.updatedChapters.single().dateUploadRaw shouldBe "Yesterday"
+            repository.chapters.single().dateUploadRaw shouldBe "Yesterday"
         }
     }
 
@@ -369,6 +371,118 @@ class SyncNovelChaptersWithSourceTest {
         }
     }
 
+    @Test
+    fun `metadata refresh preserves user changes committed after the database snapshot`() = runTest {
+        val existingChapter = existingChapter()
+        val repository = FakeNovelChapterRepository().apply { chapters = listOf(existingChapter) }
+        val snapshotRead = CompletableDeferred<Unit>()
+        val resumeSync = CompletableDeferred<Unit>()
+        repository.afterSnapshot = {
+            snapshotRead.complete(Unit)
+            resumeSync.await()
+        }
+        val interactor = syncInteractor(repository)
+        val sourceChapter = SNovelChapter.create().apply {
+            url = "/chapter-1"
+            name = "Chapter 2 revised"
+            chapter_number = 2f
+            date_upload = 900L
+            date_upload_raw = "Today"
+            scanlator = "New group"
+        }
+
+        val sync = async {
+            interactor.await(listOf(sourceChapter), Novel.create().copy(id = 10L, title = "Novel"), FakeNovelSource())
+        }
+        snapshotRead.await()
+        repository.chapters =
+            listOf(existingChapter.copy(read = true, bookmark = true, lastPageRead = 37L, version = 8L))
+        resumeSync.complete(Unit)
+        sync.await() shouldBe emptyList()
+
+        val stored = repository.chapters.single()
+        stored.read shouldBe true
+        stored.bookmark shouldBe true
+        stored.lastPageRead shouldBe 37L
+        stored.version shouldBe 8L
+        stored.dateFetch shouldBe 500L
+        stored.name shouldBe "Chapter 2 revised"
+        stored.chapterNumber shouldBe 2.0
+        stored.dateUpload shouldBe 900L
+        stored.dateUploadRaw shouldBe "Today"
+        stored.scanlator shouldBe "New group"
+        repository.updatedChapters.single().assertSourceOnly()
+    }
+
+    @Test
+    fun `source order refresh preserves a concurrent unread and progress reset`() = runTest {
+        val existingChapter = existingChapter().copy(read = true, bookmark = true, lastPageRead = 37L, sourceOrder = 4L)
+        val repository = FakeNovelChapterRepository().apply { chapters = listOf(existingChapter) }
+        val snapshotRead = CompletableDeferred<Unit>()
+        val resumeSync = CompletableDeferred<Unit>()
+        repository.afterSnapshot = {
+            snapshotRead.complete(Unit)
+            resumeSync.await()
+        }
+        val interactor = syncInteractor(repository)
+        val sourceChapter = SNovelChapter.create().apply {
+            url = "/chapter-1"
+            name = "Chapter 1"
+            chapter_number = 1f
+            date_upload = 100L
+            date_upload_raw = "Yesterday"
+        }
+
+        val sync = async {
+            interactor.await(listOf(sourceChapter), Novel.create().copy(id = 10L, title = "Novel"), FakeNovelSource())
+        }
+        snapshotRead.await()
+        repository.chapters =
+            listOf(existingChapter.copy(read = false, bookmark = false, lastPageRead = 0L, version = 8L))
+        resumeSync.complete(Unit)
+        sync.await()
+
+        val stored = repository.chapters.single()
+        stored.read shouldBe false
+        stored.bookmark shouldBe false
+        stored.lastPageRead shouldBe 0L
+        stored.version shouldBe 8L
+        stored.sourceOrder shouldBe 0L
+        repository.updatedChapters.single().assertSourceOnly()
+    }
+
+    private fun NovelChapterUpdate.assertSourceOnly() {
+        read shouldBe null
+        bookmark shouldBe null
+        lastPageRead shouldBe null
+        version shouldBe null
+        dateFetch shouldBe null
+        novelId shouldBe null
+        url shouldBe null
+    }
+
+    private fun existingChapter() = NovelChapter.create().copy(
+        id = 1L,
+        novelId = 10L,
+        url = "/chapter-1",
+        name = "Chapter 1",
+        chapterNumber = 1.0,
+        dateUpload = 100L,
+        dateUploadRaw = "Yesterday",
+        dateFetch = 500L,
+        version = 3L,
+    )
+
+    private fun syncInteractor(repository: NovelChapterRepository) = SyncNovelChaptersWithSource(
+        novelChapterRepository = repository,
+        shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
+        updateNovel = mockk(relaxed = true),
+        libraryPreferences = mockk {
+            every { markDuplicateReadChapterAsRead().get() } returns emptySet()
+        },
+        getNovelExcludedScanlators = noExcludedScanlators(),
+    )
+
     private fun noExcludedScanlators(): GetNovelExcludedScanlators = mockk {
         coEvery { await(any()) } returns emptySet()
     }
@@ -384,6 +498,7 @@ class SyncNovelChaptersWithSourceTest {
         val updatedChapters = mutableListOf<NovelChapterUpdate>()
         val removedIds = mutableListOf<Long>()
         var chapters = emptyList<NovelChapter>()
+        var afterSnapshot: suspend () -> Unit = {}
 
         override suspend fun addAllChapters(chapters: List<NovelChapter>): List<NovelChapter> {
             addedChapters.addAll(chapters)
@@ -405,7 +520,11 @@ class SyncNovelChaptersWithSourceTest {
         override suspend fun getChapterByNovelId(
             novelId: Long,
             applyScanlatorFilter: Boolean,
-        ): List<NovelChapter> = chapters
+        ): List<NovelChapter> {
+            val snapshot = chapters
+            afterSnapshot()
+            return snapshot
+        }
 
         override suspend fun getScanlatorsByNovelId(novelId: Long): List<String> = chapters.mapNotNull { it.scanlator }
 
@@ -430,6 +549,26 @@ class SyncNovelChaptersWithSourceTest {
             addedChapters.addAll(toAdd)
             updatedChapters.addAll(toUpdate)
             removedIds.addAll(toDelete)
+            // Model novel_chapters.sq coalesce semantics at the repository boundary, not its
+            // triggers. The await-path tests also require that the patch omit the version.
+            chapters = chapters.filterNot { it.id in toDelete }.map { stored ->
+                val patch = toUpdate.firstOrNull { it.id == stored.id } ?: return@map stored
+                stored.copy(
+                    novelId = patch.novelId ?: stored.novelId,
+                    read = patch.read ?: stored.read,
+                    bookmark = patch.bookmark ?: stored.bookmark,
+                    lastPageRead = patch.lastPageRead ?: stored.lastPageRead,
+                    dateFetch = patch.dateFetch ?: stored.dateFetch,
+                    sourceOrder = patch.sourceOrder ?: stored.sourceOrder,
+                    url = patch.url ?: stored.url,
+                    name = patch.name ?: stored.name,
+                    dateUpload = patch.dateUpload ?: stored.dateUpload,
+                    dateUploadRaw = patch.dateUploadRaw ?: stored.dateUploadRaw,
+                    chapterNumber = patch.chapterNumber ?: stored.chapterNumber,
+                    scanlator = patch.scanlator ?: stored.scanlator,
+                    version = patch.version ?: stored.version,
+                )
+            } + toAdd
             return toAdd
         }
     }

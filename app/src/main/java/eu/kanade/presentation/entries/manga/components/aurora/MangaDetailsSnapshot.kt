@@ -169,7 +169,7 @@ fun resolveMangaProgressSnapshot(chapters: List<Chapter>): MangaProgressSnapshot
 
     val totalChapters = chapters.size
     val readCount = chapters.count { chapter ->
-        chapter.read || chapter.lastPageRead > 0L
+        chapter.read
     }
 
     val currentChapterIndex = (readCount - 1).takeIf { it >= 0 }
