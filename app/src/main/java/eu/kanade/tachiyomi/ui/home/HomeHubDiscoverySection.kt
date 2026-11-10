@@ -1011,34 +1011,6 @@ private fun DiscoveryRefreshIconButton(isRefreshing: Boolean, onClick: () -> Uni
     }
 }
 
-@Composable
-private fun DiscoveryPoolStatusLine(
-    status: DiscoveryPoolStatus,
-    maxWidthDp: Int? = null,
-    horizontalPadding: Dp,
-) {
-    val text = when (status) {
-        DiscoveryPoolStatus.Silent -> null
-        is DiscoveryPoolStatus.Underfilled ->
-            stringResource(AYMR.strings.for_you_pool_status, status.pool, status.target)
-        is DiscoveryPoolStatus.Unavailable ->
-            stringResource(AYMR.strings.for_you_sources_unavailable, status.count)
-        is DiscoveryPoolStatus.UnderfilledAndUnavailable ->
-            stringResource(AYMR.strings.for_you_pool_status, status.pool, status.target) + " · " +
-                stringResource(AYMR.strings.for_you_sources_unavailable, status.count)
-    } ?: return
-    Text(
-        text = text,
-        color = AuroraTheme.colors.textSecondary,
-        fontSize = 12.sp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (maxWidthDp != null) Modifier.auroraCenteredMaxWidth(maxWidthDp) else Modifier)
-            .padding(horizontal = horizontalPadding)
-            .padding(top = 8.dp),
-    )
-}
-
 /** Тизер-секция «Для тебя» на Home Hub: заголовок + «Ещё» + горизонтальный рельс карточек. */
 @Composable
 internal fun ForYouSection(
@@ -1058,21 +1030,17 @@ internal fun ForYouSection(
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
-    val poolStatus = discoveryPoolStatus(poolSize, failedSourceCount)
     if (items.isEmpty()) {
         val resolvedEmpty = emptyState ?: when {
             isRefreshing -> ForYouEmptyState.REFRESHING
             else -> ForYouEmptyState.NOT_LOADED_YET
         }
-        Column {
-            EmptyForYouCard(
-                emptyState = resolvedEmpty,
-                onMoreClick = onMoreClick,
-                isRefreshing = isRefreshing,
-                onRefreshClick = onRefreshClick,
-            )
-            DiscoveryPoolStatusLine(poolStatus, horizontalPadding = 24.dp)
-        }
+        EmptyForYouCard(
+            emptyState = resolvedEmpty,
+            onMoreClick = onMoreClick,
+            isRefreshing = isRefreshing,
+            onRefreshClick = onRefreshClick,
+        )
         return
     }
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
@@ -1125,11 +1093,6 @@ internal fun ForYouSection(
                 },
             )
         }
-        DiscoveryPoolStatusLine(
-            poolStatus,
-            maxWidthDp = contentMaxWidthDp,
-            horizontalPadding = sectionHorizontalPadding,
-        )
         Spacer(Modifier.height(16.dp))
         LazyRow(
             modifier = Modifier

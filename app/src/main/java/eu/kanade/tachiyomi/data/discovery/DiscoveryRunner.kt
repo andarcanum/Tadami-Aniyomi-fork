@@ -259,7 +259,6 @@ class DiscoveryRunner(
         isConfigurationRefresh: Boolean = false,
         topUp: Boolean = false,
     ): DiscoveryRunOutcome {
-        preferences.lastSourceFailureCount(mediaType).set(0)
         DiscoveryProgressTracker.update(
             isRunning = true,
             mediaType = mediaType,
@@ -788,11 +787,6 @@ class DiscoveryRunner(
             null
         }
         val published = publishReceipt as? DiscoveryPublishReceipt.Published
-        val persistedRows = if (published != null) {
-            feed.rows.filterValues { it.isNotEmpty() }.keys
-        } else {
-            emptySet()
-        }
 
         var keptTopUpReceipt: DiscoveryTopUpReceipt? = null
         if (publishReceipt is DiscoveryPublishReceipt.KeptExisting) {
@@ -833,6 +827,12 @@ class DiscoveryRunner(
             keptTopUpReceipt is DiscoveryTopUpReceipt.Busy
         val topUpAdded = keptTopUpReceipt is DiscoveryTopUpReceipt.ToppedUp
 
+        val persistedRows = if (published != null || topUpAdded) {
+            feed.rows.filterValues { it.isNotEmpty() }.keys
+        } else {
+            emptySet()
+        }
+
         val status = when {
             publishReceipt is DiscoveryPublishReceipt.Superseded -> DiscoveryRunStatus.SKIPPED
             allExecutedFailed -> DiscoveryRunStatus.FAILED
@@ -852,7 +852,8 @@ class DiscoveryRunner(
             else -> DiscoveryRunStatus.SUCCESS
         }
 
-        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed && (published != null || topUpAdded)) {
+        val poolAdvanced = published != null || topUpAdded || publishReceipt is DiscoveryPublishReceipt.KeptExisting
+        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed && poolAdvanced) {
             if (isManualRefresh) {
                 preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
             } else if (!isConfigurationRefresh) {

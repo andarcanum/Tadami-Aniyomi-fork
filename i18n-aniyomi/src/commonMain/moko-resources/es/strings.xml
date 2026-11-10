@@ -830,7 +830,11 @@
     <string name="discovery_enforcement_label">Rigor de los géneros obligatorios</string>
     <string name="discovery_enforcement_global">Se aplica a todos los medios</string>
     <string name="discovery_enforcement_best_effort_hint">BEST_EFFORT no filtra por géneros obligatorios; la lista negra y los géneros ignorados siguen siendo estrictos.</string>
+    <string name="discovery_enforcement_strict">Estricto</string>
+    <string name="discovery_enforcement_best_effort">Flexible</string>
     <string name="discovery_match_mode_label">Coincidencia de géneros</string>
+    <string name="discovery_match_mode_all">Todos</string>
+    <string name="discovery_match_mode_any">Cualquiera</string>
     <string name="discovery_regeneration_warning">Cambiar el modo reconstruye la selección actual.</string>
     <string name="for_you_pool_status">%1$d de %2$d</string>
     <string name="for_you_sources_unavailable">Fuentes no disponibles: %1$d</string>

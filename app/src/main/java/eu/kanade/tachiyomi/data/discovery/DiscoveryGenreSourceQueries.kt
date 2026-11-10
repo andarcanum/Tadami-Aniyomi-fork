@@ -153,7 +153,7 @@ internal suspend fun queryDiscoveryGenreSources(
     if (ids.isEmpty()) return@supervisorScope emptyList()
 
     val required = policy.requiredGenres.isNotEmpty()
-    val target = targetItems
+    val target = if (required && ids.size > 1) minOf(targetItems, RICH_SOURCE_TARGET) else targetItems
     val pageBudget = if (required) MAX_REQUIRED_SOURCE_PAGES else pages.coerceAtLeast(1)
     val states = ids.map { id ->
         SourceQueryState(

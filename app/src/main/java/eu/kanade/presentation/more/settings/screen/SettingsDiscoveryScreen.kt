@@ -403,8 +403,15 @@ object SettingsDiscoveryScreen : SearchableSettings {
             GenreFilterDialog(
                 initialFilters = initialFilters,
                 discoveryPreferences = discoveryPreferences,
-                onApply = { updatedFilters ->
-                    changedDiscoveryGenreFilters(initialFilters, updatedFilters).forEach { (mediaType, filters) ->
+                onApply = { updatedFilters, newEnforcement, newMatchMode ->
+                    val filtersChanged = changedDiscoveryGenreFilters(initialFilters, updatedFilters)
+                    val modeChanged = newEnforcement != discoveryPreferences.requiredEnforcement().get() ||
+                        newMatchMode != discoveryPreferences.requiredMatchMode().get()
+                    if (modeChanged) {
+                        discoveryPreferences.requiredEnforcement().set(newEnforcement)
+                        discoveryPreferences.requiredMatchMode().set(newMatchMode)
+                    }
+                    filtersChanged.forEach { (mediaType, filters) ->
                         applyDiscoveryGenreFilters(
                             context = context,
                             preferences = discoveryPreferences,
@@ -413,6 +420,13 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             requiredCsv = filters.requiredCsv,
                             ignoredCsv = filters.ignoredCsv,
                         )
+                    }
+                    if (modeChanged) {
+                        DiscoveryMediaType.entries.forEach { mediaType ->
+                            if (mediaType !in filtersChanged.keys) {
+                                DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
+                            }
+                        }
                     }
                     showGenreDialog = false
                 },
@@ -978,14 +992,20 @@ private fun ReleaseStatusFilterDialog(
 private fun GenreFilterDialog(
     initialFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
     discoveryPreferences: DiscoveryPreferences,
-    onApply: (Map<DiscoveryMediaType, DiscoveryGenreFilterValues>) -> Unit,
+    onApply: (
+        updatedFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+        enforcement: String,
+        matchMode: String,
+    ) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = eu.kanade.presentation.theme.AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val shape = RoundedCornerShape(28.dp)
-    val enforcement by discoveryPreferences.requiredEnforcement().collectAsStateWithLifecycle()
-    val matchMode by discoveryPreferences.requiredMatchMode().collectAsStateWithLifecycle()
+    val initialEnforcement = remember { discoveryPreferences.requiredEnforcement().get() }
+    val initialMatchMode = remember { discoveryPreferences.requiredMatchMode().get() }
+    var draftEnforcement by remember { mutableStateOf(initialEnforcement) }
+    var draftMatchMode by remember { mutableStateOf(initialMatchMode) }
 
     val allGenres = remember {
         eu.kanade.tachiyomi.data.discovery.GenreOntology.displayNames.entries
@@ -1657,16 +1677,16 @@ private fun GenreFilterDialog(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DiscoveryChoiceChip(
-                        label = "STRICT",
-                        selected = enforcement == "STRICT",
+                        label = stringResource(AYMR.strings.discovery_enforcement_strict),
+                        selected = draftEnforcement == "STRICT",
                         selectedColor = selectedColor,
-                        onClick = { discoveryPreferences.requiredEnforcement().set("STRICT") },
+                        onClick = { draftEnforcement = "STRICT" },
                     )
                     DiscoveryChoiceChip(
-                        label = "BEST_EFFORT",
-                        selected = enforcement == "BEST_EFFORT",
+                        label = stringResource(AYMR.strings.discovery_enforcement_best_effort),
+                        selected = draftEnforcement == "BEST_EFFORT",
                         selectedColor = selectedColor,
-                        onClick = { discoveryPreferences.requiredEnforcement().set("BEST_EFFORT") },
+                        onClick = { draftEnforcement = "BEST_EFFORT" },
                     )
                 }
                 Text(
@@ -1685,16 +1705,16 @@ private fun GenreFilterDialog(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DiscoveryChoiceChip(
-                        label = "ALL",
-                        selected = matchMode == "ALL",
+                        label = stringResource(AYMR.strings.discovery_match_mode_all),
+                        selected = draftMatchMode == "ALL",
                         selectedColor = selectedColor,
-                        onClick = { discoveryPreferences.requiredMatchMode().set("ALL") },
+                        onClick = { draftMatchMode = "ALL" },
                     )
                     DiscoveryChoiceChip(
-                        label = "ANY",
-                        selected = matchMode == "ANY",
+                        label = stringResource(AYMR.strings.discovery_match_mode_any),
+                        selected = draftMatchMode == "ANY",
                         selectedColor = selectedColor,
-                        onClick = { discoveryPreferences.requiredMatchMode().set("ANY") },
+                        onClick = { draftMatchMode = "ANY" },
                     )
                 }
                 Text(
@@ -1768,6 +1788,8 @@ private fun GenreFilterDialog(
                                         ),
                                     )
                                 },
+                                draftEnforcement,
+                                draftMatchMode,
                             )
                         },
                         shape = CircleShape,

@@ -1986,7 +1986,11 @@
     <string name="discovery_enforcement_label">Строгость обязательных жанров</string>
     <string name="discovery_enforcement_global">Для всех медиа</string>
     <string name="discovery_enforcement_best_effort_hint">BEST_EFFORT не отсекает по обязательным жанрам; blacklist и игнорируемые жанры остаются строгими.</string>
+    <string name="discovery_enforcement_strict">Строгий</string>
+    <string name="discovery_enforcement_best_effort">Мягкий</string>
     <string name="discovery_match_mode_label">Совпадение жанров</string>
+    <string name="discovery_match_mode_all">Все</string>
+    <string name="discovery_match_mode_any">Любой</string>
     <string name="discovery_regeneration_warning">Смена режима пересоберёт текущую ленту.</string>
     <string name="for_you_pool_status">%1$d из %2$d</string>
     <string name="for_you_sources_unavailable">Недоступно источников: %1$d</string>

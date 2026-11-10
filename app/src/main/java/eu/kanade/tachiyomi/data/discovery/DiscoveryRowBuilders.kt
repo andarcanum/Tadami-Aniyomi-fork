@@ -738,8 +738,9 @@ class DiscoverySourceRowBuilder(
                 )
             }
         }
-        val failures = states.count { !it.hasFresh() && (it.latestFailed || it.popularFailed) }
-        if (failures == states.size) throw IOException("all source catalog fetches failed")
+        val failedStates = states.filter { !it.hasFresh() && (it.latestFailed || it.popularFailed) }
+        failedSourceIds = failedStates.map { it.id }.toSet()
+        if (failedStates.size == states.size) throw IOException("all source catalog fetches failed")
         val parts = states.map { state ->
             val quota = slotAllocations.getValue(state.id)
             val latest = state.latest.distinctBy { it.cleanTitle }.take(quota - quota / 5)

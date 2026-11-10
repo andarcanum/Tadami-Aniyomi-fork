@@ -799,10 +799,21 @@ class DiscoveryRepositoryImpl(
                 hidden = hidden,
                 blacklist = blacklist,
             ).size
-            if (token.configurationKey == publication.configuration_key &&
+            val totalPreparedEligible = eligibleSuggestions(
+                media = token.mediaType,
+                rows = preparedSuggestions,
+                known = known,
+                memory = memory,
+                hidden = hidden,
+                blacklist = blacklist,
+            ).distinctBy { it.identityKeys().firstOrNull() ?: it.cleanTitle }.size
+            val isDegradedShrinkage = token.configurationKey == publication.configuration_key &&
                 oldEligibleCount > 0 &&
-                accepted.size < oldEligibleCount
-            ) {
+                (
+                    totalPreparedEligible == 0 ||
+                        (totalPreparedEligible < oldEligibleCount && totalPreparedEligible <= oldEligibleCount / 2)
+                    )
+            if (isDegradedShrinkage) {
                 db.discovery_publicationQueries.revokeOwner(token.mediaType.key, token.requestId)
                 return@await DiscoveryPublishReceipt.KeptExisting(accepted.size, oldEligibleCount)
             }
