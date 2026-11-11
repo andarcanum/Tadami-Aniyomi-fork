@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -161,18 +163,21 @@ class DiscoverySourcesScreen : ParentScreen() {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         item(key = "mode") {
-                            ModeTabs(mode = state.mode, onMode = model::setMode)
+                            Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                ModeTabs(mode = state.mode, onMode = model::setMode)
+                            }
                         }
                         if (state.mode == "auto") {
                             item(key = "auto_card") {
-                                AutoTopCard(state = state, model = model, colors = colors)
+                                Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                    AutoTopCard(state = state, model = model, colors = colors)
+                                }
                             }
                             if (state.entries.isNotEmpty()) {
                                 item(key = "auto_preview") {
-                                    Box(modifier = Modifier.alpha(0.38f)) {
+                                    Box(modifier = Modifier.padding(bottom = 10.dp).alpha(0.38f)) {
                                         SourceSectionCard(
                                             entries = state.entries.take(4),
                                             mediaType = state.mediaType,
@@ -187,44 +192,72 @@ class DiscoverySourcesScreen : ParentScreen() {
                             }
                         } else {
                             item(key = "search") {
-                                SearchRow(
-                                    state = state,
-                                    colors = colors,
-                                    onQuery = model::setQuery,
-                                    onSelectAll = model::selectAll,
-                                    onDeselectAll = model::deselectAll,
-                                )
+                                Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                    SearchRow(
+                                        state = state,
+                                        colors = colors,
+                                        onQuery = model::setQuery,
+                                        onSelectAll = model::selectAll,
+                                        onDeselectAll = model::deselectAll,
+                                    )
+                                }
                             }
                             if (isOverloadWarn(state.entries)) {
-                                item(key = "warn") { WarnStrip(colors = colors) }
+                                item(key = "warn") {
+                                    Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                        WarnStrip(colors = colors)
+                                    }
+                                }
                             }
                             if (filtered.isEmpty()) {
                                 item(key = "empty") {
-                                    Text(
-                                        text = stringResource(AYMR.strings.discovery_sources_search_empty),
-                                        fontSize = 11.5.sp,
-                                        color = colors.textSecondary,
-                                        fontStyle = FontStyle.Italic,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 18.dp),
-                                        textAlign = TextAlign.Center,
-                                    )
+                                    Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                        Text(
+                                            text = stringResource(AYMR.strings.discovery_sources_search_empty),
+                                            fontSize = 11.5.sp,
+                                            color = colors.textSecondary,
+                                            fontStyle = FontStyle.Italic,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 18.dp),
+                                            textAlign = TextAlign.Center,
+                                        )
+                                    }
                                 }
                             } else {
-                                item(key = "rows") {
-                                    SourceSectionCard(
-                                        entries = filtered,
+                                itemsIndexed(
+                                    items = filtered,
+                                    key = { _, entry -> "source_" + entry.pluginKey },
+                                ) { index, entry ->
+                                    val shape = when {
+                                        filtered.size == 1 -> RoundedCornerShape(20.dp)
+                                        index == 0 -> RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                                        index == filtered.lastIndex -> RoundedCornerShape(
+                                            bottomStart = 20.dp,
+                                            bottomEnd = 20.dp,
+                                        )
+                                        else -> RectangleShape
+                                    }
+                                    val bottomPad = if (index == filtered.lastIndex) 10.dp else 0.dp
+                                    SourcePickRowItem(
+                                        entry = entry,
                                         mediaType = state.mediaType,
                                         model = model,
                                         colors = colors,
                                         allowedCount = state.entries.count { !it.excluded },
                                         clickable = true,
-                                        onToggle = model::toggleSource,
+                                        shape = shape,
+                                        showDivider = index < filtered.lastIndex,
+                                        onToggle = { model.toggleSource(entry.pluginKey) },
+                                        modifier = Modifier.padding(bottom = bottomPad),
                                     )
                                 }
                             }
-                            item(key = "counter") { CounterCard(state = state, colors = colors) }
+                            item(key = "counter") {
+                                Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                    CounterCard(state = state, colors = colors)
+                                }
+                            }
                         }
                         item(key = "footer") {
                             Text(
@@ -487,6 +520,46 @@ private fun WarnStrip(colors: AuroraColors) {
 }
 
 // ── секция строк плагинов ──────────────────────────────────────────────────────
+
+/** Отдельная виртуализированная строка плагина в общем списке LazyColumn. */
+@Composable
+private fun SourcePickRowItem(
+    entry: SourcePickUi,
+    mediaType: DiscoveryMediaType,
+    model: DiscoverySourcesScreenModel,
+    colors: AuroraColors,
+    allowedCount: Int,
+    clickable: Boolean,
+    shape: Shape,
+    showDivider: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .sectionSurface(colors, shape),
+    ) {
+        SourcePickRow(
+            entry = entry,
+            mediaType = mediaType,
+            model = model,
+            colors = colors,
+            allowedCount = allowedCount,
+            clickable = clickable,
+            onClick = onToggle,
+        )
+        if (showDivider) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .height(1.dp)
+                    .background(colors.divider.copy(alpha = 0.5f)),
+            )
+        }
+    }
+}
 
 /** Групповая карточка-секция со строками плагинов (паттерн «grouped section cards»). */
 @Composable

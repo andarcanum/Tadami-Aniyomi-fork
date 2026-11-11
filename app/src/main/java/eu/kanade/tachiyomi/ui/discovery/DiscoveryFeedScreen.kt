@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -49,6 +50,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -810,16 +812,13 @@ private fun FeedBody(
     val similarTemplate = stringResource(AYMR.strings.for_you_reason_similar)
     val trendTemplate = stringResource(AYMR.strings.for_you_reason_trending)
     val nextTemplate = stringResource(AYMR.strings.for_you_reason_season_next)
+    val tasteTemplate = stringResource(AYMR.strings.for_you_reason_taste)
 
     when {
-        state.isLoading -> Box(
-            modifier
-                .padding(contentPadding)
-                .fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator(color = colors.accent)
-        }
+        state.isLoading -> DiscoveryFeedSkeletonGrid(
+            contentPadding = contentPadding,
+            modifier = modifier,
+        )
 
         items.isEmpty() -> Column(
             modifier
@@ -868,46 +867,95 @@ private fun FeedBody(
             }
         }
 
-        else -> LazyVerticalGrid(
-            columns = GridCells.Adaptive(130.dp),
-            modifier = modifier
-                .then(if (colors.isEInk) Modifier else Modifier.hazeSource(hazeState)),
-            contentPadding = contentPadding,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            items(items = items, key = { it.rowType.key + ":" + it.cleanTitle }) { item ->
-                val homeItem = remember(item) { item.toHomeHubDiscoveryItem() }
-                val reason = if (showReasons) {
-                    discoveryReasonText(homeItem, similarTemplate, trendTemplate, nextTemplate)
-                } else {
-                    null
+        else -> {
+            var selectedGenre by rememberSaveable { mutableStateOf<String?>(null) }
+            val availableGenres = remember(items) { extractAvailableGenres(items) }
+            val displayedItems = remember(items, selectedGenre) { filterDiscoveryFeed(items, selectedGenre) }
+
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(130.dp),
+                modifier = modifier
+                    .then(if (colors.isEInk) Modifier else Modifier.hazeSource(hazeState)),
+                contentPadding = contentPadding,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (availableGenres.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "genre_chips") {
+                        DiscoveryGenreChipBar(
+                            genres = availableGenres,
+                            selectedGenre = selectedGenre,
+                            onGenreSelect = { selectedGenre = it },
+                        )
+                    }
                 }
-                FeedCard(
-                    item = item,
-                    reason = reason,
-                    isAdding = item.title in state.addingTitles,
-                    coverMediaType = state.mediaType,
-                    coverRecoveryTick = state.coverRecoveryTick,
-                    modifier = Modifier.trackDiscoveryExposure(
-                        tracker = exposureTracker,
-                        item = homeItem,
-                        isSectionActive = true,
-                        isResumed = isResumed,
-                    ),
-                    onClick = {
-                        appHaptics.tap()
-                        onItemClick(item)
-                    },
-                    onLongClick = {
-                        appHaptics.tap()
-                        onItemLongClick(item)
-                    },
-                    onAdd = {
-                        appHaptics.tap()
-                        onItemAdd(item)
-                    },
-                )
+
+                if (displayedItems.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "empty_genre") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp, horizontal = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                stringResource(AYMR.strings.for_you_no_genre_matches),
+                                color = colors.textSecondary,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    appHaptics.tap()
+                                    selectedGenre = null
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text(
+                                    stringResource(AYMR.strings.for_you_filter_reset),
+                                    color = colors.textOnAccent,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(items = displayedItems, key = { it.rowType.key + ":" + it.cleanTitle }) { item ->
+                        val homeItem = remember(item) { item.toHomeHubDiscoveryItem() }
+                        val reason = if (showReasons) {
+                            discoveryReasonText(homeItem, similarTemplate, trendTemplate, nextTemplate, tasteTemplate)
+                        } else {
+                            null
+                        }
+                        FeedCard(
+                            item = item,
+                            reason = reason,
+                            isAdding = item.title in state.addingTitles,
+                            coverMediaType = state.mediaType,
+                            coverRecoveryTick = state.coverRecoveryTick,
+                            modifier = Modifier.trackDiscoveryExposure(
+                                tracker = exposureTracker,
+                                item = homeItem,
+                                isSectionActive = true,
+                                isResumed = isResumed,
+                            ),
+                            onClick = {
+                                appHaptics.tap()
+                                onItemClick(item)
+                            },
+                            onLongClick = {
+                                appHaptics.tap()
+                                onItemLongClick(item)
+                            },
+                            onAdd = {
+                                appHaptics.tap()
+                                onItemAdd(item)
+                            },
+                        )
+                    }
+                }
             }
         }
     }

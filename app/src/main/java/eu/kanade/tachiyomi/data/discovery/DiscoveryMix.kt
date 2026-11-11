@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.identityKeys
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 
 data class DiscoveryMixQuotas(
@@ -21,12 +22,18 @@ internal inline fun <T> runCatchingUnlessCancelled(block: () -> T): Result<T> = 
     Result.failure(e)
 }
 
+/** Извлекает нормализованный первичный жанр для анти-кластеризации и диверсификации. */
+internal fun primaryGenreOf(item: DiscoveryRowItem): String? =
+    item.genres.firstOrNull()?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        ?: item.reason?.substringBefore(",")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
 /**
  * Смешанный поток: round-robin по квотам сигналов (LIKE → TASTE → TREND → SOURCE),
  * внутри сигнала — порядок ряда (скор). Квота пустого сигнала перераспределяется
  * автоматически (round-robin просто пропускает пустой пул), остаток до [total]
  * добивается по убыванию [rrf]-скоров (ранговая fusion — шкалы сигналов несопоставимы),
  * а при rrf = null — по сырому скору (прежнее поведение).
+ * Предотвращает затяжные серии (> 2) одного первичного жанра при наличии альтернатив (MMR).
  */
 internal fun interleaveMix(
     rows: Map<DiscoveryRowType, List<DiscoveryRowItem>>,
@@ -41,43 +48,124 @@ internal fun interleaveMix(
         DiscoveryRowType.SOURCE to quotas.source,
     )
     val pools = DiscoveryRowType.entries.associateWith { type ->
-        ArrayDeque(rows[type].orEmpty())
+        ArrayList(rows[type].orEmpty())
     }
     val out = mutableListOf<DiscoveryRowItem>()
     val seen = mutableSetOf<String>()
     val taken = mutableMapOf<DiscoveryRowType, Int>()
+    var lastPrimaryGenre: String? = null
+    var consecutiveSameGenre = 0
     var progressed = true
+
     while (out.size < total && progressed) {
         progressed = false
         for (type in DiscoveryRowType.entries) {
             if (out.size >= total) break
             if ((taken[type] ?: 0) >= (quotaOf[type] ?: 0)) continue
             val pool = pools[type] ?: continue
-            var candidate: DiscoveryRowItem? = null
-            while (pool.isNotEmpty()) {
-                val next = pool.removeFirst()
-                if (next.cleanTitle !in seen) {
-                    candidate = next
-                    break
+
+            while (pool.isNotEmpty() && pool.first().cleanTitle in seen) {
+                pool.removeAt(0)
+            }
+            if (pool.isEmpty()) continue
+
+            var candidateIndex = -1
+            if (consecutiveSameGenre >= 2 && lastPrimaryGenre != null) {
+                candidateIndex = pool.indexOfFirst {
+                    it.cleanTitle !in seen && (primaryGenreOf(it) == null || primaryGenreOf(it) != lastPrimaryGenre)
                 }
             }
-            if (candidate == null) continue
+            if (candidateIndex == -1) {
+                candidateIndex = pool.indexOfFirst { it.cleanTitle !in seen }
+            }
+            if (candidateIndex == -1) {
+                pool.clear()
+                continue
+            }
+
+            val candidate = pool[candidateIndex]
+            val candidateGenre = primaryGenreOf(candidate)
+
+            if (consecutiveSameGenre >= 2 && candidateGenre != null && candidateGenre == lastPrimaryGenre) {
+                val hasAlternativeInOtherPools = DiscoveryRowType.entries.any { otherType ->
+                    if (otherType == type) return@any false
+                    if ((taken[otherType] ?: 0) >= (quotaOf[otherType] ?: 0)) return@any false
+                    val otherPool = pools[otherType] ?: return@any false
+                    otherPool.any {
+                        it.cleanTitle !in seen &&
+                            (primaryGenreOf(it) == null || primaryGenreOf(it) != lastPrimaryGenre)
+                    }
+                }
+                if (hasAlternativeInOtherPools) {
+                    continue
+                }
+            }
+
+            pool.removeAt(candidateIndex)
             out += candidate
             seen += candidate.cleanTitle
             taken[type] = (taken[type] ?: 0) + 1
+            if (candidateGenre != null && candidateGenre == lastPrimaryGenre) {
+                consecutiveSameGenre++
+            } else {
+                lastPrimaryGenre = candidateGenre
+                consecutiveSameGenre = if (candidateGenre != null) 1 else 0
+            }
             progressed = true
         }
+
+        if (!progressed && out.size < total) {
+            for (type in DiscoveryRowType.entries) {
+                if ((taken[type] ?: 0) >= (quotaOf[type] ?: 0)) continue
+                val pool = pools[type] ?: continue
+                val idx = pool.indexOfFirst { it.cleanTitle !in seen }
+                if (idx != -1) {
+                    val candidate = pool.removeAt(idx)
+                    out += candidate
+                    seen += candidate.cleanTitle
+                    taken[type] = (taken[type] ?: 0) + 1
+                    val candidateGenre = primaryGenreOf(candidate)
+                    if (candidateGenre != null && candidateGenre == lastPrimaryGenre) {
+                        consecutiveSameGenre++
+                    } else {
+                        lastPrimaryGenre = candidateGenre
+                        consecutiveSameGenre = if (candidateGenre != null) 1 else 0
+                    }
+                    progressed = true
+                    break
+                }
+            }
+        }
     }
+
     if (out.size < total) {
-        pools.values.flatten()
+        val remaining = pools.values.flatten()
             .filterNot { it.cleanTitle in seen }
             .distinctBy { it.cleanTitle }
             .sortedByDescending { rrf?.get(it.cleanTitle) ?: it.score }
-            .take(total - out.size)
-            .forEach { item ->
-                out += item
-                seen += item.cleanTitle
+            .toMutableList()
+
+        while (out.size < total && remaining.isNotEmpty()) {
+            val candidateIndex = if (consecutiveSameGenre >= 2 && lastPrimaryGenre != null) {
+                val altIdx = remaining.indexOfFirst {
+                    val g = primaryGenreOf(it)
+                    g == null || g != lastPrimaryGenre
+                }
+                if (altIdx != -1) altIdx else 0
+            } else {
+                0
             }
+            val item = remaining.removeAt(candidateIndex)
+            out += item
+            seen += item.cleanTitle
+            val g = primaryGenreOf(item)
+            if (g != null && g == lastPrimaryGenre) {
+                consecutiveSameGenre++
+            } else {
+                lastPrimaryGenre = g
+                consecutiveSameGenre = if (g != null) 1 else 0
+            }
+        }
     }
     return out
 }
@@ -284,9 +372,18 @@ private const val DAY_MS = 24L * 60 * 60 * 1000
  */
 internal fun dedupeCrossRow(
     items: List<tachiyomi.domain.discovery.model.DiscoverySuggestion>,
-): List<tachiyomi.domain.discovery.model.DiscoverySuggestion> = items
-    .sortedBy { it.rowType.ordinal }
-    .distinctBy { it.cleanTitle }
+): List<tachiyomi.domain.discovery.model.DiscoverySuggestion> {
+    val sorted = items.sortedBy { it.rowType.ordinal }
+    val seenKeys = HashSet<String>()
+    val result = ArrayList<tachiyomi.domain.discovery.model.DiscoverySuggestion>(items.size)
+    for (item in sorted) {
+        val keys = item.identityKeys() + item.cleanTitle
+        if (keys.any { it in seenKeys }) continue
+        result += item
+        seenKeys += keys
+    }
+    return result
+}
 
 /**
  * Матчит ли хоть один жанр айтема против набора целевых жанров (обычно уже
@@ -480,7 +577,7 @@ internal fun filterGenreClustering(
     val overflow = mutableListOf<DiscoveryRowItem>()
     val genreCounts = mutableMapOf<String, Int>()
     for (item in items) {
-        val primaryGenre = item.reason?.substringBefore(",")?.trim()?.lowercase().orEmpty()
+        val primaryGenre = primaryGenreOf(item).orEmpty()
         val count = genreCounts.getOrDefault(primaryGenre, 0)
         if (primaryGenre.isEmpty() || count < maxPerGenre) {
             result.add(item)

@@ -71,6 +71,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.TtlCache
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.manga.MangaMemoRepairHelper
+import eu.kanade.tachiyomi.util.manga.getMangaUpdateLocked
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
@@ -823,7 +824,7 @@ class MangaScreenModel(
             val fresh = try {
                 withIOContext {
                     sourceUpdateMutex.withLock {
-                        state.source.getMangaUpdate(
+                        state.source.getMangaUpdateLocked(
                             manga = MangaMemoRepairHelper.getOrRepairMangaRequest(
                                 state.manga,
                                 state.source,
@@ -863,7 +864,7 @@ class MangaScreenModel(
                 // Combined API: unchanged for 1.4/1.5 extensions (its default calls
                 // getMangaDetails), and works for 1.6 extensions that only implement this one.
                 val networkManga = prefetched?.manga ?: sourceUpdateMutex.withLock {
-                    state.source.getMangaUpdate(
+                    state.source.getMangaUpdateLocked(
                         manga = MangaMemoRepairHelper.getOrRepairMangaRequest(state.manga, state.source, updateManga),
                         chapters = emptyList(),
                         fetchDetails = true,
@@ -1326,7 +1327,7 @@ class MangaScreenModel(
                 // Combined API: unchanged for 1.4/1.5 extensions, and the only entry point a
                 // 1.6 extension implements - calling getChapterList there throws.
                 val sourceChapters = prefetched?.chapters ?: sourceUpdateMutex.withLock {
-                    state.source.getMangaUpdate(
+                    state.source.getMangaUpdateLocked(
                         manga = MangaMemoRepairHelper.getOrRepairMangaRequest(state.manga, state.source, updateManga),
                         chapters = emptyList(),
                         fetchDetails = false,

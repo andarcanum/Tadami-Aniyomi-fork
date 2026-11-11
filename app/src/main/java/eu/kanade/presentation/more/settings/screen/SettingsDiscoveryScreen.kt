@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
@@ -105,9 +106,12 @@ internal fun changeDiscoveryProviderSetting(
     preference: tachiyomi.core.common.preference.Preference<Boolean>,
     setting: DiscoveryProviderSetting,
     value: Boolean,
+    refreshImmediately: Boolean = true,
 ): Boolean {
     preference.set(value)
-    DiscoveryUpdateJob.refreshAfterProviderChange(context, setting)
+    if (refreshImmediately) {
+        DiscoveryUpdateJob.refreshAfterProviderChange(context, setting)
+    }
     return false
 }
 
@@ -116,6 +120,13 @@ internal fun changeDiscoveryProviderSetting(
  * мастер-выключатель серит все группы; выключенный ряд серит свои подустановки.
  */
 object SettingsDiscoveryScreen : SearchableSettings {
+
+    @Composable
+    override fun Content() {
+        val context = LocalContext.current
+        rememberScreenModel { SettingsDiscoverySessionScreenModel(context.applicationContext) }
+        super.Content()
+    }
 
     @ReadOnlyComposable
     @Composable
@@ -383,9 +394,6 @@ object SettingsDiscoveryScreen : SearchableSettings {
                 onApply = { csv ->
                     discoveryPreferences.releaseStatusFilter().set(csv)
                     showStatusDialog = false
-                    DiscoveryMediaType.entries.forEach { media ->
-                        DiscoveryUpdateJob.refreshConfiguration(context, media)
-                    }
                 },
                 onDismiss = { showStatusDialog = false },
             )
@@ -402,15 +410,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
             }
             GenreFilterDialog(
                 initialFilters = initialFilters,
-                discoveryPreferences = discoveryPreferences,
-                onApply = { updatedFilters, newEnforcement, newMatchMode ->
+                onApply = { updatedFilters ->
                     val filtersChanged = changedDiscoveryGenreFilters(initialFilters, updatedFilters)
-                    val modeChanged = newEnforcement != discoveryPreferences.requiredEnforcement().get() ||
-                        newMatchMode != discoveryPreferences.requiredMatchMode().get()
-                    if (modeChanged) {
-                        discoveryPreferences.requiredEnforcement().set(newEnforcement)
-                        discoveryPreferences.requiredMatchMode().set(newMatchMode)
-                    }
                     filtersChanged.forEach { (mediaType, filters) ->
                         applyDiscoveryGenreFilters(
                             context = context,
@@ -419,14 +420,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             priorityCsv = filters.priorityCsv,
                             requiredCsv = filters.requiredCsv,
                             ignoredCsv = filters.ignoredCsv,
+                            refreshImmediately = false,
                         )
-                    }
-                    if (modeChanged) {
-                        DiscoveryMediaType.entries.forEach { mediaType ->
-                            if (mediaType !in filtersChanged.keys) {
-                                DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
-                            }
-                        }
                     }
                     showGenreDialog = false
                 },
@@ -473,6 +468,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                     discoveryPreferences.externalProvidersEnabled(),
                                     DiscoveryProviderSetting.EXTERNAL,
                                     value,
+                                    refreshImmediately = false,
                                 )
                             },
                         ),
@@ -621,6 +617,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                 sourcePreferences.suggestionsUseShikimori(),
                                 DiscoveryProviderSetting.SHIKIMORI,
                                 value,
+                                refreshImmediately = false,
                             )
                         },
                     ),
@@ -635,6 +632,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                 sourcePreferences.suggestionsUseMangaUpdatesNovel(),
                                 DiscoveryProviderSetting.MANGA_UPDATES,
                                 value,
+                                refreshImmediately = false,
                             )
                         },
                     ),
@@ -649,6 +647,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                 sourcePreferences.suggestionsUseNovelUpdates(),
                                 DiscoveryProviderSetting.NOVEL_UPDATES,
                                 value,
+                                refreshImmediately = false,
                             )
                         },
                     ),
@@ -757,6 +756,28 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         subtitle = stringResource(AYMR.strings.pref_discovery_genre_filters_summary_per_media),
                         onClick = { showGenreDialog = true },
                         enabled = enabled,
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = discoveryPreferences.requiredEnforcement(),
+                        entries = persistentMapOf(
+                            "STRICT" to stringResource(AYMR.strings.discovery_enforcement_strict),
+                            "BEST_EFFORT" to stringResource(AYMR.strings.discovery_enforcement_best_effort),
+                        ),
+                        title = stringResource(AYMR.strings.discovery_enforcement_label),
+                        subtitleProvider = { value, entries -> entries[value] },
+                        enabled = enabled,
+                        onValueChanged = { true },
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = discoveryPreferences.requiredMatchMode(),
+                        entries = persistentMapOf(
+                            "ALL" to stringResource(AYMR.strings.discovery_match_mode_all),
+                            "ANY" to stringResource(AYMR.strings.discovery_match_mode_any),
+                        ),
+                        title = stringResource(AYMR.strings.discovery_match_mode_label),
+                        subtitleProvider = { value, entries -> entries[value] },
+                        enabled = enabled,
+                        onValueChanged = { true },
                     ),
                 ),
             ),
@@ -991,21 +1012,14 @@ private fun ReleaseStatusFilterDialog(
 @Composable
 private fun GenreFilterDialog(
     initialFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
-    discoveryPreferences: DiscoveryPreferences,
     onApply: (
         updatedFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
-        enforcement: String,
-        matchMode: String,
     ) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = eu.kanade.presentation.theme.AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val shape = RoundedCornerShape(28.dp)
-    val initialEnforcement = remember { discoveryPreferences.requiredEnforcement().get() }
-    val initialMatchMode = remember { discoveryPreferences.requiredMatchMode().get() }
-    var draftEnforcement by remember { mutableStateOf(initialEnforcement) }
-    var draftMatchMode by remember { mutableStateOf(initialMatchMode) }
 
     val allGenres = remember {
         eu.kanade.tachiyomi.data.discovery.GenreOntology.displayNames.entries
@@ -1661,69 +1675,6 @@ private fun GenreFilterDialog(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    stringResource(AYMR.strings.discovery_enforcement_label),
-                    color = colors.textPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    stringResource(AYMR.strings.discovery_enforcement_global),
-                    color = colors.textSecondary,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DiscoveryChoiceChip(
-                        label = stringResource(AYMR.strings.discovery_enforcement_strict),
-                        selected = draftEnforcement == "STRICT",
-                        selectedColor = selectedColor,
-                        onClick = { draftEnforcement = "STRICT" },
-                    )
-                    DiscoveryChoiceChip(
-                        label = stringResource(AYMR.strings.discovery_enforcement_best_effort),
-                        selected = draftEnforcement == "BEST_EFFORT",
-                        selectedColor = selectedColor,
-                        onClick = { draftEnforcement = "BEST_EFFORT" },
-                    )
-                }
-                Text(
-                    stringResource(AYMR.strings.discovery_enforcement_best_effort_hint),
-                    color = colors.textSecondary,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    stringResource(AYMR.strings.discovery_match_mode_label),
-                    color = colors.textPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DiscoveryChoiceChip(
-                        label = stringResource(AYMR.strings.discovery_match_mode_all),
-                        selected = draftMatchMode == "ALL",
-                        selectedColor = selectedColor,
-                        onClick = { draftMatchMode = "ALL" },
-                    )
-                    DiscoveryChoiceChip(
-                        label = stringResource(AYMR.strings.discovery_match_mode_any),
-                        selected = draftMatchMode == "ANY",
-                        selectedColor = selectedColor,
-                        onClick = { draftMatchMode = "ANY" },
-                    )
-                }
-                Text(
-                    stringResource(AYMR.strings.discovery_regeneration_warning),
-                    color = colors.textSecondary,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-
                 // Кнопки действий закреплены внутри окна (вне скролла).
                 Row(
                     Modifier
@@ -1788,8 +1739,6 @@ private fun GenreFilterDialog(
                                         ),
                                     )
                                 },
-                                draftEnforcement,
-                                draftMatchMode,
                             )
                         },
                         shape = CircleShape,
@@ -1822,52 +1771,6 @@ private fun genreDisplayLabel(names: Pair<String, String?>): String {
     val en = names.first
     if (en.length <= 24 && en.split(' ').size <= 3) return en
     return ru ?: en
-}
-
-/**
- * Haze Frost чип жанра (рецепт FeedTabs): стеклянный градиент, градиентная рамка,
- * точка-индикатор у выбранных; «занят другим режимом» — приглушён, без клика.
- */
-@Composable
-private fun DiscoveryChoiceChip(
-    label: String,
-    selected: Boolean,
-    selectedColor: Color,
-    onClick: () -> Unit,
-) {
-    val colors = eu.kanade.presentation.theme.AuroraTheme.colors
-    val appHaptics = LocalAppHaptics.current
-    val shape = CircleShape
-    Row(
-        Modifier
-            .clip(shape)
-            .background(
-                when {
-                    selected -> selectedColor
-                    colors.isEInk -> Color.White
-                    else -> Color.White.copy(alpha = 0.06f)
-                },
-                shape,
-            )
-            .border(
-                1.dp,
-                if (selected) selectedColor.copy(alpha = 0.70f) else colors.divider,
-                shape,
-            )
-            .clickable {
-                appHaptics.tap()
-                onClick()
-            }
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            label,
-            color = if (selected) colors.textOnAccent else colors.textPrimary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
 }
 
 @Composable

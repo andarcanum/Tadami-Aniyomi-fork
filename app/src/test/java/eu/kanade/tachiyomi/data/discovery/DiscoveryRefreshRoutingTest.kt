@@ -160,6 +160,7 @@ class DiscoveryRefreshRoutingTest {
         )
         DiscoveryUpdateJob.refreshConfiguration(context, media)
         val configuration = requests.getValue("DiscoveryUpdateConfiguration:novel")
+        configuration.workSpec.initialDelay shouldBe 15_000L
         runRequest(configuration)
         preferences.manualRefreshAt(media).get() shouldBe 1_000_000L
         preferences.manualRefreshCount(media).get() shouldBe 7

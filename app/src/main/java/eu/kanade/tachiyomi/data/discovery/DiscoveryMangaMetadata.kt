@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.discovery
 
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.util.manga.getMangaUpdateLocked
 
 /**
  * lib 1.6 sources may only implement getMangaUpdate. Its default implementation
@@ -10,7 +11,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 internal suspend fun fetchDiscoveryMangaDetails(source: MangaSource, entry: SManga): SManga {
     val originalUrl = entry.url
     val originalTitle = runCatching { entry.title }.getOrNull()
-    val details = source.getMangaUpdate(
+    val details = source.getMangaUpdateLocked(
         manga = entry,
         chapters = emptyList(),
         fetchDetails = true,

@@ -6,7 +6,6 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.data.discovery.AppDiscoverySeedSources
-import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.formatKeyCsv
 import eu.kanade.tachiyomi.data.discovery.groupSourcesByPlugin
 import eu.kanade.tachiyomi.data.discovery.parseKeyCsv
@@ -249,11 +248,8 @@ class DiscoverySourcesScreenModel(
 
     fun setMode(mode: String) {
         val mediaType = state.value.mediaType
-        // Повторный тап по активному сегменту не должен дёргать refreshNow
-        // (isManualRefresh ротирует сиды/страницы — только реальные изменения).
         if (discoveryPreferences.discoverySourceMode(mediaType).get() == mode) return
         discoveryPreferences.discoverySourceMode(mediaType).set(mode)
-        DiscoveryUpdateJob.refreshNow(context, mediaType)
         rebuild()
     }
 
@@ -271,7 +267,6 @@ class DiscoverySourcesScreenModel(
             return
         }
         discoveryPreferences.discoverySourceExcluded(mediaType).set(formatKeyCsv(next))
-        DiscoveryUpdateJob.refreshNow(context, mediaType)
         val becameExcluded = pluginKey !in currentExcluded
         val name = data.ordered.firstOrNull { it.key == pluginKey }?.name.orEmpty()
         val toast = if (becameExcluded) {
@@ -287,7 +282,6 @@ class DiscoverySourcesScreenModel(
         val mediaType = state.value.mediaType
         if (mediaData[mediaType] == null) return
         discoveryPreferences.discoverySourceExcluded(mediaType).set("")
-        DiscoveryUpdateJob.refreshNow(context, mediaType)
         rebuild()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.SelectAll) }
     }
@@ -302,7 +296,6 @@ class DiscoverySourcesScreenModel(
         // (переустановка = снова исключён).
         discoveryPreferences.discoverySourceExcluded(mediaType)
             .set(formatKeyCsv(excluded + deselectAllKeepTop1(allowedOrder)))
-        DiscoveryUpdateJob.refreshNow(context, mediaType)
         rebuild()
         val keepName = data.ordered.firstOrNull { it.key == keep }?.name.orEmpty()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.DeselectAllKeep(keepName)) }
@@ -312,7 +305,6 @@ class DiscoverySourcesScreenModel(
         val toast = state.value.toast as? DiscoverySourcesToast.Excluded ?: return
         val mediaType = state.value.mediaType
         discoveryPreferences.discoverySourceExcluded(mediaType).set(toast.undoCsv)
-        DiscoveryUpdateJob.refreshNow(context, mediaType)
         rebuild()
         mutableState.update { it.copy(toast = null) }
     }

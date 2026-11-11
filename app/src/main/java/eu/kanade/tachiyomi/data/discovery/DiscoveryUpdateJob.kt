@@ -242,6 +242,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         const val KEY_TARGET_MEDIA_TYPE = "target_media_type"
         const val KEY_CONFIGURATION_REFRESH = "configuration_refresh"
         const val KEY_TOP_UP = "top_up"
+        internal const val CONFIGURATION_DEBOUNCE_DELAY_SECONDS = 15L
 
         fun configurationWorkName(mediaType: DiscoveryMediaType): String =
             "DiscoveryUpdateConfiguration:${mediaType.key}"
@@ -261,6 +262,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             if (!preferences.discoveryEnabled().get()) return
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
                 .addTag(configurationWorkName(mediaType))
+                .setInitialDelay(CONFIGURATION_DEBOUNCE_DELAY_SECONDS, TimeUnit.SECONDS)
                 .setInputData(
                     Data.Builder()
                         .putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)

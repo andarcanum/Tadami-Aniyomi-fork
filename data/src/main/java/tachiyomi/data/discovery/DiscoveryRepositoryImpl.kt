@@ -783,7 +783,21 @@ class DiscoveryRepositoryImpl(
                 }
             }
 
-            val oldKeys = oldRows.flatMap { it.identityKeys() }.toSet()
+            val incomingRowTypes = preparedSuggestions.map { it.rowType.key }.toSet()
+            val isPartialRefresh = token.configurationKey == publication.configuration_key &&
+                prepared is DiscoveryPreparedPool.Fresh &&
+                incomingRowTypes.isNotEmpty()
+            val preservedOldRows = if (isPartialRefresh) {
+                oldRows.filter { it.rowType.key !in incomingRowTypes }
+            } else {
+                emptyList()
+            }
+
+            val oldKeys = if (isPartialRefresh) {
+                preservedOldRows.flatMap { it.identityKeys() }.toSet()
+            } else {
+                oldRows.flatMap { it.identityKeys() }.toSet()
+            }
             val accepted = prepareCandidates(
                 media = token.mediaType,
                 suggestions = preparedSuggestions,
@@ -801,7 +815,7 @@ class DiscoveryRepositoryImpl(
             ).size
             val totalPreparedEligible = eligibleSuggestions(
                 media = token.mediaType,
-                rows = preparedSuggestions,
+                rows = preparedSuggestions + preservedOldRows,
                 known = known,
                 memory = memory,
                 hidden = hidden,
@@ -817,7 +831,7 @@ class DiscoveryRepositoryImpl(
                 db.discovery_publicationQueries.revokeOwner(token.mediaType.key, token.requestId)
                 return@await DiscoveryPublishReceipt.KeptExisting(accepted.size, oldEligibleCount)
             }
-            if (prepared is DiscoveryPreparedPool.Fresh && accepted.isEmpty()) {
+            if (prepared is DiscoveryPreparedPool.Fresh && accepted.isEmpty() && preservedOldRows.isEmpty()) {
                 return@await DiscoveryPublishReceipt.NoAdmissibleItems
             }
 
@@ -831,7 +845,13 @@ class DiscoveryRepositoryImpl(
                 .executeAsList()
                 .toSet()
 
+            val updatedRowTypes = accepted.map { it.rowType.key }.toSet()
+
             oldRows.forEach { old ->
+                // Partial refresh preserves un-updated/failed rows in cache without retiring them.
+                if (isPartialRefresh && old.rowType.key !in updatedRowTypes) {
+                    return@forEach
+                }
                 // Insurance: Home teaser writes exposures on focus/interaction, but items in active/issued batch count as seen to guarantee unseen titles are never retired in background.
                 val seen = old.cleanTitle in exposedTitles || old.identityKeys().any { it in seenKeys }
                 val blockedUntil = retirement.blockedUntil(committedAt, seen)
@@ -855,7 +875,13 @@ class DiscoveryRepositoryImpl(
                 }
             }
 
-            db.discovery_suggestionsQueries.deleteAllByMedia(token.mediaType.key)
+            if (isPartialRefresh) {
+                updatedRowTypes.forEach { rowTypeKey ->
+                    db.discovery_suggestionsQueries.deleteByMediaAndRow(token.mediaType.key, rowTypeKey)
+                }
+            } else {
+                db.discovery_suggestionsQueries.deleteAllByMedia(token.mediaType.key)
+            }
             accepted.forEachIndexed { index, item ->
                 db.discovery_suggestionsQueries.insert(
                     media_type = token.mediaType.key,

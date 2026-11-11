@@ -451,11 +451,14 @@ class DiscoveryRunnerTest {
                 configurationKey = configurationKey,
             )
 
+        var lastRetirementPolicy: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy? = null
+
         override suspend fun publishGeneration(
             token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
             prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
             retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
         ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
+            lastRetirementPolicy = retirement
             generation = token.expectedGeneration + 1
             val suggestions = (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
                 ?.suggestions.orEmpty()
@@ -1906,5 +1909,59 @@ class DiscoveryRunnerTest {
         ctx.seeds.size shouldBe 1
         ctx.seeds.single().entryId shouldBe 102L
         ctx.seeds.single().title shouldBe "library title 2"
+    }
+
+    @Test
+    fun `configuration refresh uses DiscoveryRetirementPolicy NONE to avoid quarantine`() = runTest {
+        val repo = FakeRepository()
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = discoveryPrefs(),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType) = emptyList<DiscoverySeedInput>()
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+            coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = false)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isConfigurationRefresh = true)
+        repo.lastRetirementPolicy shouldBe tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy.NONE
+    }
+
+    @Test
+    fun `manual refresh uses DiscoveryRetirementPolicy RETIRE_ALL`() = runTest {
+        val repo = FakeRepository()
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = discoveryPrefs(),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType) = emptyList<DiscoverySeedInput>()
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+            coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = false)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+        repo.lastRetirementPolicy shouldBe tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy.RETIRE_ALL
+    }
+
+    @Test
+    fun `standard background refresh uses DiscoveryRetirementPolicy SEEN_ONLY`() = runTest {
+        val repo = FakeRepository()
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = discoveryPrefs(),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType) = emptyList<DiscoverySeedInput>()
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+            coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = false)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+        repo.lastRetirementPolicy shouldBe tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy.SEEN_ONLY
     }
 }

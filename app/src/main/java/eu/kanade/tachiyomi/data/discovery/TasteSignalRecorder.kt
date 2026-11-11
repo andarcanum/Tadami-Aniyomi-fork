@@ -137,6 +137,18 @@ object TasteSignalRecorder {
             }.getOrNull() ?: return false
         } else if (signalType == DiscoverySignalType.HIDE) {
             runCatchingUnlessCancelled { repository.hide(item.mediaType, item.cleanTitle) }
+            runCatchingUnlessCancelled {
+                repository.recordSignalWithReceipt(
+                    mediaType = item.mediaType,
+                    cleanTitle = item.cleanTitle,
+                    title = item.title,
+                    signalType = signalType,
+                    genres = genres,
+                    provider = item.provider,
+                    sourceKey = sourceKey,
+                    timestamp = eventTimestamp,
+                )
+            }
             eventTimestamp
         } else {
             runCatchingUnlessCancelled {
@@ -163,7 +175,12 @@ object TasteSignalRecorder {
         }
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)
-        } else if (positive && genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+        } else if (
+            (signalType == DiscoverySignalType.LIKE || signalType == DiscoverySignalType.ADD) &&
+            genres.isEmpty() &&
+            (item.sourceId ?: 0L) > 0L &&
+            !item.sourceUrl.isNullOrBlank()
+        ) {
             enrichmentScope.launch {
                 enrichLikeMetadata(
                     repository = repository,
@@ -237,6 +254,7 @@ object TasteSignalRecorder {
         mediaType: DiscoveryMediaType,
         title: String,
         sourceId: Long?,
+        enrichmentScope: CoroutineScope? = null,
         altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
             runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
         },
@@ -270,13 +288,25 @@ object TasteSignalRecorder {
                 DiscoveryFactKind.STARTED,
             )
         }
-        recordConsumedAltKeys(
-            repository = repository,
-            mediaType = mediaType,
-            primaryTitle = title,
-            sourceKey = sourceKey,
-            altMetaResolver = altMetaResolver,
-        )
+        if (enrichmentScope != null) {
+            enrichmentScope.launch {
+                recordConsumedAltKeys(
+                    repository = repository,
+                    mediaType = mediaType,
+                    primaryTitle = title,
+                    sourceKey = sourceKey,
+                    altMetaResolver = altMetaResolver,
+                )
+            }
+        } else {
+            recordConsumedAltKeys(
+                repository = repository,
+                mediaType = mediaType,
+                primaryTitle = title,
+                sourceKey = sourceKey,
+                altMetaResolver = altMetaResolver,
+            )
+        }
         afterConsumed(repository, mediaType, cleanTitle)
     }
 

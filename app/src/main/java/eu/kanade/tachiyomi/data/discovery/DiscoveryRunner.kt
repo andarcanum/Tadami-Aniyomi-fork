@@ -342,6 +342,8 @@ class DiscoveryRunner(
         val sourceWeights = candidates.filter { it.sourceId > 0 }.groupingBy { it.sourceId }.eachCount()
         val isManualMode = preferences.discoverySourceMode(mediaType).get() == "manual"
         val learnedSourceAffinity = foldLearnedTasteProfile(signals = allSignals).sourceAffinity
+        val sourceFailureHistory = parseSourceFailureHistory(preferences.sourceFailureHistory(mediaType).get())
+        val runnerNow = System.currentTimeMillis()
         val pluginStats = plugins.mapNotNull { plugin ->
             val representative = selectPluginRepresentative(
                 memberIds = plugin.sourceIds.toSet(),
@@ -358,11 +360,15 @@ class DiscoveryRunner(
             )
         }.sortedWith(
             compareByDescending<DiscoveryPluginStat> {
-                applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
+                val base = applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
+                val reliability = calculateSourceReliabilityFactor(it.representative, sourceFailureHistory, runnerNow)
+                base * reliability
             }.thenBy { it.representative },
         )
         val effectiveSourceWeights = pluginStats.associate {
-            it.representative to applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
+            val base = applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
+            val reliability = calculateSourceReliabilityFactor(it.representative, sourceFailureHistory, runnerNow)
+            it.representative to (base * reliability)
         }
         val excludedKeys = parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
         val participation = if (pluginStats.isEmpty()) {
@@ -441,6 +447,8 @@ class DiscoveryRunner(
         // получают мягкий минус. Синтез на лету (не пишется в БД), явные сигналы важнее.
         val libraryTasteProfile = buildTasteProfile(candidates)
         val libraryProfileGenres = libraryTasteProfile.map { it.first }
+        val blacklistedTags = repository.getBlacklistedTags(mediaType)
+        val blacklistedVetoSet = expandGenreSet(blacklistedTags.toList())
         val implicitNegatives = runCatching {
             synthesizeImplicitNegatives(
                 shownWithCount = repository.getShownWithCount(mediaType),
@@ -450,11 +458,15 @@ class DiscoveryRunner(
                 profileGenres = libraryProfileGenres,
             )
         }.getOrDefault(emptyList())
-        val learnedProfile = foldLearnedTasteProfile(signals = allSignals + implicitNegatives)
-        val mergedTasteProfile = mergeTasteProfiles(
-            libraryProfile = libraryTasteProfile,
-            learned = learnedProfile,
+        val learnedProfile = foldLearnedTasteProfile(
+            signals = allSignals + implicitNegatives,
+            vetoGenres = blacklistedVetoSet,
         )
+        val filteredLibraryProfile = libraryTasteProfile.filterNot { it.first.lowercase() in blacklistedVetoSet }
+        val mergedTasteProfile = mergeTasteProfiles(
+            libraryProfile = filteredLibraryProfile,
+            learned = learnedProfile,
+        ).filterNot { it.first.lowercase() in blacklistedVetoSet }
         // «Просмотрено/прочитано»: нейтральное исключение — consumed-тайтлы не
         // попадают в новые генерации ленты (вкусовой профиль они не трогают).
         val consumedCleanTitles = allSignals
@@ -482,7 +494,7 @@ class DiscoveryRunner(
             historyCleanTitles = seedSources.historyCleanTitles(mediaType),
             hiddenCleanTitles = repository.getHiddenTitles(mediaType) + consumedCleanTitles,
             tasteProfile = mergedTasteProfile,
-            blacklistedTags = repository.getBlacklistedTags(mediaType),
+            blacklistedTags = blacklistedTags,
             ignoredGenres = genreFilterSpec.ignoredGenres,
             // V1: статус-фильтр трендов — CSV из настроек, пусто = без фильтра.
             releaseStatuses = DiscoveryReleaseStatus.parseCsv(preferences.releaseStatusFilter().get()),
@@ -625,6 +637,14 @@ class DiscoveryRunner(
         val sourceFailures = feed.failedSourceIds.size
         val sourceDegraded = feed.degradedSourceIds.size
         preferences.lastSourceFailureCount(mediaType).set(sourceFailures)
+        val successfulSourceIds = (context.sourceIds - feed.failedSourceIds).toSet()
+        val updatedFailureHistory = updateSourceFailures(
+            currentHistory = sourceFailureHistory,
+            failedIds = feed.failedSourceIds,
+            successfulIds = successfulSourceIds,
+            nowMs = System.currentTimeMillis(),
+        )
+        preferences.sourceFailureHistory(mediaType).set(formatSourceFailureHistory(updatedFailureHistory))
         val fillAudit = buildDiscoveryFillAudit(
             mediaType = mediaType,
             rawCandidates = feed.rawCandidates,
@@ -777,10 +797,10 @@ class DiscoveryRunner(
             null
         }
         val publishReceipt = if (prepared != null && token != null) {
-            val retirement = if (isManualRefresh) {
-                DiscoveryRetirementPolicy.RETIRE_ALL
-            } else {
-                DiscoveryRetirementPolicy.SEEN_ONLY
+            val retirement = when {
+                isConfigurationRefresh -> DiscoveryRetirementPolicy.NONE
+                isManualRefresh -> DiscoveryRetirementPolicy.RETIRE_ALL
+                else -> DiscoveryRetirementPolicy.SEEN_ONLY
             }
             repository.publishGeneration(token, prepared, retirement)
         } else {

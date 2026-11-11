@@ -154,6 +154,7 @@ class ReaderViewModel @JvmOverloads constructor(
                 mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
                 title = title,
                 sourceId = sourceId,
+                enrichmentScope = this,
             )
         }
     }

@@ -26,9 +26,12 @@ internal fun applyDiscoveryGenreFilters(
     priorityCsv: String,
     requiredCsv: String,
     ignoredCsv: String,
+    refreshImmediately: Boolean = true,
 ) {
     preferences.priorityGenres(mediaType).set(priorityCsv)
     preferences.requiredGenres(mediaType).set(requiredCsv)
     preferences.ignoredGenres(mediaType).set(ignoredCsv)
-    DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
+    if (refreshImmediately) {
+        DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
+    }
 }

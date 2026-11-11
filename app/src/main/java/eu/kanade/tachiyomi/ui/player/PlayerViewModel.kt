@@ -217,6 +217,7 @@ class PlayerViewModel @JvmOverloads constructor(
                 mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
                 title = title,
                 sourceId = sourceId,
+                enrichmentScope = this,
             )
         }
     }

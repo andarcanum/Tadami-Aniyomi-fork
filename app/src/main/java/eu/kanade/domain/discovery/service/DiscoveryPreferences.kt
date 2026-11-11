@@ -233,6 +233,10 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun lastSourceFailureCount(mediaType: DiscoveryMediaType): Preference<Int> =
         preferenceStore.getInt(Preference.appStateKey("discovery_source_failures_" + mediaType.key), 0)
 
+    /** История сбоев источников (sourceId:timestamp:count) per-media; app-state, не входит в backup. */
+    fun sourceFailureHistory(mediaType: DiscoveryMediaType): Preference<String> =
+        preferenceStore.getString(Preference.appStateKey("discovery_source_fail_history_" + mediaType.key), "")
+
     /** Статус последней генерации per-media: "SUCCESS", "PARTIAL", "FAILED", "SKIPPED", "" (не запускалось). */
     fun lastGenerationStatus(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString("discovery_last_gen_status_" + mediaType.key, "")

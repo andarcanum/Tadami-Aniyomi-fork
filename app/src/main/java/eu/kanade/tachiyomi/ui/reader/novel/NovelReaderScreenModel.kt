@@ -940,12 +940,13 @@ class NovelReaderScreenModel(
     private fun markDiscoveryConsumed(title: String, sourceId: Long) {
         if (title == lastConsumedMarkedTitle) return
         lastConsumedMarkedTitle = title
-        screenModelScope.launch {
+        screenModelScope.launch(Dispatchers.IO) {
             eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.recordConsumed(
                 repository = discoveryRepository,
                 mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
                 title = title,
                 sourceId = sourceId,
+                enrichmentScope = this,
             )
         }
     }

@@ -2201,6 +2201,10 @@
     <string name="for_you_reason_similar">Similar to «%1$s»</string>
     <string name="for_you_reason_trending">Trending now</string>
     <string name="for_you_reason_season_next">Next season</string>
+    <string name="for_you_reason_taste">Based on your taste: %1$s</string>
+    <string name="for_you_filter_all">All</string>
+    <string name="for_you_filter_reset">Reset filter</string>
+    <string name="for_you_no_genre_matches">No titles found for this genre</string>
     <string name="for_you_all_picks">All picks</string>
     <string name="for_you_stage_prev">Previous pick</string>
     <string name="for_you_stage_next">Next pick</string>
@@ -2352,11 +2356,11 @@
     <string name="discovery_enforcement_label">Required genre strictness</string>
     <string name="discovery_enforcement_global">Applies to all media</string>
     <string name="discovery_enforcement_best_effort_hint">BEST_EFFORT does not filter by required genres; blacklist and ignored genres stay strict.</string>
-    <string name="discovery_enforcement_strict">Strict</string>
-    <string name="discovery_enforcement_best_effort">Best effort</string>
-    <string name="discovery_match_mode_label">Genre match</string>
-    <string name="discovery_match_mode_all">All</string>
-    <string name="discovery_match_mode_any">Any</string>
+    <string name="discovery_enforcement_strict">Strict (must contain required genres)</string>
+    <string name="discovery_enforcement_best_effort">Best effort (prefer required genres, but never empty)</string>
+    <string name="discovery_match_mode_label">Required genre match logic</string>
+    <string name="discovery_match_mode_all">All (full match of all required genres)</string>
+    <string name="discovery_match_mode_any">Any (partial match, at least one genre)</string>
     <string name="discovery_regeneration_warning">Changing a mode rebuilds the current feed.</string>
     <string name="for_you_pool_status">%1$d of %2$d</string>
     <string name="for_you_sources_unavailable">Unavailable sources: %1$d</string>

@@ -512,8 +512,8 @@ internal fun firstBlacklistTag(
 
 /** Сколько карточек текущего тизера скроется при блэклисте [tag] (для undo-snackbar). */
 internal fun countAffectedTeasers(items: List<HomeHubDiscoveryItem>, tag: String): Int {
-    val policy = eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy(blacklistedTags = setOf(tag))
-    return items.count { !policy.isAllowed(it.toDiscoverySuggestion()) }
+    val expanded = eu.kanade.tachiyomi.data.discovery.expandGenreSet(listOf(tag))
+    return items.count { eu.kanade.tachiyomi.data.discovery.isBlacklisted(it.toDiscoverySuggestion(), expanded) }
 }
 
 /**
@@ -525,6 +525,7 @@ internal fun discoveryReasonText(
     similarTemplate: String,
     trendTemplate: String,
     nextSeasonTemplate: String,
+    tasteTemplate: String? = null,
 ): String? = when (item.rowType) {
     DiscoveryRowType.LIKE -> item.seedTitle?.let { similarTemplate.replace("%1\$s", it) }
     DiscoveryRowType.TREND -> when (item.reasonPayload) {
@@ -533,7 +534,9 @@ internal fun discoveryReasonText(
         "source" -> item.provider
         else -> trendTemplate
     }
-    DiscoveryRowType.TASTE -> item.reasonPayload?.takeIf { it.isNotBlank() }
+    DiscoveryRowType.TASTE -> item.reasonPayload?.takeIf { it.isNotBlank() }?.let { payload ->
+        tasteTemplate?.replace("%1\$s", payload) ?: payload
+    }
     DiscoveryRowType.SOURCE -> item.provider
 }
 
@@ -916,7 +919,8 @@ private fun discoveryReasonOrNull(item: HomeHubDiscoveryItem): String? {
     val similarTemplate = stringResource(AYMR.strings.for_you_reason_similar)
     val trendTemplate = stringResource(AYMR.strings.for_you_reason_trending)
     val nextTemplate = stringResource(AYMR.strings.for_you_reason_season_next)
-    return discoveryReasonText(item, similarTemplate, trendTemplate, nextTemplate)
+    val tasteTemplate = stringResource(AYMR.strings.for_you_reason_taste)
+    return discoveryReasonText(item, similarTemplate, trendTemplate, nextTemplate, tasteTemplate)
 }
 
 /** Круглая кнопка обновления ленты (общая для заголовка ForYouSection и Hybrid-полосы). */
@@ -2291,8 +2295,10 @@ internal fun DiscoveryHeroStage(
                                         }
                                     }
                                 }
-                                if (lockedAxis == 1 || (caughtMoving && lockedAxis == 0)) {
-                                    // Наш драг или ловля летящей сцены: клики слота под пальцем подавлены.
+                                if (lockedAxis == 1) {
+                                    // Наш горизонтальный драг: потребляем перемещение.
+                                    // lockedAxis == 0 не потребляем, чтобы вертикальный скролл родителя
+                                    // не блокировался при ловле движущейся сцены до определения оси.
                                     change.consume()
                                 }
                                 // lockedAxis == −1: вертикаль отдаётся родителю без потребления.
@@ -2541,6 +2547,7 @@ private fun BoxScope.StageSlot(
     onLongClick: (() -> Unit)?,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val context = LocalContext.current
     val coverReloadTick = rememberCoverReloadTick()
     val coverRequest = remember(context, item.coverUrl, coverMediaType, item.provider, coverReloadTick) {
@@ -2596,7 +2603,13 @@ private fun BoxScope.StageSlot(
             )
             .then(
                 if (onLongClick != null) {
-                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                    Modifier.combinedClickable(
+                        onClick = onClick,
+                        onLongClick = {
+                            appHaptics.tap()
+                            onLongClick()
+                        },
+                    )
                 } else {
                     Modifier.clickable(onClick = onClick)
                 },
@@ -2709,8 +2722,8 @@ private fun CollageTile(
     onLongClick: (() -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
-    val context = LocalContext.current
     val appHaptics = LocalAppHaptics.current
+    val context = LocalContext.current
     val coverReloadTick = rememberCoverReloadTick()
     val coverRequest = remember(context, item.coverUrl, coverMediaType, coverProvider, coverReloadTick) {
         buildAuroraCoverImageRequest(context, discoveryCoverData(coverMediaType, coverProvider, item.coverUrl))
@@ -2848,16 +2861,16 @@ internal fun EmptyForYouCard(
     val emptyMaxWidthDp = emptyAdaptiveSpec.updatesMaxWidthDp ?: emptyAdaptiveSpec.entryMaxWidthDp
 
     if (emptyState == ForYouEmptyState.DISABLED) return
+    if (emptyState == ForYouEmptyState.REFRESHING) {
+        eu.kanade.tachiyomi.ui.discovery.DiscoveryTeaserSkeletonRow(
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        return
+    }
 
     val content = when (emptyState) {
         ForYouEmptyState.DISABLED -> return
-        ForYouEmptyState.REFRESHING -> EmptyCardContent(
-            icon = Icons.Outlined.AutoAwesome,
-            title = stringResource(AYMR.strings.for_you_refreshing_title),
-            subtitle = stringResource(AYMR.strings.for_you_refreshing_subtitle),
-            actionText = null,
-            actionClick = null,
-        )
+        ForYouEmptyState.REFRESHING -> return
         ForYouEmptyState.FAILED -> EmptyCardContent(
             icon = Icons.Outlined.ErrorOutline,
             title = stringResource(AYMR.strings.for_you_failed_title),

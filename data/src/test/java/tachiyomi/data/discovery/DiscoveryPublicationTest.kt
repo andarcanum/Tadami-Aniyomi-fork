@@ -129,6 +129,58 @@ class DiscoveryPublicationTest {
     }
 
     @Test
+    fun `publishGeneration preserves cached rows for unupdated row types during partial failure`() = runTest {
+        val sourceItems = (1..5).map { num ->
+            suggestion(
+                num,
+            ).copy(
+                rowType = DiscoveryRowType.SOURCE,
+                title = "Source $num",
+                cleanTitle = "source $num",
+                identityKey = "source:$num",
+            )
+        }
+        val trendItems = (6..10).map { num ->
+            suggestion(
+                num,
+            ).copy(
+                rowType = DiscoveryRowType.TREND,
+                title = "Trend $num",
+                cleanTitle = "trend $num",
+                identityKey = "trend:$num",
+            )
+        }
+        val initialPool = DiscoveryPreparedPool.Fresh(sourceItems + trendItems, partial = false)
+        val first = publish("req-1", initialPool, configurationKey = "cfg-stable")
+        val firstSnapshot = (first as DiscoveryPublishReceipt.Published).snapshot
+        firstSnapshot.suggestions.size shouldBe 10
+
+        // Second publish only updates TREND (e.g. SOURCE failed and was absent from prepared pool)
+        val newTrendItems = (11..15).map { num ->
+            suggestion(
+                num,
+            ).copy(
+                rowType = DiscoveryRowType.TREND,
+                title = "New Trend $num",
+                cleanTitle = "new trend $num",
+                identityKey = "trend:$num",
+            )
+        }
+        val partialPool = DiscoveryPreparedPool.Fresh(newTrendItems, partial = true)
+        val second = publish("req-2", partialPool, configurationKey = "cfg-stable")
+        (second is DiscoveryPublishReceipt.Published) shouldBe true
+
+        // Assert: TREND items are replaced with newTrendItems, but SOURCE items are preserved!
+        val allSuggestions = repository.subscribe(media).first()
+        val sources = allSuggestions.filter { it.rowType == DiscoveryRowType.SOURCE }
+        val trends = allSuggestions.filter { it.rowType == DiscoveryRowType.TREND }
+        sources.size shouldBe 5
+        sources.map { it.title } shouldBe sourceItems.map { it.title }
+        trends.size shouldBe 5
+        trends.map { it.title } shouldBe newTrendItems.map { it.title }
+    }
+
+    @Test
     fun `verified empty publishes exhaustion and retires the old pool`() = runTest {
         publish("req-1", DiscoveryPreparedPool.Fresh((1..3).map(::suggestion), partial = false))
         val empty = DiscoveryPreparedPool.VerifiedEmpty(
@@ -494,6 +546,30 @@ class DiscoveryPublicationTest {
         val memoryMap = memoryList.associateBy { it.identity.identityKey }
         (1..5).forEach { num ->
             memoryMap[keyOf(num)]?.blockedUntil shouldBe (gen2CommittedAt + DISCOVERY_RETIRE_MS)
+        }
+    }
+
+    @Test
+    fun `publish with NONE retirement never blocks titles even if exposed`() = runTest {
+        val gen1Items = (1..5).map(::suggestion)
+        publish("req-1", DiscoveryPreparedPool.Fresh(gen1Items, partial = false))
+        repository.recordExposure(media, listOf(gen1Items[0].cleanTitle, gen1Items[1].cleanTitle))
+
+        val gen2Items = (6..10).map(::suggestion)
+        publish(
+            "req-2",
+            DiscoveryPreparedPool.Fresh(gen2Items, partial = false),
+            retirement = DiscoveryRetirementPolicy.NONE,
+        )
+
+        val memoryList = repository.observeTitleMemory(media).first()
+        val memoryMap = memoryList.associateBy { it.identity.identityKey }
+        (1..5).forEach { num ->
+            (memoryMap[keyOf(num)]?.blockedUntil ?: 0L) shouldBe 0L
+        }
+        val eligibility = repository.eligibility(media)
+        (1..5).forEach { num ->
+            (keyOf(num) in eligibility.excludedIdentityKeys) shouldBe false
         }
     }
 

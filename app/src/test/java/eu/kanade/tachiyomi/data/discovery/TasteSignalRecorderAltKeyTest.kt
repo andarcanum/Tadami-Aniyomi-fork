@@ -42,6 +42,26 @@ class TasteSignalRecorderAltKeyTest {
     }
 
     @Test
+    fun `recordConsumed does not block on slow altMetaResolver`() = runTest {
+        val repo = RecordingFakeRepository()
+        TasteSignalRecorder.recordConsumed(
+            repository = repo,
+            mediaType = DiscoveryMediaType.MANGA,
+            title = "Solo Leveling",
+            sourceId = -1L,
+            enrichmentScope = this,
+            altMetaResolver = { _, _ ->
+                kotlinx.coroutines.delay(10_000)
+                DiscoveryMeta(null, emptyList(), "Na Honjaman Level Up", null)
+            },
+        )
+        // Primary consumed signal recorded immediately without waiting for delay
+        repo.recorded.map { it.second }.shouldBe(listOf("solo leveling"))
+        testScheduler.advanceTimeBy(10_001)
+        repo.recorded.map { it.second }.shouldBe(listOf("solo leveling", "na honjaman level up"))
+    }
+
+    @Test
     fun `record with consumed item also enriches alt key`() = runTest {
         val repo = RecordingFakeRepository()
         val item = DiscoverySuggestion(
@@ -228,12 +248,14 @@ class TasteSignalRecorderAltKeyTest {
             repository = repo,
             item = item,
             signalType = DiscoverySignalType.CLICK,
+            enrichmentScope = this,
             localEntryResolver = { _, _, _ -> emptyList() },
             sourceDetailsResolver = { _, _, _ ->
                 sourceResolverCalled = true
                 listOf("NetworkAction")
             },
         )
+        testScheduler.advanceUntilIdle()
         success shouldBe true
         sourceResolverCalled shouldBe false
         repo.recordedGenres.last() shouldBe emptyList()
@@ -286,11 +308,12 @@ class TasteSignalRecorderAltKeyTest {
                 kind: DiscoverySignalType,
                 metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
             ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
-                persistedReceipt = metadata.changedAt + 10L
+                val receiptTime = metadata.changedAt + 10L
+                persistedReceipt = receiptTime
                 return tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt(
                     identityKey = identity.identityKey,
                     effectiveKind = kind,
-                    positiveCreatedAt = persistedReceipt!!,
+                    positiveCreatedAt = receiptTime,
                 )
             }
 

@@ -21,4 +21,11 @@ class DiscoveryRetirementPolicyTest {
             committedAt + DISCOVERY_RETIRE_MS
         DiscoveryRetirementPolicy.SEEN_ONLY.blockedUntil(committedAt, seen = false) shouldBe null
     }
+
+    @Test
+    fun `blockedUntil returns null for NONE regardless of seen`() {
+        val committedAt = 1_000_000L
+        DiscoveryRetirementPolicy.NONE.blockedUntil(committedAt, seen = true) shouldBe null
+        DiscoveryRetirementPolicy.NONE.blockedUntil(committedAt, seen = false) shouldBe null
+    }
 }
