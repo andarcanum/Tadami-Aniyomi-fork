@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -74,9 +76,12 @@ import dev.chrisbanes.haze.hazeSource
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
+import eu.kanade.presentation.more.settings.LocalAuroraTopBarInteractive
+import eu.kanade.presentation.more.settings.LocalAuroraTopBarScrollProgress
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.settingsSubtitleColor
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
@@ -89,6 +94,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
@@ -111,6 +117,7 @@ private fun NovelTextReplaceRulesScreenContent(onBack: () -> Unit) {
     val uiStyle = rememberResolvedSettingsUiStyle()
     val isAurora = uiStyle == SettingsUiStyle.Aurora
     val hazeState = remember { HazeState() }
+    val listState = rememberLazyListState()
     val prefs = remember { Injekt.get<NovelReaderPreferences>() }
     var rules by remember { mutableStateOf(prefs.replaceRules()) }
     var editorRule by remember { mutableStateOf<ReplaceRule?>(null) }
@@ -124,19 +131,24 @@ private fun NovelTextReplaceRulesScreenContent(onBack: () -> Unit) {
         prefs.setReplaceRules(next)
     }
 
-    val actionIconSurface: Modifier = if (isAurora) {
-        Modifier.auroraHeaderIconSurface(colors)
-    } else {
-        Modifier
-    }
-
     CompositionLocalProvider(LocalSettingsUiStyle provides uiStyle) {
         Box(modifier = Modifier.fillMaxSize()) {
             SettingsScaffold(
                 title = stringResource(AYMR.strings.novel_reader_text_replace),
                 uiStyle = uiStyle,
                 onBackPressed = onBack,
+                topBarCanScroll = { listState.canScroll() },
                 actions = {
+                    val isTopBarInteractive = LocalAuroraTopBarInteractive.current
+                    val topBarScrollProgress = LocalAuroraTopBarScrollProgress.current
+                    val actionModifier = if (isAurora) {
+                        Modifier.auroraHeaderIconSurface(
+                            colors = colors,
+                            scrollProgress = topBarScrollProgress,
+                        )
+                    } else {
+                        Modifier
+                    }
                     Row(
                         modifier = Modifier.padding(end = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -150,7 +162,8 @@ private fun NovelTextReplaceRulesScreenContent(onBack: () -> Unit) {
                                 )
                                 editorIsNew = true
                             },
-                            modifier = actionIconSurface,
+                            enabled = isTopBarInteractive,
+                            modifier = actionModifier,
                         ) {
                             Icon(
                                 Icons.Outlined.Add,
@@ -160,7 +173,8 @@ private fun NovelTextReplaceRulesScreenContent(onBack: () -> Unit) {
                         Box {
                             IconButton(
                                 onClick = { menuExpanded = true },
-                                modifier = actionIconSurface,
+                                enabled = isTopBarInteractive,
+                                modifier = actionModifier,
                             ) {
                                 Icon(Icons.Outlined.MoreVert, contentDescription = null)
                             }
@@ -254,12 +268,13 @@ private fun NovelTextReplaceRulesScreenContent(onBack: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding)
                         .hazeSource(hazeState),
                 ) {
                     if (rules.isEmpty()) {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(padding),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -269,9 +284,9 @@ private fun NovelTextReplaceRulesScreenContent(onBack: () -> Unit) {
                         }
                     } else {
                         LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         ) {
                             itemsIndexed(rules, key = { _, rule -> rule.id }) { index, rule ->
                                 BasePreferenceWidget(

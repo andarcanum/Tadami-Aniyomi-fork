@@ -24,6 +24,7 @@ import com.tadami.aurora.BuildConfig
 import eu.kanade.domain.easteregg.crystal.CrystalDayPhase
 import eu.kanade.domain.easteregg.crystal.CrystalWeather
 import eu.kanade.presentation.more.settings.SettingsScaffold
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.aniyomi.AYMR
@@ -43,13 +44,15 @@ internal object CrystalLivingCornerDebugScreen : Screen {
         val colors = AuroraTheme.colors
         var phase by remember { mutableStateOf<CrystalDayPhase?>(null) }
         var weather by remember { mutableStateOf<CrystalWeather?>(null) }
+        val scrollState = rememberScrollState()
         SettingsScaffold(
             title = stringResource(AYMR.strings.crystal_living_lab_title),
             uiStyle = rememberResolvedSettingsUiStyle(),
             onBackPressed = { navigator.pop() },
+            topBarCanScroll = { scrollState.canScroll() },
         ) { padding ->
             Column(
-                Modifier.padding(padding).verticalScroll(rememberScrollState()),
+                Modifier.verticalScroll(scrollState).padding(padding),
                 verticalArrangement =
                 Arrangement.spacedBy(12.dp),
             ) {

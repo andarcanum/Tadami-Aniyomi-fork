@@ -80,7 +80,7 @@ class AppLanguageScreen : Screen() {
             }
             LazyColumn(
                 state = state,
-                modifier = Modifier.padding(contentPadding),
+                contentPadding = contentPadding,
             ) {
                 items(langs) {
                     BasePreferenceWidget(

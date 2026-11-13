@@ -71,6 +71,7 @@ import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.settingsAccentColor
 import eu.kanade.presentation.more.settings.settingsCardBorderColor
@@ -202,15 +203,17 @@ class HomeHeaderLayoutEditorScreen : Screen() {
                 }
             }
 
+            val scrollState = rememberScrollState()
             SettingsScaffold(
                 title = stringResource(AYMR.strings.home_header_layout_editor_title),
                 uiStyle = uiStyle,
                 onBackPressed = navigator::pop,
+                topBarCanScroll = { scrollState.canScroll() },
             ) { contentPadding ->
                 Column(
                     modifier = Modifier
+                        .verticalScroll(scrollState)
                         .padding(contentPadding)
-                        .verticalScroll(rememberScrollState())
                         .padding(16.dp),
                 ) {
                     Text(
