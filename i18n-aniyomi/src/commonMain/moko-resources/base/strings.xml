@@ -2369,6 +2369,7 @@
     <string name="pref_discovery_genre_empty">Nothing found</string>
     <string name="pref_discovery_genre_add_custom">Add \"%1$s\"</string>
     <string name="pref_discovery_genre_popular">Popular</string>
+    <string name="pref_discovery_genre_selected">Selected</string>
     <string name="pref_discovery_row_taste">“Your taste” row</string>
     <string name="pref_discovery_row_taste_summary">Personalized genre recommendations based on your library and likes/hides</string>
     <string name="pref_discovery_row_source">Source catalogue row</string>

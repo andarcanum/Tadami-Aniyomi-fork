@@ -840,6 +840,7 @@
     <string name="for_you_sources_unavailable">Fuentes no disponibles: %1$d</string>
     <string name="pref_discovery_genre_search">Buscar un género…</string>
     <string name="pref_discovery_genre_popular">Populares</string>
+    <string name="pref_discovery_genre_selected">Seleccionados</string>
     <string name="pref_discovery_genre_empty">No se encontraron resultados</string>
     <string name="pref_discovery_genre_add_custom">Agregar «%1$s»</string>
     <string name="anixart_import_preference_group_title">Importar</string>

@@ -2003,6 +2003,7 @@
     <string name="pref_discovery_genre_empty">Ничего не найдено</string>
     <string name="pref_discovery_genre_add_custom">Добавить «%1$s»</string>
     <string name="pref_discovery_genre_popular">Популярные</string>
+    <string name="pref_discovery_genre_selected">Выбранные</string>
     <string name="pref_discovery_row_taste">Ряд «Твой вкус»</string>
     <string name="pref_discovery_row_taste_summary">Персональные жанровые рекомендации на основе библиотеки и ваших лайков/скрытий</string>
     <string name="pref_discovery_row_source">Ряд источника</string>

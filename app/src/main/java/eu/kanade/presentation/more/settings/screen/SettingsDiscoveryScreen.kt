@@ -408,8 +408,15 @@ object SettingsDiscoveryScreen : SearchableSettings {
                     ignoredCsv = discoveryPreferences.ignoredGenres(mediaType).get(),
                 )
             }
+            val initialMediaType = remember(showGenreDialog) {
+                resolveGenreDialogMediaType(discoveryPreferences.lastGenreDialogMediaType().get())
+            }
             GenreFilterDialog(
                 initialFilters = initialFilters,
+                initialMediaType = initialMediaType,
+                onMediaTypeChange = { selectedMedia ->
+                    discoveryPreferences.lastGenreDialogMediaType().set(selectedMedia.key)
+                },
                 onApply = { updatedFilters ->
                     val filtersChanged = changedDiscoveryGenreFilters(initialFilters, updatedFilters)
                     filtersChanged.forEach { (mediaType, filters) ->
@@ -1012,6 +1019,8 @@ private fun ReleaseStatusFilterDialog(
 @Composable
 private fun GenreFilterDialog(
     initialFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+    initialMediaType: DiscoveryMediaType,
+    onMediaTypeChange: (DiscoveryMediaType) -> Unit,
     onApply: (
         updatedFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
     ) -> Unit,
@@ -1025,6 +1034,9 @@ private fun GenreFilterDialog(
         eu.kanade.tachiyomi.data.discovery.GenreOntology.displayNames.entries
             .sortedBy { (it.value.second ?: it.value.first).lowercase() }
             .toList()
+    }
+    val displayNameByKey = remember(allGenres) {
+        allGenres.associate { it.key to genreDisplayLabel(it.value) }
     }
     // «Популярные» — курированный порядок реально частых жанров, НЕ take(N) по алфавиту.
     val popular = remember {
@@ -1042,7 +1054,7 @@ private fun GenreFilterDialog(
         )
     }
 
-    var mediaType by remember { mutableStateOf(DiscoveryMediaType.ANIME) }
+    var mediaType by remember(initialMediaType) { mutableStateOf(initialMediaType) }
     var mode by remember { mutableStateOf(1) } // 0=ignored, 1=priority, 2=required
     var search by remember { mutableStateOf("") }
 
@@ -1109,17 +1121,21 @@ private fun GenreFilterDialog(
     }
     val selectedColor = colors.accent
 
+    val selectCanon: (String) -> Unit = { key ->
+        // Сначала взаимоисключение: жанр вычищается из всех наборов (включая активный),
+        // и только затем добавляется в активный. Иначе remove из активного набора
+        // гасил только что сделанный add — чипы не подсвечивались.
+        priorityCan.remove(key)
+        requiredCan.remove(key)
+        ignoredCan.remove(key)
+        activeCanon.add(key)
+    }
+
     val toggleCanon: (String) -> Unit = { key ->
         if (activeCanon.contains(key)) {
             activeCanon.remove(key)
         } else {
-            // Сначала взаимоисключение: жанр вычищается из всех наборов (включая активный),
-            // и только затем добавляется в активный. Иначе remove из активного набора
-            // гасил только что сделанный add — чипы не подсвечивались.
-            priorityCan.remove(key)
-            requiredCan.remove(key)
-            ignoredCan.remove(key)
-            activeCanon.add(key)
+            selectCanon(key)
         }
     }
 
@@ -1240,6 +1256,7 @@ private fun GenreFilterDialog(
                     onTabSelected = { index ->
                         mediaTypes.getOrNull(index)?.let { selectedMedia ->
                             mediaType = selectedMedia
+                            onMediaTypeChange(selectedMedia)
                         }
                     },
                     scrollable = false,
@@ -1524,8 +1541,8 @@ private fun GenreFilterDialog(
                         }
                     }
 
-                    val chipGenres = if (search.isBlank()) {
-                        popular
+                    val visibleChips = if (search.isBlank()) {
+                        filterAvailablePopularGenres(popular, activeCanon) { it.key }
                     } else {
                         val q = search.trim().lowercase()
                         allGenres.filter { (key, names) ->
@@ -1535,7 +1552,7 @@ private fun GenreFilterDialog(
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    if (search.isBlank()) {
+                    if (search.isBlank() && visibleChips.isNotEmpty()) {
                         Text(
                             stringResource(AYMR.strings.pref_discovery_genre_popular),
                             fontSize = 11.sp,
@@ -1544,7 +1561,7 @@ private fun GenreFilterDialog(
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
                     }
-                    if (chipGenres.isEmpty()) {
+                    if (search.isNotBlank() && visibleChips.isEmpty()) {
                         Text(
                             stringResource(AYMR.strings.pref_discovery_genre_empty),
                             fontSize = 12.sp,
@@ -1552,63 +1569,61 @@ private fun GenreFilterDialog(
                         )
                         // Совпадений нет — предлагаем добавить запрос как есть в активный
                         // режим: каноническим ключом, если матчер резолвит, иначе raw-строкой.
-                        if (search.isNotBlank()) {
-                            Spacer(Modifier.height(10.dp))
-                            Row(
-                                Modifier
-                                    .clip(CircleShape)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                selectedColor.copy(alpha = if (colors.isDark) 0.16f else 0.10f),
-                                                selectedColor.copy(alpha = if (colors.isDark) 0.06f else 0.04f),
-                                            ),
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            Modifier
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            selectedColor.copy(alpha = if (colors.isDark) 0.16f else 0.10f),
+                                            selectedColor.copy(alpha = if (colors.isDark) 0.06f else 0.04f),
                                         ),
-                                        CircleShape,
-                                    )
-                                    .border(1.dp, selectedColor.copy(alpha = 0.40f), CircleShape)
-                                    .clickable {
-                                        appHaptics.tap()
-                                        val (resolved, isCanonical) = resolveUserGenreInput(search)
-                                        if (resolved.isNotBlank()) {
-                                            if (isCanonical) {
-                                                toggleCanon(resolved)
-                                            } else {
-                                                priorityRaw.removeAll { it.equals(resolved, ignoreCase = true) }
-                                                requiredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
-                                                ignoredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
-                                                activeRaw.add(resolved)
-                                            }
+                                    ),
+                                    CircleShape,
+                                )
+                                .border(1.dp, selectedColor.copy(alpha = 0.40f), CircleShape)
+                                .clickable {
+                                    appHaptics.tap()
+                                    val (resolved, isCanonical) = resolveUserGenreInput(search)
+                                    if (resolved.isNotBlank()) {
+                                        if (isCanonical) {
+                                            selectCanon(resolved)
+                                        } else {
+                                            priorityRaw.removeAll { it.equals(resolved, ignoreCase = true) }
+                                            requiredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
+                                            ignoredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
+                                            activeRaw.add(resolved)
                                         }
-                                        search = ""
                                     }
-                                    .padding(horizontal = 14.dp, vertical = 9.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Add,
-                                    contentDescription = null,
-                                    tint = selectedColor,
-                                    modifier = Modifier.size(15.dp),
-                                )
-                                Text(
-                                    stringResource(AYMR.strings.pref_discovery_genre_add_custom, search.trim()),
-                                    color = selectedColor,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                                    search = ""
+                                }
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Add,
+                                contentDescription = null,
+                                tint = selectedColor,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                stringResource(AYMR.strings.pref_discovery_genre_add_custom, search.trim()),
+                                color = selectedColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
-                    } else {
+                    } else if (visibleChips.isNotEmpty()) {
                         FlowRow(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            chipGenres.forEach { (key, names) ->
+                            visibleChips.forEach { (key, names) ->
                                 GenreFrostChip(
                                     label = genreDisplayLabel(names),
                                     selected = key in activeCanon,
@@ -1619,60 +1634,48 @@ private fun GenreFilterDialog(
                                 )
                             }
                         }
+                        if (visibleChips.any { (key, _) -> key in othersCanon }) {
+                            Text(
+                                stringResource(AYMR.strings.discovery_genre_move_hint),
+                                color = colors.textSecondary,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
                     }
 
-                    Text(
-                        stringResource(AYMR.strings.discovery_genre_move_hint),
-                        color = colors.textSecondary,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 6.dp),
+                    val selectedPills = buildSelectedGenrePills(
+                        selectedCanonical = activeCanon,
+                        selectedRaw = activeRaw,
+                        labelForKey = { key -> displayNameByKey[key] ?: key },
                     )
-
-                    if (activeRaw.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
+                    if (selectedPills.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            stringResource(AYMR.strings.pref_discovery_genre_selected),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
                         FlowRow(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            activeRaw.forEach { rawGenre ->
-                                Row(
-                                    Modifier
-                                        .clip(CircleShape)
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(
-                                                    selectedColor.copy(alpha = if (colors.isDark) 0.12f else 0.08f),
-                                                    selectedColor.copy(alpha = if (colors.isDark) 0.04f else 0.03f),
-                                                ),
-                                            ),
-                                            CircleShape,
-                                        )
-                                        .border(1.dp, selectedColor.copy(alpha = 0.30f), CircleShape)
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Text("«»", fontSize = 9.sp, color = selectedColor.copy(alpha = 0.7f))
-                                    Text(
-                                        rawGenre,
-                                        color = selectedColor,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                    )
-                                    Icon(
-                                        Icons.Outlined.Close,
-                                        contentDescription = null,
-                                        tint = colors.textSecondary,
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable {
-                                                appHaptics.tap()
-                                                activeRaw.remove(rawGenre)
-                                            },
-                                    )
-                                }
+                            selectedPills.forEach { pill ->
+                                SelectedGenreFrostChip(
+                                    label = pill.label,
+                                    isCustom = pill.isCustom,
+                                    selectedColor = selectedColor,
+                                    onRemove = {
+                                        if (pill.isCustom) {
+                                            activeRaw.remove(pill.keyOrRaw)
+                                        } else {
+                                            activeCanon.remove(pill.keyOrRaw)
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
@@ -1901,6 +1904,107 @@ private fun GenreFrostChip(
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
+        )
+    }
+}
+
+internal data class SelectedGenrePill(
+    val keyOrRaw: String,
+    val label: String,
+    val isCustom: Boolean,
+)
+
+internal fun resolveGenreDialogMediaType(savedKey: String): DiscoveryMediaType =
+    DiscoveryMediaType.fromKey(savedKey) ?: DiscoveryMediaType.ANIME
+
+internal fun <T> filterAvailablePopularGenres(
+    popular: List<T>,
+    selectedCanonical: Set<String>,
+    keyOf: (T) -> String,
+): List<T> = popular.filter { keyOf(it) !in selectedCanonical }
+
+internal fun buildSelectedGenrePills(
+    selectedCanonical: Set<String>,
+    selectedRaw: List<String>,
+    labelForKey: (String) -> String,
+): List<SelectedGenrePill> {
+    val canonicalPills = selectedCanonical
+        .map { key -> SelectedGenrePill(keyOrRaw = key, label = labelForKey(key), isCustom = false) }
+        .sortedBy { it.label.lowercase() }
+    val rawPills = selectedRaw
+        .map { raw -> SelectedGenrePill(keyOrRaw = raw, label = raw, isCustom = true) }
+    return canonicalPills + rawPills
+}
+
+@Composable
+private fun SelectedGenreFrostChip(
+    label: String,
+    isCustom: Boolean,
+    selectedColor: Color,
+    onRemove: () -> Unit,
+) {
+    val colors = eu.kanade.presentation.theme.AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    val shape = CircleShape
+
+    val bgBrush = if (colors.isEInk) {
+        Brush.verticalGradient(listOf(colors.textPrimary, colors.textPrimary))
+    } else {
+        Brush.verticalGradient(
+            listOf(
+                selectedColor.copy(alpha = if (colors.isDark) 0.22f else 0.16f),
+                selectedColor.copy(alpha = if (colors.isDark) 0.08f else 0.05f),
+            ),
+        )
+    }
+    val borderBrush = if (colors.isEInk) {
+        Brush.verticalGradient(listOf(colors.textPrimary, colors.textPrimary))
+    } else {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = if (colors.isDark) 0.50f else 0.80f),
+                selectedColor.copy(alpha = if (colors.isDark) 0.35f else 0.35f),
+            ),
+        )
+    }
+    val contentColor = when {
+        colors.isEInk -> colors.background
+        colors.isDark -> Color.White
+        else -> selectedColor
+    }
+
+    Row(
+        Modifier
+            .clip(shape)
+            .background(bgBrush, shape)
+            .border(1.dp, borderBrush, shape)
+            .clickable {
+                appHaptics.tap()
+                onRemove()
+            }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (isCustom) {
+            Text(
+                "«»",
+                fontSize = 9.sp,
+                color = contentColor.copy(alpha = 0.7f),
+            )
+        }
+        Text(
+            label,
+            color = contentColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        Icon(
+            Icons.Outlined.Close,
+            contentDescription = null,
+            tint = contentColor.copy(alpha = 0.8f),
+            modifier = Modifier.size(15.dp),
         )
     }
 }

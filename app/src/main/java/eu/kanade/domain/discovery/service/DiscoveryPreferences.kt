@@ -274,6 +274,12 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun retirementResetVersion(): Preference<Int> =
         preferenceStore.getInt("discovery_retirement_reset_version", 0)
 
+    /** Последний выбранный раздел в диалоге жанровых фильтров (app-state, не входит в backup). */
+    fun lastGenreDialogMediaType(): Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("discovery_genre_dialog_media_type"),
+        DiscoveryMediaType.ANIME.key,
+    )
+
     fun teaserCount(): Preference<Int> = preferenceStore.getInt("discovery_teaser_count", 16)
     fun showReasons(): Preference<Boolean> = preferenceStore.getBoolean("discovery_show_reasons", true)
 
