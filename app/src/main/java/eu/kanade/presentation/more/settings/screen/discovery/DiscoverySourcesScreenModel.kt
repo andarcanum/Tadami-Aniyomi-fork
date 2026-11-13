@@ -6,6 +6,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.data.discovery.AppDiscoverySeedSources
+import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.formatKeyCsv
 import eu.kanade.tachiyomi.data.discovery.groupSourcesByPlugin
 import eu.kanade.tachiyomi.data.discovery.parseKeyCsv
@@ -241,6 +242,12 @@ class DiscoverySourcesScreenModel(
         }
     }
 
+    private fun notifyConfigurationChanged(mediaType: DiscoveryMediaType) {
+        runCatching<Unit> {
+            DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
+        }
+    }
+
     fun switchMedia(mediaType: DiscoveryMediaType) {
         mutableState.update { it.copy(mediaType = mediaType, query = "", toast = null) }
         rebuild()
@@ -251,6 +258,7 @@ class DiscoverySourcesScreenModel(
         if (discoveryPreferences.discoverySourceMode(mediaType).get() == mode) return
         discoveryPreferences.discoverySourceMode(mediaType).set(mode)
         rebuild()
+        notifyConfigurationChanged(mediaType)
     }
 
     fun setQuery(query: String) {
@@ -276,6 +284,7 @@ class DiscoverySourcesScreenModel(
         }
         rebuild()
         mutableState.update { it.copy(toast = toast) }
+        notifyConfigurationChanged(mediaType)
     }
 
     fun selectAll() {
@@ -284,6 +293,7 @@ class DiscoverySourcesScreenModel(
         discoveryPreferences.discoverySourceExcluded(mediaType).set("")
         rebuild()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.SelectAll) }
+        notifyConfigurationChanged(mediaType)
     }
 
     fun deselectAll() {
@@ -299,6 +309,7 @@ class DiscoverySourcesScreenModel(
         rebuild()
         val keepName = data.ordered.firstOrNull { it.key == keep }?.name.orEmpty()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.DeselectAllKeep(keepName)) }
+        notifyConfigurationChanged(mediaType)
     }
 
     fun undoLast() {
@@ -307,6 +318,7 @@ class DiscoverySourcesScreenModel(
         discoveryPreferences.discoverySourceExcluded(mediaType).set(toast.undoCsv)
         rebuild()
         mutableState.update { it.copy(toast = null) }
+        notifyConfigurationChanged(mediaType)
     }
 
     fun clearToast() {

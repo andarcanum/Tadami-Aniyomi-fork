@@ -163,6 +163,7 @@ internal fun composeTeaserItems(
     items: List<DiscoverySuggestion>,
     limit: Int,
     offset: Int = 0,
+    hasPriorityBoost: (DiscoverySuggestion) -> Boolean = { false },
 ): List<HomeHubDiscoveryItem> {
     val capped = limit.coerceIn(3, 20)
     val rows = items.groupBy { it.rowType }
@@ -178,6 +179,7 @@ internal fun composeTeaserItems(
                     score = s.score,
                     sourceId = s.sourceId,
                     sourceUrl = s.sourceUrl,
+                    genres = s.genres,
                 )
             }
         }
@@ -196,7 +198,9 @@ internal fun composeTeaserItems(
         minOtherCount = 3,
     )
     return finalSelection.mapNotNull { row ->
-        items.firstOrNull { it.cleanTitle == row.cleanTitle }?.toHomeHubDiscoveryItem()
+        items.firstOrNull { it.cleanTitle == row.cleanTitle }?.let { suggestion ->
+            suggestion.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(suggestion))
+        }
     }
 }
 
@@ -271,6 +275,7 @@ internal fun selectFreshTeaserItems(
     offset: Int = 0,
     shownCutoffMap: Map<String, Long> = emptyMap(),
     currentTitles: Set<String> = emptySet(),
+    hasPriorityBoost: (DiscoverySuggestion) -> Boolean = { false },
 ): List<HomeHubDiscoveryItem> {
     val capped = count.coerceIn(3, 20)
     if (pool.isEmpty()) return emptyList()
@@ -303,30 +308,43 @@ internal fun selectFreshTeaserItems(
 
     val rawSelection: List<HomeHubDiscoveryItem> = when {
         freshNotCurrent.size >= capped -> {
-            composeTeaserItems(rotateList(freshNotCurrent, offset), capped, offset = 0)
+            composeTeaserItems(
+                rotateList(freshNotCurrent, offset),
+                capped,
+                offset = 0,
+                hasPriorityBoost = hasPriorityBoost,
+            )
         }
         freshPool.size >= capped -> {
-            val chosen = rotateList(freshNotCurrent, offset).map { it.toHomeHubDiscoveryItem() }
-            val remainingFresh = rotateList(freshOnScreen, offset).map { it.toHomeHubDiscoveryItem() }
+            val chosen = rotateList(freshNotCurrent, offset).map {
+                it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
+            }
+            val remainingFresh = rotateList(freshOnScreen, offset).map {
+                it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
+            }
             (chosen + remainingFresh).take(capped)
         }
         freshPool.isNotEmpty() -> {
             val freshCandidates = (rotateList(freshNotCurrent, offset) + rotateList(freshOnScreen, offset))
                 .distinctBy { it.cleanTitle }
-                .map { it.toHomeHubDiscoveryItem() }
+                .map { it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it)) }
             val needed = capped - freshCandidates.size
 
             val rotatedShownNotCurrent = rotateList(shownNotCurrent, offset)
             val rotatedShownOnScreen = rotateList(shownOnScreen, offset)
             val combined = rotatedShownNotCurrent + rotatedShownOnScreen
-            val backfillPool = combined.take(needed).map { it.toHomeHubDiscoveryItem() }
+            val backfillPool = combined.take(needed).map {
+                it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
+            }
             (freshCandidates + backfillPool).take(capped)
         }
         else -> {
             val rotatedShownNotCurrent = rotateList(shownNotCurrent, offset)
             val rotatedShownOnScreen = rotateList(shownOnScreen, offset)
             val combined = rotatedShownNotCurrent + rotatedShownOnScreen
-            combined.take(capped).map { it.toHomeHubDiscoveryItem() }
+            combined.take(capped).map {
+                it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
+            }
         }
     }
 
@@ -358,7 +376,7 @@ internal fun selectFreshTeaserItems(
             if (clustered.size >= capped) break
             val key = extractSeriesKey(item.title, item.cleanTitle)
             if ((seriesCounts[key] ?: 0) < maxPerSeries) {
-                clustered.add(item.toHomeHubDiscoveryItem())
+                clustered.add(item.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(item)))
                 selectedCleanTitles.add(item.cleanTitle)
                 seriesCounts[key] = (seriesCounts[key] ?: 0) + 1
             }
@@ -367,7 +385,7 @@ internal fun selectFreshTeaserItems(
         for (item in allRemaining) {
             if (clustered.size >= capped) break
             if (item.cleanTitle !in selectedCleanTitles) {
-                clustered.add(item.toHomeHubDiscoveryItem())
+                clustered.add(item.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(item)))
                 selectedCleanTitles.add(item.cleanTitle)
             }
         }
@@ -402,6 +420,7 @@ internal fun patchTeaserItems(
     shownTitles: Set<String> = emptySet(),
     shownCutoffMap: Map<String, Long> = emptyMap(),
     dismissedTitles: Set<String> = emptySet(),
+    hasPriorityBoost: (DiscoverySuggestion) -> Boolean = { false },
 ): List<HomeHubDiscoveryItem> {
     val capped = targetCount.coerceIn(3, 20)
     if (pool.isEmpty()) return emptyList()
@@ -411,6 +430,7 @@ internal fun patchTeaserItems(
             shownTitles = shownTitles,
             count = capped,
             shownCutoffMap = shownCutoffMap,
+            hasPriorityBoost = hasPriorityBoost,
         )
     }
 
@@ -471,12 +491,21 @@ internal fun patchTeaserItems(
     for (item in currentItems) {
         if (result.size >= capped) break
         if (item.cleanTitle in validCleanTitles && item.cleanTitle !in dismissedTitles) {
-            val fresh = poolMap[item.cleanTitle]?.toHomeHubDiscoveryItem(shownCutoffMap[item.cleanTitle]) ?: item
+            val suggestion = poolMap[item.cleanTitle]
+            val fresh = suggestion?.toHomeHubDiscoveryItem(
+                shownAt = shownCutoffMap[item.cleanTitle],
+                hasPriorityBoost = hasPriorityBoost(suggestion) || item.hasPriorityBoost,
+            ) ?: item
             result.add(fresh)
         } else {
             val replacement = nextReplacement()
             if (replacement != null) {
-                result.add(replacement.toHomeHubDiscoveryItem(shownCutoffMap[replacement.cleanTitle]))
+                result.add(
+                    replacement.toHomeHubDiscoveryItem(
+                        shownAt = shownCutoffMap[replacement.cleanTitle],
+                        hasPriorityBoost = hasPriorityBoost(replacement),
+                    ),
+                )
                 usedCleanTitles.add(replacement.cleanTitle)
             }
         }
@@ -484,7 +513,12 @@ internal fun patchTeaserItems(
 
     while (result.size < capped) {
         val replacement = nextReplacement() ?: break
-        result.add(replacement.toHomeHubDiscoveryItem(shownCutoffMap[replacement.cleanTitle]))
+        result.add(
+            replacement.toHomeHubDiscoveryItem(
+                shownAt = shownCutoffMap[replacement.cleanTitle],
+                hasPriorityBoost = hasPriorityBoost(replacement),
+            ),
+        )
         usedCleanTitles.add(replacement.cleanTitle)
     }
 
@@ -560,7 +594,10 @@ internal fun resolveHeroPresentation(
         if (discoveryEnabled && discoveryCount >= 3) HomeHeroMode.Stage else HomeHeroMode.Continue
 }
 
-internal fun DiscoverySuggestion.toHomeHubDiscoveryItem(shownAt: Long? = null) = HomeHubDiscoveryItem(
+internal fun DiscoverySuggestion.toHomeHubDiscoveryItem(
+    shownAt: Long? = null,
+    hasPriorityBoost: Boolean = false,
+) = HomeHubDiscoveryItem(
     title = title,
     cleanTitle = cleanTitle,
     coverUrl = coverUrl,
@@ -573,6 +610,7 @@ internal fun DiscoverySuggestion.toHomeHubDiscoveryItem(shownAt: Long? = null) =
     sourceUrl = sourceUrl,
     shownAt = shownAt,
     genres = genres,
+    hasPriorityBoost = hasPriorityBoost,
 )
 
 internal fun HomeHubDiscoveryItem.toSuggestionItem(): SuggestionItem = SuggestionItem(
@@ -1479,8 +1517,26 @@ internal fun DiscoveryHeroCollage(
     // Окно до 5 плиток: свежее (48h-метки показа) вперёд, franchise-кластеризация —
     // не больше одной плитки серии; реролл (offset+1) меняет состав в обеих группах
     // (фикс «мёртвого реролла» и дублей при <5 айтемах сохранён).
-    val tiles = remember(items, offset) { collageTiles(items, offset) }
-    LaunchedEffect(tiles) {
+    // Стабильность между рероллами: смена shownAt или точечное удаление элемента
+    // патчит сохранённый порядок in-place, не перетряхивая все 5 плиток.
+    var savedCollageTitles by rememberSaveable { mutableStateOf(ArrayList<String>()) }
+    var savedCollageOffset by rememberSaveable { mutableIntStateOf(offset) }
+    val orderedCollage = remember(items, offset) {
+        restoreOrPatchStageOrder(items, offset, savedCollageTitles, savedCollageOffset)
+    }
+    LaunchedEffect(orderedCollage, offset) {
+        savedCollageTitles = ArrayList(orderedCollage.map { it.cleanTitle })
+        savedCollageOffset = offset
+    }
+    val tiles = remember(orderedCollage) {
+        filterFranchiseClusteringGeneric(
+            items = orderedCollage,
+            titleExtractor = { it.title },
+            cleanTitleExtractor = { it.cleanTitle },
+            maxPerSeries = 1,
+        ).take(5)
+    }
+    LaunchedEffect(tiles.firstOrNull()?.cleanTitle) {
         delay(1200)
         tiles.firstOrNull()?.let(onItemFocused)
     }
@@ -1856,7 +1912,7 @@ internal fun resolveStageReanchorCenter(
     if (!itemsChanged || previousFocusedTitle == null) return currentCenter
     if (newOrderedTitles.isEmpty()) return currentCenter
     val newIndex = newOrderedTitles.indexOf(previousFocusedTitle)
-    return if (newIndex >= 0) newIndex else 0
+    return if (newIndex >= 0) newIndex else stageItemIndex(currentCenter, 0, newOrderedTitles.size)
 }
 
 /**
@@ -1877,10 +1933,18 @@ internal fun stageHeroOrder(
     val fresh = items.filter { (it.shownAt ?: 0L) <= 0L }
     val shown = items.filter { (it.shownAt ?: 0L) > 0L }
 
+    fun shuffleGroup(group: List<HomeHubDiscoveryItem>): List<HomeHubDiscoveryItem> {
+        if (group.size <= 1) return group
+        val boosted = group.filter { it.hasPriorityBoost }
+        if (boosted.isEmpty() || boosted.size == group.size) return group.shuffled(random)
+        val normal = group.filterNot { it.hasPriorityBoost }
+        return boosted.shuffled(random) + normal.shuffled(random)
+    }
+
     fun prioritizeNotVisible(pool: List<HomeHubDiscoveryItem>): List<HomeHubDiscoveryItem> {
-        if (currentVisibleTitles.isEmpty()) return pool.shuffled(random)
-        val notVisible = pool.filterNot { it.cleanTitle in currentVisibleTitles }.shuffled(random)
-        val visible = pool.filter { it.cleanTitle in currentVisibleTitles }.shuffled(random)
+        if (currentVisibleTitles.isEmpty()) return shuffleGroup(pool)
+        val notVisible = shuffleGroup(pool.filterNot { it.cleanTitle in currentVisibleTitles })
+        val visible = shuffleGroup(pool.filter { it.cleanTitle in currentVisibleTitles })
         return notVisible + visible
     }
 
@@ -1961,6 +2025,24 @@ internal fun patchStageOrder(
     }
 
     return result
+}
+
+internal fun restoreOrPatchStageOrder(
+    items: List<HomeHubDiscoveryItem>,
+    offset: Int,
+    savedCleanTitles: List<String>,
+    savedOffset: Int,
+): List<HomeHubDiscoveryItem> {
+    if (items.isEmpty()) return emptyList()
+    if (savedCleanTitles.isEmpty() || savedOffset != offset) {
+        return stageHeroOrder(items, offset)
+    }
+    val poolByTitle = items.associateBy { it.cleanTitle }
+    val template = items.first()
+    val previousOrdered = savedCleanTitles.map { cleanTitle ->
+        poolByTitle[cleanTitle] ?: template.copy(title = cleanTitle, cleanTitle = cleanTitle)
+    }
+    return patchStageOrder(previousOrdered, items)
 }
 
 /**
@@ -2059,6 +2141,9 @@ internal fun DiscoveryHeroStage(
     var offset by rememberSaveable { mutableIntStateOf(discoveryPreferences.stageOffset(coverMediaType).get()) }
     var userInteractionToken by remember { mutableIntStateOf(0) }
     var center by rememberSaveable { mutableIntStateOf(0) }
+    var savedOrderedTitles by rememberSaveable { mutableStateOf(ArrayList<String>()) }
+    var savedOffset by rememberSaveable { mutableIntStateOf(offset) }
+    var savedFocusedTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var isDragging by remember { mutableStateOf(false) }
 
     // B1: непрерывный центр сцены. Драг двигает его за пальцем (snapTo), отпускание/кнопки/авто-ротация
@@ -2069,7 +2154,9 @@ internal fun DiscoveryHeroStage(
 
     // 48h-уникальность hero: непоказанное вперёд (см. stageHeroOrder), реролл — seeded
     // shuffle внутри групп. Фокус и авто-ротация ходят по свежему в первую очередь.
-    val orderedState = remember { mutableStateOf(stageHeroOrder(items, offset)) }
+    val orderedState = remember {
+        mutableStateOf(restoreOrPatchStageOrder(items, offset, savedOrderedTitles, savedOffset))
+    }
     val lastOffset = remember { mutableIntStateOf(offset) }
     val lastItems = remember { mutableStateOf(items) }
 
@@ -2078,13 +2165,9 @@ internal fun DiscoveryHeroStage(
         lastItems.value = items
     } else if (items !== lastItems.value) {
         if (orderedState.value.isEmpty()) {
-            orderedState.value = stageHeroOrder(items, offset)
+            orderedState.value = restoreOrPatchStageOrder(items, offset, savedOrderedTitles, savedOffset)
         } else {
-            val currentTitles = orderedState.value.map { it.cleanTitle }.toSet()
-            val newTitles = items.map { it.cleanTitle }.toSet()
-            if (currentTitles != newTitles) {
-                orderedState.value = patchStageOrder(orderedState.value, items)
-            }
+            orderedState.value = patchStageOrder(orderedState.value, items)
         }
         lastItems.value = items
     }
@@ -2128,7 +2211,7 @@ internal fun DiscoveryHeroStage(
 
     // Ре-анкор фокуса при смене СОСТАВА ленты (items) — синхронно, до первого кадра:
     // центр переносится на новый индекс сфокусированного тайтла (если он остался),
-    // иначе сцена сбрасывается к началу. Реролл (смена offset без смены items) НЕ
+    // иначе сцена остаётся на текущем слоте (modulo размера). Реролл (смена offset без смены items) НЕ
     // ре-анкорит — «смена порядка под позицией» сохранена by design.
     val focusAnchor = remember {
         object {
@@ -2138,12 +2221,23 @@ internal fun DiscoveryHeroStage(
         }
     }
     if (ordered.isNotEmpty()) {
-        val reanchorCenter = resolveStageReanchorCenter(
-            itemsChanged = focusAnchor.items != null && focusAnchor.items !== items,
-            previousFocusedTitle = focusAnchor.orderedTitles.getOrNull(
+        val currentOrderedTitles = ordered.map { it.cleanTitle }
+        val hasSavedSession = focusAnchor.items == null && savedOrderedTitles.isNotEmpty() && savedOffset == offset
+        val itemsChanged = (focusAnchor.items != null && focusAnchor.items !== items) ||
+            (hasSavedSession && savedOrderedTitles != currentOrderedTitles)
+        val prevFocusedTitle = if (focusAnchor.items != null) {
+            focusAnchor.orderedTitles.getOrNull(
                 stageItemIndex(focusAnchor.center, 0, focusAnchor.orderedTitles.size),
-            ),
-            newOrderedTitles = ordered.map { it.cleanTitle },
+            )
+        } else {
+            savedFocusedTitle ?: savedOrderedTitles.getOrNull(
+                stageItemIndex(center, 0, savedOrderedTitles.size),
+            )
+        }
+        val reanchorCenter = resolveStageReanchorCenter(
+            itemsChanged = itemsChanged,
+            previousFocusedTitle = prevFocusedTitle,
+            newOrderedTitles = currentOrderedTitles,
             currentCenter = center,
         )
         if (reanchorCenter != center) {
@@ -2154,8 +2248,11 @@ internal fun DiscoveryHeroStage(
             markFocusedSoon()
         }
         focusAnchor.items = items
-        focusAnchor.orderedTitles = ordered.map { it.cleanTitle }
+        focusAnchor.orderedTitles = currentOrderedTitles
         focusAnchor.center = center
+        savedOrderedTitles = ArrayList(currentOrderedTitles)
+        savedOffset = offset
+        savedFocusedTitle = ordered.getOrNull(stageItemIndex(center, 0, ordered.size))?.cleanTitle
     }
     // Ken-burns у фокуса: состояние читается внутри graphicsLayer, поэтому кадры не рекомпозируют слоты.
     // B3: профиль (направление/дрейф) выбирается по постеру и применяется в слое слота.
@@ -2418,6 +2515,11 @@ internal fun DiscoveryHeroStage(
                         orderedState.value = nextOrdered
                         lastOffset.intValue = offset
                         lastItems.value = items
+                        savedOrderedTitles = ArrayList(nextOrdered.map { it.cleanTitle })
+                        savedOffset = offset
+                        savedFocusedTitle = nextOrdered.getOrNull(
+                            stageItemIndex(targetCenter, 0, nextOrdered.size),
+                        )?.cleanTitle
                         scope.launch(start = CoroutineStart.UNDISPATCHED) {
                             centerAnim.snapTo(center.toFloat())
                         }

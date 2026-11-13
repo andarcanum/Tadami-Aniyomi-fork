@@ -1574,6 +1574,9 @@ private fun GenreFilterDialog(
                                             if (isCanonical) {
                                                 toggleCanon(resolved)
                                             } else {
+                                                priorityRaw.removeAll { it.equals(resolved, ignoreCase = true) }
+                                                requiredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
+                                                ignoredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
                                                 activeRaw.add(resolved)
                                             }
                                         }

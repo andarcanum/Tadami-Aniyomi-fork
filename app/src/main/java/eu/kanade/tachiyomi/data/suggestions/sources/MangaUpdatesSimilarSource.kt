@@ -139,6 +139,13 @@ class MangaUpdatesSimilarSource(
                             .parseAs<MuSeriesDetail>(json)
 
                         if (recDetail.type in allowedTypes && !(nsfwFilterProvider() && recDetail.adult)) {
+                            val extractedGenres = recDetail.genres
+                                .mapNotNull { it.genre?.trim()?.takeIf(String::isNotEmpty) }
+                            val resolvedStatus = when {
+                                recDetail.completed -> "Completed"
+                                !recDetail.status.isNullOrBlank() -> recDetail.status
+                                else -> null
+                            }
                             SuggestionItem(
                                 title = rec.seriesName,
                                 searchQueries = listOf(rec.seriesName),
@@ -148,6 +155,8 @@ class MangaUpdatesSimilarSource(
                                 providerId = rec.seriesId.toString(),
                                 mediaType = mediaType,
                                 reason = SuggestionReason.EXTERNAL_MU,
+                                releaseStatus = resolvedStatus,
+                                genres = extractedGenres,
                             )
                         } else {
                             null

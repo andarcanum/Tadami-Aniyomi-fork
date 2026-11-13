@@ -119,7 +119,8 @@ internal fun resolveShikimoriStatusFilter(
     if (releaseStatuses.size == 1) {
         return releaseStatuses.first().shikimoriValue to emptySet()
     }
-    return seasonStatus to releaseStatuses.map { it.shikimoriValue }.toSet()
+    val statuses = releaseStatuses.map { it.shikimoriValue }.toSet()
+    return statuses.sorted().joinToString(",") to statuses
 }
 
 /** V1: пост-фильтр выдачи по сырому статусу Shikimori (пустой статус не режем — best-effort). */
@@ -204,7 +205,7 @@ open class ShikimoriTrendingSource(
         val seasonStatus = when (season) {
             TrendSeason.CURRENT -> "ongoing"
             TrendSeason.NEXT -> "anons"
-            TrendSeason.BOTH -> "ongoing"
+            TrendSeason.BOTH -> "ongoing,anons"
         }
         val seasonLabel = when (season) {
             TrendSeason.CURRENT -> "current"

@@ -395,4 +395,23 @@ class DiscoveryCandidatePolicyTest {
 
         policy.filterRowCandidates(items, { it.genres }) shouldBe emptyList()
     }
+
+    @Test
+    fun `best-effort required prefers proven matching items over empty-genre items with higher score`() {
+        val policy = DiscoveryCandidatePolicy(
+            requiredGenres = setOf("Romance"),
+            strictRequired = false,
+        )
+
+        val items = listOf(
+            testRowItem("Unknown Genres High Score", genres = emptyList(), score = 0.99),
+            testRowItem("Proven Romance", genres = listOf("Romance"), score = 0.30),
+        )
+
+        val filtered = policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
+        filtered.map { it.title } shouldBe listOf("Proven Romance")
+
+        val onlyUnknown = listOf(testRowItem("Unknown Genres", genres = emptyList(), score = 0.5))
+        policy.filterRowCandidates(onlyUnknown, { it.genres }).map { it.title } shouldBe listOf("Unknown Genres")
+    }
 }

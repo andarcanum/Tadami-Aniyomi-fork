@@ -133,6 +133,15 @@ class DiscoveryCandidatePolicy(
     }
 
     /**
+     * Возвращает true, если рекомендация [item] совпадает с приоритетными жанрами пользователя.
+     */
+    fun hasPriorityBoost(item: DiscoverySuggestion): Boolean {
+        if (priorityGenres.isEmpty()) return false
+        val verdict = evaluate(item.genres)
+        return verdict is CandidateVerdict.Admitted && verdict.hasPriorityBoost
+    }
+
+    /**
      * Возвращает true, если рекомендация [item] допущена политикой (прошла blacklist, ignored и strict required).
      */
     fun isAllowed(item: DiscoverySuggestion): Boolean = evaluate(item.genres) is CandidateVerdict.Admitted
@@ -244,21 +253,25 @@ class DiscoveryCandidatePolicy(
         val admittedCandidates = if (requiredGenres.isEmpty()) {
             withoutForbidden
         } else {
-            val withRequired = withoutForbidden.filter { (_, verdict) ->
-                if (verdict is CandidateVerdict.Admitted) {
-                    verdict.matchesRequired || (verdict.hasIncompleteMetadata && !isStrictRequired)
-                } else {
-                    false
-                }
+            val exactRequired = withoutForbidden.filter { (_, verdict) ->
+                verdict is CandidateVerdict.Admitted && verdict.matchesRequired
             }
-            if (withRequired.isNotEmpty()) {
-                withRequired
-            } else if (!isStrictRequired) {
-                // Best-effort ослабление: подходящих по requiredGenres тайтлов нет,
-                // возвращаем допущенные без блэклиста/игнора, чтобы лента не была пустой.
-                withoutForbidden
+            val incompleteRequired = if (!isStrictRequired) {
+                withoutForbidden.filter { (_, verdict) ->
+                    verdict is CandidateVerdict.Admitted && !verdict.matchesRequired && verdict.hasIncompleteMetadata
+                }
             } else {
                 emptyList()
+            }
+            when {
+                exactRequired.isNotEmpty() -> exactRequired
+                incompleteRequired.isNotEmpty() -> incompleteRequired
+                !isStrictRequired -> {
+                    // Best-effort ослабление: подходящих по requiredGenres тайтлов нет,
+                    // возвращаем допущенные без блэклиста/игнора, чтобы лента не была пустой.
+                    withoutForbidden
+                }
+                else -> emptyList()
             }
         }
 

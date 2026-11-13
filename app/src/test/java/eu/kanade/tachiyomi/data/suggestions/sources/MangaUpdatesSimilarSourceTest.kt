@@ -1,7 +1,10 @@
 package eu.kanade.tachiyomi.data.suggestions.sources
 
+import eu.kanade.tachiyomi.data.suggestions.sources.dto.MuSeriesDetail
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class MangaUpdatesSimilarSourceTest {
@@ -40,5 +43,22 @@ class MangaUpdatesSimilarSourceTest {
         val source = MangaUpdatesSimilarSource(SuggestionMediaType.NOVEL)
         assertEquals(SuggestionMediaType.NOVEL, source.mediaType)
         assertNotEquals(SuggestionMediaType.ANIME, source.mediaType)
+    }
+
+    @Test
+    fun `MuSeriesDetail deserializes genres status and completed fields`() {
+        val payload = """
+            {
+              "type": "Novel",
+              "adult": false,
+              "genres": [{"genre": "Fantasy"}, {"genre": "Romance"}],
+              "status": "2 Volumes (Complete)",
+              "completed": true
+            }
+        """.trimIndent()
+        val detail = Json { ignoreUnknownKeys = true }.decodeFromString<MuSeriesDetail>(payload)
+        assertEquals(listOf("Fantasy", "Romance"), detail.genres.mapNotNull { it.genre })
+        assertEquals("2 Volumes (Complete)", detail.status)
+        assertTrue(detail.completed)
     }
 }

@@ -752,6 +752,7 @@ internal data class HomeHubDiscoveryItem(
     // Метка последнего показа (48h-окно): hero-карусель Stage заказывает непоказанное вперёд.
     val shownAt: Long? = null,
     val genres: List<String> = emptyList(),
+    val hasPriorityBoost: Boolean = false,
 )
 
 /** Бейдж «откроется напрямую»: только полная привязка (id + непустой url). */

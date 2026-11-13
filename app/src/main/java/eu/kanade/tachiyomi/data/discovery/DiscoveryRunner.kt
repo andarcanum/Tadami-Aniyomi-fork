@@ -425,7 +425,7 @@ class DiscoveryRunner(
         // Full generation replaces the published pool atomically. Cache-first
         // merging, per-row writes and stale backfill are no longer part of the
         // refresh path.
-        val currentSuggestions = emptyList<DiscoverySuggestion>()
+        val currentSuggestions = previousPool?.suggestions.orEmpty()
         val existingRowItems = emptyMap<DiscoveryRowType, List<DiscoveryRowItem>>()
         val shownCutoffMap = runCatching {
             repository.getRecentExclusionsWithTimestamp(mediaType)

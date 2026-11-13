@@ -176,17 +176,6 @@ internal fun AnimeHomeHub(
         }
     }
 
-    var isFirstComposition by remember { mutableStateOf(true) }
-    LaunchedEffect(activeSection, tabNavigator.current) {
-        if (activeSection == HomeHubSection.Anime && tabNavigator.current is HomeHubTab) {
-            if (isFirstComposition) {
-                isFirstComposition = false
-            } else {
-                screenModel.onScreenReentry()
-            }
-        }
-    }
-
     var lastSourceId by remember(activeSection) {
         mutableLongStateOf(
             if (activeSection == HomeHubSection.Anime) screenModel.getLastUsedAnimeSourceId() else -1L,

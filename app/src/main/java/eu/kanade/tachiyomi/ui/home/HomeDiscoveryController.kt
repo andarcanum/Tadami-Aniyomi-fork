@@ -42,6 +42,7 @@ internal class HomeDiscoveryController(
 ) {
     private val mutex = Mutex()
     private var cachedDiscoveryPool: List<DiscoverySuggestion> = emptyList()
+    private var cachedPolicy: DiscoveryCandidatePolicy = DiscoveryCandidatePolicy()
     private var discoveryOffset: Int = 0
     private var lastReentryTime: Long = 0L
     private var lastRefreshClickTime: Long = 0L
@@ -135,14 +136,31 @@ internal class HomeDiscoveryController(
                         .groupBy { it.rowType }
                         .flatMap { (_, items) ->
                             obs.policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
+                                .map { item ->
+                                    if (obs.policy.hasPriorityBoost(item)) {
+                                        item.copy(score = maxOf(item.score * 1.5, item.score + 10.0))
+                                    } else {
+                                        item
+                                    }
+                                }
                         }
-                    cachedDiscoveryPool = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
+                    val deduped = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
+                    cachedPolicy = obs.policy
+                    cachedDiscoveryPool = if (obs.policy.priorityGenres.isNotEmpty()) {
+                        val (boosted, normal) = deduped.partition { obs.policy.hasPriorityBoost(it) }
+                        boosted + normal
+                    } else {
+                        deduped
+                    }
                     val shownAtByTitle = runCatching {
                         repository.getRecentExclusionsWithTimestamp(mediaType)
                     }.getOrDefault(emptyMap())
 
                     val updatedPool = cachedDiscoveryPool.map { item ->
-                        item.toHomeHubDiscoveryItem(shownAtByTitle[item.cleanTitle])
+                        item.toHomeHubDiscoveryItem(
+                            shownAt = shownAtByTitle[item.cleanTitle],
+                            hasPriorityBoost = obs.policy.hasPriorityBoost(item),
+                        )
                     }
                     val lastUpdated = obs.visible.maxOfOrNull { it.createdAt }
                         ?: runCatching { repository.lastUpdatedAt(mediaType) }.getOrNull()
@@ -188,6 +206,8 @@ internal class HomeDiscoveryController(
         }
 
         val state = currentState()
+        val activePolicy = cachedPolicy
+        val priorityCheck: (DiscoverySuggestion) -> Boolean = { activePolicy.hasPriorityBoost(it) }
         if (!forceUpdate && !advanceOffset && state.discovery.isNotEmpty()) {
             val validCleanTitles = pool.mapTo(HashSet()) { it.cleanTitle }
             val shownMap = runCatching {
@@ -202,10 +222,14 @@ internal class HomeDiscoveryController(
                 shownTitles = shownMap.keys,
                 shownCutoffMap = shownMap,
                 dismissedTitles = dismissedSessionTitles,
+                hasPriorityBoost = priorityCheck,
             )
 
             val updatedPool = pool.map { p ->
-                p.toHomeHubDiscoveryItem(shownMap[p.cleanTitle])
+                p.toHomeHubDiscoveryItem(
+                    shownAt = shownMap[p.cleanTitle],
+                    hasPriorityBoost = priorityCheck(p),
+                )
             }
 
             if (patched != state.discovery || updatedPool != state.discoveryPool) {
@@ -238,6 +262,7 @@ internal class HomeDiscoveryController(
             offset = discoveryOffset,
             shownCutoffMap = shownMap,
             currentTitles = currentTitles,
+            hasPriorityBoost = priorityCheck,
         )
 
         if (notifyIfLimited && currentTitles.isNotEmpty()) {
@@ -248,7 +273,10 @@ internal class HomeDiscoveryController(
         }
 
         val updatedPool = pool.map { p ->
-            p.toHomeHubDiscoveryItem(shownMap[p.cleanTitle])
+            p.toHomeHubDiscoveryItem(
+                shownAt = shownMap[p.cleanTitle],
+                hasPriorityBoost = priorityCheck(p),
+            )
         }
         onStateUpdate {
             it.copy(
@@ -281,7 +309,7 @@ internal class HomeDiscoveryController(
         lastReentryTime = now
         scope.launchIO {
             mutex.withLock {
-                updateDiscoveryTeaserLocked(advanceOffset = true)
+                updateDiscoveryTeaserLocked(advanceOffset = false)
             }
         }
     }
@@ -370,7 +398,10 @@ internal class HomeDiscoveryController(
                     blacklistedTags = blacklist,
                 )
                 if (!preferences.discoveryEnabled().get() || !policy.isAllowed(suggestion)) return@withLock
-                val freshItem = suggestion.toHomeHubDiscoveryItem(shownMap[item.cleanTitle])
+                val freshItem = suggestion.toHomeHubDiscoveryItem(
+                    shownAt = shownMap[item.cleanTitle],
+                    hasPriorityBoost = policy.hasPriorityBoost(suggestion),
+                )
                 cachedDiscoveryPool = listOf(suggestion) +
                     cachedDiscoveryPool.filterNot { it.cleanTitle == suggestion.cleanTitle }
                 onStateUpdate { current ->

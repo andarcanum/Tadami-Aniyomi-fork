@@ -1411,7 +1411,7 @@ class AppDiscoverySourceCatalog(
     }
 
     private companion object {
-        const val DETAILS_ENRICH_CAP = 8
+        const val DETAILS_ENRICH_CAP = 24
     }
 }
 

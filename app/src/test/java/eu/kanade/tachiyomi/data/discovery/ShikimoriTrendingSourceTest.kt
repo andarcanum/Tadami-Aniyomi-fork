@@ -77,4 +77,17 @@ class ShikimoriTrendingSourceTest {
         plain.contains("genre=") shouldBe false
         plain.contains("status=") shouldBe false
     }
+
+    @Test
+    fun `resolveShikimoriStatusFilter joins multiple statuses instead of falling back`() {
+        val (serverStatus, clientFilter) = resolveShikimoriStatusFilter(
+            seasonStatus = "ongoing",
+            releaseStatuses = setOf(
+                tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.FINISHED,
+                tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.PAUSED,
+            ),
+        )
+        serverStatus shouldBe "on_hiatus,released"
+        clientFilter shouldBe setOf("released", "on_hiatus")
+    }
 }

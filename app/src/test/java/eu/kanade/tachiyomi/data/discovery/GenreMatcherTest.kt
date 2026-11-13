@@ -272,4 +272,12 @@ class GenreMatcherTest {
         GenreMatcher.matchesConstraint("romance", "romantic comedy") shouldBe false
         GenreMatcher.matchesSearch("боевик", "Action") shouldBe true
     }
+
+    @Test
+    fun `онтология не склеивает etchi с hentai и shonen ai с yaoi`() {
+        GenreMatcher.matchesConstraint("etchi", "Ecchi") shouldBe true
+        GenreMatcher.matchesConstraint("etchi", "Hentai") shouldBe false
+        GenreMatcher.matchesConstraint("shonen ai", "Shounen Ai") shouldBe true
+        GenreMatcher.matchesConstraint("shonen ai", "Yaoi") shouldBe false
+    }
 }
