@@ -2203,8 +2203,10 @@
     <string name="reels_mix_title">All Plugins</string>
     <string name="reels_mix_subtitle">Shuffle feed · %1$d of %2$d active</string>
     <string name="reels_mix_customize">Configure shuffle mix</string>
+    <string name="reels_mix_configure_short">Plugins</string>
     <string name="reels_mix_burst_label">Clips per plugin turn</string>
     <string name="reels_mix_sources_label">Included plugins</string>
+    <string name="reels_mix_sources_hint">Check plugins to mix, or tap a row to open it alone</string>
     <string name="reels_mix_status_needs_auth">Sign in required</string>
     <string name="reels_mix_status_cooldown">Cooling down</string>
     <string name="reels_mix_status_unavailable">Unavailable</string>

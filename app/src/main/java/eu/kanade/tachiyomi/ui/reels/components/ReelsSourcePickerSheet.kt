@@ -23,7 +23,6 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -66,7 +66,9 @@ fun ReelsSourcePickerSheet(
     onToggleMixSourceExcluded: (Long) -> Unit = {},
     onSetMixBurstSize: (Int) -> Unit = {},
 ) {
-    var showMixConfig by remember { mutableStateOf(false) }
+    var showMixConfig by remember(currentSourceId, allSourcesId) {
+        mutableStateOf(currentSourceId == allSourcesId)
+    }
     val isEInk = AuroraTheme.colors.isEInk
     val accent = AuroraTheme.colors.accent
     val unselectedBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isEInk) 1f else 0.45f)
@@ -171,30 +173,52 @@ fun ReelsSourcePickerSheet(
                                     }
                                 }
 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
                                     if (isMixSelected) {
                                         Icon(
                                             imageVector = Icons.Filled.Check,
                                             contentDescription = stringResource(MR.strings.reels_selected),
                                             tint = if (isEInk) MaterialTheme.colorScheme.onSurface else accent,
-                                            modifier = Modifier
-                                                .padding(end = 4.dp)
-                                                .size(20.dp),
+                                            modifier = Modifier.size(18.dp),
                                         )
                                     }
-                                    IconButton(
-                                        onClick = { showMixConfig = !showMixConfig },
-                                        modifier = Modifier.size(36.dp),
+                                    val configChipBg = when {
+                                        showMixConfig && isEInk -> MaterialTheme.colorScheme.onSurface
+                                        showMixConfig && !isEInk -> accent.copy(alpha = 0.2f)
+                                        isEInk -> Color.Transparent
+                                        else -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f)
+                                    }
+                                    val configChipBorder = if (showMixConfig) selectedBorder else unselectedBorder
+                                    val configChipFg = when {
+                                        showMixConfig && isEInk -> MaterialTheme.colorScheme.surface
+                                        showMixConfig && !isEInk -> accent
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(configChipBg)
+                                            .border(1.dp, configChipBorder, RoundedCornerShape(8.dp))
+                                            .clickable { showMixConfig = !showMixConfig }
+                                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.Tune,
                                             contentDescription = stringResource(MR.strings.reels_mix_customize),
-                                            tint = if (showMixConfig && !isEInk) {
-                                                accent
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            modifier = Modifier.size(20.dp),
+                                            tint = configChipFg,
+                                            modifier = Modifier.size(15.dp),
+                                        )
+                                        Text(
+                                            text = stringResource(MR.strings.reels_mix_configure_short),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = configChipFg,
+                                            maxLines = 1,
                                         )
                                     }
                                 }
@@ -238,21 +262,24 @@ fun ReelsSourcePickerSheet(
                                 shape = RoundedCornerShape(12.dp),
                             )
                             .clickable {
-                                if (showMixConfig && showMixEntry) {
-                                    onToggleMixSourceExcluded(source.id)
-                                } else {
-                                    onSelectSource(source.id)
-                                    onDismissRequest()
-                                }
+                                onSelectSource(source.id)
+                                onDismissRequest()
                             }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(
+                                start = 14.dp,
+                                end = if (showMixConfig && showMixEntry) 6.dp else 14.dp,
+                                top = 10.dp,
+                                bottom = 10.dp,
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .alpha(if (showMixConfig && showMixEntry && !isMixIncluded) 0.55f else 1f),
                         ) {
                             val icon = icons[source.id]
                             if (icon != null) {
@@ -417,10 +444,17 @@ private fun MixConfigPanel(
                 }
             }
         }
-        Text(
-            text = stringResource(MR.strings.reels_mix_sources_label),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = stringResource(MR.strings.reels_mix_sources_label),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(MR.strings.reels_mix_sources_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

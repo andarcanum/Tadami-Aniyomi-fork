@@ -451,4 +451,52 @@ class ReelsMultiSourceCoordinatorTest {
         resumed.statuses[601L] shouldBe MixSourceStatus.EXHAUSTED
         coordinator.stop()
     }
+
+    @Test
+    fun `fast source does not monopolize batch while slower peer is still fetching`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val fastSource = FakeFeedSource(701L) { _, _ ->
+            delay(10L)
+            FeedPage((1..10).map { item("fast-$it") }, hasNextPage = false)
+        }
+        val slowSource = FakeFeedSource(702L) { _, _ ->
+            delay(1_500L)
+            FeedPage((1..4).map { item("slow-$it") }, hasNextPage = false)
+        }
+
+        val coordinator = ReelsMultiSourceCoordinator(
+            ioDispatcher = dispatcher,
+            random = Random(9L),
+            nowMonoMs = { testScheduler.currentTime },
+            sourceTimeoutMs = 5_000L,
+            startupGraceMs = 500L,
+            progressiveMinSources = 2,
+            batchSize = 18,
+        )
+        coordinator.reset(this, listOf(fastSource, slowSource), emptySet(), burst = 2)
+
+        val deferredFirst = async {
+            coordinator.nextBatch(isInitial = true, filterCandidates = passAllFilter())
+        }
+        testScheduler.advanceTimeBy(1_000L)
+        testScheduler.runCurrent()
+
+        deferredFirst.isCompleted shouldBe true
+        val first = deferredFirst.await()
+        // Only a single burst (2 items) from fastSource is emitted while slowSource is still fetching.
+        first.slots.map { it.sourceId to it.item.id } shouldContainExactly listOf(
+            701L to "fast-1",
+            701L to "fast-2",
+        )
+        first.hasMore shouldBe true
+
+        // Once slowSource finishes at 1_500ms, batch 2 puts slowSource first (no boundary repeat) and mixes both.
+        testScheduler.advanceTimeBy(600L)
+        testScheduler.runCurrent()
+        val second = coordinator.nextBatch(isInitial = false, filterCandidates = passAllFilter())
+        second.slots.first().sourceId shouldBe 702L
+        second.slots.any { it.sourceId == 702L } shouldBe true
+        second.slots.any { it.sourceId == 701L } shouldBe true
+        coordinator.stop()
+    }
 }

@@ -34,6 +34,14 @@ WHERE account_scope_id = :scope
   AND item_id IN :itemIds
   AND (watched_qualified_at IS NOT NULL OR skipped_forward_at IS NOT NULL);
 
+-- Fallback anti-join across all scopes for a source (used in Mix while an account identity warms up).
+consumedIdsForSource:
+SELECT DISTINCT item_id
+FROM reels_consumption
+WHERE source_id = :sourceId
+  AND item_id IN :itemIds
+  AND (watched_qualified_at IS NOT NULL OR skipped_forward_at IS NOT NULL);
+
 countConsumed:
 SELECT COUNT(*)
 FROM reels_consumption

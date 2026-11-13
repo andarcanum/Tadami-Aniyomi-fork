@@ -621,14 +621,25 @@ class ReelsFeedScreenModel(
     private fun visitSlotKey(itemId: String, itemIndex: Int): String =
         if (itemIndex >= 0) "$itemIndex:$itemId" else itemId
 
-    /** Resolves and caches a source's For You scope independently for Mix mode without altering global pin. */
+    /**
+     * Resolves and caches a source's For You scope independently for Mix mode without altering global pin.
+     * Fallback (`src:`) entries are never sticky when the source supports account identity: if login/TDLib
+     * warms up mid-session, we adopt fallback history into the real `acc:` scope immediately.
+     */
     private suspend fun ensureForYouScopeMix(sourceId: Long): Pair<String, Long> {
-        forYouScopesBySource[sourceId]?.let { return it }
         val fallback = ReelsForYou.fallbackScope(sourceId)
+        val cached = forYouScopesBySource[sourceId]
+        val rawSource = sourceManager.get(sourceId)
+        if (cached != null && (cached.first != fallback || rawSource !is AnimeFeedAccountIdentitySource)) {
+            return cached
+        }
         val identity = runCatchingCancelSafe {
-            (sourceManager.get(sourceId) as? AnimeFeedAccountIdentitySource)?.accountScopeId()
+            (rawSource as? AnimeFeedAccountIdentitySource)?.accountScopeId()
         }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
         val scope = ReelsForYou.accountScope(sourceId, identity)
+        if (cached != null && scope == fallback) {
+            return cached
+        }
         if (scope != fallback) {
             runCatchingCancelSafe { reelsConsumptionRepository.mergeScope(fallback, scope, sourceId) }
                 .onFailure { logcat(LogPriority.WARN, it) { "Reels mix history merge $fallback -> $scope failed" } }
@@ -781,12 +792,42 @@ class ReelsFeedScreenModel(
     }
 
     /** Foreground loss: persist the latest position of the active visit before it can be lost. */
-    fun onForegroundLost() {
+    fun onForegroundLost(isConfigurationChange: Boolean = false) {
         if (state.value.roundRobinOwner != null) {
             roundRobinCoordinator.foregroundLost()
             return
         }
+        if (!isConfigurationChange && state.value.isMixMode && !state.value.isOffline) {
+            flushActiveMixVisit(endTrackerVisit = false)
+        }
         if (isReplaySurface()) sessionContinuity.flushActiveVisit()
+    }
+
+    /**
+     * Mix has no saved scroll-position restore across launches, so an active card whose visit
+     * is interrupted by backgrounding/app-kill/source-switch must be committed before state resets.
+     */
+    private fun flushActiveMixVisit(endTrackerVisit: Boolean) {
+        val current = state.value
+        if (!current.isMixMode || current.isOffline) return
+        val activeIndex = current.activeIndex
+        val activeItem = current.items.getOrNull(activeIndex) ?: return
+        val visitKey = visitSlotKey(activeItem.id, activeIndex)
+        val sourceId = (if (endTrackerVisit) visitSourceIds.remove(visitKey) else visitSourceIds[visitKey])
+            ?: current.itemSourceIds.getOrNull(activeIndex)
+            ?: return
+        val snapshot = if (endTrackerVisit) {
+            if (activeVisitSlotKey == visitKey) activeVisitSlotKey = null
+            interactionTracker.endVisit(activeItem.id, nowMs(), 0L)
+        } else {
+            interactionTracker.snapshot(activeItem.id)
+        } ?: return
+        if (sourceId == SourcePreferences.REELS_ALL_SOURCES_ID || isIncognito(sourceId)) return
+        if (snapshot.qualified || snapshot.watchedMs >= ReelsForYou.WATCH_THRESHOLD_MS) {
+            commitWatched(activeItem.id, sourceId)
+        } else {
+            commitSkipped(activeItem.id, sourceId)
+        }
     }
 
     fun onVideoCompleted(itemId: String) {
@@ -952,7 +993,7 @@ class ReelsFeedScreenModel(
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             if (isMix) {
                 activeMixSources.forEach { feedSource ->
-                    val scope = accountScopeFor(feedSource.id)
+                    val (scope, _) = ensureForYouScopeMix(feedSource.id)
                     val generation = reelsConsumptionRepository.resetHistory(scope, ReelsForYou.POLICY_VERSION)
                     forYouScopesBySource[feedSource.id] = scope to generation
                 }
@@ -1313,17 +1354,23 @@ class ReelsFeedScreenModel(
 
     fun switchSource(newSourceId: Long) {
         if (state.value.isOffline) return
+        val previousSourceId = state.value.currentSourceId
+        // Flush and stop Mix BEFORE `stopRoundRobin(clearProjection = true)` wipes `items` and
+        // `activeIndex`, otherwise the active Mix card loses its slot provenance on switch.
+        if (newSourceId != SourcePreferences.REELS_ALL_SOURCES_ID) {
+            stopMixSession()
+        } else if (state.value.isMixMode) {
+            flushActiveMixVisit(endTrackerVisit = true)
+        }
         stopQualitySession()
         // A source switch replaces the whole feed: stop the round-robin actor and drop its
         // projection before the new source (which may not even implement v28) takes over.
         stopRoundRobin(clearProjection = true)
         invalidateReplay()
-        val previousSourceId = state.value.currentSourceId
         if (newSourceId == SourcePreferences.REELS_ALL_SOURCES_ID) {
             switchToMixMode(previousSourceId)
             return
         }
-        stopMixSession()
         val rawSource = sourceManager.get(newSourceId)
         if (rawSource is AnimeFeedSource) {
             val creatorCapable = rawSource is AnimeCreatorFeedSource
@@ -1679,6 +1726,9 @@ class ReelsFeedScreenModel(
         stopCoordinator: Boolean = true,
         fromDispose: Boolean = false,
     ) {
+        if (state.value.isMixMode && !state.value.isOffline) {
+            flushActiveMixVisit(endTrackerVisit = true)
+        }
         mixFeedStarted = false
         loadJob?.cancel()
         mixQualityJobs.forEach { it.cancel() }
@@ -1897,11 +1947,21 @@ class ReelsFeedScreenModel(
                         MixFilterVerdict(kept = visible, unseenFilteredCount = 0)
                     } else {
                         val (scope, _) = ensureForYouScopeMix(slotSourceId)
-                        val consumed = reelsConsumptionRepository.consumedIds(
-                            scope,
-                            slotSourceId,
-                            visible.map { it.id },
-                        )
+                        val fallback = ReelsForYou.fallbackScope(slotSourceId)
+                        val consumed = if (scope == fallback &&
+                            sourceManager.get(slotSourceId) is AnimeFeedAccountIdentitySource
+                        ) {
+                            reelsConsumptionRepository.consumedIdsForSource(
+                                slotSourceId,
+                                visible.map { it.id },
+                            )
+                        } else {
+                            reelsConsumptionRepository.consumedIds(
+                                scope,
+                                slotSourceId,
+                                visible.map { it.id },
+                            )
+                        }
                         if (consumed.isEmpty()) {
                             MixFilterVerdict(kept = visible, unseenFilteredCount = 0)
                         } else {
@@ -1967,6 +2027,9 @@ class ReelsFeedScreenModel(
                 runway.onLoadFinished()
                 if (reset && state.value.items.isNotEmpty()) {
                     prepareQualityWindow(0)
+                    if (state.value.canLoadMore) {
+                        maybeLoadMoreForRunway()
+                    }
                 } else if (!reset && newItems.isNotEmpty() && lastPagerPage > pageAtLoadStart) {
                     maybeLoadMoreForRunway()
                 }

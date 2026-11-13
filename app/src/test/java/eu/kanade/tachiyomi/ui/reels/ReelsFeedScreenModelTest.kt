@@ -2552,6 +2552,16 @@ class ReelsFeedScreenModelTest {
             }.toSet()
         }
 
+        override suspend fun consumedIdsForSource(
+            sourceId: Long,
+            itemIds: Collection<String>,
+        ): Set<String> {
+            return itemIds.filter { id ->
+                val key = sourceId to id
+                key in watched || key in skipped
+            }.toSet()
+        }
+
         override suspend fun entry(scope: String, sourceId: Long, itemId: String): ReelsConsumptionEntry? = null
 
         override suspend fun countConsumed(scope: String, sourceId: Long): Long {
@@ -4673,6 +4683,108 @@ class ReelsFeedScreenModelTest {
             testDispatcher.scheduler.advanceUntilIdle()
 
             consumption.watched.keys shouldBe setOf(slot0Sid to "dup-visit", slot1Sid to "dup-visit")
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
+
+    @Test
+    fun `mix mode cold start filters account-scoped history even when identity is initially null`() =
+        runTest(testDispatcher) {
+            var currentIdentity: String? = null
+            val accountSource = object : AnimeFeedSource, AnimeFeedAccountIdentitySource {
+                override val id: Long = 961L
+                override val name: String = "AccountSource"
+                override val lang: String = "en"
+                override fun accountScopeId(): String? = currentIdentity
+                override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+                    return if (page == 1) {
+                        FeedPage(
+                            listOf(videoItem("seen-under-acc"), videoItem("fresh-1")),
+                            hasNextPage = true,
+                        )
+                    } else {
+                        FeedPage(listOf(videoItem("fresh-2")), hasNextPage = false)
+                    }
+                }
+            }
+            val peerSource = RecordingFeedSource(962L) { FeedPage(listOf(videoItem("peer-1")), hasNextPage = false) }
+            val consumption = FakeReelsConsumptionRepository().apply {
+                val key = 961L to "seen-under-acc"
+                watched[key] = Date(100L)
+                scopes[key] = "acc:961:uid-42"
+            }
+
+            val model = buildModel(
+                sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+                manager = sourceManagerOf(accountSource, peerSource),
+                preferences = SourcePreferences(MapPreferenceStore()),
+                consumptionRepository = consumption,
+            )
+            try {
+                testDispatcher.scheduler.advanceUntilIdle()
+                val loadedIds = model.state.value.items.map { it.id }
+                loadedIds.contains("seen-under-acc") shouldBe false
+                loadedIds.contains("fresh-1") shouldBe true
+
+                // Once identity becomes available, new writes land under acc:961:uid-42 via upgraded scope.
+                currentIdentity = "uid-42"
+                val freshIdx = model.state.value.items.indexOfFirst { it.id == "fresh-1" }
+                val cb = ReelsRoundRobinPageCallbacks(model, owner = null, slotIndex = freshIdx)
+                cb.onVisitStarted(model.state.value.items[freshIdx])
+                cb.onVisitEnded(model.state.value.items[freshIdx], 100L, 0.1f, 10f)
+                testDispatcher.scheduler.advanceUntilIdle()
+
+                consumption.scopes[961L to "fresh-1"] shouldBe "acc:961:uid-42"
+            } finally {
+                model.onDispose()
+                ReelsSessionSource.lastSourceId = null
+            }
+        }
+
+    @Test
+    fun `mix mode flushes active visit on foreground loss and source switch`() = runTest(testDispatcher) {
+        val s1 =
+            RecordingFeedSource(971L) { FeedPage(listOf(videoItem("s1-a"), videoItem("s1-b")), hasNextPage = false) }
+        val s2 =
+            RecordingFeedSource(972L) { FeedPage(listOf(videoItem("s2-a"), videoItem("s2-b")), hasNextPage = false) }
+        val consumption = FakeReelsConsumptionRepository()
+        val model = buildModel(
+            sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+            manager = sourceManagerOf(s1, s2),
+            preferences = SourcePreferences(MapPreferenceStore()),
+            consumptionRepository = consumption,
+        )
+        try {
+            testDispatcher.scheduler.advanceUntilIdle()
+            val st = model.state.value
+            val slot0Sid = st.slotSourceId(0)
+            val page0 = ReelsRoundRobinPageCallbacks(model, owner = null, slotIndex = 0)
+            page0.onVisitStarted(st.items[0])
+
+            // Configuration change (rotation) must not prematurely consume the active card.
+            model.onForegroundLost(isConfigurationChange = true)
+            testDispatcher.scheduler.advanceUntilIdle()
+            consumption.skipped.containsKey(slot0Sid to st.items[0].id) shouldBe false
+
+            // Real backgrounding commits the active Mix card immediately.
+            model.onForegroundLost(isConfigurationChange = false)
+            testDispatcher.scheduler.advanceUntilIdle()
+            consumption.skipped.containsKey(slot0Sid to st.items[0].id) shouldBe true
+
+            // Switching to a single plugin commits the active Mix card under its own slot source before clearing state.
+            val nextIdx = (1 until st.items.size).first { st.slotSourceId(it) != slot0Sid }
+            val nextSid = st.slotSourceId(nextIdx)
+            val otherSid = if (nextSid == s1.id) s2.id else s1.id
+            val nextItem = st.items[nextIdx]
+            model.onPageChanged(nextIdx, ReelsTransitionCause.USER_FORWARD)
+            ReelsRoundRobinPageCallbacks(model, owner = null, slotIndex = nextIdx).onVisitStarted(nextItem)
+            model.switchSource(otherSid)
+            testDispatcher.scheduler.advanceUntilIdle()
+            consumption.skipped.containsKey(nextSid to nextItem.id) shouldBe true
+            consumption.skipped.containsKey(otherSid to nextItem.id) shouldBe false
+            consumption.skipped.containsKey(SourcePreferences.REELS_ALL_SOURCES_ID to nextItem.id) shouldBe false
         } finally {
             model.onDispose()
             ReelsSessionSource.lastSourceId = null

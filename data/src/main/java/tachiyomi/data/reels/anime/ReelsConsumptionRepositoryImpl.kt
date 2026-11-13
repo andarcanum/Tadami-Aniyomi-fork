@@ -93,13 +93,28 @@ class ReelsConsumptionRepositoryImpl(
         scope: String,
         sourceId: Long,
         itemIds: Collection<String>,
+    ): Set<String> = queryConsumedIds(sourceId, itemIds) { db, chunk ->
+        db.reels_consumptionQueries.consumedIds(scope, sourceId, chunk).executeAsList()
+    }
+
+    override suspend fun consumedIdsForSource(
+        sourceId: Long,
+        itemIds: Collection<String>,
+    ): Set<String> = queryConsumedIds(sourceId, itemIds) { db, chunk ->
+        db.reels_consumptionQueries.consumedIdsForSource(sourceId, chunk).executeAsList()
+    }
+
+    private suspend fun queryConsumedIds(
+        sourceId: Long,
+        itemIds: Collection<String>,
+        query: (AnimeDb, List<String>) -> List<String>,
     ): Set<String> {
         if (itemIds.isEmpty()) return emptySet()
         return try {
             handler.await(inTransaction = true) { db ->
                 val result = HashSet<String>()
                 for (chunk in itemIds.chunked(SQLITE_IN_CHUNK_SIZE)) {
-                    result += db.reels_consumptionQueries.consumedIds(scope, sourceId, chunk).executeAsList()
+                    result += query(db, chunk)
                 }
                 result
             }

@@ -83,7 +83,7 @@ class ReelsMultiSourceCoordinator(
     companion object {
         const val DEFAULT_MAX_CONCURRENCY = 4
         const val DEFAULT_SOURCE_TIMEOUT_MS = 7_000L
-        const val DEFAULT_STARTUP_GRACE_MS = 1_500L
+        const val DEFAULT_STARTUP_GRACE_MS = 2_000L
         const val DEFAULT_PROGRESSIVE_MIN_SOURCES = 2
         const val DEFAULT_BATCH_SIZE = 18
         const val DEFAULT_MAX_EMPTY_REFILLS = 6
@@ -644,6 +644,16 @@ class ReelsMultiSourceCoordinator(
             }.shuffled(random).toMutableList()
 
             if (cycle.isEmpty()) break
+
+            // Never drain a sole fast/warm source repeatedly into one batch while peer plugins
+            // are still fetching: emit at most one burst so incoming peers interleave right behind.
+            if (cycle.size == 1 && emitted.isNotEmpty()) {
+                val soleSourceId = cycle.first().source.id
+                val hasFetchingPeers = streams.values.any {
+                    !it.excluded && it.fetching && it.source.id != soleSourceId
+                }
+                if (hasFetchingPeers) break
+            }
 
             if (cycle.size > 1 && cycle.first().source.id == lastEmittedSourceId) {
                 val swapIndex = 1 + random.nextInt(cycle.size - 1)

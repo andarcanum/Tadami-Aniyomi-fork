@@ -296,7 +296,9 @@ data class ReelsFeedScreen(
                     Lifecycle.Event.ON_RESUME -> isForeground = true
                     Lifecycle.Event.ON_PAUSE -> {
                         isForeground = false
-                        screenModel.onForegroundLost()
+                        screenModel.onForegroundLost(
+                            isConfigurationChange = activity?.isChangingConfigurations == true,
+                        )
                     }
                     else -> Unit
                 }

@@ -47,6 +47,9 @@ interface ReelsConsumptionRepository {
     /** Batch anti-join for one page: ids of [itemIds] that are already consumed. */
     suspend fun consumedIds(scope: String, sourceId: Long, itemIds: Collection<String>): Set<String>
 
+    /** Fallback batch anti-join across any recorded scope for [sourceId] when identity is not yet proven. */
+    suspend fun consumedIdsForSource(sourceId: Long, itemIds: Collection<String>): Set<String> = emptySet()
+
     suspend fun entry(scope: String, sourceId: Long, itemId: String): ReelsConsumptionEntry?
 
     suspend fun countConsumed(scope: String, sourceId: Long): Long
