@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
@@ -226,7 +227,7 @@ private fun PhoneAdaptiveSheet(
         }
             .map { (offset, max) ->
                 when {
-                    !max.isFinite() || max <= 0f || !offset.isFinite() -> 1f
+                    !max.isFinite() || max <= 0f || !offset.isFinite() -> 0f
                     else -> (1f - offset / max).coerceIn(0f, 1f)
                 }
             }
@@ -253,18 +254,20 @@ private fun PhoneAdaptiveSheet(
             bottomEnd = ZeroCornerSize,
             bottomStart = ZeroCornerSize,
         )
+        val initialOffscreenOffsetPx = with(density) { screenHeight.roundToPx() }
         // CRITICAL modifier order: offset/drag must WRAP border+fill.
         // If border/clip sit outside offset, the top rim stays fixed while the panel
         // slides — exactly the "phantom top edge" ghost during dismiss/open.
         Surface(
             modifier = Modifier
+                .alpha(if (sheetHeight > 0 && anchoredDraggableState.offset.isFinite()) 1f else 0f)
                 .offset {
                     IntOffset(
                         0,
                         anchoredDraggableState.offset
                             .takeIf { it.isFinite() }
                             ?.roundToInt()
-                            ?: 0,
+                            ?: initialOffscreenOffsetPx,
                     )
                 }
                 .then(
@@ -331,16 +334,17 @@ private fun PhoneAdaptiveSheet(
         LaunchedEffect(dismissRequested) {
             if (dismissRequested) {
                 scrimTargetAlpha = 0f
-                if (!dismissRequestedByDrag) {
+                if (!dismissRequestedByDrag && sheetHeight > 0) {
                     anchoredDraggableState.animateTo(1)
-                } else {
+                } else if (dismissRequestedByDrag) {
                     val remainingOffset = anchoredDraggableState.anchors.maxPosition() - anchoredDraggableState.offset
-                    if (remainingOffset != 0f) {
+                    if (remainingOffset.isFinite() && remainingOffset != 0f) {
                         anchoredDraggableState.dispatchRawDelta(remainingOffset)
                     }
                 }
                 onDismissRequest()
             } else {
+                snapshotFlow { sheetHeight > 0 }.first { it }
                 scrimTargetAlpha = scrimAlpha
                 anchoredDraggableState.animateTo(0)
                 sheetShown = true
