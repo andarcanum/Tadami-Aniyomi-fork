@@ -73,8 +73,12 @@ import eu.kanade.presentation.components.AuroraFrostConfirm
 import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.settingsAccentColor
+import eu.kanade.presentation.more.settings.settingsSubtitleColor
+import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
@@ -116,22 +120,46 @@ fun AiTranslationSettingsContent(
         title = stringResource(AYMR.strings.ai_translation_title),
         uiStyle = uiStyle,
         onBackPressed = onBackPressed,
+        // Top bar stays pinned: AuroraTabRow sits fixed above the grid, so a collapsing bar
+        // would leave an empty gap above the tabs and could hide on short or empty tabs.
+        topBarCanScroll = { false },
         titleContent = {
             Column {
-                Text(stringResource(AYMR.strings.ai_translation_title), style = MaterialTheme.typography.titleLarge)
-                Text(stringResource(AYMR.strings.ai_translation_subtitle), style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = stringResource(AYMR.strings.ai_translation_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = settingsTitleColor(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(AYMR.strings.ai_translation_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = settingsSubtitleColor(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         },
         actions = {
             if (limitsProfileId != null) {
-                IconButton(
-                    onClick = { onAction(AiTranslationAction.EditRecovery(limitsProfileId)) },
-                ) {
-                    Icon(
-                        Icons.Default.Settings,
-                        stringResource(AYMR.strings.ai_translation_limits),
+                if (uiStyle == SettingsUiStyle.Aurora) {
+                    AuroraTopBarIconButton(
+                        onClick = { onAction(AiTranslationAction.EditRecovery(limitsProfileId)) },
+                        icon = Icons.Default.Settings,
+                        contentDescription = stringResource(AYMR.strings.ai_translation_limits),
                         tint = colors.accent,
                     )
+                } else {
+                    IconButton(
+                        onClick = { onAction(AiTranslationAction.EditRecovery(limitsProfileId)) },
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            stringResource(AYMR.strings.ai_translation_limits),
+                            tint = settingsAccentColor(),
+                        )
+                    }
                 }
             }
         },
