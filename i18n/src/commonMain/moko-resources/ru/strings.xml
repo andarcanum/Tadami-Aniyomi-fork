@@ -1999,6 +1999,7 @@
     <string name="reels_mix_customize">Настроить микс плагинов</string>
     <string name="reels_mix_configure_short">Выбрать</string>
     <string name="reels_mix_burst_label">Видео подряд от плагина</string>
+    <string name="reels_mix_unseen_label">Скрывать просмотренные</string>
     <string name="reels_mix_sources_label">Плагины в ленте</string>
     <string name="reels_mix_sources_hint">Отметьте плагины для общей ленты или нажмите на строку для перехода</string>
     <string name="reels_mix_status_needs_auth">Требуется вход</string>

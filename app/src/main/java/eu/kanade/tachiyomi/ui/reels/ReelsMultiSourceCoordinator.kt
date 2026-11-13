@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.FeedError
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
@@ -96,6 +98,7 @@ class ReelsMultiSourceCoordinator(
         private val HTTP_AUTH_REGEX = Regex("\\b(?:401|403)\\b")
         private val HTTP_RATE_LIMIT_REGEX = Regex("\\b429\\b")
         private val RETRY_AFTER_REGEX = Regex("(?i)retry[-_ ]?after[:= ]+(\\d{1,4})")
+        private val URL_REDACT_REGEX = Regex("https?://\\S+")
         private val ELIGIBLE_ACTIVE_STATUSES = setOf(
             MixSourceStatus.ACTIVE,
             MixSourceStatus.COOLDOWN,
@@ -143,9 +146,9 @@ class ReelsMultiSourceCoordinator(
         burst: Int,
         sessionToken: Long? = null,
     ) {
-        stateMutex.withLock {
+        val logDetails = stateMutex.withLock {
             if (sessionToken != null && sessionToken < minValidSessionToken) {
-                return@withLock
+                return@withLock "skipped_stale token=$sessionToken minValid=$minValidSessionToken"
             }
             activeSessionToken = sessionToken
             generationJob?.cancel()
@@ -166,7 +169,12 @@ class ReelsMultiSourceCoordinator(
                 )
             }
             updateSeq.value++
+            val srcSummary = sources.joinToString { s ->
+                "${s.id}(${s.name},excl=${s.id in excludedIds})"
+            }
+            "gen=$generation token=$sessionToken burst=$burstSize sources=${sources.size} [$srcSummary]"
         }
+        ReelsMixDiagnosticLog.log("coord_reset", logDetails)
     }
 
     /** Stops any active background fetches for the current Mix generation. */
@@ -305,6 +313,12 @@ class ReelsMultiSourceCoordinator(
                 !it.excluded && it.status in ELIGIBLE_ACTIVE_STATUSES
             }
         }
+        val fetchList = streamsToFetch.joinToString { "${it.source.id}:${it.source.name}" }
+        ReelsMixDiagnosticLog.log(
+            "coord_batch_start",
+            "gen=$currentGen initial=$isInitial eligible=$eligibleAtStart " +
+                "toFetch=${streamsToFetch.size}[$fetchList]",
+        )
 
         streamsToFetch.forEach { stream ->
             launchScope.launch {
@@ -313,6 +327,7 @@ class ReelsMultiSourceCoordinator(
                         fetchStreamUntilReady(
                             stream = stream,
                             expectedGeneration = currentGen,
+                            launchScope = launchScope,
                             filterCandidates = filterCandidates,
                             onFiltered = { hiddenDelta -> batchConsumedHidden.addAndGet(hiddenDelta) },
                             onFailed = { batchFailures.incrementAndGet() },
@@ -340,6 +355,10 @@ class ReelsMultiSourceCoordinator(
 
         return stateMutex.withLock {
             if (generation != currentGen) {
+                ReelsMixDiagnosticLog.log(
+                    "coord_batch_stale",
+                    "expectedGen=$currentGen currentGen=$generation initial=$isInitial",
+                )
                 return@withLock MixBatchResult(
                     slots = emptyList(),
                     hasMore = false,
@@ -357,6 +376,14 @@ class ReelsMultiSourceCoordinator(
                         (!stream.exhausted && stream.status in CONTINUABLE_STATUSES)
                     )
             }
+            val runsSummary = formatBatchRuns(emitted)
+            val streamsSummary = formatStreamsSummaryLocked()
+            ReelsMixDiagnosticLog.log(
+                "coord_batch_done",
+                "gen=$currentGen initial=$isInitial emitted=${emitted.size} " +
+                    "runs=[$runsSummary] hasMore=$hasMore hidden=${batchConsumedHidden.get()} " +
+                    "fail=${batchFailures.get()} streams=[$streamsSummary]",
+            )
             MixBatchResult(
                 slots = emitted,
                 hasMore = hasMore,
@@ -382,21 +409,51 @@ class ReelsMultiSourceCoordinator(
     private suspend fun fetchStreamUntilReady(
         stream: MixSourceStream,
         expectedGeneration: Long,
+        launchScope: CoroutineScope,
         filterCandidates: suspend (Long, List<ShortVideoItem>) -> MixFilterVerdict,
         onFiltered: (Int) -> Unit,
         onFailed: () -> Unit,
     ) {
+        val attemptActive = AtomicBoolean(true)
+        val outcomeDeferred = CompletableDeferred<Boolean>()
+        var workerJob: Job? = null
         try {
+            workerJob = launchScope.launch {
+                val ok = try {
+                    fetchPagesIntoBuffer(
+                        stream = stream,
+                        expectedGeneration = expectedGeneration,
+                        isAttemptActive = { attemptActive.get() },
+                        filterCandidates = filterCandidates,
+                        onFiltered = onFiltered,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    if (attemptActive.get()) {
+                        stateMutex.withLock {
+                            if (generation == expectedGeneration && attemptActive.get()) {
+                                applyFailureLocked(stream, t)
+                            }
+                        }
+                    }
+                    false
+                }
+                outcomeDeferred.complete(ok)
+            }
+
             val outcome = withTimeoutOrNull(sourceTimeoutMs) {
-                fetchPagesIntoBuffer(
-                    stream = stream,
-                    expectedGeneration = expectedGeneration,
-                    filterCandidates = filterCandidates,
-                    onFiltered = onFiltered,
-                )
+                outcomeDeferred.await()
             }
             if (outcome == null) {
-                // Source exceeded hard per-source timeout budget: isolate without stalling peers.
+                // Fence off late blocking I/O returns first, then cancel cooperatively so the
+                // semaphore permit is freed immediately without waiting for uninterruptible sockets.
+                attemptActive.set(false)
+                workerJob.cancel()
+                ReelsMixDiagnosticLog.log(
+                    "coord_timeout",
+                    "gen=$expectedGeneration src=${stream.source.id}(${stream.source.name}) timeoutMs=$sourceTimeoutMs",
+                )
                 onFailed()
                 stateMutex.withLock {
                     if (generation != expectedGeneration) return@withLock
@@ -405,6 +462,10 @@ class ReelsMultiSourceCoordinator(
             } else if (!outcome) {
                 onFailed()
             }
+        } catch (e: CancellationException) {
+            attemptActive.set(false)
+            workerJob?.cancel()
+            throw e
         } finally {
             withContext(NonCancellable) {
                 stateMutex.withLock {
@@ -425,35 +486,52 @@ class ReelsMultiSourceCoordinator(
     private suspend fun fetchPagesIntoBuffer(
         stream: MixSourceStream,
         expectedGeneration: Long,
+        isAttemptActive: () -> Boolean,
         filterCandidates: suspend (Long, List<ShortVideoItem>) -> MixFilterVerdict,
         onFiltered: (Int) -> Unit,
     ): Boolean {
         while (true) {
-            val (filters, pagination) = stateMutex.withLock {
-                if (generation != expectedGeneration || stream.excluded || stream.exhausted) {
+            val (cachedFilters, pagination) = stateMutex.withLock {
+                if (generation != expectedGeneration || !isAttemptActive() || stream.excluded || stream.exhausted) {
                     return true
                 }
-                val resolvedFilters = stream.filters ?: runCatching { stream.source.getFilterList() }
-                    .getOrElse { AnimeFilterList() }
-                    .also { stream.filters = it }
-                resolvedFilters to stream.pagination
+                stream.filters to stream.pagination
+            }
+            val filters = cachedFilters ?: run {
+                val resolved = try {
+                    stream.source.getFilterList()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    AnimeFilterList()
+                }
+                stateMutex.withLock {
+                    if (generation != expectedGeneration || !isAttemptActive()) return true
+                    stream.filters = resolved
+                }
+                resolved
             }
 
+            val fetchStartMs = nowMonoMs()
+            val reqPage = pagination.nextPage
+            val reqCursorMode = pagination.cursorMode
+            val hadCursor = !pagination.nextCursor.isNullOrBlank()
             val page = try {
-                val cursor = if (pagination.cursorMode) pagination.nextCursor else null
-                stream.source.getFeed(pagination.nextPage, cursor, filters)
+                val cursor = if (reqCursorMode) pagination.nextCursor else null
+                stream.source.getFeed(reqPage, cursor, filters)
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
                 stateMutex.withLock {
-                    if (generation != expectedGeneration) return false
+                    if (generation != expectedGeneration || !isAttemptActive()) return false
                     applyFailureLocked(stream, t)
                 }
                 return false
             }
+            val durMs = (nowMonoMs() - fetchStartMs).coerceAtLeast(0L)
 
             val deduplicatedInput = stateMutex.withLock {
-                if (generation != expectedGeneration) return true
+                if (generation != expectedGeneration || !isAttemptActive()) return true
                 page.videos.distinctBy { it.id }.filterNot { it.id in stream.seenIds }
             }
 
@@ -465,12 +543,16 @@ class ReelsMultiSourceCoordinator(
                 MixFilterVerdict(kept = deduplicatedInput, unseenFilteredCount = 0)
             }
 
+            if (!isAttemptActive()) return true
             if (verdict.unseenFilteredCount > 0) {
                 onFiltered(verdict.unseenFilteredCount)
             }
 
+            var logBuf = 0
+            var logExhausted = false
+            var logEmptyRefills = 0
             val shouldRefillEmpty = stateMutex.withLock {
-                if (generation != expectedGeneration) return true
+                if (generation != expectedGeneration || !isAttemptActive()) return true
                 stream.consecutiveFailures = 0
                 stream.lastFetchedGeneration = expectedGeneration
                 page.videos.forEach { stream.seenIds += it.id }
@@ -496,9 +578,24 @@ class ReelsMultiSourceCoordinator(
                     stream.exhausted = true
                 }
 
+                logBuf = stream.buffer.size
+                logExhausted = stream.exhausted
+                logEmptyRefills = stream.emptyRefillCount
+
                 stream.buffer.isEmpty() && !stream.exhausted && !stream.excluded &&
                     stream.status == MixSourceStatus.ACTIVE
             }
+
+            ReelsMixDiagnosticLog.log(
+                "coord_page",
+                "gen=$expectedGeneration src=${stream.source.id}(${stream.source.name}) " +
+                    "page=$reqPage cursorMode=$reqCursorMode hadCursor=$hadCursor " +
+                    "raw=${page.videos.size} afterMem=${deduplicatedInput.size} " +
+                    "kept=${verdict.kept.size} unseenFilt=${verdict.unseenFilteredCount} " +
+                    "durMs=$durMs buf=$logBuf hasNext=${page.hasNextPage} " +
+                    "nextCursor=${!page.nextCursor.isNullOrBlank()} ex=$logExhausted " +
+                    "emptyRefills=$logEmptyRefills refill=$shouldRefillEmpty",
+            )
 
             if (!shouldRefillEmpty) {
                 return true
@@ -563,6 +660,21 @@ class ReelsMultiSourceCoordinator(
                 }
             }
         }
+        val errSummary = if (error == null) {
+            "timeout"
+        } else {
+            val sanitized = error.message.orEmpty()
+                .replace(URL_REDACT_REGEX, "<url>")
+                .replace('\n', ' ')
+                .take(120)
+            "${error::class.simpleName}:$sanitized"
+        }
+        ReelsMixDiagnosticLog.log(
+            "coord_error",
+            "src=${stream.source.id}(${stream.source.name}) verdict=${verdict?.let {
+                it::class.simpleName
+            } ?: "null"} status=${stream.status} failures=${stream.consecutiveFailures} err=$errSummary",
+        )
     }
 
     private fun bumpCircuitBreakerLocked(stream: MixSourceStream) {
@@ -591,7 +703,13 @@ class ReelsMultiSourceCoordinator(
 
         while (true) {
             val check = stateMutex.withLock {
-                if (generation != expectedGeneration) return
+                if (generation != expectedGeneration) {
+                    ReelsMixDiagnosticLog.log(
+                        "coord_readiness_stale",
+                        "expectedGen=$expectedGeneration currentGen=$generation initial=$isInitial",
+                    )
+                    return
+                }
                 val readyWithItems = streams.values.count {
                     !it.excluded && it.buffer.isNotEmpty()
                 }
@@ -614,6 +732,12 @@ class ReelsMultiSourceCoordinator(
                         (totalBuffered >= batchSize && readyWithItems >= minOf(2, readyWithItems + inFlight)) ||
                             (readyWithItems >= 1 && graceReached)
                     }
+                }
+                if (readyEnough) {
+                    ReelsMixDiagnosticLog.log(
+                        "coord_readiness",
+                        "gen=$expectedGeneration initial=$isInitial elapsedMs=$elapsed grace=$graceReached ready=$readyWithItems buffered=$totalBuffered inFlight=$inFlight",
+                    )
                 }
                 Triple(
                     readyEnough,
@@ -645,14 +769,21 @@ class ReelsMultiSourceCoordinator(
 
             if (cycle.isEmpty()) break
 
-            // Never drain a sole fast/warm source repeatedly into one batch while peer plugins
-            // are still fetching: emit at most one burst so incoming peers interleave right behind.
-            if (cycle.size == 1 && emitted.isNotEmpty()) {
-                val soleSourceId = cycle.first().source.id
-                val hasFetchingPeers = streams.values.any {
-                    !it.excluded && it.fetching && it.source.id != soleSourceId
+            // Never drain a subset of fast/warm sources repeatedly into one batch while peer
+            // plugins are still fetching without items yet: emit at most one round so incoming
+            // peers interleave right behind.
+            if (emitted.isNotEmpty()) {
+                val readyIds = cycle.map { it.source.id }.toSet()
+                val fetchingPeers = streams.values.count {
+                    !it.excluded && it.fetching && it.buffer.isEmpty() && it.source.id !in readyIds
                 }
-                if (hasFetchingPeers) break
+                if (fetchingPeers > 0) {
+                    ReelsMixDiagnosticLog.log(
+                        "coord_drain_stop_peers",
+                        "readySources=${cycle.size} fetchingPeers=$fetchingPeers emittedSoFar=${emitted.size}",
+                    )
+                    break
+                }
             }
 
             if (cycle.size > 1 && cycle.first().source.id == lastEmittedSourceId) {
@@ -698,4 +829,29 @@ class ReelsMultiSourceCoordinator(
 
     private fun currentStatusesLocked(): Map<Long, MixSourceStatus> =
         streams.mapValues { (_, stream) -> stream.status }
+
+    private fun formatBatchRuns(slots: List<MixSlot>): String {
+        if (slots.isEmpty()) return ""
+        val parts = ArrayList<String>()
+        var currentId = slots.first().sourceId
+        var currentName = slots.first().sourceName
+        var count = 0
+        for (slot in slots) {
+            if (slot.sourceId == currentId) {
+                count++
+            } else {
+                parts += "$currentId($currentName)x$count"
+                currentId = slot.sourceId
+                currentName = slot.sourceName
+                count = 1
+            }
+        }
+        parts += "$currentId($currentName)x$count"
+        return parts.joinToString()
+    }
+
+    private fun formatStreamsSummaryLocked(): String =
+        streams.values.joinToString { s ->
+            "${s.source.id}:buf=${s.buffer.size},fetch=${s.fetching},ex=${s.exhausted},excl=${s.excluded},st=${s.status}"
+        }
 }

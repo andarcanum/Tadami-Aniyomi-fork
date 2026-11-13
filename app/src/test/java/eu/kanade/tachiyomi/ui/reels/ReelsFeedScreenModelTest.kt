@@ -4790,4 +4790,45 @@ class ReelsFeedScreenModelTest {
             ReelsSessionSource.lastSourceId = null
         }
     }
+
+    @Test
+    fun `mix unseen filter stays enabled independently when single-source unseen toggle is off`() =
+        runTest(testDispatcher) {
+            val s1 = RecordingFeedSource(981L) {
+                FeedPage(listOf(videoItem("seen-1"), videoItem("fresh-1")), hasNextPage = false)
+            }
+            val s2 = RecordingFeedSource(982L) {
+                FeedPage(listOf(videoItem("fresh-2")), hasNextPage = false)
+            }
+            val prefs = SourcePreferences(MapPreferenceStore()).apply {
+                reelsUnseenOnly().set(false)
+            }
+            val consumption = FakeReelsConsumptionRepository().apply {
+                watched[981L to "seen-1"] = Date(1_000L)
+            }
+            val model = buildModel(
+                sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+                manager = sourceManagerOf(s1, s2),
+                preferences = prefs,
+                consumptionRepository = consumption,
+            )
+            try {
+                testDispatcher.scheduler.advanceUntilIdle()
+                val st = model.state.value
+                st.isMixMode shouldBe true
+                st.unseenOnly shouldBe false
+                st.mixUnseenOnly shouldBe true
+                st.items.map { it.id }.toSet() shouldBe setOf("fresh-1", "fresh-2")
+
+                // Toggling unseen off in Mix affects only mixUnseenOnly and keeps single-plugin preference intact.
+                model.setMixUnseenOnly(false)
+                testDispatcher.scheduler.advanceUntilIdle()
+                prefs.reelsMixUnseenOnly().get() shouldBe false
+                prefs.reelsUnseenOnly().get() shouldBe false
+                model.state.value.items.map { it.id }.toSet() shouldBe setOf("seen-1", "fresh-1", "fresh-2")
+            } finally {
+                model.onDispose()
+                ReelsSessionSource.lastSourceId = null
+            }
+        }
 }

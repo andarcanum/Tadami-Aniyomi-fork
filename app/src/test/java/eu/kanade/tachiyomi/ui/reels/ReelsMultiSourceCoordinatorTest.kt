@@ -12,10 +12,12 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
 import kotlin.random.Random
 
@@ -497,6 +499,110 @@ class ReelsMultiSourceCoordinatorTest {
         second.slots.first().sourceId shouldBe 702L
         second.slots.any { it.sourceId == 702L } shouldBe true
         second.slots.any { it.sourceId == 701L } shouldBe true
+        coordinator.stop()
+    }
+
+    @Test
+    fun `multiple ready fast sources emit only one round while remaining peers are fetching`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val fast1 = FakeFeedSource(801L) { _, _ ->
+            delay(10L)
+            FeedPage((1..10).map { item("f1-$it") }, hasNextPage = false)
+        }
+        val fast2 = FakeFeedSource(802L) { _, _ ->
+            delay(10L)
+            FeedPage((1..10).map { item("f2-$it") }, hasNextPage = false)
+        }
+        val slow1 = FakeFeedSource(803L) { _, _ ->
+            delay(1_500L)
+            FeedPage((1..4).map { item("s1-$it") }, hasNextPage = false)
+        }
+        val slow2 = FakeFeedSource(804L) { _, _ ->
+            delay(1_500L)
+            FeedPage((1..4).map { item("s2-$it") }, hasNextPage = false)
+        }
+
+        val coordinator = ReelsMultiSourceCoordinator(
+            ioDispatcher = dispatcher,
+            random = Random(11L),
+            nowMonoMs = { testScheduler.currentTime },
+            sourceTimeoutMs = 5_000L,
+            startupGraceMs = 500L,
+            progressiveMinSources = 2,
+            batchSize = 18,
+        )
+        coordinator.reset(this, listOf(fast1, fast2, slow1, slow2), emptySet(), burst = 2)
+
+        val deferredFirst = async {
+            coordinator.nextBatch(isInitial = true, filterCandidates = passAllFilter())
+        }
+        testScheduler.advanceTimeBy(600L)
+        testScheduler.runCurrent()
+
+        deferredFirst.isCompleted shouldBe true
+        val first = deferredFirst.await()
+        // Only one round (2 clips from fast1 + 2 clips from fast2 = 4) instead of filling all 18 slots.
+        first.slots.shouldHaveSize(4)
+        first.slots.count { it.sourceId == 801L } shouldBe 2
+        first.slots.count { it.sourceId == 802L } shouldBe 2
+        first.hasMore shouldBe true
+
+        // Once slower peers arrive, subsequent batches mix them in immediately.
+        testScheduler.advanceTimeBy(1_000L)
+        testScheduler.runCurrent()
+        val second = coordinator.nextBatch(isInitial = false, filterCandidates = passAllFilter())
+        second.slots.any { it.sourceId == 803L } shouldBe true
+        second.slots.any { it.sourceId == 804L } shouldBe true
+        coordinator.stop()
+    }
+
+    @Test
+    fun `blocking source timeout frees semaphore slot and cools down without stalling peers`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val uninterruptibleLatch = CompletableDeferred<Unit>()
+        val blockingSource = FakeFeedSource(901L) { _, _ ->
+            withContext(NonCancellable) {
+                uninterruptibleLatch.await()
+            }
+            FeedPage(listOf(item("blocked-late")), hasNextPage = false)
+        }
+        val healthyQueuedSource = FakeFeedSource(902L) { _, _ ->
+            delay(10L)
+            FeedPage(listOf(item("queued-ok-1"), item("queued-ok-2")), hasNextPage = false)
+        }
+
+        val coordinator = ReelsMultiSourceCoordinator(
+            ioDispatcher = dispatcher,
+            random = Random(13L),
+            nowMonoMs = { testScheduler.currentTime },
+            maxConcurrency = 1,
+            sourceTimeoutMs = 500L,
+            startupGraceMs = 200L,
+            progressiveMinSources = 2,
+        )
+        coordinator.reset(this, listOf(blockingSource, healthyQueuedSource), emptySet(), burst = 2)
+
+        val deferredFirst = async {
+            coordinator.nextBatch(isInitial = true, filterCandidates = passAllFilter())
+        }
+        // Advance past blockingSource's 500ms timeout while uninterruptibleLatch is still locked.
+        testScheduler.advanceTimeBy(700L)
+        testScheduler.runCurrent()
+
+        deferredFirst.isCompleted shouldBe true
+        val first = deferredFirst.await()
+        coordinator.currentStatuses()[901L] shouldBe MixSourceStatus.COOLDOWN
+        // Semaphore slot was freed after timeout, so healthyQueuedSource completed and delivered items!
+        first.slots.map { it.sourceId to it.item.id } shouldContainExactly listOf(
+            902L to "queued-ok-1",
+            902L to "queued-ok-2",
+        )
+
+        // Release latch cleanly and ensure late uninterruptible return never pollutes coordinator state.
+        uninterruptibleLatch.complete(Unit)
+        testScheduler.advanceUntilIdle()
+        val after = coordinator.nextBatch(isInitial = false, filterCandidates = passAllFilter())
+        after.slots.none { it.item.id == "blocked-late" } shouldBe true
         coordinator.stop()
     }
 }

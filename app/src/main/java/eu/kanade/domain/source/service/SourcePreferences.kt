@@ -215,6 +215,13 @@ class SourcePreferences(
     fun reelsUnseenOnly() = preferenceStore.getBoolean("pref_reels_unseen_only", true)
 
     /**
+     * Filters already-watched/skipped clips out of the "All Plugins" Mix feed independently from
+     * single-plugin browsing so turning unseen filtering off in one plugin does not disable Mix
+     * deduplication.
+     */
+    fun reelsMixUnseenOnly() = preferenceStore.getBoolean("pref_reels_mix_unseen_only", true)
+
+    /**
      * Source IDs (as decimal strings) opted out of the virtual "All Plugins" shuffle mix.
      */
     fun reelsMixExcludedSources() = preferenceStore.getStringSet("pref_reels_mix_excluded_sources", emptySet())

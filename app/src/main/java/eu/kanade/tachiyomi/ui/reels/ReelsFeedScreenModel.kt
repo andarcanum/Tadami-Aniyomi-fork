@@ -208,6 +208,7 @@ class ReelsFeedScreenModel(
         preloadWifiOnly = sourcePreferences.reelsPreloadWifiOnly().get(),
         isPipEnabled = sourcePreferences.reelsPipEnabled().get(),
         unseenOnly = sourcePreferences.reelsUnseenOnly().get(),
+        mixUnseenOnly = sourcePreferences.reelsMixUnseenOnly().get(),
         showUnmuteHint = !sessionSound.decided,
     ),
 ) {
@@ -640,13 +641,19 @@ class ReelsFeedScreenModel(
         if (cached != null && scope == fallback) {
             return cached
         }
+        var mergeStatus = "na"
         if (scope != fallback) {
-            runCatchingCancelSafe { reelsConsumptionRepository.mergeScope(fallback, scope, sourceId) }
-                .onFailure { logcat(LogPriority.WARN, it) { "Reels mix history merge $fallback -> $scope failed" } }
+            val mergeRes = runCatchingCancelSafe { reelsConsumptionRepository.mergeScope(fallback, scope, sourceId) }
+            mergeStatus = if (mergeRes.isSuccess) "ok" else "err"
+            mergeRes.onFailure { logcat(LogPriority.WARN, it) { "Reels mix history merge $fallback -> $scope failed" } }
         }
         val generation = reelsConsumptionRepository.ensureScope(scope, ReelsForYou.POLICY_VERSION)
         val result = scope to generation
         forYouScopesBySource[sourceId] = result
+        ReelsMixDiagnosticLog.log(
+            "mix_scope",
+            "src=$sourceId scopeType=${if (scope == fallback) "fallback" else "account"} gen=$generation upgraded=${cached != null} merge=$mergeStatus",
+        )
         return result
     }
 
@@ -722,10 +729,15 @@ class ReelsFeedScreenModel(
      * they may grow an "unwatched only" switch later.
      */
     private fun filtersUnseen(query: String): Boolean {
+        val unseenToggle = if (state.value.isMixMode) {
+            state.value.mixUnseenOnly
+        } else {
+            state.value.unseenOnly
+        }
         return mode == FeedMode.GLOBAL &&
             query.isBlank() &&
             !state.value.isOffline &&
-            state.value.unseenOnly &&
+            unseenToggle &&
             // Entering from the watch history is an explicit "play THIS clip" request: hiding
             // the target would break the resume promise.
             resumeVideoId == null
@@ -823,7 +835,13 @@ class ReelsFeedScreenModel(
             interactionTracker.snapshot(activeItem.id)
         } ?: return
         if (sourceId == SourcePreferences.REELS_ALL_SOURCES_ID || isIncognito(sourceId)) return
-        if (snapshot.qualified || snapshot.watchedMs >= ReelsForYou.WATCH_THRESHOLD_MS) {
+        val qualified = snapshot.qualified || snapshot.watchedMs >= ReelsForYou.WATCH_THRESHOLD_MS
+        val safeId = if (activeItem.id.contains("://")) "h:${activeItem.id.hashCode()}" else activeItem.id.take(32)
+        ReelsMixDiagnosticLog.log(
+            "mix_flush",
+            "endVisit=$endTrackerVisit idx=$activeIndex src=$sourceId item=$safeId decision=${if (qualified) "watched" else "skipped"} watchedMs=${snapshot.watchedMs} qualified=${snapshot.qualified}",
+        )
+        if (qualified) {
             commitWatched(activeItem.id, sourceId)
         } else {
             commitSkipped(activeItem.id, sourceId)
@@ -929,6 +947,13 @@ class ReelsFeedScreenModel(
             } else {
                 logcat(LogPriority.WARN) { "Reels watch for $itemId was not persisted (generation $generation)" }
             }
+            if (isMix) {
+                val scopeType = if (scope == ReelsForYou.fallbackScope(sourceId)) "fallback" else "account"
+                ReelsMixDiagnosticLog.log(
+                    "mix_commit",
+                    "type=watched src=$sourceId scopeType=$scopeType gen=$generation ok=$ok",
+                )
+            }
         }
     }
 
@@ -956,11 +981,22 @@ class ReelsFeedScreenModel(
             } else {
                 logcat(LogPriority.WARN) { "Reels skip for $itemId was not persisted (generation $generation)" }
             }
+            if (isMix) {
+                val scopeType = if (scope == ReelsForYou.fallbackScope(sourceId)) "fallback" else "account"
+                ReelsMixDiagnosticLog.log(
+                    "mix_commit",
+                    "type=skipped src=$sourceId scopeType=$scopeType gen=$generation ok=$ok",
+                )
+            }
         }
     }
 
     /** "Only unwatched in For You": OFF is the explicit show-watched mode, not a history wipe. */
     fun setUnseenOnly(enabled: Boolean) {
+        if (state.value.isMixMode) {
+            setMixUnseenOnly(enabled)
+            return
+        }
         if (state.value.unseenOnly == enabled) return
         persistUnlessIncognito(state.value.currentSourceId) {
             sourcePreferences.reelsUnseenOnly().set(enabled)
@@ -969,6 +1005,20 @@ class ReelsFeedScreenModel(
         skippedCommitted.clear()
         mutableState.update { it.copy(unseenOnly = enabled) }
         restartFeedForContextChange()
+    }
+
+    /** Dedicated "Only unwatched" toggle for All Plugins Mix mode. */
+    fun setMixUnseenOnly(enabled: Boolean) {
+        if (state.value.mixUnseenOnly == enabled) return
+        persistUnlessIncognito(SourcePreferences.REELS_ALL_SOURCES_ID) {
+            sourcePreferences.reelsMixUnseenOnly().set(enabled)
+        }
+        watchedCommitted.clear()
+        skippedCommitted.clear()
+        mutableState.update { it.copy(mixUnseenOnly = enabled) }
+        if (state.value.isMixMode) {
+            restartFeedForContextChange()
+        }
     }
 
     /**
@@ -1243,7 +1293,14 @@ class ReelsFeedScreenModel(
                         ReelsMultiSourceCoordinator.MIN_BURST_SIZE,
                         ReelsMultiSourceCoordinator.MAX_BURST_SIZE,
                     ),
+                    mixUnseenOnly = sourcePreferences.reelsMixUnseenOnly().get(),
                 )
+            }
+            screenModelScope.launch(ioDispatcher) {
+                sourcePreferences.reelsMixUnseenOnly().changes().collectLatest { enabled ->
+                    if (state.value.mixUnseenOnly == enabled) return@collectLatest
+                    mutableState.update { it.copy(mixUnseenOnly = enabled) }
+                }
             }
             screenModelScope.launch(ioDispatcher) {
                 sourcePreferences.reelsMixExcludedSources().changes().collectLatest { excludedSet ->
@@ -1315,6 +1372,17 @@ class ReelsFeedScreenModel(
                             if (state.value.currentSourceId != SourcePreferences.REELS_ALL_SOURCES_ID) {
                                 return@withContext
                             }
+                            val capsSummary = feedSources.joinToString { s ->
+                                "${s.id}(${s.name}," +
+                                    "rr=${s is AnimeFeedRoundRobinSource}," +
+                                    "acct=${s is AnimeFeedAccountIdentitySource}," +
+                                    "errCls=${s is AnimeFeedErrorClassifierSource}," +
+                                    "replay=${s is AnimeFeedReplaySource})"
+                            }
+                            ReelsMixDiagnosticLog.log(
+                                "mix_sources_loaded",
+                                "count=${feedSources.size} started=$mixFeedStarted [$capsSummary]",
+                            )
                             when {
                                 feedSources.isEmpty() -> {
                                     stopMixSession()
@@ -1619,6 +1687,15 @@ class ReelsFeedScreenModel(
             ReelsMultiSourceCoordinator.MIN_BURST_SIZE,
             ReelsMultiSourceCoordinator.MAX_BURST_SIZE,
         )
+        val mixUnseenPref = sourcePreferences.reelsMixUnseenOnly().get()
+        val excludedList = excludedPref.sorted().joinToString(",")
+        ReelsMixDiagnosticLog.log(
+            "mix_switch_enter",
+            "prevSrc=$previousSourceId mode=$mode sourcesLoaded=$mixSourcesLoaded " +
+                "knownCount=${knownFeedSources.size} burst=$burstPref mixUnseen=$mixUnseenPref " +
+                "singleUnseen=${state.value.unseenOnly} resume=${resumeVideoId != null} " +
+                "excluded=[$excludedList]",
+        )
 
         mutableState.update {
             it.copy(
@@ -1687,6 +1764,7 @@ class ReelsFeedScreenModel(
                 isSourcePickerOpen = false,
                 excludedMixSourceIds = excludedPref,
                 mixBurstSize = burstPref,
+                mixUnseenOnly = mixUnseenPref,
                 mixSourceStatuses = persistentHashMapOf(),
                 mixSkippedCount = 0,
                 mixQualityStates = persistentHashMapOf(),
@@ -1741,6 +1819,12 @@ class ReelsFeedScreenModel(
         activeVisitSlotKey = null
         val sessionToken = mixSessionSeq.incrementAndGet()
         currentMixSessionToken = sessionToken
+        if (state.value.isMixMode || mixFeedStarted || stopCoordinator) {
+            ReelsMixDiagnosticLog.log(
+                "mix_stop",
+                "stopCoordinator=$stopCoordinator fromDispose=$fromDispose sessionToken=$sessionToken wasMix=${state.value.isMixMode}",
+            )
+        }
         if (!stopCoordinator) return
         mixStopJob?.cancel()
         mixStopJob = if (fromDispose) {
@@ -1758,6 +1842,12 @@ class ReelsFeedScreenModel(
         mixFeedStarted = true
         val sessionToken = mixSessionSeq.incrementAndGet()
         currentMixSessionToken = sessionToken
+        ReelsMixDiagnosticLog.log(
+            "mix_start",
+            "sessionToken=$sessionToken sources=${feedSources.size} [${feedSources.joinToString {
+                "${it.id}:${it.name}"
+            }}]",
+        )
         syncMixQualitySessions(feedSources)
         loadMixFeed(reset = true, sessionToken = sessionToken)
     }
@@ -1944,13 +2034,17 @@ class ReelsFeedScreenModel(
                         item.id in hiddenVideos || (item.author != null && item.author in hiddenAuthors)
                     }
                     if (!unseenFilter || visible.isEmpty()) {
+                        ReelsMixDiagnosticLog.log(
+                            "mix_filter",
+                            "src=$slotSourceId raw=${rawCandidates.size} visible=${visible.size} kept=${visible.size} unseenFilt=0 unseenMode=$unseenFilter",
+                        )
                         MixFilterVerdict(kept = visible, unseenFilteredCount = 0)
                     } else {
                         val (scope, _) = ensureForYouScopeMix(slotSourceId)
                         val fallback = ReelsForYou.fallbackScope(slotSourceId)
-                        val consumed = if (scope == fallback &&
+                        val usedFallbackAnyScope = scope == fallback &&
                             sourceManager.get(slotSourceId) is AnimeFeedAccountIdentitySource
-                        ) {
+                        val consumed = if (usedFallbackAnyScope) {
                             reelsConsumptionRepository.consumedIdsForSource(
                                 slotSourceId,
                                 visible.map { it.id },
@@ -1962,14 +2056,24 @@ class ReelsFeedScreenModel(
                                 visible.map { it.id },
                             )
                         }
-                        if (consumed.isEmpty()) {
-                            MixFilterVerdict(kept = visible, unseenFilteredCount = 0)
+                        val kept = if (consumed.isEmpty()) {
+                            visible
                         } else {
-                            MixFilterVerdict(
-                                kept = visible.filterNot { it.id in consumed },
-                                unseenFilteredCount = consumed.size,
-                            )
+                            visible.filterNot { it.id in consumed }
                         }
+                        val scopeType = when {
+                            usedFallbackAnyScope -> "fallback_any_scope"
+                            scope == fallback -> "fallback"
+                            else -> "account"
+                        }
+                        ReelsMixDiagnosticLog.log(
+                            "mix_filter",
+                            "src=$slotSourceId raw=${rawCandidates.size} visible=${visible.size} kept=${kept.size} unseenFilt=${consumed.size} scopeType=$scopeType",
+                        )
+                        MixFilterVerdict(
+                            kept = kept,
+                            unseenFilteredCount = consumed.size,
+                        )
                     }
                 }
 
@@ -2025,6 +2129,13 @@ class ReelsFeedScreenModel(
                     )
                 }
                 runway.onLoadFinished()
+                val statusSummary = batch.statuses.entries.joinToString { "${it.key}:${it.value}" }
+                ReelsMixDiagnosticLog.log(
+                    "mix_feed_applied",
+                    "gen=$generation reset=$reset newItems=${newItems.size} " +
+                        "totalItems=${state.value.items.size} canLoadMore=${batch.hasMore} " +
+                        "skipped=$skippedCount statuses=$statusSummary",
+                )
                 if (reset && state.value.items.isNotEmpty()) {
                     prepareQualityWindow(0)
                     if (state.value.canLoadMore) {
@@ -2044,6 +2155,14 @@ class ReelsFeedScreenModel(
                 // Superseded by reset/switch.
             } catch (t: Throwable) {
                 logcat(LogPriority.ERROR, t) { "Failed to load multi-source Mix feed" }
+                val errMsg = t.message.orEmpty()
+                    .replace(Regex("https?://\\S+"), "<url>")
+                    .replace('\n', ' ')
+                    .take(120)
+                ReelsMixDiagnosticLog.log(
+                    "mix_load_error",
+                    "gen=$generation reset=$reset err=${t::class.simpleName}:$errMsg",
+                )
                 if (loadGeneration.get() != generation) return@launch
                 runway.onLoadAborted()
                 mutableState.update { current ->
@@ -2075,6 +2194,10 @@ class ReelsFeedScreenModel(
         sourcePreferences.reelsMixExcludedSources().set(updatedPref)
         val excludedImmutable = updatedPref.toImmutableSet()
         val excludedLongIds = updatedPref.mapNotNull { it.toLongOrNull() }.toSet()
+        ReelsMixDiagnosticLog.log(
+            "mix_exclude_toggle",
+            "src=$sourceId excluded=$excluded isMix=${state.value.isMixMode} totalExcluded=${excludedImmutable.size}",
+        )
 
         mutableState.update { current ->
             if (!current.isMixMode || !excluded) {
@@ -5882,6 +6005,7 @@ class ReelsFeedScreenModel(
         val followingCreatorsBySource: ImmutableMap<Long, ImmutableSet<String>> = persistentHashMapOf(),
         val excludedMixSourceIds: ImmutableSet<String> = persistentSetOf(),
         val mixBurstSize: Int = 2,
+        val mixUnseenOnly: Boolean = true,
         val mixSourceStatuses: ImmutableMap<Long, MixSourceStatus> = persistentHashMapOf(),
         val mixSkippedCount: Int = 0,
         val mixQualityStates: ImmutableMap<Long, ReelsQualityState> = persistentHashMapOf(),

@@ -1851,8 +1851,11 @@ data class ReelsFeedScreen(
                     onToggleTouchLock = { touchLocked = !touchLocked },
                     isReelsIncognito = isIncognito,
                     onToggleReelsIncognito = screenModel::toggleReelsIncognito,
-                    isUnseenOnly = state.unseenOnly,
-                    onToggleUnseenOnly = { screenModel.setUnseenOnly(!state.unseenOnly) },
+                    isUnseenOnly = if (state.isMixMode) state.mixUnseenOnly else state.unseenOnly,
+                    onToggleUnseenOnly = {
+                        val currentUnseen = if (state.isMixMode) state.mixUnseenOnly else state.unseenOnly
+                        screenModel.setUnseenOnly(!currentUnseen)
+                    },
                     onResetForYouHistory = { pendingResetHistory = true },
                     onMoreMenuOpenChanged = { moreMenuOpen = it },
                     onClearVideoCache = {
@@ -1933,9 +1936,11 @@ data class ReelsFeedScreen(
                     allSourcesId = SourcePreferences.REELS_ALL_SOURCES_ID,
                     excludedMixSourceIds = state.excludedMixSourceIds,
                     mixBurstSize = state.mixBurstSize,
+                    mixUnseenOnly = state.mixUnseenOnly,
                     mixSourceStatuses = state.mixSourceStatuses,
                     onToggleMixSourceExcluded = screenModel::toggleMixSourceExcluded,
                     onSetMixBurstSize = screenModel::setMixBurstSize,
+                    onToggleMixUnseenOnly = { screenModel.setMixUnseenOnly(!state.mixUnseenOnly) },
                 )
             }
 

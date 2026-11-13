@@ -2205,6 +2205,7 @@
     <string name="reels_mix_customize">Configure shuffle mix</string>
     <string name="reels_mix_configure_short">Plugins</string>
     <string name="reels_mix_burst_label">Clips per plugin turn</string>
+    <string name="reels_mix_unseen_label">Hide watched in mix</string>
     <string name="reels_mix_sources_label">Included plugins</string>
     <string name="reels_mix_sources_hint">Check plugins to mix, or tap a row to open it alone</string>
     <string name="reels_mix_status_needs_auth">Sign in required</string>

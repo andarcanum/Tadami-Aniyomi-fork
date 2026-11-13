@@ -24,6 +24,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -62,9 +63,11 @@ fun ReelsSourcePickerSheet(
     allSourcesId: Long = SourcePreferences.REELS_ALL_SOURCES_ID,
     excludedMixSourceIds: Set<String> = emptySet(),
     mixBurstSize: Int = 2,
+    mixUnseenOnly: Boolean = true,
     mixSourceStatuses: Map<Long, MixSourceStatus> = emptyMap(),
     onToggleMixSourceExcluded: (Long) -> Unit = {},
     onSetMixBurstSize: (Int) -> Unit = {},
+    onToggleMixUnseenOnly: () -> Unit = {},
 ) {
     var showMixConfig by remember(currentSourceId, allSourcesId) {
         mutableStateOf(currentSourceId == allSourcesId)
@@ -227,11 +230,13 @@ fun ReelsSourcePickerSheet(
                             AnimatedVisibility(visible = showMixConfig) {
                                 MixConfigPanel(
                                     mixBurstSize = mixBurstSize,
+                                    mixUnseenOnly = mixUnseenOnly,
                                     isEInk = isEInk,
                                     accent = accent,
                                     selectedBorder = selectedBorder,
                                     unselectedBorder = unselectedBorder,
                                     onSetMixBurstSize = onSetMixBurstSize,
+                                    onToggleMixUnseenOnly = onToggleMixUnseenOnly,
                                 )
                             }
                         }
@@ -375,11 +380,13 @@ fun ReelsSourcePickerSheet(
 @Composable
 private fun MixConfigPanel(
     mixBurstSize: Int,
+    mixUnseenOnly: Boolean,
     isEInk: Boolean,
     accent: Color,
     selectedBorder: Color,
     unselectedBorder: Color,
     onSetMixBurstSize: (Int) -> Unit,
+    onToggleMixUnseenOnly: () -> Unit,
 ) {
     val containerColor = if (isEInk) {
         Color.Transparent
@@ -443,6 +450,26 @@ private fun MixConfigPanel(
                     }
                 }
             }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onToggleMixUnseenOnly)
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(MR.strings.reels_mix_unseen_label),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = mixUnseenOnly,
+                onCheckedChange = { onToggleMixUnseenOnly() },
+            )
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
