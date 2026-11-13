@@ -18,6 +18,7 @@ data class ReelsAlbumFeedSeed(
     val nextCursor: String? = null,
     val cursorMode: Boolean = false,
     val canLoadMore: Boolean = true,
+    val sourceId: Long? = null,
 )
 
 object ReelsAlbumFeedSeedStore {
@@ -26,12 +27,14 @@ object ReelsAlbumFeedSeedStore {
     var pending: ReelsAlbumFeedSeed? = null
 
     /**
-     * Consumes the pending album seed if it matches [albumId].
-     * Returns null if no seed is pending or if [albumId] doesn't match.
+     * Consumes the pending album seed if it matches [albumId] and, when both sides specify it,
+     * [sourceId]. Keeping [sourceId] optional preserves 1-arg compatibility for existing callers.
      */
-    fun consume(albumId: String): ReelsAlbumFeedSeed? {
+    fun consume(albumId: String, sourceId: Long? = null): ReelsAlbumFeedSeed? {
         val seed = pending ?: return null
-        return if (seed.albumId == albumId) {
+        val albumMatches = seed.albumId == albumId
+        val sourceMatches = sourceId == null || seed.sourceId == null || seed.sourceId == sourceId
+        return if (albumMatches && sourceMatches) {
             pending = null
             seed
         } else {

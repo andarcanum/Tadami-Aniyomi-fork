@@ -147,7 +147,7 @@ fun ReelsPlayerView(
             AsyncImage(
                 model = posterUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = if (isCropMode) ContentScale.Crop else ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
             if (!isMediaUnplayable) {
@@ -229,18 +229,19 @@ fun ReelsPlayerView(
                 .background(Color.Black),
             contentAlignment = androidx.compose.ui.Alignment.Center,
         ) {
+            val stillScale = if (isCropMode) ContentScale.Crop else ContentScale.Fit
             if (posterUrl.isNotBlank()) {
                 AsyncImage(
                     model = posterUrl,
                     contentDescription = null,
-                    contentScale = ContentScale.Fit,
+                    contentScale = stillScale,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
             AsyncImage(
                 model = videoUrl,
                 contentDescription = videoDescription,
-                contentScale = ContentScale.Fit,
+                contentScale = stillScale,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { photoReady = true },
                 onError = { photoReady = true },
@@ -313,6 +314,7 @@ fun ReelsPlayerView(
 
     var videoWidth by remember { mutableIntStateOf(0) }
     var videoHeight by remember { mutableIntStateOf(0) }
+    var videoPixelRatio by remember { mutableFloatStateOf(1f) }
 
     // Playback position to restore after a quality (URL) switch within the same page.
     var restorePositionMs by remember { mutableLongStateOf(0L) }
@@ -327,41 +329,40 @@ fun ReelsPlayerView(
     var createdForUrl by remember { mutableStateOf<String?>(null) }
     var createdForMediaIdentity by remember { mutableStateOf<String?>(null) }
 
-    fun updateMatrix(tv: TextureView?, vw: Int, vh: Int, crop: Boolean) {
-        if (tv == null || vw <= 0 || vh <= 0) return
-        val viewW = tv.width.toFloat()
-        val viewH = tv.height.toFloat()
-        if (viewW <= 0 || viewH <= 0) return
+    fun updateMatrix(
+        tv: TextureView?,
+        vw: Int,
+        vh: Int,
+        crop: Boolean,
+        viewWOverride: Float? = null,
+        viewHOverride: Float? = null,
+        pixelRatio: Float = videoPixelRatio,
+    ) {
+        if (tv == null) return
+        val fallbackSize = player?.videoSize
+        val resolvedVw = if (vw > 0) vw else (fallbackSize?.width ?: 0)
+        val resolvedVh = if (vh > 0) vh else (fallbackSize?.height ?: 0)
+        if (resolvedVw <= 0 || resolvedVh <= 0) return
+        val resolvedPixelRatio = pixelRatio.takeIf { it.isFinite() && it > 0f }
+            ?: fallbackSize?.pixelWidthHeightRatio?.takeIf { it.isFinite() && it > 0f }
+            ?: 1f
+
+        val viewW = (viewWOverride?.takeIf { it > 0f } ?: tv.width.toFloat())
+        val viewH = (viewHOverride?.takeIf { it > 0f } ?: tv.height.toFloat())
+        val (sx, sy) = calculateReelTextureScale(
+            vw = resolvedVw,
+            vh = resolvedVh,
+            viewW = viewW,
+            viewH = viewH,
+            crop = crop,
+            pixelRatio = resolvedPixelRatio,
+        ) ?: return
 
         val matrix = Matrix()
-        val sx: Float
-        val sy: Float
-
-        val videoRatio = vw.toFloat() / vh.toFloat()
-        val viewRatio = viewW / viewH
-
-        if (crop) {
-            // Fill screen by cropping
-            if (videoRatio > viewRatio) {
-                sx = (viewH * vw / vh) / viewW
-                sy = 1f
-            } else {
-                sx = 1f
-                sy = (viewW * vh / vw) / viewH
-            }
-        } else {
-            // Fit screen preserving full aspect ratio
-            if (videoRatio > viewRatio) {
-                sx = 1f
-                sy = (viewW * vh / vw) / viewH
-            } else {
-                sx = (viewH * vw / vh) / viewW
-                sy = 1f
-            }
-        }
-
         matrix.setScale(sx, sy, viewW / 2f, viewH / 2f)
         tv.setTransform(matrix)
+        tv.invalidate()
+        tv.postInvalidateOnAnimation()
     }
 
     // Player lifecycle: create for active or preloaded pages, release otherwise.
@@ -509,7 +510,14 @@ fun ReelsPlayerView(
                         override fun onVideoSizeChanged(videoSize: VideoSize) {
                             videoWidth = videoSize.width
                             videoHeight = videoSize.height
-                            updateMatrix(textureViewRef, videoSize.width, videoSize.height, currentCropMode)
+                            videoPixelRatio = videoSize.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+                            updateMatrix(
+                                tv = textureViewRef,
+                                vw = videoSize.width,
+                                vh = videoSize.height,
+                                crop = currentCropMode,
+                                pixelRatio = videoPixelRatio,
+                            )
                             if (videoSize.width > 0 && videoSize.height > 0) {
                                 onVideoSizeKnown(videoSize.width, videoSize.height)
                                 onVideoLandscapeKnown(videoSize.width > videoSize.height)
@@ -599,6 +607,13 @@ fun ReelsPlayerView(
         player?.let { p ->
             if (isActive) {
                 currentSurface?.takeIf { it.isValid }?.let { p.setVideoSurface(it) }
+                val vs = p.videoSize
+                if (vs.width > 0 && vs.height > 0) {
+                    videoWidth = vs.width
+                    videoHeight = vs.height
+                    videoPixelRatio = vs.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+                    updateMatrix(textureViewRef, vs.width, vs.height, currentCropMode, pixelRatio = videoPixelRatio)
+                }
                 p.playWhenReady = isPlaying
             } else {
                 // Preload: buffer without rendering or playing audio.
@@ -626,13 +641,22 @@ fun ReelsPlayerView(
     LaunchedEffect(currentSurface) {
         val s = currentSurface
         if (s != null && s.isValid && isActive) {
-            player?.setVideoSurface(s)
+            player?.let { p ->
+                p.setVideoSurface(s)
+                val vs = p.videoSize
+                if (vs.width > 0 && vs.height > 0) {
+                    videoWidth = vs.width
+                    videoHeight = vs.height
+                    videoPixelRatio = vs.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+                }
+                updateMatrix(textureViewRef, videoWidth, videoHeight, currentCropMode, pixelRatio = videoPixelRatio)
+            }
         }
     }
 
     // React to crop mode changes.
-    LaunchedEffect(isCropMode, videoWidth, videoHeight, textureViewRef) {
-        updateMatrix(textureViewRef, videoWidth, videoHeight, isCropMode)
+    LaunchedEffect(isCropMode, videoWidth, videoHeight, videoPixelRatio, textureViewRef) {
+        updateMatrix(textureViewRef, videoWidth, videoHeight, isCropMode, pixelRatio = videoPixelRatio)
     }
 
     // React to seek request.
@@ -815,16 +839,59 @@ fun ReelsPlayerView(
                 factory = { ctx ->
                     TextureView(ctx).apply {
                         textureViewRef = this
+                        addOnLayoutChangeListener {
+                                view,
+                                left,
+                                top,
+                                right,
+                                bottom,
+                                oldLeft,
+                                oldTop,
+                                oldRight,
+                                oldBottom,
+                            ->
+                            val newW = (right - left).toFloat()
+                            val newH = (bottom - top).toFloat()
+                            val oldW = (oldRight - oldLeft).toFloat()
+                            val oldH = (oldBottom - oldTop).toFloat()
+                            if (newW > 0f && newH > 0f && (newW != oldW || newH != oldH)) {
+                                updateMatrix(
+                                    tv = view as? TextureView,
+                                    vw = videoWidth,
+                                    vh = videoHeight,
+                                    crop = currentCropMode,
+                                    viewWOverride = newW,
+                                    viewHOverride = newH,
+                                    pixelRatio = videoPixelRatio,
+                                )
+                            }
+                        }
                         surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                             override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
                                 val s = Surface(st)
                                 currentSurface = s
                                 player?.setVideoSurface(s)
-                                updateMatrix(this@apply, videoWidth, videoHeight, currentCropMode)
+                                updateMatrix(
+                                    tv = this@apply,
+                                    vw = videoWidth,
+                                    vh = videoHeight,
+                                    crop = currentCropMode,
+                                    viewWOverride = width.toFloat(),
+                                    viewHOverride = height.toFloat(),
+                                    pixelRatio = videoPixelRatio,
+                                )
                             }
 
                             override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {
-                                updateMatrix(this@apply, videoWidth, videoHeight, currentCropMode)
+                                updateMatrix(
+                                    tv = this@apply,
+                                    vw = videoWidth,
+                                    vh = videoHeight,
+                                    crop = currentCropMode,
+                                    viewWOverride = width.toFloat(),
+                                    viewHOverride = height.toFloat(),
+                                    pixelRatio = videoPixelRatio,
+                                )
                             }
 
                             override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
@@ -847,7 +914,13 @@ fun ReelsPlayerView(
                 },
                 update = { tv ->
                     textureViewRef = tv
-                    updateMatrix(tv, videoWidth, videoHeight, currentCropMode)
+                    updateMatrix(
+                        tv = tv,
+                        vw = videoWidth,
+                        vh = videoHeight,
+                        crop = isCropMode,
+                        pixelRatio = videoPixelRatio,
+                    )
                 },
                 modifier = Modifier
                     .fillMaxSize()
@@ -1155,3 +1228,40 @@ private val prewarmNetworkClient: OkHttpClient by lazy {
 }
 
 private const val HEAD_PREWARM_TIMEOUT_MS = 20_000L
+
+/**
+ * Pure Fit / Fill (`Вписать / Заполнить`) scale factor computation for [ReelsPlayerView]'s
+ * [TextureView] transform matrix. Returns `(sx, sy)` around the view center `(viewW/2, viewH/2)`,
+ * or `null` when either the video or view dimensions are not positive yet.
+ */
+internal fun calculateReelTextureScale(
+    vw: Int,
+    vh: Int,
+    viewW: Float,
+    viewH: Float,
+    crop: Boolean,
+    pixelRatio: Float = 1f,
+): Pair<Float, Float>? {
+    if (vw <= 0 || vh <= 0 || viewW <= 0f || viewH <= 0f) return null
+    val safePixelRatio = pixelRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+    val displayVw = vw.toFloat() * safePixelRatio
+    val displayVh = vh.toFloat()
+    val videoRatio = displayVw / displayVh
+    val viewRatio = viewW / viewH
+
+    return if (crop) {
+        // Fill screen by cropping
+        if (videoRatio > viewRatio) {
+            ((viewH * displayVw / displayVh) / viewW) to 1f
+        } else {
+            1f to ((viewW * displayVh / displayVw) / viewH)
+        }
+    } else {
+        // Fit screen preserving full aspect ratio
+        if (videoRatio > viewRatio) {
+            1f to ((viewW * displayVh / displayVw) / viewH)
+        } else {
+            ((viewH * displayVw / displayVh) / viewW) to 1f
+        }
+    }
+}

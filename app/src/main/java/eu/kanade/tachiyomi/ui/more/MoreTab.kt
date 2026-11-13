@@ -112,14 +112,28 @@ data object MoreTab : Tab {
         // installed source instead). Read outside remember so the snapshot state registers
         // as a recomposition dependency and the memo below re-runs on every selection change.
         val sessionReelsSourceId = ReelsSessionSource.lastSourceId
-        val targetReelsSource = remember(animeSources, lastUsedReelsSourceId, disabledSources, sessionReelsSourceId) {
+        val targetReelsSourceId = remember(animeSources, lastUsedReelsSourceId, disabledSources, sessionReelsSourceId) {
             val feeds = animeSources.filterIsInstance<AnimeFeedSource>()
                 .filterNot { it.id.toString() in disabledSources }
-            feeds.firstOrNull { it.id == sessionReelsSourceId }
-                ?: feeds.firstOrNull { it.id == lastUsedReelsSourceId }
-                ?: feeds.firstOrNull()
+            if (feeds.isEmpty()) {
+                null
+            } else {
+                val candidateIds = feeds.map { it.id }.toSet()
+                val canUseMix = feeds.size > 1
+                when {
+                    sessionReelsSourceId == SourcePreferences.REELS_ALL_SOURCES_ID && canUseMix ->
+                        SourcePreferences.REELS_ALL_SOURCES_ID
+                    sessionReelsSourceId != null && sessionReelsSourceId in candidateIds ->
+                        sessionReelsSourceId
+                    lastUsedReelsSourceId == SourcePreferences.REELS_ALL_SOURCES_ID && canUseMix ->
+                        SourcePreferences.REELS_ALL_SOURCES_ID
+                    lastUsedReelsSourceId in candidateIds ->
+                        lastUsedReelsSourceId
+                    else -> feeds.first().id
+                }
+            }
         }
-        val showReelsEntry = showReelsVideoFeed && targetReelsSource != null
+        val showReelsEntry = showReelsVideoFeed && targetReelsSourceId != null
 
         // «More» menu customization: which entries exist right now, and how the user ordered them.
         val moreMenuOrder by uiPreferences.moreMenuOrder().preferenceCollectAsState()
@@ -204,7 +218,7 @@ data object MoreTab : Tab {
                     screenModel.screenModelScope.launchIO { latticeManager.requestBreach() }
                 },
                 showReelsEntry = showReelsEntry,
-                onReelsClick = { targetReelsSource?.let { navigator.push(ReelsFeedScreen(it.id)) } },
+                onReelsClick = { targetReelsSourceId?.let { navigator.push(ReelsFeedScreen(it)) } },
                 visibleEntryIds = moreMenuVisibleIds,
                 onCustomizeMenuClick = {
                     navigator.push(
@@ -274,7 +288,7 @@ data object MoreTab : Tab {
                     screenModel.screenModelScope.launchIO { latticeManager.requestBreach() }
                 },
                 showReelsEntry = showReelsEntry,
-                onClickReels = { targetReelsSource?.let { navigator.push(ReelsFeedScreen(it.id)) } },
+                onClickReels = { targetReelsSourceId?.let { navigator.push(ReelsFeedScreen(it)) } },
             )
         }
     }

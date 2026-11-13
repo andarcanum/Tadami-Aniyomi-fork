@@ -6,7 +6,7 @@ package eu.kanade.tachiyomi.ui.reels
  * into cursor mode; a null token while the source still claims more pages is a protocol
  * violation that stops pagination instead of replaying the head page forever.
  */
-internal data class ReelsPagination(
+data class ReelsPagination(
     val nextPage: Int = 1,
     val nextCursor: String? = null,
     val cursorMode: Boolean = false,
@@ -28,7 +28,7 @@ internal data class ReelsPagination(
     }
 }
 
-internal data class ReelsPaginationStep(
+data class ReelsPaginationStep(
     val pagination: ReelsPagination,
     val cursorLost: Boolean,
 )

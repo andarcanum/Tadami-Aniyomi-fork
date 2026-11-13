@@ -64,12 +64,17 @@ class ReelsAlbumRepositoryImplTest {
         return ReelsAlbumRepositoryImpl(handler) to driver
     }
 
-    private fun album(albumId: String, sourceId: Long = 401L, name: String = "Album $albumId") = ReelsAlbum(
+    private fun album(
+        albumId: String,
+        sourceId: Long = 401L,
+        name: String = "Album $albumId",
+        addedAt: Date = Date(1_700_000_000_000L),
+    ) = ReelsAlbum(
         sourceId = sourceId,
         albumId = albumId,
         name = name,
         coverUrl = "https://example.com/$albumId.jpg",
-        addedAt = Date(1_700_000_000_000L),
+        addedAt = addedAt,
     )
 
     @Test
@@ -139,6 +144,29 @@ class ReelsAlbumRepositoryImplTest {
             // Marks are keyed by (source, video) without an album ref: they survive so a
             // re-added album restores its watched state.
             repo.subscribeWatched(401L).first() shouldContainExactly listOf("v1")
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun `getAll and subscribeAll aggregate albums across all sources newest first`() = runBlocking {
+        val (repo, driver) = buildRepository()
+        try {
+            repo.insert(album("shared", sourceId = 401L, addedAt = Date(1_000L)))
+            repo.insert(album("shared", sourceId = 402L, addedAt = Date(3_000L)))
+            repo.insert(album("mid", sourceId = 401L, addedAt = Date(2_000L)))
+
+            repo.getAll().map { it.sourceId to it.albumId } shouldContainExactly listOf(
+                402L to "shared",
+                401L to "mid",
+                401L to "shared",
+            )
+            repo.subscribeAll().first().map { it.sourceId to it.albumId } shouldContainExactly listOf(
+                402L to "shared",
+                401L to "mid",
+                401L to "shared",
+            )
         } finally {
             driver.close()
         }

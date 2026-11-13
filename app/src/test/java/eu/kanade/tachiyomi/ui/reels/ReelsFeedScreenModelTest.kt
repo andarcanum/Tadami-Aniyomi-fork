@@ -4292,4 +4292,390 @@ class ReelsFeedScreenModelTest {
         model.state.value.pendingSeekItemId shouldBe "saved-1"
         model.state.value.pendingSeekPositionMs shouldBe 37200L
     }
+
+    @Test
+    fun `mix mode initializes from REELS_ALL_SOURCES_ID across installed sources and persists selection`() =
+        runTest(testDispatcher) {
+            val s1 = RecordingFeedSource(901L) { page ->
+                if (page ==
+                    1
+                ) {
+                    FeedPage(listOf(videoItem("a-1"), videoItem("a-2")), hasNextPage = false)
+                } else {
+                    FeedPage(emptyList(), false)
+                }
+            }
+            val s2 = RecordingFeedSource(902L) { page ->
+                if (page ==
+                    1
+                ) {
+                    FeedPage(listOf(videoItem("b-1"), videoItem("b-2")), hasNextPage = false)
+                } else {
+                    FeedPage(emptyList(), false)
+                }
+            }
+            val prefs = SourcePreferences(MapPreferenceStore()).also {
+                it.reelsMixBurstSize().set(2)
+            }
+            val model = buildModel(
+                sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+                manager = sourceManagerOf(s1, s2),
+                preferences = prefs,
+            )
+            try {
+                testDispatcher.scheduler.advanceUntilIdle()
+
+                val st = model.state.value
+                st.isMixMode shouldBe true
+                st.currentSourceId shouldBe SourcePreferences.REELS_ALL_SOURCES_ID
+                st.mixBurstSize shouldBe 2
+                st.supportsSearch shouldBe false
+                st.supportsFilter shouldBe false
+                st.items shouldHaveSize 4
+                st.itemSourceIds shouldHaveSize 4
+                st.itemSourceIds.toSet() shouldBe setOf(901L, 902L)
+                prefs.lastUsedReelsSource().get() shouldBe SourcePreferences.REELS_ALL_SOURCES_ID
+                ReelsSessionSource.lastSourceId shouldBe SourcePreferences.REELS_ALL_SOURCES_ID
+            } finally {
+                model.onDispose()
+                ReelsSessionSource.lastSourceId = null
+            }
+        }
+
+    @Test
+    fun `mix mode falls back to single feed source when fewer than two sources exist`() = runTest(testDispatcher) {
+        val single = RecordingFeedSource(903L) {
+            FeedPage(listOf(videoItem("only-1")), hasNextPage = false)
+        }
+        val prefs = SourcePreferences(MapPreferenceStore())
+        val model = buildModel(
+            sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+            manager = sourceManagerOf(single),
+            preferences = prefs,
+        )
+        try {
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val st = model.state.value
+            st.isMixMode shouldBe false
+            st.currentSourceId shouldBe 903L
+            st.items.map { it.id } shouldBe listOf("only-1")
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
+
+    @Test
+    fun `mix mode isolates colliding item ids and creators across slot sources`() = runTest(testDispatcher) {
+        val customDescriptor = FeedMediaDescriptor(hdFallback = false, offlineSupported = false)
+        val resolvingCreatorSource = object :
+            AnimeFeedSource,
+            AnimeCreatorFeedSource,
+            AnimeFeedVideoResolverSource,
+            AnimeFeedMediaDescriptorSource {
+            override val id: Long = 911L
+            override val name: String = "Creator Mix 911"
+            override val lang: String = "all"
+
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(
+                    videos = listOf(
+                        ShortVideoItem(
+                            id = "dup-1",
+                            videoUrl = "",
+                            posterUrl = "https://example.com/911-dup.jpg",
+                            author = "SharedCreator",
+                        ),
+                    ),
+                    hasNextPage = false,
+                )
+
+            override suspend fun getCreatorFeed(creator: String, page: Int, cursor: String?): FeedPage =
+                FeedPage(emptyList(), false)
+
+            override suspend fun resolveVideoUrl(itemId: String, hd: Boolean): String? =
+                "https://cdn911.example.com/$itemId-$hd.mp4"
+
+            override fun mediaDescriptor(item: ShortVideoItem): FeedMediaDescriptor = customDescriptor
+        }
+        val plainSource = RecordingFeedSource(912L) {
+            FeedPage(
+                videos = listOf(
+                    ShortVideoItem(
+                        id = "dup-1",
+                        videoUrl = "https://cdn912.example.com/dup-1.mp4",
+                        posterUrl = "https://example.com/912-dup.jpg",
+                        author = "SharedCreator",
+                    ),
+                ),
+                hasNextPage = false,
+            )
+        }
+        val favorites = FakeReelsFavoriteRepository().apply {
+            favorites["dup-1" to 912L] = ReelsFavorite(
+                videoId = "dup-1",
+                sourceId = 912L,
+                title = "Pre-liked on 912",
+                author = "SharedCreator",
+                videoUrl = "https://cdn912.example.com/dup-1.mp4",
+                videoUrlHd = null,
+                posterUrl = "https://example.com/912-dup.jpg",
+                posterUrlVertical = null,
+                webUrl = null,
+                durationSec = 9.0,
+                hasAudio = true,
+                addedAt = Date(0),
+            )
+        }
+        val follows = FakeReelsFollowRepository()
+        val consumption = FakeReelsConsumptionRepository()
+        val model = buildModel(
+            sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+            manager = sourceManagerOf(resolvingCreatorSource, plainSource),
+            repository = favorites,
+            followRepository = follows,
+            consumptionRepository = consumption,
+        )
+        try {
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val st0 = model.state.value
+            val idx911 = st0.itemSourceIds.indexOf(911L)
+            val idx912 = st0.itemSourceIds.indexOf(912L)
+            (idx911 >= 0 && idx912 >= 0) shouldBe true
+
+            // Likes remain scoped to (sourceId, videoId) even when both plugins emit "dup-1".
+            st0.isLiked("dup-1", idx912) shouldBe true
+            st0.isLiked("dup-1", idx911) shouldBe false
+
+            // Creator capability & follows isolate per owning source.
+            st0.isSlotCreatorCapable(idx911) shouldBe true
+            st0.isSlotCreatorCapable(idx912) shouldBe false
+
+            model.toggleLike(st0.items[idx911], idx911)
+            model.toggleFollow("SharedCreator", 911L)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            model.state.value.isLiked("dup-1", idx911) shouldBe true
+            model.state.value.isLiked("dup-1", idx912) shouldBe true
+            favorites.favorites.containsKey("dup-1" to 911L) shouldBe true
+            favorites.favorites.containsKey("dup-1" to 912L) shouldBe true
+
+            model.state.value.isFollowingCreator("SharedCreator", idx911) shouldBe true
+            model.state.value.isFollowingCreator("SharedCreator", idx912) shouldBe false
+            follows.follows.containsKey(911L to "SharedCreator") shouldBe true
+            follows.follows.containsKey(912L to "SharedCreator") shouldBe false
+
+            // Resolver and MediaDescriptor dispatch to each slot's source, not REELS_ALL_SOURCES_ID.
+            model.mediaDescriptor(st0.items[idx911], sourceId = 911L) shouldBe customDescriptor
+            model.mediaDescriptor(st0.items[idx912], sourceId = 912L) shouldBe null
+            model.resolvePlaybackUrl(st0.items[idx911], hd = true, sourceId = 911L) shouldBe
+                "https://cdn911.example.com/dup-1-true.mp4"
+
+            // Forward swipe records skip under the owning slot sourceId rather than -2L.
+            model.onPageChanged(0, ReelsTransitionCause.PROGRAMMATIC)
+            model.onPageChanged(1, ReelsTransitionCause.USER_FORWARD)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val firstSlotSource = st0.slotSourceId(0)
+            consumption.skipped.containsKey(firstSlotSource to "dup-1") shouldBe true
+            consumption.skipped.containsKey(SourcePreferences.REELS_ALL_SOURCES_ID to "dup-1") shouldBe false
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
+
+    @Test
+    fun `excludeSourceFromMix keeps visited slots removes upcoming slots and switches cleanly`() =
+        runTest(testDispatcher) {
+            val s1 = RecordingFeedSource(921L) { page ->
+                if (page == 1) {
+                    FeedPage(listOf(videoItem("a1"), videoItem("a2"), videoItem("a3")), hasNextPage = false)
+                } else {
+                    FeedPage(emptyList(), false)
+                }
+            }
+            val s2 = RecordingFeedSource(922L) { page ->
+                if (page == 1) {
+                    FeedPage(listOf(videoItem("b1"), videoItem("b2"), videoItem("b3")), hasNextPage = false)
+                } else {
+                    FeedPage(emptyList(), false)
+                }
+            }
+            val prefs = SourcePreferences(MapPreferenceStore())
+            val model = buildModel(
+                sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+                manager = sourceManagerOf(s1, s2),
+                preferences = prefs,
+            )
+            try {
+                testDispatcher.scheduler.advanceUntilIdle()
+                val activeSid = model.state.value.slotSourceId(0)
+                val otherSid = if (activeSid == 921L) 922L else 921L
+                val firstItemId = model.state.value.items.first().id
+
+                model.excludeSourceFromMix(otherSid)
+                testDispatcher.scheduler.advanceUntilIdle()
+
+                val afterExclude = model.state.value
+                afterExclude.items.first().id shouldBe firstItemId
+                afterExclude.itemSourceIds.drop(1).none { it == otherSid } shouldBe true
+                afterExclude.excludedMixSourceIds shouldContain otherSid.toString()
+                afterExclude.mixSourceStatuses[otherSid] shouldBe MixSourceStatus.EXCLUDED
+
+                // Re-enabling updates preference & restores source availability.
+                model.setMixSourceExcluded(otherSid, excluded = false)
+                model.setMixBurstSize(3)
+                testDispatcher.scheduler.advanceUntilIdle()
+
+                model.state.value.excludedMixSourceIds shouldNotContain otherSid.toString()
+                model.state.value.mixBurstSize shouldBe 3
+                prefs.reelsMixBurstSize().get() shouldBe 3
+
+                // Switching to single-source feed exits Mix, and switching back restores Mix.
+                model.switchSource(921L)
+                testDispatcher.scheduler.advanceUntilIdle()
+                model.state.value.isMixMode shouldBe false
+                model.state.value.currentSourceId shouldBe 921L
+                model.state.value.items.map { it.id } shouldBe listOf("a1", "a2", "a3")
+
+                model.switchSource(SourcePreferences.REELS_ALL_SOURCES_ID)
+                testDispatcher.scheduler.advanceUntilIdle()
+                model.state.value.isMixMode shouldBe true
+                model.state.value.itemSourceIds.toSet() shouldBe setOf(921L, 922L)
+            } finally {
+                model.onDispose()
+                ReelsSessionSource.lastSourceId = null
+            }
+        }
+
+    @Test
+    fun `mix mode under incognito keeps playing without persisting lastUsedReelsSource`() = runTest(testDispatcher) {
+        val s1 = RecordingFeedSource(931L) { FeedPage(listOf(videoItem("inc-1")), hasNextPage = false) }
+        val s2 = RecordingFeedSource(932L) { FeedPage(listOf(videoItem("inc-2")), hasNextPage = false) }
+        val prefs = SourcePreferences(MapPreferenceStore())
+        val model = buildModel(
+            sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+            manager = sourceManagerOf(s1, s2),
+            incognito = true,
+            preferences = prefs,
+        )
+        try {
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            model.state.value.isMixMode shouldBe true
+            model.state.value.items shouldHaveSize 2
+            prefs.lastUsedReelsSource().get() shouldBe -1L
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
+
+    @Test
+    fun `mix mode survives rapid source switching without stop racing reset`() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var firstMixLoad = true
+        val s1 = object : AnimeFeedSource {
+            override val id: Long = 941L
+            override val name: String = "Feed 941"
+            override val lang: String = "all"
+
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+                if (firstMixLoad) {
+                    firstMixLoad = false
+                    gate.await()
+                }
+                return FeedPage(listOf(videoItem("r1")), hasNextPage = false)
+            }
+        }
+        val s2 = RecordingFeedSource(942L) {
+            FeedPage(listOf(videoItem("r2")), hasNextPage = false)
+        }
+        val model = buildModel(
+            sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+            manager = sourceManagerOf(s1, s2),
+            preferences = SourcePreferences(MapPreferenceStore()),
+        )
+        try {
+            // Start initial Mix load up to its suspended fetch, then churn Mix -> Single -> Mix
+            // without waiting for background stop() coroutines to settle first.
+            testDispatcher.scheduler.runCurrent()
+            model.switchSource(941L)
+            testDispatcher.scheduler.runCurrent()
+            model.switchSource(SourcePreferences.REELS_ALL_SOURCES_ID)
+            model.switchSource(942L)
+            model.switchSource(SourcePreferences.REELS_ALL_SOURCES_ID)
+            gate.complete(Unit)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            val st = model.state.value
+            st.isMixMode shouldBe true
+            st.currentSourceId shouldBe SourcePreferences.REELS_ALL_SOURCES_ID
+            st.isLoading shouldBe false
+            st.items.map { it.id }.toSet() shouldBe setOf("r1", "r2")
+            st.itemSourceIds.toSet() shouldBe setOf(941L, 942L)
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
+
+    @Test
+    fun `mix mode isolates concurrent page visits with colliding item ids`() = runTest(testDispatcher) {
+        val s1 = RecordingFeedSource(951L) { FeedPage(listOf(videoItem("dup-visit")), hasNextPage = false) }
+        val s2 = RecordingFeedSource(952L) { FeedPage(listOf(videoItem("dup-visit")), hasNextPage = false) }
+        val consumption = FakeReelsConsumptionRepository()
+        var clock = 0L
+        val model = buildModel(
+            sourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+            manager = sourceManagerOf(s1, s2),
+            preferences = SourcePreferences(MapPreferenceStore()),
+            consumptionRepository = consumption,
+            nowMs = { clock },
+        )
+        try {
+            testDispatcher.scheduler.advanceUntilIdle()
+            val st = model.state.value
+            st.items.map { it.id } shouldBe listOf("dup-visit", "dup-visit")
+            val slot0Sid = st.slotSourceId(0)
+            val slot1Sid = st.slotSourceId(1)
+            (slot0Sid != slot1Sid) shouldBe true
+
+            val page0 = ReelsRoundRobinPageCallbacks(model, owner = null, slotIndex = 0)
+            val page1 = ReelsRoundRobinPageCallbacks(model, owner = null, slotIndex = 1)
+
+            // Simulate page 1 activating before page 0 reports visit end (colliding item.id).
+            page0.onVisitStarted(st.items[0])
+            page1.onVisitStarted(st.items[1])
+            page0.onVisitEnded(st.items[0], positionMs = 100L, positionFraction = 0.01f, durationSec = 10f)
+
+            model.onFirstFramePresented("dup-visit")
+            repeat(6) {
+                clock += 1_000L
+                page1.onPlaybackSample("dup-visit", positionMs = clock, eligible = true)
+            }
+            page1.onVisitEnded(st.items[1], positionMs = clock, positionFraction = 0.8f, durationSec = 10f)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            consumption.watched.keys shouldBe setOf(slot1Sid to "dup-visit")
+
+            // Re-visiting slot 0 afterward credits slot0Sid without touching slot1Sid.
+            page0.onVisitStarted(st.items[0])
+            model.onFirstFramePresented("dup-visit")
+            repeat(6) {
+                clock += 1_000L
+                page0.onPlaybackSample("dup-visit", positionMs = clock, eligible = true)
+            }
+            page0.onVisitEnded(st.items[0], positionMs = clock, positionFraction = 0.8f, durationSec = 10f)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            consumption.watched.keys shouldBe setOf(slot0Sid to "dup-visit", slot1Sid to "dup-visit")
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
 }

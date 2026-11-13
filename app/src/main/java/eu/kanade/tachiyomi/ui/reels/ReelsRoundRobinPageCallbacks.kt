@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 internal class ReelsRoundRobinPageCallbacks(
     private val screenModel: ReelsFeedScreenModel,
     private val owner: ReelsRoundRobinRenderOwner?,
+    private val slotIndex: Int = -1,
 ) {
     fun onVideoCompleted(itemId: String) {
         if (owner != null) {
@@ -27,7 +28,7 @@ internal class ReelsRoundRobinPageCallbacks(
         if (owner != null) {
             screenModel.onRoundRobinVisitStarted(owner, startedItem)
         } else {
-            screenModel.onVisitStarted(startedItem)
+            screenModel.onVisitStarted(startedItem, slotIndex)
         }
     }
 
@@ -43,7 +44,7 @@ internal class ReelsRoundRobinPageCallbacks(
         if (owner != null) {
             screenModel.onRoundRobinPlaybackSample(owner, itemId, positionMs, eligible)
         } else {
-            screenModel.onPlaybackSample(itemId, positionMs, eligible)
+            screenModel.onPlaybackSample(itemId, positionMs, eligible, slotIndex)
         }
     }
 
@@ -56,7 +57,7 @@ internal class ReelsRoundRobinPageCallbacks(
         if (owner != null) {
             screenModel.onRoundRobinVisitEnded(owner, item, positionMs, positionFraction, durationSec)
         } else {
-            screenModel.onVisitEnded(item, positionMs, positionFraction, durationSec)
+            screenModel.onVisitEnded(item, positionMs, positionFraction, durationSec, slotIndex)
         }
     }
 }

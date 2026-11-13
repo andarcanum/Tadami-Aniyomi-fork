@@ -1,8 +1,12 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
+import androidx.compose.ui.unit.dp
+import eu.kanade.tachiyomi.ui.reels.player.calculateReelTextureScale
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.floats.shouldBeWithinPercentageOf
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
-import kotlin.math.roundToInt
+import kotlin.math.max
 
 class ReelsLandscapeComponentsTest {
 
@@ -65,34 +69,71 @@ class ReelsLandscapeComponentsTest {
     }
 
     @Test
-    fun `landscape action rail vertical centering guarantees clearance from topbar`() {
+    fun `v1 landscape controls meet 48dp touch target minimums`() {
+        (REELS_LANDSCAPE_TOUCH_TARGET_DP >= 48f).shouldBeTrue()
+        (REELS_LANDSCAPE_DOCK_HEIGHT_DP >= 48f).shouldBeTrue()
+        REELS_LANDSCAPE_CONTROL_VISUAL_HEIGHT_DP shouldBe 36f
+    }
+
+    @Test
+    fun `v2 unified cinema console and compact 2-line meta clear center transport across font scales`() {
         val screenHeightDp = 360f
-        val topBarBottomDp = 54f
+        val centerTransportBottomDp = (screenHeightDp / 2f) + 32f // 212dp (64dp Play circle centered)
+        val dockHeightDp = 24f + 2f + REELS_LANDSCAPE_DOCK_HEIGHT_DP + 4f // 78dp total bottom console
 
-        // Old layout: BottomEnd with 54dp bottom margin and 275dp height
-        val oldRailHeightDp = 275f
-        val oldBottomMarginDp = 54f
-        val oldRailTopDp = screenHeightDp - oldBottomMarginDp - oldRailHeightDp // 31dp
-        val oldCollisionDp = topBarBottomDp - oldRailTopDp // 23dp overlap
-        (oldCollisionDp > 0) shouldBe true
+        for (fontScale in listOf(1f, 1.3f)) {
+            // Compact 2-line landscape meta: Row 1 (max 20dp avatar / 12.5sp * fontScale) + 3dp gap + Row 2 (16sp * fontScale)
+            val row1HeightDp = max(20f, 14f * fontScale)
+            val row2HeightDp = 16.5f * fontScale
+            val compactMetaHeightDp = row1HeightDp + 3f + row2HeightDp
+            val metaTopDp = screenHeightDp - dockHeightDp - compactMetaHeightDp
+            (metaTopDp - centerTransportBottomDp >= 20f).shouldBeTrue()
+        }
+    }
 
-        // New Smart layout: CenterEnd with compact 4-pod rail (36dp circle in 44dp touch target + 4dp spacing)
-        val buttonOnlyRailHeightDp = (4 * 44f) + (3 * 4f) // 188dp
-        val buttonOnlyRailTopDp = (screenHeightDp / 2f) - (buttonOnlyRailHeightDp / 2f) // 86dp
-        val buttonClearance = buttonOnlyRailTopDp - topBarBottomDp // 32dp of clear air
-        (buttonClearance >= 30f) shouldBe true
+    @Test
+    fun `v1 bottom-end landscape rail clears topbar and scrubber dock across font scales`() {
+        val screenHeightDp = 360f
+        val topBarBottomDp = 56f
+        val railBottomMarginDp = 60f
 
-        // Full layout including compact 9sp labels (44dp button + 2dp spacing + 11dp label = 57dp per pod)
-        val fullRailHeightDp = (4 * (44f + 2f + 11f)) + (3 * 4f) // 240dp
-        val compactRailTopDp = (screenHeightDp / 2f) - (fullRailHeightDp / 2f) // 60dp
-        val compactClearanceFromTopBar = compactRailTopDp - topBarBottomDp // 6dp on compact 360dp phone
-        (compactClearanceFromTopBar > 0f) shouldBe true
+        for (fontScale in listOf(1f, 1.3f)) {
+            // 36dp circle + 2dp gap + 11sp * fontScale label + 2dp item vertical padding, floored at 48dp hit height
+            val podHeightDp = max(REELS_LANDSCAPE_TOUCH_TARGET_DP, 36f + 2f + 11f * fontScale + 2f)
+            // 4 pods + 3 * 1dp Arrangement.spacedBy + 2dp top/bottom container padding (4dp total)
+            val railHeightDp = (4 * podHeightDp) + (3 * 1f) + 4f
+            val railTopDp = screenHeightDp - railBottomMarginDp - railHeightDp
+            val clearanceDp = railTopDp - topBarBottomDp
+            (clearanceDp >= 16f).shouldBeTrue()
+        }
+    }
 
-        // On standard phone (392dp height), full layout clearance provides ample breathing room
-        val standardHeightDp = 392f
-        val standardRailTopDp = (standardHeightDp / 2f) - (fullRailHeightDp / 2f) // 76dp
-        val standardClearanceFromTopBar = standardRailTopDp - topBarBottomDp // 22dp of clear air
-        (standardClearanceFromTopBar >= 20f) shouldBe true
+    @Test
+    fun `v1 landscape seek notice padding clears both action rail and center transport`() {
+        reelsSeekNoticeHorizontalPadding(isLandscape = false) shouldBe REELS_SEEK_NOTICE_PORTRAIT_INSET_DP.dp
+        reelsSeekNoticeHorizontalPadding(isLandscape = true) shouldBe REELS_SEEK_NOTICE_LANDSCAPE_INSET_DP.dp
+
+        val usableWidthDp = 592f
+        val centerHalfWidthDp = (48f + 28f + 64f + 28f + 48f) / 2f // 108dp
+        val centerRightEdgeDp = (usableWidthDp / 2f) + centerHalfWidthDp // 404dp
+        val railLeftEdgeDp = usableWidthDp - 12f - 58f // 522dp
+        val noticeWidthDp = 76f
+        val noticeRightEdgeDp = usableWidthDp - REELS_SEEK_NOTICE_LANDSCAPE_INSET_DP
+        val noticeLeftEdgeDp = noticeRightEdgeDp - noticeWidthDp
+
+        (noticeLeftEdgeDp - centerRightEdgeDp >= 20f).shouldBeTrue()
+        (railLeftEdgeDp - noticeRightEdgeDp >= 15f).shouldBeTrue()
+    }
+
+    @Test
+    fun `nextReelsLandscapeSpeed cycles expected rates cleanly`() {
+        nextReelsLandscapeSpeed(1f) shouldBe 1.25f
+        nextReelsLandscapeSpeed(1.25f) shouldBe 1.5f
+        nextReelsLandscapeSpeed(1.5f) shouldBe 2f
+        nextReelsLandscapeSpeed(2f) shouldBe 0.75f
+        nextReelsLandscapeSpeed(0.75f) shouldBe 1f
+        nextReelsLandscapeSpeed(1.251f) shouldBe 1.5f
+        nextReelsLandscapeSpeed(0.5f) shouldBe 1f
     }
 
     @Test
@@ -141,16 +182,43 @@ class ReelsLandscapeComponentsTest {
     }
 
     @Test
-    fun `portrait return fits the compact landscape rail at enlarged font scale`() {
+    fun `v1 landscape topbar and transitional exit rail fit 360dp height at enlarged font scale`() {
         val screenHeightDp = 360f
-        val topBarBottomDp = 54f
+        val topBarBottomDp = 56f
+        val railBottomMarginDp = 60f
 
-        // Like, portrait return, download and share; only the portrait return has no caption.
+        // Transitional Wave 1 mode (showExitButton = true, onOpenHide = null):
+        // 3 captioned pods (Like, Download, Share) + 1 uncaptioned 48dp exit pod.
         for (fontScale in listOf(1f, 1.3f)) {
-            val captionedPodHeight = 44f + 2f + 12f * fontScale
-            val railHeightDp = 3 * captionedPodHeight + 44f + 3 * 4f
-            val railTopDp = (screenHeightDp - railHeightDp) / 2f
-            (railTopDp - topBarBottomDp > 0f) shouldBe true
+            val captionedPodHeight = max(REELS_LANDSCAPE_TOUCH_TARGET_DP, 36f + 2f + 11f * fontScale + 2f)
+            val railHeightDp = (3 * captionedPodHeight) + REELS_LANDSCAPE_TOUCH_TARGET_DP + (3 * 2f) + 8f
+            val railTopDp = screenHeightDp - railBottomMarginDp - railHeightDp
+            (railTopDp - topBarBottomDp >= 16f).shouldBeTrue()
         }
+    }
+
+    @Test
+    fun `calculateReelTextureScale switches cleanly between Fit and Fill in landscape`() {
+        // 9:16 vertical clip (1080x1920) on a 20:9 landscape viewport (2400x1080)
+        val verticalFit = calculateReelTextureScale(1080, 1920, 2400f, 1080f, crop = false)!!
+        verticalFit.first.shouldBeWithinPercentageOf(0.253125f, 0.1)
+        verticalFit.second shouldBe 1f
+
+        val verticalFill = calculateReelTextureScale(1080, 1920, 2400f, 1080f, crop = true)!!
+        verticalFill.first shouldBe 1f
+        verticalFill.second.shouldBeWithinPercentageOf(3.9506f, 0.1)
+
+        // 16:9 horizontal clip (1920x1080) on a 20:9 landscape viewport (2400x1080)
+        val horizontalFit = calculateReelTextureScale(1920, 1080, 2400f, 1080f, crop = false)!!
+        horizontalFit.first.shouldBeWithinPercentageOf(0.8f, 0.1)
+        horizontalFit.second shouldBe 1f
+
+        val horizontalFill = calculateReelTextureScale(1920, 1080, 2400f, 1080f, crop = true)!!
+        horizontalFill.first shouldBe 1f
+        horizontalFill.second.shouldBeWithinPercentageOf(1.25f, 0.1)
+
+        // Invalid dimensions return null
+        calculateReelTextureScale(0, 1080, 2400f, 1080f, crop = false) shouldBe null
+        calculateReelTextureScale(1920, 1080, 0f, 1080f, crop = true) shouldBe null
     }
 }

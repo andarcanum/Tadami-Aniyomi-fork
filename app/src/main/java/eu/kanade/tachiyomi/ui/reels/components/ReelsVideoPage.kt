@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
@@ -61,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -130,6 +132,10 @@ fun ReelsVideoPage(
     showSearch: Boolean = false,
     isSearchBarOpen: Boolean = false,
     onToggleSearch: () -> Unit = {},
+    searchQuery: String = "",
+    onSearchSubmit: (String) -> Unit = {},
+    onClearSearch: () -> Unit = {},
+    onOpenSourcePicker: (() -> Unit)? = null,
     // Window geometry only: landscape gets a horizontal actions row. Never a media-aspect hint.
     isLandscape: Boolean = false,
     // Orientation toggle lives in the action rail (thumb reach), not in the top bar.
@@ -213,6 +219,11 @@ fun ReelsVideoPage(
     isTouchLocked: Boolean = false,
     onToggleTouchLock: () -> Unit = {},
     sourceName: String = "Tadami Feed",
+    feedSectionLabel: String? = null,
+    sourceBadgeName: String? = null,
+    sourceBadgeIcon: ImageBitmap? = null,
+    onSourceBadgeClick: (() -> Unit)? = null,
+    onExcludeSourceFromMix: (() -> Unit)? = null,
     playlistItems: List<ShortVideoItem> = emptyList(),
     playlistIndex: Int = 0,
     onSelectPlaylistItem: (Int) -> Unit = {},
@@ -317,11 +328,18 @@ fun ReelsVideoPage(
     val speedLabel = stringResource(
         if (effectivePlaybackSpeed == 1f) MR.strings.reels_a11y_speed_2x else MR.strings.reels_a11y_speed_normal,
     )
-    fun seekBy(deltaSec: Float) {
-        if (durationSec <= 0f) return
-        val target = ((progressState.floatValue * durationSec + deltaSec) / durationSec).coerceIn(0f, 1f)
+    fun seekBy(deltaSec: Float, showNotice: Boolean = false) {
+        val activeDurationSec = currentDurationSec
+        if (activeDurationSec <= 0f) return
+        val currentSec = progressState.floatValue * activeDurationSec
+        val target = ((currentSec + deltaSec) / activeDurationSec).coerceIn(0f, 1f)
         seekFraction = target
         progressState.floatValue = target
+        if (showNotice) {
+            // The caption reports what the player really moved, so a tap near the ends
+            // cannot promise +10 while the reel only had 3 seconds left.
+            currentSeekNotice.show((target * activeDurationSec - currentSec).toInt())
+        }
         coroutineScope.launch {
             delay(50)
             seekFraction = null
@@ -626,17 +644,7 @@ fun ReelsVideoPage(
                             else -> 0f
                         }
                         if (seekDeltaSec != 0f) {
-                            val currentSec = progressState.floatValue * activeDurationSec
-                            val target = ((currentSec + seekDeltaSec) / activeDurationSec).coerceIn(0f, 1f)
-                            seekFraction = target
-                            progressState.floatValue = target
-                            // The caption reports what the player really moved, so a tap near the
-                            // ends cannot promise +10 while the reel only had 3 seconds left.
-                            currentSeekNotice.show((target * activeDurationSec - currentSec).toInt())
-                            coroutineScope.launch {
-                                delay(50)
-                                seekFraction = null
-                            }
+                            seekBy(seekDeltaSec, showNotice = true)
                         } else {
                             // Set-like, not toggle: the second double-tap on an already liked
                             // reel must stay a like.
@@ -745,28 +753,51 @@ fun ReelsVideoPage(
             )
         }
 
-        // 3. Play / Pause indicator overlay (flashes briefly on state change)
+        // 3. Center transport / Play-Pause overlay
         AnimatedVisibility(
-            visible = !isPlaying && !isInPictureInPicture,
+            visible = if (isLandscape) {
+                (chromeVisible || !isPlaying) &&
+                    heldRate == null &&
+                    !drawerOpen &&
+                    qualityDialogMode == null &&
+                    !isInPictureInPicture
+            } else {
+                !isPlaying && !isInPictureInPicture
+            },
             enter = fadeIn() + scaleIn(initialScale = 0.8f),
             exit = fadeOut() + scaleOut(targetScale = 0.8f),
             modifier = Modifier.align(Alignment.Center),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clickable(role = Role.Button, onClick = currentOnTogglePlayPause)
-                    .background(Color.Black.copy(alpha = 0.55f), shape = androidx.compose.foundation.shape.CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (!isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    contentDescription = stringResource(
-                        if (!isPlaying) MR.strings.action_play else MR.strings.action_pause,
-                    ),
-                    tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.size(40.dp),
+            if (isLandscape) {
+                ReelsLandscapeCenterTransport(
+                    isPlaying = isPlaying,
+                    onSeekBack = {
+                        onScrubStart()
+                        seekBy(-10f, showNotice = true)
+                    },
+                    onTogglePlayPause = currentOnTogglePlayPause,
+                    onSeekForward = {
+                        onScrubStart()
+                        seekBy(10f, showNotice = true)
+                    },
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clickable(role = Role.Button, onClick = currentOnTogglePlayPause)
+                        .background(Color.Black.copy(alpha = 0.55f), shape = CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (!isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                        contentDescription = stringResource(
+                            if (!isPlaying) MR.strings.action_play else MR.strings.action_pause,
+                        ),
+                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
             }
         }
 
@@ -851,7 +882,14 @@ fun ReelsVideoPage(
             exit = fadeOut() + slideOutHorizontally { if (seekNotice.forward) it / 5 else -it / 5 },
             modifier = Modifier
                 .align(if (seekNotice.forward) Alignment.CenterEnd else Alignment.CenterStart)
-                .padding(horizontal = if (isLandscape) 18.dp else 14.dp),
+                .then(
+                    if (isLandscape) {
+                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = reelsSeekNoticeHorizontalPadding(isLandscape)),
         ) {
             Text(
                 text = seekNotice.seconds?.let { seconds ->
@@ -915,7 +953,7 @@ fun ReelsVideoPage(
                 if (isLandscape) {
                     // Landscape TopBar
                     AnimatedVisibility(
-                        visible = chromeVisible,
+                        visible = chromeVisible || isSearchBarOpen,
                         enter = fadeIn() + slideInVertically { -it },
                         exit = fadeOut() + slideOutVertically { -it },
                         modifier = Modifier.align(Alignment.TopCenter),
@@ -928,45 +966,33 @@ fun ReelsVideoPage(
                                 drawerOpen = true
                             },
                             onClearDisplay = onToggleChrome,
+                            playbackSpeed = effectivePlaybackSpeed,
+                            isCropMode = isCropMode,
+                            onToggleCropMode = {
+                                onScrubStart()
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                onToggleCropMode()
+                            },
                             showSearch = showSearch,
                             isSearchOpen = isSearchBarOpen,
-                            onToggleSearch = onToggleSearch,
+                            onToggleSearch = {
+                                if (!isSearchBarOpen) onScrubStart()
+                                onToggleSearch()
+                            },
+                            searchQuery = searchQuery,
+                            onSearchSubmit = onSearchSubmit,
+                            onClearSearch = onClearSearch,
+                            onOpenSourcePicker = onOpenSourcePicker,
+                            onOpenSettings = {
+                                drawerTab = 0
+                                drawerOpen = true
+                            },
+                            onExitLandscape = onExitLandscape,
+                            feedSectionLabel = feedSectionLabel,
                         )
                     }
 
-                    // Landscape Action Rail (Right Pod)
-                    AnimatedVisibility(
-                        visible = chromeVisible,
-                        enter = fadeIn() + slideInHorizontally { it },
-                        exit = fadeOut() + slideOutHorizontally { it },
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                    ) {
-                        ReelsLandscapeActionRail(
-                            isLiked = isLiked,
-                            likesCount = item.likesCount,
-                            onToggleLike = {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                onToggleLike()
-                            },
-                            onToggleLandscape = onExitLandscape,
-                            isDownloaded = isDownloaded,
-                            isDownloading = isDownloading,
-                            isPartial = isPartial,
-                            downloadSizeText = downloadSizeText,
-                            downloadProgress = downloadProgress,
-                            onDownload = onDownload?.let { download ->
-                                {
-                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    download()
-                                }
-                            },
-                            onOpenHide = null,
-                            onShare = { onShare(progressState.floatValue * durationSec.coerceAtLeast(0f)) },
-                            modifier = Modifier.padding(end = 16.dp),
-                        )
-                    }
-
-                    // Landscape Bottom Meta
+                    // Landscape Compact Bottom Meta (bottom-start, above the 2-row Unified Cinema Console)
                     AnimatedVisibility(
                         visible = chromeVisible,
                         enter = fadeIn() + slideInVertically { it },
@@ -985,15 +1011,20 @@ fun ReelsVideoPage(
                                 drawerTab = 0
                                 drawerOpen = true
                             },
-                            modifier = Modifier.padding(
-                                start = 16.dp,
-                                end = 120.dp,
-                                bottom = 52.dp,
-                            ),
+                            sourceBadgeName = sourceBadgeName,
+                            sourceBadgeIcon = sourceBadgeIcon,
+                            onSourceBadgeClick = onSourceBadgeClick,
+                            isLandscapeCompact = true,
+                            modifier = Modifier
+                                .fillMaxWidth(0.58f)
+                                .padding(
+                                    start = 16.dp,
+                                    bottom = 78.dp,
+                                ),
                         )
                     }
 
-                    // Landscape Bottom Scrubber Dock
+                    // Landscape Bottom Unified Cinema Console (Seekbar + 36dp Unified Control Deck)
                     AnimatedVisibility(
                         visible = chromeVisible,
                         enter = fadeIn() + slideInVertically { it },
@@ -1013,6 +1044,39 @@ fun ReelsVideoPage(
                                     qualityDialogMode = ReelsQualityDialogMode.VIDEO
                                 }
                             },
+                            isCropMode = isCropMode,
+                            onToggleCropMode = {
+                                onScrubStart()
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                onToggleCropMode()
+                            },
+                            playbackSpeed = effectivePlaybackSpeed,
+                            onCycleSpeed = {
+                                onScrubStart()
+                                updatePlaybackSpeed(nextReelsLandscapeSpeed(effectivePlaybackSpeed))
+                            },
+                            isLiked = isLiked,
+                            likesCount = item.likesCount,
+                            onToggleLike = {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                onToggleLike()
+                            },
+                            isDownloaded = isDownloaded,
+                            isDownloading = isDownloading,
+                            isPartial = isPartial,
+                            downloadProgress = downloadProgress,
+                            onDownload = onDownload?.let { download ->
+                                {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    download()
+                                }
+                            },
+                            onShare = { onShare(progressState.floatValue * durationSec.coerceAtLeast(0f)) },
+                            onOpenMore = if (showHideAction) {
+                                { showHideDialog = true }
+                            } else {
+                                null
+                            },
                             posterUrl = item.posterUrlVertical ?: item.posterUrl,
                             onSeek = { frac ->
                                 seekFraction = frac
@@ -1023,7 +1087,7 @@ fun ReelsVideoPage(
                                 }
                             },
                             onScrubStart = onScrubStart,
-                            modifier = Modifier.padding(bottom = 6.dp),
+                            modifier = Modifier.padding(bottom = 4.dp),
                         )
                     }
 
@@ -1042,7 +1106,11 @@ fun ReelsVideoPage(
                             onOpenQualityVideo = { qualityDialogMode = ReelsQualityDialogMode.VIDEO },
                             onOpenQualityDefault = { qualityDialogMode = ReelsQualityDialogMode.GLOBAL },
                             isCropMode = isCropMode,
-                            onToggleCropMode = onToggleCropMode,
+                            onToggleCropMode = {
+                                onScrubStart()
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                                onToggleCropMode()
+                            },
                             playbackSpeed = effectivePlaybackSpeed,
                             onSetPlaybackSpeed = { updatePlaybackSpeed(it) },
                             isAutoAdvance = isAutoAdvance,
@@ -1072,6 +1140,9 @@ fun ReelsVideoPage(
                             } else {
                                 null
                             },
+                            currentSourceName = sourceBadgeName,
+                            onOpenSource = onSourceBadgeClick,
+                            onExcludeSourceFromMix = onExcludeSourceFromMix,
                             onClearVideoCache = onClearVideoCache,
                             onSelectClip = { idx ->
                                 drawerOpen = false
@@ -1137,7 +1208,6 @@ fun ReelsVideoPage(
                             isPartial = isPartial,
                             downloadSizeText = downloadSizeText,
                             downloadProgress = downloadProgress,
-                            isLandscapeLayout = false,
                             modifier = Modifier.padding(end = 8.dp, bottom = actionsBottomPadding),
                         )
                     }
@@ -1157,6 +1227,9 @@ fun ReelsVideoPage(
                             showFollowAction = showFollowAction,
                             isFollowingCreator = isFollowingCreator,
                             onToggleFollowCreator = onToggleFollowCreator,
+                            sourceBadgeName = sourceBadgeName,
+                            sourceBadgeIcon = sourceBadgeIcon,
+                            onSourceBadgeClick = onSourceBadgeClick,
                             modifier = Modifier
                                 .padding(
                                     start = 16.dp,
@@ -1265,6 +1338,66 @@ fun ReelsVideoPage(
                         )
                         Text(
                             text = stringResource(MR.strings.reels_hide_author),
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
+                if (!sourceBadgeName.isNullOrBlank() && onSourceBadgeClick != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AuroraTheme.colors.accent.copy(alpha = 0.14f))
+                            .border(1.dp, AuroraTheme.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                showHideDialog = false
+                                onSourceBadgeClick()
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = null,
+                            tint = AuroraTheme.colors.accent,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = stringResource(MR.strings.reels_mix_open_plugin, sourceBadgeName),
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
+                if (!sourceBadgeName.isNullOrBlank() && onExcludeSourceFromMix != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                showHideDialog = false
+                                onExcludeSourceFromMix()
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.VisibilityOff,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = stringResource(MR.strings.reels_mix_exclude_plugin),
                             color = Color.White,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,

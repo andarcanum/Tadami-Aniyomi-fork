@@ -356,9 +356,9 @@ data class ReelsFeedScreen(
         }
         LaunchedEffect(Unit) { offlineUsedBytes = screenModel.offlineUsedBytes() }
 
-        fun handleFollowToggle(creatorName: String?) {
+        fun handleFollowToggle(creatorName: String?, sourceId: Long = state.currentSourceId) {
             if (creatorName == null) return
-            screenModel.toggleFollow(creatorName)
+            screenModel.toggleFollow(creatorName, sourceId)
         }
         // B3.2: the hide snackbar offers an undo of the most recent hide (video or author).
         val hideSnackbarMessage = stringResource(MR.strings.reels_hidden_snackbar)
@@ -491,10 +491,10 @@ data class ReelsFeedScreen(
         }
 
         fun handleDownload(item: ShortVideoItem, itemIndex: Int, hd: Boolean) {
-            val sourceId = if (state.isOffline) {
-                state.offlineSourceIds.getOrNull(itemIndex) ?: return
-            } else {
-                state.currentSourceId
+            val sourceId = when {
+                state.isOffline -> state.offlineSourceIds.getOrNull(itemIndex) ?: return
+                state.isMixMode -> state.slotSourceId(itemIndex)
+                else -> state.currentSourceId
             }
             val key = reelsDownloadKey(sourceId, item.id)
             val previous = exportStates[key]
@@ -520,7 +520,7 @@ data class ReelsFeedScreen(
             exportStates[key] = previous?.copy(inProgress = true, partial = false) ?: ReelsExportState()
             val headers = HashMap(screenModel.downloadHeaders(sourceId))
             val baseSnapshot = if (resumeUri != null) {
-                previous?.qualitySnapshot
+                previous.qualitySnapshot
             } else {
                 screenModel.captureQualityDownload(item, sourceId, headers)
             }
@@ -537,7 +537,7 @@ data class ReelsFeedScreen(
                 } else {
                     baseSnapshot
                 }
-                if (qualitySnapshot == null && screenModel.isQualityModeItem(item.id)) {
+                if (qualitySnapshot == null && screenModel.isQualityModeItem(item.id, sourceId)) {
                     exportStates[key] = previous ?: ReelsExportState()
                     snackbarHostState.showSnackbar(downloadFailedMessage)
                     return@launch
@@ -692,25 +692,23 @@ data class ReelsFeedScreen(
         var qualityDialogOpen by remember { mutableStateOf(false) }
         var portraitQualityDialogMode by remember { mutableStateOf<ReelsQualityDialogMode?>(null) }
         var portraitQualityItemId by remember { mutableStateOf<String?>(null) }
+        var portraitQualitySourceId by remember { mutableStateOf<Long?>(null) }
         val qualityDialogVisible = qualityDialogOpen || portraitQualityDialogMode != null
         // The HOME-gesture handler runs outside composition: this ref keeps the PiP params
         // tied to the live crop mode.
         val currentCropMode by rememberUpdatedState(state.isCropMode)
-        // Back first leaves the landscape mode; the next Back performs normal navigation.
+        // Back closes open search / active search filter first (including in landscape),
+        // then exits landscape, then navigates back normally.
         BackHandler(enabled = landscape) {
             if (activity != null) {
                 ReelsOrientationLock.setLandscape(activity, false)
             }
         }
-        // Back closes the open search bar before leaving the feed (popup sheets and dialogs
-        // own their dismiss handling already).
-        BackHandler(enabled = !landscape && state.isSearchBarOpen) {
+        BackHandler(enabled = state.isSearchBarOpen) {
             screenModel.toggleSearchBar(false)
         }
-        // Report fix: with an active search result (album cards or filtered feed), back
-        // cancels the search and restores the previous feed instead of leaving Reels.
         BackHandler(
-            enabled = !landscape && !state.isSearchBarOpen && state.searchQuery.isNotBlank(),
+            enabled = !state.isSearchBarOpen && state.searchQuery.isNotBlank(),
         ) {
             screenModel.clearSearch()
         }
@@ -845,10 +843,11 @@ data class ReelsFeedScreen(
             state.items.size,
             moreMenuOpen,
             qualityDialogVisible,
+            state.isSearchBarOpen,
         ) {
-            // Device UX: an open settings block never auto-hides the chrome (the hide timer
-            // must not race the user reading the menu); closing restarts the countdown.
-            if (moreMenuOpen || qualityDialogVisible) return@LaunchedEffect
+            // Device UX: an open settings block or search field never auto-hides the chrome;
+            // closing restarts the countdown.
+            if (moreMenuOpen || qualityDialogVisible || state.isSearchBarOpen) return@LaunchedEffect
             if (
                 reelsChromeShouldAutoHide(
                     visible = chromeVisible,
@@ -856,7 +855,7 @@ data class ReelsFeedScreen(
                     hasItems = state.items.isNotEmpty(),
                     hasError = state.error != null || state.errorRes != null,
                     isLoading = state.isLoading,
-                    blockingSurfaceOpen = moreMenuOpen || qualityDialogVisible,
+                    blockingSurfaceOpen = moreMenuOpen || qualityDialogVisible || state.isSearchBarOpen,
                 )
             ) {
                 delay(3000)
@@ -1016,7 +1015,12 @@ data class ReelsFeedScreen(
                     // loop (+2..+4) can warm bytes. Page settles are handled by onPageChanged; this
                     // effect covers data readiness, feed replacement and a new quality owner. It is a
                     // background refresh, so an already-bound active reel is not retuned.
-                    LaunchedEffect(state.items.size, state.feedGeneration, state.qualityState?.owner?.token) {
+                    LaunchedEffect(
+                        state.items.size,
+                        state.feedGeneration,
+                        state.qualityState?.owner?.token,
+                        state.mixQualityStates.size,
+                    ) {
                         screenModel.prepareQualityWindow(state.activeIndex, skipBoundStart = true)
                     }
 
@@ -1034,14 +1038,14 @@ data class ReelsFeedScreen(
                         effectiveHd,
                         state.qualityState?.selectionRevision,
                         state.qualityState?.items?.values?.count { it.actual != null },
+                        state.mixQualityStates,
                     ) {
                         if (!preloadAllowed) return@LaunchedEffect
                         val settled = pagerState.settledPage
                         val items = state.items
                         val offline = state.isOffline
-                        val offlineSourceIds = state.offlineSourceIds
+                        val mixMode = state.isMixMode
                         val sourceId = state.currentSourceId
-                        val headers = state.sourceHeaders
                         withContext(Dispatchers.IO) {
                             // The effect's job dies on a settled-page/source/quality change; a
                             // prewarm run must stop pulling bytes instead of warming stale pages.
@@ -1049,21 +1053,22 @@ data class ReelsFeedScreen(
                             for (index in settled + 2..settled + 4) {
                                 if (prewarmJob?.isActive == false) break
                                 val item = items.getOrNull(index) ?: break
-                                val quality = screenModel.qualityPlayback(item.id)
-                                if (screenModel.isQualityModeItem(item.id) && quality == null) continue
+                                val slotSourceId = state.slotSourceId(index)
+                                val quality = screenModel.qualityPlayback(item.id, slotSourceId)
+                                if (screenModel.isQualityModeItem(item.id, slotSourceId) && quality == null) continue
                                 val url = quality?.videoUrl
                                     ?: if (effectiveHd) item.videoUrlHd ?: item.videoUrl else item.videoUrl
-                                val prefix = if (offline) {
-                                    offlineSourceIds.getOrNull(index)?.toString() ?: "offline"
-                                } else {
-                                    sourceId.toString()
+                                val prefix = when {
+                                    offline -> state.offlineSourceIds.getOrNull(index)?.toString() ?: "offline"
+                                    mixMode -> slotSourceId.toString()
+                                    else -> sourceId.toString()
                                 }
                                 prewarmReelHead(
                                     context = context,
                                     url = url,
                                     cacheKey = quality?.cacheKey
                                         ?: "$prefix:${item.id}:${if (effectiveHd) "hd" else "sd"}",
-                                    headers = headers,
+                                    headers = state.slotHeaders(index),
                                     webUrl = item.webUrl,
                                     isCancelled = { prewarmJob?.isActive == false },
                                 )
@@ -1136,7 +1141,7 @@ data class ReelsFeedScreen(
                     // Horizontal swipe switches feeds: left on the global feed opens this
                     // source's Following feed, right on Following pops back. The vertical
                     // pager owns the orthogonal axis.
-                    val feedSwipeEnabled = (
+                    val feedSwipeEnabled = !state.isMixMode && (
                         followingFeed ||
                             (state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL && state.isCreatorCapable)
                         )
@@ -1150,8 +1155,8 @@ data class ReelsFeedScreen(
                         // Pages belong to the media identity, not the slot: after a feed reset
                         // an index can point at an entirely different reel, and per-page state
                         // (gesture captures, progress, speed) must not leak across. The offline
-                        // playlist merges favorites from several sources, so its key includes
-                        // the source — the same videoId may legitimately repeat there.
+                        // and Mix playlists merge items from several sources, so their keys include
+                        // the source — the same videoId may legitimately repeat across plugins.
                         key = { index ->
                             val item = state.items.getOrNull(index)
                             val offlineSourceId = state.offlineSourceIds.getOrNull(index)
@@ -1162,6 +1167,7 @@ data class ReelsFeedScreen(
                                 // a recontext/account change must rebuild page state even when
                                 // the same item id is served again.
                                 roundRobinOwner != null -> "${roundRobinOwner.token}:${item.id}"
+                                state.isMixMode -> "mix:${state.slotSourceId(index)}:${item.id}"
                                 state.isOffline && offlineSourceId != null -> "$offlineSourceId:${item.id}"
                                 else -> item.id
                             }
@@ -1224,19 +1230,22 @@ data class ReelsFeedScreen(
                         // was composed under (where the model rejects it as stale), never for
                         // whichever owner the state holds when the callback finally arrives.
                         val pageOwner = state.roundRobinOwner
-                        val pageCallbacks = remember(pageOwner) {
-                            ReelsRoundRobinPageCallbacks(screenModel, pageOwner)
+                        val pageCallbacks = remember(pageOwner, page) {
+                            ReelsRoundRobinPageCallbacks(screenModel, pageOwner, slotIndex = page)
                         }
                         if (item != null) {
-                            // Contract v25: the source's per-item media verdict; remembered
-                            // per item so re-composition does not re-run plugin code.
-                            val mediaDescriptor = remember(item) { screenModel.mediaDescriptor(item) }
-                            val exportSourceId = if (state.isOffline) {
-                                state.offlineSourceIds.getOrNull(page) ?: state.currentSourceId
+                            val slotSourceId = state.slotSourceId(page)
+                            val slotQualityState = if (state.isMixMode) {
+                                state.mixQualityStates[slotSourceId]
                             } else {
-                                state.currentSourceId
+                                state.qualityState
                             }
-                            val export = exportStates[reelsDownloadKey(exportSourceId, item.id)]
+                            // Contract v25: the source's per-item media verdict; remembered
+                            // per (item, slotSourceId) so re-composition does not re-run plugin code.
+                            val mediaDescriptor = remember(item, slotSourceId) {
+                                screenModel.mediaDescriptor(item, slotSourceId)
+                            }
+                            val export = exportStates[reelsDownloadKey(slotSourceId, item.id)]
                             ReelsVideoPage(
                                 item = item,
                                 // Activate only the settled page: during fast flings intermediate
@@ -1250,13 +1259,17 @@ data class ReelsFeedScreen(
                                 isMuted = state.isMuted,
                                 isLiked = state.isLiked(item.id, page),
                                 isHdQuality = effectiveHd,
-                                qualityModeEnabled = screenModel.isQualityModeItem(item.id),
-                                qualityPlayback = screenModel.qualityPlayback(item.id),
-                                qualityItemState = state.qualityState?.items?.get(item.id),
-                                qualityGlobal = state.qualityState?.global ?: ReelsQualityPreference.Source,
-                                onSetQualityGlobal = screenModel::setQualityGlobal,
-                                onSetQualityOverride = screenModel::setQualityOverride,
-                                onClearQualityOverride = screenModel::clearQualityOverride,
+                                qualityModeEnabled = screenModel.isQualityModeItem(item.id, slotSourceId),
+                                qualityPlayback = screenModel.qualityPlayback(item.id, slotSourceId),
+                                qualityItemState = slotQualityState?.items?.get(item.id),
+                                qualityGlobal = slotQualityState?.global ?: ReelsQualityPreference.Source,
+                                onSetQualityGlobal = { screenModel.setQualityGlobalForSource(it, slotSourceId) },
+                                onSetQualityOverride = { id, pref ->
+                                    screenModel.setQualityOverrideForSource(id, pref, slotSourceId)
+                                },
+                                onClearQualityOverride = { id ->
+                                    screenModel.clearQualityOverrideForSource(id, slotSourceId)
+                                },
                                 onQualityDialogOpenChanged = { qualityDialogOpen = it },
                                 onRetryQuality = { screenModel.prepareQualityForIndex(page) },
                                 playbackSpeed = playbackSpeed,
@@ -1265,10 +1278,23 @@ data class ReelsFeedScreen(
                                 isCropMode = state.isCropMode,
                                 chromeVisible = chromeVisible && page == pagerState.settledPage,
                                 isLandscape = windowIsLandscape,
-                                showSearch = state.supportsTags &&
+                                showSearch = state.supportsSearch &&
+                                    state.supportsTags &&
                                     state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
                                 isSearchBarOpen = state.isSearchBarOpen,
                                 onToggleSearch = { screenModel.toggleSearchBar(!state.isSearchBarOpen) },
+                                searchQuery = state.searchQuery,
+                                onSearchSubmit = screenModel::search,
+                                onClearSearch = screenModel::clearSearch,
+                                onOpenSourcePicker = if (
+                                    !state.isOffline &&
+                                    state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL &&
+                                    state.availableSources.size > 1
+                                ) {
+                                    { screenModel.toggleSourcePicker(true) }
+                                } else {
+                                    null
+                                },
                                 landscape = landscape,
                                 onToggleLandscape = {
                                     if (activity != null) {
@@ -1330,19 +1356,18 @@ data class ReelsFeedScreen(
                                 // B3.2 "not interested": local hide + undo snackbar (live feeds only).
                                 showHideAction = !state.isOffline,
                                 onHideVideo = {
-                                    screenModel.hideVideo(item)
+                                    screenModel.hideVideo(item, page)
                                     notifyHidden()
                                 },
                                 onHideAuthor = item.author?.let { author ->
                                     {
-                                        screenModel.hideAuthor(author)
+                                        screenModel.hideAuthor(author, page)
                                         notifyHidden()
                                     }
                                 },
                                 // B3.3 offline copy: shown only in the offline playlist.
                                 showOfflineAction = state.isOffline,
-                                isOfflineStored = state.offlineSourceIds.getOrNull(page)
-                                    ?.let { "$it:${item.id}" } in state.offlineStored,
+                                isOfflineStored = "$slotSourceId:${item.id}" in state.offlineStored,
                                 onToggleOffline = {
                                     if (!offlineBusy) {
                                         offlineBusy = true
@@ -1376,11 +1401,12 @@ data class ReelsFeedScreen(
                                 },
                                 onDownload = { handleDownload(item, page, effectiveHd) },
                                 // Contract v18 creator surfaces: capability + author gated.
-                                showFollowAction = state.isCreatorCapable && !state.isOffline && item.author != null,
-                                isFollowingCreator = item.author?.let { it in state.followingCreators } == true,
-                                onToggleFollowCreator = { handleFollowToggle(item.author) },
+                                showFollowAction =
+                                state.isSlotCreatorCapable(page) && !state.isOffline && item.author != null,
+                                isFollowingCreator = item.author?.let { state.isFollowingCreator(it, page) } == true,
+                                onToggleFollowCreator = { handleFollowToggle(item.author, slotSourceId) },
                                 onAuthorClick = if (
-                                    state.isCreatorCapable && !state.isOffline && item.author != null &&
+                                    state.isSlotCreatorCapable(page) && !state.isOffline && item.author != null &&
                                     // Already on that creator's page: self-push would only stack
                                     // a duplicate screen.
                                     !(
@@ -1391,7 +1417,7 @@ data class ReelsFeedScreen(
                                     {
                                         navigator.push(
                                             ReelsFeedScreen(
-                                                sourceId = state.currentSourceId,
+                                                sourceId = slotSourceId,
                                                 creator = item.author,
                                             ),
                                         )
@@ -1399,7 +1425,7 @@ data class ReelsFeedScreen(
                                 } else {
                                     null
                                 },
-                                onCreatorClick = if (state.isCreatorCapable && !state.isOffline) {
+                                onCreatorClick = if (state.isSlotCreatorCapable(page) && !state.isOffline) {
                                     { creator ->
                                         if (!(
                                                 state.mode == ReelsFeedScreenModel.FeedMode.CREATOR &&
@@ -1408,7 +1434,7 @@ data class ReelsFeedScreen(
                                         ) {
                                             navigator.push(
                                                 ReelsFeedScreen(
-                                                    sourceId = state.currentSourceId,
+                                                    sourceId = slotSourceId,
                                                     creator = creator,
                                                 ),
                                             )
@@ -1476,33 +1502,51 @@ data class ReelsFeedScreen(
                                 onInitialSeekPositionConsumed = {
                                     screenModel.onSeekPositionConsumed(item.id)
                                 },
-                                // Audit H3: the offline playlist mixes sources — the cache key prefix must be the
-                                // SLOT's sourceId, not the single tapped-favorite source; videoIds
+                                // Audit H3: the offline and Mix playlists mix sources — the cache key prefix must be the
+                                // SLOT's sourceId, not the sentinel or single tapped-favorite source; videoIds
                                 // are only unique per source, a shared prefix lets CacheDataSource
                                 // serve one source's bytes for another's reel.
-                                cachePrefix = if (state.isOffline) {
-                                    state.offlineSourceIds.getOrNull(page)?.toString() ?: "offline"
-                                } else {
-                                    state.currentSourceId.toString()
+                                cachePrefix = when {
+                                    state.isOffline -> state.offlineSourceIds.getOrNull(page)?.toString() ?: "offline"
+                                    state.isMixMode -> slotSourceId.toString()
+                                    else -> state.currentSourceId.toString()
                                 },
                                 resolveUrl = { pageItem ->
-                                    screenModel.resolvePlaybackUrl(pageItem, effectiveHd)
+                                    screenModel.resolvePlaybackUrl(pageItem, effectiveHd, slotSourceId)
                                 },
                                 mediaDescriptor = mediaDescriptor,
                                 isLastPage = page == state.items.lastIndex,
                                 isTouchLocked = touchLocked,
                                 onToggleTouchLock = { touchLocked = !touchLocked },
                                 sourceName = when {
+                                    state.isOffline -> ""
+                                    state.isMixMode -> stringResource(MR.strings.reels_mix_title)
+                                    else -> state.sourceName
+                                },
+                                feedSectionLabel = when {
                                     state.isOffline -> stringResource(MR.strings.reels_favorites_title)
+                                    state.isMixMode -> stringResource(MR.strings.reels_menu_section_for_you)
                                     state.mode == ReelsFeedScreenModel.FeedMode.FOLLOWING ->
                                         stringResource(MR.strings.reels_following_feed)
                                     state.mode == ReelsFeedScreenModel.FeedMode.CREATOR ->
                                         "@${state.creator.orEmpty()}"
                                     state.mode == ReelsFeedScreenModel.FeedMode.CUSTOM ->
-                                        state.customFeedName.orEmpty()
+                                        state.customFeedName?.takeIf { it.isNotBlank() }
                                     state.mode == ReelsFeedScreenModel.FeedMode.NICHE ->
-                                        state.nicheName.orEmpty()
-                                    else -> state.sourceName
+                                        state.nicheName?.takeIf { it.isNotBlank() }
+                                    else -> stringResource(MR.strings.reels_menu_section_for_you)
+                                },
+                                sourceBadgeName = if (state.isMixMode) state.slotSourceName(page) else null,
+                                sourceBadgeIcon = if (state.isMixMode) state.sourceIcons[slotSourceId] else null,
+                                onSourceBadgeClick = if (state.isMixMode) {
+                                    { screenModel.switchSource(slotSourceId) }
+                                } else {
+                                    null
+                                },
+                                onExcludeSourceFromMix = if (state.isMixMode) {
+                                    { screenModel.excludeSourceFromMix(slotSourceId) }
+                                } else {
+                                    null
                                 },
                                 playlistItems = state.items,
                                 playlistIndex = page,
@@ -1556,14 +1600,16 @@ data class ReelsFeedScreen(
                                 onToggleIncognito = screenModel::toggleReelsIncognito,
                                 onClearOffline = { confirmClearOffline = true },
                                 onBack = {
-                                    if (landscape && activity != null) {
-                                        ReelsOrientationLock.setLandscape(activity, false)
-                                    } else {
-                                        navigator.pop()
+                                    when {
+                                        state.isSearchBarOpen -> screenModel.toggleSearchBar(false)
+                                        state.searchQuery.isNotBlank() -> screenModel.clearSearch()
+                                        landscape && activity != null ->
+                                            ReelsOrientationLock.setLandscape(activity, false)
+                                        else -> navigator.pop()
                                     }
                                 },
                                 onToggleChrome = { chromeVisible = !chromeVisible },
-                                headers = state.sourceHeaders,
+                                headers = state.slotHeaders(page),
                             )
                         }
                     }
@@ -1587,8 +1633,14 @@ data class ReelsFeedScreen(
                 enter = fadeIn() + scaleIn(initialScale = 0.85f),
                 exit = fadeOut() + scaleOut(targetScale = 0.85f),
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 150.dp),
+                    .align(if (windowIsLandscape) Alignment.TopCenter else Alignment.BottomCenter)
+                    .then(
+                        if (windowIsLandscape) {
+                            Modifier.padding(top = if (chromeVisible) 66.dp else 18.dp)
+                        } else {
+                            Modifier.padding(bottom = 150.dp)
+                        },
+                    ),
             ) {
                 Row(
                     modifier = Modifier
@@ -1621,21 +1673,24 @@ data class ReelsFeedScreen(
                 }
             }
 
-            // Top Bar Overlay; auto-hidden in immersive mode, revealed on tap or when a
-            // search/filter/source sheet is open. The system-owned PiP frame never shows it.
+            // Portrait Top Bar Overlay; suppressed in landscape (where ReelsLandscapeTopBar owns
+            // navigation, source/feed pills, inline search, and settings) and in PiP.
             AnimatedVisibility(
                 visible = !inPictureInPicture &&
+                    !windowIsLandscape &&
                     (
-                        (!windowIsLandscape && (chromeVisible || moreMenuOpen)) ||
+                        chromeVisible || moreMenuOpen ||
                             state.isSearchBarOpen || state.isFilterDialogOpen ||
                             state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen ||
                             state.isWebLoginDialogOpen
                         ),
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
+                val activeSlotSourceId = state.slotSourceId(state.activeIndex)
                 ReelsTopBar(
                     sourceName = when {
                         state.isOffline -> stringResource(MR.strings.reels_favorites_title)
+                        state.isMixMode -> stringResource(MR.strings.reels_mix_title)
                         state.mode == ReelsFeedScreenModel.FeedMode.FOLLOWING ->
                             stringResource(MR.strings.reels_following_feed)
                         state.mode == ReelsFeedScreenModel.FeedMode.CREATOR ->
@@ -1646,16 +1701,16 @@ data class ReelsFeedScreen(
                             state.nicheName.orEmpty()
                         else -> state.sourceName
                     },
-                    sourceIcon = state.sourceIcons[state.currentSourceId],
+                    sourceIcon = if (state.isMixMode) null else state.sourceIcons[state.currentSourceId],
                     searchQuery = state.searchQuery,
                     isSearchBarOpen = state.isSearchBarOpen,
                     isAutoAdvance = state.isAutoAdvance,
                     isCropMode = state.isCropMode,
                     isHdQuality = state.isHdQuality,
                     qualityModeEnabled = state.items.getOrNull(state.activeIndex)
-                        ?.let { screenModel.isQualityModeItem(it.id) } == true,
+                        ?.let { screenModel.isQualityModeItem(it.id, activeSlotSourceId) } == true,
                     qualityLabel = state.items.getOrNull(state.activeIndex)
-                        ?.let { screenModel.qualityPlayback(it.id) }
+                        ?.let { screenModel.qualityPlayback(it.id, activeSlotSourceId) }
                         ?.decision?.variant?.let { variant ->
                             val shortEdge = listOfNotNull(variant.width, variant.height)
                                 .minOrNull()?.takeIf { it > 0 }
@@ -1665,6 +1720,7 @@ data class ReelsFeedScreen(
                         val item = state.items.getOrNull(state.activeIndex)
                         if (item != null) {
                             portraitQualityItemId = item.id
+                            portraitQualitySourceId = activeSlotSourceId
                             portraitQualityDialogMode = ReelsQualityDialogMode.VIDEO
                         }
                     },
@@ -1672,6 +1728,7 @@ data class ReelsFeedScreen(
                         val item = state.items.getOrNull(state.activeIndex)
                         if (item != null) {
                             portraitQualityItemId = item.id
+                            portraitQualitySourceId = activeSlotSourceId
                             portraitQualityDialogMode = ReelsQualityDialogMode.GLOBAL
                         }
                     },
@@ -1681,9 +1738,13 @@ data class ReelsFeedScreen(
                     isOffline = state.isOffline,
                     // Search and source picking belong to the global feed; the filter sheet additionally
                     // opens in NICHE mode for order-capable sources (contract v21).
-                    showSearch = state.supportsTags && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
-                    showFilter = state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL ||
-                        (state.mode == ReelsFeedScreenModel.FeedMode.NICHE && state.isCategoryOrderCapable),
+                    showSearch = state.supportsSearch &&
+                        state.supportsTags &&
+                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    showFilter = state.supportsFilter && (
+                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL ||
+                            (state.mode == ReelsFeedScreenModel.FeedMode.NICHE && state.isCategoryOrderCapable)
+                        ),
                     // Source-supplied chips for the search bar (contract v19 addendum);
                     // no chips when the source supplies none.
                     searchHints = state.searchHints,
@@ -1711,7 +1772,7 @@ data class ReelsFeedScreen(
                     // Favorites stays a direct circle; personal content groups into the account hub.
                     // Source switching lives on the title badge only — one affordance per action.
                     // Account hub (V1): login state, custom feeds, Following, login/logout, Niches.
-                    showAccount = (
+                    showAccount = !state.isMixMode && (
                         state.isLoginCapable ||
                             state.isBrowseCapable ||
                             state.isCreatorCapable ||
@@ -1808,7 +1869,7 @@ data class ReelsFeedScreen(
                     onOpenFavorites = { navigator.push(ReelsFavoritesScreen()) },
                     onOpenHistory = { navigator.push(ReelsWatchHistoryScreen()) },
                     onOpenHidden = { navigator.push(ReelsHiddenScreen()) },
-                    onOpenAlbums = { navigator.push(ReelsAlbumsScreen(state.currentSourceId)) },
+                    onOpenAlbums = { navigator.push(ReelsAlbumsScreen(null)) },
                     nicheAlbumSaved = if (nicheId != null) nicheId in state.savedAlbumIds else null,
                     onToggleNicheAlbum = { screenModel.toggleCurrentNicheAlbum() },
                     onOpenFollows = { navigator.push(ReelsFollowsScreen(sourceId = state.currentSourceId)) },
@@ -1820,22 +1881,28 @@ data class ReelsFeedScreen(
 
             portraitQualityDialogMode?.let { mode ->
                 val itemId = portraitQualityItemId
+                val targetSourceId = portraitQualitySourceId ?: state.slotSourceId(state.activeIndex)
+                val targetQualityState = if (state.isMixMode) {
+                    state.mixQualityStates[targetSourceId]
+                } else {
+                    state.qualityState
+                }
                 ReelsVideoQualityDialog(
                     mode = mode,
-                    itemState = itemId?.let { state.qualityState?.items?.get(it) },
-                    global = state.qualityState?.global ?: ReelsQualityPreference.Source,
+                    itemState = itemId?.let { targetQualityState?.items?.get(it) },
+                    global = targetQualityState?.global ?: ReelsQualityPreference.Source,
                     onSelect = { preference ->
                         if (itemId != null) {
                             if (mode == ReelsQualityDialogMode.VIDEO) {
-                                screenModel.setQualityOverride(itemId, preference)
+                                screenModel.setQualityOverrideForSource(itemId, preference, targetSourceId)
                             } else {
-                                screenModel.setQualityGlobal(preference)
+                                screenModel.setQualityGlobalForSource(preference, targetSourceId)
                             }
                         }
                         portraitQualityDialogMode = null
                     },
                     onUseDefault = {
-                        itemId?.let(screenModel::clearQualityOverride)
+                        itemId?.let { screenModel.clearQualityOverrideForSource(it, targetSourceId) }
                         portraitQualityDialogMode = null
                     },
                     onDismiss = { portraitQualityDialogMode = null },
@@ -1861,6 +1928,12 @@ data class ReelsFeedScreen(
                     currentSourceId = state.currentSourceId,
                     onSelectSource = screenModel::switchSource,
                     icons = state.sourceIcons,
+                    allSourcesId = SourcePreferences.REELS_ALL_SOURCES_ID,
+                    excludedMixSourceIds = state.excludedMixSourceIds,
+                    mixBurstSize = state.mixBurstSize,
+                    mixSourceStatuses = state.mixSourceStatuses,
+                    onToggleMixSourceExcluded = screenModel::toggleMixSourceExcluded,
+                    onSetMixBurstSize = screenModel::setMixBurstSize,
                 )
             }
 

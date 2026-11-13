@@ -2182,4 +2182,37 @@
     <string name="crystal_debug_scan_empty">No matching saved progress found yet.</string>
     <string name="crystal_debug_scan_waiting">Check after unlocking the app and finishing backup restoration.</string>
     <string name="crystal_debug_scan_ready">Condition met. The gift is available without resetting rewards.</string>
+
+    <!-- Reels landscape UX, cross-plugin albums & multi-plugin mix feed -->
+    <string name="reels_landscape_preview_frame">Preview frame</string>
+    <string name="pref_show_reels_in_library">Show Reels albums in Library</string>
+    <string name="pref_show_reels_in_library_summary">Show a dedicated Reels albums tab in the Aurora library</string>
+    <string name="reels_albums_tab_saved">Saved</string>
+    <string name="reels_albums_tab_discover">Discover</string>
+    <string name="reels_albums_search_hint">Search albums across plugins…</string>
+    <string name="reels_albums_library_section">Reels</string>
+    <string name="reels_albums_library_empty_hint">Save albums from your Reels plugins to open or play them from here</string>
+    <string name="reels_albums_discover_action">Discover albums</string>
+    <string name="reels_albums_manage_action">Browse &amp; manage plugins</string>
+    <string name="reels_albums_login_required">Sign in required to browse albums from this source</string>
+    <string name="reels_albums_rate_limited_short">Rate limited — tap Retry later</string>
+    <string name="reels_albums_no_plugins">No enabled Reels plugins support albums</string>
+    <string name="reels_albums_load_more">Load more</string>
+    <string name="reels_albums_items_count">%1$d videos</string>
+    <string name="reels_albums_cleanup_confirm">Remove saved albums whose plugin is no longer installed?</string>
+    <string name="reels_mix_title">All Plugins</string>
+    <string name="reels_mix_subtitle">Shuffle feed · %1$d of %2$d active</string>
+    <string name="reels_mix_customize">Configure shuffle mix</string>
+    <string name="reels_mix_burst_label">Clips per plugin turn</string>
+    <string name="reels_mix_sources_label">Included plugins</string>
+    <string name="reels_mix_status_needs_auth">Sign in required</string>
+    <string name="reels_mix_status_cooldown">Cooling down</string>
+    <string name="reels_mix_status_unavailable">Unavailable</string>
+    <string name="reels_mix_status_exhausted">End reached</string>
+    <string name="reels_mix_no_active_sources">All plugins are excluded or unavailable</string>
+    <string name="reels_mix_source_section">MIX SOURCE</string>
+    <string name="reels_mix_open_plugin">Open %1$s</string>
+    <string name="reels_mix_open_plugin_desc">Switch to this plugin feed only</string>
+    <string name="reels_mix_exclude_plugin">Exclude from shuffle</string>
+    <string name="reels_mix_exclude_plugin_desc">Hide %1$s from All Plugins mix</string>
 </resources>

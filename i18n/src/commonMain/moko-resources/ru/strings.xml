@@ -1976,4 +1976,37 @@
     <string name="crystal_debug_scan_empty">Подходящий сохранённый прогресс пока не найден.</string>
     <string name="crystal_debug_scan_waiting">Проверка доступна после разблокировки и завершения восстановления.</string>
     <string name="crystal_debug_scan_ready">Условие выполнено. Посылка доступна без сброса наград.</string>
+
+    <!-- Reels landscape UX, cross-plugin albums & multi-plugin mix feed -->
+    <string name="reels_landscape_preview_frame">Кадр видео</string>
+    <string name="pref_show_reels_in_library">Показывать альбомы Reels в библиотеке</string>
+    <string name="pref_show_reels_in_library_summary">Отображать отдельную вкладку альбомов Reels в библиотеке Aurora</string>
+    <string name="reels_albums_tab_saved">Сохранённые</string>
+    <string name="reels_albums_tab_discover">Обзор</string>
+    <string name="reels_albums_search_hint">Поиск альбомов по плагинам…</string>
+    <string name="reels_albums_library_section">Reels</string>
+    <string name="reels_albums_library_empty_hint">Сохраняйте альбомы из плагинов Reels, чтобы открывать и запускать их отсюда</string>
+    <string name="reels_albums_discover_action">Найти альбомы</string>
+    <string name="reels_albums_manage_action">Плагины и поиск альбомов</string>
+    <string name="reels_albums_login_required">Требуется вход в аккаунт для просмотра альбомов этого источника</string>
+    <string name="reels_albums_rate_limited_short">Превышен лимит запросов — повторите позже</string>
+    <string name="reels_albums_no_plugins">Нет активных плагинов Reels с поддержкой альбомов</string>
+    <string name="reels_albums_load_more">Загрузить ещё</string>
+    <string name="reels_albums_items_count">%1$d видео</string>
+    <string name="reels_albums_cleanup_confirm">Удалить сохранённые альбомы, чьи плагины больше не установлены?</string>
+    <string name="reels_mix_title">Все плагины</string>
+    <string name="reels_mix_subtitle">Общая лента · активно %1$d из %2$d</string>
+    <string name="reels_mix_customize">Настроить микс плагинов</string>
+    <string name="reels_mix_burst_label">Видео подряд от плагина</string>
+    <string name="reels_mix_sources_label">Плагины в ленте</string>
+    <string name="reels_mix_status_needs_auth">Требуется вход</string>
+    <string name="reels_mix_status_cooldown">Пауза (лимит запросов)</string>
+    <string name="reels_mix_status_unavailable">Недоступен</string>
+    <string name="reels_mix_status_exhausted">Лента закончилась</string>
+    <string name="reels_mix_no_active_sources">Все плагины исключены или недоступны</string>
+    <string name="reels_mix_source_section">ИСТОЧНИК В МИКСЕ</string>
+    <string name="reels_mix_open_plugin">Открыть %1$s</string>
+    <string name="reels_mix_open_plugin_desc">Перейти только к ленте этого плагина</string>
+    <string name="reels_mix_exclude_plugin">Исключить из общей ленты</string>
+    <string name="reels_mix_exclude_plugin_desc">Скрыть %1$s из микса плагинов</string>
 </resources>

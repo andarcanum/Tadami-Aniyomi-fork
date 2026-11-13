@@ -629,6 +629,7 @@ internal fun AuroraTabRow(
     scrollable: Boolean,
     showBorder: Boolean = true,
     compact: Boolean = false,
+    horizontalPadding: Dp = 16.dp,
 ) {
     val colors = AuroraTheme.colors
     val scrollState = rememberScrollState()
@@ -638,6 +639,19 @@ internal fun AuroraTabRow(
     val tabPositionsY = remember { mutableStateMapOf<Int, Float>() }
     var containerWidthPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val initialFontSizeSp = resolveAuroraTabInitialFontSizeSp(
+        tabCount = tabs.size,
+        compact = compact,
+        scrollable = scrollable,
+    )
+    var dynamicFontSizeSp by remember(tabs.size, compact, scrollable, containerWidthPx) {
+        mutableFloatStateOf(initialFontSizeSp)
+    }
+    val tabHorizontalPadding = resolveAuroraTabHorizontalPaddingDp(
+        tabCount = tabs.size,
+        compact = compact,
+        scrollable = scrollable,
+    )
 
     // Auto-scroll to center the selected tab when scrollable (except first two).
     LaunchedEffect(selectedIndex, containerWidthPx) {
@@ -733,7 +747,7 @@ internal fun AuroraTabRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = horizontalPadding)
             .then(
                 if (showTabGlow && !colors.isEInk) {
                     val glowColor = colors.accent
@@ -953,6 +967,17 @@ internal fun AuroraTabRow(
                     onClick = { onTabSelected(index) },
                     fillAvailableWidth = !scrollable,
                     compact = compact,
+                    horizontalPadding = tabHorizontalPadding,
+                    fontSize = dynamicFontSizeSp.sp,
+                    onTextOverflow = if (!scrollable) {
+                        {
+                            if (dynamicFontSizeSp > 9.5f) {
+                                dynamicFontSizeSp = (dynamicFontSizeSp - 0.5f).coerceAtLeast(9.5f)
+                            }
+                        }
+                    } else {
+                        null
+                    },
                     modifier = tabModifier
                         .onGloballyPositioned { coords ->
                             tabWidths[index] = coords.size.width.toFloat()
@@ -967,6 +992,30 @@ internal fun AuroraTabRow(
     }
 } // close AuroraTabRow
 
+internal fun resolveAuroraTabHorizontalPaddingDp(
+    tabCount: Int,
+    compact: Boolean,
+    scrollable: Boolean,
+): Dp {
+    return when {
+        !scrollable && tabCount >= 4 -> 6.dp
+        compact -> 10.dp
+        else -> 16.dp
+    }
+}
+
+internal fun resolveAuroraTabInitialFontSizeSp(
+    tabCount: Int,
+    compact: Boolean,
+    scrollable: Boolean,
+): Float {
+    return when {
+        compact -> 12f
+        !scrollable && tabCount >= 4 -> 12.5f
+        else -> 14f
+    }
+}
+
 @Composable
 internal fun AuroraTab(
     text: String,
@@ -975,6 +1024,9 @@ internal fun AuroraTab(
     onClick: () -> Unit,
     fillAvailableWidth: Boolean = false,
     compact: Boolean = false,
+    horizontalPadding: Dp = if (compact) 10.dp else 16.dp,
+    fontSize: TextUnit = if (compact) 12.sp else 14.sp,
+    onTextOverflow: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -996,7 +1048,7 @@ internal fun AuroraTab(
                 appHaptics.tap()
                 onClick()
             }
-            .padding(horizontal = if (compact) 10.dp else 16.dp, vertical = 10.dp),
+            .padding(horizontal = horizontalPadding, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -1025,12 +1077,17 @@ internal fun AuroraTab(
                 style = resolveAuroraTabTextStyle(
                     baseStyle = MaterialTheme.typography.bodyLarge,
                     isSelected = isSelected,
-                    fontSize = if (compact) 12.sp else 14.sp,
+                    fontSize = fontSize,
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 softWrap = false,
                 textAlign = TextAlign.Center,
+                onTextLayout = { result ->
+                    if (result.hasVisualOverflow) {
+                        onTextOverflow?.invoke()
+                    }
+                },
             )
 
             if (badgeCount != null && badgeCount > 0) {

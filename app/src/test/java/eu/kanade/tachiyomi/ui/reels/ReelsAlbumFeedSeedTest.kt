@@ -68,4 +68,35 @@ class ReelsAlbumFeedSeedTest {
         ReelsAlbumFeedSeedStore.clear()
         ReelsAlbumFeedSeedStore.pending shouldBe null
     }
+
+    @Test
+    fun `pending seed with sourceId is not consumed by another source with same albumId`() {
+        val seed = ReelsAlbumFeedSeed(
+            albumId = "trending",
+            items = persistentListOf(),
+            sourceId = 100L,
+        )
+        ReelsAlbumFeedSeedStore.pending = seed
+
+        // Different source with matching album slug must not steal the seed
+        ReelsAlbumFeedSeedStore.consume(albumId = "trending", sourceId = 200L) shouldBe null
+        ReelsAlbumFeedSeedStore.pending shouldBe seed
+
+        // Matching sourceId consumes the seed
+        ReelsAlbumFeedSeedStore.consume(albumId = "trending", sourceId = 100L) shouldBe seed
+        ReelsAlbumFeedSeedStore.pending shouldBe null
+    }
+
+    @Test
+    fun `consume without sourceId retains backward compatibility for 1-arg callers`() {
+        val seed = ReelsAlbumFeedSeed(
+            albumId = "trending",
+            items = persistentListOf(),
+            sourceId = 100L,
+        )
+        ReelsAlbumFeedSeedStore.pending = seed
+
+        ReelsAlbumFeedSeedStore.consume(albumId = "trending") shouldBe seed
+        ReelsAlbumFeedSeedStore.pending shouldBe null
+    }
 }

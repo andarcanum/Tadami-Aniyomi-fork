@@ -8,7 +8,20 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+
+internal const val REELS_SEEK_NOTICE_LANDSCAPE_INSET_DP = 88f
+internal const val REELS_SEEK_NOTICE_PORTRAIT_INSET_DP = 14f
+
+/**
+ * Horizontal inset from the screen edge (inside `WindowInsets.safeDrawing` when landscape)
+ * keeping the landscape seek caption clear of both the ~70dp right ActionRail and the 216dp
+ * centered transport cluster.
+ */
+internal fun reelsSeekNoticeHorizontalPadding(isLandscape: Boolean): Dp =
+    if (isLandscape) REELS_SEEK_NOTICE_LANDSCAPE_INSET_DP.dp else REELS_SEEK_NOTICE_PORTRAIT_INSET_DP.dp
 
 internal class ReelsSeekNotice {
     var seconds by mutableStateOf<Int?>(null)

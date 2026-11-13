@@ -70,6 +70,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -85,6 +86,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -105,6 +108,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAll
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
@@ -148,10 +152,12 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.LocalBottomNavVisibilityController
 import eu.kanade.presentation.util.Tab
+import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
+import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.ui.browse.anime.migration.config.AnimeMigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
@@ -177,6 +183,11 @@ import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reels.ReelsAlbumScreen
+import eu.kanade.tachiyomi.ui.reels.ReelsAlbumsScreen
+import eu.kanade.tachiyomi.ui.reels.ReelsAlbumsSort
+import eu.kanade.tachiyomi.ui.reels.ReelsAlbumsTab
+import eu.kanade.tachiyomi.ui.reels.ReelsFeedScreen
 import eu.kanade.tachiyomi.ui.series.anime.AnimeSeriesScreen
 import eu.kanade.tachiyomi.ui.series.manga.MangaSeriesScreen
 import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreen
@@ -185,6 +196,8 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.core.common.i18n.stringResource
@@ -196,6 +209,9 @@ import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.reels.anime.model.ReelsAlbum
+import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
+import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -225,6 +241,7 @@ data object AnimeLibraryTab : Tab {
         Anime,
         Manga,
         Novel,
+        Reels,
     }
 
     private var lastAuroraSection: Section = Section.Anime
@@ -282,6 +299,14 @@ data object AnimeLibraryTab : Tab {
     private val auroraScrollPositions =
         mutableMapOf<Triple<Section, Long, LibraryDisplayMode>, Pair<Int, Int>>()
 
+    // Retain the latest emitted AnimeSource list across navigator pushes so returning from
+    // ReelsAlbumScreen / ReelsFeedScreen does not see an empty initial emission on Frame 1 and
+    // kick the user out of Section.Reels back to Section.Anime.
+    private var cachedAnimeSources: List<eu.kanade.tachiyomi.animesource.AnimeSource> = emptyList()
+    private var hasCachedAnimeSources: Boolean = false
+    private var retainedReelsSelectedSourceId: Long? = null
+    private var retainedReelsSort: ReelsAlbumsSort = ReelsAlbumsSort.DateDesc
+
     // H19-S2: holders for cross-section UI state that used to live in the Content scope as
     // mutableStateOf - every write (continue tap, novel picker dialog open) invalidated the
     // whole screen. Plain/snapshot state in object holders scopes the invalidation to the
@@ -308,9 +333,84 @@ data object AnimeLibraryTab : Tab {
 
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
+        val isAurora = theme.isAuroraStyle
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
         val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
         val showNovelSection by uiPreferences.showNovelSection().collectAsStateWithLifecycle()
+        val animeSourceManager = remember { Injekt.get<AnimeSourceManager>() }
+        val isAnimeSourcesInitialized by animeSourceManager.isInitialized.collectAsStateWithLifecycle()
+        val animeSourcesState by remember(animeSourceManager) {
+            animeSourceManager.sources.map { sources ->
+                cachedAnimeSources = sources
+                hasCachedAnimeSources = true
+                sources to true
+            }
+        }.collectAsStateWithLifecycle(initialValue = cachedAnimeSources to hasCachedAnimeSources)
+        val animeSources = animeSourcesState.first
+        val hasEmittedAnimeSources = animeSourcesState.second
+        val isReelsSourcesReady = isAnimeSourcesInitialized && hasEmittedAnimeSources
+        val hasReelsSources = remember(animeSources) { animeSources.any { it is AnimeFeedSource } }
+        val showReelsVideoFeed by uiPreferences.showReelsVideoFeed().collectAsStateWithLifecycle()
+        val showReelsInLibrary by uiPreferences.showReelsInLibrary().collectAsStateWithLifecycle()
+        val showReelsSection = shouldShowAuroraReelsLibrarySection(
+            hasReelsSources = hasReelsSources,
+            showReelsVideoFeed = showReelsVideoFeed,
+            showReelsInLibrary = showReelsInLibrary,
+        )
+        val reelsAlbumRepository = remember { Injekt.get<ReelsAlbumRepository>() }
+        val animeExtensionManager = remember { Injekt.get<AnimeExtensionManager>() }
+        val reelsLoadState by remember(isAurora, showReelsSection) {
+            if (isAurora && showReelsSection) {
+                reelsAlbumRepository.subscribeAll().map { it to true }
+            } else {
+                flowOf(emptyList<ReelsAlbum>() to false)
+            }
+        }.collectAsStateWithLifecycle(initialValue = emptyList<ReelsAlbum>() to false)
+        val reelsAlbums = reelsLoadState.first
+        val reelsHasLoaded = reelsLoadState.second
+        val reelsSourceNames = remember(animeSources) {
+            animeSources.associate { it.id to it.name }
+        }
+        val reelsMissingSourceIds = remember(isAnimeSourcesInitialized, animeSources, reelsAlbums) {
+            if (!isAnimeSourcesInitialized) {
+                emptySet()
+            } else {
+                val validIds = animeSources
+                    .filterIsInstance<AnimeFeedSource>()
+                    .mapTo(HashSet()) { it.id }
+                reelsAlbums.asSequence()
+                    .map { it.sourceId }
+                    .filter { it !in validIds }
+                    .toSet()
+            }
+        }
+        val reelsSourceIcons by produceState<Map<Long, ImageBitmap>>(
+            initialValue = emptyMap(),
+            key1 = isAurora && showReelsSection,
+            key2 = animeSources,
+            key3 = reelsAlbums,
+        ) {
+            if (!isAurora || !showReelsSection) {
+                value = emptyMap()
+                return@produceState
+            }
+            value = withContext(Dispatchers.IO) {
+                val ids = buildSet {
+                    animeSources.filterIsInstance<AnimeFeedSource>().forEach { add(it.id) }
+                    reelsAlbums.forEach { add(it.sourceId) }
+                }
+                ids.mapNotNull { sid ->
+                    animeExtensionManager.getAppIconForSource(sid)
+                        ?.toBitmap()
+                        ?.asImageBitmap()
+                        ?.let { sid to it }
+                }.toMap()
+            }
+        }
+        var reelsSearchQuery by remember { mutableStateOf<String?>(null) }
+        var reelsSelectedSourceId by remember { mutableStateOf(retainedReelsSelectedSourceId) }
+        var reelsSort by remember { mutableStateOf(retainedReelsSort) }
+        var showReelsFilterDialog by remember { mutableStateOf(false) }
         val immersiveModeEnabled by uiPreferences.auroraLibraryImmersiveMode().collectAsStateWithLifecycle()
         val swipeSwitchesCategories by uiPreferences
             .auroraLibrarySwipeSwitchesCategories()
@@ -340,13 +440,13 @@ data object AnimeLibraryTab : Tab {
             .libraryPreferences
             .categoryGroupedNumberOfItems()
             .collectAsStateWithLifecycle()
-        val isAurora = theme.isAuroraStyle
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val availableSections = listOfNotNull(
             Section.Anime.takeIf { showAnimeSection },
             Section.Manga.takeIf { showMangaSection },
             Section.Novel.takeIf { showNovelSection },
+            Section.Reels.takeIf { showReelsSection },
         )
         val auroraPageCount = availableSections.size.coerceAtLeast(1)
         // Restore the section the user actually worked in (survives process death); fall back
@@ -364,10 +464,16 @@ data object AnimeLibraryTab : Tab {
             }
         }
         val initialSection = restoredSection.takeIf { it in availableSections }
-            ?: availableSections.firstOrNull()
-            ?: restoredSection
+            ?: resolveFallbackAuroraLibrarySection(availableSections)
+        var pendingReelsSectionRestore by remember {
+            mutableStateOf(
+                restoredSection == Section.Reels &&
+                    Section.Reels !in availableSections &&
+                    !isReelsSourcesReady,
+            )
+        }
         LaunchedEffect(Unit) {
-            lastAuroraSection = initialSection
+            lastAuroraSection = if (pendingReelsSectionRestore) Section.Reels else initialSection
             lastAuroraSectionRestored = true
         }
         val initialAuroraPage = availableSections.indexOf(initialSection)
@@ -375,6 +481,25 @@ data object AnimeLibraryTab : Tab {
             ?.coerceIn(0, auroraPageCount - 1)
             ?: 0
         val auroraPagerState = rememberPagerState(initialAuroraPage) { auroraPageCount }
+        LaunchedEffect(isReelsSourcesReady, availableSections, showReelsSection) {
+            if (!isAurora || !isReelsSourcesReady) return@LaunchedEffect
+            if (pendingReelsSectionRestore) {
+                if (Section.Reels in availableSections) {
+                    val reelsPage = availableSections.indexOf(Section.Reels).coerceIn(0, auroraPageCount - 1)
+                    if (auroraPagerState.currentPage == initialAuroraPage &&
+                        reelsPage != auroraPagerState.currentPage
+                    ) {
+                        auroraPagerState.scrollToPage(reelsPage)
+                    }
+                    lastAuroraSection = Section.Reels
+                } else {
+                    val fallback = resolveFallbackAuroraLibrarySection(availableSections)
+                    lastAuroraSection = fallback
+                    userProfilePreferences.libraryLastSection().set(fallback.name.lowercase(Locale.ROOT))
+                }
+                pendingReelsSectionRestore = false
+            }
+        }
         val sectionAtPage: (Int) -> Section? = { index ->
             resolveAuroraLibrarySection(availableSections, index)
         }
@@ -532,6 +657,7 @@ data object AnimeLibraryTab : Tab {
             state.searchQuery != null ||
                 mangaState.searchQuery != null ||
                 novelState.searchQuery != null ||
+                reelsSearchQuery != null ||
                 state.selectionMode ||
                 mangaState.selectionMode ||
                 novelState.selectionMode ||
@@ -1023,11 +1149,93 @@ data object AnimeLibraryTab : Tab {
                 }
             },
         )
+        val reelsTab = TabContent(
+            titleRes = MR.strings.reels_albums_library_section,
+            searchEnabled = true,
+            content = { contentPadding, _ ->
+                val scrollKey = Triple(
+                    Section.Reels,
+                    reelsSelectedSourceId ?: -1L,
+                    LibraryDisplayMode.CompactGrid,
+                )
+                val restoredScroll = auroraScrollPositions[scrollKey]
+                val retainedGridState = remember(scrollKey) {
+                    LazyGridState(restoredScroll?.first ?: 0, restoredScroll?.second ?: 0)
+                }
+                DisposableEffect(scrollKey) {
+                    onDispose {
+                        auroraScrollPositions[scrollKey] =
+                            retainedGridState.firstVisibleItemIndex to
+                            retainedGridState.firstVisibleItemScrollOffset
+                    }
+                }
+                ReelsLibraryAlbumsSection(
+                    albums = reelsAlbums,
+                    hasLoaded = reelsHasLoaded,
+                    searchQuery = reelsSearchQuery,
+                    selectedSourceId = reelsSelectedSourceId,
+                    onSelectSource = {
+                        reelsSelectedSourceId = it
+                        retainedReelsSelectedSourceId = it
+                    },
+                    sort = reelsSort,
+                    onSelectSort = {
+                        reelsSort = it
+                        retainedReelsSort = it
+                    },
+                    sourceNames = reelsSourceNames,
+                    sourceIcons = reelsSourceIcons,
+                    missingSourceIds = reelsMissingSourceIds,
+                    showFilterDialog = showReelsFilterDialog,
+                    onDismissFilterDialog = { showReelsFilterDialog = false },
+                    onOpenAlbum = { album ->
+                        navigator.push(
+                            ReelsAlbumScreen(
+                                sourceId = album.sourceId,
+                                albumId = album.albumId,
+                                albumName = album.name,
+                            ),
+                        )
+                    },
+                    onPlayAlbum = { album ->
+                        navigator.push(
+                            ReelsFeedScreen(
+                                sourceId = album.sourceId,
+                                nicheId = album.albumId,
+                                nicheName = album.name,
+                            ),
+                        )
+                    },
+                    onRemoveAlbum = { album ->
+                        scope.launchIO {
+                            reelsAlbumRepository.delete(album.sourceId, album.albumId)
+                        }
+                    },
+                    onCleanupMissingSources = {
+                        scope.launchIO {
+                            val count = reelsAlbums.count { it.sourceId in reelsMissingSourceIds }
+                            reelsMissingSourceIds.forEach { sid ->
+                                reelsAlbumRepository.deleteBySource(sid)
+                            }
+                            snackbarHostState.showSnackbar(
+                                context.stringResource(MR.strings.reels_cleanup_missing_done, count),
+                            )
+                        }
+                    },
+                    onDiscoverAlbums = {
+                        navigator.push(ReelsAlbumsScreen(null, ReelsAlbumsTab.Discover))
+                    },
+                    contentPadding = contentPadding,
+                    gridState = retainedGridState,
+                )
+            },
+        )
 
         val sectionTabs = listOfNotNull(
             (Section.Anime to animeTab).takeIf { showAnimeSection },
             (Section.Manga to mangaTab).takeIf { showMangaSection },
             (Section.Novel to novelTab).takeIf { showNovelSection },
+            (Section.Reels to reelsTab).takeIf { showReelsSection },
         )
         val auroraSections = sectionTabs.map { it.first }
         val auroraTabs = sectionTabs.map { it.second }.toImmutableList()
@@ -1035,16 +1243,43 @@ data object AnimeLibraryTab : Tab {
         val novelTabIndex = sectionTabs.indexOfFirst { it.first == Section.Novel }.takeIf { it >= 0 } ?: -1
         val isMangaTab: (Int) -> Boolean = { index -> index == mangaTabIndex }
 
-        LaunchedEffect(auroraPageCount) {
-            if (auroraPagerState.currentPage > auroraPageCount - 1) {
+        LaunchedEffect(auroraPageCount, availableSections, isReelsSourcesReady, isAurora) {
+            if (isAurora &&
+                isReelsSourcesReady &&
+                lastAuroraSection == Section.Reels &&
+                Section.Reels !in availableSections
+            ) {
+                val fallback = resolveFallbackAuroraLibrarySection(availableSections)
+                val targetPage = availableSections.indexOf(fallback).coerceIn(0, auroraPageCount - 1)
+                if (auroraPagerState.currentPage != targetPage) {
+                    auroraPagerState.scrollToPage(targetPage)
+                }
+                lastAuroraSection = fallback
+                userProfilePreferences.libraryLastSection().set(fallback.name.lowercase(Locale.ROOT))
+            } else if (auroraPagerState.currentPage > auroraPageCount - 1) {
                 auroraPagerState.scrollToPage(auroraPageCount - 1)
             }
         }
 
         // H18: persist on SETTLED page - an aborted swipe used to write the section pref twice
         // (flip at 50% + spring-back).
-        LaunchedEffect(auroraPagerState.settledPage, auroraPageCount, isAurora) {
+        LaunchedEffect(
+            auroraPagerState.settledPage,
+            auroraPageCount,
+            isAurora,
+            isReelsSourcesReady,
+            pendingReelsSectionRestore,
+        ) {
             if (isAurora) {
+                if (pendingReelsSectionRestore &&
+                    !isReelsSourcesReady &&
+                    auroraPagerState.settledPage == initialAuroraPage
+                ) {
+                    return@LaunchedEffect
+                }
+                if (auroraPagerState.settledPage != initialAuroraPage) {
+                    pendingReelsSectionRestore = false
+                }
                 sectionAtPage(auroraPagerState.settledPage.coerceAtMost(auroraPageCount - 1))?.let {
                     lastAuroraSection = it
                     userProfilePreferences.libraryLastSection().set(it.name.lowercase(Locale.ROOT))
@@ -1073,11 +1308,16 @@ data object AnimeLibraryTab : Tab {
             novelState.searchQuery.isNullOrEmpty() &&
                 (!showNovelSection || (novelState.hasLoaded && novelState.isLibraryEmpty))
         }
+        val isReelsLibraryEmpty by derivedStateOf {
+            reelsSearchQuery.isNullOrEmpty() &&
+                (!showReelsSection || (reelsHasLoaded && reelsAlbums.isEmpty()))
+        }
         val isSectionEmpty: (Section) -> Boolean = { section ->
             when (section) {
                 Section.Anime -> isAnimeLibraryEmpty
                 Section.Manga -> isMangaLibraryEmpty
                 Section.Novel -> isNovelLibraryEmpty
+                Section.Reels -> isReelsLibraryEmpty
             }
         }
         val isLibraryEmpty by derivedStateOf {
@@ -1093,6 +1333,7 @@ data object AnimeLibraryTab : Tab {
                 Section.Anime -> state.isLoading
                 Section.Manga -> mangaState.isLoading
                 Section.Novel -> isNovelLoading
+                Section.Reels -> false
             }
         }
         val isLoading by derivedStateOf {
@@ -1108,6 +1349,7 @@ data object AnimeLibraryTab : Tab {
                 Section.Anime -> state.searchQuery
                 Section.Manga -> mangaState.searchQuery
                 Section.Novel -> novelState.searchQuery
+                Section.Reels -> reelsSearchQuery
                 null -> null
             }
         }
@@ -1116,6 +1358,7 @@ data object AnimeLibraryTab : Tab {
                 Section.Anime -> screenModel.search(query)
                 Section.Manga -> mangaScreenModel.search(query)
                 Section.Novel -> novelScreenModel?.search(query)
+                Section.Reels -> reelsSearchQuery = query
                 null -> Unit
             }
         }
@@ -1124,6 +1367,7 @@ data object AnimeLibraryTab : Tab {
                 Section.Anime -> state.categories
                 Section.Manga -> mangaState.categories
                 Section.Novel -> novelState.categories
+                Section.Reels -> emptyList()
                 null -> emptyList()
             }
         }
@@ -1141,6 +1385,7 @@ data object AnimeLibraryTab : Tab {
                     requestedIndex = novelScreenModel?.activeCategoryIndex ?: 0,
                     categoryCount = novelState.categories.size,
                 )
+                Section.Reels -> 0
                 null -> 0
             }
         }
@@ -1164,6 +1409,7 @@ data object AnimeLibraryTab : Tab {
                     showCategoryTabs = novelState.showCategoryTabs,
                     searchQuery = novelState.searchQuery,
                 )
+                Section.Reels -> false
                 null -> false
             }
         }
@@ -1187,6 +1433,7 @@ data object AnimeLibraryTab : Tab {
                         categoryCount = novelState.categories.size,
                     )
                 }
+                Section.Reels -> Unit
                 null -> Unit
             }
         }
@@ -1216,6 +1463,7 @@ data object AnimeLibraryTab : Tab {
                         ),
                     )
                 }
+                Section.Reels -> Unit
                 null -> Unit
             }
         }
@@ -1224,6 +1472,7 @@ data object AnimeLibraryTab : Tab {
                 Section.Anime -> screenModel.showSettingsDialog()
                 Section.Manga -> mangaScreenModel.showSettingsDialog()
                 Section.Novel -> novelScreenModel?.showSettingsDialog()
+                Section.Reels -> showReelsFilterDialog = true
                 null -> Unit
             }
         }
@@ -1234,6 +1483,7 @@ data object AnimeLibraryTab : Tab {
                     Section.Anime -> onClickRefresh(state.categories.getOrNull(animeCategoryIndex))
                     Section.Manga -> onClickRefreshManga(mangaState.categories.getOrNull(mangaCategoryIndex))
                     Section.Novel -> onClickRefreshNovel(novelState.categories.getOrNull(novelCategoryIndex))
+                    Section.Reels -> Unit
                     null -> Unit
                 }
             }
@@ -1244,6 +1494,7 @@ data object AnimeLibraryTab : Tab {
                     Section.Anime -> onClickRefresh(null)
                     Section.Manga -> onClickRefreshManga(null)
                     Section.Novel -> onClickRefreshNovel(null)
+                    Section.Reels -> Unit
                     null -> Unit
                 }
             }
@@ -1295,6 +1546,31 @@ data object AnimeLibraryTab : Tab {
                                     navigator.push(NovelSeriesScreen(randomItem.librarySeries.id))
                             }
                         } else {
+                            snackbarHostState.showSnackbar(
+                                context.stringResource(MR.strings.information_no_entries_found),
+                            )
+                        }
+                    }
+                }
+                Section.Reels -> {
+                    val visible = filterReelsLibraryAlbums(
+                        albums = reelsAlbums,
+                        selectedSourceId = reelsSelectedSourceId,
+                        searchQuery = reelsSearchQuery,
+                        sort = reelsSort,
+                        sourceNames = reelsSourceNames,
+                    )
+                    val randomAlbum = visible.randomOrNull()
+                    if (randomAlbum != null) {
+                        navigator.push(
+                            ReelsAlbumScreen(
+                                sourceId = randomAlbum.sourceId,
+                                albumId = randomAlbum.albumId,
+                                albumName = randomAlbum.name,
+                            ),
+                        )
+                    } else {
+                        scope.launch {
                             snackbarHostState.showSnackbar(
                                 context.stringResource(MR.strings.information_no_entries_found),
                             )
@@ -1553,6 +1829,7 @@ data object AnimeLibraryTab : Tab {
                                     onRefreshCurrent = onAuroraRefreshCurrent,
                                     onRefreshGlobal = onAuroraRefreshGlobal,
                                     onOpenRandomEntry = onAuroraOpenRandom,
+                                    includeRefresh = auroraCurrentSection != Section.Reels,
                                     onImportEpub = if (shouldShowLibraryBookImport(auroraCurrentSection)) {
                                         {
                                             epubImportLauncher.launch(
@@ -1579,7 +1856,7 @@ data object AnimeLibraryTab : Tab {
                                             Section.Anime -> state.getAnimeCountForCategory(category)
                                             Section.Manga -> mangaState.getMangaCountForCategory(category)
                                             Section.Novel -> novelState.getNovelCountForCategory(category)
-                                            null -> null
+                                            Section.Reels, null -> null
                                         }
                                     },
                                     formatCountForCategory = { count ->
@@ -1860,6 +2137,7 @@ data object AnimeLibraryTab : Tab {
                     val novelModel = novelScreenModel
                     if (novelModel != null && novelModel.state.value.selectionMode) novelModel.clearSelection()
                 }
+                Section.Reels -> Unit
             }
         }
 
@@ -1870,6 +2148,7 @@ data object AnimeLibraryTab : Tab {
             Section.Anime -> hasAnimeSearchQuery
             Section.Manga -> hasMangaSearchQuery
             Section.Novel -> hasNovelSearchQuery
+            Section.Reels -> reelsSearchQuery != null
             null -> false
         }
         BackHandler(enabled = currentSelectionMode || currentSectionHasSearch) {
@@ -1879,7 +2158,7 @@ data object AnimeLibraryTab : Tab {
                         Section.Anime -> screenModel.clearSelection()
                         Section.Manga -> mangaScreenModel.clearSelection()
                         Section.Novel -> novelScreenModel?.clearSelection()
-                        null -> Unit
+                        Section.Reels, null -> Unit
                     }
                 }
                 else -> {
@@ -1887,6 +2166,7 @@ data object AnimeLibraryTab : Tab {
                         Section.Anime -> screenModel.search(null)
                         Section.Manga -> mangaScreenModel.search(null)
                         Section.Novel -> novelScreenModel?.search(null)
+                        Section.Reels -> reelsSearchQuery = null
                         null -> Unit
                     }
                 }
@@ -1900,7 +2180,7 @@ data object AnimeLibraryTab : Tab {
                 Section.Anime -> state.dialog
                 Section.Manga -> mangaState.dialog
                 Section.Novel -> novelState.dialog
-                null -> null
+                Section.Reels, null -> null
             }
         }
         LaunchedEffect(currentSelectionMode, currentSectionDialog, currentSection, isAurora) {
@@ -1948,6 +2228,7 @@ data object AnimeLibraryTab : Tab {
                             Section.Anime -> screenModel.search(query)
                             Section.Manga -> mangaScreenModel.search(query)
                             Section.Novel -> novelScreenModel?.search(query)
+                            Section.Reels -> reelsSearchQuery = query
                             null -> Unit
                         }
                     }
@@ -1967,6 +2248,7 @@ data object AnimeLibraryTab : Tab {
                             Section.Anime -> screenModel.showSettingsDialog()
                             Section.Manga -> mangaScreenModel.showSettingsDialog()
                             Section.Novel -> novelScreenModel?.showSettingsDialog()
+                            Section.Reels -> showReelsFilterDialog = true
                             null -> screenModel.showSettingsDialog()
                         }
                     }
@@ -2213,6 +2495,7 @@ private fun AuroraLibraryPinnedHeader(
     onOpenRandomEntry: () -> Unit,
     onImportEpub: (() -> Unit)?,
     onImportFolder: (() -> Unit)?,
+    includeRefresh: Boolean = true,
     categories: List<Category>,
     selectedCategoryIndex: Int,
     showCategories: Boolean,
@@ -2341,6 +2624,7 @@ private fun AuroraLibraryPinnedHeader(
                                     auroraLibraryPinnedHeaderMenuItems(
                                         includeImportEpub = onImportEpub != null,
                                         includeImportFolder = onImportFolder != null,
+                                        includeRefresh = includeRefresh,
                                     ).forEach { item ->
                                         AuroraEntryDropdownMenuItem(
                                             text = when (item) {
@@ -2404,6 +2688,7 @@ private fun AuroraLibraryPinnedHeader(
                         selectedIndex = selectedSectionIndex,
                         onTabSelected = onSectionSelected,
                         scrollable = false,
+                        horizontalPadding = 0.dp,
                     )
                 }
             }
@@ -2434,10 +2719,13 @@ internal enum class AuroraLibraryPinnedHeaderMenuItem {
 internal fun auroraLibraryPinnedHeaderMenuItems(
     includeImportEpub: Boolean,
     includeImportFolder: Boolean,
+    includeRefresh: Boolean = true,
 ): List<AuroraLibraryPinnedHeaderMenuItem> {
     return buildList {
-        add(AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent)
-        add(AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal)
+        if (includeRefresh) {
+            add(AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent)
+            add(AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal)
+        }
         add(AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry)
         if (includeImportEpub) {
             add(AuroraLibraryPinnedHeaderMenuItem.ImportEpub)
@@ -2754,7 +3042,7 @@ internal fun resolveAuroraLibrarySelectionMode(
         AnimeLibraryTab.Section.Anime -> animeSelectionMode
         AnimeLibraryTab.Section.Manga -> mangaSelectionMode
         AnimeLibraryTab.Section.Novel -> novelSelectionMode
-        null -> false
+        AnimeLibraryTab.Section.Reels, null -> false
     }
 }
 

@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -17,7 +16,6 @@ import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
@@ -64,7 +62,8 @@ fun ReelsActionsColumn(
     showFollow: Boolean = false,
     isFollowing: Boolean = false,
     onToggleFollow: () -> Unit = {},
-    // B3.2 "more / hide" slot: opens the dialog trigger; null hides the slot.
+    // B3.2 "more / hide" slot kept for call-site source compatibility until Wave 2 cleanup.
+    @Suppress("UNUSED_PARAMETER")
     onOpenHide: (() -> Unit)? = null,
     // B3.3 offline-copy slot (offline playlist only): null hides the slot.
     onToggleOffline: (() -> Unit)? = null,
@@ -82,9 +81,6 @@ fun ReelsActionsColumn(
     isPartial: Boolean = false,
     downloadSizeText: String? = null,
     downloadProgress: Float? = null,
-    // A rotated window has width but not enough height for the portrait column: the same
-    // slots are laid out in one horizontal row.
-    isLandscapeLayout: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val scaleHeart by animateFloatAsState(
@@ -98,7 +94,7 @@ fun ReelsActionsColumn(
         label = "follow_scale",
     )
 
-    val showLabels = !isLandscapeLayout
+    val showLabels = true
 
     @Composable
     fun LikeItem() {
@@ -205,20 +201,6 @@ fun ReelsActionsColumn(
     }
 
     @Composable
-    fun HideItem() {
-        // B3.2 "more / hide" entry: opens the caller's choice dialog.
-        if (onOpenHide != null) {
-            ActionIconItem(
-                icon = Icons.Filled.MoreVert,
-                label = stringResource(MR.strings.reels_hide_menu),
-                tint = Color.White,
-                showLabel = showLabels,
-                onClick = onOpenHide,
-            )
-        }
-    }
-
-    @Composable
     fun OfflineItem() {
         // B3.3 offline copy: download / remove the real local file.
         if (onToggleOffline != null) {
@@ -239,49 +221,18 @@ fun ReelsActionsColumn(
         }
     }
 
-    if (isLandscapeLayout) {
-        // A rotated window has no height for the stacked column and no room for captions:
-        // the playback actions stay under the thumb, the contextual ones ride above them.
-        Column(
-            modifier = modifier,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.End,
-        ) {
-            val hasContextual = showFollow || onOpenHide != null || onToggleOffline != null
-            if (hasContextual) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FollowItem()
-                    HideItem()
-                    OfflineItem()
-                }
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LikeItem()
-                LandscapeItem()
-                SoundItem()
-                ShareItem()
-            }
-        }
-    } else {
-        Column(
-            modifier = modifier,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            LikeItem()
-            LandscapeItem()
-            FollowItem()
-            DownloadItem()
-            ShareItem()
-            OfflineItem()
-            SoundItem()
-        }
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        LikeItem()
+        LandscapeItem()
+        FollowItem()
+        DownloadItem()
+        ShareItem()
+        OfflineItem()
+        SoundItem()
     }
 }
 

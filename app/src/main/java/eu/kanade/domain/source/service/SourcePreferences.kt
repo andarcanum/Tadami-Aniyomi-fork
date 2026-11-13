@@ -214,6 +214,16 @@ class SourcePreferences(
      */
     fun reelsUnseenOnly() = preferenceStore.getBoolean("pref_reels_unseen_only", true)
 
+    /**
+     * Source IDs (as decimal strings) opted out of the virtual "All Plugins" shuffle mix.
+     */
+    fun reelsMixExcludedSources() = preferenceStore.getStringSet("pref_reels_mix_excluded_sources", emptySet())
+
+    /**
+     * Maximum consecutive clips pulled from one source per cycle in the multi-plugin shuffle mix (1..3).
+     */
+    fun reelsMixBurstSize() = preferenceStore.getInt("pref_reels_mix_burst_size", 2)
+
     fun animeExtensionUpdatesCount() = preferenceStore.getInt("animeext_updates_count", 0)
     fun mangaExtensionUpdatesCount() = preferenceStore.getInt("ext_updates_count", 0)
     fun novelExtensionUpdatesCount() = preferenceStore.getInt("novelext_updates_count", 0)
@@ -338,4 +348,9 @@ class SourcePreferences(
     fun importEpubAddToLibrary() = preferenceStore.getBoolean("pref_epub_import_add_to_library", true)
 
     fun autoCompileLocalEpubBook() = preferenceStore.getBoolean("pref_auto_compile_local_epub_book", false)
+
+    companion object {
+        /** Virtual source id representing the unified multi-plugin shuffle mix feed. */
+        const val REELS_ALL_SOURCES_ID = -2L
+    }
 }

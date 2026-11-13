@@ -168,6 +168,7 @@ data class ReelsAlbumScreen(
                                             nextCursor = state.nextCursor,
                                             cursorMode = state.cursorMode,
                                             canLoadMore = state.canLoadMore,
+                                            sourceId = sourceId,
                                         )
                                     }
                                     navigator.push(
@@ -258,6 +259,7 @@ data class ReelsAlbumScreen(
                                     nextCursor = state.nextCursor,
                                     cursorMode = state.cursorMode,
                                     canLoadMore = state.canLoadMore,
+                                    sourceId = sourceId,
                                 )
                                 navigator.push(
                                     ReelsFeedScreen(

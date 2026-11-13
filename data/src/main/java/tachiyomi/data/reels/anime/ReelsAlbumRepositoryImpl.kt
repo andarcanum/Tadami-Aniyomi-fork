@@ -17,6 +17,18 @@ class ReelsAlbumRepositoryImpl(
     private val handler: AnimeDatabaseHandler,
 ) : ReelsAlbumRepository {
 
+    override fun subscribeAll(): Flow<List<ReelsAlbum>> {
+        return handler.subscribeToList { db ->
+            db.reels_albumsQueries.getAllAlbums()
+        }.map { rows -> rows.map(::mapAlbum) }
+    }
+
+    override suspend fun getAll(): List<ReelsAlbum> {
+        return handler.awaitList { db ->
+            db.reels_albumsQueries.getAllAlbums()
+        }.map(::mapAlbum)
+    }
+
     override fun subscribeBySource(sourceId: Long): Flow<List<ReelsAlbum>> {
         return handler.subscribeToList { db ->
             db.reels_albumsQueries.getAlbumsBySource(sourceId)

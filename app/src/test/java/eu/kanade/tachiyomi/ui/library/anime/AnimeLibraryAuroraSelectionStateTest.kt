@@ -48,4 +48,15 @@ class AnimeLibraryAuroraSelectionStateTest {
             novelSelectionMode = true,
         ) shouldBe true
     }
+
+    @Test
+    fun `resolveAuroraLibrarySelectionMode disables bulk selection on reels section`() {
+        resolveAuroraLibrarySelectionMode(
+            isAurora = true,
+            section = AnimeLibraryTab.Section.Reels,
+            animeSelectionMode = true,
+            mangaSelectionMode = true,
+            novelSelectionMode = true,
+        ) shouldBe false
+    }
 }

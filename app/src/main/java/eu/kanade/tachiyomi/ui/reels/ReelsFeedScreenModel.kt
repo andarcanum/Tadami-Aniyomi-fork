@@ -108,7 +108,9 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
 /**
@@ -184,6 +186,11 @@ class ReelsFeedScreenModel(
     private val sessionSound: ReelsSessionSoundState = sharedSessionSound,
     // Adaptive pager runway; injectable so tests can drive a fake mono clock.
     private val runway: ReelsFeedRunway = ReelsFeedRunway(),
+    private val multiSourceCoordinator: ReelsMultiSourceCoordinator = ReelsMultiSourceCoordinator(
+        ioDispatcher = ioDispatcher,
+        nowMonoMs = nowMs,
+        nowWallMs = { wallClock().time },
+    ),
 ) : StateScreenModel<ReelsFeedScreenModel.State>(
     State(
         currentSourceId = initialSourceId,
@@ -334,6 +341,32 @@ class ReelsFeedScreenModel(
     // from different sources. Written from the IO load job, read from main-thread like handlers.
     @Volatile
     private var offlineSourceIds: List<Long> = emptyList()
+
+    // Multi-plugin Mix mode tracking (ALL_SOURCES_ID = -2L).
+    @Volatile
+    private var mixSourcesLoaded = false
+
+    @Volatile
+    private var mixFeedStarted = false
+
+    @Volatile
+    private var knownFeedSources: List<AnimeFeedSource> = emptyList()
+
+    private val hiddenBySource = ConcurrentHashMap<Long, Pair<Set<String>, Set<String>>>()
+    private val forYouScopesBySource = ConcurrentHashMap<Long, Pair<String, Long>>()
+    private val visitSourceIds = ConcurrentHashMap<String, Long>()
+    private val mixQualityControllers = ConcurrentHashMap<Long, ReelsQualityController>()
+    private val mixQualityJobs = mutableListOf<Job>()
+    private val mixSessionSeq = AtomicLong(0L)
+
+    @Volatile
+    private var currentMixSessionToken: Long = 0L
+
+    @Volatile
+    private var mixStopJob: Job? = null
+
+    @Volatile
+    private var activeVisitSlotKey: String? = null
 
     // videoIds the user liked/unliked this session (main-confined). Their DB state is already
     // authoritative, so a concurrently-loaded persisted favorites snapshot must never
@@ -582,6 +615,54 @@ class ReelsFeedScreenModel(
         return scope
     }
 
+    private inline fun <T> runCatchingCancelSafe(block: () -> T): Result<T> =
+        runCatching(block).onFailure { if (it is CancellationException) throw it }
+
+    private fun visitSlotKey(itemId: String, itemIndex: Int): String =
+        if (itemIndex >= 0) "$itemIndex:$itemId" else itemId
+
+    /** Resolves and caches a source's For You scope independently for Mix mode without altering global pin. */
+    private suspend fun ensureForYouScopeMix(sourceId: Long): Pair<String, Long> {
+        forYouScopesBySource[sourceId]?.let { return it }
+        val fallback = ReelsForYou.fallbackScope(sourceId)
+        val identity = runCatchingCancelSafe {
+            (sourceManager.get(sourceId) as? AnimeFeedAccountIdentitySource)?.accountScopeId()
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        val scope = ReelsForYou.accountScope(sourceId, identity)
+        if (scope != fallback) {
+            runCatchingCancelSafe { reelsConsumptionRepository.mergeScope(fallback, scope, sourceId) }
+                .onFailure { logcat(LogPriority.WARN, it) { "Reels mix history merge $fallback -> $scope failed" } }
+        }
+        val generation = reelsConsumptionRepository.ensureScope(scope, ReelsForYou.POLICY_VERSION)
+        val result = scope to generation
+        forYouScopesBySource[sourceId] = result
+        return result
+    }
+
+    /** Resolves owning plugin sourceId for slot [itemIndex] or [fallbackItemId]. */
+    private fun resolveSlotSourceId(itemIndex: Int = -1, fallbackItemId: String? = null): Long {
+        val current = state.value
+        if (itemIndex >= 0) {
+            current.itemSourceIds.getOrNull(itemIndex)?.let { return it }
+            offlineSourceIds.getOrNull(itemIndex)?.let { return it }
+        }
+        if (current.isMixMode) {
+            if (fallbackItemId != null) {
+                visitSourceIds[fallbackItemId]?.let { return it }
+                val activeItem = current.items.getOrNull(current.activeIndex)
+                if (activeItem?.id == fallbackItemId) {
+                    current.itemSourceIds.getOrNull(current.activeIndex)?.let { return it }
+                }
+                val matchIdx = current.items.indexOfFirst { it.id == fallbackItemId }
+                if (matchIdx >= 0) {
+                    current.itemSourceIds.getOrNull(matchIdx)?.let { return it }
+                }
+            }
+            current.itemSourceIds.getOrNull(current.activeIndex)?.let { return it }
+        }
+        return current.currentSourceId
+    }
+
     /** Scope + history generation of the current account, cached until the scope changes. */
     private suspend fun ensureForYouScope(sourceId: Long): Pair<String, Long> {
         val scope = accountScopeFor(sourceId)
@@ -641,10 +722,18 @@ class ReelsFeedScreenModel(
 
     /** A page became the active card: a fresh visit starts, the previous one is dropped. */
     fun onVisitStarted(item: ShortVideoItem) {
+        onVisitStarted(item, itemIndex = -1)
+    }
+
+    fun onVisitStarted(item: ShortVideoItem, itemIndex: Int) {
         if (state.value.isOffline) return
+        val slotSourceId = resolveSlotSourceId(itemIndex = itemIndex, fallbackItemId = item.id)
+        val visitKey = visitSlotKey(item.id, itemIndex)
+        visitSourceIds[visitKey] = slotSourceId
         // A configuration recreation re-activates the same clip while its visit is still
         // open: resuming must not restart the accumulation or duplicate the continuity entry.
-        if (interactionTracker.snapshot(item.id) != null) return
+        if (activeVisitSlotKey == visitKey && interactionTracker.snapshot(item.id) != null) return
+        activeVisitSlotKey = visitKey
         interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
         if (isReplaySurface()) sessionContinuity.visitStarted(item, persistEligible = true)
     }
@@ -673,10 +762,22 @@ class ReelsFeedScreenModel(
      * the threshold is crossed — not on `onStop`, which a process kill can preempt.
      */
     fun onPlaybackSample(itemId: String, positionMs: Long, eligible: Boolean) {
+        onPlaybackSample(itemId, positionMs, eligible, itemIndex = -1)
+    }
+
+    fun onPlaybackSample(itemId: String, positionMs: Long, eligible: Boolean, itemIndex: Int) {
         if (state.value.isOffline) return
         if (isReplaySurface()) sessionContinuity.sample(itemId, positionMs, foreground = eligible)
         val event = interactionTracker.onSample(itemId, nowMs(), positionMs, eligible) ?: return
-        commitWatched(event.itemId)
+        val visitKey = visitSlotKey(event.itemId, itemIndex)
+        val slotSourceId = visitSourceIds[visitKey]
+            ?: if (itemIndex >= 0) {
+                state.value.itemSourceIds.getOrNull(itemIndex)
+                    ?: resolveSlotSourceId(itemIndex = itemIndex, fallbackItemId = event.itemId)
+            } else {
+                resolveSlotSourceId(fallbackItemId = event.itemId)
+            }
+        commitWatched(event.itemId, slotSourceId)
     }
 
     /** Foreground loss: persist the latest position of the active visit before it can be lost. */
@@ -703,40 +804,61 @@ class ReelsFeedScreenModel(
      * row; guarantees consumption is committed if not already done.
      */
     fun onVisitEnded(item: ShortVideoItem, positionMs: Long, positionFraction: Float, durationSec: Float) {
+        onVisitEnded(item, positionMs, positionFraction, durationSec, itemIndex = -1)
+    }
+
+    fun onVisitEnded(
+        item: ShortVideoItem,
+        positionMs: Long,
+        positionFraction: Float,
+        durationSec: Float,
+        itemIndex: Int,
+    ) {
         if (isReplaySurface()) sessionContinuity.positionBoundary(item.id, positionMs)
-        val snapshot = interactionTracker.endVisit(item.id, nowMs(), positionMs)
+        val visitKey = visitSlotKey(item.id, itemIndex)
+        val trackedSourceId = visitSourceIds.remove(visitKey)
+        val isActiveSlotVisit = itemIndex < 0 || activeVisitSlotKey == null || activeVisitSlotKey == visitKey
+        val snapshot = if (isActiveSlotVisit) {
+            if (activeVisitSlotKey == visitKey) activeVisitSlotKey = null
+            interactionTracker.endVisit(item.id, nowMs(), positionMs)
+        } else {
+            null
+        }
         if (snapshot == null) return
+        val sourceId = trackedSourceId ?: resolveSlotSourceId(itemIndex = itemIndex, fallbackItemId = item.id)
         // Remote personalization (opt-in capability) reports the REAL foreground playback the
         // tracker measured, not the wall time the card spent on screen.
-        reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec)
-        recordWatchHistory(item, positionFraction, durationSec)
-        if (state.value.isOffline) return
-        val sourceId = state.value.currentSourceId
+        reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec, sourceId)
+        recordWatchHistory(item, positionFraction, durationSec, sourceId)
+        if (state.value.isOffline || sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
         if (isIncognito(sourceId)) return
 
         // Guarantee consumption on visit end: if real playback reached the threshold count as watched,
         // otherwise count as skipped (e.g. swiped away or screen closed before threshold).
         if (snapshot.qualified || snapshot.watchedMs >= ReelsForYou.WATCH_THRESHOLD_MS) {
-            commitWatched(item.id)
+            commitWatched(item.id, sourceId)
         } else {
-            commitSkipped(item.id)
+            commitSkipped(item.id, sourceId)
         }
 
         if (positionMs <= 0L) return
+        val isMix = state.value.isMixMode
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val (scope, _) = ensureForYouScope(sourceId)
+            val (scope, _) = if (isMix) ensureForYouScopeMix(sourceId) else ensureForYouScope(sourceId)
             reelsCandidateRepository.saveResumePosition(scope, sourceId, item.id, positionMs)
         }
     }
 
-    private fun commitWatched(itemId: String) {
-        val sourceId = state.value.currentSourceId
+    private fun commitWatched(itemId: String, sourceId: Long = state.value.currentSourceId) {
+        if (sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
         // Incognito means "do not persist what I watch" — the For You history included.
         if (isIncognito(sourceId)) return
-        if (!watchedCommitted.add(itemId)) return
+        val commitKey = if (state.value.isMixMode) "$sourceId:$itemId" else itemId
+        if (!watchedCommitted.add(commitKey)) return
         val surface = currentSurface().key
+        val isMix = state.value.isMixMode
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val (scope, generation) = ensureForYouScope(sourceId)
+            val (scope, generation) = if (isMix) ensureForYouScopeMix(sourceId) else ensureForYouScope(sourceId)
             val at = wallClock()
             var ok = reelsConsumptionRepository.markWatched(
                 scope,
@@ -769,15 +891,16 @@ class ReelsFeedScreenModel(
         }
     }
 
-    private fun commitSkipped(itemId: String) {
-        if (state.value.isOffline) return
-        val sourceId = state.value.currentSourceId
+    private fun commitSkipped(itemId: String, sourceId: Long = state.value.currentSourceId) {
+        if (state.value.isOffline || sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
         if (isIncognito(sourceId)) return
-        if (watchedCommitted.contains(itemId)) return
-        if (!skippedCommitted.add(itemId)) return
+        val commitKey = if (state.value.isMixMode) "$sourceId:$itemId" else itemId
+        if (watchedCommitted.contains(commitKey)) return
+        if (!skippedCommitted.add(commitKey)) return
         val surface = currentSurface().key
+        val isMix = state.value.isMixMode
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val (scope, generation) = ensureForYouScope(sourceId)
+            val (scope, generation) = if (isMix) ensureForYouScopeMix(sourceId) else ensureForYouScope(sourceId)
             val ok = reelsConsumptionRepository.markSkipped(
                 scope,
                 sourceId,
@@ -821,9 +944,24 @@ class ReelsFeedScreenModel(
         roundRobinSkippedCommitted.clear()
         val sourceId = state.value.currentSourceId
         val src = source
+        val isMix = state.value.isMixMode
+        val activeMixSources = knownFeedSources
         watchedCommitted.clear()
         skippedCommitted.clear()
+        forYouScopesBySource.clear()
         screenModelScope.launch(NonCancellable + ioDispatcher) {
+            if (isMix) {
+                activeMixSources.forEach { feedSource ->
+                    val scope = accountScopeFor(feedSource.id)
+                    val generation = reelsConsumptionRepository.resetHistory(scope, ReelsForYou.POLICY_VERSION)
+                    forYouScopesBySource[feedSource.id] = scope to generation
+                }
+                withContext(Dispatchers.Main.immediate) {
+                    if (state.value.currentSourceId != SourcePreferences.REELS_ALL_SOURCES_ID) return@withContext
+                    loadFeed(reset = true)
+                }
+                return@launch
+            }
             // The reset must target the pinned scope the restore read and the next attach use,
             // never a freshly re-derived identity that may have vanished in between.
             val scope = if (src is AnimeFeedRoundRobinSource && isRoundRobinRoute(src)) {
@@ -1015,6 +1153,7 @@ class ReelsFeedScreenModel(
                         isOffline = true,
                         items = localPlayable.map { fav -> fav.toShortVideoItem() }.toImmutableList(),
                         offlineSourceIds = offlineSourceIds.toImmutableList(),
+                        itemSourceIds = offlineSourceIds.toImmutableList(),
                         offlineStored = stored.map { "${it.first}:${it.second}" }.toImmutableSet(),
                         // Append/dedupe bookkeeping: the offline playlist never appends.
                         seenIds = localPlayable.map { it.videoId }.toImmutableSet(),
@@ -1054,7 +1193,42 @@ class ReelsFeedScreenModel(
                 }
             }
         } else {
-            mutableState.update { it.copy(mode = mode, creator = creator) }
+            mutableState.update {
+                it.copy(
+                    mode = mode,
+                    creator = creator,
+                    excludedMixSourceIds = sourcePreferences.reelsMixExcludedSources().get().toImmutableSet(),
+                    mixBurstSize = sourcePreferences.reelsMixBurstSize().get().coerceIn(
+                        ReelsMultiSourceCoordinator.MIN_BURST_SIZE,
+                        ReelsMultiSourceCoordinator.MAX_BURST_SIZE,
+                    ),
+                )
+            }
+            screenModelScope.launch(ioDispatcher) {
+                sourcePreferences.reelsMixExcludedSources().changes().collectLatest { excludedSet ->
+                    val immutable = excludedSet.toImmutableSet()
+                    if (state.value.excludedMixSourceIds == immutable) return@collectLatest
+                    mutableState.update { it.copy(excludedMixSourceIds = immutable) }
+                    if (state.value.isMixMode) {
+                        multiSourceCoordinator.updateExcludedSources(
+                            immutable.mapNotNull { it.toLongOrNull() }.toSet(),
+                        )
+                    }
+                }
+            }
+            screenModelScope.launch(ioDispatcher) {
+                sourcePreferences.reelsMixBurstSize().changes().collectLatest { rawBurst ->
+                    val clamped = rawBurst.coerceIn(
+                        ReelsMultiSourceCoordinator.MIN_BURST_SIZE,
+                        ReelsMultiSourceCoordinator.MAX_BURST_SIZE,
+                    )
+                    if (state.value.mixBurstSize == clamped) return@collectLatest
+                    mutableState.update { it.copy(mixBurstSize = clamped) }
+                    if (state.value.isMixMode) {
+                        multiSourceCoordinator.setBurstSize(clamped)
+                    }
+                }
+            }
             // Collect installed feed sources (with their extension icons) for quick switching.
             // Sources disabled in Browse are excluded, consistent with the sources list.
             screenModelScope.launch(ioDispatcher) {
@@ -1068,17 +1242,64 @@ class ReelsFeedScreenModel(
                     val icons = feedSources.mapNotNull { source ->
                         sourceIconProvider(source.id)?.let { source.id to it }
                     }.toMap().toImmutableMap()
+                    val names = feedSources.associate { it.id to it.name }.toImmutableMap()
+                    val headersBySource = feedSources.associate { feedSource ->
+                        val hdrs = (feedSource as? AnimeHttpSource)?.headers
+                            ?.associate { it.first to it.second }
+                            .orEmpty()
+                            .toPersistentHashMap()
+                        feedSource.id to hdrs
+                    }.toImmutableMap()
+                    val creatorCapableBySource = feedSources.associate {
+                        it.id to (it is AnimeCreatorFeedSource)
+                    }.toImmutableMap()
                     // The lambda is blocking (bitmap decode) and ignores cancellation; drop a
                     // superseded emission so it cannot overwrite a fresher source/icon set.
                     ensureActive()
+                    knownFeedSources = feedSources
+                    mixSourcesLoaded = true
                     mutableState.update {
-                        it.copy(availableSources = feedSources.toImmutableList(), sourceIcons = icons)
+                        it.copy(
+                            availableSources = feedSources.toImmutableList(),
+                            sourceIcons = icons,
+                            itemSourceNames = names,
+                            sourceHeadersBySource = headersBySource,
+                            isCreatorCapableBySource = creatorCapableBySource,
+                        )
+                    }
+                    if (state.value.currentSourceId == SourcePreferences.REELS_ALL_SOURCES_ID &&
+                        state.value.isMixMode
+                    ) {
+                        withContext(Dispatchers.Main.immediate) {
+                            if (state.value.currentSourceId != SourcePreferences.REELS_ALL_SOURCES_ID) {
+                                return@withContext
+                            }
+                            when {
+                                feedSources.isEmpty() -> {
+                                    stopMixSession()
+                                    mutableState.update {
+                                        it.copy(
+                                            isLoading = false,
+                                            canLoadMore = false,
+                                            error = null,
+                                            errorRes = MR.strings.reels_feed_empty,
+                                        )
+                                    }
+                                }
+                                feedSources.size == 1 -> switchSource(feedSources.first().id)
+                                !mixFeedStarted -> startMixFeed(feedSources)
+                                else -> {
+                                    multiSourceCoordinator.syncSources(feedSources)
+                                    syncMixQualitySessions(feedSources)
+                                }
+                            }
+                        }
                     }
                 }
             }
 
             switchSource(initialSourceId)
-            if (resumeVideoId != null) {
+            if (resumeVideoId != null && initialSourceId != SourcePreferences.REELS_ALL_SOURCES_ID) {
                 launchResumeLookup(resumeVideoId, initialSourceId)
             }
         }
@@ -1098,6 +1319,11 @@ class ReelsFeedScreenModel(
         stopRoundRobin(clearProjection = true)
         invalidateReplay()
         val previousSourceId = state.value.currentSourceId
+        if (newSourceId == SourcePreferences.REELS_ALL_SOURCES_ID) {
+            switchToMixMode(previousSourceId)
+            return
+        }
+        stopMixSession()
         val rawSource = sourceManager.get(newSourceId)
         if (rawSource is AnimeFeedSource) {
             val creatorCapable = rawSource is AnimeCreatorFeedSource
@@ -1182,6 +1408,14 @@ class ReelsFeedScreenModel(
                 it.copy(
                     currentSourceId = newSourceId,
                     sourceName = rawSource.name,
+                    isMixMode = false,
+                    supportsSearch = true,
+                    supportsFilter = true,
+                    itemSourceIds = persistentListOf(),
+                    mixSourceStatuses = persistentHashMapOf(),
+                    mixSkippedCount = 0,
+                    mixQualityStates = persistentHashMapOf(),
+                    followingCreatorsBySource = persistentHashMapOf(),
                     supportsTags = rawSource.supportsTags,
                     // Search hints (v19 addendum) are per source: drop the previous list;
                     // loadSearchHints below refills it when the capability exists.
@@ -1281,6 +1515,578 @@ class ReelsFeedScreenModel(
                     isLoading = false,
                     isSourcePickerOpen = false,
                 )
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Multi-plugin Mix mode (ALL_SOURCES_ID = -2L)
+    // ---------------------------------------------------------------------------
+
+    private fun switchToMixMode(previousSourceId: Long) {
+        if (mode != FeedMode.GLOBAL) {
+            source = null
+            mutableState.update {
+                it.copy(
+                    errorRes = MR.strings.reels_source_not_feed,
+                    error = null,
+                    isLoading = false,
+                    isSourcePickerOpen = false,
+                )
+            }
+            return
+        }
+        stopMixSession(stopCoordinator = false)
+        source = null
+        rateLimitRetryJob?.cancel()
+        rateLimitRetries = 0
+        persistUnlessIncognito(SourcePreferences.REELS_ALL_SOURCES_ID) {
+            sourcePreferences.lastUsedReelsSource().set(SourcePreferences.REELS_ALL_SOURCES_ID)
+        }
+        ReelsSessionSource.lastSourceId = SourcePreferences.REELS_ALL_SOURCES_ID
+        baseItems = persistentListOf()
+        baseSeenIds = persistentSetOf()
+        baseNextPageIndex = 1
+        baseNextCursor = null
+        baseCursorMode = false
+        baseCanLoadMore = true
+        basePosition = 0
+        decidedIds.clear()
+        watchedCommitted.clear()
+        skippedCommitted.clear()
+        pinnedScope = null
+        unseenRefillPages = 0
+        if (SourcePreferences.REELS_ALL_SOURCES_ID != previousSourceId) resumeNavPending = false
+        decidedFollows.clear()
+        followingStreams = emptyList()
+        hiddenSnapshot = emptySet<String>() to emptySet<String>()
+        hiddenBySource.clear()
+        forYouScopesBySource.clear()
+        visitSourceIds.clear()
+        lastHide = null
+        pendingRestorePosition = 0
+        restorePositionPending = false
+
+        val excludedPref = sourcePreferences.reelsMixExcludedSources().get().toImmutableSet()
+        val burstPref = sourcePreferences.reelsMixBurstSize().get().coerceIn(
+            ReelsMultiSourceCoordinator.MIN_BURST_SIZE,
+            ReelsMultiSourceCoordinator.MAX_BURST_SIZE,
+        )
+
+        mutableState.update {
+            it.copy(
+                currentSourceId = SourcePreferences.REELS_ALL_SOURCES_ID,
+                sourceName = "All Plugins",
+                isMixMode = true,
+                supportsSearch = false,
+                supportsFilter = false,
+                supportsTags = false,
+                searchHints = persistentListOf(),
+                searchQuery = "",
+                isSearchBarOpen = false,
+                albumSearchCapable = false,
+                albumSearchResults = persistentListOf(),
+                albumSearchNextPage = 1,
+                albumSearchNextCursor = null,
+                albumSearchCursorMode = false,
+                albumSearchCanLoadMore = true,
+                previewAlbumId = null,
+                previewItems = persistentListOf(),
+                previewLoading = false,
+                searchSuggestions = null,
+                filters = AnimeFilterList(),
+                isFilterDialogOpen = false,
+                sourceHeaders = persistentHashMapOf(),
+                items = persistentListOf(),
+                itemSourceIds = persistentListOf(),
+                seenIds = persistentSetOf(),
+                likedIds = persistentSetOf(),
+                isCreatorCapable = false,
+                followingCreators = persistentSetOf(),
+                followingCreatorsBySource = persistentHashMapOf(),
+                isLoginCapable = false,
+                loggedInAccount = null,
+                isLoggingIn = false,
+                loginError = null,
+                loginRejected = false,
+                isWebLoginCapable = false,
+                isWebLoginDialogOpen = false,
+                webLoginHint = false,
+                webLoginStage2Attempt = 0,
+                cfBootstrapAttempt = 0,
+                cfBootstrapExhausted = false,
+                webLoginPendingClose = false,
+                isCustomFeedCapable = false,
+                isBrowseCapable = false,
+                isCategoryOrderCapable = false,
+                isCategorySubscribable = false,
+                isCategoryFollowed = false,
+                isContentPreferencesCapable = false,
+                contentPreferences = null,
+                isContentPreferencesOpen = false,
+                isContentPreferencesLoading = false,
+                contentPreferencesError = null,
+                contentPreferencesSaveFailed = false,
+                isBlockedTagsCapable = false,
+                blockedTags = null,
+                isBlockedTagsOpen = false,
+                isBlockedTagsLoading = false,
+                blockedTagsError = null,
+                blockedTagsSaveFailed = false,
+                customFeeds = persistentListOf(),
+                isCustomFeedsOpen = false,
+                isCustomFeedsLoading = false,
+                customFeedsError = null,
+                isSourcePickerOpen = false,
+                excludedMixSourceIds = excludedPref,
+                mixBurstSize = burstPref,
+                mixSourceStatuses = persistentHashMapOf(),
+                mixSkippedCount = 0,
+                mixQualityStates = persistentHashMapOf(),
+                qualityState = null,
+                error = null,
+                errorRes = null,
+                errorCounts = null,
+                pageError = null,
+                retryAfterSec = 0,
+                isLoading = true,
+                canLoadMore = true,
+                unseenHidden = 0,
+                unseenScanStopped = false,
+            )
+        }
+
+        if (mixSourcesLoaded) {
+            val currentSources = knownFeedSources
+            when {
+                currentSources.isEmpty() -> {
+                    stopMixSession(stopCoordinator = true)
+                    mutableState.update {
+                        it.copy(
+                            isLoading = false,
+                            canLoadMore = false,
+                            errorRes = MR.strings.reels_feed_empty,
+                        )
+                    }
+                }
+                currentSources.size == 1 -> switchSource(currentSources.first().id)
+                else -> startMixFeed(currentSources)
+            }
+        }
+    }
+
+    private fun stopMixSession(
+        stopCoordinator: Boolean = true,
+        fromDispose: Boolean = false,
+    ) {
+        mixFeedStarted = false
+        loadJob?.cancel()
+        mixQualityJobs.forEach { it.cancel() }
+        mixQualityJobs.clear()
+        mixQualityControllers.values.forEach { it.detach() }
+        mixQualityControllers.clear()
+        hiddenBySource.clear()
+        forYouScopesBySource.clear()
+        visitSourceIds.clear()
+        activeVisitSlotKey = null
+        val sessionToken = mixSessionSeq.incrementAndGet()
+        currentMixSessionToken = sessionToken
+        if (!stopCoordinator) return
+        mixStopJob?.cancel()
+        mixStopJob = if (fromDispose) {
+            screenModelScope.launch(NonCancellable + ioDispatcher) {
+                multiSourceCoordinator.stop(sessionToken = sessionToken)
+            }
+        } else {
+            screenModelScope.launch(ioDispatcher) {
+                multiSourceCoordinator.stop(sessionToken = sessionToken)
+            }
+        }
+    }
+
+    private fun startMixFeed(feedSources: List<AnimeFeedSource>) {
+        mixFeedStarted = true
+        val sessionToken = mixSessionSeq.incrementAndGet()
+        currentMixSessionToken = sessionToken
+        syncMixQualitySessions(feedSources)
+        loadMixFeed(reset = true, sessionToken = sessionToken)
+    }
+
+    private fun syncMixQualitySessions(feedSources: List<AnimeFeedSource>) {
+        if (!state.value.isMixMode) return
+        val qualitySources = feedSources.mapNotNull { source ->
+            val qualitySource = source as? AnimeFeedVideoQualitySource ?: return@mapNotNull null
+            source.id to qualitySource
+        }
+        val qualityIds = qualitySources.mapTo(HashSet()) { it.first }
+        val removed = mixQualityControllers.keys.filter { it !in qualityIds }
+        removed.forEach { oldId ->
+            mixQualityControllers.remove(oldId)?.detach()
+        }
+        qualitySources.forEach { (sourceId, qualitySource) ->
+            if (mixQualityControllers.containsKey(sourceId)) return@forEach
+            val controller = ReelsQualityController(sourcePreferences)
+            mixQualityControllers[sourceId] = controller
+            val stateCollectJob = screenModelScope.launch(Dispatchers.Main.immediate) {
+                controller.state.collectLatest { qs ->
+                    mutableState.update { current ->
+                        if (!current.isMixMode) return@update current
+                        val updatedMap = (current.mixQualityStates + (sourceId to qs)).toImmutableMap()
+                        val activeSlotSource = current.itemSourceIds.getOrNull(current.activeIndex)
+                        current.copy(
+                            mixQualityStates = updatedMap,
+                            qualityState = if (activeSlotSource == sourceId) qs else current.qualityState,
+                        )
+                    }
+                }
+            }
+            mixQualityJobs += stateCollectJob
+            val sessionJob = screenModelScope.launch(ioDispatcher) {
+                val initial = runCatchingCancelSafe { qualitySource.prepareReplay() }.getOrNull()
+                if (!state.value.isMixMode) return@launch
+                if (initial != null && initial.accountId.isNotBlank()) {
+                    val owner = ReelsQualityOwner(UUID.randomUUID().toString(), sourceId, initial.accountId)
+                    controller.attach(qualitySource, owner)
+                    prepareQualityWindow(state.value.activeIndex, skipBoundStart = true)
+                }
+                qualitySource.replayContextChanges.collectLatest { context ->
+                    if (!state.value.isMixMode) return@collectLatest
+                    if (context == null || context.accountId.isBlank()) {
+                        controller.detach()
+                    } else {
+                        val currentOwner = controller.state.value.owner
+                        val owner = if (currentOwner?.sourceId == sourceId &&
+                            currentOwner.accountId == context.accountId
+                        ) {
+                            currentOwner
+                        } else {
+                            ReelsQualityOwner(UUID.randomUUID().toString(), sourceId, context.accountId)
+                        }
+                        controller.attach(qualitySource, owner)
+                        prepareQualityWindow(state.value.activeIndex, skipBoundStart = true)
+                    }
+                }
+            }
+            mixQualityJobs += sessionJob
+        }
+    }
+
+    private suspend fun loadMixMetadata(feedSources: List<AnimeFeedSource>) {
+        val activeIds = feedSources.mapTo(HashSet()) { it.id }
+        val hiddenMap = coroutineScope {
+            feedSources.map { feedSource ->
+                async(ioDispatcher) {
+                    val entries = runCatchingCancelSafe { reelsHiddenRepository.getBySource(feedSource.id) }
+                        .getOrDefault(emptyList())
+                    val videos = entries.filter { it.kind == ReelsHiddenEntry.KIND_VIDEO }.map { it.value }.toSet()
+                    val authors = entries.filter { it.kind == ReelsHiddenEntry.KIND_AUTHOR }.map { it.value }.toSet()
+                    feedSource.id to (videos to authors)
+                }
+            }.awaitAll()
+        }
+        hiddenMap.forEach { (sid, pair) ->
+            hiddenBySource.compute(sid) { _, existing ->
+                val prevVideos = existing?.first.orEmpty()
+                val prevAuthors = existing?.second.orEmpty()
+                (prevVideos + pair.first) to (prevAuthors + pair.second)
+            }
+        }
+
+        val allFavorites = runCatchingCancelSafe { reelsFavoriteRepository.getAll() }.getOrDefault(emptyList())
+        val favoriteKeys = allFavorites
+            .filter { it.sourceId in activeIds }
+            .map { "${it.sourceId}:${it.videoId}" }
+
+        val followPairs = coroutineScope {
+            feedSources.filter { it is AnimeCreatorFeedSource }.map { feedSource ->
+                async(ioDispatcher) {
+                    val creators = runCatchingCancelSafe { reelsFollowRepository.getCreatorsBySource(feedSource.id) }
+                        .getOrDefault(emptyList())
+                    feedSource.id to creators
+                }
+            }.awaitAll()
+        }
+
+        withContext(Dispatchers.Main.immediate) {
+            if (!state.value.isMixMode) return@withContext
+            mutableState.update { current ->
+                val mergedLikes = (favoriteKeys.filterNot { it in decidedIds }.toSet() + current.likedIds)
+                    .toImmutableSet()
+                val mergedFollows = current.followingCreatorsBySource.toMutableMap()
+                followPairs.forEach { (sid, creators) ->
+                    val existing = mergedFollows[sid].orEmpty()
+                    val filtered = creators.filterNot { "$sid:$it" in decidedFollows }
+                    mergedFollows[sid] = (existing + filtered).toImmutableSet()
+                }
+                current.copy(
+                    likedIds = mergedLikes,
+                    followingCreatorsBySource = mergedFollows.toImmutableMap(),
+                )
+            }
+        }
+    }
+
+    private fun loadMixFeed(reset: Boolean, sessionToken: Long = currentMixSessionToken) {
+        if (!state.value.isMixMode || state.value.isOffline) return
+        if (!reset && state.value.isLoading) return
+        if (!reset && !state.value.canLoadMore) return
+
+        loadJob?.cancel()
+        val generation = loadGeneration.incrementAndGet()
+        val pendingStopJob = if (reset) mixStopJob else null
+        if (reset) {
+            runway.reset()
+            lastPagerPage = 0
+            unseenRefillPages = 0
+        }
+
+        mutableState.update { current ->
+            if (reset) {
+                current.copy(
+                    isLoading = true,
+                    error = null,
+                    errorRes = null,
+                    pageError = null,
+                    canLoadMore = true,
+                    unseenHidden = 0,
+                    unseenScanStopped = false,
+                )
+            } else {
+                current.copy(isLoading = true, error = null, errorRes = null, errorCounts = null)
+            }
+        }
+
+        val feedSourcesSnapshot = knownFeedSources
+        val excludedLongIds = state.value.excludedMixSourceIds.mapNotNull { it.toLongOrNull() }.toSet()
+        val burstSnapshot = state.value.mixBurstSize
+        val unseenFilter = filtersUnseen("")
+        val pageAtLoadStart = lastPagerPage
+
+        loadJob = screenModelScope.launch(ioDispatcher) {
+            runway.onLoadStarted()
+            try {
+                if (reset) {
+                    pendingStopJob?.join()
+                    if (mixStopJob === pendingStopJob) mixStopJob = null
+                    loadMixMetadata(feedSourcesSnapshot)
+                    ensureActive()
+                    if (
+                        loadGeneration.get() != generation ||
+                        !state.value.isMixMode ||
+                        currentMixSessionToken != sessionToken
+                    ) {
+                        return@launch
+                    }
+                    multiSourceCoordinator.reset(
+                        parentScope = screenModelScope,
+                        sources = feedSourcesSnapshot,
+                        excludedSourceIds = excludedLongIds,
+                        burst = burstSnapshot,
+                        sessionToken = sessionToken,
+                    )
+                    ensureActive()
+                }
+
+                val batch = multiSourceCoordinator.nextBatch(isInitial = reset) { slotSourceId, rawCandidates ->
+                    val (hiddenVideos, hiddenAuthors) = hiddenBySource[slotSourceId]
+                        ?: (emptySet<String>() to emptySet())
+                    val visible = rawCandidates.filterNot { item ->
+                        item.id in hiddenVideos || (item.author != null && item.author in hiddenAuthors)
+                    }
+                    if (!unseenFilter || visible.isEmpty()) {
+                        MixFilterVerdict(kept = visible, unseenFilteredCount = 0)
+                    } else {
+                        val (scope, _) = ensureForYouScopeMix(slotSourceId)
+                        val consumed = reelsConsumptionRepository.consumedIds(
+                            scope,
+                            slotSourceId,
+                            visible.map { it.id },
+                        )
+                        if (consumed.isEmpty()) {
+                            MixFilterVerdict(kept = visible, unseenFilteredCount = 0)
+                        } else {
+                            MixFilterVerdict(
+                                kept = visible.filterNot { it.id in consumed },
+                                unseenFilteredCount = consumed.size,
+                            )
+                        }
+                    }
+                }
+
+                ensureActive()
+                if (loadGeneration.get() != generation || !state.value.isMixMode) return@launch
+
+                val newItems = batch.slots.map { it.item }
+                val newSlotIds = batch.slots.map { it.sourceId }
+                val newCompositeIds = batch.slots.map { "${it.sourceId}:${it.item.id}" }
+                val skippedCount = batch.statuses.values.count {
+                    it == MixSourceStatus.NEEDS_AUTH || it == MixSourceStatus.CIRCUIT_OPEN
+                }
+                val itemsBeforeAppend = state.value.items.size
+
+                mutableState.update { current ->
+                    if (loadGeneration.get() != generation || !current.isMixMode) return@update current
+                    val mergedItems = if (reset) newItems else current.items + newItems
+                    val mergedSlotIds = if (reset) newSlotIds else current.itemSourceIds + newSlotIds
+                    val mergedSeen = if (reset) {
+                        newCompositeIds.toImmutableSet()
+                    } else {
+                        (current.seenIds + newCompositeIds).toImmutableSet()
+                    }
+                    val terminalErrorRes = if (reset && mergedItems.isEmpty()) {
+                        val allExcluded = batch.statuses.isNotEmpty() &&
+                            batch.statuses.values.all { it == MixSourceStatus.EXCLUDED }
+                        when {
+                            allExcluded || feedSourcesSnapshot.all { it.id in excludedLongIds } ->
+                                MR.strings.reels_mix_no_active_sources
+                            batch.failedCount > 0 && batch.statuses.values.none {
+                                it == MixSourceStatus.ACTIVE || it == MixSourceStatus.EXHAUSTED
+                            } -> MR.strings.reels_feed_load_failed
+                            else -> MR.strings.reels_feed_empty
+                        }
+                    } else {
+                        null
+                    }
+                    current.copy(
+                        items = mergedItems.toImmutableList(),
+                        itemSourceIds = mergedSlotIds.toImmutableList(),
+                        seenIds = mergedSeen,
+                        isLoading = false,
+                        canLoadMore = batch.hasMore,
+                        feedGeneration = if (reset) current.feedGeneration + 1 else current.feedGeneration,
+                        targetPageIndex = if (reset) 0 else current.targetPageIndex,
+                        activeIndex = if (reset) 0 else current.activeIndex,
+                        mixSourceStatuses = batch.statuses.toImmutableMap(),
+                        mixSkippedCount = skippedCount,
+                        pageError = null,
+                        error = null,
+                        errorRes = terminalErrorRes,
+                        unseenHidden = current.unseenHidden + batch.consumedHiddenCount,
+                    )
+                }
+                runway.onLoadFinished()
+                if (reset && state.value.items.isNotEmpty()) {
+                    prepareQualityWindow(0)
+                } else if (!reset && newItems.isNotEmpty() && lastPagerPage > pageAtLoadStart) {
+                    maybeLoadMoreForRunway()
+                }
+                val itemsAfterAppend = state.value.items.size
+                if (!reset && itemsAfterAppend > itemsBeforeAppend &&
+                    state.value.items.size - 1 <= state.value.activeIndex + 2 &&
+                    state.value.canLoadMore
+                ) {
+                    maybeLoadMoreForRunway()
+                }
+            } catch (e: CancellationException) {
+                // Superseded by reset/switch.
+            } catch (t: Throwable) {
+                logcat(LogPriority.ERROR, t) { "Failed to load multi-source Mix feed" }
+                if (loadGeneration.get() != generation) return@launch
+                runway.onLoadAborted()
+                mutableState.update { current ->
+                    if (current.items.isEmpty()) {
+                        current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
+                    } else {
+                        current.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
+                    }
+                }
+            }
+        }
+    }
+
+    /** Toggles exclusion of [sourceId] from the multi-plugin Mix shuffle. */
+    fun toggleMixSourceExcluded(sourceId: Long) {
+        val currentSet = sourcePreferences.reelsMixExcludedSources().get()
+        val key = sourceId.toString()
+        setMixSourceExcluded(sourceId, excluded = key !in currentSet)
+    }
+
+    /** Persists inclusion/exclusion of [sourceId] in Mix mode and applies it dynamically. */
+    fun setMixSourceExcluded(sourceId: Long, excluded: Boolean) {
+        val key = sourceId.toString()
+        val updatedPref = if (excluded) {
+            sourcePreferences.reelsMixExcludedSources().get() + key
+        } else {
+            sourcePreferences.reelsMixExcludedSources().get() - key
+        }
+        sourcePreferences.reelsMixExcludedSources().set(updatedPref)
+        val excludedImmutable = updatedPref.toImmutableSet()
+        val excludedLongIds = updatedPref.mapNotNull { it.toLongOrNull() }.toSet()
+
+        mutableState.update { current ->
+            if (!current.isMixMode || !excluded) {
+                current.copy(excludedMixSourceIds = excludedImmutable)
+            } else {
+                // Strip unvisited upcoming slots belonging to the newly excluded plugin while
+                // preserving already-reached positions (`0..activeIndex`) so the pager stays put.
+                val pivot = current.activeIndex.coerceAtLeast(-1)
+                val keptItems = ArrayList<ShortVideoItem>(current.items.size)
+                val keptSourceIds = ArrayList<Long>(current.itemSourceIds.size)
+                current.items.forEachIndexed { idx, item ->
+                    val slotSid = current.itemSourceIds.getOrNull(idx) ?: current.currentSourceId
+                    if (idx <= pivot || slotSid != sourceId) {
+                        keptItems += item
+                        keptSourceIds += slotSid
+                    }
+                }
+                val statuses = (current.mixSourceStatuses + (sourceId to MixSourceStatus.EXCLUDED))
+                    .toImmutableMap()
+                val allExcludedNow = current.availableSources.isNotEmpty() &&
+                    current.availableSources.all { it.id.toString() in excludedImmutable }
+                current.copy(
+                    excludedMixSourceIds = excludedImmutable,
+                    items = keptItems.toImmutableList(),
+                    itemSourceIds = keptSourceIds.toImmutableList(),
+                    mixSourceStatuses = statuses,
+                    canLoadMore = if (allExcludedNow) false else current.canLoadMore,
+                    errorRes = if (keptItems.isEmpty() && allExcludedNow) {
+                        MR.strings.reels_mix_no_active_sources
+                    } else {
+                        current.errorRes
+                    },
+                )
+            }
+        }
+
+        if (state.value.isMixMode) {
+            screenModelScope.launch(ioDispatcher) {
+                multiSourceCoordinator.updateExcludedSources(excludedLongIds)
+                val statuses = multiSourceCoordinator.currentStatuses().toImmutableMap()
+                withContext(Dispatchers.Main.immediate) {
+                    if (!state.value.isMixMode) return@withContext
+                    val hasEnabled = knownFeedSources.any { it.id !in excludedLongIds }
+                    mutableState.update {
+                        it.copy(
+                            mixSourceStatuses = statuses,
+                            canLoadMore = if (!excluded && hasEnabled) true else it.canLoadMore,
+                        )
+                    }
+                    if (!excluded && hasEnabled && !state.value.isLoading && state.value.items.isEmpty()) {
+                        loadMixFeed(reset = true)
+                    } else if (hasEnabled) {
+                        maybeLoadMoreForRunway()
+                    }
+                }
+            }
+        }
+    }
+
+    /** Convenience alias used by item overflow / drawer actions to exclude the current clip's source. */
+    fun excludeSourceFromMix(sourceId: Long) {
+        setMixSourceExcluded(sourceId, excluded = true)
+    }
+
+    /** Updates consecutive clips-per-source burst size (`1..3`) in Mix mode. */
+    fun setMixBurstSize(size: Int) {
+        val clamped = size.coerceIn(
+            ReelsMultiSourceCoordinator.MIN_BURST_SIZE,
+            ReelsMultiSourceCoordinator.MAX_BURST_SIZE,
+        )
+        sourcePreferences.reelsMixBurstSize().set(clamped)
+        mutableState.update { it.copy(mixBurstSize = clamped) }
+        if (state.value.isMixMode) {
+            screenModelScope.launch(ioDispatcher) {
+                multiSourceCoordinator.setBurstSize(clamped)
             }
         }
     }
@@ -2144,6 +2950,10 @@ class ReelsFeedScreenModel(
      * prefix and let buildFiltersAndStartFeed pick RR or the legacy route for the new filters.
      */
     private fun restartFeedForContextChange() {
+        if (state.value.isMixMode) {
+            loadMixFeed(reset = true)
+            return
+        }
         val src = source
         if (src is AnimeFeedRoundRobinSource && mode == FeedMode.GLOBAL && !state.value.isOffline) {
             stopRoundRobin(clearProjection = true)
@@ -2154,6 +2964,10 @@ class ReelsFeedScreenModel(
     }
 
     fun loadFeed(reset: Boolean = false) {
+        if (state.value.isMixMode) {
+            loadMixFeed(reset = reset)
+            return
+        }
         val src = source
         if (!state.value.isOffline && src is AnimeFeedRoundRobinSource && isRoundRobinRoute(src)) {
             if (!reset) {
@@ -2184,7 +2998,7 @@ class ReelsFeedScreenModel(
     private fun loadFeedInternal(reset: Boolean = false) {
         if (state.value.isOffline) return
         if (reset && mode == FeedMode.NICHE && nicheId != null) {
-            val seed = ReelsAlbumFeedSeedStore.consume(nicheId)
+            val seed = ReelsAlbumFeedSeedStore.consume(nicheId, state.value.currentSourceId)
             if (seed != null && seed.items.isNotEmpty()) {
                 loadJob?.cancel()
                 loadGeneration.incrementAndGet()
@@ -2618,6 +3432,10 @@ class ReelsFeedScreenModel(
      * can fall back to a back-navigation.
      */
     fun retryFromError(): Boolean {
+        if (state.value.isMixMode) {
+            loadFeed(reset = true)
+            return true
+        }
         if (source != null) {
             loadFeed(reset = true)
             return true
@@ -3032,16 +3850,37 @@ class ReelsFeedScreenModel(
      * removal). Uncapped — the FOLLOWING fan-out is bounded at fetch time, not at the follow set.
      */
     fun toggleFollow(creator: String) {
-        val sourceId = state.value.currentSourceId
-        val willFollow = creator !in state.value.followingCreators
-        decidedFollows += creator
+        val targetSourceId = if (state.value.isMixMode) {
+            resolveSlotSourceId(state.value.activeIndex)
+        } else {
+            state.value.currentSourceId
+        }
+        toggleFollow(creator, targetSourceId)
+    }
+
+    fun toggleFollow(creator: String, sourceId: Long) {
+        if (sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
+        val isMix = state.value.isMixMode
+        val willFollow = if (isMix) {
+            creator !in state.value.followingCreatorsBySource[sourceId].orEmpty()
+        } else {
+            creator !in state.value.followingCreators
+        }
+        decidedFollows += if (isMix) "$sourceId:$creator" else creator
         mutableState.update { state ->
-            val newFollows = if (willFollow) {
-                state.followingCreators + creator
+            if (state.isMixMode) {
+                val existing = state.followingCreatorsBySource[sourceId].orEmpty()
+                val updatedSet = (if (willFollow) existing + creator else existing - creator).toImmutableSet()
+                val updatedMap = (state.followingCreatorsBySource + (sourceId to updatedSet)).toImmutableMap()
+                state.copy(followingCreatorsBySource = updatedMap)
             } else {
-                state.followingCreators - creator
+                val newFollows = if (willFollow) {
+                    state.followingCreators + creator
+                } else {
+                    state.followingCreators - creator
+                }
+                state.copy(followingCreators = newFollows.toImmutableSet())
             }
-            state.copy(followingCreators = newFollows.toImmutableSet())
         }
         // The tap is authoritative for this session; the DB write must survive screen
         // disposal (NonCancellable), and repository errors are logged, not surfaced.
@@ -3071,7 +3910,7 @@ class ReelsFeedScreenModel(
     }
 
     fun search(query: String) {
-        if (state.value.isOffline) return
+        if (state.value.isOffline || state.value.isMixMode) return
         applySearchQuery(query, closeBar = true)
     }
 
@@ -3211,7 +4050,7 @@ class ReelsFeedScreenModel(
     }
 
     fun applyFilters() {
-        if (state.value.isOffline) return
+        if (state.value.isOffline || state.value.isMixMode) return
         val serialized = serializeFilters(state.value.filters)
         persistUnlessIncognito(state.value.currentSourceId) {
             sourcePreferences.lastReelsFilter(state.value.currentSourceId).set(serialized)
@@ -3221,7 +4060,7 @@ class ReelsFeedScreenModel(
     }
 
     fun resetFilters() {
-        if (state.value.isOffline) return
+        if (state.value.isOffline || state.value.isMixMode) return
         val src = source ?: return
         val sourceId = state.value.currentSourceId
         persistUnlessIncognito(sourceId) {
@@ -3249,10 +4088,12 @@ class ReelsFeedScreenModel(
     }
 
     fun toggleFilterDialog(open: Boolean) {
+        if (open && state.value.isMixMode) return
         mutableState.update { it.copy(isFilterDialogOpen = open) }
     }
 
     fun toggleSearchBar(open: Boolean) {
+        if (open && state.value.isMixMode) return
         mutableState.update { it.copy(isSearchBarOpen = open) }
         if (open) loadSearchHints()
     }
@@ -3746,23 +4587,44 @@ class ReelsFeedScreenModel(
      */
     fun setLike(item: ShortVideoItem, liked: Boolean, itemIndex: Int = -1) {
         val videoId = item.id
-        val likeKey = state.value.likeKey(videoId, itemIndex)
-        if (liked == (likeKey in state.value.likedIds)) return
+        val current = state.value
+        val resolvedIndex = when {
+            itemIndex >= 0 -> itemIndex
+            current.isMixMode -> {
+                if (current.items.getOrNull(current.activeIndex)?.id == videoId) {
+                    current.activeIndex
+                } else {
+                    current.items.indexOfFirst { it.id == videoId }
+                }
+            }
+            else -> -1
+        }
+        val likeKey = current.likeKey(videoId, resolvedIndex)
+        if (liked == (likeKey in current.likedIds)) return
         // The item comes from the caller (the page rendering it): re-finding it in state
         // would silently skip the insert when a feed refresh displaced the video between
         // the tap and the write. The write must survive screen disposal (NonCancellable).
-        // Offline playlists resolve the sourceId by the item's SLOT (same videoId can exist
+        // Offline and Mix playlists resolve sourceId by the item's SLOT (same videoId can exist
         // for several sources — a videoId-keyed lookup would misattribute likes).
-        val sourceId = if (state.value.isOffline) {
-            offlineSourceIds.getOrNull(itemIndex) ?: state.value.currentSourceId
+        val sourceId = if (current.isOffline || current.isMixMode) {
+            current.itemSourceIds.getOrNull(resolvedIndex)
+                ?: offlineSourceIds.getOrNull(resolvedIndex)
+                ?: current.currentSourceId
         } else {
-            state.value.currentSourceId
+            current.currentSourceId
         }
+        if (sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
         // Snapshot the feedback capability synchronously: reading the live `source` field
         // inside the NonCancellable launch below could deliver the like signal to a DIFFERENT
         // source's plugin if a source switch lands between the tap and the write.
-        val feedback = source as? AnimeReelsFeedbackSource
-        decidedIds += videoId
+        val feedback = (
+            if (current.isMixMode || current.isOffline) {
+                sourceManager.get(sourceId) as? AnimeFeedSource
+            } else {
+                source
+            }
+            ) as? AnimeReelsFeedbackSource
+        decidedIds += likeKey
         mutableState.update { state ->
             val newLikes = if (liked) state.likedIds + likeKey else state.likedIds - likeKey
             state.copy(likedIds = newLikes.toImmutableSet())
@@ -3789,9 +4651,21 @@ class ReelsFeedScreenModel(
 
     /** Reports playback of a reel to a feedback-capable source (drives remote personalization). */
     fun reportVideoView(itemId: String, secondsWatched: Float, duration: Float) {
-        val feedback = source as? AnimeReelsFeedbackSource ?: return
+        val slotSourceId = resolveSlotSourceId(fallbackItemId = itemId)
+        reportVideoView(itemId, secondsWatched, duration, slotSourceId)
+    }
+
+    fun reportVideoView(itemId: String, secondsWatched: Float, duration: Float, sourceId: Long) {
+        if (sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
+        val feedback = (
+            if (state.value.isMixMode) {
+                sourceManager.get(sourceId) as? AnimeFeedSource
+            } else {
+                source
+            }
+            ) as? AnimeReelsFeedbackSource ?: return
         // Incognito: no remote view signal either (privacy end-to-end).
-        if (isIncognito(state.value.currentSourceId)) return
+        if (isIncognito(sourceId)) return
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             runCatching { feedback.onVideoViewed(itemId, secondsWatched.toDouble(), duration.toDouble()) }
         }
@@ -3803,9 +4677,18 @@ class ReelsFeedScreenModel(
      * is not recorded (it replays local rows, not browsing).
      */
     fun recordWatchHistory(item: ShortVideoItem, positionFraction: Float, durationSec: Float) {
-        if (state.value.isOffline) return
-        if (isIncognito(state.value.currentSourceId)) return
-        val sourceId = state.value.currentSourceId
+        val slotSourceId = resolveSlotSourceId(fallbackItemId = item.id)
+        recordWatchHistory(item, positionFraction, durationSec, slotSourceId)
+    }
+
+    fun recordWatchHistory(
+        item: ShortVideoItem,
+        positionFraction: Float,
+        durationSec: Float,
+        sourceId: Long,
+    ) {
+        if (state.value.isOffline || sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
+        if (isIncognito(sourceId)) return
         val positionMs = (positionFraction.coerceIn(0f, 1f) * durationSec.coerceAtLeast(0f) * 1000f).toLong()
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             reelsWatchRepository.upsert(
@@ -4032,15 +4915,35 @@ class ReelsFeedScreenModel(
 
     /** Hides one reel from future pages; undo until the next hide via [undoHide]. */
     fun hideVideo(item: ShortVideoItem) {
+        hideVideo(item, itemIndex = -1)
+    }
+
+    fun hideVideo(item: ShortVideoItem, itemIndex: Int) {
         if (state.value.isOffline || item.id.isBlank()) return
+        val targetSourceId = if (state.value.isMixMode) {
+            resolveSlotSourceId(itemIndex = itemIndex, fallbackItemId = item.id)
+        } else {
+            state.value.currentSourceId
+        }
+        if (targetSourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
         // The manager screen shows the captured title; the raw videoId is the fallback.
-        applyHide(ReelsHiddenEntry.KIND_VIDEO, item.id, state.value.currentSourceId, item.title)
+        applyHide(ReelsHiddenEntry.KIND_VIDEO, item.id, targetSourceId, item.title)
     }
 
     /** Hides an author's reels from future pages; undo until the next hide via [undoHide]. */
     fun hideAuthor(author: String) {
+        hideAuthor(author, itemIndex = -1)
+    }
+
+    fun hideAuthor(author: String, itemIndex: Int) {
         if (state.value.isOffline || author.isBlank()) return
-        applyHide(ReelsHiddenEntry.KIND_AUTHOR, author, state.value.currentSourceId)
+        val targetSourceId = if (state.value.isMixMode) {
+            resolveSlotSourceId(itemIndex = itemIndex)
+        } else {
+            state.value.currentSourceId
+        }
+        if (targetSourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
+        applyHide(ReelsHiddenEntry.KIND_AUTHOR, author, targetSourceId)
     }
 
     /** Token of the most recent hide; capture it when showing the undo snackbar. */
@@ -4054,10 +4957,18 @@ class ReelsFeedScreenModel(
         if (token == null || lastHide != token) return
         val (kind, value, sourceId) = token
         lastHide = null
-        val (videos, authors) = hiddenSnapshot
-        hiddenSnapshot = when (kind) {
-            ReelsHiddenEntry.KIND_VIDEO -> (videos - value) to authors
-            else -> videos to (authors - value)
+        if (!state.value.isMixMode && state.value.currentSourceId == sourceId) {
+            val (videos, authors) = hiddenSnapshot
+            hiddenSnapshot = when (kind) {
+                ReelsHiddenEntry.KIND_VIDEO -> (videos - value) to authors
+                else -> videos to (authors - value)
+            }
+        }
+        hiddenBySource.computeIfPresent(sourceId) { _, (videos, authors) ->
+            when (kind) {
+                ReelsHiddenEntry.KIND_VIDEO -> (videos - value) to authors
+                else -> videos to (authors - value)
+            }
         }
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             hiddenWriteMutex.withLock {
@@ -4067,12 +4978,28 @@ class ReelsFeedScreenModel(
     }
 
     private fun applyHide(kind: String, value: String, sourceId: Long, label: String? = null) {
-        val (videos, authors) = hiddenSnapshot
-        hiddenSnapshot = when (kind) {
-            ReelsHiddenEntry.KIND_VIDEO -> (videos + value) to authors
-            else -> videos to (authors + value)
+        if (!state.value.isMixMode && state.value.currentSourceId == sourceId) {
+            val (videos, authors) = hiddenSnapshot
+            hiddenSnapshot = when (kind) {
+                ReelsHiddenEntry.KIND_VIDEO -> (videos + value) to authors
+                else -> videos to (authors + value)
+            }
+        }
+        hiddenBySource.compute(sourceId) { _, existing ->
+            val prevVideos = existing?.first.orEmpty()
+            val prevAuthors = existing?.second.orEmpty()
+            when (kind) {
+                ReelsHiddenEntry.KIND_VIDEO -> (prevVideos + value) to prevAuthors
+                else -> prevVideos to (prevAuthors + value)
+            }
         }
         lastHide = Triple(kind, value, sourceId)
+        if (state.value.isMixMode) {
+            screenModelScope.launch(ioDispatcher) {
+                val (v, a) = hiddenBySource[sourceId] ?: (emptySet<String>() to emptySet())
+                multiSourceCoordinator.purgeHidden(sourceId, v, a)
+            }
+        }
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             hiddenWriteMutex.withLock {
                 reelsHiddenRepository.insert(
@@ -4084,12 +5011,13 @@ class ReelsFeedScreenModel(
 
     /** Export requests keep the owning source's headers even in a mixed-source playlist. */
     fun downloadHeaders(sourceId: Long): Map<String, String> =
-        if (!state.value.isOffline && sourceId == state.value.currentSourceId) {
+        if (!state.value.isOffline && !state.value.isMixMode && sourceId == state.value.currentSourceId) {
             state.value.sourceHeaders
         } else {
-            (sourceManager.get(sourceId) as? AnimeHttpSource)?.headers
-                ?.associate { it.first to it.second }
-                .orEmpty()
+            state.value.sourceHeadersBySource[sourceId]
+                ?: (sourceManager.get(sourceId) as? AnimeHttpSource)?.headers
+                    ?.associate { it.first to it.second }
+                    .orEmpty()
         }
 
     // --- B3.3 offline copies ---
@@ -4100,10 +5028,15 @@ class ReelsFeedScreenModel(
      * Contract v25: the source's own media verdict for [item], or null when the source does
      * not implement the capability (the host then keeps the legacy URL-based rules).
      * [sourceId] names the item's owning source when it differs from the live feed source
-     * (the offline playlist mixes sources; its slots carry their own id).
+     * (the offline and Mix playlists share slots from multiple plugins).
      */
     fun mediaDescriptor(item: ShortVideoItem, sourceId: Long? = null): FeedMediaDescriptor? {
-        val owner = sourceId?.let(sourceManager::get) ?: source
+        val effectiveSourceId = sourceId ?: if (state.value.isMixMode) {
+            resolveSlotSourceId(fallbackItemId = item.id)
+        } else {
+            null
+        }
+        val owner = effectiveSourceId?.let(sourceManager::get) ?: source
         val descriptorSource = owner as? AnimeFeedMediaDescriptorSource ?: return null
         return try {
             descriptorSource.mediaDescriptor(item)
@@ -4126,8 +5059,13 @@ class ReelsFeedScreenModel(
         hd: Boolean,
         sourceId: Long? = null,
     ): String? {
-        val owner = sourceId?.let(sourceManager::get) ?: source
-        if (owner === source && isReplaySurface() && replayKey != null) {
+        val effectiveSourceId = sourceId ?: if (state.value.isMixMode) {
+            resolveSlotSourceId(fallbackItemId = item.id)
+        } else {
+            null
+        }
+        val owner = effectiveSourceId?.let(sourceManager::get) ?: source
+        if (source != null && owner === source && isReplaySurface() && replayKey != null) {
             val key = replayKey
             val result = sessionContinuity.resolveItem(item.id)
             if (replayKey != key) return null
@@ -4479,6 +5417,7 @@ class ReelsFeedScreenModel(
         // the flown-over reels unconsumed, so they came back in the next generation.
         if (cause == ReelsTransitionCause.USER_FORWARD && index > previousIndex && previousItem != null) {
             val items = state.value.items
+            val slotIds = state.value.itemSourceIds
             // Manual-forward skips are consumption, so they must use the ACTIVE RR owner's
             // immutable scope; the legacy path keeps its previous provenance.
             val roundRobinOwner = state.value.roundRobinOwner
@@ -4487,26 +5426,36 @@ class ReelsFeedScreenModel(
                     if (roundRobinOwner != null) {
                         commitRoundRobinSkipped(roundRobinOwner, item.id)
                     } else {
-                        commitSkipped(item.id)
+                        val slotSourceId = slotIds.getOrNull(position)
+                            ?: offlineSourceIds.getOrNull(position)
+                            ?: state.value.currentSourceId
+                        commitSkipped(item.id, slotSourceId)
                     }
                 }
             }
         }
-        mutableState.update {
-            it.copy(
+        mutableState.update { current ->
+            val updatedQuality = if (current.isMixMode) {
+                val activeSlotSourceId = current.itemSourceIds.getOrNull(index)
+                activeSlotSourceId?.let { current.mixQualityStates[it] }
+            } else {
+                current.qualityState
+            }
+            current.copy(
                 activeIndex = index,
+                qualityState = updatedQuality,
                 // Swiping resumes playback only when the user has not deliberately paused;
                 // the sticky pause keeps every subsequently swiped page paused until resumed.
-                isPlaying = !it.userPaused,
+                isPlaying = !current.userPaused,
                 // P03: actual playback belongs to the settled page's player. The new page
                 // starts paused/preloaded, so claiming "running" here would keep the screen
                 // awake and hide the chrome while it is still buffering.
                 isActuallyPlaying = false,
             )
         }
-        // Every feed mode persists its own browsing position (B3.1); the offline playlist has no
-        // live feed position to remember.
-        if (!state.value.isOffline) {
+        // Every feed mode persists its own browsing position (B3.1); the offline and Mix
+        // playlists have no stable per-position cursor to restore.
+        if (!state.value.isOffline && !state.value.isMixMode) {
             persistUnlessIncognito(state.value.currentSourceId) {
                 sourcePreferences.lastReelsPosition(state.value.currentSourceId, positionSuffix).set(index)
             }
@@ -4515,48 +5464,137 @@ class ReelsFeedScreenModel(
         prepareQualityWindow(index)
     }
 
-    fun qualityItemState(itemId: String): ReelsQualityItemState? = qualityController.itemState(itemId)
+    private fun qualityControllerFor(itemId: String, sourceId: Long? = null): ReelsQualityController? {
+        if (!state.value.isMixMode) return qualityController
+        if (sourceId != null) return mixQualityControllers[sourceId]
+        val current = state.value
+        val activeSlotId = if (current.items.getOrNull(current.activeIndex)?.id == itemId) {
+            current.itemSourceIds.getOrNull(current.activeIndex)
+        } else {
+            null
+        }
+        val slotId = activeSlotId ?: current.items.indexOfFirst { it.id == itemId }
+            .takeIf { it >= 0 }
+            ?.let { current.itemSourceIds.getOrNull(it) }
+        return slotId?.let { mixQualityControllers[it] }
+    }
 
-    fun qualityPlayback(itemId: String): ReelsQualityPlayback? = qualityController.playback(itemId)
+    fun qualityItemState(itemId: String): ReelsQualityItemState? =
+        qualityControllerFor(itemId)?.itemState(itemId)
+
+    fun qualityItemState(itemId: String, sourceId: Long): ReelsQualityItemState? =
+        qualityControllerFor(itemId, sourceId)?.itemState(itemId)
+
+    fun qualityPlayback(itemId: String): ReelsQualityPlayback? =
+        qualityControllerFor(itemId)?.playback(itemId)
+
+    fun qualityPlayback(itemId: String, sourceId: Long): ReelsQualityPlayback? =
+        qualityControllerFor(itemId, sourceId)?.playback(itemId)
 
     fun captureQualityDownload(
         item: ShortVideoItem,
         sourceId: Long,
         headers: Map<String, String>,
     ): ReelsQualityDownloadSnapshot? {
-        val owner = qualityController.state.value.owner ?: return null
+        val controller = if (state.value.isMixMode) {
+            mixQualityControllers[sourceId] ?: return null
+        } else {
+            qualityController
+        }
+        val owner = controller.state.value.owner ?: return null
         if (owner.sourceId != sourceId) return null
-        return qualityController.captureDownload(owner, item, headers)
+        return controller.captureDownload(owner, item, headers)
     }
 
     suspend fun rehydrateQualityDownload(
         snapshot: ReelsQualityDownloadSnapshot,
         resumeFrom: Long,
-    ): ReelsQualityDownloadSnapshot? = qualityController.rehydrateDownload(snapshot, resumeFrom)
+    ): ReelsQualityDownloadSnapshot? {
+        val controller = mixQualityControllers[snapshot.owner.sourceId] ?: qualityController
+        return controller.rehydrateDownload(snapshot, resumeFrom)
+    }
+
+    private inline fun withQualityController(
+        itemId: String?,
+        sourceId: Long?,
+        block: (ReelsQualityController, ReelsQualityOwner) -> Unit,
+    ) {
+        val controller = if (state.value.isMixMode) {
+            when {
+                sourceId != null -> mixQualityControllers[sourceId]
+                itemId != null -> qualityControllerFor(itemId)
+                else -> state.value.items.getOrNull(state.value.activeIndex)?.let { qualityControllerFor(it.id) }
+            }
+        } else {
+            qualityController
+        } ?: return
+        val owner = controller.state.value.owner ?: return
+        block(controller, owner)
+        prepareQualityForIndex(state.value.activeIndex)
+    }
 
     fun setQualityGlobal(value: ReelsQualityPreference) {
-        val owner = qualityController.state.value.owner ?: return
-        qualityController.setGlobal(owner, value)
-        prepareQualityForIndex(state.value.activeIndex)
+        withQualityController(itemId = null, sourceId = null) { controller, owner ->
+            controller.setGlobal(owner, value)
+        }
+    }
+
+    fun setQualityGlobalForSource(value: ReelsQualityPreference, sourceId: Long) {
+        withQualityController(itemId = null, sourceId = sourceId) { controller, owner ->
+            controller.setGlobal(owner, value)
+        }
     }
 
     fun setQualityOverride(itemId: String, value: ReelsQualityPreference) {
-        val owner = qualityController.state.value.owner ?: return
-        qualityController.setOverride(owner, itemId, value)
-        prepareQualityForIndex(state.value.activeIndex)
+        withQualityController(itemId = itemId, sourceId = null) { controller, owner ->
+            controller.setOverride(owner, itemId, value)
+        }
+    }
+
+    fun setQualityOverrideForSource(itemId: String, value: ReelsQualityPreference, sourceId: Long) {
+        withQualityController(itemId = itemId, sourceId = sourceId) { controller, owner ->
+            controller.setOverride(owner, itemId, value)
+        }
     }
 
     fun clearQualityOverride(itemId: String) {
-        val owner = qualityController.state.value.owner ?: return
-        qualityController.clearOverride(owner, itemId)
-        prepareQualityForIndex(state.value.activeIndex)
+        withQualityController(itemId = itemId, sourceId = null) { controller, owner ->
+            controller.clearOverride(owner, itemId)
+        }
+    }
+
+    fun clearQualityOverrideForSource(itemId: String, sourceId: Long) {
+        withQualityController(itemId = itemId, sourceId = sourceId) { controller, owner ->
+            controller.clearOverride(owner, itemId)
+        }
     }
 
     fun isQualityModeItem(itemId: String): Boolean {
-        val quality = state.value.qualityState ?: return false
+        val sourceId = if (state.value.isMixMode) {
+            val current = state.value
+            if (current.items.getOrNull(current.activeIndex)?.id == itemId) {
+                current.itemSourceIds.getOrNull(current.activeIndex)
+            } else {
+                current.items.indexOfFirst { it.id == itemId }
+                    .takeIf { it >= 0 }
+                    ?.let { current.itemSourceIds.getOrNull(it) }
+            }
+        } else {
+            null
+        }
+        return isQualityModeItem(itemId, sourceId)
+    }
+
+    fun isQualityModeItem(itemId: String, sourceId: Long?): Boolean {
+        val controller = if (state.value.isMixMode) {
+            sourceId?.let { mixQualityControllers[it] } ?: return false
+        } else {
+            qualityController
+        }
+        val quality = controller.state.value
         if (quality.owner == null) return false
         if (quality.items[itemId]?.catalogStatus == ReelsQualityCatalogStatus.UNSUPPORTED) return false
-        return qualityController.supports(itemId)
+        return controller.supports(itemId)
     }
 
     fun onQualityForceSdChanged(forceSd: Boolean) {
@@ -4567,8 +5605,10 @@ class ReelsFeedScreenModel(
         // Never retune the reel that is already playing: the new automatic-SD verdict applies
         // at the next activation, so only the forward window is re-resolved here. A reel with
         // no binding yet (error/pending) is included.
-        val activeIsBound = state.value.items.getOrNull(index)
-            ?.let { qualityController.playback(it.id) } != null
+        val activeItem = state.value.items.getOrNull(index)
+        val activeSlotId = state.value.itemSourceIds.getOrNull(index)
+        val activeIsBound = activeItem
+            ?.let { qualityControllerFor(it.id, activeSlotId)?.playback(it.id) } != null
         prepareQualityRange(
             fromIndex = if (activeIsBound) index + 1 else index,
             toIndex = index + QUALITY_PREPARE_AHEAD,
@@ -4577,11 +5617,13 @@ class ReelsFeedScreenModel(
 
     fun prepareQualityForIndex(index: Int) {
         val item = state.value.items.getOrNull(index) ?: return
-        val owner = qualityController.state.value.owner ?: return
-        if (!qualityController.supports(item.id)) return
+        val slotId = state.value.itemSourceIds.getOrNull(index)
+        val controller = qualityControllerFor(item.id, slotId) ?: return
+        val owner = controller.state.value.owner ?: return
+        if (!controller.supports(item.id)) return
         qualityPrepareJob?.cancel()
         qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
-            qualityController.prepare(
+            controller.prepare(
                 expectedOwner = owner,
                 item = item,
                 forceSd = qualityForceSd,
@@ -4601,16 +5643,47 @@ class ReelsFeedScreenModel(
      *   already playing keeps its actual binding and only the forward window is re-resolved.
      */
     fun prepareQualityWindow(startIndex: Int, skipBoundStart: Boolean = false) {
-        val boundStart = state.value.items.getOrNull(startIndex)
-            ?.let { qualityController.playback(it.id) } != null
+        val startItem = state.value.items.getOrNull(startIndex)
+        val startSlotId = state.value.itemSourceIds.getOrNull(startIndex)
+        val boundStart = startItem
+            ?.let { qualityControllerFor(it.id, startSlotId)?.playback(it.id) } != null
         val fromIndex = if (skipBoundStart && boundStart) startIndex + 1 else startIndex
         prepareQualityRange(fromIndex, startIndex + QUALITY_PREPARE_AHEAD)
     }
 
     private fun prepareQualityRange(fromIndex: Int, toIndex: Int) {
         if (fromIndex < 0 || toIndex < fromIndex) return
+        val current = state.value
+        val items = current.items
+        if (items.isEmpty()) return
+        if (current.isMixMode) {
+            if (mixQualityControllers.isEmpty()) return
+            val slotIds = current.itemSourceIds
+            val end = toIndex.coerceAtMost(items.lastIndex)
+            val perSource = LinkedHashMap<Long, MutableList<ShortVideoItem>>()
+            for (idx in fromIndex..end) {
+                val sid = slotIds.getOrNull(idx) ?: continue
+                if (!mixQualityControllers.containsKey(sid)) continue
+                perSource.getOrPut(sid) { mutableListOf() } += items[idx]
+            }
+            if (perSource.isEmpty()) return
+            qualityPrepareJob?.cancel()
+            qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
+                perSource.forEach { (sid, slotItems) ->
+                    val controller = mixQualityControllers[sid] ?: return@forEach
+                    val owner = controller.state.value.owner ?: return@forEach
+                    controller.prepareWindow(
+                        expectedOwner = owner,
+                        items = slotItems,
+                        fromIndex = 0,
+                        toIndex = slotItems.lastIndex,
+                        forceSd = qualityForceSd,
+                    )
+                }
+            }
+            return
+        }
         val owner = qualityController.state.value.owner ?: return
-        val items = state.value.items
         qualityPrepareJob?.cancel()
         qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
             qualityController.prepareWindow(
@@ -4724,6 +5797,7 @@ class ReelsFeedScreenModel(
      */
     override fun onDispose() {
         stopQualitySession()
+        stopMixSession(stopCoordinator = true, fromDispose = true)
         stopRoundRobin(clearProjection = false)
         super.onDispose()
     }
@@ -4733,10 +5807,24 @@ class ReelsFeedScreenModel(
         val currentSourceId: Long,
         val sourceName: String = "",
         val isOffline: Boolean = false,
+        val isMixMode: Boolean = false,
+        // Unified per-slot source ids (Mix mode + Offline playlist), index-aligned with [items].
+        val itemSourceIds: ImmutableList<Long> = persistentListOf(),
         // B3.3 offline playlist: per-slot source ids and the stored-copy keys ("sourceId:videoId").
         val offlineSourceIds: ImmutableList<Long> = persistentListOf(),
         val offlineStored: ImmutableSet<String> = persistentSetOf(),
+        val itemSourceNames: ImmutableMap<Long, String> = persistentHashMapOf(),
+        val sourceHeadersBySource: ImmutableMap<Long, ImmutableMap<String, String>> = persistentHashMapOf(),
+        val isCreatorCapableBySource: ImmutableMap<Long, Boolean> = persistentHashMapOf(),
+        val followingCreatorsBySource: ImmutableMap<Long, ImmutableSet<String>> = persistentHashMapOf(),
+        val excludedMixSourceIds: ImmutableSet<String> = persistentSetOf(),
+        val mixBurstSize: Int = 2,
+        val mixSourceStatuses: ImmutableMap<Long, MixSourceStatus> = persistentHashMapOf(),
+        val mixSkippedCount: Int = 0,
+        val mixQualityStates: ImmutableMap<Long, ReelsQualityState> = persistentHashMapOf(),
         val supportsTags: Boolean = true,
+        val supportsSearch: Boolean = true,
+        val supportsFilter: Boolean = true,
         // Source-supplied tag hints (contract v19 addendum): the reels search-bar chips.
         // Empty => the TopBar falls back to its static popular list.
         val searchHints: ImmutableList<String> = persistentListOf(),
@@ -4923,13 +6011,41 @@ class ReelsFeedScreenModel(
         val unseenHidden: Int = 0,
         val unseenScanStopped: Boolean = false,
     ) {
+        /** Resolves the owning plugin id for pager slot [itemIndex] (Mix / Offline / single-source). */
+        fun slotSourceId(itemIndex: Int): Long =
+            itemSourceIds.getOrNull(itemIndex)
+                ?: offlineSourceIds.getOrNull(itemIndex)
+                ?: currentSourceId
+
+        /** Resolves the display name of the plugin owning pager slot [itemIndex]. */
+        fun slotSourceName(itemIndex: Int): String? =
+            itemSourceNames[slotSourceId(itemIndex)] ?: if (!isMixMode) sourceName.takeIf { it.isNotBlank() } else null
+
+        /** Resolves HTTP request headers for pager slot [itemIndex]. */
+        fun slotHeaders(itemIndex: Int): ImmutableMap<String, String> =
+            sourceHeadersBySource[slotSourceId(itemIndex)] ?: sourceHeaders
+
+        /** True when the plugin owning slot [itemIndex] supports creator feeds/follows. */
+        fun isSlotCreatorCapable(itemIndex: Int): Boolean =
+            if (isMixMode) isCreatorCapableBySource[slotSourceId(itemIndex)] ?: false else isCreatorCapable
+
+        /** True when [creator] is followed on the plugin owning slot [itemIndex]. */
+        fun isFollowingCreator(creator: String, itemIndex: Int): Boolean =
+            if (isMixMode) {
+                creator in followingCreatorsBySource[slotSourceId(itemIndex)].orEmpty()
+            } else {
+                creator in followingCreators
+            }
+
         /**
-         * Like identity for the playlist slot: the offline playlist merges several sources,
-         * where a raw videoId is ambiguous; single-source feeds keep the plain id.
+         * Like identity for the playlist slot: the offline and Mix playlists merge several
+         * sources where a raw videoId is ambiguous; single-source feeds keep the plain id.
          */
         fun likeKey(videoId: String, itemIndex: Int): String =
-            if (isOffline && itemIndex >= 0) {
-                "${offlineSourceIds.getOrNull(itemIndex) ?: currentSourceId}:$videoId"
+            if ((isOffline || isMixMode) && itemIndex >= 0) {
+                "${itemSourceIds.getOrNull(
+                    itemIndex,
+                ) ?: offlineSourceIds.getOrNull(itemIndex) ?: currentSourceId}:$videoId"
             } else {
                 videoId
             }

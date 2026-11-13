@@ -46,6 +46,7 @@ class UiPreferences(
     fun showMangaSection() = preferenceStore.getBoolean("aurora_show_manga_section", true)
     fun showNovelSection() = preferenceStore.getBoolean("aurora_show_novel_section", true)
     fun showReelsVideoFeed() = preferenceStore.getBoolean("pref_show_reels_video_feed", true)
+    fun showReelsInLibrary() = preferenceStore.getBoolean("pref_show_reels_in_library", true)
 
     fun hideFeedTab() = preferenceStore.getBoolean("hide_feed_tab", false)
     fun feedTabInFront() = preferenceStore.getBoolean("feed_tab_position", false)

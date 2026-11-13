@@ -216,6 +216,7 @@ object SettingsAppearanceScreen : SearchableSettings {
         val hasReelsSources = remember(animeSources) {
             animeSources.any { it is AnimeFeedSource }
         }
+        val showReelsVideoFeed by uiPreferences.showReelsVideoFeed().collectAsState()
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.pref_category_app_interface),
@@ -290,6 +291,15 @@ object SettingsAppearanceScreen : SearchableSettings {
                             subtitle = stringResource(MR.strings.pref_enable_reels_video_feed_summary),
                         ),
                     )
+                    if (showReelsVideoFeed) {
+                        add(
+                            Preference.PreferenceItem.SwitchPreference(
+                                preference = uiPreferences.showReelsInLibrary(),
+                                title = stringResource(MR.strings.pref_show_reels_in_library),
+                                subtitle = stringResource(MR.strings.pref_show_reels_in_library_summary),
+                            ),
+                        )
+                    }
                 }
                 add(
                     Preference.PreferenceItem.ListPreference(

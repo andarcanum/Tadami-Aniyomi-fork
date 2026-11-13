@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.DataSaverOn
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.HighQuality
@@ -104,6 +105,9 @@ fun ReelsAuroraFrostDrawer(
     onClearVideoCache: () -> Unit = {},
     onClearOffline: () -> Unit = {},
     onOpenHide: (() -> Unit)? = null,
+    currentSourceName: String? = null,
+    onOpenSource: (() -> Unit)? = null,
+    onExcludeSourceFromMix: (() -> Unit)? = null,
     onSelectClip: (Int) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
@@ -156,6 +160,19 @@ fun ReelsAuroraFrostDrawer(
                 isIncognito = isIncognito,
                 onToggleIncognito = onToggleIncognito,
                 onOpenHide = onOpenHide,
+                currentSourceName = currentSourceName,
+                onOpenSource = onOpenSource?.let { cb ->
+                    {
+                        cb()
+                        onDismiss()
+                    }
+                },
+                onExcludeSourceFromMix = onExcludeSourceFromMix?.let { cb ->
+                    {
+                        cb()
+                        onDismiss()
+                    }
+                },
             )
             1 -> NetworkOfflineTabContent(
                 currentItem = currentItem,
@@ -206,6 +223,9 @@ private fun PlayerTabContent(
     isIncognito: Boolean,
     onToggleIncognito: () -> Unit,
     onOpenHide: (() -> Unit)? = null,
+    currentSourceName: String? = null,
+    onOpenSource: (() -> Unit)? = null,
+    onExcludeSourceFromMix: (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -359,6 +379,27 @@ private fun PlayerTabContent(
                     subtitle = stringResource(MR.strings.reels_hide_dialog_title),
                     onClick = onOpenHide,
                 )
+            }
+        }
+
+        if (!currentSourceName.isNullOrBlank() && (onOpenSource != null || onExcludeSourceFromMix != null)) {
+            FrostCard(title = stringResource(MR.strings.reels_mix_source_section)) {
+                if (onOpenSource != null) {
+                    FrostNavRow(
+                        icon = Icons.AutoMirrored.Filled.OpenInNew,
+                        title = stringResource(MR.strings.reels_mix_open_plugin, currentSourceName),
+                        subtitle = stringResource(MR.strings.reels_mix_open_plugin_desc),
+                        onClick = onOpenSource,
+                    )
+                }
+                if (onExcludeSourceFromMix != null) {
+                    FrostNavRow(
+                        icon = Icons.Filled.VisibilityOff,
+                        title = stringResource(MR.strings.reels_mix_exclude_plugin),
+                        subtitle = stringResource(MR.strings.reels_mix_exclude_plugin_desc, currentSourceName),
+                        onClick = onExcludeSourceFromMix,
+                    )
+                }
             }
         }
 
