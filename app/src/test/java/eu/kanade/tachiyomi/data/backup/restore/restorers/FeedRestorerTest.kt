@@ -28,6 +28,7 @@ class FeedRestorerTest {
 
     @BeforeEach
     fun setup() {
+        Class.forName("org.sqlite.JDBC")
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         MangaDb.Schema.create(driver)
         database = MangaDb(

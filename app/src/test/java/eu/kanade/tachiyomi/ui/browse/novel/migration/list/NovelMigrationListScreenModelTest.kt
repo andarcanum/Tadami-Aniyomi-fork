@@ -1,14 +1,25 @@
 package eu.kanade.tachiyomi.ui.browse.novel.migration.list
 
 import android.app.Application
+import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
+import eu.kanade.tachiyomi.novelsource.NovelSource
+import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import tachiyomi.core.common.preference.InMemoryPreferenceStore
+import tachiyomi.domain.source.novel.model.StubNovelSource
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
@@ -48,16 +59,27 @@ class NovelMigrationListScreenModelTest {
 
     @Test
     fun `constructor resolves its context default from the Application binding`() {
+        val fakeSourceManager = object : NovelSourceManager {
+            override val isInitialized: StateFlow<Boolean> = MutableStateFlow(true)
+            override val catalogueSources: Flow<List<NovelCatalogueSource>> = emptyFlow()
+            override fun get(sourceKey: Long): NovelSource? = null
+            override fun getOrStub(sourceKey: Long): NovelSource = mockk(relaxed = true)
+            override fun getOnlineSources(): List<NovelHttpSource> = emptyList()
+            override fun getCatalogueSources(): List<NovelCatalogueSource> = emptyList()
+            override fun getStubSources(): List<StubNovelSource> = emptyList()
+        }
         val screenModel = NovelMigrationListScreenModel(
             novelIds = emptyList(),
             sourceIds = emptyList(),
             extraSearchQuery = null,
-            sourcePreferences = mockk(relaxed = true),
-            sourceManager = mockk(relaxed = true),
+            // The init search reads source and migration preferences even with no novel ids.
+            // Real defaults avoid relaxed generic return values escaping into another test.
+            sourcePreferences = SourcePreferences(InMemoryPreferenceStore()),
+            sourceManager = fakeSourceManager,
             getNovel = mockk(relaxed = true),
             novelChapterRepository = mockk(relaxed = true),
             migrateNovel = mockk(relaxed = true),
-            preferenceStore = mockk(relaxed = true),
+            preferenceStore = InMemoryPreferenceStore(),
         )
         created += screenModel
 

@@ -58,9 +58,6 @@ import tachiyomi.domain.series.novel.model.NovelSeries
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetTracksPerNovel
 import tachiyomi.domain.track.novel.model.NovelTrack
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.fullType
-import uy.kohesive.injekt.api.get
 import java.util.Date
 
 class NovelLibraryScreenModelTest {
@@ -118,10 +115,8 @@ class NovelLibraryScreenModelTest {
         downloadedIdsFlow = MutableStateFlow(emptySet())
         every { downloadCache.downloadedIds } returns downloadedIdsFlow
         sourceManager = mockk(relaxed = true)
-        runCatching { Injekt.get<NovelSourceManager>() }
-            .getOrElse {
-                Injekt.addSingleton(fullType<NovelSourceManager>(), sourceManager)
-            }
+        // The model receives sourceManager explicitly; leaving a suite-local mock in global Injekt
+        // makes later suites reuse it and hang on its never-emitting flows.
         getVisibleNovelCategories = mockk()
         getTracksPerNovel = mockk()
         trackerManager = mockk(relaxed = true)

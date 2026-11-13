@@ -76,6 +76,9 @@ class NovelSourcesScreenModelTest {
                 getEnabledSources = getEnabledSources,
                 toggleSource = toggleSource,
                 togglePin = togglePin,
+                // A relaxed NovelSourceManager left in global Injekt by another suite would make
+                // isInitialized.first { it } hang; the DI-less contract skips the gate entirely.
+                sourceManager = null,
             ).also(activeScreenModels::add)
 
             withTimeout(1_000) {
