@@ -2,7 +2,6 @@
 
 package eu.kanade.presentation.reader.novel
 
-import android.content.ClipData
 import android.graphics.drawable.ColorDrawable
 import android.view.Window
 import android.view.WindowManager
@@ -34,7 +33,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
@@ -45,7 +43,6 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -54,8 +51,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -76,19 +71,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
 import eu.kanade.presentation.components.AdaptiveSheet
+import eu.kanade.presentation.more.settings.translation.AiTranslationCustomPromptDialog
+import eu.kanade.presentation.more.settings.translation.AiTranslationOutlinedTextField
+import eu.kanade.presentation.more.settings.translation.AiTranslationTerminalLogsSection
+import eu.kanade.presentation.more.settings.translation.AiTranslatorChoiceChip
+import eu.kanade.presentation.more.settings.translation.AiTranslatorFilterChip
+import eu.kanade.presentation.more.settings.translation.aiDeepSeekGenerationPresets
+import eu.kanade.presentation.more.settings.translation.aiDefaultGenerationPresets
+import eu.kanade.presentation.more.settings.translation.resolveSelectedGenerationPresetId
 import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.reader.settings.AuroraChipFlow
 import eu.kanade.presentation.reader.settings.AuroraFieldLabel
@@ -106,8 +105,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiModelEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiThinkingContract
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OLLAMA_CLOUD_FREE_MODELS
+import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveGeminiModelCapabilities
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveTranslationReasoningOptions
 import eu.kanade.tachiyomi.ui.reader.novel.translation.supportsAdultPromptMode
 import kotlinx.collections.immutable.persistentListOf
@@ -117,7 +118,6 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 
@@ -295,12 +295,10 @@ internal fun GeminiTranslationDialog(
             }
     }
 
-    var tempKey by remember(readerSettings.geminiApiKey) { mutableStateOf(readerSettings.geminiApiKey) }
     var tempModel by remember(readerSettings.geminiModel) {
         mutableStateOf(
             when (readerSettings.geminiModel) {
                 "gemini-3-flash" -> "gemini-3-flash-preview"
-                "gemini-2.5-flash" -> "gemini-3.1-flash-lite-preview"
                 else -> readerSettings.geminiModel
             },
         )
@@ -326,6 +324,9 @@ internal fun GeminiTranslationDialog(
         mutableStateOf(readerSettings.geminiReasoningEffort)
     }
     var tempBudget by remember(readerSettings.geminiBudgetTokens) { mutableStateOf(readerSettings.geminiBudgetTokens) }
+    var tempBudgetInput by remember(readerSettings.geminiBudgetTokens) {
+        mutableStateOf(readerSettings.geminiBudgetTokens.toString())
+    }
     var tempTemperature by remember(readerSettings.geminiTemperature) {
         mutableStateOf(readerSettings.geminiTemperature.toString())
     }
@@ -352,6 +353,8 @@ internal fun GeminiTranslationDialog(
     var tempProvider by remember(readerSettings.translationProvider) {
         mutableStateOf(readerSettings.translationProvider)
     }
+    // Live settings never carry secrets, so the field is write-only: presence comes from the vault mirror.
+    var tempKey by remember(tempProvider) { mutableStateOf("") }
     var tempPrivatePythonLikeMode by remember(readerSettings.geminiPrivatePythonLikeMode) {
         mutableStateOf(readerSettings.geminiPrivatePythonLikeMode)
     }
@@ -466,92 +469,8 @@ internal fun GeminiTranslationDialog(
     var showLogs by remember { mutableStateOf(false) }
     var showCustomPromptDialog by remember { mutableStateOf(false) }
 
-    data class GenerationPreset(
-        val id: String,
-        val title: String,
-        val temperature: Float,
-        val topP: Float,
-        val topK: Int?,
-        val scenario: String,
-        val advantage: String,
-    )
-
-    val defaultGenerationPresets = listOf(
-        GenerationPreset(
-            id = "anchor_plus",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_anchor_plus_title),
-            temperature = 0.62f,
-            topP = 0.9f,
-            topK = 36,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_anchor_plus_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_anchor_plus_advantage),
-        ),
-        GenerationPreset(
-            id = "authorial",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_authorial_title),
-            temperature = 0.76f,
-            topP = 0.93f,
-            topK = 48,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_authorial_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_authorial_advantage),
-        ),
-        GenerationPreset(
-            id = "dialogue_plus",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_dialogue_plus_title),
-            temperature = 0.88f,
-            topP = 0.95f,
-            topK = 56,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_dialogue_plus_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_dialogue_plus_advantage),
-        ),
-        GenerationPreset(
-            id = "private_pulse",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_private_pulse_title),
-            temperature = 0.98f,
-            topP = 0.97f,
-            topK = 72,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_private_pulse_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_private_pulse_advantage),
-        ),
-        GenerationPreset(
-            id = "unbound",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_unbound_title),
-            temperature = 1.08f,
-            topP = 0.985f,
-            topK = 96,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_unbound_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_unbound_advantage),
-        ),
-    )
-    val deepSeekGenerationPresets = listOf(
-        GenerationPreset(
-            id = "deepseek_balanced",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_balanced_title),
-            temperature = 1.3f,
-            topP = 0.9f,
-            topK = null,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_balanced_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_balanced_advantage),
-        ),
-        GenerationPreset(
-            id = "deepseek_expressive",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_expressive_title),
-            temperature = 1.4f,
-            topP = 0.93f,
-            topK = null,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_expressive_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_expressive_advantage),
-        ),
-        GenerationPreset(
-            id = "deepseek_creative",
-            title = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_creative_title),
-            temperature = 1.5f,
-            topP = 0.95f,
-            topK = null,
-            scenario = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_creative_scenario),
-            advantage = stringResource(AYMR.strings.novel_reader_gemini_generation_deepseek_creative_advantage),
-        ),
-    )
+    val defaultGenerationPresets = aiDefaultGenerationPresets()
+    val deepSeekGenerationPresets = aiDeepSeekGenerationPresets()
     val stylePresets = remember { NovelTranslationStylePresets.all }
     fun resolveSelectedGenerationPresetId(
         provider: NovelTranslationProvider,
@@ -559,32 +478,14 @@ internal fun GeminiTranslationDialog(
         topP: Float,
         topK: Int,
     ): String {
-        val presets = if (provider == NovelTranslationProvider.DEEPSEEK) {
-            deepSeekGenerationPresets
-        } else {
-            defaultGenerationPresets
-        }
-        if (presets.isEmpty()) return ""
-        val epsilon = 0.0001f
-        presets.firstOrNull { preset ->
-            val tempMatch = abs(preset.temperature - temperature) <= epsilon
-            val topPMatch = abs(preset.topP - topP) <= epsilon
-            val topKMatch = when {
-                provider == NovelTranslationProvider.DEEPSEEK -> true
-                preset.topK == null -> true
-                else -> preset.topK == topK
-            }
-            tempMatch && topPMatch && topKMatch
-        }?.let { return it.id }
-
-        return presets.minByOrNull { preset ->
-            val topKDistance = when {
-                provider == NovelTranslationProvider.DEEPSEEK -> 0f
-                preset.topK == null -> 0f
-                else -> abs((topK - preset.topK).toFloat()) / 100f
-            }
-            abs(preset.temperature - temperature) + abs(preset.topP - topP) + topKDistance
-        }?.id ?: presets.first().id
+        val isDeepSeek = provider == NovelTranslationProvider.DEEPSEEK
+        return resolveSelectedGenerationPresetId(
+            isDeepSeek = isDeepSeek,
+            presets = if (isDeepSeek) deepSeekGenerationPresets else defaultGenerationPresets,
+            temperature = temperature,
+            topP = topP,
+            topK = topK,
+        )
     }
     var selectedGenerationPresetId by remember(
         tempProvider,
@@ -647,6 +548,15 @@ internal fun GeminiTranslationDialog(
     }
     val reasoningOptions = remember(tempProvider, activeReasoningModel) {
         resolveTranslationReasoningOptions(tempProvider, activeReasoningModel)
+    }
+    val tokenBudgetContract = remember(tempProvider, activeReasoningModel) {
+        if (tempProvider == NovelTranslationProvider.GEMINI ||
+            tempProvider == NovelTranslationProvider.GEMINI_PRIVATE
+        ) {
+            resolveGeminiModelCapabilities(activeReasoningModel).thinking as? GeminiThinkingContract.TokenBudget
+        } else {
+            null
+        }
     }
     val activeGenerationPresets = if (isDeepSeekSelected) {
         deepSeekGenerationPresets
@@ -1009,7 +919,7 @@ internal fun GeminiTranslationDialog(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        AuroraOutlinedTextField(
+                                        AiTranslationOutlinedTextField(
                                             value = tempSourceLang,
                                             onValueChange = {
                                                 tempSourceLang = it
@@ -1053,7 +963,7 @@ internal fun GeminiTranslationDialog(
                                                 )
                                             }
                                         }
-                                        AuroraOutlinedTextField(
+                                        AiTranslationOutlinedTextField(
                                             value = tempTargetLang,
                                             onValueChange = {
                                                 tempTargetLang = it
@@ -1104,24 +1014,28 @@ internal fun GeminiTranslationDialog(
                                             ) {
                                                 rowProviders.forEach { option ->
                                                     val selected = tempProvider == option.first
+                                                    val keyPresent =
+                                                        option.first in readerSettings.translationCredentialProviders ||
+                                                            (selected && tempKey.isNotBlank())
                                                     val apiConfigured = when (option.first) {
-                                                        NovelTranslationProvider.GEMINI -> tempKey.isNotBlank()
-                                                        NovelTranslationProvider.GEMINI_PRIVATE -> tempKey.isNotBlank() &&
-                                                            isPrivateProviderUnlocked
+                                                        NovelTranslationProvider.GEMINI -> keyPresent
+                                                        NovelTranslationProvider.GEMINI_PRIVATE ->
+                                                            keyPresent &&
+                                                                isPrivateProviderUnlocked
                                                         NovelTranslationProvider.OPENROUTER -> tempOpenRouterBaseUrl.isNotBlank() &&
-                                                            readerSettings.openRouterApiKey.isNotBlank() &&
+                                                            keyPresent &&
                                                             tempOpenRouterModel.isNotBlank()
                                                         NovelTranslationProvider.DEEPSEEK -> tempDeepSeekBaseUrl.isNotBlank() &&
-                                                            readerSettings.deepSeekApiKey.isNotBlank() &&
+                                                            keyPresent &&
                                                             tempDeepSeekModel.isNotBlank()
                                                         NovelTranslationProvider.MISTRAL -> tempMistralBaseUrl.isNotBlank() &&
-                                                            readerSettings.mistralApiKey.isNotBlank() &&
+                                                            keyPresent &&
                                                             tempMistralModel.isNotBlank()
                                                         NovelTranslationProvider.NVIDIA -> tempNvidiaBaseUrl.isNotBlank() &&
-                                                            readerSettings.nvidiaApiKey.isNotBlank() &&
+                                                            keyPresent &&
                                                             tempNvidiaModel.isNotBlank()
                                                         NovelTranslationProvider.OLLAMA_CLOUD -> tempOllamaCloudBaseUrl.isNotBlank() &&
-                                                            readerSettings.ollamaCloudApiKey.isNotBlank() &&
+                                                            keyPresent &&
                                                             tempOllamaCloudModel.isNotBlank()
                                                     }
                                                     AiTranslatorProviderCard(
@@ -1184,7 +1098,7 @@ internal fun GeminiTranslationDialog(
                                                 .padding(horizontal = 16.dp, vertical = 4.dp),
                                             verticalArrangement = Arrangement.spacedBy(6.dp),
                                         ) {
-                                            AuroraOutlinedTextField(
+                                            AiTranslationOutlinedTextField(
                                                 value = tempPrivatePassword,
                                                 onValueChange = { tempPrivatePassword = it },
                                                 label = {
@@ -1348,7 +1262,7 @@ internal fun GeminiTranslationDialog(
                                                     )
                                                 }
                                             }
-                                            AuroraOutlinedTextField(
+                                            AiTranslationOutlinedTextField(
                                                 value = tempOpenRouterModel,
                                                 onValueChange = {
                                                     tempOpenRouterModel = it
@@ -1409,7 +1323,7 @@ internal fun GeminiTranslationDialog(
                                                     )
                                                 }
                                             }
-                                            AuroraOutlinedTextField(
+                                            AiTranslationOutlinedTextField(
                                                 value = tempDeepSeekModel,
                                                 onValueChange = {
                                                     tempDeepSeekModel = it
@@ -1470,7 +1384,7 @@ internal fun GeminiTranslationDialog(
                                                     )
                                                 }
                                             }
-                                            AuroraOutlinedTextField(
+                                            AiTranslationOutlinedTextField(
                                                 value = tempMistralModel,
                                                 onValueChange = {
                                                     tempMistralModel = it
@@ -1531,7 +1445,7 @@ internal fun GeminiTranslationDialog(
                                                     )
                                                 }
                                             }
-                                            AuroraOutlinedTextField(
+                                            AiTranslationOutlinedTextField(
                                                 value = tempNvidiaModel,
                                                 onValueChange = {
                                                     tempNvidiaModel = it
@@ -1590,7 +1504,7 @@ internal fun GeminiTranslationDialog(
                                                     )
                                                 }
                                             }
-                                            AuroraOutlinedTextField(
+                                            AiTranslationOutlinedTextField(
                                                 value = tempOllamaCloudModel,
                                                 onValueChange = {
                                                     tempOllamaCloudModel = it
@@ -1653,7 +1567,8 @@ internal fun GeminiTranslationDialog(
                                     }
                                 }
 
-                                // 6. Reasoning Effort
+                                // 6. Reasoning Effort / Thinking Token Budget
+                                val budgetLabel = stringResource(AYMR.strings.ai_translation_reason_budget)
                                 if (reasoningOptions.isNotEmpty()) {
                                     AuroraGlassSection(
                                         title = reasoningLabel,
@@ -1678,6 +1593,67 @@ internal fun GeminiTranslationDialog(
                                                 )
                                             }
                                         }
+                                    }
+                                } else if (tokenBudgetContract != null) {
+                                    AuroraGlassSection(
+                                        title = budgetLabel,
+                                    ) {
+                                        val rangeHint = buildList {
+                                            add(
+                                                stringResource(
+                                                    AYMR.strings.ai_translation_reason_range,
+                                                    tokenBudgetContract.minimum,
+                                                    tokenBudgetContract.maximum,
+                                                ),
+                                            )
+                                            if (tokenBudgetContract.canDisable) {
+                                                add(stringResource(AYMR.strings.ai_translation_reason_disable))
+                                            }
+                                            if (tokenBudgetContract.canUseDynamic) {
+                                                add(stringResource(AYMR.strings.ai_translation_reason_dynamic))
+                                            }
+                                        }.joinToString(" · ")
+                                        AuroraFieldLabel(rangeHint)
+                                        val budgetPresets = buildList {
+                                            if (tokenBudgetContract.canUseDynamic) add(-1)
+                                            if (tokenBudgetContract.canDisable) add(0)
+                                            listOf(1024, 4096, 8192, 16384, 24576)
+                                                .filter {
+                                                    it in tokenBudgetContract.minimum..tokenBudgetContract.maximum
+                                                }
+                                                .forEach(::add)
+                                            if (tokenBudgetContract.maximum > 0) add(tokenBudgetContract.maximum)
+                                        }.distinct()
+                                        AuroraChipFlow {
+                                            budgetPresets.forEach { tokens ->
+                                                AiTranslatorChoiceChip(
+                                                    text = tokens.toString(),
+                                                    selected = tempBudget == tokens,
+                                                    onClick = {
+                                                        tempBudget = tokens
+                                                        tempBudgetInput = tokens.toString()
+                                                        onSetGeminiBudgetTokens(tokens)
+                                                        logPair(budgetLabel, tokens.toString())
+                                                    },
+                                                )
+                                            }
+                                        }
+                                        AiTranslationOutlinedTextField(
+                                            value = tempBudgetInput,
+                                            onValueChange = { raw ->
+                                                val filtered = raw.filter { it.isDigit() || it == '-' }
+                                                tempBudgetInput = filtered
+                                                val parsed = filtered.toIntOrNull()
+                                                if (parsed != null && tokenBudgetContract.accepts(parsed)) {
+                                                    tempBudget = parsed
+                                                    onSetGeminiBudgetTokens(parsed)
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            label = { Text(budgetLabel) },
+                                        )
                                     }
                                 }
                             }
@@ -2266,7 +2242,7 @@ internal fun GeminiTranslationDialog(
                                         isNvidiaSelected ||
                                         isOllamaCloudSelected
                                     ) {
-                                        AuroraOutlinedTextField(
+                                        AiTranslationOutlinedTextField(
                                             value = when {
                                                 isOpenRouterSelected -> tempOpenRouterBaseUrl
                                                 isDeepSeekSelected -> tempDeepSeekBaseUrl
@@ -2345,16 +2321,10 @@ internal fun GeminiTranslationDialog(
                                         }
                                     }
 
-                                    AuroraOutlinedTextField(
-                                        value = when {
-                                            isOpenRouterSelected -> readerSettings.openRouterApiKey
-                                            isDeepSeekSelected -> readerSettings.deepSeekApiKey
-                                            isMistralSelected -> readerSettings.mistralApiKey
-                                            isNvidiaSelected -> readerSettings.nvidiaApiKey
-                                            isOllamaCloudSelected -> readerSettings.ollamaCloudApiKey
-                                            else -> tempKey
-                                        },
+                                    AiTranslationOutlinedTextField(
+                                        value = tempKey,
                                         onValueChange = {
+                                            tempKey = it
                                             if (isOpenRouterSelected) {
                                                 onSetOpenRouterApiKey(it)
                                             } else if (isDeepSeekSelected) {
@@ -2366,8 +2336,12 @@ internal fun GeminiTranslationDialog(
                                             } else if (isOllamaCloudSelected) {
                                                 onSetOllamaCloudApiKey(it)
                                             } else {
-                                                tempKey = it
                                                 onSetGeminiApiKey(it)
+                                            }
+                                        },
+                                        placeholder = {
+                                            if (tempProvider in readerSettings.translationCredentialProviders) {
+                                                Text(stringResource(AYMR.strings.novel_reader_ai_translator_key_stored))
                                             }
                                         },
                                         label = {
@@ -2460,81 +2434,13 @@ internal fun GeminiTranslationDialog(
                                 }
 
                                 // 3. Debug Terminal Logs
-                                val clipboard = LocalClipboard.current
                                 AuroraGlassSection(
                                     title = stringResource(AYMR.strings.novel_reader_ai_translator_logs_title),
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_logs_count,
-                                            ).format(logs.size),
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            TextButton(
-                                                onClick = {
-                                                    val text = logs.joinToString("\n")
-                                                    scope.launch {
-                                                        clipboard.setClipEntry(
-                                                            ClipEntry(ClipData.newPlainText(null, text)),
-                                                        )
-                                                    }
-                                                },
-                                            ) {
-                                                Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.size(4.dp))
-                                                Text(
-                                                    text = stringResource(
-                                                        AYMR.strings.novel_reader_dictionary_history_action_copy,
-                                                    ),
-                                                )
-                                            }
-                                            TextButton(onClick = onClearLogs) {
-                                                Icon(Icons.Filled.Delete, null, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.size(4.dp))
-                                                Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear))
-                                            }
-                                        }
-                                    }
-
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(if (aurora.isDark) Color(0xFF07090F) else Color(0xFF1E232E))
-                                            .padding(10.dp)
-                                            .heightIn(max = 140.dp)
-                                            .verticalScroll(rememberScrollState()),
-                                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                                    ) {
-                                        if (logs.isEmpty()) {
-                                            Text(
-                                                text = stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_logs_empty,
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = Color(0xFF9CA3AF),
-                                                fontFamily = FontFamily.Monospace,
-                                            )
-                                        } else {
-                                            logs.forEach { log ->
-                                                Text(
-                                                    text = log,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = Color(0xFFA7F3D0),
-                                                    fontFamily = FontFamily.Monospace,
-                                                )
-                                            }
-                                        }
-                                    }
+                                    AiTranslationTerminalLogsSection(
+                                        logs = logs,
+                                        onClearLogs = onClearLogs,
+                                    )
                                 }
                             }
                         }
@@ -2546,188 +2452,21 @@ internal fun GeminiTranslationDialog(
     }
 
     if (showCustomPromptDialog) {
-        AlertDialog(
-            onDismissRequest = { showCustomPromptDialog = false },
-            title = { Text(stringResource(AYMR.strings.novel_reader_ai_translator_custom_modifier_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AuroraOutlinedTextField(
-                        value = tempCustomModifier,
-                        onValueChange = { tempCustomModifier = it },
-                        label = {
-                            Text(stringResource(AYMR.strings.novel_reader_ai_translator_custom_instructions))
-                        },
-                        minLines = 4,
-                        singleLine = false,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        stringResource(AYMR.strings.novel_reader_ai_translator_custom_modifier_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        AiTranslationCustomPromptDialog(
+            initialText = tempCustomModifier,
+            onDismiss = { showCustomPromptDialog = false },
+            onClear = {
+                tempCustomModifier = ""
+                onSetGeminiCustomPromptModifier("")
+                showCustomPromptDialog = false
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    onSetGeminiCustomPromptModifier(tempCustomModifier)
-                    onAddLog(customPromptUpdatedLabel)
-                    showCustomPromptDialog = false
-                }) {
-                    Text(stringResource(AYMR.strings.novel_reader_ai_translator_save))
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        tempCustomModifier = ""
-                        onSetGeminiCustomPromptModifier("")
-                        showCustomPromptDialog = false
-                    }) { Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear)) }
-                    TextButton(onClick = { showCustomPromptDialog = false }) {
-                        Text(stringResource(AYMR.strings.novel_reader_ai_translator_cancel))
-                    }
-                }
+            onSave = { updated ->
+                tempCustomModifier = updated
+                onSetGeminiCustomPromptModifier(updated)
+                onAddLog(customPromptUpdatedLabel)
+                showCustomPromptDialog = false
             },
         )
-    }
-}
-
-@Composable
-private fun AuroraOutlinedTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    label: @Composable (() -> Unit)? = null,
-    singleLine: Boolean = true,
-    minLines: Int = 1,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    trailingIcon: @Composable (() -> Unit)? = null,
-) {
-    val aurora = AuroraTheme.colors
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = label,
-        modifier = modifier,
-        singleLine = singleLine,
-        minLines = minLines,
-        visualTransformation = visualTransformation,
-        trailingIcon = trailingIcon,
-        shape = RoundedCornerShape(16.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = aurora.accent,
-            unfocusedBorderColor = auroraRimColor(),
-            focusedLabelColor = aurora.accent,
-            unfocusedLabelColor = if (aurora.isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
-            cursorColor = aurora.accent,
-            focusedContainerColor = if (aurora.isDark) {
-                Color.White.copy(
-                    alpha = 0.04f,
-                )
-            } else {
-                Color.Black.copy(alpha = 0.02f)
-            },
-            unfocusedContainerColor = if (aurora.isDark) {
-                Color.White.copy(
-                    alpha = 0.02f,
-                )
-            } else {
-                Color.Black.copy(alpha = 0.01f)
-            },
-        ),
-    )
-}
-
-@Composable
-private fun AiTranslatorChoiceChip(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val aurora = AuroraTheme.colors
-    Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (selected) {
-                aurora.accent.copy(alpha = 0.55f)
-            } else {
-                auroraRimColor()
-            },
-        ),
-        color = if (selected) {
-            aurora.accent.copy(alpha = 0.16f)
-        } else {
-            if (aurora.isDark) Color.White.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.03f)
-        },
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelMedium,
-            textAlign = TextAlign.Center,
-            color = if (selected) {
-                aurora.accent
-            } else {
-                if (aurora.isDark) Color(0xFFD1D5DB) else Color(0xFF374151)
-            },
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        )
-    }
-}
-
-@Composable
-private fun AiTranslatorFilterChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val aurora = AuroraTheme.colors
-    Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (selected) {
-                aurora.accent.copy(alpha = 0.50f)
-            } else {
-                auroraRimColor()
-            },
-        ),
-        color = if (selected) {
-            if (aurora.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
-        } else {
-            if (aurora.isDark) Color.White.copy(alpha = 0.03f) else Color.Black.copy(alpha = 0.02f)
-        },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = aurora.accent,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    if (aurora.isDark) Color(0xFFD1D5DB) else Color(0xFF374151)
-                },
-                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            )
-        }
     }
 }
 

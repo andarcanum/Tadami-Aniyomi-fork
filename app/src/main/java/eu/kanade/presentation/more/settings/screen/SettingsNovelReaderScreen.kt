@@ -59,6 +59,7 @@ import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsScreen
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
 import eu.kanade.presentation.reader.novel.NOVEL_READER_BACKGROUND_PRESET_AGED_PAGE_ID
@@ -117,7 +118,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistory
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.StarDictManager
 import eu.kanade.tachiyomi.ui.reader.novel.replace.NovelTextReplaceRulesScreen
-import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelAutoScrollChapterEndBehavior
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
@@ -126,10 +126,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTypographyPreset
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
-import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableMap
@@ -467,16 +465,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
     private fun getAiTranslationGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val aiEnabled by prefs.geminiEnabled().collectAsState()
         val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
-        val translationProviderPref = prefs.translationProvider()
-        val translationProvider by translationProviderPref.collectAsState()
-        val privateProviderFallbackLabel = stringResource(
-            AYMR.strings.novel_reader_translation_provider_gemini_private,
-        )
-        val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
-            GeminiPrivateBridge.providerLabel()
-        } else {
-            privateProviderFallbackLabel
-        }
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.SwitchPreference(
                 preference = prefs.geminiEnabled(),
@@ -487,127 +475,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
         )
 
         if (aiEnabled) {
-            items += Preference.PreferenceItem.ListPreference(
-                preference = translationProviderPref,
-                entries = persistentMapOf(
-                    NovelTranslationProvider.GEMINI to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
-                    NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
-                    NovelTranslationProvider.OPENROUTER to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
-                    NovelTranslationProvider.DEEPSEEK to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
-                    NovelTranslationProvider.MISTRAL to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_mistral),
-                    NovelTranslationProvider.NVIDIA to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_nvidia),
-                ),
-                title = stringResource(AYMR.strings.novel_reader_translation_provider),
-            )
-
-            when (translationProvider) {
-                NovelTranslationProvider.OPENROUTER -> {
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.openRouterBaseUrl(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_openrouter_base_url),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.openRouterApiKey(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_openrouter_api_key),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.openRouterModel(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_openrouter_model),
-                        subtitle = "%s",
-                    )
-                }
-                NovelTranslationProvider.DEEPSEEK -> {
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.deepSeekBaseUrl(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_deepseek_base_url),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.deepSeekApiKey(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_deepseek_api_key),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.deepSeekModel(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_deepseek_model),
-                        subtitle = "%s",
-                    )
-                }
-                NovelTranslationProvider.MISTRAL -> {
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.mistralBaseUrl(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_mistral_base_url),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.mistralApiKey(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_mistral_api_key),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.mistralModel(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_mistral_model),
-                        subtitle = "%s",
-                    )
-                }
-                NovelTranslationProvider.NVIDIA -> {
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.nvidiaBaseUrl(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_nvidia_base_url),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.nvidiaApiKey(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_nvidia_api_key),
-                        subtitle = "%s",
-                    )
-                    items += Preference.PreferenceItem.EditTextInfoPreference(
-                        preference = prefs.nvidiaModel(),
-                        dialogSubtitle = null,
-                        title = stringResource(AYMR.strings.novel_reader_nvidia_model),
-                        subtitle = "%s",
-                    )
-                }
-                else -> Unit
-            }
-
-            items += Preference.PreferenceItem.ListPreference(
-                preference = prefs.geminiPromptMode(),
-                title = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
-                entries = persistentMapOf(
-                    GeminiPromptMode.CLASSIC to stringResource(
-                        AYMR.strings.novel_reader_gemini_prompt_mode_classic,
-                    ),
-                    GeminiPromptMode.ADULT_18 to stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult),
-                ),
-            )
-            items += Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.geminiAutoTranslateEnglishSource(),
-                title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_auto_english_summary),
-            )
-            items += Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.geminiPrefetchNextChapterTranslation(),
-                title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_summary),
+            val navigator = LocalNavigator.current
+            items += Preference.PreferenceItem.TextPreference(
+                title = stringResource(AYMR.strings.ai_translation_title),
+                subtitle = stringResource(AYMR.strings.ai_translation_subtitle),
+                onClick = { navigator?.push(AiTranslationSettingsScreen()) },
             )
         }
 

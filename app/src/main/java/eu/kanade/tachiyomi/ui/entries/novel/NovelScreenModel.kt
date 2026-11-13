@@ -62,6 +62,8 @@ import eu.kanade.tachiyomi.data.translation.TranslationBatchRequest
 import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
+import eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices
+import eu.kanade.tachiyomi.data.translation.profile.readerProfileSettings
 import eu.kanade.tachiyomi.data.translation.toTranslationQueueProfileSnapshot
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJaomixPagedSource
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
@@ -75,6 +77,7 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionStateResolver
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.novel.sortedByNovelReadingOrder
+import eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule
 import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -112,6 +115,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
@@ -123,6 +127,7 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.achievement.model.AchievementEvent
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.category.model.Category
@@ -144,6 +149,7 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
+import tachiyomi.domain.translation.profile.TranslationProfileRepository
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.source.local.entries.novel.isLocal
@@ -263,6 +269,11 @@ class NovelScreenModel(
     private val suggestionCoordinator: SuggestionCoordinator = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
+    private val translationProfiles: TranslationProfileRepository? = runCatching {
+        Injekt.get<NovelDatabaseHandler>()
+        Injekt.get<Json>()
+        TranslationProfileServices.repository
+    }.getOrNull(),
 ) : StateScreenModel<NovelScreenModel.State>(State.Loading) {
 
     private var hasVerifiedDiskDownloadsOnce = false
@@ -291,7 +302,7 @@ class NovelScreenModel(
     private val successState: State.Success?
         get() = state.value as? State.Success
 
-    private var readerSettingsCache: NovelReaderSettings? = null
+    @Volatile private var readerSettingsCache: NovelReaderSettings? = null
 
     val novel: Novel?
         get() = successState?.novel
@@ -576,8 +587,7 @@ class NovelScreenModel(
             val resumeChapterId = resumeChapterIdDeferred.await()
             val initialBookState = bookStateDeferred.await()
             val source = sourceManager.getOrStub(novel.source)
-            val readerSettings = novelReaderPreferences.resolveSettings(novel.source)
-            readerSettingsCache = readerSettings
+            val readerSettings = resolveProfileReaderSettings(novel.source)
             val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
             val isJaomixPagedSource = source.isJaomixPagedSource()
             val isLocalNovel = novel.isLocal()
@@ -689,7 +699,9 @@ class NovelScreenModel(
             }
             // Seed the UI with lightweight neutral Gemini actions immediately, then
             // resolve translated download and translation cache state in the background.
-            queuedChapterIds = translationQueueManager.queue.value.mapTo(mutableSetOf()) { it.chapterId }
+            queuedChapterIds = translationQueueManager.queue.value
+                .filter { it.status != TranslationStatus.PAUSED }
+                .mapTo(mutableSetOf()) { it.chapterId }
             refreshChapterActionStatesAsync(delayMs = 0L)
             screenModelScope.launchIO {
                 basePreferences.downloadedOnly().changes()
@@ -701,8 +713,24 @@ class NovelScreenModel(
             screenModelScope.launchIO {
                 novelReaderPreferences.geminiEnabled().changes()
                     .collectLatest {
+                        readerSettingsCache = null
                         refreshChapterActionStatesAsync(delayMs = 100L)
                     }
+            }
+
+            translationProfiles?.let { profiles ->
+                screenModelScope.launchIO {
+                    var seenInitial = false
+                    profiles.observeCatalog()
+                        .collectLatest {
+                            if (!seenInitial) {
+                                seenInitial = true
+                                return@collectLatest
+                            }
+                            readerSettingsCache = null
+                            refreshChapterActionStatesAsync(delayMs = 100L)
+                        }
+                }
             }
 
             screenModelScope.launchIO {
@@ -722,7 +750,9 @@ class NovelScreenModel(
                 translationQueueManager.queue
                     .onEach { items ->
                         val previousQueuedChapterIds = queuedChapterIds
-                        queuedChapterIds = items.mapTo(mutableSetOf()) { it.chapterId }
+                        queuedChapterIds = items
+                            .filter { it.status != TranslationStatus.PAUSED }
+                            .mapTo(mutableSetOf()) { it.chapterId }
                         val addedChapterIds = queuedChapterIds - previousQueuedChapterIds
                         val removedChapterIds = previousQueuedChapterIds - queuedChapterIds
                         val activeChapterId = translationQueueManager.activeTranslation.value?.chapterId
@@ -755,12 +785,14 @@ class NovelScreenModel(
                                 TranslationStatus.COMPLETED,
                                 TranslationStatus.FAILED,
                                 TranslationStatus.CANCELLED,
+                                TranslationStatus.PAUSED,
                                 -> updateChapterTranslateStates(
                                     chapterIds = setOf(update.chapterId),
                                     isTranslating = false,
                                 )
                                 TranslationStatus.IN_PROGRESS,
                                 TranslationStatus.PENDING,
+                                TranslationStatus.WAITING,
                                 -> updateChapterTranslateStates(
                                     chapterIds = setOf(update.chapterId),
                                     isTranslating = true,
@@ -1401,7 +1433,8 @@ class NovelScreenModel(
         chapterActionStatesJob = screenModelScope.launchIO {
             delay(delayMs)
             val current = successState ?: return@launchIO
-            val resolved = current.withResolvedChapterActionStates()
+            val readerSettings = resolveProfileReaderSettings(current.novel.source)
+            val resolved = current.withResolvedChapterActionStates(readerSettings = readerSettings)
             if (resolved.chapterActionStates != current.chapterActionStates ||
                 resolved.geminiEnabled != current.geminiEnabled ||
                 resolved.translatedDownloadFormat != current.translatedDownloadFormat
@@ -1492,8 +1525,30 @@ class NovelScreenModel(
         }
     }
 
-    private fun resolveReaderSettings(sourceId: Long): NovelReaderSettings {
+    private fun resolveCachedReaderSettings(sourceId: Long): NovelReaderSettings {
         return readerSettingsCache ?: novelReaderPreferences.resolveSettings(sourceId).also { readerSettingsCache = it }
+    }
+
+    private suspend fun resolveProfileReaderSettings(
+        sourceId: Long,
+        rules: List<ReplaceRule>? = null,
+        fallbackOnError: Boolean = true,
+    ): NovelReaderSettings {
+        val base = novelReaderPreferences.resolveSettings(sourceId)
+        val enabledRules = rules ?: novelReaderPreferences.enabledReplaceRules()
+        val resolved = if (fallbackOnError) {
+            try {
+                translationQueueManager.readerProfileSettings(base, novelId, enabledRules)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                base
+            }
+        } else {
+            translationQueueManager.readerProfileSettings(base, novelId, enabledRules)
+        }
+        readerSettingsCache = resolved
+        return resolved
     }
 
     private fun syncDownloadedState(deferFilesystemFallback: Boolean = true) {
@@ -1659,9 +1714,9 @@ class NovelScreenModel(
     }
 
     private fun State.Success.withResolvedChapterActionStates(
+        readerSettings: NovelReaderSettings = resolveCachedReaderSettings(novel.source),
         queueState: NovelDownloadQueueState = NovelDownloadQueueManager.state.value,
     ): State.Success {
-        val readerSettings = novelReaderPreferences.resolveSettings(novel.source)
         readerSettingsCache = readerSettings
         val translatedCacheChapterIds = NovelReaderTranslationDiskCacheStore.chapterIds(
             chapters.map { it.id },
@@ -2944,15 +2999,32 @@ class NovelScreenModel(
         chapterIds: Set<Long>,
         isTranslating: Boolean,
     ) {
-        successState ?: return
+        val current = successState ?: return
         if (chapterIds.isEmpty()) return
 
-        updateSuccessState { current ->
-            val translatedCacheChapterIds = NovelReaderTranslationDiskCacheStore.chapterIds(
-                current.chapters.map { it.id },
-                resolveReaderSettings(current.novel.source).geminiTargetLang,
-            )
-            val updatedChapterActionStates = current.chapterActionStates.toMutableMap()
+        if (isTranslating) {
+            val needsUpdate = chapterIds.any { chapterId ->
+                val state = current.chapterActionStates[chapterId]
+                state != null && state.translateState != NovelChapterActionIconState.InProgress
+            }
+            if (!needsUpdate) return
+        }
+
+        val translatedCacheChapterIds = if (isTranslating) {
+            emptySet()
+        } else {
+            val targetLang = resolveCachedReaderSettings(current.novel.source).geminiTargetLang
+            chapterIds.filterTo(mutableSetOf()) { chapterId ->
+                current.chapterActionStates.containsKey(chapterId) &&
+                    NovelReaderTranslationDiskCacheStore.has(
+                        chapterId = chapterId,
+                        targetLang = targetLang,
+                    )
+            }
+        }
+
+        updateSuccessState { latest ->
+            val updatedChapterActionStates = latest.chapterActionStates.toMutableMap()
             var changed = false
 
             chapterIds.forEach { chapterId ->
@@ -2969,7 +3041,7 @@ class NovelScreenModel(
                 }
             }
 
-            if (!changed) current else current.copy(chapterActionStates = updatedChapterActionStates)
+            if (!changed) latest else latest.copy(chapterActionStates = updatedChapterActionStates)
         }
     }
 
@@ -3143,7 +3215,7 @@ class NovelScreenModel(
         onProgress: (NovelEpubExportProgress) -> Unit = {},
     ): NovelEpubExportResult {
         val state = successState ?: return NovelEpubExportResult.Failure(NovelEpubExportFailure.UNKNOWN)
-        val readerSettings = resolveReaderSettings(state.novel.source)
+        val readerSettings = resolveProfileReaderSettings(state.novel.source)
         val stylesheet = NovelEpubStyleBuilder.buildStylesheet(
             settings = readerSettings,
             sourceId = state.novel.source,
@@ -3563,7 +3635,6 @@ class NovelScreenModel(
         val state = successState ?: return
         screenModelScope.launchIO {
             try {
-                val readerSettings = resolveReaderSettings(state.novel.source)
                 val selectedChapterIds = state.selectedChapterIds.ifEmpty { setOf(anchorChapterId) }
                 val resolvedChapterIds = resolveTranslationBatchChapterIds(
                     scope = scope,
@@ -3581,9 +3652,13 @@ class NovelScreenModel(
                     return@launchIO
                 }
 
-                val batchReplaceRulesFingerprint = replaceRulesFingerprint(
-                    novelReaderPreferences.enabledReplaceRules(),
+                val batchRules = novelReaderPreferences.enabledReplaceRules()
+                val readerSettings = resolveProfileReaderSettings(
+                    sourceId = state.novel.source,
+                    rules = batchRules,
+                    fallbackOnError = false,
                 )
+                val batchReplaceRulesFingerprint = replaceRulesFingerprint(batchRules)
                 val translationCacheRequirements = readerSettings.toTranslationCacheRequirements(
                     replaceRulesFingerprint = batchReplaceRulesFingerprint,
                 )
@@ -3612,26 +3687,33 @@ class NovelScreenModel(
                         chapterIds = filteredSelection.chapterIdsToEnqueue,
                         profileSnapshot = readerSettings.toTranslationQueueProfileSnapshot(
                             replaceRulesFingerprint = batchReplaceRulesFingerprint,
+                            replaceRulesSnapshot = batchRules,
                         ),
                         forceRetranslate = forceRetranslate,
                     ),
                 )
                 if (result.enqueuedCount > 0) {
-                    TranslationJob.runImmediately(context.applicationContext)
                     dismissDialog()
-                    val skippedText = if (filteredSelection.skippedAlreadyTranslatedCount > 0) {
-                        " Пропущено уже переведённых: ${filteredSelection.skippedAlreadyTranslatedCount}."
-                    } else {
-                        ""
-                    }
                     snackbarHostState.showSnackbar(
-                        message = "Поставлено в очередь: ${result.enqueuedCount} глав.$skippedText",
+                        message = context.stringResource(
+                            AYMR.strings.novel_ai_translation_batch_queued,
+                            result.enqueuedCount,
+                            filteredSelection.skippedAlreadyTranslatedCount,
+                            result.conflictingCount,
+                        ),
                     )
                 } else {
                     snackbarHostState.showSnackbar(
-                        message = "Не удалось добавить главы в очередь.",
+                        message = context.stringResource(
+                            AYMR.strings.novel_ai_translation_batch_queued,
+                            result.enqueuedCount,
+                            filteredSelection.skippedAlreadyTranslatedCount,
+                            result.conflictingCount,
+                        ),
                     )
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar(
                     message = "Не удалось запустить очередь перевода: ${e.message}",

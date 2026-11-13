@@ -1,6 +1,12 @@
 package eu.kanade.tachiyomi.ui.reader.novel.setting
 
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
+import eu.kanade.tachiyomi.data.translation.profile.LegacyCredentialReferences
+import eu.kanade.tachiyomi.data.translation.profile.LegacyPreferenceAccess
+import eu.kanade.tachiyomi.data.translation.profile.LegacyPreferenceValues
+import eu.kanade.tachiyomi.data.translation.profile.LegacyProvider
+import eu.kanade.tachiyomi.data.translation.profile.LegacyRemovalResult
+import eu.kanade.tachiyomi.data.translation.profile.VerifiedLegacyCredential
 import eu.kanade.tachiyomi.ui.reader.novel.NovelQuoteCardStyle
 import eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule
 import kotlinx.coroutines.CoroutineScope
@@ -128,6 +134,14 @@ data class NovelReaderSettings(
     val novelDictionaryEnabled: Boolean = false,
     val novelDictionaryTargetLanguage: String = "ru",
 
+    // Dispatch resolves credentials on IO; live state carries only a scope hint and public profiles.
+    val translationSourceId: Long? = null,
+    val translationCredentialProviders: Set<NovelTranslationProvider> = emptySet(),
+    val systemPromptSnapshot: String? = null,
+    val geminiRequestShape: eu.kanade.tachiyomi.data.translation.profile.GeminiProfileRequestShape? = null,
+    val connectionProfile: tachiyomi.domain.translation.profile.ConnectionProfile? = null,
+    val translationProfile: tachiyomi.domain.translation.profile.TranslationProfile? = null,
+
     // Gemini Translation
     val geminiEnabled: Boolean = false,
     val geminiApiKey: String = "",
@@ -138,6 +152,9 @@ data class NovelReaderSettings(
     val geminiRelaxedMode: Boolean = true,
     val geminiReasoningEffort: String = "minimal",
     val geminiBudgetTokens: Int = 8192,
+    /** Execution snapshots only; never persisted as a global/source user preference. */
+    val geminiFrozenGenerationConfig: kotlinx.serialization.json.JsonObject? = null,
+    val geminiFrozenInputTokenLimit: Int? = null,
     val geminiTemperature: Float = 0.7f,
     val geminiTopP: Float = 0.95f,
     val geminiTopK: Int = 40,
@@ -469,6 +486,63 @@ class NovelReaderPreferences(
     private val preferenceStore: PreferenceStore,
     private val json: Json = Injekt.get(),
 ) {
+    private val legacyTranslationLock = Any()
+
+    internal fun legacyTranslationPreferenceValues(): LegacyPreferenceValues = synchronized(legacyTranslationLock) {
+        LegacyPreferenceValues(preferenceStore.getAll().toMap())
+    }
+
+    internal fun compareAndRemoveLegacyCredentials(values: List<VerifiedLegacyCredential>): LegacyRemovalResult =
+        synchronized(legacyTranslationLock) { LegacyPreferenceAccess.remove(preferenceStore, values) }
+
+    internal fun configuredLegacyProviders(sourceId: Long?): Set<NovelTranslationProvider> =
+        synchronized(legacyTranslationLock) {
+            val override = sourceId?.let(::getSourceOverride)
+            LegacyProvider.entries.filter { provider ->
+                if (sourceId != null && LegacyCredentialReferences.contains(
+                        provider,
+                        tachiyomi.domain.translation.profile.LegacyCredentialScope.SOURCE,
+                        sourceId,
+                    )
+                ) {
+                    true
+                } else {
+                    val owned = when (provider) {
+                        LegacyProvider.GEMINI, LegacyProvider.GEMINI_PRIVATE -> override?.geminiApiKey
+                        LegacyProvider.OPENROUTER -> override?.openRouterApiKey
+                        LegacyProvider.DEEPSEEK -> override?.deepSeekApiKey
+                        LegacyProvider.MISTRAL -> override?.mistralApiKey
+                        LegacyProvider.NVIDIA -> override?.nvidiaApiKey
+                        LegacyProvider.OLLAMA_CLOUD -> override?.ollamaCloudApiKey
+                    }
+                    if (!owned.isNullOrBlank()) {
+                        true
+                    } else {
+                        LegacyCredentialReferences.contains(
+                            provider,
+                            tachiyomi.domain.translation.profile.LegacyCredentialScope.GLOBAL,
+                            0,
+                        ) || when (provider) {
+                            LegacyProvider.GEMINI, LegacyProvider.GEMINI_PRIVATE -> geminiApiKey().get()
+                            LegacyProvider.OPENROUTER -> openRouterApiKey().get()
+                            LegacyProvider.DEEPSEEK -> deepSeekApiKey().get()
+                            LegacyProvider.MISTRAL -> mistralApiKey().get()
+                            LegacyProvider.NVIDIA -> nvidiaApiKey().get()
+                            LegacyProvider.OLLAMA_CLOUD -> ollamaCloudApiKey().get()
+                        }.isNotBlank()
+                    }
+                }
+            }.map { NovelTranslationProvider.valueOf(it.name) }.toSet()
+        }
+
+    private fun <T> Preference<T>.serializedLegacyWrites(): Preference<T> {
+        val preference = this
+        return object : Preference<T> by preference {
+            override fun set(value: T) = synchronized(legacyTranslationLock) { preference.set(value) }
+            override fun delete() = synchronized(legacyTranslationLock) { preference.delete() }
+        }
+    }
+
     init {
         migrateLegacyParagraphSpacingIfNeeded()
         migrateLegacyOverrideParagraphSpacingIfNeeded()
@@ -814,9 +888,12 @@ class NovelReaderPreferences(
     // Gemini Translation
     fun geminiEnabled() = preferenceStore.getBoolean("novel_reader_gemini_enabled", false)
 
-    fun geminiApiKey() = preferenceStore.getString("novel_reader_gemini_api_key", "")
+    fun geminiApiKey() = preferenceStore.getString("novel_reader_gemini_api_key", "").serializedLegacyWrites()
 
     fun geminiModel() = preferenceStore.getString("novel_reader_gemini_model", "gemini-3.1-flash-lite-preview")
+
+    /** Public intrinsic limits only, not credentials or per-key model availability. Excluded from backups. */
+    fun geminiModelDescriptors() = preferenceStore.getString("__APP_STATE_novel_reader_gemini_model_descriptors", "")
 
     fun geminiBatchSize() = preferenceStore.getInt("novel_reader_gemini_batch_size", 40)
 
@@ -894,19 +971,19 @@ class NovelReaderPreferences(
         "https://openrouter.ai/api/v1",
     )
 
-    fun openRouterApiKey() = preferenceStore.getString("novel_reader_openrouter_api_key", "")
+    fun openRouterApiKey() = preferenceStore.getString("novel_reader_openrouter_api_key", "").serializedLegacyWrites()
 
     fun openRouterModel() = preferenceStore.getString("novel_reader_openrouter_model", "")
 
     fun deepSeekBaseUrl() = preferenceStore.getString("novel_reader_deepseek_base_url", "https://api.deepseek.com")
 
-    fun deepSeekApiKey() = preferenceStore.getString("novel_reader_deepseek_api_key", "")
+    fun deepSeekApiKey() = preferenceStore.getString("novel_reader_deepseek_api_key", "").serializedLegacyWrites()
 
     fun deepSeekModel() = preferenceStore.getString("novel_reader_deepseek_model", "deepseek-chat")
 
     fun mistralBaseUrl() = preferenceStore.getString("novel_reader_mistral_base_url", "https://api.mistral.ai/v1")
 
-    fun mistralApiKey() = preferenceStore.getString("novel_reader_mistral_api_key", "")
+    fun mistralApiKey() = preferenceStore.getString("novel_reader_mistral_api_key", "").serializedLegacyWrites()
 
     fun mistralModel() = preferenceStore.getString("novel_reader_mistral_model", "mistral-large-latest")
 
@@ -915,7 +992,7 @@ class NovelReaderPreferences(
         "https://integrate.api.nvidia.com/v1",
     )
 
-    fun nvidiaApiKey() = preferenceStore.getString("novel_reader_nvidia_api_key", "")
+    fun nvidiaApiKey() = preferenceStore.getString("novel_reader_nvidia_api_key", "").serializedLegacyWrites()
 
     fun nvidiaModel() = preferenceStore.getString("novel_reader_nvidia_model", "")
 
@@ -924,7 +1001,10 @@ class NovelReaderPreferences(
         "https://ollama.com/api",
     )
 
-    fun ollamaCloudApiKey() = preferenceStore.getString("novel_reader_ollama_cloud_api_key", "")
+    fun ollamaCloudApiKey() = preferenceStore.getString(
+        "novel_reader_ollama_cloud_api_key",
+        "",
+    ).serializedLegacyWrites()
 
     fun ollamaCloudModel() = preferenceStore.getString("novel_reader_ollama_cloud_model", "gpt-oss:120b")
 
@@ -960,11 +1040,11 @@ class NovelReaderPreferences(
         emptyMap(),
         serializer = { json.encodeToString(overrideSerializer, it) },
         deserializer = { json.decodeFromString(overrideSerializer, it) },
-    )
+    ).serializedLegacyWrites()
 
     fun getSourceOverride(sourceId: Long): NovelReaderOverride? = sourceOverrides().get()[sourceId]
 
-    fun setSourceOverride(sourceId: Long, override: NovelReaderOverride?) {
+    fun setSourceOverride(sourceId: Long, override: NovelReaderOverride?) = synchronized(legacyTranslationLock) {
         val updated = sourceOverrides().get().toMutableMap()
         if (override == null) {
             updated.remove(sourceId)
@@ -1179,7 +1259,8 @@ class NovelReaderPreferences(
                 bionicReading = bionicReading().get(),
                 customCSS = customCSS().get(),
                 customJS = customJS().get(),
-                geminiApiKey = geminiApiKey().get(),
+                // A blank copy would shadow the global vault slot, so an absent key stays absent.
+                geminiApiKey = geminiApiKey().get().takeIf { it.isNotBlank() },
                 geminiModel = geminiModel().get(),
                 geminiBatchSize = geminiBatchSize().get(),
                 geminiConcurrency = geminiConcurrency().get(),
@@ -1202,19 +1283,19 @@ class NovelReaderPreferences(
                 geminiPrivatePythonLikeMode = geminiPrivatePythonLikeMode().get(),
                 translationProvider = translationProvider().get(),
                 openRouterBaseUrl = openRouterBaseUrl().get(),
-                openRouterApiKey = openRouterApiKey().get(),
+                openRouterApiKey = openRouterApiKey().get().takeIf { it.isNotBlank() },
                 openRouterModel = openRouterModel().get(),
                 deepSeekBaseUrl = deepSeekBaseUrl().get(),
-                deepSeekApiKey = deepSeekApiKey().get(),
+                deepSeekApiKey = deepSeekApiKey().get().takeIf { it.isNotBlank() },
                 deepSeekModel = deepSeekModel().get(),
                 mistralBaseUrl = mistralBaseUrl().get(),
-                mistralApiKey = mistralApiKey().get(),
+                mistralApiKey = mistralApiKey().get().takeIf { it.isNotBlank() },
                 mistralModel = mistralModel().get(),
                 nvidiaBaseUrl = nvidiaBaseUrl().get(),
-                nvidiaApiKey = nvidiaApiKey().get(),
+                nvidiaApiKey = nvidiaApiKey().get().takeIf { it.isNotBlank() },
                 nvidiaModel = nvidiaModel().get(),
                 ollamaCloudBaseUrl = ollamaCloudBaseUrl().get(),
-                ollamaCloudApiKey = ollamaCloudApiKey().get(),
+                ollamaCloudApiKey = ollamaCloudApiKey().get().takeIf { it.isNotBlank() },
                 ollamaCloudModel = ollamaCloudModel().get(),
                 googleTranslationEnabled = googleTranslationEnabled().get(),
                 googleTranslationSourceLang = googleTranslationSourceLang().get(),
@@ -1246,8 +1327,10 @@ class NovelReaderPreferences(
         setSourceOverride(sourceId, update(current))
     }
 
-    fun resolveSettings(sourceId: Long): NovelReaderSettings {
-        val override = getSourceOverride(sourceId)
+    fun resolveGlobalSettings(): NovelReaderSettings = resolveSettings(null)
+
+    fun resolveSettings(sourceId: Long?): NovelReaderSettings {
+        val override = sourceId?.let(::getSourceOverride)
         val rawFontSize = override?.fontSize ?: fontSize().get()
         val preset = override?.typographyPreset ?: typographyPreset().get()
 
@@ -1355,8 +1438,10 @@ class NovelReaderPreferences(
             selectedTextTranslationTargetLanguage().get(),
             novelDictionaryEnabled = novelDictionaryEnabled().get(),
             novelDictionaryTargetLanguage = novelDictionaryTargetLanguage().get(),
+            translationSourceId = sourceId,
+            translationCredentialProviders = configuredLegacyProviders(sourceId),
             geminiEnabled = geminiEnabled().get(),
-            geminiApiKey = override?.geminiApiKey ?: geminiApiKey().get(),
+            geminiApiKey = "",
             geminiModel = override?.geminiModel ?: geminiModel().get(),
             geminiBatchSize = override?.geminiBatchSize ?: geminiBatchSize().get(),
             geminiConcurrency = override?.geminiConcurrency ?: geminiConcurrency().get(),
@@ -1384,19 +1469,19 @@ class NovelReaderPreferences(
             override?.geminiPrivatePythonLikeMode ?: geminiPrivatePythonLikeMode().get(),
             translationProvider = override?.translationProvider ?: translationProvider().get(),
             openRouterBaseUrl = override?.openRouterBaseUrl ?: openRouterBaseUrl().get(),
-            openRouterApiKey = override?.openRouterApiKey ?: openRouterApiKey().get(),
+            openRouterApiKey = "",
             openRouterModel = override?.openRouterModel ?: openRouterModel().get(),
             deepSeekBaseUrl = override?.deepSeekBaseUrl ?: deepSeekBaseUrl().get(),
-            deepSeekApiKey = override?.deepSeekApiKey ?: deepSeekApiKey().get(),
+            deepSeekApiKey = "",
             deepSeekModel = override?.deepSeekModel ?: deepSeekModel().get(),
             mistralBaseUrl = override?.mistralBaseUrl ?: mistralBaseUrl().get(),
-            mistralApiKey = override?.mistralApiKey ?: mistralApiKey().get(),
+            mistralApiKey = "",
             mistralModel = override?.mistralModel ?: mistralModel().get(),
             nvidiaBaseUrl = override?.nvidiaBaseUrl ?: nvidiaBaseUrl().get(),
-            nvidiaApiKey = override?.nvidiaApiKey ?: nvidiaApiKey().get(),
+            nvidiaApiKey = "",
             nvidiaModel = override?.nvidiaModel ?: nvidiaModel().get(),
             ollamaCloudBaseUrl = override?.ollamaCloudBaseUrl ?: ollamaCloudBaseUrl().get(),
-            ollamaCloudApiKey = override?.ollamaCloudApiKey ?: ollamaCloudApiKey().get(),
+            ollamaCloudApiKey = "",
             ollamaCloudModel = override?.ollamaCloudModel ?: ollamaCloudModel().get(),
             googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
             googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
@@ -1909,8 +1994,10 @@ class NovelReaderPreferences(
                 selectedTextTranslationTargetLanguage = advanced.selectedTextTranslationTargetLanguage,
                 novelDictionaryEnabled = advanced.novelDictionaryEnabled,
                 novelDictionaryTargetLanguage = advanced.novelDictionaryTargetLanguage,
+                translationSourceId = sourceId,
+                translationCredentialProviders = configuredLegacyProviders(sourceId),
                 geminiEnabled = gemini.enabled,
-                geminiApiKey = override?.geminiApiKey ?: gemini.apiKey,
+                geminiApiKey = "",
                 geminiModel = override?.geminiModel ?: gemini.model,
                 geminiBatchSize = override?.geminiBatchSize ?: gemini.batchSize,
                 geminiConcurrency = override?.geminiConcurrency ?: gemini.concurrency,
@@ -1937,19 +2024,19 @@ class NovelReaderPreferences(
                 override?.geminiPrivatePythonLikeMode ?: gemini.privatePythonLikeMode,
                 translationProvider = override?.translationProvider ?: gemini.translationProvider,
                 openRouterBaseUrl = override?.openRouterBaseUrl ?: gemini.openRouterBaseUrl,
-                openRouterApiKey = override?.openRouterApiKey ?: gemini.openRouterApiKey,
+                openRouterApiKey = "",
                 openRouterModel = override?.openRouterModel ?: gemini.openRouterModel,
                 deepSeekBaseUrl = override?.deepSeekBaseUrl ?: gemini.deepSeekBaseUrl,
-                deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
+                deepSeekApiKey = "",
                 deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
                 mistralBaseUrl = override?.mistralBaseUrl ?: gemini.mistralBaseUrl,
-                mistralApiKey = override?.mistralApiKey ?: gemini.mistralApiKey,
+                mistralApiKey = "",
                 mistralModel = override?.mistralModel ?: gemini.mistralModel,
                 nvidiaBaseUrl = override?.nvidiaBaseUrl ?: gemini.nvidiaBaseUrl,
-                nvidiaApiKey = override?.nvidiaApiKey ?: gemini.nvidiaApiKey,
+                nvidiaApiKey = "",
                 nvidiaModel = override?.nvidiaModel ?: gemini.nvidiaModel,
                 ollamaCloudBaseUrl = override?.ollamaCloudBaseUrl ?: gemini.ollamaCloudBaseUrl,
-                ollamaCloudApiKey = override?.ollamaCloudApiKey ?: gemini.ollamaCloudApiKey,
+                ollamaCloudApiKey = "",
                 ollamaCloudModel = override?.ollamaCloudModel ?: gemini.ollamaCloudModel,
                 googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
                 googleTranslationSourceLang =

@@ -3,8 +3,12 @@ package eu.kanade.tachiyomi.ui.player.subtitle.translation
 import eu.kanade.tachiyomi.test.assertIcuSafeRegexPattern
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.translation.model.TranslationAttemptException
+import tachiyomi.domain.translation.model.TranslationFailure
+import tachiyomi.domain.translation.model.TranslationFailureKind
 
 class AiSubtitleTranslationProviderTest {
     @Test
@@ -113,5 +117,106 @@ class AiSubtitleTranslationProviderTest {
         result as SubtitleTranslationProviderResult.Success
         assertEquals("Hello translated", result.translatedByIndex[7])
         assertEquals("{\\an8}World translated", result.translatedByIndex[9])
+    }
+
+    @Test
+    fun `fingerprint reflects client fingerprint changes dynamically`() {
+        var currentFingerprint = "fp-1"
+        val provider = AiSubtitleTranslationProvider(
+            client = object : AiSubtitleTranslationClient {
+                override val fingerprint: String
+                    get() = currentFingerprint
+
+                override suspend fun translateIndexedSegments(
+                    prompt: String,
+                    segments: List<IndexedSubtitleSegment>,
+                    sourceLanguage: String,
+                    targetLanguage: String,
+                ): String = ""
+            },
+        )
+
+        assertEquals("ai-subtitle-fp-1-v2", provider.fingerprint)
+        currentFingerprint = "fp-2"
+        assertEquals("ai-subtitle-fp-2-v2", provider.fingerprint)
+    }
+
+    @Test
+    fun `fails fast without retry on blank key IllegalStateException and non-retryable attempt errors`() = runTest {
+        val errors: List<Throwable> = listOf(
+            IllegalStateException("AI subtitle translation API key is not configured"),
+            TranslationAttemptException(TranslationFailure(TranslationFailureKind.CONFIGURATION, "Bad model")),
+            TranslationAttemptException(TranslationFailure(TranslationFailureKind.AUTHORIZATION, "HTTP 401")),
+            TranslationAttemptException(TranslationFailure(TranslationFailureKind.QUOTA, "Quota exceeded")),
+            TranslationAttemptException(TranslationFailure(TranslationFailureKind.REFUSED, "Content refused")),
+        )
+
+        for (error in errors) {
+            var attempts = 0
+            val provider = AiSubtitleTranslationProvider(
+                client = object : AiSubtitleTranslationClient {
+                    override val fingerprint: String = "fp"
+
+                    override suspend fun translateIndexedSegments(
+                        prompt: String,
+                        segments: List<IndexedSubtitleSegment>,
+                        sourceLanguage: String,
+                        targetLanguage: String,
+                    ): String {
+                        attempts++
+                        throw error
+                    }
+                },
+                maxAttemptsPerChunk = 3,
+            )
+
+            val result = provider.translate(
+                cues = listOf(SubtitleCue(1, 0, 1000, "Hello")),
+                sourceLanguage = "en",
+                targetLanguage = "ru",
+            )
+
+            val failure = result as SubtitleTranslationProviderResult.Failure
+            assertFalse(failure.retryable, "Expected retryable=false for $error")
+            assertEquals(1, attempts, "Expected no retries for $error")
+        }
+    }
+
+    @Test
+    fun `retries transient 503 and rate limit failures then succeeds`() = runTest {
+        var attempts = 0
+        val provider = AiSubtitleTranslationProvider(
+            client = object : AiSubtitleTranslationClient {
+                override val fingerprint: String = "fp"
+
+                override suspend fun translateIndexedSegments(
+                    prompt: String,
+                    segments: List<IndexedSubtitleSegment>,
+                    sourceLanguage: String,
+                    targetLanguage: String,
+                ): String {
+                    attempts++
+                    return when (attempts) {
+                        1 -> throw TranslationAttemptException(
+                            TranslationFailure(TranslationFailureKind.TRANSIENT, "HTTP 503"),
+                        )
+                        2 -> throw TranslationAttemptException(
+                            TranslationFailure(TranslationFailureKind.RATE_LIMIT, "HTTP 429"),
+                        )
+                        else -> "<s i=\"1\">Privet</s>"
+                    }
+                }
+            },
+            maxAttemptsPerChunk = 3,
+        )
+
+        val result = provider.translate(
+            cues = listOf(SubtitleCue(1, 0, 1000, "Hello")),
+            sourceLanguage = "en",
+            targetLanguage = "ru",
+        ) as SubtitleTranslationProviderResult.Success
+
+        assertEquals(3, attempts)
+        assertEquals("Privet", result.translatedByIndex[1])
     }
 }

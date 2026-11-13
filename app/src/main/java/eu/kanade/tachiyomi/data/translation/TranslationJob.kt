@@ -4,10 +4,11 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.lifecycle.asFlow
-import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -16,38 +17,71 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.translation.SharedTranslationRequests
+import eu.kanade.tachiyomi.ui.reader.novel.translation.redactTranslationDiagnostic
+import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationConcurrencyLimit
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationEndpoint
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationGenerationFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationPromptModifiersFingerprint
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationQuotaKey
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.setForegroundSafely
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.entries.novel.interactor.GetNovel
+import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import tachiyomi.domain.translation.model.TranslationArtifactReceipt
+import tachiyomi.domain.translation.model.TranslationAttemptException
+import tachiyomi.domain.translation.model.TranslationFailure
+import tachiyomi.domain.translation.model.TranslationFailureKind
+import tachiyomi.domain.translation.model.TranslationFragment
+import tachiyomi.domain.translation.model.TranslationRun
+import tachiyomi.domain.translation.model.TranslationRunStatus
+import tachiyomi.domain.translation.service.TranslationFragmentPlanner
+import tachiyomi.domain.translation.service.TranslationPassState
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.TimeUnit
 
-class TranslationJob(
+/** WorkManager is a runner/wakeup, not a second, whole-chapter HTTP retry loop. */
+class TranslationJob @JvmOverloads constructor(
     context: Context,
     workerParams: WorkerParameters,
+    private val queue: TranslationQueueManager = Injekt.get(),
+    private val notifications: TranslationNotificationManager = Injekt.get(),
+    private val preferences: NovelReaderPreferences = Injekt.get(),
+    private val json: Json = Injekt.get(),
+    private val chapters: NovelTtsChapterRepository = NovelTtsChapterRepository(),
+    private val processor: NovelChapterTranslationProcessor = NovelChapterTranslationProcessor(),
+    private val chapterRepository: NovelChapterRepository = Injekt.get(),
+    private val getNovel: GetNovel = Injekt.get(),
+    private val enterForeground: suspend (TranslationJob) -> Unit = { it.setForegroundSafely() },
+    private val wakeScheduler: (Context, Long?) -> Unit = { ctx, due -> scheduleWake(ctx, due) },
 ) : CoroutineWorker(context, workerParams) {
-
-    private val queueManager: TranslationQueueManager = Injekt.get()
-    private val notificationManager: TranslationNotificationManager = Injekt.get()
-    private val chapterRepository: NovelTtsChapterRepository = NovelTtsChapterRepository()
-    private val readerPreferences: NovelReaderPreferences = Injekt.get()
-    private val translationProcessor: NovelChapterTranslationProcessor = NovelChapterTranslationProcessor()
-    private val json: Json = Injekt.get()
+    private val repository get() = queue.repository
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notification = applicationContext.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
@@ -57,284 +91,451 @@ class TranslationJob(
         return ForegroundInfo(
             Notifications.ID_TRANSLATION_PROGRESS,
             notification,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            } else {
-                0
-            },
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
         )
     }
 
     override suspend fun doWork(): Result {
-        logcat(LogPriority.DEBUG) { "TranslationJob.doWork() started" }
-
-        // Set foreground first - required for foreground service workers
-        setForegroundSafely()
-        queueManager.recoverStaleInProgressRows()
-
-        try {
-            var pausedBatchState: TranslationBatchState? = null
-            while (!isStopped) {
-                val item = queueManager.getNextPending() ?: break
-                if (queueManager.isBatchPaused(item.batchToken)) {
-                    pausedBatchState = queueManager.getBatchState(item.batchToken)
-                    break
-                }
-
-                logcat(LogPriority.DEBUG) { "Processing translation for chapter ${item.chapterId}" }
-                try {
-                    processItem(item)
-                    val batchState = queueManager.recordBatchItemResult(
-                        batchToken = item.batchToken,
-                        chapterId = item.chapterId,
-                        succeeded = true,
-                    )
-                    if (batchState?.status == TranslationBatchStatus.COMPLETED) {
-                        notificationManager.showBatchComplete(batchState)
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    val chapterName = "Chapter ${item.chapterId}"
-                    val message = e.message ?: e::class.java.simpleName
-                    if (shouldRetryTranslationFailure(message) && item.retryCount < MAX_CHAPTER_RETRIES) {
-                        queueManager.incrementRetryAwait(item.chapterId)
-                        queueManager.updateStatusAwait(
-                            chapterId = item.chapterId,
-                            status = TranslationStatus.PENDING,
-                            chapterName = chapterName,
-                        )
-                        queueManager.setActiveTranslation(null)
-                        queueManager.emitLog(
-                            item.chapterId,
-                            "Retry scheduled (${item.retryCount + 1}/$MAX_CHAPTER_RETRIES): $message",
-                        )
-                        logcat(LogPriority.WARN, e) {
-                            "Transient translation failure for chapter ${item.chapterId}; retry scheduled"
+        repository.recoverInterrupted(System.currentTimeMillis())
+        while (!isStopped) {
+            val run = repository.claimNext(System.currentTimeMillis()) ?: break
+            enterForeground(this)
+            queue.setActiveTranslation(run.toQueueItem())
+            try {
+                processRun(run)
+            } catch (error: CancellationException) {
+                if (!currentCoroutineContext().isActive) {
+                    withContext(NonCancellable) {
+                        val current = repository.getByChapterId(run.chapterId)
+                        if (current?.id == run.id && current.generation == run.generation) {
+                            repository.release(
+                                current,
+                                TranslationRunStatus.PENDING,
+                                current.progress,
+                                null,
+                                now = System.currentTimeMillis(),
+                            )
                         }
-                        continue
                     }
-                    queueManager.setErrorAwait(
-                        chapterId = item.chapterId,
-                        error = message,
-                        chapterName = chapterName,
+                    throw error
+                }
+                // A targeted cancellation ends this run's child scope, not unrelated queued work.
+            } catch (error: Exception) {
+                val failure = (error as? TranslationAttemptException)?.failure
+                    ?: TranslationFailure(
+                        TranslationFailureKind.INVALID_RESPONSE,
+                        redactTranslationDiagnostic(
+                            error.message?.takeIf { it.isNotBlank() }
+                                ?: "Unable to prepare or save chapter (${error.javaClass.simpleName})",
+                        ),
                     )
-                    val batchState = queueManager.recordBatchItemResult(
-                        batchToken = item.batchToken,
-                        chapterId = item.chapterId,
-                        succeeded = false,
-                    )
-                    queueManager.setActiveTranslation(null)
-                    notificationManager.showError(
-                        chapterName = chapterName,
-                        error = message,
-                        chapterId = item.chapterId,
-                    )
-                    if (batchState?.status == TranslationBatchStatus.COMPLETED) {
-                        notificationManager.showBatchComplete(batchState)
-                    }
-                    logcat(LogPriority.ERROR, e) {
-                        "Translation failed for chapter ${item.chapterId}"
-                    }
+                val current = repository.getByChapterId(run.chapterId)
+                if (current?.id == run.id && current.generation == run.generation) {
+                    recordFailure(current, failure, "Chapter ${run.chapterId}")
+                }
+            } finally {
+                if (queue.activeTranslation.value?.id == run.id &&
+                    queue.activeTranslation.value?.generation == run.generation
+                ) {
+                    queue.setActiveTranslation(null)
                 }
             }
+        }
+        wakeScheduler(applicationContext, repository.nextWakeAt())
+        val batches = repository.getActiveBatches()
+        batches.filter { it.status == tachiyomi.domain.translation.model.TranslationBatchStatus.PAUSED }
+            .firstOrNull()?.let { notifications.showBatchPaused(it.toBatchState()) }
+        if (batches.none {
+                it.status == tachiyomi.domain.translation.model.TranslationBatchStatus.PAUSED
+            }
+        ) {
+            notifications.cancelQueueProgress()
+        }
+        return Result.success()
+    }
 
-            // An item enqueued between the last empty poll and this terminal state would be
-            // stranded: the caller's enqueueUniqueWork(KEEP) drops its restart request while this
-            // worker still counts as "existing pending work". Re-arm via retry instead of
-            // finishing (5s linear backoff, see runImmediately).
-            if (pausedBatchState == null && !isStopped && queueManager.getNextPending() != null) {
-                return Result.retry()
-            }
-            if (pausedBatchState != null) {
-                notificationManager.showBatchPaused(pausedBatchState)
-            } else {
-                notificationManager.showQueueComplete()
-            }
-            return Result.success()
-        } catch (_: CancellationException) {
-            val activeItem = queueManager.activeTranslation.value
-            if (activeItem != null) {
-                if (queueManager.hasPendingOrActive(activeItem.chapterId)) {
-                    queueManager.updateStatusAwait(activeItem.chapterId, TranslationStatus.PENDING)
+    private suspend fun processRun(initial: TranslationRun) = coroutineScope {
+        val runScope = this
+        val watch = launch {
+            repository.observeRuns(initial.novelId.takeIf { it > 0 }).collect { rows ->
+                val current = rows.firstOrNull { it.chapterId == initial.chapterId }
+                if (current == null ||
+                    current.id != initial.id ||
+                    current.generation != initial.generation ||
+                    current.status == TranslationRunStatus.CANCELLED
+                ) {
+                    runScope.cancel(CancellationException("Translation run was cancelled or replaced"))
                 }
-                queueManager.setActiveTranslation(null)
             }
-            logcat(LogPriority.DEBUG) { "Translation job cancelled" }
-            return Result.success()
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Translation job failed: ${e.message}" }
-
-            val activeItem = queueManager.activeTranslation.value
-            if (activeItem != null) {
-                queueManager.setError(activeItem.chapterId, e.message ?: "Unknown error")
-                queueManager.setActiveTranslation(null)
-
-                notificationManager.showError(
-                    chapterName = "Chapter ${activeItem.chapterId}",
-                    error = e.message ?: "Unknown error",
-                    chapterId = activeItem.chapterId,
+        }
+        try {
+            var run = initial
+            val chapter = chapterRepository.getChapterById(run.chapterId)
+                ?: error("Chapter not found")
+            val novel = getNovel.await(chapter.novelId) ?: error("Novel not found")
+            val live = preferences.resolveSettings(novel.source)
+            if (run.profileSnapshotJson == null) {
+                val rules = preferences.enabledReplaceRules()
+                val snapshot = queue.freezeProfileSnapshot(live, novel.id, rules)
+                val encoded = json.encodeToString(TranslationQueueProfileSnapshot.serializer(), snapshot)
+                run = repository.freezeProfile(
+                    run,
+                    encoded,
+                    TranslationFragmentPlanner.sourceFingerprint(listOf(encoded)),
+                    System.currentTimeMillis(),
+                )
+                    ?: throw CancellationException("Translation run is no longer current")
+            }
+            val snapshotJson = requireNotNull(run.profileSnapshotJson)
+            val snapshot = decodeTranslationRunSnapshot(snapshotJson, json)
+            val profileFingerprint = TranslationFragmentPlanner.sourceFingerprint(listOf(snapshotJson))
+            if (run.profileFingerprint != null && run.profileFingerprint != profileFingerprint) {
+                throw TranslationAttemptException(
+                    TranslationFailure(
+                        TranslationFailureKind.CONFIGURATION,
+                        "Stored translation profile identity does not match its snapshot",
+                        attempted = false,
+                    ),
                 )
             }
-
-            return Result.failure()
+            val settings = snapshot.toReaderSettings(live)
+            if (snapshot.geminiDisableCache != run.sessionOnly) {
+                if (
+                    run.sourceFingerprint != null
+                ) {
+                    error("Stored translation privacy policy does not match the frozen profile")
+                }
+                run = run.copy(sessionOnly = snapshot.geminiDisableCache)
+            }
+            if (snapshot.snapshotVersion != 2) {
+                SharedTranslationRequests.gate.configure(
+                    translationQuotaKey(settings.translationEndpoint()),
+                    settings.translationConcurrencyLimit(),
+                )
+            }
+            var fragments = if (
+                run.sessionOnly
+            ) {
+                TranslationSessionResults.store.fragments(run)
+            } else {
+                repository.getFragments(run)
+            }
+            if (
+                fragments == null && run.sourceFingerprint != null
+            ) {
+                error("Session-only translation was interrupted; start it again")
+            }
+            var source: List<String>
+            val rules = snapshot.replaceRulesSnapshot ?: preferences.enabledReplaceRules()
+            if (fragments.isNullOrEmpty()) {
+                if (run.sourceFingerprint != null) error("Stored translation checkpoints are missing")
+                if (snapshot.replaceRulesSnapshot == null &&
+                    snapshot.replaceRulesFingerprint != replaceRulesFingerprint(rules)
+                ) {
+                    error("Legacy extraction rules changed; queue the chapter again")
+                }
+                val loaded = chapters.loadChapterSnapshot(run.chapterId, rules)
+                source = loaded.contentBlocks.filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>().map {
+                    it.text
+                }
+                if (source.isEmpty()) error("Chapter has no translatable text")
+                fragments = TranslationFragmentPlanner.plan(source, processor.maxFragmentChars(settings))
+                if (run.sessionOnly && !run.forceRetranslate) {
+                    val reusable = TranslationSessionResults.store.reusable(run.chapterId, run.profileFingerprint)
+                    if (reusable != null && TranslationFragmentPlanner.sourceSegments(reusable) == source) {
+                        fragments = reusable.map {
+                            if (
+                                it.isComplete
+                            ) {
+                                it
+                            } else {
+                                it.copy(attempts = 0, firstFailureAt = null, nextAttemptAt = 0, failure = null)
+                            }
+                        }
+                    }
+                }
+                val sourceHash = TranslationFragmentPlanner.sourceFingerprint(source)
+                val prepared = repository.prepare(
+                    run,
+                    sourceHash,
+                    profileFingerprint,
+                    source.size,
+                    fragments,
+                    System.currentTimeMillis(),
+                )
+                requireOwnedOperation(
+                    run,
+                    prepared,
+                    TranslationFailureKind.CONFIGURATION,
+                    "Could not freeze the translation source",
+                )
+                if (run.sessionOnly) TranslationSessionResults.store.checkpoint(run, fragments)
+                run = repository.getByChapterId(run.chapterId)
+                    ?: throw CancellationException("Translation run disappeared")
+            } else {
+                source = TranslationFragmentPlanner.sourceSegments(fragments)
+                if (source.size != run.sourceSegmentCount ||
+                    TranslationFragmentPlanner.sourceFingerprint(source) != run.sourceFingerprint
+                ) {
+                    error("Stored translation source identity is invalid")
+                }
+            }
+            val sourceHash = requireNotNull(run.sourceFingerprint)
+            val generationHash = settings.translationGenerationFingerprint()
+            val requirements = settings.toTranslationCacheRequirements(snapshot.replaceRulesFingerprint, sourceHash)
+            if (!run.forceRetranslate && !run.sessionOnly) {
+                val cached = NovelReaderTranslationDiskCacheStore.get(run.chapterId)
+                if (cached?.isTranslationComplete == true && cached.sourceFingerprint == sourceHash &&
+                    cached.sourceSegmentCount == source.size &&
+                    cached.translatedByIndex.keys == source.indices.toSet() &&
+                    NovelReaderTranslationCacheResolver.matches(cached, requirements)
+                ) {
+                    val receipt = TranslationArtifactReceipt(
+                        sourceHash,
+                        requireNotNull(run.profileFingerprint),
+                        source.size,
+                    )
+                    if (repository.publishCached(run, System.currentTimeMillis(), receipt) {}) {
+                        queue.emitRunLog(run, "Restored a complete translation after verifying the current source")
+                        notifications.showChapterComplete(chapter.name, chapter.id)
+                        repository.getBatch(run.batchToken)?.takeIf {
+                            it.status == tachiyomi.domain.translation.model.TranslationBatchStatus.COMPLETED
+                        }
+                            ?.let { notifications.showBatchComplete(it.toBatchState()) }
+                    } else {
+                        currentCoroutineContext().ensureActive()
+                        if (
+                            !repository.isRunnable(run)
+                        ) {
+                            repository.release(
+                                run,
+                                TranslationRunStatus.PAUSED,
+                                99,
+                                null,
+                                now = System.currentTimeMillis(),
+                            )
+                        } else {
+                            error("Cached translation could not be published")
+                        }
+                    }
+                    return@coroutineScope
+                }
+            }
+            val current = requireNotNull(fragments).associateBy { it.id }.toMutableMap()
+            val result = processor.translateFragments(
+                fragments = current.values.sortedBy { it.id },
+                settings = settings,
+                profileSnapshot = snapshot,
+                run = run,
+                onLog = { message -> /* Logs must not own state writes or outlive the run. */ },
+                beforeRequest = { repository.isRunnable(run) },
+                checkpoint = { changes ->
+                    changes.forEach { current[it.id] = it }
+                    val progress = TranslationFragmentPlanner.progress(current.values.toList())
+                    requireOwnedOperation(
+                        run,
+                        repository.checkpoint(run, changes, progress, System.currentTimeMillis()),
+                        TranslationFailureKind.STORAGE,
+                        "Could not save verified translation progress",
+                    )
+                    if (run.sessionOnly) {
+                        TranslationSessionResults.store.checkpoint(
+                            run,
+                            current.values.sortedBy {
+                                it.id
+                            },
+                        )
+                    }
+                    queue.setActiveTranslation(run.toQueueItem().copy(progress = progress))
+                    notifications.showProgress(
+                        chapter.name,
+                        chapter.id,
+                        notificationBatchToken(run),
+                        progress,
+                        queue.queue.value.size,
+                    )
+                },
+            )
+            val progress = TranslationFragmentPlanner.progress(result.fragments)
+            when (result.state) {
+                TranslationPassState.COMPLETE -> {
+                    val translated = TranslationFragmentPlanner.assemble(result.fragments)
+                    if (
+                        translated.keys != source.indices.toSet() || translated.values.any(String::isBlank)
+                    ) {
+                        error("Chapter coverage is incomplete")
+                    }
+                    val entry = GeminiTranslationCacheEntry(
+                        chapterId = run.chapterId,
+                        translatedByIndex = translated,
+                        provider = settings.translationProvider,
+                        model = settings.translationCacheModelId(),
+                        sourceLang = settings.geminiSourceLang,
+                        targetLang = settings.geminiTargetLang,
+                        promptMode = settings.geminiPromptMode, stylePreset = settings.geminiStylePreset,
+                        extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
+                        promptModifiersFingerprint = settings.translationPromptModifiersFingerprint(),
+                        replaceRulesFingerprint = snapshot.replaceRulesFingerprint, sourceSegmentCount = source.size,
+                        sourceFingerprint = sourceHash, generationFingerprint = generationHash,
+                    )
+                    if (repository.publish(run, System.currentTimeMillis()) {
+                            if (
+                                run.sessionOnly
+                            ) {
+                                TranslationSessionResults.store.publish(
+                                    run,
+                                    entry,
+                                )
+                            } else {
+                                NovelReaderTranslationDiskCacheStore.put(entry)
+                            }
+                        }
+                    ) {
+                        notifications.showChapterComplete(chapter.name, chapter.id)
+                        repository.getBatch(run.batchToken)?.takeIf {
+                            it.status == tachiyomi.domain.translation.model.TranslationBatchStatus.COMPLETED
+                        }
+                            ?.let { notifications.showBatchComplete(it.toBatchState()) }
+                    } else {
+                        repository.release(
+                            run,
+                            TranslationRunStatus.PAUSED,
+                            progress,
+                            null,
+                            now = System.currentTimeMillis(),
+                        )
+                    }
+                }
+                TranslationPassState.WAITING -> {
+                    val due = requireNotNull(result.nextAttemptAt)
+                    repository.release(
+                        run,
+                        TranslationRunStatus.WAITING,
+                        progress,
+                        result.failure?.message,
+                        due,
+                        System.currentTimeMillis(),
+                    )
+                    queue.emitRunLog(
+                        run,
+                        "Temporary failure; verified progress $progress%; next attempt not before $due",
+                    )
+                }
+                TranslationPassState.PAUSED -> repository.release(
+                    run,
+                    TranslationRunStatus.PAUSED,
+                    progress,
+                    null,
+                    now = System.currentTimeMillis(),
+                )
+                TranslationPassState.FAILED -> {
+                    val failure = result.failure ?: TranslationFailure(
+                        TranslationFailureKind.INVALID_RESPONSE,
+                        "Chapter translation is incomplete",
+                    )
+                    recordFailure(run.copy(progress = progress), failure, chapter.name)
+                }
+            }
+        } finally {
+            watch.cancel()
         }
     }
 
-    private suspend fun processItem(item: TranslationQueueItem) {
-        queueManager.setActiveTranslation(item)
-        queueManager.updateStatusAwait(item.chapterId, TranslationStatus.IN_PROGRESS)
-
-        val snapshot = chapterRepository.loadChapterSnapshot(item.chapterId)
-        val liveSettings = readerPreferences.resolveSettings(snapshot.novel.source)
-        val settings = item.profileSnapshotJson?.let { snapshotJson ->
-            runCatching {
-                json.decodeFromString<TranslationQueueProfileSnapshot>(snapshotJson)
-                    .toReaderSettings(liveSettings)
-            }.onFailure { error ->
-                logcat(LogPriority.WARN, error) {
-                    "Failed to decode translation snapshot for chapter ${item.chapterId}; falling back to live settings"
-                }
-            }.getOrNull()
-        } ?: liveSettings
-        val textSegments = snapshot.contentBlocks
-            .asSequence()
-            .filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
-            .map { it.text }
-            .toList()
-
-        if (textSegments.isEmpty()) {
-            throw IllegalStateException("Chapter has no translatable text")
+    private suspend fun notificationBatchToken(run: TranslationRun): String {
+        val batch = repository.getBatch(run.batchToken)
+        return if (batch?.status == tachiyomi.domain.translation.model.TranslationBatchStatus.RUNNING ||
+            batch?.status == tachiyomi.domain.translation.model.TranslationBatchStatus.QUEUED
+        ) {
+            run.batchToken
+        } else {
+            ""
         }
+    }
 
-        val chapterName = snapshot.chapter.name.ifBlank { "Chapter ${item.chapterId}" }
-        queueManager.updateStatusAwait(item.chapterId, TranslationStatus.IN_PROGRESS, chapterName)
-        notificationManager.showProgress(
-            chapterName = chapterName,
-            chapterId = item.chapterId,
-            batchToken = item.batchToken,
-            progress = 0,
-            pendingCount = queueManager.queue.value.size,
-        )
-        val translatedByIndex = translationProcessor.translateSegments(
-            segments = textSegments,
-            settings = settings,
-            onLog = { message ->
-                logcat(LogPriority.DEBUG) { "TranslationJob[${item.chapterId}]: $message" }
-                queueManager.emitLog(item.chapterId, message)
-            },
-            onProgress = { progress ->
-                queueManager.updateProgress(
-                    chapterId = item.chapterId,
-                    progress = progress,
-                    status = TranslationStatus.IN_PROGRESS,
-                )
-                notificationManager.showProgress(
-                    chapterName = chapterName,
-                    chapterId = item.chapterId,
-                    batchToken = item.batchToken,
-                    progress = progress,
-                    pendingCount = queueManager.queue.value.size,
-                )
-            },
-        )
-
-        if (!settings.geminiDisableCache) {
-            NovelReaderTranslationDiskCacheStore.put(
-                GeminiTranslationCacheEntry(
-                    chapterId = item.chapterId,
-                    translatedByIndex = translatedByIndex,
-                    provider = settings.translationProvider,
-                    model = settings.translationCacheModelId(),
-                    sourceLang = settings.geminiSourceLang,
-                    targetLang = settings.geminiTargetLang,
-                    promptMode = settings.geminiPromptMode,
-                    stylePreset = settings.geminiStylePreset,
-                    extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
-                    promptModifiersFingerprint = settings.translationPromptModifiersFingerprint(),
-                    replaceRulesFingerprint = replaceRulesFingerprint(readerPreferences.enabledReplaceRules()),
-                    sourceSegmentCount = textSegments.size,
-                ),
+    /** A validation/storage refusal is not a user cancellation and must not strand owned work. */
+    private suspend fun requireOwnedOperation(
+        run: TranslationRun,
+        succeeded: Boolean,
+        kind: TranslationFailureKind,
+        message: String,
+    ) {
+        if (succeeded) return
+        currentCoroutineContext().ensureActive()
+        val current = repository.getByChapterId(run.chapterId)
+        if (current == null ||
+            current.id != run.id ||
+            current.generation != run.generation ||
+            current.status.isTerminal
+        ) {
+            throw CancellationException("Translation run is no longer owned")
+        }
+        if (!repository.isRunnable(current)) {
+            repository.release(
+                current,
+                TranslationRunStatus.PAUSED,
+                current.progress,
+                null,
+                now = System.currentTimeMillis(),
             )
+            throw CancellationException("Translation owners are paused")
         }
+        throw TranslationAttemptException(TranslationFailure(kind, message))
+    }
 
-        queueManager.updateProgressAwait(
-            chapterId = item.chapterId,
-            progress = 100,
-            status = TranslationStatus.COMPLETED,
-            chapterName = chapterName,
-        )
-        queueManager.setActiveTranslation(null)
-
-        notificationManager.showChapterComplete(
-            chapterName = chapterName,
-            chapterId = item.chapterId,
-        )
-
-        logcat(LogPriority.DEBUG) { "Completed translation for chapter ${item.chapterId}" }
+    private suspend fun recordFailure(run: TranslationRun, failure: TranslationFailure, title: String) {
+        val now = System.currentTimeMillis()
+        val action = translationActionPauseReason(run.profileSnapshotJson, failure)
+        val recorded = if (action != null) {
+            repository.parkForAction(run.chapterId, run.generation, action, now)
+        } else {
+            repository.release(run, TranslationRunStatus.FAILED, run.progress, failure.message, now = now)
+        }
+        if (recorded) notifications.showError(title, failure.message, run.chapterId)
     }
 
     companion object {
         private const val TAG = "TranslationJob"
-        private const val MAX_CHAPTER_RETRIES = 2
-
-        private fun shouldRetryTranslationFailure(message: String): Boolean {
-            val normalized = message.lowercase()
-            if (normalized.contains("401") ||
-                normalized.contains("403") ||
-                normalized.contains("invalid api") ||
-                normalized.contains("api key") ||
-                normalized.contains("unauthorized")
-            ) {
-                return false
-            }
-            return normalized.contains("429") ||
-                normalized.contains("rate limit") ||
-                normalized.contains("timeout") ||
-                normalized.contains("temporar") ||
-                normalized.contains("network") ||
-                normalized.contains("connection") ||
-                normalized.contains("socket") ||
-                normalized.contains("500") ||
-                normalized.contains("502") ||
-                normalized.contains("503") ||
-                normalized.contains("504") ||
-                normalized.contains("returned no translated blocks")
-        }
+        private const val WAKE_TAG = "TranslationWakeJob"
 
         fun runImmediately(context: Context) {
-            logcat(LogPriority.DEBUG) { "TranslationJob.runImmediately() called" }
-            val request = OneTimeWorkRequestBuilder<TranslationJob>()
-                .addTag(TAG)
-                // Fast, predictable re-arm for the terminal-state race re-check (Result.retry).
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 5, TimeUnit.SECONDS)
-                .build()
-            WorkManager.getInstance(context)
-                .enqueueUniqueWork(TAG, ExistingWorkPolicy.KEEP, request)
-            logcat(LogPriority.DEBUG) { "TranslationJob work request enqueued" }
+            val request = OneTimeWorkRequestBuilder<TranslationJob>().addTag(TAG)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
+            // An enqueue racing the last empty poll is appended, never dropped by KEEP.
+            WorkManager.getInstance(context).enqueueUniqueWork(TAG, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
 
-        fun start(context: Context) {
-            runImmediately(context)
+        internal fun scheduleWake(context: Context, due: Long?) {
+            val manager = WorkManager.getInstance(context)
+            if (due == null) {
+                manager.cancelUniqueWork(WAKE_TAG)
+            } else {
+                val request = OneTimeWorkRequestBuilder<TranslationWakeJob>().addTag(WAKE_TAG)
+                    .setInitialDelay((due - System.currentTimeMillis()).coerceAtLeast(0), TimeUnit.MILLISECONDS).build()
+                manager.enqueueUniqueWork(WAKE_TAG, ExistingWorkPolicy.REPLACE, request)
+            }
         }
 
+        fun start(context: Context) = runImmediately(context)
         fun stop(context: Context) {
-            WorkManager.getInstance(context)
-                .cancelUniqueWork(TAG)
+            WorkManager.getInstance(context).cancelUniqueWork(TAG)
+            WorkManager.getInstance(context).cancelUniqueWork(WAKE_TAG)
         }
+        fun isRunning(
+            context: Context,
+        ): Boolean = WorkManager.getInstance(context).getWorkInfosForUniqueWork(TAG).get().any {
+            it.state == WorkInfo.State.RUNNING
+        }
+        fun isRunningFlow(
+            context: Context,
+        ): Flow<Boolean> = WorkManager.getInstance(context).getWorkInfosForUniqueWorkLiveData(TAG).asFlow()
+            .map { rows -> rows.any { it.state == WorkInfo.State.RUNNING } }
+    }
+}
 
-        fun isRunning(context: Context): Boolean {
-            return WorkManager.getInstance(context)
-                .getWorkInfosForUniqueWork(TAG)
-                .get()
-                .let { list -> list.count { it.state == WorkInfo.State.RUNNING } == 1 }
-        }
-
-        fun isRunningFlow(context: Context): Flow<Boolean> {
-            return WorkManager.getInstance(context)
-                .getWorkInfosForUniqueWorkLiveData(TAG)
-                .asFlow()
-                .map { list -> list.count { it.state == WorkInfo.State.RUNNING } == 1 }
-        }
+/** Sleeps in WorkManager's scheduler, not in a foreground coroutine or an occupied provider slot. */
+class TranslationWakeJob(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        TranslationJob.runImmediately(applicationContext)
+        return Result.success()
     }
 }

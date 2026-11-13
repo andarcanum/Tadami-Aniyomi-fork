@@ -33,6 +33,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ReelsFavoritesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ReelsFollowsBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.TranslationConfigurationBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
@@ -116,6 +117,8 @@ class BackupCreator(
     private val extensionsBackupCreator: ExtensionsBackupCreator = ExtensionsBackupCreator(context),
     private val achievementBackupCreator: AchievementBackupCreator = AchievementBackupCreator(),
     private val achievementHandler: AchievementHandler = Injekt.get(),
+    private val translationConfigurationBackupCreator: TranslationConfigurationBackupCreator =
+        TranslationConfigurationBackupCreator(),
 ) {
 
     suspend fun backup(uri: Uri, options: BackupOptions): String = backupCreationMutex.withLock {
@@ -313,6 +316,7 @@ class BackupCreator(
                 backupDiscoveryHidden = if (options.sisterAppCompatible) emptyList() else backupDiscovery.first,
                 backupDiscoveryBlacklistTags = if (options.sisterAppCompatible) emptyList() else backupDiscovery.second,
                 backupDiscoverySignals = if (options.sisterAppCompatible) emptyList() else backupDiscovery.third,
+                backupTranslationConfiguration = translationConfigurationBackupCreator(options),
             )
 
             // The object above already mirrors the wire: sister mode flattens novels into the

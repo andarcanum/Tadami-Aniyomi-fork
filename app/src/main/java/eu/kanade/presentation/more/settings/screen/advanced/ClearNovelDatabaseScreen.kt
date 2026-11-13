@@ -42,6 +42,7 @@ import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -243,6 +244,7 @@ private class ClearNovelDatabaseScreenModel : ScreenModel {
         val state = state.value as? State.Ready ?: return@withNonCancellableContext
         database.novelsQueries.deleteNovelsNotInLibraryBySourceIds(state.selection)
         database.novel_historyQueries.removeResettedHistory()
+        TranslationProfileServices.repository.pruneOrphanNovelAssignments()
     }
 
     fun toggleSelection(source: Source) {

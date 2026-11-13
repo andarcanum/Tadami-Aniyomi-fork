@@ -6,6 +6,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import tachiyomi.domain.translation.model.TranslationAttemptException
+import tachiyomi.domain.translation.model.TranslationFailureKind
 import java.util.concurrent.atomic.AtomicInteger
 
 interface AiSubtitleTranslationClient {
@@ -31,7 +33,8 @@ class AiSubtitleTranslationProvider(
     private val maxAttemptsPerChunk: Int = 3,
 ) : SubtitleTranslationProvider {
     override val id = SubtitleTranslationProviderId.Ai
-    override val fingerprint = "ai-subtitle-${client?.fingerprint ?: "unconfigured"}-v2"
+    override val fingerprint: String
+        get() = "ai-subtitle-${client?.fingerprint ?: "unconfigured"}-v2"
     override val supportsBatch = true
 
     override suspend fun translate(
@@ -146,8 +149,39 @@ private fun backoffDelayMs(attempt: Int): Long {
 }
 
 private fun Throwable.isRetryable(): Boolean {
+    if (this is TranslationAttemptException) {
+        return when (failure.kind) {
+            TranslationFailureKind.TRANSIENT,
+            TranslationFailureKind.RATE_LIMIT,
+            TranslationFailureKind.TRUNCATED,
+            TranslationFailureKind.INVALID_RESPONSE,
+            TranslationFailureKind.WAITING,
+            -> true
+            TranslationFailureKind.QUOTA,
+            TranslationFailureKind.AUTHORIZATION,
+            TranslationFailureKind.CONFIGURATION,
+            TranslationFailureKind.REFUSED,
+            TranslationFailureKind.STORAGE,
+            -> false
+        }
+    }
+    if (this is IllegalStateException || this is IllegalArgumentException) {
+        return false
+    }
     val message = (message ?: "").lowercase()
-    val fatal = listOf("unauthor", "forbidden", "invalid api", "api key", "400", "401", "403")
+    val fatal = listOf(
+        "unauthor",
+        "forbidden",
+        "invalid api",
+        "api key",
+        "not configured",
+        "quota",
+        "insufficient_quota",
+        "400",
+        "401",
+        "402",
+        "403",
+    )
     if (fatal.any { message.contains(it) }) return false
     return true
 }

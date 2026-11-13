@@ -21,7 +21,7 @@ class NvidiaTranslationService(
         if (params.model.isBlank()) return null
 
         val taggedInput = segments.mapIndexed { index, text ->
-            "<s i='$index'>$text</s>"
+            "<s i='$index'>${escapeTranslationSource(text)}</s>"
         }.joinToString("\n")
         val promptFamily = resolveNovelTranslationPromptFamily(params.targetLang)
         val systemPrompt = buildSystemPrompt(
@@ -55,31 +55,7 @@ class NvidiaTranslationService(
             onLog = onLog,
         ) ?: return null
 
-        val candidateText = payload.extractAssistantContent().trim()
-        if (candidateText.isBlank()) {
-            onLog?.invoke("NVIDIA returned empty message content")
-            onLog?.invoke("NVIDIA payload: ${payload.toString().take(1200)}")
-            return null
-        }
-
-        val parsed = GeminiXmlSegmentParser.parse(
-            candidateText.trimNonXmlTail(),
-            expectedCount = segments.size,
-        )
-        if (parsed.all { it.isNullOrBlank() }) {
-            val parsedPlaintext = GeminiXmlSegmentParser.parsePlaintext(
-                rawResponse = candidateText,
-                expectedCount = segments.size,
-            )
-            if (parsedPlaintext.any { !it.isNullOrBlank() }) {
-                onLog?.invoke("NVIDIA parse warning: no XML segments found; used plaintext fallback")
-                return parsedPlaintext
-            }
-            onLog?.invoke("NVIDIA parse warning: no XML segments found in message")
-            onLog?.invoke("NVIDIA content preview: ${candidateText.take(600)}")
-            return null
-        }
-        return parsed
+        return parseOpenAiTranslationResponse(payload, segments.size, "NVIDIA", onLog)
     }
 
     private fun buildSystemPrompt(
@@ -109,13 +85,7 @@ private const val NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 internal fun normalizeNvidiaBaseUrl(baseUrl: String): String {
     val trimmed = baseUrl.trim().trimEnd('/')
     if (trimmed.isBlank()) return NVIDIA_BASE_URL
-    val lower = trimmed.lowercase()
-    return when {
-        lower.endsWith("/v1/chat/completions") -> trimmed.dropLast("/chat/completions".length)
-        lower.endsWith("/chat/completions") -> trimmed.dropLast("/chat/completions".length)
-        lower.endsWith("/v1") -> trimmed
-        else -> "$trimmed/v1"
-    }
+    return normalizeOpenAiBaseUrlRoot(trimmed, "/v1")
 }
 
 private fun computeTranslationMaxTokens(segments: List<String>): Int {

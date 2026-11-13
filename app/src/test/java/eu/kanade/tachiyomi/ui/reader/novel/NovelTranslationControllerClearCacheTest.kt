@@ -52,12 +52,18 @@ class NovelTranslationControllerClearCacheTest {
         every { host.translationReaderSettings() } returns settings
         every { host.translationActiveChapterId() } returns 7L
 
+        val queueManager = mockk<TranslationQueueManager>(relaxed = true)
+        // Deletion is delegated to the queue manager now; keep it observable synchronously.
+        every { queueManager.clearArtifacts(any()) } answers {
+            NovelReaderTranslationDiskCacheStore.remove(firstArg())
+        }
+
         return NovelTranslationController(
             host = host,
             application = mockk(relaxed = true),
             novelReaderPreferences = mockk<NovelReaderPreferences>(relaxed = true),
             googleTranslationService = mockk<GoogleTranslationService>(relaxed = true),
-            translationQueueManager = mockk<TranslationQueueManager>(relaxed = true),
+            translationQueueManager = queueManager,
         )
     }
 

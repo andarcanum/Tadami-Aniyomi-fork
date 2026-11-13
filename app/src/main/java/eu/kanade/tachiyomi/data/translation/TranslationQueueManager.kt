@@ -1,747 +1,340 @@
 package eu.kanade.tachiyomi.data.translation
 
+import eu.kanade.tachiyomi.data.translation.profile.freezeProfileWire
+import eu.kanade.tachiyomi.data.translation.profile.withTranslationProfile
+import eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule
+import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.translation.redactTranslationDiagnostic
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import logcat.LogPriority
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
+import tachiyomi.data.translation.TranslationRunRepositoryImpl
+import tachiyomi.domain.entries.novel.interactor.GetNovel
+import tachiyomi.domain.translation.model.TranslationRun
+import tachiyomi.domain.translation.profile.ConnectionProfile
+import tachiyomi.domain.translation.profile.TranslationProfile
+import tachiyomi.domain.translation.profile.TranslationProfileRepository
+import tachiyomi.domain.translation.repository.TranslationRunRepository
+import tachiyomi.domain.translation.service.TranslationFragmentPlanner
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.util.UUID
+import tachiyomi.domain.translation.model.TranslationBatch as DomainTranslationBatch
 
+/** Android facade over the transactional run repository. No fire-and-forget progress writes. */
 class TranslationQueueManager(
-    private val handler: NovelDatabaseHandler = Injekt.get(),
+    handler: NovelDatabaseHandler = Injekt.get(),
     private val json: Json = Injekt.get(),
+    val repository: TranslationRunRepository = TranslationRunRepositoryImpl(handler, json),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val scheduleWork: () -> Unit = { TranslationJob.runImmediately(Injekt.get<android.app.Application>()) },
+    private val profileRepository: TranslationProfileRepository? = null,
+    private val profileApplication: () -> android.app.Application = { Injekt.get() },
 ) {
+    private val mutationLock = Mutex()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private val _queue = MutableStateFlow<List<TranslationQueueItem>>(emptyList())
-    val queue: StateFlow<List<TranslationQueueItem>> = _queue.asStateFlow()
+    val queue: StateFlow<List<TranslationQueueItem>> = repository.observeRuns().map { runs ->
+        runs.filter {
+            !it.status.isTerminal &&
+                it.status != tachiyomi.domain.translation.model.TranslationRunStatus.RUNNING
+        }.map { it.toQueueItem() }
+    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     private val _activeTranslation = MutableStateFlow<TranslationQueueItem?>(null)
     val activeTranslation: StateFlow<TranslationQueueItem?> = _activeTranslation.asStateFlow()
+    private val logs = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 64)
 
-    private val _progressUpdates = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 64)
-    val progressUpdates: SharedFlow<TranslationProgressUpdate> = _progressUpdates.asSharedFlow()
+    /** Cold durable snapshots give every new subscriber current state; logs alone are ephemeral. */
+    val progressUpdates: Flow<TranslationProgressUpdate> get() = observeProgress()
 
-    init {
-        loadQueue()
-    }
-
-    private fun loadQueue() {
-        scope.launch {
-            try {
-                val items = handler.awaitList { db ->
-                    db.translation_queueQueries.getPending(::mapQueueItem)
+    fun observeProgress(novelId: Long? = null): Flow<TranslationProgressUpdate> = merge(
+        flow {
+            val previous = mutableMapOf<Long, TranslationQueueItem>()
+            repository.observeRuns(novelId).collect { rows ->
+                rows.forEach { run ->
+                    val item = run.toQueueItem()
+                    if (previous.put(item.chapterId, item) != item) emit(item.toProgressUpdate())
+                    val active = _activeTranslation.value
+                    if (active?.id == item.id && active.generation == item.generation) {
+                        _activeTranslation.value = item.takeIf { it.status == TranslationStatus.IN_PROGRESS }
+                    }
                 }
-                _queue.value = items
-                logcat(LogPriority.DEBUG) { "Loaded ${items.size} items from translation queue" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to load translation queue: ${e.message}" }
             }
-        }
+        },
+        logs,
+    )
+
+    suspend fun addToQueue(chapterIds: List<Long>, novelId: Long): Int {
+        val novel = Injekt.get<GetNovel>().await(novelId) ?: error("Novel not found")
+        val preferences = Injekt.get<NovelReaderPreferences>()
+        val settings = preferences.resolveSettings(novel.source)
+        val rules = preferences.enabledReplaceRules()
+        return enqueueChapters(chapterIds, novelId, settings, rules)
     }
 
-    suspend fun addToQueue(
+    suspend fun enqueueChapters(
         chapterIds: List<Long>,
         novelId: Long,
-        targetLang: String? = null,
+        settings: NovelReaderSettings,
+        rules: List<ReplaceRule>,
+        forceRetranslate: Boolean = false,
+        priority: Int = 2,
     ): Int {
-        if (chapterIds.isEmpty()) return 0
-
-        val currentTime = System.currentTimeMillis()
-        val batchToken = ""
-        var addedCount = 0
-        chapterIds.distinct().forEach { chapterId ->
-            if (targetLang != null && NovelReaderTranslationDiskCacheStore.has(chapterId, targetLang)) {
-                return@forEach
-            }
-
-            val existing = getQueueItemByChapterId(chapterId)
-            if (
-                shouldSkipTranslationQueueInsert(
-                    existingStatus = existing?.status,
-                    activeChapterId = activeTranslation.value?.chapterId,
-                    chapterId = chapterId,
-                )
-            ) {
-                return@forEach
-            }
-
-            insertQueueItem(
-                chapterId = chapterId,
-                novelId = novelId,
-                batchToken = batchToken,
-                batchOrder = 0,
-                profileSnapshotJson = null,
-                createdAt = currentTime,
-            )
-            addedCount++
+        val effective = resolveAssignedProfile(settings, novelId)
+        val snapshot = effective.toTranslationQueueProfileSnapshot(replaceRulesFingerprint(rules), rules)
+        val result = enqueue(snapshot, chapterIds, novelId, "", forceRetranslate, priority)
+        if (
+            result.conflictingChapterIds.isNotEmpty()
+        ) {
+            error("A translation with different settings is already queued for this chapter")
         }
+        return result.insertedChapterIds.size + result.joinedChapterIds.size
+    }
 
-        refreshQueue()
-        logcat(LogPriority.DEBUG) {
-            "Added $addedCount/${chapterIds.distinct().size} chapters to translation queue"
+    suspend fun enqueueProfileChapters(
+        chapterIds: List<Long>,
+        novelId: Long,
+        profile: TranslationProfile,
+        connection: ConnectionProfile,
+        rules: List<ReplaceRule>,
+        forceRetranslate: Boolean = false,
+        priority: Int = 2,
+    ): Int {
+        val novel = Injekt.get<GetNovel>().await(novelId) ?: error("Novel not found")
+        val settings = Injekt.get<NovelReaderPreferences>().resolveSettings(novel.source)
+            .withTranslationProfile(profile, connection).copy(geminiEnabled = true)
+        return enqueueChapters(chapterIds, novelId, settings, rules, forceRetranslate, priority)
+    }
+
+    private suspend fun resolveAssignedProfile(settings: NovelReaderSettings, novelId: Long): NovelReaderSettings {
+        if (settings.translationProfile != null) {
+            require(settings.connectionProfile?.id == settings.translationProfile.connectionId) {
+                "Selected translation connection is missing"
+            }
+            return settings
         }
-        return addedCount
+        val catalog = profileRepository ?: return settings
+        val profile =
+            catalog.resolveProfile(novelId = novelId, sourceId = settings.translationSourceId) ?: return settings
+        val connection = catalog.getConnection(profile.connectionId) ?: error("Translation connection is missing")
+        return settings.withTranslationProfile(profile, connection)
+    }
+
+    internal suspend fun freezeProfileSnapshot(
+        settings: NovelReaderSettings,
+        novelId: Long,
+        rules: List<ReplaceRule>,
+    ): TranslationQueueProfileSnapshot = prepareSnapshot(
+        resolveAssignedProfile(
+            settings,
+            novelId,
+        ).toTranslationQueueProfileSnapshot(replaceRulesFingerprint(rules), rules),
+    )
+
+    private suspend fun prepareSnapshot(snapshot: TranslationQueueProfileSnapshot): TranslationQueueProfileSnapshot {
+        if (snapshot.snapshotVersion != 2 || snapshot.systemPromptSnapshot != null) return snapshot
+        return withContext(Dispatchers.IO) { snapshot.freezeProfileWire(profileApplication()) }
     }
 
     suspend fun enqueueTranslationBatch(request: TranslationBatchRequest): TranslationBatchEnqueueResult {
-        val distinctChapterIds = request.chapterIds.distinct()
-        if (distinctChapterIds.isEmpty()) {
-            return TranslationBatchEnqueueResult(
-                batchToken = request.batchToken,
-                requestedCount = 0,
-                enqueuedCount = 0,
-                skippedAlreadyTranslatedCount = 0,
-            )
+        val rules = request.profileSnapshot.replaceRulesSnapshot
+            ?: Injekt.get<NovelReaderPreferences>().enabledReplaceRules()
+        val fingerprint = replaceRulesFingerprint(rules)
+        if (request.profileSnapshot.replaceRulesFingerprint.isNotEmpty() &&
+            request.profileSnapshot.replaceRulesFingerprint != fingerprint
+        ) {
+            error("Text replacement rules changed; select the batch again")
         }
-
-        val batchToken = request.batchToken.ifBlank { UUID.randomUUID().toString() }
-        val currentTime = System.currentTimeMillis()
-        val profileSnapshotJson = json.encodeToString(request.profileSnapshot)
-        // Full-requirements probe: identical to the reader's restore check, so a batch never skips
-        // a chapter whose cache was produced under different settings (targetLang-only probe let
-        // the batch report "already translated" while the reader kept showing the original text).
-        val cacheRequirements = request.profileSnapshot.toTranslationCacheRequirements()
-        var enqueuedCount = 0
-        var skippedAlreadyTranslatedCount = 0
-
-        distinctChapterIds.forEachIndexed { index, chapterId ->
-            if (
-                !request.forceRetranslate &&
-                NovelReaderTranslationDiskCacheStore.has(chapterId, cacheRequirements)
-            ) {
-                skippedAlreadyTranslatedCount++
-                return@forEachIndexed
-            }
-
-            val existing = getQueueItemByChapterId(chapterId)
-            val canReplacePendingItem = request.forceRetranslate && existing?.status == TranslationStatus.PENDING
-            if (
-                !canReplacePendingItem &&
-                shouldSkipTranslationQueueInsert(
-                    existingStatus = existing?.status,
-                    activeChapterId = activeTranslation.value?.chapterId,
-                    chapterId = chapterId,
-                )
-            ) {
-                return@forEachIndexed
-            }
-
-            insertQueueItem(
-                chapterId = chapterId,
-                novelId = request.novelId,
-                batchToken = batchToken,
-                batchOrder = index,
-                profileSnapshotJson = profileSnapshotJson,
-                createdAt = currentTime,
-            )
-            enqueuedCount++
+        var selected = request.profileSnapshot
+        if (selected.snapshotVersion < 2 && profileRepository != null) {
+            val novel = Injekt.get<GetNovel>().await(request.novelId) ?: error("Novel not found")
+            val base = Injekt.get<NovelReaderPreferences>().resolveSettings(novel.source)
+            selected = resolveAssignedProfile(selected.toReaderSettings(base), request.novelId)
+                .toTranslationQueueProfileSnapshot(fingerprint, rules)
         }
-
-        upsertBatchState(
-            TranslationBatchState(
-                batchToken = batchToken,
-                novelId = request.novelId,
-                status = if (enqueuedCount > 0) TranslationBatchStatus.RUNNING else TranslationBatchStatus.COMPLETED,
-                total = distinctChapterIds.size,
-                enqueued = enqueuedCount,
-                skipped = skippedAlreadyTranslatedCount,
-                completed = 0,
-                failed = 0,
-                lastSuccessfulChapterId = null,
-                createdAt = currentTime,
-                updatedAt = currentTime,
-            ),
+        val snapshot = selected.copy(
+            snapshotVersion = if (selected.snapshotVersion == 2) 2 else 1,
+            replaceRulesSnapshot = rules,
+            replaceRulesFingerprint = fingerprint,
         )
-        refreshQueue()
-        logcat(LogPriority.DEBUG) {
-            "Added $enqueuedCount/${distinctChapterIds.size} chapters to translation batch $batchToken"
-        }
+        val token = request.batchToken.ifBlank { java.util.UUID.randomUUID().toString() }
+        val result = enqueue(
+            snapshot,
+            request.chapterIds,
+            request.novelId,
+            token,
+            request.forceRetranslate,
+            request.priority,
+        )
         return TranslationBatchEnqueueResult(
-            batchToken = batchToken,
-            requestedCount = distinctChapterIds.size,
-            enqueuedCount = enqueuedCount,
-            skippedAlreadyTranslatedCount = skippedAlreadyTranslatedCount,
+            batchToken = result.batchToken,
+            requestedCount = request.chapterIds.distinct().size,
+            enqueuedCount = result.insertedChapterIds.size + result.joinedChapterIds.size,
+            skippedAlreadyTranslatedCount = 0,
+            conflictingCount = result.conflictingChapterIds.size,
         )
     }
 
-    fun removeFromQueue(chapterId: Long) {
-        scope.launch {
-            try {
-                cancelChapter(chapterId)
-                logcat(LogPriority.DEBUG) { "Removed chapter $chapterId from translation queue" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to remove chapter from queue: ${e.message}" }
-            }
-        }
-    }
-
-    suspend fun getNextPending(): TranslationQueueItem? {
-        return try {
-            handler.awaitOneOrNull { db ->
-                db.translation_queueQueries.getNextPending {
-                        id,
-                        chapterId,
-                        novelId,
-                        batchToken,
-                        batchOrder,
-                        profileSnapshotJson,
-                        status,
-                        progress,
-                        errorMessage,
-                        createdAt,
-                        updatedAt,
-                        retryCount,
-                    ->
-                    TranslationQueueItem(
-                        id = id,
-                        chapterId = chapterId,
-                        novelId = novelId,
-                        status = TranslationStatus.entries[status.toInt()],
-                        progress = progress.toInt(),
-                        errorMessage = errorMessage,
-                        retryCount = retryCount.toInt(),
-                        createdAt = createdAt,
-                        updatedAt = updatedAt,
-                        batchToken = batchToken,
-                        batchOrder = batchOrder.toInt(),
-                        profileSnapshotJson = profileSnapshotJson,
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Failed to get next pending item: ${e.message}" }
-            null
-        }
-    }
-
-    suspend fun updateStatusAwait(
-        chapterId: Long,
-        status: TranslationStatus,
-        chapterName: String = "",
-    ) {
-        handler.await { db ->
-            db.translation_queueQueries.updateStatus(
-                chapterId = chapterId,
-                status = status.ordinal.toLong(),
-                updatedAt = System.currentTimeMillis(),
-            )
-        }
-        refreshQueue()
-        getQueueItemByChapterId(chapterId)?.let { item ->
-            _progressUpdates.emit(
-                TranslationProgressUpdate(
-                    chapterId = item.chapterId,
-                    novelId = item.novelId,
-                    status = status,
-                    progress = item.progress,
-                    currentChunk = 0,
-                    totalChunks = 0,
-                    chapterName = chapterName,
-                    errorMessage = item.errorMessage,
-                ),
-            )
-        }
-        logcat(LogPriority.DEBUG) { "Updated chapter $chapterId status to $status" }
-    }
-
-    fun updateStatus(chapterId: Long, status: TranslationStatus) {
-        scope.launch {
-            try {
-                updateStatusAwait(chapterId, status)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to update chapter status: ${e.message}" }
-            }
-        }
-    }
-
-    suspend fun updateProgressAwait(
-        chapterId: Long,
-        progress: Int,
-        status: TranslationStatus,
-        chapterName: String = "",
-    ) {
-        handler.await { db ->
-            db.translation_queueQueries.updateStatusAndProgress(
-                chapterId = chapterId,
-                status = status.ordinal.toLong(),
-                progress = progress.toLong(),
-                updatedAt = System.currentTimeMillis(),
-            )
-        }
-        refreshQueue()
-        getQueueItemByChapterId(chapterId)?.let { item ->
-            _progressUpdates.emit(
-                TranslationProgressUpdate(
-                    chapterId = chapterId,
-                    novelId = item.novelId,
-                    status = status,
-                    progress = progress,
-                    currentChunk = 0,
-                    totalChunks = 0,
-                    chapterName = chapterName,
-                    errorMessage = null,
-                ),
-            )
-        }
-    }
-
-    fun updateProgress(chapterId: Long, progress: Int, status: TranslationStatus) {
-        scope.launch {
-            try {
-                updateProgressAwait(chapterId, progress, status)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to update chapter progress: ${e.message}" }
-            }
-        }
-    }
-
-    fun emitLog(chapterId: Long, message: String) {
-        scope.launch {
-            try {
-                val item = getQueueItemByChapterId(chapterId) ?: return@launch
-                _progressUpdates.emit(
-                    TranslationProgressUpdate(
-                        chapterId = item.chapterId,
-                        novelId = item.novelId,
-                        status = item.status,
-                        progress = item.progress,
-                        currentChunk = 0,
-                        totalChunks = 0,
-                        chapterName = "",
-                        errorMessage = null,
-                        logMessage = message,
-                    ),
-                )
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to emit translation log: ${e.message}" }
-            }
-        }
-    }
-
-    suspend fun setErrorAwait(
-        chapterId: Long,
-        error: String,
-        chapterName: String = "",
-    ) {
-        handler.await { db ->
-            db.translation_queueQueries.setError(
-                chapterId = chapterId,
-                error = error,
-                updatedAt = System.currentTimeMillis(),
-            )
-        }
-        refreshQueue()
-        getQueueItemByChapterId(chapterId)?.let { item ->
-            _progressUpdates.emit(
-                TranslationProgressUpdate(
-                    chapterId = chapterId,
-                    novelId = item.novelId,
-                    status = TranslationStatus.FAILED,
-                    progress = item.progress,
-                    currentChunk = 0,
-                    totalChunks = 0,
-                    chapterName = chapterName,
-                    errorMessage = error,
-                ),
-            )
-        }
-        logcat(LogPriority.DEBUG) { "Set error for chapter $chapterId: $error" }
-    }
-
-    fun setError(chapterId: Long, error: String) {
-        scope.launch {
-            try {
-                setErrorAwait(chapterId, error)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to set chapter error: ${e.message}" }
-            }
-        }
-    }
-
-    suspend fun hasNext(): Boolean {
-        return try {
-            handler.awaitOneOrNull { db ->
-                db.translation_queueQueries.getNextPending { _, _, _, _, _, _, _, _, _, _, _, _ -> }
-            } != null
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Failed to check for next item: ${e.message}" }
-            false
-        }
-    }
-
-    suspend fun hasPendingOrActive(chapterId: Long): Boolean {
-        return try {
-            getQueueItemByChapterId(chapterId)?.status.let { status ->
-                status == TranslationStatus.PENDING || status == TranslationStatus.IN_PROGRESS
-            }
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Failed to check chapter $chapterId queue state: ${e.message}" }
-            false
-        }
-    }
-
-    suspend fun getBatchState(batchToken: String): TranslationBatchState? {
-        if (batchToken.isBlank()) return null
-        return try {
-            handler.awaitOneOrNull { db ->
-                db.translation_queueQueries.getBatchState(batchToken) {
-                        batchToken,
-                        novelId,
-                        status,
-                        total,
-                        enqueued,
-                        skipped,
-                        completed,
-                        failed,
-                        lastSuccessfulChapterId,
-                        createdAt,
-                        updatedAt,
-                    ->
-                    TranslationBatchState(
-                        batchToken = batchToken,
-                        novelId = novelId,
-                        status = TranslationBatchStatus.entries[status.toInt()],
-                        total = total.toInt(),
-                        enqueued = enqueued.toInt(),
-                        skipped = skipped.toInt(),
-                        completed = completed.toInt(),
-                        failed = failed.toInt(),
-                        lastSuccessfulChapterId = lastSuccessfulChapterId,
-                        createdAt = createdAt,
-                        updatedAt = updatedAt,
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Failed to get batch state for $batchToken: ${e.message}" }
-            null
-        }
-    }
-
-    suspend fun isBatchPaused(batchToken: String): Boolean {
-        return getBatchState(batchToken)?.status == TranslationBatchStatus.PAUSED
-    }
-
-    suspend fun pauseBatch(batchToken: String): Boolean {
-        val state = getBatchState(batchToken) ?: return false
-        if (state.status == TranslationBatchStatus.CANCELLED || state.status == TranslationBatchStatus.COMPLETED) {
-            return false
-        }
-        upsertBatchState(state.copy(status = TranslationBatchStatus.PAUSED, updatedAt = System.currentTimeMillis()))
-        return true
-    }
-
-    suspend fun resumeBatch(batchToken: String): Boolean {
-        val state = getBatchState(batchToken) ?: return false
-        if (state.status == TranslationBatchStatus.CANCELLED || state.status == TranslationBatchStatus.COMPLETED) {
-            return false
-        }
-        upsertBatchState(state.copy(status = TranslationBatchStatus.RUNNING, updatedAt = System.currentTimeMillis()))
-        return true
-    }
-
-    suspend fun cancelBatch(batchToken: String): Boolean {
-        val state = getBatchState(batchToken) ?: return false
-        val wasActive = activeTranslation.value?.batchToken == batchToken
-        handler.await { db ->
-            db.translation_queueQueries.upsertBatchState(
-                batchToken = state.batchToken,
-                novelId = state.novelId,
-                status = TranslationBatchStatus.CANCELLED.ordinal.toLong(),
-                total = state.total.toLong(),
-                enqueued = state.enqueued.toLong(),
-                skipped = state.skipped.toLong(),
-                completed = state.completed.toLong(),
-                failed = state.failed.toLong(),
-                lastSuccessfulChapterId = state.lastSuccessfulChapterId,
-                createdAt = state.createdAt,
-                updatedAt = System.currentTimeMillis(),
-            )
-            db.translation_queueQueries.deleteByBatchToken(batchToken)
-        }
-        if (wasActive) {
-            setActiveTranslation(null)
-        }
-        refreshQueue()
-        return wasActive
-    }
-
-    suspend fun recoverStaleInProgressRows(): Int {
-        return try {
-            val staleItems = handler.awaitList { db ->
-                db.translation_queueQueries.getInProgress(::mapQueueItem)
-            }
-            if (staleItems.isEmpty()) {
-                return 0
-            }
-            handler.await { db ->
-                db.translation_queueQueries.recoverInProgress(System.currentTimeMillis())
-            }
-            refreshQueue()
-            logcat(LogPriority.DEBUG) {
-                "Recovered ${staleItems.size} stale in-progress translation row(s)"
-            }
-            staleItems.size
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Failed to recover in-progress rows: ${e.message}" }
-            0
-        }
-    }
-
-    suspend fun recordBatchItemResult(
+    private suspend fun enqueue(
+        snapshot: TranslationQueueProfileSnapshot,
+        chapters: List<Long>,
+        novelId: Long,
         batchToken: String,
-        chapterId: Long,
-        succeeded: Boolean,
-    ): TranslationBatchState? {
-        val state = getBatchState(batchToken) ?: return null
-        if (state.status == TranslationBatchStatus.CANCELLED) {
-            return state
+        force: Boolean,
+        priority: Int,
+    ): tachiyomi.domain.translation.model.TranslationEnqueueResult {
+        val frozen = prepareSnapshot(snapshot)
+        val encoded = json.encodeToString(frozen)
+        val fingerprint = TranslationFragmentPlanner.sourceFingerprint(listOf(encoded))
+        return withContext(NonCancellable) {
+            mutationLock.withLock {
+                val result = repository.enqueue(
+                    chapterIds = chapters,
+                    novelId = novelId,
+                    profileSnapshotJson = encoded,
+                    profileFingerprint = fingerprint,
+                    batchToken = batchToken,
+                    forceRetranslate = force,
+                    priority = priority,
+                    now = System.currentTimeMillis(),
+                    sessionOnly = frozen.geminiDisableCache,
+                )
+                if (result.insertedChapterIds.isNotEmpty() || result.joinedChapterIds.isNotEmpty()) scheduleWork()
+                result
+            }
         }
-
-        val updatedState = state.copy(
-            status = when {
-                state.completed + state.failed + 1 >= state.enqueued && state.enqueued > 0 ->
-                    TranslationBatchStatus.COMPLETED
-                state.status == TranslationBatchStatus.PAUSED ->
-                    TranslationBatchStatus.PAUSED
-                else ->
-                    TranslationBatchStatus.RUNNING
-            },
-            completed = state.completed + if (succeeded) 1 else 0,
-            failed = state.failed + if (succeeded) 0 else 1,
-            lastSuccessfulChapterId = if (succeeded) chapterId else state.lastSuccessfulChapterId,
-            updatedAt = System.currentTimeMillis(),
-        )
-        upsertBatchState(updatedState)
-        return updatedState
     }
+
+    suspend fun getNextPending(): TranslationQueueItem? = repository.claimNext(
+        System.currentTimeMillis(),
+    )?.toQueueItem()
+    suspend fun hasNext(): Boolean = repository.nextWakeAt() != null
+    suspend fun hasPendingOrActive(
+        chapterId: Long,
+    ): Boolean = repository.getByChapterId(chapterId)?.status?.isTerminal == false
+    suspend fun getBatchState(token: String): TranslationBatchState? = repository.getBatch(token)?.toBatchState()
+    suspend fun getActiveBatches(): List<TranslationBatchState> =
+        repository.getActiveBatches().map { it.toBatchState() }
+    suspend fun isBatchPaused(token: String): Boolean = getBatchState(token)?.status == TranslationBatchStatus.PAUSED
+    suspend fun pauseBatch(token: String): Boolean = repository.pauseBatch(token, System.currentTimeMillis())
+    suspend fun resumeBatch(token: String): Boolean {
+        val resumed = repository.resumeBatch(token, System.currentTimeMillis())
+        if (resumed) scheduleWork()
+        return resumed
+    }
+
+    suspend fun pauseImplicitOwner(chapterId: Long, generation: Long): Boolean =
+        repository.pauseImplicitOwner(chapterId, generation, System.currentTimeMillis())
+
+    suspend fun resumeImplicitOwner(chapterId: Long, generation: Long): Boolean {
+        val resumed = repository.resumeImplicitOwner(chapterId, generation, System.currentTimeMillis())
+        if (resumed) scheduleWork()
+        return resumed
+    }
+
+    suspend fun resumeActionPaused(chapterId: Long, generation: Long): Boolean {
+        val resumed = repository.resumeActionPaused(chapterId, generation, System.currentTimeMillis())
+        if (resumed) scheduleWork()
+        return resumed
+    }
+
+    suspend fun detachImplicitOwner(chapterId: Long, generation: Long): Boolean =
+        repository.detachImplicitOwner(chapterId, generation, System.currentTimeMillis())
+
+    suspend fun retryOwnedRun(chapterId: Long, generation: Long, force: Boolean = false): Boolean {
+        val retried = repository.retryOwnedRun(chapterId, generation, force, System.currentTimeMillis())
+        if (retried) scheduleWork()
+        return retried
+    }
+    suspend fun cancelBatch(token: String): Boolean = repository.cancelBatch(token, System.currentTimeMillis())
+    suspend fun cancelChapter(
+        chapterId: Long,
+    ): Boolean = repository.cancelChapter(chapterId, System.currentTimeMillis())
+    suspend fun cancelAll(): Boolean = repository.cancelAll(System.currentTimeMillis()) > 0
+    suspend fun recoverStaleInProgressRows(): Int = repository.recoverInterrupted(System.currentTimeMillis())
 
     fun setActiveTranslation(item: TranslationQueueItem?) {
         _activeTranslation.value = item
     }
 
-    suspend fun cancelChapter(chapterId: Long): Boolean {
-        val item = getQueueItemByChapterId(chapterId) ?: return false
-        _progressUpdates.emit(
-            TranslationProgressUpdate(
-                chapterId = item.chapterId,
-                novelId = item.novelId,
-                status = TranslationStatus.CANCELLED,
-                progress = item.progress,
-                currentChunk = 0,
-                totalChunks = 0,
-                chapterName = "",
-                errorMessage = null,
-            ),
-        )
-        handler.await { db ->
-            db.translation_queueQueries.delete(chapterId)
-        }
-        if (_activeTranslation.value?.chapterId == chapterId) {
-            setActiveTranslation(null)
-        }
-        refreshQueue()
-        return item.status == TranslationStatus.IN_PROGRESS
+    /** Named prefetch joins the reader only while that same current generation is still active. */
+    suspend fun promotePrefetch(
+        snapshot: TranslationQueueProfileSnapshot,
+        chapterId: Long,
+        novelId: Long,
+        token: String,
+    ): Boolean {
+        val frozen = prepareSnapshot(snapshot)
+        val encoded = json.encodeToString(frozen)
+        val fingerprint = TranslationFragmentPlanner.sourceFingerprint(listOf(encoded))
+        val promoted = repository.promotePrefetchRun(chapterId, token, encoded, fingerprint, System.currentTimeMillis())
+        if (promoted) scheduleWork()
+        return promoted
     }
 
-    suspend fun cancelAll(): Boolean {
-        val items = queue.value + activeTranslation.value.let(::listOfNotNull)
-        if (items.isEmpty()) return false
-        items.distinctBy { it.chapterId }.forEach { item ->
-            _progressUpdates.emit(
-                TranslationProgressUpdate(
-                    chapterId = item.chapterId,
-                    novelId = item.novelId,
-                    status = TranslationStatus.CANCELLED,
-                    progress = item.progress,
-                    currentChunk = 0,
-                    totalChunks = 0,
-                    chapterName = "",
-                    errorMessage = null,
-                ),
-            )
-            handler.await { db ->
-                db.translation_queueQueries.delete(item.chapterId)
-            }
-        }
-        handler.await { db ->
-            db.translation_queueQueries.deleteAllBatchStates()
-        }
-        setActiveTranslation(null)
-        refreshQueue()
-        return true
-    }
-
-    suspend fun incrementRetryAwait(chapterId: Long) {
-        handler.await { db ->
-            db.translation_queueQueries.incrementRetry(
-                chapterId = chapterId,
-                updatedAt = System.currentTimeMillis(),
-            )
-        }
-        refreshQueue()
-        logcat(LogPriority.DEBUG) { "Incremented retry count for chapter $chapterId" }
-    }
-
-    fun incrementRetry(chapterId: Long) {
-        scope.launch {
-            try {
-                incrementRetryAwait(chapterId)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to increment retry count: ${e.message}" }
-            }
-        }
-    }
-
-    fun clearCompleted() {
-        scope.launch {
-            try {
-                handler.await { db ->
-                    db.translation_queueQueries.deleteCompleted()
+    /** Invalidate ownership before deleting artifacts; enqueues cannot overtake an explicit clear. */
+    fun clearArtifacts(chapterId: Long? = null) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            mutationLock.withLock {
+                if (chapterId == null) {
+                    repository.invalidateAllCheckpoints(System.currentTimeMillis())
+                    NovelReaderTranslationDiskCacheStore.clear()
+                    TranslationSessionResults.store.clearAll()
+                } else {
+                    repository.invalidateCheckpoint(chapterId, System.currentTimeMillis())
+                    NovelReaderTranslationDiskCacheStore.remove(chapterId)
+                    TranslationSessionResults.store.clearChapter(chapterId)
                 }
-                refreshQueue()
-                logcat(LogPriority.DEBUG) { "Cleared completed translations from queue" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to clear completed translations: ${e.message}" }
             }
         }
     }
 
-    private suspend fun refreshQueue() {
-        try {
-            val items = handler.awaitList { db ->
-                db.translation_queueQueries.getPending(::mapQueueItem)
-            }
-            _queue.value = items
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) { "Failed to refresh queue: ${e.message}" }
-        }
+    /** Cleanup remains live after the reader scope is disposed. */
+    fun launchCleanup(block: suspend () -> Unit) {
+        scope.launch { block() }
     }
 
-    private suspend fun insertQueueItem(
-        chapterId: Long,
-        novelId: Long,
-        batchToken: String,
-        batchOrder: Int,
-        profileSnapshotJson: String?,
-        createdAt: Long,
-    ) {
-        handler.await { db ->
-            db.translation_queueQueries.insert(
-                chapterId = chapterId,
-                novelId = novelId,
-                batchToken = batchToken,
-                batchOrder = batchOrder.toLong(),
-                profileSnapshotJson = profileSnapshotJson,
-                createdAt = createdAt,
-            )
-        }
-    }
-
-    private suspend fun upsertBatchState(state: TranslationBatchState) {
-        handler.await { db ->
-            db.translation_queueQueries.upsertBatchState(
-                batchToken = state.batchToken,
-                novelId = state.novelId,
-                status = state.status.ordinal.toLong(),
-                total = state.total.toLong(),
-                enqueued = state.enqueued.toLong(),
-                skipped = state.skipped.toLong(),
-                completed = state.completed.toLong(),
-                failed = state.failed.toLong(),
-                lastSuccessfulChapterId = state.lastSuccessfulChapterId,
-                createdAt = state.createdAt,
-                updatedAt = state.updatedAt,
-            )
-        }
-    }
-
-    private suspend fun getQueueItemByChapterId(chapterId: Long): TranslationQueueItem? {
-        return handler.awaitOneOrNull { db ->
-            db.translation_queueQueries.getByChapterId(chapterId) {
-                    id,
-                    chapterId,
-                    novelId,
-                    batchToken,
-                    batchOrder,
-                    profileSnapshotJson,
-                    status,
-                    progress,
-                    errorMessage,
-                    createdAt,
-                    updatedAt,
-                    retryCount,
-                ->
-                mapQueueItem(
-                    id = id,
-                    chapterId = chapterId,
-                    novelId = novelId,
-                    batchToken = batchToken,
-                    batchOrder = batchOrder,
-                    profileSnapshotJson = profileSnapshotJson,
-                    status = status,
-                    progress = progress,
-                    errorMessage = errorMessage,
-                    createdAt = createdAt,
-                    updatedAt = updatedAt,
-                    retryCount = retryCount,
-                )
-            }
-        }
-    }
-
-    private fun mapQueueItem(
-        id: Long,
-        chapterId: Long,
-        novelId: Long,
-        batchToken: String,
-        batchOrder: Long,
-        profileSnapshotJson: String?,
-        status: Long,
-        progress: Long,
-        errorMessage: String?,
-        createdAt: Long,
-        updatedAt: Long,
-        retryCount: Long,
-    ): TranslationQueueItem {
-        val safeStatus = TranslationStatus.entries.getOrElse(status.toInt()) { TranslationStatus.PENDING }
-        return TranslationQueueItem(
-            id = id,
-            chapterId = chapterId,
-            novelId = novelId,
-            status = safeStatus,
-            progress = progress.toInt().coerceIn(0, 100),
-            errorMessage = errorMessage,
-            retryCount = retryCount.toInt().coerceAtLeast(0),
-            createdAt = createdAt,
-            updatedAt = updatedAt,
-            batchToken = batchToken,
-            batchOrder = batchOrder.toInt(),
-            profileSnapshotJson = profileSnapshotJson,
-        )
+    suspend fun emitRunLog(run: TranslationRun, message: String) {
+        val current = repository.getByChapterId(run.chapterId) ?: return
+        if (current.id != run.id || current.generation != run.generation) return
+        logs.emit(current.toQueueItem().toProgressUpdate().copy(logMessage = redactTranslationDiagnostic(message)))
     }
 }
 
-internal fun shouldSkipTranslationQueueInsert(
-    existingStatus: TranslationStatus?,
-    activeChapterId: Long?,
-    chapterId: Long,
-): Boolean {
-    return existingStatus == TranslationStatus.PENDING ||
-        (existingStatus == TranslationStatus.IN_PROGRESS && activeChapterId == chapterId)
-}
+internal fun TranslationRun.toQueueItem(): TranslationQueueItem = TranslationQueueItem(
+    id, chapterId, novelId, TranslationStatus.entries[status.ordinal], progress, errorMessage, retryCount,
+    createdAt, updatedAt, batchToken, batchOrder, profileSnapshotJson,
+    generation = generation, nextAttemptAt = nextAttemptAt, sourceFingerprint = sourceFingerprint,
+)
+
+internal fun TranslationQueueItem.toProgressUpdate(): TranslationProgressUpdate = TranslationProgressUpdate(
+    chapterId, novelId, status, progress, 0, 0, "", errorMessage,
+    generation = generation, nextAttemptAt = nextAttemptAt, sourceFingerprint = sourceFingerprint,
+)
+
+internal fun DomainTranslationBatch.toBatchState(): TranslationBatchState = TranslationBatchState(
+    batchToken, novelId, TranslationBatchStatus.entries[status.ordinal], total, enqueued, skipped, completed, failed,
+    lastSuccessfulChapterId, createdAt, updatedAt, cancelled = cancelled,
+)

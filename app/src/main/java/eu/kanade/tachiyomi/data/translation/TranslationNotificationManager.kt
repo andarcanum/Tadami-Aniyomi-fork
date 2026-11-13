@@ -300,11 +300,6 @@ class TranslationNotificationManager(
         return Notifications.ID_TRANSLATION_PROGRESS + stableNotificationId(chapterId)
     }
 
-    private fun stableNotificationId(chapterId: Long): Int {
-        val mixed = chapterId xor (chapterId ushr 32)
-        return (mixed and 0x3FFFFFFF).toInt().coerceAtLeast(1)
-    }
-
     private fun stableBatchRequestCode(batchToken: String, salt: Int): Int {
         val hash = batchToken.hashCode() * 31 + salt
         return (hash and 0x3FFFFFFF).coerceAtLeast(1)
@@ -340,6 +335,13 @@ class TranslationNotificationManager(
                 state.completed,
                 state.skipped,
             )
+        }
+    }
+
+    companion object {
+        internal fun stableNotificationId(chapterId: Long): Int {
+            val mixed = chapterId xor (chapterId ushr 32)
+            return (mixed and 0x3FFFFFFF).toInt().coerceAtLeast(1)
         }
     }
 }

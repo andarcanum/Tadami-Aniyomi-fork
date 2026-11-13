@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupReelsFollow
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
 import eu.kanade.tachiyomi.data.backup.models.BackupStats
+import eu.kanade.tachiyomi.data.backup.models.BackupTranslationConfiguration
 import eu.kanade.tachiyomi.data.backup.models.BackupUserProfile
 import eu.kanade.tachiyomi.data.backup.models.MihonBackupManga
 import eu.kanade.tachiyomi.data.backup.models.TadamiMediaType
@@ -94,6 +95,9 @@ internal object BackupPayloadEmitter {
             messageList(625, backup.backupDiscoveryBlacklistTags, BackupDiscoveryTag.serializer(), proto)
             messageList(627, backup.backupDiscoverySignals, BackupDiscoverySignal.serializer(), proto)
             messageList(628, backup.backupAnimeSeries, BackupAnimeSeries.serializer(), proto)
+            backup.backupTranslationConfiguration?.let {
+                messageField(629, proto.encodeToByteArray(BackupTranslationConfiguration.serializer(), it))
+            }
         }
     }
 

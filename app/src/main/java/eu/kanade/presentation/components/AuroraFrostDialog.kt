@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -72,6 +73,7 @@ fun AuroraFrostDialog(
     headerContent: (@Composable () -> Unit)? = null,
     surfaceOverlay: Brush? = null,
     closeLabel: String? = null,
+    contentSpacing: Dp = 0.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AuroraTheme.colors
@@ -192,9 +194,10 @@ fun AuroraFrostDialog(
                 }
                 Spacer(Modifier.height(14.dp))
                 Column(
-                    Modifier
+                    modifier = Modifier
                         .weight(1f, fill = false)
                         .then(if (innerScroll) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
                 ) {
                     content()
                 }

@@ -19,55 +19,76 @@ class TranslationCancelReceiver : BroadcastReceiver() {
         val notificationManager = Injekt.get<TranslationNotificationManager>()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                when (intent.action) {
-                    ACTION_CANCEL_ALL -> {
-                        val hadWork = queueManager.cancelAll()
-                        if (hadWork) {
-                            TranslationJob.stop(context)
-                        }
-                        notificationManager.cancelQueueProgress()
-                    }
-                    ACTION_PAUSE_BATCH -> {
-                        val batchToken = intent.getStringExtra(EXTRA_BATCH_TOKEN).orEmpty()
-                        if (batchToken.isBlank()) return@launch
-                        if (queueManager.pauseBatch(batchToken)) {
-                            queueManager.getBatchState(batchToken)?.let(notificationManager::showBatchPaused)
-                        }
-                    }
-                    ACTION_RESUME_BATCH -> {
-                        val batchToken = intent.getStringExtra(EXTRA_BATCH_TOKEN).orEmpty()
-                        if (batchToken.isBlank()) return@launch
-                        if (queueManager.resumeBatch(batchToken)) {
-                            TranslationJob.runImmediately(context.applicationContext)
-                        }
-                    }
-                    ACTION_CANCEL_BATCH -> {
-                        val batchToken = intent.getStringExtra(EXTRA_BATCH_TOKEN).orEmpty()
-                        if (batchToken.isBlank()) return@launch
-                        val wasActive = queueManager.cancelBatch(batchToken)
-                        if (wasActive) {
-                            TranslationJob.stop(context)
-                        }
-                        if (queueManager.hasNext()) {
-                            TranslationJob.runImmediately(context.applicationContext)
-                        }
-                        notificationManager.cancelQueueProgress()
-                    }
-                    else -> {
-                        val chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, -1)
-                        if (chapterId == -1L) return@launch
-                        val wasActive = queueManager.cancelChapter(chapterId)
-                        if (wasActive) {
-                            TranslationJob.stop(context)
-                            if (queueManager.hasNext()) {
-                                TranslationJob.runImmediately(context.applicationContext)
-                            }
-                        }
-                        context.cancelNotification(Notifications.ID_TRANSLATION_PROGRESS + chapterId.toInt())
-                    }
-                }
+                handleAction(
+                    context = context,
+                    intent = intent,
+                    queueManager = queueManager,
+                    notificationManager = notificationManager,
+                )
             } finally {
                 pendingResult.finish()
+            }
+        }
+    }
+
+    internal suspend fun handleAction(
+        context: Context,
+        intent: Intent,
+        queueManager: TranslationQueueManager,
+        notificationManager: TranslationNotificationManager,
+        stopQueueWorker: () -> Unit = { TranslationJob.stop(context) },
+        triggerQueueWorker: () -> Unit = { TranslationJob.runImmediately(context.applicationContext) },
+        cancelChapterNotification: (Int) -> Unit = { id -> context.cancelNotification(id) },
+    ) {
+        when (intent.action) {
+            ACTION_CANCEL_ALL -> {
+                val hadWork = queueManager.cancelAll()
+                if (hadWork) {
+                    stopQueueWorker()
+                }
+                notificationManager.cancelQueueProgress()
+            }
+            ACTION_PAUSE_BATCH -> {
+                val batchToken = intent.getStringExtra(EXTRA_BATCH_TOKEN).orEmpty()
+                if (batchToken.isBlank()) return
+                if (queueManager.pauseBatch(batchToken)) {
+                    queueManager.getBatchState(batchToken)?.let(notificationManager::showBatchPaused)
+                }
+            }
+            ACTION_RESUME_BATCH -> {
+                val batchToken = intent.getStringExtra(EXTRA_BATCH_TOKEN).orEmpty()
+                if (batchToken.isBlank()) return
+                if (queueManager.resumeBatch(batchToken)) {
+                    triggerQueueWorker()
+                }
+            }
+            ACTION_CANCEL_BATCH -> {
+                val batchToken = intent.getStringExtra(EXTRA_BATCH_TOKEN).orEmpty()
+                if (batchToken.isBlank()) return
+                queueManager.cancelBatch(batchToken)
+                val hasNext = queueManager.hasNext()
+                if (hasNext) {
+                    triggerQueueWorker()
+                }
+                val remainingBatches = queueManager.getActiveBatches()
+                if (!hasNext && queueManager.activeTranslation.value == null) {
+                    val pausedBatch = remainingBatches.firstOrNull {
+                        it.status == TranslationBatchStatus.PAUSED
+                    }
+                    when {
+                        pausedBatch != null -> notificationManager.showBatchPaused(pausedBatch)
+                        remainingBatches.isEmpty() -> notificationManager.cancelQueueProgress()
+                    }
+                }
+            }
+            else -> {
+                val chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, -1)
+                if (chapterId == -1L) return
+                queueManager.cancelChapter(chapterId)
+                cancelChapterNotification(
+                    Notifications.ID_TRANSLATION_PROGRESS +
+                        TranslationNotificationManager.stableNotificationId(chapterId),
+                )
             }
         }
     }

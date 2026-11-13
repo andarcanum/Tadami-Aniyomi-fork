@@ -13,7 +13,19 @@ CREATE TABLE translation_queue(
     error_message TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL DEFAULT 0,
-    retry_count INTEGER NOT NULL DEFAULT 0
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    generation INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at INTEGER NOT NULL DEFAULT 0,
+    source_fingerprint TEXT,
+    profile_fingerprint TEXT,
+    source_segment_count INTEGER NOT NULL DEFAULT 0,
+    force_retranslate INTEGER AS Boolean NOT NULL DEFAULT 0,
+    priority INTEGER NOT NULL DEFAULT 1,
+    implicit_owner INTEGER AS Boolean NOT NULL DEFAULT 1,
+    session_only INTEGER AS Boolean NOT NULL DEFAULT 0,
+    implicit_paused INTEGER AS Boolean NOT NULL DEFAULT 0,
+    action_paused INTEGER AS Boolean NOT NULL DEFAULT 0,
+    action_pause_reason TEXT
 );
 
 CREATE TABLE translation_batch_state(
@@ -27,13 +39,17 @@ CREATE TABLE translation_batch_state(
     failed INTEGER NOT NULL DEFAULT 0,
     last_successful_chapter_id INTEGER,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL DEFAULT 0
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    base_completed INTEGER NOT NULL DEFAULT 0,
+    base_failed INTEGER NOT NULL DEFAULT 0,
+    cancelled_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX translation_queue_status_index ON translation_queue(status);
 CREATE INDEX translation_queue_chapter_id_index ON translation_queue(chapter_id);
 CREATE INDEX translation_queue_batch_token_index ON translation_queue(batch_token);
 CREATE INDEX translation_queue_batch_order_index ON translation_queue(batch_token, status, batch_order, created_at);
+CREATE INDEX translation_queue_runnable_index ON translation_queue(status, next_attempt_at, priority, created_at);
 
 -- Queries
 insert:
@@ -95,10 +111,6 @@ WHERE status = 0
 ORDER BY created_at ASC, batch_order ASC, _id ASC
 LIMIT 1;
 
-deleteByBatchToken:
-DELETE FROM translation_queue
-WHERE batch_token = :batchToken;
-
 updateStatus:
 UPDATE translation_queue
 SET status = :status, updated_at = :updatedAt
@@ -128,14 +140,6 @@ recoverInProgress:
 UPDATE translation_queue
 SET status = 0, progress = 0, error_message = NULL, updated_at = :updatedAt
 WHERE status = 1;
-
-delete:
-DELETE FROM translation_queue
-WHERE chapter_id = :chapterId;
-
-deleteCompleted:
-DELETE FROM translation_queue
-WHERE status = 2;
 
 upsertBatchState:
 INSERT INTO translation_batch_state(
@@ -179,9 +183,185 @@ getBatchState:
 SELECT * FROM translation_batch_state
 WHERE batch_token = :batchToken;
 
-deleteBatchState:
-DELETE FROM translation_batch_state
+-- Generation-fenced repository queries. Legacy queries above remain for compatibility.
+insertRun:
+INSERT INTO translation_queue (
+    chapter_id, novel_id, batch_token, batch_order, profile_snapshot_json,
+    status, progress, created_at, updated_at, retry_count, generation,
+    next_attempt_at, source_fingerprint, profile_fingerprint, source_segment_count,
+    force_retranslate, priority, implicit_owner, session_only
+) VALUES (
+    :chapterId, :novelId, :batchToken, :batchOrder, :profileSnapshotJson,
+    0, 0, :now, :now, 0, 0, 0, NULL, :profileFingerprint, 0,
+    :forceRetranslate, :priority, :implicitOwner, :sessionOnly
+);
+
+rerun:
+UPDATE translation_queue
+SET novel_id = :novelId, batch_token = :batchToken, batch_order = :batchOrder,
+    profile_snapshot_json = :profileSnapshotJson, generation = :newGeneration,
+    status = 0, progress = :progress, error_message = NULL, created_at = :now,
+    updated_at = :now, retry_count = 0, next_attempt_at = 0,
+    source_fingerprint = :sourceFingerprint, profile_fingerprint = :profileFingerprint,
+    source_segment_count = :sourceSegmentCount, force_retranslate = :forceRetranslate,
+    priority = :priority, implicit_owner = :implicitOwner, session_only = :sessionOnly, implicit_paused = 0, action_paused = 0, action_pause_reason = NULL
+WHERE _id = :queueId AND generation = :generation AND status IN (2, 3, 4);
+
+joinRun:
+UPDATE translation_queue
+SET implicit_owner = :implicitOwner,
+    priority = MAX(priority, :priority), updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (0, 1, 5, 6);
+
+setImplicitOwnerState:
+UPDATE translation_queue
+SET implicit_owner = :implicitOwner, implicit_paused = :implicitPaused, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (0, 1, 5, 6);
+
+parkAction:
+UPDATE translation_queue
+SET status = 6, action_paused = 1, action_pause_reason = :reason, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (0, 1, 5, 6);
+resumeAction:
+UPDATE translation_queue
+SET status = :status, action_paused = 0, action_pause_reason = NULL, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status = 6 AND action_paused = 1;
+
+getRunById:
+SELECT * FROM translation_queue WHERE _id = :queueId;
+
+getAllRuns:
+SELECT * FROM translation_queue ORDER BY priority DESC, created_at, batch_order, _id;
+
+getRunsForNovel:
+SELECT * FROM translation_queue WHERE novel_id = :novelId
+ORDER BY priority DESC, created_at, batch_order, _id;
+
+getActiveRuns:
+SELECT * FROM translation_queue WHERE status IN (0, 1, 5, 6);
+
+getRunningRuns:
+SELECT * FROM translation_queue WHERE status = 1;
+
+getRunnableDue:
+SELECT * FROM translation_queue
+WHERE status IN (0, 5) AND action_paused = 0 AND next_attempt_at <= :now
+AND ((implicit_owner = 1 AND implicit_paused = 0) OR EXISTS (
+    SELECT 1 FROM translation_batch_membership m
+    JOIN translation_batch_state b ON b.batch_token = m.batch_token
+    WHERE m.queue_id = translation_queue._id AND m.generation = translation_queue.generation
+      AND m.outcome = 0 AND b.status IN (0, 1)
+))
+ORDER BY priority DESC, created_at, batch_order, _id
+LIMIT 1;
+
+claimRun:
+UPDATE translation_queue
+SET status = 1, next_attempt_at = 0, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (0, 5) AND action_paused = 0
+  AND next_attempt_at <= :now
+  AND ((implicit_owner = 1 AND implicit_paused = 0) OR EXISTS (
+      SELECT 1 FROM translation_batch_membership m
+      JOIN translation_batch_state b ON b.batch_token = m.batch_token
+      WHERE m.queue_id = translation_queue._id AND m.generation = translation_queue.generation
+        AND m.outcome = 0 AND b.status IN (0, 1)
+  ));
+
+freezeRunProfile:
+UPDATE translation_queue
+SET profile_snapshot_json = :profileSnapshotJson, profile_fingerprint = :profileFingerprint, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND profile_snapshot_json IS NULL
+  AND status IN (0, 1, 5, 6);
+
+prepareRunIdentity:
+UPDATE translation_queue
+SET source_fingerprint = :sourceFingerprint, profile_fingerprint = :profileFingerprint,
+    source_segment_count = :sourceSegmentCount, session_only = :sessionOnly, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND source_fingerprint IS NULL
+  AND status IN (1, 6);
+
+checkpointRunProgress:
+UPDATE translation_queue
+SET progress = MAX(progress, :progress), updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (1, 6);
+
+releaseRun:
+UPDATE translation_queue
+SET status = :status, progress = MAX(progress, :progress), error_message = :errorMessage,
+    next_attempt_at = :nextAttemptAt,
+    retry_count = retry_count + CASE WHEN :status = 5 THEN 1 ELSE 0 END,
+    updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (1, 6);
+
+completeRun:
+UPDATE translation_queue
+SET status = 2, progress = 100, error_message = NULL, next_attempt_at = 0, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status = 1;
+
+cancelRun:
+UPDATE translation_queue
+SET status = 4, implicit_owner = 0, implicit_paused = 0, action_paused = 0, action_pause_reason = NULL, next_attempt_at = 0, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (0, 1, 5, 6);
+
+touchRunOwnership:
+UPDATE translation_queue SET updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status = 1;
+
+setIdleRunStatus:
+UPDATE translation_queue SET status = :status, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status IN (0, 5, 6);
+
+recoverRun:
+UPDATE translation_queue SET status = :status, updated_at = :now
+WHERE _id = :queueId AND generation = :generation AND status = 1;
+
+getNextWakeAt:
+SELECT q.next_attempt_at FROM translation_queue q
+WHERE q.status IN (0, 5) AND q.action_paused = 0 AND ((q.implicit_owner = 1 AND q.implicit_paused = 0) OR EXISTS (
+    SELECT 1 FROM translation_batch_membership m
+    JOIN translation_batch_state b ON b.batch_token = m.batch_token
+    WHERE m.queue_id = q._id AND m.generation = q.generation
+      AND m.outcome = 0 AND b.status IN (0, 1)
+)) ORDER BY q.next_attempt_at LIMIT 1;
+
+
+invalidateRun:
+UPDATE translation_queue
+SET generation = :newGeneration, status = 4, source_fingerprint = NULL, source_segment_count = 0,
+    progress = 0, next_attempt_at = 0, retry_count = 0, error_message = NULL,
+    force_retranslate = 1, implicit_owner = 0, implicit_paused = 0, action_paused = 0, action_pause_reason = NULL, updated_at = :now
+WHERE _id = :queueId AND generation = :generation;
+
+mutationChanges:
+SELECT changes();
+
+insertRunBatch:
+INSERT OR IGNORE INTO translation_batch_state (
+    batch_token, novel_id, status, total, enqueued, skipped, completed, failed, created_at, updated_at
+) VALUES (:batchToken, :novelId, 0, 0, 0, 0, 0, 0, :now, :now);
+
+getActiveRunBatches:
+SELECT * FROM translation_batch_state WHERE status IN (0, 1, 2) ORDER BY created_at, batch_token;
+
+setRunBatchStatus:
+UPDATE translation_batch_state SET status = :status, updated_at = :now WHERE batch_token = :batchToken;
+
+updateRunBatchAdmission:
+UPDATE translation_batch_state
+SET enqueued = MAX(enqueued, (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = :batchToken)),
+    skipped = MAX(skipped, :conflictingCount),
+    total = MAX(total, :requestedCount, (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = :batchToken) + MAX(skipped, :conflictingCount)),
+    updated_at = :now
 WHERE batch_token = :batchToken;
 
-deleteAllBatchStates:
-DELETE FROM translation_batch_state;
+recomputeRunBatchCounters:
+UPDATE translation_batch_state
+SET completed = base_completed + (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = :batchToken AND m.outcome = 1),
+    failed = base_failed + (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = :batchToken AND m.outcome = 2),
+    cancelled_count = (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = :batchToken AND m.outcome = 3),
+    updated_at = :now
+WHERE batch_token = :batchToken;
+
+recordRunBatchSuccess:
+UPDATE translation_batch_state SET last_successful_chapter_id = :chapterId, updated_at = :now
+WHERE batch_token = :batchToken;

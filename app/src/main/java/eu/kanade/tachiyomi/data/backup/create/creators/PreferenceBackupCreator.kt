@@ -80,5 +80,6 @@ class PreferenceBackupCreator(
             this
         } else {
             this.filter { !Preference.isPrivate(it.key) }
+                .mapNotNull(NovelTranslationPreferenceSanitizer::sanitize)
         }
 }

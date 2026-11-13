@@ -1,0 +1,76 @@
+CREATE TABLE translation_checkpoint (
+    queue_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    fragment_id INTEGER NOT NULL,
+    payload_json TEXT NOT NULL CHECK (length(payload_json) <= 65536),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (queue_id, generation, fragment_id)
+);
+
+CREATE TABLE translation_batch_membership (
+    batch_token TEXT NOT NULL,
+    queue_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    batch_order INTEGER NOT NULL,
+    outcome INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (batch_token, queue_id, generation)
+);
+
+CREATE INDEX translation_membership_run_index ON translation_batch_membership(queue_id, generation, outcome, batch_token);
+
+getFragments:
+SELECT fragment_id, payload_json FROM translation_checkpoint
+WHERE queue_id = :queueId AND generation = :generation ORDER BY fragment_id;
+
+countFragments:
+SELECT COUNT(*) FROM translation_checkpoint WHERE queue_id = :queueId AND generation = :generation;
+
+saveFragment:
+INSERT INTO translation_checkpoint (queue_id, generation, fragment_id, payload_json, updated_at)
+VALUES (:queueId, :generation, :fragmentId, :payloadJson, :now)
+ON CONFLICT(queue_id, generation, fragment_id) DO UPDATE
+SET payload_json = excluded.payload_json, updated_at = excluded.updated_at;
+
+insertMembership:
+INSERT OR IGNORE INTO translation_batch_membership (batch_token, queue_id, generation, chapter_id, batch_order, outcome)
+VALUES (:batchToken, :queueId, :generation, :chapterId, :batchOrder, 0);
+
+getRunBatchTokens:
+SELECT batch_token FROM translation_batch_membership WHERE queue_id = :queueId AND generation = :generation;
+
+getPendingRunBatchTokens:
+SELECT batch_token FROM translation_batch_membership
+WHERE queue_id = :queueId AND generation = :generation AND outcome = 0;
+
+countRunOwners:
+SELECT COUNT(*) FROM translation_batch_membership m
+JOIN translation_batch_state b ON b.batch_token = m.batch_token
+WHERE m.queue_id = :queueId AND m.generation = :generation AND m.outcome = 0 AND b.status IN (0, 1, 2);
+
+countRunnableOwners:
+SELECT COUNT(*) FROM translation_batch_membership m
+JOIN translation_batch_state b ON b.batch_token = m.batch_token
+WHERE m.queue_id = :queueId AND m.generation = :generation AND m.outcome = 0 AND b.status IN (0, 1);
+
+getBatchRuns:
+SELECT * FROM translation_queue WHERE EXISTS (
+    SELECT 1 FROM translation_batch_membership m
+    WHERE m.queue_id = translation_queue._id AND m.generation = translation_queue.generation
+      AND m.batch_token = :batchToken AND m.outcome = 0
+);
+
+countPendingBatchMembers:
+SELECT COUNT(*) FROM translation_batch_membership WHERE batch_token = :batchToken AND outcome = 0;
+
+countRunningBatchMembers:
+SELECT COUNT(*) FROM translation_batch_membership m
+JOIN translation_queue q ON q._id = m.queue_id AND q.generation = m.generation
+WHERE m.batch_token = :batchToken AND m.outcome = 0 AND q.status = 1;
+
+setRunMembersOutcome:
+UPDATE translation_batch_membership SET outcome = :outcome
+WHERE queue_id = :queueId AND generation = :generation AND outcome = 0;
+
+cancelBatchMemberships:
+UPDATE translation_batch_membership SET outcome = 3 WHERE batch_token = :batchToken AND outcome = 0;

@@ -120,6 +120,7 @@ data class Backup(
     // Taste Learning Engine: сигнал-лог вкусов (переживает переустановку вместе с остальным discovery).
     @ProtoNumber(627) var backupDiscoverySignals: List<BackupDiscoverySignal> = emptyList(),
     @ProtoNumber(628) var backupAnimeSeries: List<BackupAnimeSeries> = emptyList(),
+    @ProtoNumber(629) var backupTranslationConfiguration: BackupTranslationConfiguration? = null,
 )
 
 /**

@@ -96,4 +96,8 @@
         <item quantity="one">%d title in library</item>
         <item quantity="other">%d titles in library</item>
     </plurals>
+    <plurals name="ai_translation_more_fragments">
+        <item quantity="one">And %1$d more part</item>
+        <item quantity="other">And %1$d more parts</item>
+    </plurals>
 </resources>

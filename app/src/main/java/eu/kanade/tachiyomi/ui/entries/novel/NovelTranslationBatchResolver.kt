@@ -23,8 +23,8 @@ data class TranslationBatchSelection(
  * Out-of-range ends clamp to the last position; a range lying fully past the end of the list
  * (normalized start > [chapters].size) yields an empty result instead of clamping to the tail.
  *
- * When [limit] > 0 it acts as a global post-filter applied across ALL scopes, capping the total
- * number of enqueued ids (protects translation quota for SELECTED/DOWNLOADED/UNREAD).
+ * A positive [limit] caps only [TranslationBatchScope.FIRST_N_VISIBLE]. Other scopes resolve
+ * the entire matching set or positional range without an additional count limit.
  */
 fun resolveTranslationBatchChapterIds(
     scope: TranslationBatchScope,
@@ -36,7 +36,7 @@ fun resolveTranslationBatchChapterIds(
     rangeEnd: Int = limit,
 ): List<Long> {
     val orderedChapters = chapters.asSequence()
-    val resolved = when (scope) {
+    return when (scope) {
         TranslationBatchScope.SELECTED ->
             orderedChapters
                 .filter { it.id in selectedChapterIds }
@@ -85,11 +85,6 @@ fun resolveTranslationBatchChapterIds(
                     .toList()
             }
         }
-    }
-    return if (limit > 0 && scope != TranslationBatchScope.FIRST_N_VISIBLE) {
-        resolved.take(limit)
-    } else {
-        resolved
     }
 }
 

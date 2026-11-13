@@ -145,6 +145,14 @@ class TranslationHelperTest {
     }
 
     @Test
+    fun `extractOpenAiStyleChoiceContent joins all answer fragments without dropping repeated text`() {
+        val choice = json.parseToJsonElement(
+            """{ "message": { "content": [ { "type": "text", "text": "First" }, { "type": "thinking", "text": "private" }, { "type": "text", "text": "Second" }, { "type": "text", "text": "Second" } ] } }""",
+        ) as kotlinx.serialization.json.JsonObject
+        choice.extractOpenAiStyleChoiceContent() shouldBe "FirstSecondSecond"
+    }
+
+    @Test
     fun `extractOpenAiStyleChoiceContent returns empty string when choice is empty`() {
         val choice = buildJsonObject {}
         choice.extractOpenAiStyleChoiceContent() shouldBe ""

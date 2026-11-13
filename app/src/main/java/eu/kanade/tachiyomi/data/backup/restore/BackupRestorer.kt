@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
+import eu.kanade.tachiyomi.data.backup.models.BackupTranslationConfiguration
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AchievementRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeExtensionRepoRestorer
@@ -38,7 +39,10 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelSeriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFavoritesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFollowsRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.TranslationConfigurationRestorer
+import eu.kanade.tachiyomi.data.translation.profile.LegacyMigrationStatus
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
@@ -88,6 +92,7 @@ class BackupRestorer(
     private val discoveryRestorer: DiscoveryRestorer = DiscoveryRestorer(),
     private val extensionsRestorer: ExtensionsRestorer = ExtensionsRestorer(context),
     private val achievementRestorer: AchievementRestorer = AchievementRestorer(),
+    private val translationConfigurationRestorer: TranslationConfigurationRestorer = TranslationConfigurationRestorer(),
 ) {
 
     private var restoreAmount = 0
@@ -238,6 +243,7 @@ class BackupRestorer(
         }
         if (options.appSettings) {
             restoreAmount += 1
+            if (backup.backupTranslationConfiguration != null) restoreAmount += 1
         }
         if (options.extensionRepoSettings) {
             restoreAmount += animeExtensionRepoBackups.size + animeExtensionStoreBackups.size
@@ -370,6 +376,10 @@ class BackupRestorer(
             }
 
             // TODO: optionally trigger online library + tracker update
+        }
+        // Await the entire scope first: restored preferences and stable novel identities must exist.
+        if (options.appSettings) {
+            restoreTranslationConfiguration(backup.backupTranslationConfiguration, options)
         }
     }
 
@@ -523,6 +533,50 @@ class BackupRestorer(
                 )
             }
             notifier.showRestoreProgress(it.title, advanceProgress(), restoreAmount, isSync)
+        }
+    }
+
+    private suspend fun restoreTranslationConfiguration(
+        backup: BackupTranslationConfiguration?,
+        options: RestoreOptions,
+    ) {
+        try {
+            val result = translationConfigurationRestorer.restore(backup, options) ?: return
+            if (result.configurationFailed) {
+                errors.add(Date() to "AI translator: configuration could not be restored")
+            }
+            if (result.unresolvedNovelAssignments > 0) {
+                errors.add(
+                    Date() to "AI translator: " + result.unresolvedNovelAssignments +
+                        " novel assignment(s) had no matching source and URL",
+                )
+            }
+            if (result.missingCredentials > 0) {
+                errors.add(
+                    Date() to "AI translator: " + result.missingCredentials +
+                        " credential(s) are missing; re-enter keys in Connections",
+                )
+            }
+            val inaccessible = result.unavailableCredentials + result.corruptCredentials
+            if (inaccessible > 0) {
+                errors.add(Date() to "AI translator: " + inaccessible + " credential(s) are unavailable or corrupt")
+            }
+            result.legacyMigration?.takeIf { it.status != LegacyMigrationStatus.COMPLETE }?.let {
+                errors.add(Date() to "AI translator: restored legacy credentials require attention (" + it.status + ")")
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // No imported JSON, URL, key value or platform exception is echoed into the user log.
+            errors.add(Date() to "AI translator: configuration could not be restored")
+        }
+        if (backup != null) {
+            notifier.showRestoreProgress(
+                context.stringResource(MR.strings.app_settings),
+                advanceProgress(),
+                restoreAmount,
+                isSync,
+            )
         }
     }
 

@@ -22,7 +22,9 @@ import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
 import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationSessionResults
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
+import eu.kanade.tachiyomi.data.translation.profile.readerProfileSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJaomixPagedSource
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
@@ -83,6 +85,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.toNvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOllamaCloudTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationArtifactForSource
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationConcurrencyLimit
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
@@ -109,6 +112,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
 import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.system.isNightMode
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -116,11 +120,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -157,6 +164,7 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.domain.translation.profile.TranslationProfileRepository
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
@@ -373,6 +381,17 @@ class NovelReaderScreenModel(
         GoogleTranslationService(client = networkHelper.client)
     },
     private val translationQueueManager: TranslationQueueManager = Injekt.get(),
+    private val translationProfiles: TranslationProfileRepository? = null,
+    private val prepareTranslationSettings: suspend (
+        NovelReaderSettings,
+        Long,
+    ) -> NovelReaderSettings = { base, novelId ->
+        if (translationProfiles == null && base.translationProfile == null) {
+            base
+        } else {
+            translationQueueManager.readerProfileSettings(base, novelId, novelReaderPreferences.enabledReplaceRules())
+        }
+    },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading()),
     NovelBookReaderHost,
     NovelTtsHost,
@@ -625,12 +644,16 @@ class NovelReaderScreenModel(
     override fun ttsIsGeminiTranslating(): Boolean = translationState.isGeminiTranslating
 
     override fun ttsGeminiTranslationJob(): Job? = translationController.geminiTranslationJob()
+    override suspend fun ttsAwaitGeminiTranslation(
+        chapterId: Long,
+    ): Boolean = translationController.awaitTranslationReady(chapterId)
 
     override fun ttsIsGeminiTranslationVisible(): Boolean = translationState.isGeminiTranslationVisible
 
     override fun ttsIsGoogleTranslationVisible(): Boolean = translationState.isGoogleTranslationVisible
 
-    override fun ttsTranslationHolderEmpty(provider: String): Boolean = translationHolder.isEmpty(provider)
+    override fun ttsTranslationHolderEmpty(provider: String): Boolean =
+        translationHolderChapterId != activeTranslationChapterId() || translationHolder.isEmpty(provider)
 
     override fun ttsApplyGeminiTranslationToContentBlocks(
         blocks: List<ContentBlock>,
@@ -705,7 +728,7 @@ class NovelReaderScreenModel(
     }
 
     override fun providerHasConfiguredTranslationProvider(settings: NovelReaderSettings): Boolean =
-        settings.hasConfiguredTranslationProvider()
+        settings.hasConfiguredTranslationProvider(currentNovel?.id)
 
     // ---------------------------------------------------------------------------------------------
     // NovelTranslationHost implementation: the translation controller reaches the shared reader
@@ -752,7 +775,7 @@ class NovelReaderScreenModel(
     override fun translationIsBookRuntimeActive(): Boolean = bookController.isBookRuntimeActive()
 
     override fun translationHasConfiguredProvider(settings: NovelReaderSettings): Boolean =
-        settings.hasConfiguredTranslationProvider()
+        settings.hasConfiguredTranslationProvider(currentNovel?.id)
 
     override fun translationApplyTranslationState(
         gemini: State.ReaderGeminiState,
@@ -891,12 +914,16 @@ class NovelReaderScreenModel(
     override fun batchReaderSettings(): NovelReaderSettings? =
         (mutableState.value as? State.Success)?.readerSettings
 
+    override fun batchReplaceRules(): List<eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule> =
+        novelReaderPreferences.enabledReplaceRules()
+
     override fun batchReplaceRulesFingerprint(): String =
         replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules())
 
     override fun batchCurrentNovel(): Novel? = currentNovel
 
-    override fun batchCurrentChapter(): NovelChapter? = currentChapter
+    override fun batchCurrentChapter(): NovelChapter? =
+        bookController.bookModeChapterAtReadingPosition() ?: currentChapter
 
     override fun batchSourceManager(): NovelSourceManager = sourceManager
 
@@ -918,6 +945,7 @@ class NovelReaderScreenModel(
         novelReaderPreferences = novelReaderPreferences,
         ttsChapterRepository = ttsChapterRepository,
         sourceManager = sourceManager,
+        translationQueueManager = translationQueueManager,
     )
 
     /** Snapshot of the TTS UI state, merged into the reader state by the screen model. */
@@ -926,6 +954,7 @@ class NovelReaderScreenModel(
 
     private var settingsJob: Job? = null
     private var contentModel: NovelReaderContentModel? = null
+    private var contentModelChapterId: Long? = null
     private var currentNovel: Novel? = null
 
     /**
@@ -1009,9 +1038,7 @@ class NovelReaderScreenModel(
         mistralTranslationService = mistralTranslationService,
         nvidiaTranslationService = nvidiaTranslationService,
         ollamaCloudTranslationService = ollamaCloudTranslationService,
-        replaceTextHtml = { html ->
-            applyReplaceRulesToHtml(html, novelReaderPreferences.enabledReplaceRules())
-        },
+
     )
 
     /** Snapshot of the translation UI state, merged into the reader state by the screen model. */
@@ -1094,6 +1121,7 @@ class NovelReaderScreenModel(
         val chapter = snapshot.chapter
         val novel = snapshot.novel
         val source = sourceManager.getOrStub(novel.source)
+        translationBatchExecutor.onChapterBecomingActive(snapshot.chapter.id)
         clearChapterTransientState()
         currentNovel = novel
         observeIncognitoForNovel(novel)
@@ -1134,13 +1162,14 @@ class NovelReaderScreenModel(
         customJs = snapshot.customJs
         pluginSite = snapshot.pluginSite
         chapterWebUrl = snapshot.chapterWebUrl
+        contentModelChapterId = chapter.id
         contentModel = NovelReaderContentModel(
             canonicalHtml = normalizedChapterHtml,
             chapterWebUrl = chapterWebUrl,
             novelUrl = novel.url,
             pluginSite = pluginSite,
         )
-        val initialSettings = novelReaderPreferences.resolveSettings(novel.source)
+        val initialSettings = prepareReaderSettings(novelReaderPreferences.resolveSettings(novel.source), novel.id)
         // A seamless switch keeps the previous Success state on screen while the next chapter is
         // prepared, so the reader never flashes the full-screen chapter loading state.
         if (!seamless) {
@@ -1162,9 +1191,13 @@ class NovelReaderScreenModel(
         settingsJob?.cancel()
         settingsJob = screenModelScope.launch {
             var skippedInitialEmission = false
+            val profileChanges = translationProfiles?.observeCatalog()?.map { Unit } ?: flowOf(Unit)
             novelReaderPreferences.settingsFlow(novel.source)
+                .combine(profileChanges) { settings, _ -> settings }
+                .mapLatest { prepareReaderSettings(it, novel.id) }
                 .distinctUntilChanged()
                 .collect { settings ->
+                    if (currentChapter?.id != chapter.id) return@collect
                     if (!skippedInitialEmission && settings == initialSettings) {
                         skippedInitialEmission = true
                         return@collect
@@ -1194,14 +1227,18 @@ class NovelReaderScreenModel(
         )
         maybeAutoStartGeminiTranslation(initialSettings)
         maybeAutoStartGoogleTranslation()
-        when (initialSettings.translationProvider) {
-            NovelTranslationProvider.GEMINI -> refreshGeminiModels()
-            NovelTranslationProvider.GEMINI_PRIVATE -> Unit
-            NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
-            NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
-            NovelTranslationProvider.MISTRAL -> refreshMistralModels()
-            NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
-            NovelTranslationProvider.OLLAMA_CLOUD -> refreshOllamaCloudModels()
+        // Profile discovery is explicit in the centre; neither an inactive nor a broken profile
+        // may cause an automatic catalogue request to a legacy recipient.
+        if (initialSettings.geminiEnabled && initialSettings.translationProfile == null) {
+            when (initialSettings.translationProvider) {
+                NovelTranslationProvider.GEMINI -> refreshGeminiModels()
+                NovelTranslationProvider.GEMINI_PRIVATE -> Unit
+                NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
+                NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
+                NovelTranslationProvider.MISTRAL -> refreshMistralModels()
+                NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
+                NovelTranslationProvider.OLLAMA_CLOUD -> refreshOllamaCloudModels()
+            }
         }
     }
     fun loadFullChapterOrderList() {
@@ -1495,7 +1532,18 @@ class NovelReaderScreenModel(
             chapters.asReversed()
         }
     }
+    private suspend fun prepareReaderSettings(base: NovelReaderSettings, novelId: Long): NovelReaderSettings = try {
+        withContext(Dispatchers.IO) { prepareTranslationSettings(base, novelId) }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        // A broken profile must not prevent reading, or silently select the legacy recipient/cache.
+        logcat(LogPriority.WARN) { "AI translation profile needs configuration; original reading remains available" }
+        base.copy(geminiEnabled = false)
+    }
+
     private fun updateContent(settings: NovelReaderSettings) {
+        translationController.onReaderSettingsChanged(settings)
         if (!settings.selectedTextTranslationEnabled && !settings.novelDictionaryEnabled) {
             selectionTranslationController.clearSelection(refreshUi = false)
         }
@@ -2097,6 +2145,7 @@ class NovelReaderScreenModel(
         currentChapter = null
         chapterOrderList = mutableListOf()
         contentModel = null
+        contentModelChapterId = null
         customCss = null
         customJs = null
         pluginSite = null
@@ -2129,10 +2178,23 @@ class NovelReaderScreenModel(
 
     fun clearAllGeminiTranslationCache() = translationController.clearAllGeminiTranslationCache()
 
-    fun setGeminiApiKey(value: String) = updateGeminiSetting(
-        setGlobal = { novelReaderPreferences.geminiApiKey().set(value) },
-        setOverride = { it.copy(geminiApiKey = value) },
-    )
+    fun setGeminiApiKey(value: String) {
+        val sourceId = currentNovel?.source ?: return
+        val keyScope = sourceId.takeIf { novelReaderPreferences.getSourceOverride(it) != null }
+        screenModelScope.launch {
+            try {
+                eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.legacyCredentials.saveLegacy(
+                    NovelTranslationProvider.GEMINI,
+                    keyScope,
+                    value,
+                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                application.toast(AYMR.strings.ai_translation_protected_save_failed)
+            }
+        }
+    }
     fun setGeminiModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiModel().set(value) },
         setOverride = { it.copy(geminiModel = value) },
@@ -2571,7 +2633,7 @@ class NovelReaderScreenModel(
         return updated
     }
     private fun currentParsedTextBlocks(): List<String> {
-        return contentModel?.textBlocks ?: emptyList()
+        return if (currentChapter?.id == contentModelChapterId) contentModel?.textBlocks.orEmpty() else emptyList()
     }
 
     /**
@@ -2591,22 +2653,25 @@ class NovelReaderScreenModel(
      * The content model only ever holds the chapter the reader loaded, so over a book the blocks of
      * any other spine chapter have to be parsed from its own payload.
      */
-    override suspend fun translationSourceTextBlocks(chapterId: Long): List<String> {
-        if (!bookController.isBookRuntimeActive() || chapterId == currentChapter?.id) return currentParsedTextBlocks()
-        return runCatching {
-            val snapshot = ttsChapterRepository.loadChapterSnapshot(chapterId)
-            withContext(Dispatchers.Default) {
-                NovelReaderContentModel(
-                    canonicalHtml = prependChapterHeadingIfMissing(
-                        rawHtml = snapshot.rawHtml.normalizeStructuredChapterPayload(),
-                        chapterName = snapshot.chapter.name,
-                    ),
-                    chapterWebUrl = snapshot.chapterWebUrl,
-                    novelUrl = snapshot.novel.url,
-                ).textBlocks
+    override suspend fun translationSourceTextBlocks(chapterId: Long): List<String> =
+        eu.kanade.tachiyomi.ui.reader.novel.translation.translationSourceForChapter(
+            chapterId,
+            contentModelChapterId,
+            bookController.isBookRuntimeActive(),
+            ::currentParsedTextBlocks,
+        ) { requested ->
+            try {
+                ttsChapterRepository.loadChapterSnapshot(
+                    requested,
+                ).contentBlocks.filterIsInstance<ContentBlock.Text>().map {
+                    it.text
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
             }
-        }.getOrElse { emptyList() }
-    }
+        }
 
     /**
      * Renders a book section translated when a translation for that chapter exists.
@@ -2632,14 +2697,24 @@ class NovelReaderScreenModel(
             else -> emptyMap()
         }
         val translatedByIndex = inMemory.ifEmpty {
-            val cached = NovelReaderTranslationDiskCacheStore.get(chapterId) ?: return bodyHtml
-            val settingsMatch = NovelReaderTranslationCacheResolver.matches(
-                cached = cached,
-                requirements = settings.toTranslationCacheRequirements(
-                    replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
-                ),
-            )
-            if (!settingsMatch) return bodyHtml
+            val entry = if (settings.geminiDisableCache) {
+                TranslationSessionResults.store.result(chapterId)
+            } else {
+                NovelReaderTranslationDiskCacheStore.get(chapterId)
+            }
+            val source = NovelReaderContentModel(
+                canonicalHtml = bodyHtml,
+                chapterWebUrl = null,
+                novelUrl = "",
+            ).textBlocks
+            val cached =
+                translationArtifactForSource(
+                    entry,
+                    settings,
+                    replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+                    source,
+                )
+                    ?: return bodyHtml
             cached.translatedByIndex
         }
         if (translatedByIndex.isEmpty()) return bodyHtml
@@ -2657,7 +2732,7 @@ class NovelReaderScreenModel(
     }
 
     private fun currentParsedContentBlocks(): List<ContentBlock> {
-        return contentModel?.contentBlocks ?: emptyList()
+        return if (currentChapter?.id == contentModelChapterId) contentModel?.contentBlocks.orEmpty() else emptyList()
     }
     sealed interface State {
         data class Loading(val readerSettings: NovelReaderSettings? = null) : State

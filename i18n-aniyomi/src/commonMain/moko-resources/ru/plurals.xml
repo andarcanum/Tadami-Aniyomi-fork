@@ -53,4 +53,10 @@
         <item quantity="many">%d тайтлов в библиотеке</item>
         <item quantity="other">%d тайтла в библиотеке</item>
     </plurals>
+    <plurals name="ai_translation_more_fragments">
+        <item quantity="one">И ещё %1$d часть</item>
+        <item quantity="few">И ещё %1$d части</item>
+        <item quantity="many">И ещё %1$d частей</item>
+        <item quantity="other">И ещё %1$d части</item>
+    </plurals>
 </resources>

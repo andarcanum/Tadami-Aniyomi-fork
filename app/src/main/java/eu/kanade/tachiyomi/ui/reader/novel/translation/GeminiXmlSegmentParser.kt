@@ -37,6 +37,55 @@ internal object GeminiXmlSegmentParser {
         return out.map { it?.unescapeHtmlEntities() }
     }
 
+    /** Queue output must have explicit, closed, unambiguous source IDs. */
+    fun parseValidated(rawResponse: String, expectedCount: Int, allowSinglePlaintext: Boolean = false): List<String?> {
+        if (expectedCount <= 0) return emptyList()
+        val sanitized = rawResponse.sanitizeXmlResponseForParsing()
+        // DOM attribute values are complete tokens; the legacy regex may recognize only a numeric prefix.
+        val indexed = org.jsoup.Jsoup.parseBodyFragment(sanitized).getElementsByAttribute("i")
+        if (indexed.any {
+                !it.attr("i").matches(Regex("[0-9]+")) || it.attr("i").toIntOrNull() !in 0 until expectedCount
+            }
+        ) {
+            throw tachiyomi.domain.translation.model.TranslationAttemptException(
+                tachiyomi.domain.translation.model.TranslationFailure(
+                    tachiyomi.domain.translation.model.TranslationFailureKind.INVALID_RESPONSE,
+                    "Provider returned a malformed source block ID",
+                ),
+            )
+        }
+        val starts = xmlSegmentStartRegex.findAll(sanitized).toList()
+        if (starts.isEmpty()) {
+            val tags = sanitized.replace(10.toChar(), ' ').replace(13.toChar(), ' ').replace(9.toChar(), ' ')
+            val looksIndexed = Regex("(?i)<[^>]*[ ]i[ ]*=").containsMatchIn(tags) ||
+                tags.contains("<s ", ignoreCase = true) || tags.contains("<s>", ignoreCase = true)
+            if (indexed.isNotEmpty() || looksIndexed) return List(expectedCount) { null }
+            if (allowSinglePlaintext && expectedCount == 1 && sanitized.isNotBlank()) {
+                return listOf(sanitized.unescapeHtmlEntities())
+            }
+            return List(expectedCount) { null }
+        }
+        if (starts.any { it.groupValues[2].toIntOrNull() !in 0 until expectedCount }) {
+            throw tachiyomi.domain.translation.model.TranslationAttemptException(
+                tachiyomi.domain.translation.model.TranslationFailure(
+                    tachiyomi.domain.translation.model.TranslationFailureKind.INVALID_RESPONSE,
+                    "Provider returned an unexpected source block ID",
+                ),
+            )
+        }
+        val duplicateIds = starts.groupBy { it.groupValues[2].toInt() }.filterValues { it.size > 1 }.keys
+        val out = MutableList<String?>(expectedCount) { null }
+        xmlTagRegex.findAll(sanitized).forEach { match ->
+            val index = match.groupValues[2].toIntOrNull() ?: return@forEach
+            if (index in out.indices &&
+                index !in duplicateIds
+            ) {
+                out[index] = match.groupValues[3].trim().unescapeHtmlEntities()
+            }
+        }
+        return out
+    }
+
     fun parsePlaintext(
         rawResponse: String,
         expectedCount: Int,

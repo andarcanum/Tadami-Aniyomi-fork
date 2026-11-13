@@ -891,7 +891,11 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { ExternalIntents() }
 
         // Translation system
-        addSingletonFactory { TranslationQueueManager() }
+        addSingletonFactory {
+            TranslationQueueManager(
+                profileRepository = eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.repository,
+            )
+        }
         addSingletonFactory { TranslationNotificationManager(app) }
 
         // Achievement system repositories

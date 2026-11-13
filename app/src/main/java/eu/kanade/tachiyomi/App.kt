@@ -95,6 +95,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -253,6 +254,34 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             }
         }
 
+        val translationStartupPrep = if (isMainProcess) {
+            // A restored private backup carries plaintext keys again: move them into the vault
+            // before any dispatch, and warm the catalog mirror the reader gate reads synchronously.
+            applicationScope.launch(Dispatchers.IO) {
+                try {
+                    eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.runLegacyMigration()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    logcat(LogPriority.WARN) {
+                        "Legacy translation credential migration deferred (${error.javaClass.simpleName})"
+                    }
+                }
+                try {
+                    eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.repository
+                        .pruneOrphanNovelAssignments()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    logcat(LogPriority.WARN) {
+                        "Orphan translation assignment prune deferred (${error.javaClass.simpleName})"
+                    }
+                }
+            }
+        } else {
+            null
+        }
+
         if (isMainProcess) {
             Handler(Looper.getMainLooper()).post {
                 achievementScope.launch {
@@ -322,6 +351,18 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         setAppCompatDelegateThemeMode(Injekt.get<UiPreferences>().themeMode().get())
 
         if (isMainProcess) {
+            // Reconcile durable translation work after process death/enqueue-scheduling interruption.
+            // Wait for legacy migration/prune first so restored plaintext keys are vaulted before dispatch.
+            // APPEND_OR_REPLACE never resets an already active worker; that worker owns lease recovery.
+            scope.launch(Dispatchers.IO) {
+                translationStartupPrep?.join()
+                runCatching {
+                    val queue = Injekt.get<eu.kanade.tachiyomi.data.translation.TranslationQueueManager>()
+                    if (queue.repository.observeRuns().first().any { !it.status.isTerminal }) {
+                        eu.kanade.tachiyomi.data.translation.TranslationJob.runImmediately(this@App)
+                    }
+                }.onFailure { logcat(LogPriority.WARN) { "Unable to schedule translation reconciliation" } }
+            }
             // Updates widget update
             with(MangaWidgetManager(Injekt.get(), Injekt.get())) {
                 init(ProcessLifecycleOwner.get().lifecycleScope)

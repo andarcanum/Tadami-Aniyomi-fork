@@ -10,9 +10,10 @@ import tachiyomi.core.common.util.lang.withIOContext
 import java.io.IOException
 
 class DeepSeekModelsService(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val json: Json,
 ) {
+    private val client = client.translationSafeClient().newBuilder().cache(null).build()
 
     suspend fun fetchModels(
         baseUrl: String,
@@ -21,6 +22,7 @@ class DeepSeekModelsService(
         val normalizedBaseUrl = normalizeDeepSeekBaseUrl(baseUrl)
         if (normalizedBaseUrl.isBlank()) return emptyList()
         if (apiKey.isBlank()) return emptyList()
+        validateTranslationCredential(apiKey)
 
         val responseText = withIOContext {
             val response = client.newCall(
@@ -46,6 +48,5 @@ class DeepSeekModelsService(
     }
 }
 
-private fun normalizeDeepSeekBaseUrl(baseUrl: String): String {
-    return baseUrl.trim().trimEnd('/')
-}
+internal fun normalizeDeepSeekBaseUrl(baseUrl: String): String =
+    normalizeOpenAiBaseUrlRoot(baseUrl)

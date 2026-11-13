@@ -43,6 +43,7 @@ class NovelChapterTranslationProcessorTest {
             mistralTranslationService = mistralService,
             nvidiaTranslationService = nvidiaService,
             ollamaCloudTranslationService = ollamaService,
+            resolveCredential = { _, _ -> null },
         )
 
         every { settings.geminiEnabled } returns true
@@ -59,6 +60,8 @@ class NovelChapterTranslationProcessorTest {
         every { settings.geminiTopP } returns 0.95f
         every { settings.geminiTopK } returns 40
         every { settings.geminiReasoningEffort } returns "minimal"
+        every { settings.geminiFrozenGenerationConfig } returns null
+        every { settings.geminiFrozenInputTokenLimit } returns null
         every { settings.geminiPromptModifiers } returns ""
         every { settings.geminiCustomPromptModifier } returns ""
         every { settings.geminiEnabledPromptModifiers } returns emptyList()
@@ -134,13 +137,35 @@ class NovelChapterTranslationProcessorTest {
             geminiService.translateBatch(any(), any(), any())
         } returns listOf("Привет", null)
 
-        val result = processor.translateSegments(
-            segments = listOf("Hello", "World"),
-            settings = settings,
-        )
+        val error = runCatching {
+            processor.translateSegments(listOf("Hello", "World"), settings)
+        }.exceptionOrNull() as IncompleteChapterTranslationException
 
-        result[0] shouldBe "Привет"
-        result.containsKey(1) shouldBe false // segment 1 is omitted but translation succeeds overall
+        error.translatedByIndex[0] shouldBe "Привет"
+        error.translatedByIndex.containsKey(1) shouldBe false
+        // Partial remains resumable data, never a successful whole-chapter result.
+    }
+
+    @Test
+    fun `strict translation rejects nonnull incomplete response`() = runTest {
+        every { settings.translationProvider } returns NovelTranslationProvider.GEMINI
+        every { settings.geminiRelaxedMode } returns false
+        coEvery { geminiService.translateBatch(any(), any(), any()) } returns listOf("Привет", null)
+
+        val result = runCatching { processor.translateSegments(listOf("Hello", "World"), settings) }
+
+        result.isFailure shouldBe true
+    }
+
+    @Test
+    fun `cache disabled requests do not reuse process segment cache`() = runTest {
+        every { settings.translationProvider } returns NovelTranslationProvider.GEMINI
+        every { settings.geminiDisableCache } returns true
+        coEvery { geminiService.translateBatch(any(), any(), any()) } returns listOf("Первый перевод")
+        processor.translateSegments(listOf("Hello"), settings)[0] shouldBe "Первый перевод"
+        coEvery { geminiService.translateBatch(any(), any(), any()) } returns listOf("Новый перевод")
+
+        processor.translateSegments(listOf("Hello"), settings)[0] shouldBe "Новый перевод"
     }
 
     @Test

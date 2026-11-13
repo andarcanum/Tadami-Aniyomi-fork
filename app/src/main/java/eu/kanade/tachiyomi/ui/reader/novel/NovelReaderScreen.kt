@@ -108,6 +108,8 @@ class NovelReaderScreen(
                 chapterId = chapterId,
                 seriesId = seriesId,
                 autoStartGeminiTranslation = autoStartGeminiTranslation,
+                translationProfiles =
+                eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.repository,
             )
         }
         val state by screenModel.state.collectAsStateWithLifecycle()
