@@ -22,7 +22,9 @@ import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
 import tachiyomi.domain.discovery.model.identityKeys
+import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 
 /**
@@ -43,6 +45,7 @@ internal class HomeDiscoveryController(
     private val mutex = Mutex()
     private var cachedDiscoveryPool: List<DiscoverySuggestion> = emptyList()
     private var cachedPolicy: DiscoveryCandidatePolicy = DiscoveryCandidatePolicy()
+    private var hasObservedPolicy: Boolean = false
     private var discoveryOffset: Int = 0
     private var lastReentryTime: Long = 0L
     private var lastRefreshClickTime: Long = 0L
@@ -86,7 +89,8 @@ internal class HomeDiscoveryController(
                 combine(
                     repository.subscribeHidden(mediaType),
                     repository.subscribeConsumed(mediaType),
-                ) { hidden, consumed -> hidden to consumed },
+                    repository.observeTitleMemory(mediaType),
+                ) { hidden, consumed, memory -> Triple(hidden, consumed, memory) },
                 combine(
                     repository.subscribeBlacklist(mediaType),
                     preferences.observeGenreFilterSpec(mediaType),
@@ -104,9 +108,15 @@ internal class HomeDiscoveryController(
                         blacklistedTags = blacklist,
                     ) to status
                 },
-            ) { items, enabled, count, hiddenAndConsumed, (policy, status) ->
-                val (hidden, consumed) = hiddenAndConsumed
-                val visible = items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed }
+            ) { items, enabled, count, exclusions, (policy, status) ->
+                val (hidden, consumed, memory) = exclusions
+                val visible = filterVisibleByExclusions(
+                    items = items,
+                    mediaType = mediaType,
+                    hidden = hidden,
+                    consumed = consumed,
+                    memory = memory,
+                )
                 DiscoveryObservationState(
                     visible = visible,
                     enabled = enabled,
@@ -119,6 +129,10 @@ internal class HomeDiscoveryController(
                 )
             }.collectLatest { obs ->
                 mutex.withLock {
+                    val previousPriorityGenres = cachedPolicy.priorityGenres
+                    val hadObservedPolicy = hasObservedPolicy
+                    cachedPolicy = obs.policy
+                    hasObservedPolicy = true
                     if (!obs.enabled) {
                         cachedDiscoveryPool = emptyList()
                         onStateUpdate {
@@ -145,7 +159,6 @@ internal class HomeDiscoveryController(
                                 }
                         }
                     val deduped = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
-                    cachedPolicy = obs.policy
                     cachedDiscoveryPool = if (obs.policy.priorityGenres.isNotEmpty()) {
                         val (boosted, normal) = deduped.partition { obs.policy.hasPriorityBoost(it) }
                         boosted + normal
@@ -178,10 +191,12 @@ internal class HomeDiscoveryController(
                     }
 
                     val isFirstTeaserLoad = currentState().discovery.isEmpty()
+                    val priorityChanged = hadObservedPolicy && obs.policy.priorityGenres != previousPriorityGenres
                     updateDiscoveryTeaserLocked(
                         advanceOffset = false,
-                        forceUpdate = isFirstTeaserLoad,
+                        forceUpdate = isFirstTeaserLoad || priorityChanged,
                         teaserCount = obs.count,
+                        avoidCurrentTitles = !priorityChanged,
                     )
                 }
             }
@@ -193,6 +208,7 @@ internal class HomeDiscoveryController(
         forceUpdate: Boolean = false,
         notifyIfLimited: Boolean = false,
         teaserCount: Int? = null,
+        avoidCurrentTitles: Boolean = true,
     ) {
         if (!preferences.discoveryEnabled().get()) {
             onStateUpdate { it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList()) }
@@ -253,7 +269,11 @@ internal class HomeDiscoveryController(
             repository.getRecentExclusionsWithTimestamp(mediaType)
         }.getOrDefault(emptyMap())
         val shownTitles = shownMap.keys
-        val currentTitles = state.discovery.mapTo(HashSet()) { it.cleanTitle }
+        val currentTitles = if (avoidCurrentTitles) {
+            state.discovery.mapTo(HashSet()) { it.cleanTitle }
+        } else {
+            emptySet()
+        }
 
         val teaser = selectFreshTeaserItems(
             pool = pool.filterNot { it.cleanTitle in dismissedSessionTitles },
@@ -355,13 +375,22 @@ internal class HomeDiscoveryController(
         snapshot.eligibleSuggestions.forEach { suggestion ->
             suggestion.identityKeys().forEach { key -> byKey.putIfAbsent(key, suggestion) }
         }
-        val selected = snapshot.homeBatchKeys.mapNotNull { byKey[it] }.distinctBy { it.cleanTitle }
+        val selected = snapshot.homeBatchKeys
+            .mapNotNull { byKey[it] }
+            .distinctBy { it.cleanTitle }
+            .filter { cachedPolicy.isAllowed(it) && it.cleanTitle !in dismissedSessionTitles }
         if (selected.isEmpty()) {
             updateDiscoveryTeaserLocked(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
             return
         }
         val selectedKeys = selected.mapTo(HashSet()) { it.cleanTitle }
-        cachedDiscoveryPool = selected + cachedDiscoveryPool.filterNot { it.cleanTitle in selectedKeys }
+        val combined = selected + cachedDiscoveryPool.filterNot { it.cleanTitle in selectedKeys }
+        cachedDiscoveryPool = if (cachedPolicy.priorityGenres.isNotEmpty()) {
+            val (boosted, normal) = combined.partition { cachedPolicy.hasPriorityBoost(it) }
+            boosted + normal
+        } else {
+            combined
+        }
         discoveryOffset = 0
         updateDiscoveryTeaserLocked(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
     }
@@ -390,6 +419,15 @@ internal class HomeDiscoveryController(
                 val consumed = repository.getSignals(mediaType)
                     .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
                 if (consumed || item.cleanTitle in repository.getHiddenTitles(mediaType)) return@withLock
+                val eligibility = runCatching { repository.eligibility(mediaType) }.getOrNull()
+                if (eligibility != null && (
+                        suggestion.cleanTitle in eligibility.excludedIdentityKeys ||
+                            legacyDiscoveryKey(mediaType, suggestion.cleanTitle) in eligibility.excludedLookupKeys ||
+                            suggestion.identityKeys().any { it in eligibility.excludedIdentityKeys }
+                        )
+                ) {
+                    return@withLock
+                }
                 val blacklist = repository.getBlacklistedTags(mediaType)
                 val shownMap = repository.getRecentExclusionsWithTimestamp(mediaType)
                 // Read preferences after the suspend points, immediately before publishing.
@@ -464,3 +502,41 @@ private data class DiscoveryObservationState(
     val lastGenAt: Long,
     val sourceFailureCount: Int,
 )
+
+private fun filterVisibleByExclusions(
+    items: List<DiscoverySuggestion>,
+    mediaType: DiscoveryMediaType,
+    hidden: Set<String>,
+    consumed: Set<String>,
+    memory: List<DiscoveryTitleMemory>,
+    now: Long = System.currentTimeMillis(),
+): List<DiscoverySuggestion> {
+    if (items.isEmpty()) return emptyList()
+    val excludedIdentityKeys = HashSet<String>(hidden.size + consumed.size + memory.size * 2)
+    val excludedLookupKeys = HashSet<String>(hidden.size + consumed.size + memory.size)
+    hidden.forEach { title ->
+        excludedIdentityKeys += title
+        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
+    }
+    consumed.forEach { title ->
+        excludedIdentityKeys += title
+        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
+    }
+    memory.forEach { record ->
+        val excluded = record.opened.active ||
+            record.started.active ||
+            record.consumed.active ||
+            record.blockedUntil > now
+        if (excluded) {
+            excludedIdentityKeys += record.identity.identityKey
+            excludedIdentityKeys += record.identity.trustedAliases
+            excludedLookupKeys += legacyDiscoveryKey(record.identity.mediaType, record.identity.primaryCleanTitle)
+        }
+    }
+    if (excludedIdentityKeys.isEmpty() && excludedLookupKeys.isEmpty()) return items
+    return items.filterNot { item ->
+        item.cleanTitle in excludedIdentityKeys ||
+            legacyDiscoveryKey(mediaType, item.cleanTitle) in excludedLookupKeys ||
+            item.identityKeys().any { it in excludedIdentityKeys }
+    }
+}

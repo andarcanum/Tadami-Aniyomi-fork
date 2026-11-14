@@ -107,20 +107,46 @@ class CompositeTrendingSource(
         sort: TrendSort,
         page: Int,
         releaseStatuses: Set<DiscoveryReleaseStatus>,
+    ): List<DiscoveryTrendingItem> = fetchByGenres(
+        mediaType = mediaType,
+        genres = genres,
+        sort = sort,
+        page = page,
+        releaseStatuses = releaseStatuses,
+        matchMode = RequiredMatchMode.ANY,
+    )
+
+    override suspend fun fetchByGenres(
+        mediaType: DiscoveryMediaType,
+        genres: List<String>,
+        sort: TrendSort,
+        page: Int,
+        releaseStatuses: Set<DiscoveryReleaseStatus>,
+        matchMode: RequiredMatchMode,
     ): List<DiscoveryTrendingItem> {
         val providers: List<Pair<String, suspend () -> List<DiscoveryTrendingItem>>> = when (mediaType) {
             DiscoveryMediaType.ANIME -> listOf(
-                "shikimori" to suspend { shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
-                "anilist" to suspend { anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
+                "shikimori" to suspend {
+                    shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
+                "anilist" to suspend {
+                    anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
             )
             // Жанровой цепочкой MangaDex не владеет (fetchByGenres игнорировал жанры и
             // возвращал популярность) — только реально фильтрующие провайдеры.
             DiscoveryMediaType.MANGA -> listOf(
-                "shikimori" to suspend { shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
-                "anilist" to suspend { anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
+                "shikimori" to suspend {
+                    shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
+                "anilist" to suspend {
+                    anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
             )
             DiscoveryMediaType.NOVEL -> listOf(
-                "anilist" to suspend { anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
+                "anilist" to suspend {
+                    anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
             )
         }
         return fetchWithFallback(providers, mediaType)

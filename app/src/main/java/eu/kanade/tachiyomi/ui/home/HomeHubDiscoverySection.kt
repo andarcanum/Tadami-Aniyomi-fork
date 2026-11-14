@@ -165,7 +165,56 @@ internal fun composeTeaserItems(
     offset: Int = 0,
     hasPriorityBoost: (DiscoverySuggestion) -> Boolean = { false },
 ): List<HomeHubDiscoveryItem> {
+    if (items.isEmpty()) return emptyList()
     val capped = limit.coerceIn(3, 20)
+    val maxPerSeries = if (capped >= 15) 2 else 1
+    val sourceKey: (DiscoveryRowItem) -> String = { it.provider.ifBlank { it.sourceId?.toString().orEmpty() } }
+    val (boostedItems, normalItems) = items.partition(hasPriorityBoost)
+    val finalSelection = if (boostedItems.isEmpty() || normalItems.isEmpty()) {
+        val rotated = composeTierRowItems(items, maxPerSeries = maxPerSeries, offset = offset)
+        balancePluginDiversity(
+            items = rotated,
+            limit = capped,
+            sourceKeyExtractor = sourceKey,
+            minOtherCount = 3,
+        )
+    } else {
+        val boostedRotated = composeTierRowItems(boostedItems, maxPerSeries = maxPerSeries, offset = offset)
+        val normalRotated = composeTierRowItems(normalItems, maxPerSeries = maxPerSeries, offset = offset)
+        if (boostedRotated.size >= capped) {
+            balancePluginDiversity(
+                items = boostedRotated,
+                limit = capped,
+                sourceKeyExtractor = sourceKey,
+                minOtherCount = 3,
+            )
+        } else {
+            val remainingLimit = capped - boostedRotated.size
+            val normalTail = balancePluginDiversity(
+                items = normalRotated,
+                limit = remainingLimit,
+                sourceKeyExtractor = sourceKey,
+                minOtherCount = 3,
+            )
+            boostedRotated + normalTail
+        }
+    }
+    val byCleanTitle = HashMap<String, DiscoverySuggestion>(items.size).apply {
+        items.forEach { putIfAbsent(it.cleanTitle, it) }
+    }
+    return finalSelection.mapNotNull { row ->
+        byCleanTitle[row.cleanTitle]?.let { suggestion ->
+            suggestion.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(suggestion))
+        }
+    }
+}
+
+private fun composeTierRowItems(
+    items: List<DiscoverySuggestion>,
+    maxPerSeries: Int,
+    offset: Int,
+): List<DiscoveryRowItem> {
+    if (items.isEmpty()) return emptyList()
     val rows = items.groupBy { it.rowType }
         .mapValues { (_, row) ->
             row.map { s ->
@@ -184,23 +233,12 @@ internal fun composeTeaserItems(
             }
         }
     val fullMix = interleaveMix(rows, total = items.size, rrf = rrfScores(rows))
-    val clustered = filterFranchiseClustering(fullMix, maxPerSeries = if (capped >= 15) 2 else 1)
-    val safeOffset = if (clustered.isNotEmpty()) offset % clustered.size else 0
-    val rotated = if (safeOffset <= 0) {
+    val clustered = filterFranchiseClustering(fullMix, maxPerSeries = maxPerSeries)
+    val safeOffset = if (clustered.isNotEmpty()) ((offset % clustered.size) + clustered.size) % clustered.size else 0
+    return if (safeOffset <= 0) {
         clustered
     } else {
         clustered.drop(safeOffset) + clustered.take(safeOffset)
-    }
-    val finalSelection = balancePluginDiversity(
-        items = rotated,
-        limit = capped,
-        sourceKeyExtractor = { it.provider.ifBlank { it.sourceId?.toString().orEmpty() } },
-        minOtherCount = 3,
-    )
-    return finalSelection.mapNotNull { row ->
-        items.firstOrNull { it.cleanTitle == row.cleanTitle }?.let { suggestion ->
-            suggestion.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(suggestion))
-        }
     }
 }
 
@@ -286,6 +324,12 @@ internal fun selectFreshTeaserItems(
         return if (safe > 0) list.drop(safe) + list.take(safe) else list
     }
 
+    fun partitionByPriority(list: List<DiscoverySuggestion>): List<DiscoverySuggestion> {
+        if (list.size <= 1) return list
+        val (boosted, normal) = list.partition(hasPriorityBoost)
+        return if (boosted.isEmpty() || normal.isEmpty()) list else boosted + normal
+    }
+
     val freshPool = pool.filterNot { it.cleanTitle in shownTitles }
     val shownPool = pool.filter { it.cleanTitle in shownTitles }
 
@@ -306,6 +350,11 @@ internal fun selectFreshTeaserItems(
     val shownOnScreen = shownPool.filter { it.cleanTitle in currentTitles }
         .sortedBy { shownCutoffMap[it.cleanTitle] ?: 0L }
 
+    val orderedFreshNotCurrent = partitionByPriority(rotateList(freshNotCurrent, offset))
+    val orderedFreshOnScreen = partitionByPriority(rotateList(freshOnScreen, offset))
+    val orderedShownNotCurrent = partitionByPriority(rotateList(shownNotCurrent, offset))
+    val orderedShownOnScreen = partitionByPriority(rotateList(shownOnScreen, offset))
+
     val rawSelection: List<HomeHubDiscoveryItem> = when {
         freshNotCurrent.size >= capped -> {
             composeTeaserItems(
@@ -316,32 +365,28 @@ internal fun selectFreshTeaserItems(
             )
         }
         freshPool.size >= capped -> {
-            val chosen = rotateList(freshNotCurrent, offset).map {
+            val chosen = orderedFreshNotCurrent.map {
                 it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
             }
-            val remainingFresh = rotateList(freshOnScreen, offset).map {
+            val remainingFresh = orderedFreshOnScreen.map {
                 it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
             }
             (chosen + remainingFresh).take(capped)
         }
         freshPool.isNotEmpty() -> {
-            val freshCandidates = (rotateList(freshNotCurrent, offset) + rotateList(freshOnScreen, offset))
+            val freshCandidates = (orderedFreshNotCurrent + orderedFreshOnScreen)
                 .distinctBy { it.cleanTitle }
                 .map { it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it)) }
             val needed = capped - freshCandidates.size
 
-            val rotatedShownNotCurrent = rotateList(shownNotCurrent, offset)
-            val rotatedShownOnScreen = rotateList(shownOnScreen, offset)
-            val combined = rotatedShownNotCurrent + rotatedShownOnScreen
+            val combined = orderedShownNotCurrent + orderedShownOnScreen
             val backfillPool = combined.take(needed).map {
                 it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
             }
             (freshCandidates + backfillPool).take(capped)
         }
         else -> {
-            val rotatedShownNotCurrent = rotateList(shownNotCurrent, offset)
-            val rotatedShownOnScreen = rotateList(shownOnScreen, offset)
-            val combined = rotatedShownNotCurrent + rotatedShownOnScreen
+            val combined = orderedShownNotCurrent + orderedShownOnScreen
             combined.take(capped).map {
                 it.toHomeHubDiscoveryItem(hasPriorityBoost = hasPriorityBoost(it))
             }
@@ -365,10 +410,10 @@ internal fun selectFreshTeaserItems(
         }
 
         val allRemaining = (
-            rotateList(freshNotCurrent, offset) +
-                rotateList(freshOnScreen, offset) +
-                rotateList(shownNotCurrent, offset) +
-                rotateList(shownOnScreen, offset)
+            orderedFreshNotCurrent +
+                orderedFreshOnScreen +
+                orderedShownNotCurrent +
+                orderedShownOnScreen
             ).distinctBy { it.cleanTitle }
             .filterNot { it.cleanTitle in selectedCleanTitles }
 
@@ -445,10 +490,20 @@ internal fun patchTeaserItems(
             it.cleanTitle !in usedCleanTitles &&
             it.cleanTitle !in dismissedTitles
     }
-    val freshCandidates = ArrayDeque(validCandidates.filterNot { it.cleanTitle in shownTitles })
+    val freshCandidates = ArrayDeque(
+        validCandidates.filterNot { it.cleanTitle in shownTitles }
+            .let { list ->
+                val (boosted, normal) = list.partition(hasPriorityBoost)
+                if (boosted.isEmpty() || normal.isEmpty()) list else boosted + normal
+            },
+    )
     val backfillCandidates = ArrayDeque(
         validCandidates.filter { it.cleanTitle in shownTitles }
-            .sortedBy { shownCutoffMap[it.cleanTitle] ?: 0L },
+            .sortedBy { shownCutoffMap[it.cleanTitle] ?: 0L }
+            .let { list ->
+                val (boosted, normal) = list.partition(hasPriorityBoost)
+                if (boosted.isEmpty() || normal.isEmpty()) list else boosted + normal
+            },
     )
 
     val currentSeriesKeys = mutableMapOf<String, Int>()
@@ -488,14 +543,23 @@ internal fun patchTeaserItems(
 
     val poolMap = pool.associateBy { it.cleanTitle }
     val result = mutableListOf<HomeHubDiscoveryItem>()
+    var priorityChangedOnSurviving = false
     for (item in currentItems) {
         if (result.size >= capped) break
         if (item.cleanTitle in validCleanTitles && item.cleanTitle !in dismissedTitles) {
             val suggestion = poolMap[item.cleanTitle]
-            val fresh = suggestion?.toHomeHubDiscoveryItem(
-                shownAt = shownCutoffMap[item.cleanTitle],
-                hasPriorityBoost = hasPriorityBoost(suggestion) || item.hasPriorityBoost,
-            ) ?: item
+            val fresh = if (suggestion != null) {
+                val newBoost = hasPriorityBoost(suggestion)
+                if (newBoost != item.hasPriorityBoost) {
+                    priorityChangedOnSurviving = true
+                }
+                suggestion.toHomeHubDiscoveryItem(
+                    shownAt = shownCutoffMap[item.cleanTitle],
+                    hasPriorityBoost = newBoost,
+                )
+            } else {
+                item
+            }
             result.add(fresh)
         } else {
             val replacement = nextReplacement()
@@ -522,6 +586,13 @@ internal fun patchTeaserItems(
         usedCleanTitles.add(replacement.cleanTitle)
     }
 
+    if (priorityChangedOnSurviving) {
+        val (boosted, normal) = result.partition { it.hasPriorityBoost }
+        if (boosted.isNotEmpty() && normal.isNotEmpty()) {
+            return boosted + normal
+        }
+    }
+
     return result
 }
 
@@ -546,8 +617,22 @@ internal fun firstBlacklistTag(
 
 /** Сколько карточек текущего тизера скроется при блэклисте [tag] (для undo-snackbar). */
 internal fun countAffectedTeasers(items: List<HomeHubDiscoveryItem>, tag: String): Int {
-    val expanded = eu.kanade.tachiyomi.data.discovery.expandGenreSet(listOf(tag))
-    return items.count { eu.kanade.tachiyomi.data.discovery.isBlacklisted(it.toDiscoverySuggestion(), expanded) }
+    if (tag.isBlank()) return 0
+    val policy = eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy(blacklistedTags = setOf(tag))
+    return items.count { item ->
+        val suggestion = item.toDiscoverySuggestion()
+        if (suggestion.genres.isNotEmpty()) {
+            policy.isForbidden(suggestion)
+        } else if (suggestion.rowType == DiscoveryRowType.TASTE && !suggestion.reason.isNullOrBlank()) {
+            policy.evaluate(
+                genres = emptyList(),
+                fallbackTags = eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
+                    .extractFallbackTags(suggestion.reason),
+            ) is eu.kanade.tachiyomi.data.discovery.CandidateVerdict.Rejected
+        } else {
+            false
+        }
+    }
 }
 
 /**
@@ -2005,9 +2090,13 @@ internal fun patchStageOrder(
     val replacementCandidates = ArrayDeque(newPool.filterNot { it.cleanTitle in currentCleanTitles })
 
     val result = mutableListOf<HomeHubDiscoveryItem>()
+    var priorityChanged = false
     for (item in currentOrdered) {
         if (item.cleanTitle in validCleanTitles) {
             val updated = newPool.firstOrNull { it.cleanTitle == item.cleanTitle } ?: item
+            if (updated.hasPriorityBoost != item.hasPriorityBoost) {
+                priorityChanged = true
+            }
             result.add(updated)
         } else {
             if (replacementCandidates.isNotEmpty()) {
@@ -2022,6 +2111,13 @@ internal fun patchStageOrder(
             result.add(candidate)
             usedTitles.add(candidate.cleanTitle)
         }
+    }
+
+    if (priorityChanged) {
+        val (fresh, shown) = result.partition { (it.shownAt ?: 0L) <= 0L }
+        val (freshBoosted, freshNormal) = fresh.partition { it.hasPriorityBoost }
+        val (shownBoosted, shownNormal) = shown.partition { it.hasPriorityBoost }
+        return freshBoosted + freshNormal + shownBoosted + shownNormal
     }
 
     return result

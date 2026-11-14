@@ -6,18 +6,18 @@ import androidx.work.WorkManager
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import eu.kanade.tachiyomi.data.discovery.CandidateVerdict
 import eu.kanade.tachiyomi.data.discovery.CompositeTrendingSource
 import eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
 import eu.kanade.tachiyomi.data.discovery.DiscoveryLibraryAdder
+import eu.kanade.tachiyomi.data.discovery.DiscoveryMixQuotas
 import eu.kanade.tachiyomi.data.discovery.DiscoveryRowItem
 import eu.kanade.tachiyomi.data.discovery.DiscoveryTrendingSource
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.META_PREFETCH_COUNT
 import eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder
 import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
-import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.interleaveMix
-import eu.kanade.tachiyomi.data.discovery.isBlacklisted
 import eu.kanade.tachiyomi.data.discovery.recoverMissingCovers
 import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
@@ -45,6 +45,9 @@ import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
+import tachiyomi.domain.discovery.model.identityKeys
+import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
 import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
@@ -94,8 +97,16 @@ internal fun parseFailedRows(csv: String): Set<DiscoveryRowType> = csv
 
 /** Сколько текущих подборок скроется при блэклисте [tag] (для undo-snackbar «Скрыто N»). */
 internal fun countBlacklistImpact(items: List<DiscoverySuggestion>, tag: String): Int {
-    val expanded = expandGenreSet(listOf(tag))
-    return items.count { isBlacklisted(it, expanded) }
+    val strictPolicy = DiscoveryCandidatePolicy(blacklistedTags = setOf(tag))
+    return items.count { item ->
+        when {
+            item.genres.isNotEmpty() -> strictPolicy.isForbidden(item)
+            item.rowType == DiscoveryRowType.TASTE && !item.reason.isNullOrBlank() ->
+                strictPolicy.evaluate(emptyList(), DiscoveryCandidatePolicy.extractFallbackTags(item.reason)) is
+                    CandidateVerdict.Rejected
+            else -> false
+        }
+    }
 }
 
 internal enum class FeedSignalTab { MIX, SIMILAR, TASTE, FRESH, SOURCE }
@@ -247,6 +258,7 @@ internal class DiscoveryFeedScreenModel(
     private var lastHidden: DiscoverySuggestion? = null
     private var lastHiddenTab: FeedSignalTab = FeedSignalTab.MIX
     private var lastBlacklistedTag: String? = null
+    private var lastObservedPriorityGenres: Set<String>? = null
 
     fun start() {
         observeMedia(state.value.mediaType)
@@ -296,6 +308,7 @@ internal class DiscoveryFeedScreenModel(
     }
 
     private fun observeMedia(mediaType: DiscoveryMediaType) {
+        lastObservedPriorityGenres = null
         observeProgress(mediaType)
         failureJob?.cancel()
         failureJob = screenModelScope.launchIO {
@@ -316,7 +329,8 @@ internal class DiscoveryFeedScreenModel(
                 combine(
                     repository.subscribeHidden(mediaType),
                     repository.subscribeConsumed(mediaType),
-                ) { hidden, consumed -> hidden to consumed },
+                    repository.observeTitleMemory(mediaType),
+                ) { hidden, consumed, memory -> Triple(hidden, consumed, memory) },
                 preferences.lastFailedRows(mediaType).changes(),
                 combine(
                     repository.subscribeBlacklist(mediaType),
@@ -327,15 +341,30 @@ internal class DiscoveryFeedScreenModel(
                         blacklistedTags = blacklist,
                     )
                 },
-            ) { all, refreshing, hiddenAndConsumed, failedCsv, policy ->
-                FeedSources(all, refreshing, hiddenAndConsumed.first, failedCsv, policy, hiddenAndConsumed.second)
+            ) { all, refreshing, exclusions, failedCsv, policy ->
+                FeedSources(
+                    all = all,
+                    refreshing = refreshing,
+                    hidden = exclusions.first,
+                    failedCsv = failedCsv,
+                    policy = policy,
+                    consumed = exclusions.second,
+                    memory = exclusions.third,
+                )
             }
-                .collectLatest { (all, refreshing, hidden, failedCsv, policy, consumed) ->
+                .collectLatest { (all, refreshing, hidden, failedCsv, policy, consumed, memory) ->
+                    val priorityChanged = lastObservedPriorityGenres != null &&
+                        lastObservedPriorityGenres != policy.priorityGenres
+                    lastObservedPriorityGenres = policy.priorityGenres
                     // Кросс-рядовой дедуп: упавший ряд живёт старым кэшем и может
                     // содержать тайтлы свежих рядов — приоритет у rowType.ordinal.
-                    val allowed = all.filter { item ->
-                        item.cleanTitle !in hidden && item.cleanTitle !in consumed && policy.isAllowed(item)
-                    }
+                    val allowed = filterFeedVisibleByExclusions(
+                        items = all,
+                        mediaType = mediaType,
+                        hidden = hidden,
+                        consumed = consumed,
+                        memory = memory,
+                    ).filter { policy.isAllowed(it) }
                     val visible = dedupeCrossRow(
                         allowed.groupBy { it.rowType }
                             .flatMap { (_, items) ->
@@ -343,10 +372,21 @@ internal class DiscoveryFeedScreenModel(
                             },
                     )
                     val rows = groupFeedRows(visible)
-                    val rowItems = rows.mapValues { (_, items) -> items.map { it.toRowItem() } }
                     // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
-                    val mix = interleaveMix(rowItems, rrf = rrfScores(rowItems))
-                        .mapNotNull { row -> visible.firstOrNull { it.cleanTitle == row.cleanTitle } }
+                    val mixTotal = DiscoveryMixQuotas().total
+                    val mix = if (policy.priorityGenres.isNotEmpty()) {
+                        val (boosted, normal) = visible.partition { policy.hasPriorityBoost(it) }
+                        if (boosted.isNotEmpty() && normal.isNotEmpty()) {
+                            val boostedMix = interleaveTier(boosted, mixTotal)
+                            val remaining = (mixTotal - boostedMix.size).coerceAtLeast(0)
+                            val normalMix = if (remaining > 0) interleaveTier(normal, remaining) else emptyList()
+                            boostedMix + normalMix
+                        } else {
+                            interleaveTier(visible, mixTotal)
+                        }
+                    } else {
+                        interleaveTier(visible, mixTotal)
+                    }
                     mutableState.update { current ->
                         val currentWindows = current.activeWindows
                         val updatedWindows = if (currentWindows.isEmpty() ||
@@ -356,6 +396,11 @@ internal class DiscoveryFeedScreenModel(
                                 mapOf(FeedSignalTab.MIX to sliceFeedWindow(mix, 0, FEED_WINDOW_SIZE))
                             } else {
                                 emptyMap()
+                            }
+                        } else if (priorityChanged) {
+                            currentWindows.mapValues { (tab, _) ->
+                                val pool = if (tab == FeedSignalTab.MIX) mix else rows[tab.rowType()].orEmpty()
+                                sliceFeedWindow(pool, 0, FEED_WINDOW_SIZE)
                             }
                         } else {
                             currentWindows.mapValues { (tab, currentWindow) ->
@@ -375,6 +420,7 @@ internal class DiscoveryFeedScreenModel(
                             isRefreshing = refreshing,
                             isLoading = false,
                             failedRows = parseFailedRows(failedCsv),
+                            tabOffsets = if (priorityChanged) emptyMap() else current.tabOffsets,
                             activeWindows = updatedWindows,
                         )
                     }
@@ -395,6 +441,14 @@ internal class DiscoveryFeedScreenModel(
         }
     }
 
+    private fun interleaveTier(items: List<DiscoverySuggestion>, total: Int): List<DiscoverySuggestion> {
+        if (items.isEmpty() || total <= 0) return emptyList()
+        val tierRows = groupFeedRows(items).mapValues { (_, list) -> list.map { it.toRowItem() } }
+        val byCleanTitle = items.associateBy { it.cleanTitle }
+        return interleaveMix(tierRows, total = total, rrf = rrfScores(tierRows))
+            .mapNotNull { row -> byCleanTitle[row.cleanTitle] }
+    }
+
     private data class FeedSources(
         val all: List<DiscoverySuggestion>,
         val refreshing: Boolean,
@@ -402,6 +456,7 @@ internal class DiscoveryFeedScreenModel(
         val failedCsv: String,
         val policy: DiscoveryCandidatePolicy,
         val consumed: Set<String>,
+        val memory: List<DiscoveryTitleMemory>,
     )
 
     private fun DiscoverySuggestion.toRowItem() = DiscoveryRowItem(
@@ -522,6 +577,15 @@ internal class DiscoveryFeedScreenModel(
             val consumed = repository.getSignals(item.mediaType)
                 .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
             if (consumed || item.cleanTitle in repository.getHiddenTitles(item.mediaType)) return@enqueue
+            val eligibility = runCatching { repository.eligibility(item.mediaType) }.getOrNull()
+            if (eligibility != null && (
+                    freshItem.cleanTitle in eligibility.excludedIdentityKeys ||
+                        legacyDiscoveryKey(item.mediaType, freshItem.cleanTitle) in eligibility.excludedLookupKeys ||
+                        freshItem.identityKeys().any { it in eligibility.excludedIdentityKeys }
+                    )
+            ) {
+                return@enqueue
+            }
             val blacklist = repository.getBlacklistedTags(item.mediaType)
             val policy = DiscoveryCandidatePolicy(
                 spec = preferences.genreFilterSpec(item.mediaType),
@@ -642,4 +706,42 @@ internal class DiscoveryFeedScreenModel(
         networkToLocalAnime = networkToLocalAnime,
         networkToLocalNovel = networkToLocalNovel,
     )
+}
+
+private fun filterFeedVisibleByExclusions(
+    items: List<DiscoverySuggestion>,
+    mediaType: DiscoveryMediaType,
+    hidden: Set<String>,
+    consumed: Set<String>,
+    memory: List<DiscoveryTitleMemory>,
+    now: Long = System.currentTimeMillis(),
+): List<DiscoverySuggestion> {
+    if (items.isEmpty()) return emptyList()
+    val excludedIdentityKeys = HashSet<String>(hidden.size + consumed.size + memory.size * 2)
+    val excludedLookupKeys = HashSet<String>(hidden.size + consumed.size + memory.size)
+    hidden.forEach { title ->
+        excludedIdentityKeys += title
+        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
+    }
+    consumed.forEach { title ->
+        excludedIdentityKeys += title
+        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
+    }
+    memory.forEach { record ->
+        val excluded = record.opened.active ||
+            record.started.active ||
+            record.consumed.active ||
+            record.blockedUntil > now
+        if (excluded) {
+            excludedIdentityKeys += record.identity.identityKey
+            excludedIdentityKeys += record.identity.trustedAliases
+            excludedLookupKeys += legacyDiscoveryKey(record.identity.mediaType, record.identity.primaryCleanTitle)
+        }
+    }
+    if (excludedIdentityKeys.isEmpty() && excludedLookupKeys.isEmpty()) return items
+    return items.filterNot { item ->
+        item.cleanTitle in excludedIdentityKeys ||
+            legacyDiscoveryKey(mediaType, item.cleanTitle) in excludedLookupKeys ||
+            item.identityKeys().any { it in excludedIdentityKeys }
+    }
 }

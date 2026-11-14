@@ -41,6 +41,7 @@ import tachiyomi.domain.discovery.model.blockedUntil
 import tachiyomi.domain.discovery.model.canonicalDiscoveryKey
 import tachiyomi.domain.discovery.model.canonicalStorageKey
 import tachiyomi.domain.discovery.model.identityKeys
+import tachiyomi.domain.discovery.model.isExcludedBy
 import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 import tachiyomi.domain.discovery.model.selectNextDiscoveryBatch
@@ -65,14 +66,43 @@ object DiscoveryMapper {
         createdAt = row.created_at,
         sourceId = row.source_id,
         sourceUrl = row.source_url,
-        genres = row.genres?.splitToSequence(",")
-            ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-            ?.toList().orEmpty(),
+        genres = splitGenres(row.genres),
         identityKey = row.identity_key,
         trustedAliases = splitAliases(row.trusted_aliases),
         releaseStatus = row.release_status?.let { tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.fromKey(it) },
         metadataVerifiedAt = row.metadata_verified_at,
     )
+
+    internal fun encodeGenres(genres: List<String>): String =
+        genres.joinToString(",") { genre ->
+            genre.replace("\\", "\\\\").replace(",", "\\,")
+        }
+
+    internal fun splitGenres(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        val result = ArrayList<String>()
+        val current = StringBuilder()
+        var escaped = false
+        for (ch in raw) {
+            when {
+                escaped -> {
+                    current.append(ch)
+                    escaped = false
+                }
+                ch == '\\' -> escaped = true
+                ch == ',' -> {
+                    val trimmed = current.toString().trim()
+                    if (trimmed.isNotEmpty()) result += trimmed
+                    current.setLength(0)
+                }
+                else -> current.append(ch)
+            }
+        }
+        if (escaped) current.append('\\')
+        val trimmed = current.toString().trim()
+        if (trimmed.isNotEmpty()) result += trimmed
+        return result
+    }
 
     internal fun splitAliases(raw: String?): Set<String> =
         raw?.splitToSequence("\n")
@@ -131,7 +161,7 @@ class DiscoveryRepositoryImpl(
                     created_at = item.createdAt,
                     source_id = item.sourceId,
                     source_url = item.sourceUrl,
-                    genres = item.genres.joinToString(","),
+                    genres = DiscoveryMapper.encodeGenres(item.genres),
                     identity_key = item.identityKey,
                     trusted_aliases = item.trustedAliases.joinToString("\n"),
                     release_status = item.releaseStatus?.key,
@@ -396,11 +426,7 @@ class DiscoveryRepositoryImpl(
         cleanTitle = primaryCleanTitle.ifBlank { cleanTitle },
         title = title,
         signalType = DiscoverySignalType.fromKey(signal) ?: DiscoverySignalType.CLICK,
-        genres = genres
-            ?.splitToSequence(",")
-            ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-            ?.toList()
-            .orEmpty(),
+        genres = DiscoveryMapper.splitGenres(genres),
         provider = provider,
         sourceKey = sourceKey,
         createdAt = createdAt,
@@ -486,7 +512,7 @@ class DiscoveryRepositoryImpl(
                 title = mergedMeta.title,
                 signal = effectiveNext.key,
                 weight = effectiveNext.weight,
-                genres = mergedMeta.genres.joinToString(","),
+                genres = DiscoveryMapper.encodeGenres(mergedMeta.genres),
                 provider = mergedMeta.provider,
                 source_key = mergedMeta.sourceKey,
                 created_at = eventTimestamp,
@@ -529,7 +555,7 @@ class DiscoveryRepositoryImpl(
             incomingSourceKey = sourceKey,
         )
         db.discovery_signalsQueries.updateMetadataIfMatchesCreatedAt(
-            genres = mergedMeta.genres.joinToString(","),
+            genres = DiscoveryMapper.encodeGenres(mergedMeta.genres),
             provider = mergedMeta.provider,
             source_key = mergedMeta.sourceKey,
             trusted_aliases = existing.trustedAliases.joinToString("\n"),
@@ -566,7 +592,7 @@ class DiscoveryRepositoryImpl(
                         title = existing.title,
                         signal = positive.key,
                         weight = positive.weight,
-                        genres = existing.genres.joinToString(","),
+                        genres = DiscoveryMapper.encodeGenres(existing.genres),
                         provider = existing.provider,
                         source_key = existing.sourceKey,
                         created_at = existing.createdAt,
@@ -620,7 +646,7 @@ class DiscoveryRepositoryImpl(
                     title = mergedMeta.title,
                     signal = effectiveNext.key,
                     weight = effectiveNext.weight,
-                    genres = mergedMeta.genres.joinToString(","),
+                    genres = DiscoveryMapper.encodeGenres(mergedMeta.genres),
                     provider = mergedMeta.provider,
                     source_key = mergedMeta.sourceKey,
                     created_at = signal.createdAt,
@@ -897,7 +923,7 @@ class DiscoveryRepositoryImpl(
                     created_at = item.createdAt,
                     source_id = item.sourceId,
                     source_url = item.sourceUrl,
-                    genres = item.genres.joinToString(","),
+                    genres = DiscoveryMapper.encodeGenres(item.genres),
                     identity_key = item.identityKey,
                     trusted_aliases = item.trustedAliases.joinToString("\n"),
                     release_status = item.releaseStatus?.key,
@@ -1085,10 +1111,15 @@ class DiscoveryRepositoryImpl(
             // Prune rows from discovery_suggestions that are consumed or known (not hidden/blocked)
             val knownKeys = known.flatMap { it.asTitleKeys() }.toSet()
             val memoryByKey = memory.associateBy { it.identity.identityKey }
+            val memoryByLookup = memory.associateBy {
+                legacyDiscoveryKey(it.identity.mediaType, it.identity.primaryCleanTitle)
+            }
             val prunableRows = rows.filter { row ->
-                val mem = row.identityKey?.let { memoryByKey[it] }
+                val lookupKey = legacyDiscoveryKey(media, row.cleanTitle)
+                val mem = row.identityKey?.let { memoryByKey[it] } ?: memoryByLookup[lookupKey]
                 val isConsumed = mem?.consumed?.active == true
-                val isKnown = row.identityKeys().any { it in knownKeys }
+                val isKnown = row.identityKeys().any { it in knownKeys } ||
+                    (row.cleanTitle.isNotBlank() && lookupKey in knownKeys)
                 isConsumed || isKnown
             }
             prunableRows.forEach { row ->
@@ -1132,7 +1163,7 @@ class DiscoveryRepositoryImpl(
                     created_at = item.createdAt,
                     source_id = item.sourceId,
                     source_url = item.sourceUrl,
-                    genres = item.genres.joinToString(","),
+                    genres = DiscoveryMapper.encodeGenres(item.genres),
                     identity_key = item.identityKey,
                     trusted_aliases = item.trustedAliases.joinToString("\n"),
                     release_status = item.releaseStatus?.key,
@@ -1190,7 +1221,7 @@ class DiscoveryRepositoryImpl(
                 title = metadata.title.ifBlank { resolved.title },
                 signal = if (hideActive) DiscoverySignalType.HIDE.key else effectiveKind.key,
                 weight = if (hideActive) DiscoverySignalType.HIDE.weight else effectiveKind.weight,
-                genres = metadata.genres.joinToString(","),
+                genres = DiscoveryMapper.encodeGenres(metadata.genres),
                 provider = metadata.provider,
                 source_key = metadata.sourceKey,
                 created_at = if (hideActive) existing?.createdAt ?: voteAt else positiveCreatedAt,
@@ -1228,7 +1259,7 @@ class DiscoveryRepositoryImpl(
             return@await false
         }
         db.discovery_signalsQueries.updateMetadataIfMatchesCreatedAt(
-            genres = metadata.genres.joinToString(","),
+            genres = DiscoveryMapper.encodeGenres(metadata.genres),
             provider = metadata.provider,
             source_key = metadata.sourceKey,
             trusted_aliases = metadata.trustedAliases.joinToString("\n"),
@@ -1390,7 +1421,7 @@ class DiscoveryRepositoryImpl(
                     title = record.metadata.title,
                     signal = effectiveKind?.key ?: DiscoverySignalType.CLICK.key,
                     weight = effectiveKind?.weight ?: 0.0,
-                    genres = record.metadata.genres.joinToString(","),
+                    genres = DiscoveryMapper.encodeGenres(record.metadata.genres),
                     provider = record.metadata.provider,
                     source_key = record.metadata.sourceKey,
                     created_at = if (hideActive) negativeAt else positive?.second ?: 0L,
@@ -1508,10 +1539,9 @@ class DiscoveryRepositoryImpl(
     ): DiscoveryPublicationSnapshot {
         val publication = settlePublicationRow(media, row)
         val eligibility = buildEligibility(media, known, memory, hidden)
-        val blocked = eligibility.excludedIdentityKeys + eligibility.excludedLookupKeys
         val eligible = suggestions.filter { candidate ->
             candidate.mediaType == media &&
-                candidate.identityKeys().none { it in blocked } &&
+                !candidate.isExcludedBy(eligibility) &&
                 candidateValidator.isAllowed(candidate, blacklist)
         }
         return DiscoveryPublicationSnapshot(
@@ -1546,10 +1576,9 @@ class DiscoveryRepositoryImpl(
         blacklist: Set<String>,
     ): List<DiscoverySuggestion> {
         val eligibility = buildEligibility(media, known, memory, hidden)
-        val blocked = eligibility.excludedIdentityKeys + eligibility.excludedLookupKeys
         return rows.filter { candidate ->
             candidate.mediaType == media &&
-                candidate.identityKeys().none { it in blocked } &&
+                !candidate.isExcludedBy(eligibility) &&
                 candidateValidator.isAllowed(candidate, blacklist)
         }
     }
@@ -1596,9 +1625,6 @@ class DiscoveryRepositoryImpl(
         eligibility: DiscoveryEligibilitySnapshot,
         blacklist: Set<String>,
     ): List<DiscoverySuggestion> {
-        val blocked = HashSet<String>(oldPoolKeys)
-        blocked += eligibility.excludedIdentityKeys
-        blocked += eligibility.excludedLookupKeys
         val seen = HashSet<String>()
         val accepted = ArrayList<DiscoverySuggestion>(suggestions.size)
         for (candidate in suggestions) {
@@ -1612,8 +1638,9 @@ class DiscoveryRepositoryImpl(
                     candidate.cleanTitle,
                 ),
             )
+            if (resolved.isExcludedBy(eligibility)) continue
             val keys = resolved.identityKeys()
-            if (keys.any { it in blocked }) continue
+            if (keys.any { it in oldPoolKeys }) continue
             if (keys.any { it in seen }) continue
             seen += keys
             accepted += resolved

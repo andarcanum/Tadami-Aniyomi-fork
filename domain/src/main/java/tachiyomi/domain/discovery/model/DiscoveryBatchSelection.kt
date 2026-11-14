@@ -9,6 +9,27 @@ fun DiscoverySuggestion.identityKeys(): Set<String> =
         addAll(trustedAliases)
     }
 
+/**
+ * Checks [exclusions] by both canonical [identityKeys] and title-level fallback
+ * keys so hidden, known, or memory-excluded works cannot re-enter under a new source binding.
+ */
+fun DiscoverySuggestion.isExcludedBy(exclusions: DiscoveryEligibilitySnapshot): Boolean {
+    if (mediaType != exclusions.mediaType) return false
+    val keys = identityKeys()
+    if (keys.any { it in exclusions.excludedIdentityKeys || it in exclusions.excludedLookupKeys }) {
+        return true
+    }
+    if (cleanTitle.isNotBlank() &&
+        (
+            cleanTitle in exclusions.excludedIdentityKeys ||
+                legacyDiscoveryKey(mediaType, cleanTitle) in exclusions.excludedLookupKeys
+            )
+    ) {
+        return true
+    }
+    return false
+}
+
 fun legacyDiscoveryKey(mediaType: DiscoveryMediaType, cleanTitle: String): String =
     "title:${mediaType.key}:$cleanTitle"
 
@@ -41,16 +62,15 @@ fun selectNextDiscoveryBatch(
     limit: Int = DISCOVERY_HOME_BATCH_SIZE,
 ): List<DiscoverySuggestion> {
     if (limit <= 0) return emptyList()
-    val blocked = HashSet<String>(current.size + issued.size + exclusions.excludedIdentityKeys.size)
+    val blocked = HashSet<String>(current.size + issued.size)
     blocked += current
     blocked += issued
-    blocked += exclusions.excludedIdentityKeys
-    blocked += exclusions.excludedLookupKeys
 
     val selected = ArrayList<DiscoverySuggestion>(limit)
     val selectedKeys = HashSet<String>()
     for (candidate in ranked) {
         if (candidate.mediaType != exclusions.mediaType) continue
+        if (candidate.isExcludedBy(exclusions)) continue
         val keys = candidate.identityKeys()
         if (keys.any { it in blocked }) continue
         if (keys.any { it in selectedKeys }) continue

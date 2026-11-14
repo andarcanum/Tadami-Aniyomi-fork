@@ -914,6 +914,7 @@ class AppDiscoverySourceCatalog(
                     hasNextPage = pageData.hasNextPage,
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
+                    genreSearchApplied = genreSearch != null,
                 )
             }
             DiscoveryMediaType.NOVEL -> {
@@ -1007,6 +1008,7 @@ class AppDiscoverySourceCatalog(
                     hasNextPage = pageData.hasNextPage,
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
+                    genreSearchApplied = genreSearch != null,
                 )
             }
         }
@@ -1389,7 +1391,7 @@ class AppDiscoverySourceCatalog(
     ): StatusEnrichment<T> {
         if (releaseStatuses.isEmpty()) return StatusEnrichment(items)
         val (unknown, known) = items.partition { SourceStatusFilterMatcher.fromEntryStatus(status(it)) == null }
-        if (known.isNotEmpty() || unknown.isEmpty()) return StatusEnrichment(items)
+        if (unknown.isEmpty()) return StatusEnrichment(items)
         // Все без статуса — иначе известные уже отфильтрованы корректно, детали не нужны.
         val limit = minOf(DETAILS_ENRICH_CAP, maxDetails.coerceAtLeast(0))
         var charged = 0

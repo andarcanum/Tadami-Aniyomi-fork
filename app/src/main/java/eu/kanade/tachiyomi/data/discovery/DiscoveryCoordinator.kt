@@ -5,9 +5,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.canonicalDiscoveryKey
+import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 
 data class DiscoveryFeed(
     val mediaType: DiscoveryMediaType,
@@ -96,12 +99,13 @@ class DiscoveryCoordinator(
                         genresSelector = { it.genres },
                     )
                     val selected = selectRowItems(
-                        policyFiltered,
-                        excluded,
-                        seenSoFar,
-                        context.recentCleanTitles,
-                        context.shownCutoffMap,
-                        context.currentFeedCleanTitles,
+                        items = policyFiltered,
+                        mediaType = context.mediaType,
+                        excluded = excluded,
+                        seen = seenSoFar,
+                        recentCleanTitles = context.recentCleanTitles,
+                        currentFeedCleanTitles = context.currentFeedCleanTitles,
+                        eligibilitySnapshot = context.eligibilitySnapshot,
                     )
                     logcat {
                         "[DiscoverySelection] media=${context.mediaType} row=$pType raw=${candidates.size} " +
@@ -150,23 +154,44 @@ class DiscoveryCoordinator(
 
     private fun selectRowItems(
         items: List<DiscoveryRowItem>,
+        mediaType: DiscoveryMediaType,
         excluded: Set<String>,
         seen: Set<String>,
         recentCleanTitles: Set<String>,
-        shownCutoffMap: Map<String, Long>,
         currentFeedCleanTitles: Set<String> = emptySet(),
+        eligibilitySnapshot: DiscoveryEligibilitySnapshot? = null,
     ): List<DiscoveryRowItem> {
+        val blockedEligibility = eligibilitySnapshot
+            ?.takeIf { it.mediaType == mediaType }
+            ?.let { it.excludedIdentityKeys + it.excludedLookupKeys }
+            .orEmpty()
         val valid = items
             .filterNot { item ->
                 val keys = listOf(item.cleanTitle) + item.altCleanTitles
-                keys.any { it.isBlank() || it in excluded || it in seen }
+                if (keys.any { it.isBlank() || it in excluded || it in seen || it in currentFeedCleanTitles }) {
+                    return@filterNot true
+                }
+                if (blockedEligibility.isNotEmpty()) {
+                    val canonical = canonicalDiscoveryKey(mediaType, item.sourceId, item.sourceUrl, item.cleanTitle)
+                    if (canonical in blockedEligibility) return@filterNot true
+                    if (keys.any { key ->
+                            key in blockedEligibility || legacyDiscoveryKey(mediaType, key) in blockedEligibility
+                        }
+                    ) {
+                        return@filterNot true
+                    }
+                }
+                false
             }
             .distinctBy { it.cleanTitle }
 
         val clustered = filterFranchiseClustering(valid, maxPerSeries = 2)
 
         return clustered
-            .filterNot { it.cleanTitle in recentCleanTitles }
+            .filterNot { item ->
+                val keys = listOf(item.cleanTitle) + item.altCleanTitles
+                keys.any { it in recentCleanTitles }
+            }
             .take(rowLimit)
     }
 }

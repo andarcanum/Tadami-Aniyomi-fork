@@ -30,6 +30,15 @@ interface DiscoveryTrendingSource {
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
     ): List<DiscoveryTrendingItem>
 
+    suspend fun fetchByGenres(
+        mediaType: DiscoveryMediaType,
+        genres: List<String>,
+        sort: TrendSort = TrendSort.POPULARITY,
+        page: Int = 1,
+        releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
+        matchMode: RequiredMatchMode,
+    ): List<DiscoveryTrendingItem> = fetchByGenres(mediaType, genres, sort, page, releaseStatuses)
+
     suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta?
 }
 

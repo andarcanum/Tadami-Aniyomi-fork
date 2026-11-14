@@ -424,7 +424,8 @@ internal fun boostedTasteScore(
 ): Double {
     val base = tasteScore(itemGenres, profile)
     if (priorityGenres.isEmpty() || itemGenres.isEmpty()) return base
-    val hasPriority = itemGenres.any { g -> priorityGenres.any { pri -> GenreMatcher.matches(pri, g) } }
+    val expanded = expandGenreSet(priorityGenres.toList())
+    val hasPriority = itemGenres.any { g -> expanded.any { pri -> GenreMatcher.matchesConstraint(pri, g) } }
     return if (hasPriority) base * 1.5 else base
 }
 

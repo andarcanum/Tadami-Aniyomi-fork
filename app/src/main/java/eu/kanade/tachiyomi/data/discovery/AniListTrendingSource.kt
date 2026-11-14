@@ -66,7 +66,16 @@ internal fun anilistGenreVariables(genres: List<String>): List<String> {
     genres.forEach { genre ->
         out += genre
         GenreMatcher.resolve(genre).forEach { canonical ->
-            GenreOntology.displayNames[canonical]?.first?.let { out += it }
+            GenreOntology.displayNames[canonical]?.first?.let { display ->
+                val normalized = if (display.firstOrNull()?.isLowerCase() == true) {
+                    display.split(' ').joinToString(" ") { word ->
+                        word.replaceFirstChar { it.uppercaseChar() }
+                    }
+                } else {
+                    display
+                }
+                out += normalized
+            }
         }
     }
     return out.toList().take(12)
@@ -283,6 +292,22 @@ open class AniListTrendingSource(
         sort: TrendSort,
         page: Int,
         releaseStatuses: Set<DiscoveryReleaseStatus>,
+    ): List<DiscoveryTrendingItem> = fetchByGenres(
+        mediaType = mediaType,
+        genres = genres,
+        sort = sort,
+        page = page,
+        releaseStatuses = releaseStatuses,
+        matchMode = RequiredMatchMode.ANY,
+    )
+
+    override suspend fun fetchByGenres(
+        mediaType: DiscoveryMediaType,
+        genres: List<String>,
+        sort: TrendSort,
+        page: Int,
+        releaseStatuses: Set<DiscoveryReleaseStatus>,
+        matchMode: RequiredMatchMode,
     ): List<DiscoveryTrendingItem> {
         if (genres.isEmpty()) return emptyList()
         return try {
@@ -291,7 +316,15 @@ open class AniListTrendingSource(
                 DiscoveryMediaType.MANGA -> "MANGA" to null
                 DiscoveryMediaType.NOVEL -> "MANGA" to "NOVEL"
             }
-            queryByGenres(type, format, genres, sort, page = page, releaseStatuses = releaseStatuses)
+            queryByGenres(
+                type = type,
+                format = format,
+                genres = genres,
+                sort = sort,
+                page = page,
+                releaseStatuses = releaseStatuses,
+                matchMode = matchMode,
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -307,7 +340,14 @@ open class AniListTrendingSource(
         sort: TrendSort,
         page: Int = 1,
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
+        matchMode: RequiredMatchMode = RequiredMatchMode.ANY,
     ): List<DiscoveryTrendingItem> {
+        val effectiveQueryGenres = if (matchMode == RequiredMatchMode.ALL && genres.size > 1) {
+            val primary = genres.firstOrNull { GenreMatcher.resolve(it).isNotEmpty() } ?: genres.first()
+            listOf(primary)
+        } else {
+            genres
+        }
         val formatArg = if (format != null) ", format: ${'$'}format" else ""
         val statusArg = if (releaseStatuses.isNotEmpty()) ", status_in: ${'$'}statuses" else ""
         val query = """
@@ -325,7 +365,12 @@ open class AniListTrendingSource(
                 "variables",
                 buildJsonObject {
                     put("type", type)
-                    put("genres", buildJsonArray { anilistGenreVariables(genres).forEach { add(JsonPrimitive(it)) } })
+                    put(
+                        "genres",
+                        buildJsonArray {
+                            anilistGenreVariables(effectiveQueryGenres).forEach { add(JsonPrimitive(it)) }
+                        },
+                    )
                     put("page", page)
                     put("isAdult", adultVariableValue())
                     put(

@@ -665,27 +665,11 @@ class DiscoveryRunner(
             feed.degradedRows.isNotEmpty() ||
             (attemptedRows.isNotEmpty() && actualExecutedRows.size < attemptedRows.size)
 
+        val createdAt = System.currentTimeMillis()
         val pooledItems = feed.rows.flatMap { (rowType, items) ->
-            items.map { item ->
-                DiscoverySuggestion(
-                    id = 0L,
-                    mediaType = mediaType,
-                    rowType = rowType,
-                    title = item.title,
-                    cleanTitle = item.cleanTitle,
-                    coverUrl = item.coverUrl,
-                    reason = item.reason,
-                    seedTitle = item.seedTitle,
-                    provider = item.provider,
-                    score = item.score,
-                    position = 0L,
-                    createdAt = System.currentTimeMillis(),
-                    sourceId = item.sourceId,
-                    sourceUrl = item.sourceUrl,
-                    genres = item.genres,
-                )
-            }
+            items.map { item -> toSuggestion(mediaType, rowType, item, createdAt) }
         }
+        val topUpAdditions = interleaveRowsForTopUp(feed.rows, mediaType, createdAt)
         val exhaustionEvidence = feed.exhaustionEvidence.orEmpty()
         val conclusiveEmpty = feed.failedRows.isEmpty() && feed.degradedRows.isEmpty() &&
             feed.rows.values.all { it.isEmpty() } && exhaustionEvidence.isNotEmpty() &&
@@ -725,7 +709,7 @@ class DiscoveryRunner(
             val topUpReceipt = repository.topUpPool(
                 media = mediaType,
                 expectedGeneration = expectedGeneration,
-                additions = pooledItems,
+                additions = topUpAdditions,
                 cursors = nextCursors,
                 maxPoolSize = DISCOVERY_POOL_TARGET,
             )
@@ -810,7 +794,7 @@ class DiscoveryRunner(
 
         var keptTopUpReceipt: DiscoveryTopUpReceipt? = null
         if (publishReceipt is DiscoveryPublishReceipt.KeptExisting) {
-            val additions = (prepared as? DiscoveryPreparedPool.Fresh)?.suggestions.orEmpty()
+            val additions = if (prepared is DiscoveryPreparedPool.Fresh) topUpAdditions else emptyList()
             val cursors = when (prepared) {
                 is DiscoveryPreparedPool.Fresh -> prepared.cursors
                 is DiscoveryPreparedPool.VerifiedEmpty -> prepared.cursors
@@ -966,3 +950,47 @@ private const val MAX_MANUAL_HARVEST_PAGES = 20
 
 /** Page depth at which the persisted cursor wraps back to the first page. */
 private const val MAX_HARVEST_PAGE = 30
+
+private fun toSuggestion(
+    mediaType: DiscoveryMediaType,
+    rowType: DiscoveryRowType,
+    item: DiscoveryRowItem,
+    createdAt: Long,
+): DiscoverySuggestion = DiscoverySuggestion(
+    id = 0L,
+    mediaType = mediaType,
+    rowType = rowType,
+    title = item.title,
+    cleanTitle = item.cleanTitle,
+    coverUrl = item.coverUrl,
+    reason = item.reason,
+    seedTitle = item.seedTitle,
+    provider = item.provider,
+    score = item.score,
+    position = 0L,
+    createdAt = createdAt,
+    sourceId = item.sourceId,
+    sourceUrl = item.sourceUrl,
+    genres = item.genres,
+)
+
+private fun interleaveRowsForTopUp(
+    rows: Map<DiscoveryRowType, List<DiscoveryRowItem>>,
+    mediaType: DiscoveryMediaType,
+    createdAt: Long,
+): List<DiscoverySuggestion> {
+    val orderedRows = DiscoveryRowType.entries.mapNotNull { rowType ->
+        rows[rowType]?.takeIf { it.isNotEmpty() }?.let { rowType to it }
+    }
+    if (orderedRows.isEmpty()) return emptyList()
+    val maxLen = orderedRows.maxOf { it.second.size }
+    val result = ArrayList<DiscoverySuggestion>(orderedRows.sumOf { it.second.size })
+    for (index in 0 until maxLen) {
+        for ((rowType, items) in orderedRows) {
+            if (index < items.size) {
+                result += toSuggestion(mediaType, rowType, items[index], createdAt)
+            }
+        }
+    }
+    return result
+}
