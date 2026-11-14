@@ -222,6 +222,7 @@ internal fun ComposePagerPageRenderer(
     // When false, the pager never renders the intermediate "next/previous chapter" placeholder page:
     // the edge page shows real chapter content and the chapter switch happens directly.
     showBoundaryChapterPages: Boolean = true,
+    suppressBoundaryChapterNavigation: Boolean = false,
     onToggleUi: () -> Unit,
     onMoveBackward: () -> Unit,
     onMoveForward: () -> Unit,
@@ -261,6 +262,7 @@ internal fun ComposePagerPageRenderer(
     val latestBoundaryChapterHint by rememberUpdatedState(boundaryChapterHint)
     val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapter)
     val latestHasNextChapter by rememberUpdatedState(hasNextChapter)
+    val latestSuppressBoundaryNavigation by rememberUpdatedState(suppressBoundaryChapterNavigation)
     val edgeSwipeThresholdPx = with(density) { 160.dp.toPx() }
 
     val boundarySwipeModifier = if (useBoundaryPreview) {
@@ -323,7 +325,7 @@ internal fun ComposePagerPageRenderer(
             }
                 .distinctUntilChanged()
                 .collectLatest { (page, progress, isScrolling) ->
-                    if (isScrolling) return@collectLatest
+                    if (isScrolling || latestSuppressBoundaryNavigation) return@collectLatest
                     when (
                         resolveComposePagerSettledBoundaryChapterTarget(
                             currentPage = page,
@@ -504,6 +506,7 @@ internal fun ComposePagerPageRenderer(
                             ttsHighlightState = ttsHighlightState,
                             ttsHighlightColor = ttsHighlightColor,
                             selectionSessionIdProvider = selectionSessionIdProvider,
+                            selectionAnchorChapterId = chapterId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                             onPlainTap = onTextTap,
                             onImageLongClick = onImageLongClick,

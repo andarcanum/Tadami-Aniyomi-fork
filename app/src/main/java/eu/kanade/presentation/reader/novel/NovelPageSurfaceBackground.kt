@@ -80,6 +80,7 @@ internal fun NovelPageSurfaceBackground(
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val agingCenter1 = Offset(size.width * 0.2f, size.height * 0.2f)
                     val agingCenter2 = Offset(size.width * 0.8f, size.height * 0.75f)
+                    val agingRadius = (minOf(size.width, size.height) * 0.9f).coerceAtLeast(1f)
                     drawRect(
                         brush = Brush.radialGradient(
                             colorStops = arrayOf(
@@ -87,7 +88,7 @@ internal fun NovelPageSurfaceBackground(
                                 0.45f to Color.Transparent,
                             ),
                             center = agingCenter1,
-                            radius = size.width * 0.9f,
+                            radius = agingRadius,
                         ),
                     )
                     drawRect(
@@ -97,7 +98,7 @@ internal fun NovelPageSurfaceBackground(
                                 0.42f to Color.Transparent,
                             ),
                             center = agingCenter2,
-                            radius = size.width * 0.9f,
+                            radius = agingRadius,
                         ),
                     )
                 }

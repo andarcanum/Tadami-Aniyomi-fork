@@ -52,6 +52,7 @@ import eu.kanade.presentation.reader.novel.resolveReaderBackgroundSelection
 import eu.kanade.presentation.reader.novel.resolveReaderKeepScreenOn
 import eu.kanade.presentation.reader.novel.resolveReaderSystemUiFlag
 import eu.kanade.presentation.reader.novel.safeEnum
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
@@ -225,6 +226,7 @@ class NovelReaderScreen(
                 loadingReaderSettings?.let { settings ->
                     NovelReaderLoadingBackdrop(
                         settings = settings,
+                        fallbackBackdropColor = loadingBackdropColor,
                     )
                 }
                 LoadingScreen()
@@ -590,6 +592,7 @@ class NovelReaderScreen(
 @Composable
 private fun NovelReaderLoadingBackdrop(
     settings: eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings,
+    fallbackBackdropColor: Color,
 ) {
     val safeSettings = remember(settings) {
         settings.copy(
@@ -610,7 +613,34 @@ private fun NovelReaderLoadingBackdrop(
             ttsHighlightMode = safeEnum(settings.ttsHighlightMode, NovelTtsHighlightMode.AUTO),
         )
     }
-    if (safeSettings.appearanceMode != NovelReaderAppearanceMode.BACKGROUND) return
+    val isEInkMode = AuroraTheme.colors.isEInk
+    val isBackgroundMode = safeSettings.appearanceMode == NovelReaderAppearanceMode.BACKGROUND
+
+    if (!isBackgroundMode) {
+        val themeBackground = if (isEInkMode) AuroraTheme.colors.background else fallbackBackdropColor
+        val activeTexture = if (isEInkMode) NovelReaderBackgroundTexture.NONE else safeSettings.backgroundTexture
+        val activeOled = !isEInkMode && safeSettings.oledEdgeGradient == true
+        val isDark = if (isEInkMode) {
+            AuroraTheme.colors.isDark
+        } else {
+            when (safeSettings.theme) {
+                NovelReaderTheme.SYSTEM -> MaterialTheme.colorScheme.background.luminance() < 0.5f
+                NovelReaderTheme.DARK -> true
+                NovelReaderTheme.LIGHT -> false
+            }
+        }
+        NovelAtmosphereBackground(
+            backgroundColor = themeBackground,
+            backgroundTexture = activeTexture,
+            nativeTextureStrengthPercent = safeSettings.nativeTextureStrengthPercent,
+            oledEdgeGradient = activeOled,
+            isDarkTheme = isDark,
+            pageEdgeShadow = safeSettings.pageEdgeShadow,
+            pageEdgeShadowAlpha = safeSettings.pageEdgeShadowAlpha,
+            backgroundImageModel = null,
+        )
+        return
+    }
 
     val context = LocalContext.current
     val customBackgroundItems = remember(context) {
@@ -645,11 +675,19 @@ private fun NovelReaderLoadingBackdrop(
             customBackgroundExists = customBackgroundExists,
         )
     }
-    val backgroundColor = remember(backgroundSelection) {
-        resolveReaderBackgroundBackdropColor(backgroundSelection)
+    val backgroundColor = if (isEInkMode) {
+        AuroraTheme.colors.background
+    } else {
+        remember(backgroundSelection) {
+            resolveReaderBackgroundBackdropColor(backgroundSelection)
+        }
     }
-    val backgroundImageModel = remember(backgroundSelection) {
-        resolveReaderBackgroundImageModel(backgroundSelection)
+    val backgroundImageModel = if (isEInkMode) {
+        null
+    } else {
+        remember(backgroundSelection) {
+            resolveReaderBackgroundImageModel(backgroundSelection)
+        }
     }
 
     NovelAtmosphereBackground(
@@ -658,8 +696,8 @@ private fun NovelReaderLoadingBackdrop(
         nativeTextureStrengthPercent = safeSettings.nativeTextureStrengthPercent,
         oledEdgeGradient = false,
         isDarkTheme = backgroundColor.luminance() < 0.5f,
-        pageEdgeShadow = false,
-        pageEdgeShadowAlpha = 0f,
+        pageEdgeShadow = safeSettings.pageEdgeShadow,
+        pageEdgeShadowAlpha = safeSettings.pageEdgeShadowAlpha,
         backgroundImageModel = backgroundImageModel,
     )
 }

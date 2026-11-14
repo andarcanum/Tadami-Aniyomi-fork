@@ -482,6 +482,7 @@ internal fun WebView.applyReaderCss(
     forceBoldText: Boolean,
     forceItalicText: Boolean,
     bionicReadingEnabled: Boolean,
+    preserveScrollFraction: Boolean = false,
 ) {
     val css = buildWebReaderCssText(
         fontFaceCss = fontFaceCss,
@@ -513,9 +514,17 @@ internal fun WebView.applyReaderCss(
     val fontFlag = if (shouldForceFontFamily) "true" else "false"
     val alignFlag = if (textAlignCss.isNullOrBlank()) "false" else "true"
     val firstLineIndentFlag = if (firstLineIndentCss.isNullOrBlank()) "false" else "true"
+    val preserveScrollFlag = if (preserveScrollFraction) "true" else "false"
     evaluateJavascript(
         """
         (function() {
+            const docEl = document.documentElement;
+            const prevTotalScrollable = ($preserveScrollFlag && docEl)
+                ? Math.max(0, docEl.scrollHeight - window.innerHeight)
+                : 0;
+            const preservedFraction = prevTotalScrollable > 0
+                ? Math.min(1, Math.max(0, window.scrollY / prevTotalScrollable))
+                : null;
             const styleId = '$WEB_READER_STYLE_ELEMENT_ID';
             let style = document.getElementById(styleId);
             if (!style) {
@@ -577,6 +586,18 @@ internal fun WebView.applyReaderCss(
                 if (shouldForceFont) {
                     node.style.setProperty('font-family', 'var(--an-reader-font)', 'important');
                 }
+            }
+            if (preservedFraction !== null && docEl) {
+                const applyPreservedScroll = function() {
+                    const nextTotalScrollable = Math.max(0, docEl.scrollHeight - window.innerHeight);
+                    if (nextTotalScrollable > 0) {
+                        window.scrollTo(0, Math.round(preservedFraction * nextTotalScrollable));
+                    }
+                };
+                applyPreservedScroll();
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(applyPreservedScroll);
+                });
             }
         })();
         """.trimIndent(),
@@ -799,13 +820,16 @@ internal fun buildWebReaderAtmosphereCss(
     if (appearanceMode == NovelReaderAppearanceMode.BACKGROUND) {
         if (backgroundImageUrl.isNullOrBlank()) return ""
         return buildString {
-            append("html, body {\n")
+            append("html {\n")
             append("  background-color: var(--an-reader-bg) !important;\n")
             append("  background-image: url('$backgroundImageUrl') !important;\n")
             append("  background-repeat: no-repeat !important;\n")
             append("  background-size: cover !important;\n")
             append("  background-position: center center !important;\n")
             append("  background-attachment: fixed !important;\n")
+            append("}\n")
+            append("body {\n")
+            append("  background: transparent !important;\n")
             append("}\n")
         }
     }
@@ -840,11 +864,14 @@ internal fun buildWebReaderAtmosphereCss(
                     }
                 }
             }.joinToString(", ")
-            append("html, body {\n")
+            append("html {\n")
             append("  background-color: var(--an-reader-bg) !important;\n")
             append("  background-image: ${layers.joinToString(", ")} !important;\n")
             append("  background-repeat: $repeatValues !important;\n")
             append("  background-attachment: fixed !important;\n")
+            append("}\n")
+            append("body {\n")
+            append("  background: transparent !important;\n")
             append("}\n")
         }
     }

@@ -1,5 +1,8 @@
 package eu.kanade.presentation.reader.novel
 
+import eu.kanade.tachiyomi.ui.reader.novel.decodeNativeScrollProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodeWebScrollProgressPercent
 import kotlin.math.roundToInt
 
 internal fun shouldTrackWebViewProgress(
@@ -91,12 +94,46 @@ internal fun resolveReaderProgressToPersist(
     chapterHandoffTarget: NovelReaderPageReaderHandoffTarget =
         NovelReaderPageReaderHandoffTarget.SAVED,
 ): Long? {
-    if (!shouldPersistRead) return resolvedPersistedProgress
     if (previousProgress == null) return resolvedPersistedProgress
     if (chapterHandoffTarget == NovelReaderPageReaderHandoffTarget.START) {
         return resolvedPersistedProgress
     }
-    if (resolvedPersistedProgress >= previousProgress) return resolvedPersistedProgress
-    if (!isInitialPositionRestored && currentIndex <= 0) return null
+    if (
+        !isInitialPositionRestored &&
+        isStartProgressReport(currentIndex = currentIndex, persistedProgress = resolvedPersistedProgress) &&
+        hasNonStartSavedProgress(previousProgress)
+    ) {
+        return null
+    }
     return resolvedPersistedProgress
+}
+
+private fun isStartProgressReport(
+    currentIndex: Int,
+    persistedProgress: Long,
+): Boolean {
+    if (currentIndex > 0) return false
+    decodeNativeScrollProgress(persistedProgress)?.let {
+        return it.index <= 0 && it.offsetPx <= 0
+    }
+    decodeWebScrollProgressPercent(persistedProgress)?.let {
+        return it <= 0
+    }
+    decodePageReaderProgress(persistedProgress)?.let {
+        return it.index <= 0
+    }
+    return persistedProgress <= 0L
+}
+
+private fun hasNonStartSavedProgress(previousProgress: Long): Boolean {
+    decodeNativeScrollProgress(previousProgress)?.let {
+        return it.index > 0 || it.offsetPx > 0
+    }
+    decodeWebScrollProgressPercent(previousProgress)?.let {
+        return it > 0
+    }
+    decodePageReaderProgress(previousProgress)?.let {
+        return it.index > 0
+    }
+    return previousProgress > 0L
 }

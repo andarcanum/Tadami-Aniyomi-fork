@@ -9,7 +9,11 @@ import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import android.text.style.LeadingMarginSpan
 import android.util.Log
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -17,6 +21,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.tadami.aurora.BuildConfig
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
@@ -121,6 +128,45 @@ internal fun resolveWebViewPaddingBottomPx(
     basePaddingPx: Int,
 ): Int {
     return navigationBarHeightPx.coerceAtLeast(0) + basePaddingPx.coerceAtLeast(0)
+}
+
+internal data class NovelHorizontalSafeInsetsDp(
+    val left: Dp,
+    val right: Dp,
+)
+
+internal fun resolveNovelHorizontalSafeInsetsDp(
+    cutoutLeftPx: Int,
+    cutoutRightPx: Int,
+    navBarLeftPx: Int,
+    navBarRightPx: Int,
+    densityScale: Float,
+): NovelHorizontalSafeInsetsDp {
+    val safeScale = densityScale.takeIf { it > 0f } ?: 1f
+    val leftPx = maxOf(cutoutLeftPx.coerceAtLeast(0), navBarLeftPx.coerceAtLeast(0))
+    val rightPx = maxOf(cutoutRightPx.coerceAtLeast(0), navBarRightPx.coerceAtLeast(0))
+    return NovelHorizontalSafeInsetsDp(
+        left = (leftPx / safeScale).dp,
+        right = (rightPx / safeScale).dp,
+    )
+}
+
+@Composable
+internal fun rememberNovelHorizontalSafeInsets(): NovelHorizontalSafeInsetsDp {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    // Re-read configuration so orientation changes immediately update cutout & side nav insets.
+    LocalConfiguration.current
+    val rootInsets = ViewCompat.getRootWindowInsets(view)
+    val cutoutInsets = rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())
+    val navInsets = rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars())
+    return resolveNovelHorizontalSafeInsetsDp(
+        cutoutLeftPx = cutoutInsets?.left ?: 0,
+        cutoutRightPx = cutoutInsets?.right ?: 0,
+        navBarLeftPx = navInsets?.left ?: 0,
+        navBarRightPx = navInsets?.right ?: 0,
+        densityScale = density.density,
+    )
 }
 
 internal const val AUTO_SCROLL_COOLDOWN_MS = 2000L

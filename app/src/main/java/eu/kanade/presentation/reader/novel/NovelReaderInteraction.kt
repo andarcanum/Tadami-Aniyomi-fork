@@ -3,6 +3,7 @@ package eu.kanade.presentation.reader.novel
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
@@ -561,6 +562,50 @@ internal fun shouldUseComposePagerBoundaryPreview(
     }
 }
 
+internal fun resolveComposePagerBoundaryPagesEnabled(
+    seamlessChapterTransitionEnabled: Boolean,
+    activePageTransitionStyle: NovelPageTransitionStyle,
+): Boolean {
+    return !seamlessChapterTransitionEnabled &&
+        shouldUseComposePagerBoundaryPreview(activePageTransitionStyle)
+}
+
+internal fun resolveEffectivePageReaderViewportSize(
+    measuredWidthPx: Int,
+    measuredHeightPx: Int,
+    configWidthPx: Int,
+    configHeightPx: Int,
+): IntSize {
+    val safeConfigWidth = configWidthPx.coerceAtLeast(1)
+    val safeConfigHeight = configHeightPx.coerceAtLeast(1)
+    if (measuredWidthPx <= 0 || measuredHeightPx <= 0) {
+        return IntSize(safeConfigWidth, safeConfigHeight)
+    }
+    if (safeConfigWidth == safeConfigHeight || measuredWidthPx == measuredHeightPx) {
+        return IntSize(measuredWidthPx, measuredHeightPx)
+    }
+    val measuredIsLandscape = measuredWidthPx > measuredHeightPx
+    val configIsLandscape = safeConfigWidth > safeConfigHeight
+    return if (measuredIsLandscape == configIsLandscape) {
+        IntSize(measuredWidthPx, measuredHeightPx)
+    } else {
+        // Configuration flips orientation one frame before `.onSizeChanged` runs; swap the measured
+        // dimensions so pagination and spread column count immediately match the new orientation.
+        IntSize(measuredHeightPx, measuredWidthPx)
+    }
+}
+
+internal fun resolvePageTurnRendererSyncedSlot(
+    syncedContentPageIndex: Int?,
+    contentPageCount: Int,
+    spreadColumns: Int,
+): Int {
+    val safePageCount = contentPageCount.coerceAtLeast(1)
+    val slotCount = resolveSpreadSlotCount(safePageCount, spreadColumns)
+    val safePageIndex = (syncedContentPageIndex ?: 0).coerceIn(0, safePageCount - 1)
+    return resolveSpreadSlotForPageIndex(safePageIndex, spreadColumns).coerceIn(0, slotCount - 1)
+}
+
 /**
  * Number of pager slots [contentPageCount] single-column pages collapse into when every slot
  * shows [columnsPerSpread] of them side by side. A trailing odd page still gets its own slot
@@ -871,4 +916,168 @@ internal fun resolveBookFlipEdgeTapAnimationDurationMillis(
         transitionStyle = transitionStyle,
         animationSpeed = animationSpeed,
     )
+}
+
+internal data class NovelPageReaderAnchor(
+    val sourceBlockIndex: Int?,
+    val sourceTextStart: Int,
+    val imageUrl: String? = null,
+    val normalizedPageFraction: Float = 0f,
+)
+
+internal fun capturePageReaderAnchor(
+    contentPages: List<NovelPageContentPage>,
+    pageIndex: Int,
+): NovelPageReaderAnchor {
+    if (contentPages.isEmpty()) {
+        return NovelPageReaderAnchor(
+            sourceBlockIndex = null,
+            sourceTextStart = 0,
+            normalizedPageFraction = 0f,
+        )
+    }
+    val safeIndex = pageIndex.coerceIn(0, contentPages.lastIndex)
+    val page = contentPages[safeIndex]
+    val fraction = if (contentPages.size <= 1) {
+        0f
+    } else {
+        safeIndex.toFloat() / (contentPages.size - 1).toFloat()
+    }
+    val firstTextBlock = page.blocks.firstNotNullOfOrNull { block ->
+        when (block) {
+            is NovelPageContentBlock.Plain ->
+                block.sourceBlockIndex.takeIf { it >= 0 }?.let { idx -> idx to (block.sourceTextStart ?: 0) }
+            is NovelPageContentBlock.Rich ->
+                block.sourceBlockIndex.takeIf { it >= 0 }?.let { idx -> idx to (block.sourceTextStart ?: 0) }
+            is NovelPageContentBlock.Image -> null
+        }
+    }
+    if (firstTextBlock != null) {
+        return NovelPageReaderAnchor(
+            sourceBlockIndex = firstTextBlock.first,
+            sourceTextStart = firstTextBlock.second.coerceAtLeast(0),
+            normalizedPageFraction = fraction,
+        )
+    }
+    val firstImage = page.blocks.filterIsInstance<NovelPageContentBlock.Image>().firstOrNull()
+    return NovelPageReaderAnchor(
+        sourceBlockIndex = null,
+        sourceTextStart = 0,
+        imageUrl = firstImage?.imageUrl,
+        normalizedPageFraction = fraction,
+    )
+}
+
+internal fun resolveAnchoredPageReaderPageIndex(
+    anchor: NovelPageReaderAnchor,
+    contentPages: List<NovelPageContentPage>,
+): Int {
+    if (contentPages.isEmpty()) return 0
+    val targetBlockIndex = anchor.sourceBlockIndex
+    if (targetBlockIndex != null) {
+        var exactBlockLastMatch: Int? = null
+        var firstLaterBlockMatch: Int? = null
+        contentPages.forEachIndexed { index, page ->
+            for (block in page.blocks) {
+                val (blockIndex, start, endExclusive) = when (block) {
+                    is NovelPageContentBlock.Plain -> Triple(
+                        block.sourceBlockIndex,
+                        block.sourceTextStart ?: 0,
+                        block.sourceTextEndExclusive ?: Int.MAX_VALUE,
+                    )
+                    is NovelPageContentBlock.Rich -> Triple(
+                        block.sourceBlockIndex,
+                        block.sourceTextStart ?: 0,
+                        block.sourceTextEndExclusive ?: Int.MAX_VALUE,
+                    )
+                    is NovelPageContentBlock.Image -> continue
+                }
+                if (blockIndex < 0) continue
+                if (blockIndex == targetBlockIndex) {
+                    exactBlockLastMatch = index
+                    if (anchor.sourceTextStart in start until endExclusive || start > anchor.sourceTextStart) {
+                        return index
+                    }
+                } else if (blockIndex > targetBlockIndex && firstLaterBlockMatch == null) {
+                    firstLaterBlockMatch = index
+                }
+            }
+        }
+        exactBlockLastMatch?.let { return it }
+        firstLaterBlockMatch?.let { return it }
+    }
+    val targetImageUrl = anchor.imageUrl
+    if (!targetImageUrl.isNullOrBlank()) {
+        val imagePageIndex = contentPages.indexOfFirst { page ->
+            page.blocks.any { block ->
+                block is NovelPageContentBlock.Image && block.imageUrl == targetImageUrl
+            }
+        }
+        if (imagePageIndex >= 0) return imagePageIndex
+    }
+    return (anchor.normalizedPageFraction.coerceIn(0f, 1f) * (contentPages.size - 1))
+        .roundToInt()
+        .coerceIn(0, contentPages.lastIndex)
+}
+
+/**
+ * Preserves the reader's existing fine-grained paragraph/offset anchor when pagination reflows
+ * (for instance Portrait -> Landscape), only synthesizing an anchor if none exists yet.
+ * Capturing the start of the new wider page would collapse a mid-page anchor back to page 0's
+ * first paragraph and rewind on rotating back.
+ */
+internal fun resolvePageReaderAnchorAfterReflow(
+    existingAnchor: NovelPageReaderAnchor?,
+    contentPages: List<NovelPageContentPage>,
+    targetPageIndex: Int,
+): NovelPageReaderAnchor {
+    return existingAnchor ?: capturePageReaderAnchor(contentPages, targetPageIndex)
+}
+
+/**
+ * Updates [existingAnchor] only once the reader moves outside the spread slot that currently
+ * contains [existingAnchor], preserving exact intra-page / intra-spread block offsets until the
+ * user turns a page.
+ */
+internal fun resolveNextPageReaderAnchor(
+    existingAnchor: NovelPageReaderAnchor?,
+    contentPages: List<NovelPageContentPage>,
+    settledPageIndex: Int,
+    spreadColumns: Int,
+): NovelPageReaderAnchor? {
+    if (contentPages.isEmpty()) return existingAnchor
+    val safeIndex = settledPageIndex.coerceIn(0, contentPages.lastIndex)
+    if (existingAnchor != null) {
+        val existingPageInCurrentLayout = resolveAnchoredPageReaderPageIndex(existingAnchor, contentPages)
+        val existingSlot = resolveSpreadSlotForPageIndex(existingPageInCurrentLayout, spreadColumns)
+        val currentSlot = resolveSpreadSlotForPageIndex(safeIndex, spreadColumns)
+        if (existingSlot == currentSlot) {
+            return existingAnchor
+        }
+    }
+    return capturePageReaderAnchor(contentPages, safeIndex)
+}
+
+internal data class NovelNativeScrollViewportAnchor(
+    val firstVisibleItemIndex: Int,
+    val withinItemFraction: Float,
+    val viewportWidthPx: Int,
+)
+
+internal fun resolveNativeScrollItemFraction(
+    scrollOffsetPx: Int,
+    itemHeightPx: Int,
+): Float {
+    if (scrollOffsetPx <= 0 || itemHeightPx <= 0) return 0f
+    return (scrollOffsetPx.toFloat() / itemHeightPx.toFloat()).coerceIn(0f, 0.999f)
+}
+
+internal fun resolveAnchoredNativeScrollOffsetPx(
+    withinItemFraction: Float,
+    newItemHeightPx: Int,
+): Int {
+    if (withinItemFraction <= 0f || newItemHeightPx <= 0) return 0
+    return (withinItemFraction.coerceIn(0f, 0.999f) * newItemHeightPx.toFloat())
+        .roundToInt()
+        .coerceIn(0, (newItemHeightPx - 1).coerceAtLeast(0))
 }

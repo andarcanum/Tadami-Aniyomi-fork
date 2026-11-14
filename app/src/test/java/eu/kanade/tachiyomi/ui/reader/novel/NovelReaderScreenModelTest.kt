@@ -1993,6 +1993,48 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `transient single item report before initial restore does not mark chapter read or reset offset`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 6L,
+                novelId = 1L,
+                name = "Chapter 2",
+                url = "https://example.org/ch2",
+                lastPageRead = 25L,
+                read = false,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.updateReadingProgress(
+                currentIndex = 0,
+                totalItems = 1,
+                persistedProgress = 0L,
+                isInitialPositionRestored = false,
+            )
+            yield()
+
+            chapterRepo.lastUpdate shouldBe null
+        }
+    }
+
+    @Test
     fun `percent based tracking does not mark read too early`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")

@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.novel
 
+import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -7,12 +8,19 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -33,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import kotlinx.coroutines.launch
@@ -190,12 +199,24 @@ internal fun NovelReaderVerticalSeekbar(
                 }
             }
         }
+        val configuration = LocalConfiguration.current
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val seekbarHeight = if (isLandscape) {
+            (configuration.screenHeightDp * 0.48f).coerceIn(140f, 270f).dp
+        } else {
+            270.dp
+        }
         Column(
             modifier = modifier
+                .windowInsetsPadding(
+                    WindowInsets.displayCutout
+                        .union(WindowInsets.navigationBars)
+                        .only(WindowInsetsSides.Horizontal),
+                )
                 .padding(end = MaterialTheme.padding.small)
                 .size(
                     width = if (usePageReader && !isBookMode) 40.dp else 30.dp,
-                    height = 270.dp,
+                    height = seekbarHeight,
                 ),
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
         ) {

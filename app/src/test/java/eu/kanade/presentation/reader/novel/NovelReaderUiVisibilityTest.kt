@@ -5674,6 +5674,20 @@ class NovelReaderUiVisibilityTest {
     fun `webview bionic script is empty when disabled`() {
         assertTrue(buildWebReaderBionicJavascript(enabled = false).isBlank())
     }
+
+    @Test
+    fun `web atmosphere css paints backdrop on html and keeps body transparent`() {
+        val css = buildWebReaderAtmosphereCss(
+            appearanceMode = NovelReaderAppearanceMode.BACKGROUND,
+            backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
+            oledEdgeGradient = false,
+            backgroundImageUrl = "https://example.org/bg.jpg",
+        )
+
+        assertTrue(css.contains("html {"))
+        assertTrue(css.contains("background-size: cover !important;"))
+        assertTrue(css.contains("body {\n  background: transparent !important;\n}"))
+    }
 }
 
 private fun assertPlainPageSliceCoverage(

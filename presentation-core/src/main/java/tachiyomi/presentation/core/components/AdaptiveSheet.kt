@@ -186,7 +186,9 @@ private fun PhoneAdaptiveSheet(
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val configuration = LocalConfiguration.current
+    val currentConfigScreenHeightDp = configuration.screenHeightDp
+    val screenHeight = currentConfigScreenHeightDp.dp
     val maxHeight = screenHeight * 0.95f
     var scrimTargetAlpha by remember { mutableFloatStateOf(0f) }
     var sheetShown by remember { mutableStateOf(false) }
@@ -194,6 +196,7 @@ private fun PhoneAdaptiveSheet(
     var dismissRequestedByDrag by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
     var sheetHeight by remember { mutableStateOf(-1) }
+    var lastSheetConfigScreenHeightDp by remember { mutableStateOf(currentConfigScreenHeightDp) }
     // 1 when fully open, 0 when fully dragged off-screen. Start at 0 (closed) so callers
     // do not flash full-screen blur/dim before the open animation begins.
     var sheetReveal by remember { mutableFloatStateOf(0f) }
@@ -298,11 +301,20 @@ private fun PhoneAdaptiveSheet(
                 )
                 .onSizeChanged {
                     val newHeight = it.height
-                    if (newHeight <= 0 || newHeight == sheetHeight) return@onSizeChanged
-                    // Re-anchoring mid-drag or on content-height flicker resets the gesture
-                    // ("have to yank several times"). Freeze while dragging; never shrink once open.
+                    if (newHeight <= 0) return@onSizeChanged
                     if (isDragging) return@onSizeChanged
-                    if (sheetShown && sheetHeight > 0 && newHeight < sheetHeight) return@onSizeChanged
+                    val viewportHeightShrank = currentConfigScreenHeightDp < lastSheetConfigScreenHeightDp
+                    if (newHeight == sheetHeight) {
+                        lastSheetConfigScreenHeightDp = currentConfigScreenHeightDp
+                        return@onSizeChanged
+                    }
+                    // Re-anchoring mid-drag or on content-height flicker resets the gesture
+                    // ("have to yank several times"). Freeze while dragging; never shrink within
+                    // the same viewport height, but allow shrinking when rotation reduces height.
+                    if (sheetShown && sheetHeight > 0 && newHeight < sheetHeight && !viewportHeightShrank) {
+                        return@onSizeChanged
+                    }
+                    lastSheetConfigScreenHeightDp = currentConfigScreenHeightDp
                     sheetHeight = newHeight
                     anchoredDraggableState.updateAnchors(
                         DraggableAnchors {

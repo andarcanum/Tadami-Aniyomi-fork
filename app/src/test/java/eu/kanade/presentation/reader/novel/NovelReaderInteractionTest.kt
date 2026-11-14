@@ -1,5 +1,7 @@
 package eu.kanade.presentation.reader.novel
 
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -249,5 +251,316 @@ class NovelReaderInteractionTest {
             pageFitSafetyPx = 8,
             bookBottomInsetPx = 0,
         ) shouldBe 8
+    }
+
+    @Test
+    fun `progress persistence never overwrites saved offset at index zero before restore even when read`() {
+        resolveReaderProgressToPersist(
+            shouldPersistRead = false,
+            currentIndex = 0,
+            resolvedPersistedProgress = 0L,
+            previousProgress = 42L,
+            isInitialPositionRestored = false,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+        ) shouldBe null
+
+        resolveReaderProgressToPersist(
+            shouldPersistRead = true,
+            currentIndex = 0,
+            resolvedPersistedProgress = 0L,
+            previousProgress = 42L,
+            isInitialPositionRestored = false,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+        ) shouldBe null
+
+        resolveReaderProgressToPersist(
+            shouldPersistRead = false,
+            currentIndex = 0,
+            resolvedPersistedProgress = 0L,
+            previousProgress = 42L,
+            isInitialPositionRestored = true,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+        ) shouldBe 0L
+
+        val nativeStart = eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress(index = 0, offsetPx = 0)
+        val nativeScrolledInZero = eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress(
+            index = 0,
+            offsetPx = 420,
+        )
+        resolveReaderProgressToPersist(
+            shouldPersistRead = false,
+            currentIndex = 0,
+            resolvedPersistedProgress = nativeScrolledInZero,
+            previousProgress = nativeStart,
+            isInitialPositionRestored = false,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+        ) shouldBe nativeScrolledInZero
+
+        resolveReaderProgressToPersist(
+            shouldPersistRead = false,
+            currentIndex = 0,
+            resolvedPersistedProgress = nativeStart,
+            previousProgress = nativeScrolledInZero,
+            isInitialPositionRestored = false,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+        ) shouldBe null
+    }
+
+    @Test
+    fun `page reader anchor restores exact block offset and image across reflow`() {
+        val portraitPages = listOf(
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(
+                        sourceBlockIndex = 0,
+                        text = "First page ",
+                        sourceTextStart = 0,
+                        sourceTextEndExclusive = 11,
+                        spacingBeforePx = 0,
+                        firstLineIndentEm = null,
+                    ),
+                ),
+                pageIndex = 0,
+            ),
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(
+                        sourceBlockIndex = 0,
+                        text = "second slice",
+                        sourceTextStart = 11,
+                        sourceTextEndExclusive = 23,
+                        spacingBeforePx = 0,
+                        firstLineIndentEm = null,
+                    ),
+                ),
+                pageIndex = 1,
+            ),
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Image(
+                        imageUrl = "https://example.org/illustration.jpg",
+                        contentDescription = null,
+                    ),
+                ),
+                pageIndex = 2,
+            ),
+        )
+
+        val textAnchor = capturePageReaderAnchor(portraitPages, pageIndex = 1)
+        val imageAnchor = capturePageReaderAnchor(portraitPages, pageIndex = 2)
+
+        val landscapePages = listOf(
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(
+                        sourceBlockIndex = 0,
+                        text = "First page second slice",
+                        sourceTextStart = 0,
+                        sourceTextEndExclusive = 23,
+                        spacingBeforePx = 0,
+                        firstLineIndentEm = null,
+                    ),
+                ),
+                pageIndex = 0,
+            ),
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Image(
+                        imageUrl = "https://example.org/illustration.jpg",
+                        contentDescription = null,
+                    ),
+                ),
+                pageIndex = 1,
+            ),
+        )
+
+        resolveAnchoredPageReaderPageIndex(textAnchor, landscapePages) shouldBe 0
+        resolveAnchoredPageReaderPageIndex(imageAnchor, landscapePages) shouldBe 1
+    }
+
+    @Test
+    fun `native scroll viewport anchor scales item scroll offset across width changes`() {
+        val fraction = resolveNativeScrollItemFraction(scrollOffsetPx = 150, itemHeightPx = 300)
+        fraction shouldBe 0.5f
+
+        resolveAnchoredNativeScrollOffsetPx(withinItemFraction = fraction, newItemHeightPx = 160) shouldBe 80
+        resolveNativeScrollItemFraction(scrollOffsetPx = 50, itemHeightPx = 0) shouldBe 0f
+        resolveAnchoredNativeScrollOffsetPx(withinItemFraction = 0.5f, newItemHeightPx = 0) shouldBe 0
+    }
+
+    @Test
+    fun `horizontal safe insets take max of cutout and side nav bar in dp`() {
+        val insets = resolveNovelHorizontalSafeInsetsDp(
+            cutoutLeftPx = 90,
+            cutoutRightPx = 0,
+            navBarLeftPx = 0,
+            navBarRightPx = 144,
+            densityScale = 3f,
+        )
+
+        insets shouldBe NovelHorizontalSafeInsetsDp(left = 30.dp, right = 48.dp)
+    }
+
+    @Test
+    fun `reflow anchor preservation keeps exact block offset across portrait to landscape round trip`() {
+        val portraitPages = listOf(
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(
+                        sourceBlockIndex = 0,
+                        text = "Opening",
+                        sourceTextStart = 0,
+                        sourceTextEndExclusive = 7,
+                        spacingBeforePx = 0,
+                        firstLineIndentEm = null,
+                    ),
+                ),
+                pageIndex = 0,
+            ),
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(
+                        sourceBlockIndex = 1,
+                        text = "Middle",
+                        sourceTextStart = 0,
+                        sourceTextEndExclusive = 6,
+                        spacingBeforePx = 0,
+                        firstLineIndentEm = null,
+                    ),
+                ),
+                pageIndex = 1,
+            ),
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(
+                        sourceBlockIndex = 2,
+                        text = "Target paragraph",
+                        sourceTextStart = 0,
+                        sourceTextEndExclusive = 16,
+                        spacingBeforePx = 0,
+                        firstLineIndentEm = null,
+                    ),
+                ),
+                pageIndex = 2,
+            ),
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(
+                        sourceBlockIndex = 3,
+                        text = "Later paragraph",
+                        sourceTextStart = 0,
+                        sourceTextEndExclusive = 15,
+                        spacingBeforePx = 0,
+                        firstLineIndentEm = null,
+                    ),
+                ),
+                pageIndex = 3,
+            ),
+        )
+        val landscapePages = listOf(
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(0, "Opening", 0, 7, 0, null),
+                    NovelPageContentBlock.Plain(1, "Middle", 0, 6, 0, null),
+                    NovelPageContentBlock.Plain(2, "Target paragraph", 0, 16, 0, null),
+                ),
+                pageIndex = 0,
+            ),
+            NovelPageContentPage(
+                blocks = listOf(
+                    NovelPageContentBlock.Plain(3, "Later paragraph", 0, 15, 0, null),
+                ),
+                pageIndex = 1,
+            ),
+        )
+
+        var activeAnchor: NovelPageReaderAnchor? = capturePageReaderAnchor(portraitPages, pageIndex = 2)
+        val landscapeTarget = resolveAnchoredPageReaderPageIndex(activeAnchor!!, landscapePages)
+        landscapeTarget shouldBe 0
+
+        // Reflowing into wider Landscape page 0 (which starts at block 0) must keep block 2's anchor.
+        activeAnchor = resolvePageReaderAnchorAfterReflow(activeAnchor, landscapePages, landscapeTarget)
+        activeAnchor = resolveNextPageReaderAnchor(
+            existingAnchor = activeAnchor,
+            contentPages = landscapePages,
+            settledPageIndex = 0,
+            spreadColumns = 2,
+        )
+
+        // Rotating back to Portrait resolves back to Portrait page 2 instead of rewinding to page 0.
+        resolveAnchoredPageReaderPageIndex(activeAnchor!!, portraitPages) shouldBe 2
+
+        // Turning a spread/page forward in Landscape updates the anchor to the new spread's block.
+        activeAnchor = resolveNextPageReaderAnchor(
+            existingAnchor = activeAnchor,
+            contentPages = landscapePages,
+            settledPageIndex = 1,
+            spreadColumns = 1,
+        )
+        resolveAnchoredPageReaderPageIndex(activeAnchor!!, portraitPages) shouldBe 3
+    }
+
+    @Test
+    fun `effective viewport size swaps stale measured bounds immediately on rotation`() {
+        // Before first layout, fall back to configuration bounds.
+        resolveEffectivePageReaderViewportSize(
+            measuredWidthPx = 0,
+            measuredHeightPx = 0,
+            configWidthPx = 1260,
+            configHeightPx = 2619,
+        ) shouldBe IntSize(1260, 2619)
+
+        // Same orientation keeps the exact measured full-screen viewport (with system bars).
+        resolveEffectivePageReaderViewportSize(
+            measuredWidthPx = 1260,
+            measuredHeightPx = 2800,
+            configWidthPx = 1260,
+            configHeightPx = 2619,
+        ) shouldBe IntSize(1260, 2800)
+
+        // Rotation configuration arrives before `.onSizeChanged`: immediately swaps to landscape.
+        resolveEffectivePageReaderViewportSize(
+            measuredWidthPx = 1260,
+            measuredHeightPx = 2800,
+            configWidthPx = 2619,
+            configHeightPx = 1260,
+        ) shouldBe IntSize(2800, 1260)
+    }
+
+    @Test
+    fun `page turn synced slot derives directly from synced content page index`() {
+        resolvePageTurnRendererSyncedSlot(
+            syncedContentPageIndex = 5,
+            contentPageCount = 12,
+            spreadColumns = 1,
+        ) shouldBe 5
+
+        resolvePageTurnRendererSyncedSlot(
+            syncedContentPageIndex = 5,
+            contentPageCount = 12,
+            spreadColumns = 2,
+        ) shouldBe 2
+
+        resolvePageTurnRendererSyncedSlot(
+            syncedContentPageIndex = null,
+            contentPageCount = 12,
+            spreadColumns = 2,
+        ) shouldBe 0
+    }
+
+    @Test
+    fun `compose pager boundary pages stay disabled for instant style and seamless mode`() {
+        resolveComposePagerBoundaryPagesEnabled(
+            seamlessChapterTransitionEnabled = false,
+            activePageTransitionStyle = NovelPageTransitionStyle.SLIDE,
+        ) shouldBe true
+        resolveComposePagerBoundaryPagesEnabled(
+            seamlessChapterTransitionEnabled = false,
+            activePageTransitionStyle = NovelPageTransitionStyle.INSTANT,
+        ) shouldBe false
+        resolveComposePagerBoundaryPagesEnabled(
+            seamlessChapterTransitionEnabled = true,
+            activePageTransitionStyle = NovelPageTransitionStyle.SLIDE,
+        ) shouldBe false
     }
 }

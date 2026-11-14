@@ -1134,7 +1134,7 @@ internal fun NovelPageReaderPageContent(
     readerSettings: NovelReaderSettings,
     textColor: Color,
     textBackground: Color,
-    pageSurfaceColor: Color? = null,
+    pageSurfaceColor: Color? = Color.Transparent,
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
     chapterTitleTextColor: Color,
@@ -1190,7 +1190,7 @@ internal fun NovelPageReaderPageContent(
         modifier = modifier.fillMaxSize().then(pageTapModifier),
         contentAlignment = Alignment.TopStart,
     ) {
-        if (pageSurfaceColor != Color.Transparent) {
+        if (pageSurfaceColor != null && pageSurfaceColor != Color.Transparent) {
             NovelPageSurfaceBackground(
                 backgroundTexture = backgroundTexture,
                 nativeTextureStrengthPercent = nativeTextureStrengthPercent,

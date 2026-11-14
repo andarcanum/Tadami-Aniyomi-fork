@@ -1784,18 +1784,17 @@ class NovelReaderScreenModel(
         val chapter = currentChapter ?: return
         if (totalItems <= 0 || currentIndex < 0) return
         val resolvedPersistedProgress = persistedProgress ?: currentIndex.toLong()
-        if (!hasProgressChanged) {
-            val isSameInitialIndex = currentIndex == initialProgressIndex
-            val isSamePersistedProgress = lastSavedProgress == resolvedPersistedProgress
-            if (totalItems > 1 && isSameInitialIndex && isSamePersistedProgress) return
-            hasProgressChanged = true
-        }
+        val isTransientSingleItemReport = totalItems == 1 &&
+            !isInitialPositionRestored &&
+            (initialProgressIndex > 0 || (lastSavedProgress ?: 0L) != 0L)
         val readThreshold = when {
             totalItems == 100 -> 0.99f
             else -> 0.95f
         }
-        val reachedReadThreshold = totalItems == 1 ||
-            ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= readThreshold
+        val reachedReadThreshold = !isTransientSingleItemReport && (
+            totalItems == 1 ||
+                ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= readThreshold
+            )
         val shouldPersistRead = (lastSavedRead == true) || chapter.read || reachedReadThreshold
         val newProgress = resolveReaderProgressToPersist(
             shouldPersistRead = shouldPersistRead,
@@ -1804,6 +1803,12 @@ class NovelReaderScreenModel(
             previousProgress = lastSavedProgress,
             isInitialPositionRestored = isInitialPositionRestored,
         ) ?: return
+        if (!hasProgressChanged) {
+            val isSameInitialIndex = currentIndex == initialProgressIndex
+            val isSamePersistedProgress = lastSavedProgress == resolvedPersistedProgress
+            if (totalItems > 1 && isSameInitialIndex && isSamePersistedProgress) return
+            hasProgressChanged = true
+        }
         maybePrefetchNextChapterOnProgress(
             currentIndex = currentIndex,
             totalItems = totalItems,

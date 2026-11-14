@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -247,16 +245,15 @@ fun ToolsTab(
                 checked = settings.novelDictionaryEnabled,
                 onClick = { preferences.novelDictionaryEnabled().set(!settings.novelDictionaryEnabled) },
             )
-            var dictionaryQuickAccess by remember {
-                mutableStateOf(preferences.novelDictionaryQuickAccess().get())
-            }
+            val dictionaryQuickAccessPref = preferences.novelDictionaryQuickAccess()
+            val dictionaryQuickAccess by dictionaryQuickAccessPref.changes()
+                .collectAsState(initial = dictionaryQuickAccessPref.get())
             AuroraToggleRow(
                 label = stringResource(AYMR.strings.novel_reader_dictionary_quick_access),
                 subtitle = stringResource(AYMR.strings.novel_reader_dictionary_quick_access_summary),
                 checked = dictionaryQuickAccess,
                 onClick = {
-                    dictionaryQuickAccess = !dictionaryQuickAccess
-                    preferences.novelDictionaryQuickAccess().set(dictionaryQuickAccess)
+                    dictionaryQuickAccessPref.set(!dictionaryQuickAccess)
                 },
             )
             val dictionarySourceEntries = persistentMapOf(
@@ -265,7 +262,9 @@ fun ToolsTab(
                 "OFFLINE_FIRST" to stringResource(AYMR.strings.novel_reader_dictionary_source_offline_first),
                 "ONLINE_FIRST" to stringResource(AYMR.strings.novel_reader_dictionary_source_online_first),
             )
-            var dictionarySourceMode by remember { mutableStateOf(preferences.novelDictionarySource().get()) }
+            val dictionarySourcePref = preferences.novelDictionarySource()
+            val dictionarySourceMode by dictionarySourcePref.changes()
+                .collectAsState(initial = dictionarySourcePref.get())
             ListPreferenceWidget(
                 value = dictionarySourceMode,
                 title = stringResource(AYMR.strings.novel_reader_dictionary_source_mode),
@@ -273,8 +272,7 @@ fun ToolsTab(
                 icon = null,
                 entries = dictionarySourceEntries,
                 onValueChange = {
-                    dictionarySourceMode = it
-                    preferences.novelDictionarySource().set(it)
+                    dictionarySourcePref.set(it)
                 },
             )
             ListPreferenceWidget(

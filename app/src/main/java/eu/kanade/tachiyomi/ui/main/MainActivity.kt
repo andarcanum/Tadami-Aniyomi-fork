@@ -391,7 +391,12 @@ class MainActivity : BaseActivity() {
                             NovelReaderBackdropSession.update(null)
                         }
                     }
-                    val scaffoldInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
+                    val isNovelReaderActive = navigator.lastItem is NovelReaderScreen
+                    val scaffoldInsets = if (isNovelReaderActive) {
+                        WindowInsets(0, 0, 0, 0)
+                    } else {
+                        WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
+                    }
                     Scaffold(
                         containerColor = readerBackdropColor ?: MaterialTheme.colorScheme.background,
                         topBar = {
@@ -447,9 +452,11 @@ class MainActivity : BaseActivity() {
                                 )
                             }
                             // Draw navigation bar scrim when needed. Reels software
-                            // fullscreen owns the window; its generic scrim must not cover
-                            // the video (audit U07).
-                            if (remember { isNavigationBarNeedsScrim() } && !ReelsFullscreen.isActive) {
+                            // fullscreen and NovelReaderScreen own the window; generic scrims must
+                            // not cover the video (audit U07) or reader bottom bar/pages.
+                            if (remember { isNavigationBarNeedsScrim() } && !ReelsFullscreen.isActive &&
+                                !isNovelReaderActive
+                            ) {
                                 Spacer(
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)

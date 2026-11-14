@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -70,7 +69,6 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun SpreadPageTurnPageRenderer(
-    pagerState: PagerState,
     chapterId: Long,
     contentPages: List<NovelPageContentPage>,
     transitionStyle: NovelPageTransitionStyle,
@@ -106,6 +104,8 @@ internal fun SpreadPageTurnPageRenderer(
     nextChapterLabel: String,
     boundaryChapterHint: String,
     showBoundaryChapterPages: Boolean = true,
+    suppressBoundaryChapterNavigation: Boolean = false,
+    syncedContentPageIndex: Int? = null,
     onToggleUi: () -> Unit,
     requestedPage: Int,
     onRequestedPageConsumed: () -> Unit,
@@ -138,10 +138,14 @@ internal fun SpreadPageTurnPageRenderer(
             hasNextChapter = hasNextChapter,
         )
     }
-    val pagerCurrentSlot = pagerState.currentPage.coerceIn(0, spreadSlotCount - 1)
-    val initialVirtualSlot = remember(pagerCurrentSlot, hasPreviousChapter) {
+    val syncedSlot = resolvePageTurnRendererSyncedSlot(
+        syncedContentPageIndex = syncedContentPageIndex,
+        contentPageCount = safeContentPages.size,
+        spreadColumns = 2,
+    )
+    val initialVirtualSlot = remember(chapterId) {
         resolvePageTurnRendererVirtualPageIndex(
-            actualPageIndex = pagerCurrentSlot,
+            actualPageIndex = syncedSlot,
             hasPreviousChapter = hasPreviousChapter,
         )
     }
@@ -200,6 +204,7 @@ internal fun SpreadPageTurnPageRenderer(
     )
     val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapterNavigation)
     val latestHasNextChapter by rememberUpdatedState(hasNextChapterNavigation)
+    val latestSuppressBoundaryNavigation by rememberUpdatedState(suppressBoundaryChapterNavigation)
 
     // Advances both surfaces together: the one facing the turn direction plays the real fold, the
     // other jumps straight to its new page with no visible animation of its own (snap()), the same
@@ -339,11 +344,19 @@ internal fun SpreadPageTurnPageRenderer(
         rightPageCurlConfig.tapInteraction = tapInteraction
     }
 
-    // Chapter/content changes reset both surfaces to the same slot, exactly like the single-page
-    // renderer's equivalent effect.
-    LaunchedEffect(chapterId, pagerCurrentSlot, spreadSlotCount, hasPreviousChapter) {
+    // Chapter/content changes reset both surfaces to the synced slot without consulting
+    // pagerState (HorizontalPager is unmounted in this route, so pagerState stays stale at 0).
+    LaunchedEffect(chapterId, syncedSlot, spreadSlotCount, hasPreviousChapter) {
+        if (
+            latestSuppressBoundaryNavigation ||
+            latestRequestedPage >= 0 ||
+            leftCurlState.progress > 0f ||
+            rightCurlState.progress > 0f
+        ) {
+            return@LaunchedEffect
+        }
         val targetVirtualSlot = resolvePageTurnRendererVirtualPageIndex(
-            actualPageIndex = pagerCurrentSlot,
+            actualPageIndex = syncedSlot,
             hasPreviousChapter = hasPreviousChapter,
         )
         val invertedTarget = (virtualSlotCount - 1 - targetVirtualSlot).coerceAtLeast(0)
@@ -361,6 +374,7 @@ internal fun SpreadPageTurnPageRenderer(
         snapshotFlow { leftCurlState.current.coerceIn(0, virtualSlotCount - 1) to leftCurlState.progress }
             .distinctUntilChanged()
             .collectLatest { (targetVirtualSlot, progress) ->
+                if (latestSuppressBoundaryNavigation || latestRequestedPage >= 0) return@collectLatest
                 val realTarget = (virtualSlotCount - 1 - targetVirtualSlot).coerceAtLeast(0)
                 when (
                     resolvePageTurnRendererSettledBoundaryChapterTarget(
@@ -396,6 +410,7 @@ internal fun SpreadPageTurnPageRenderer(
         snapshotFlow { rightCurlState.current.coerceIn(0, virtualSlotCount - 1) to rightCurlState.progress }
             .distinctUntilChanged()
             .collectLatest { (target, progress) ->
+                if (latestSuppressBoundaryNavigation || latestRequestedPage >= 0) return@collectLatest
                 val invertedTarget = (virtualSlotCount - 1 - target).coerceAtLeast(0)
                 if (progress == 0f && leftCurlState.current != invertedTarget) {
                     leftCurlState.snapTo(invertedTarget)
@@ -406,6 +421,7 @@ internal fun SpreadPageTurnPageRenderer(
         snapshotFlow { leftCurlState.current.coerceIn(0, virtualSlotCount - 1) to leftCurlState.progress }
             .distinctUntilChanged()
             .collectLatest { (target, progress) ->
+                if (latestSuppressBoundaryNavigation || latestRequestedPage >= 0) return@collectLatest
                 val realTarget = (virtualSlotCount - 1 - target).coerceAtLeast(0)
                 if (progress == 0f && rightCurlState.current != realTarget) {
                     rightCurlState.snapTo(realTarget)
@@ -413,10 +429,17 @@ internal fun SpreadPageTurnPageRenderer(
             }
     }
 
-    LaunchedEffect(leftCurlState, pagerState, spreadSlotCount, hasPreviousChapter, hasNextChapter) {
-        snapshotFlow { leftCurlState.current.coerceIn(0, virtualSlotCount - 1) }
+    LaunchedEffect(leftCurlState, spreadSlotCount, hasPreviousChapter, hasNextChapter) {
+        snapshotFlow {
+            Triple(
+                leftCurlState.current.coerceIn(0, virtualSlotCount - 1),
+                latestSuppressBoundaryNavigation,
+                latestRequestedPage,
+            )
+        }
             .distinctUntilChanged()
-            .collectLatest { targetVirtualSlot ->
+            .collectLatest { (targetVirtualSlot, suppressNavigation, pendingRequestedPage) ->
+                if (suppressNavigation || pendingRequestedPage >= 0) return@collectLatest
                 val realTarget = (virtualSlotCount - 1 - targetVirtualSlot).coerceAtLeast(0)
                 val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
                     currentPage = realTarget,
@@ -431,9 +454,6 @@ internal fun SpreadPageTurnPageRenderer(
                         hasPreviousChapter = hasPreviousChapter,
                     )
                     latestCurrentPageChange(resolveSpreadSlotFirstPageIndex(targetSpreadSlot, 2))
-                    if (targetSpreadSlot != pagerState.currentPage) {
-                        pagerState.scrollToPage(targetSpreadSlot)
-                    }
                 }
             }
     }
@@ -452,12 +472,13 @@ internal fun SpreadPageTurnPageRenderer(
         val invertedTarget = (virtualSlotCount - 1 - clampedTarget).coerceAtLeast(0)
         if (leftCurlState.current != invertedTarget) leftCurlState.snapTo(invertedTarget)
         if (rightCurlState.current != clampedTarget) rightCurlState.snapTo(clampedTarget)
+        latestCurrentPageChange(resolveSpreadSlotFirstPageIndex(targetSpreadSlot, 2))
         latestRequestedPageConsumed()
     }
 
     LaunchedEffect(latestChapterNavigationRequest, transitionStyle) {
         val request = latestChapterNavigationRequest ?: return@LaunchedEffect
-        if (transitionStyle != NovelPageTransitionStyle.CURL) {
+        if (resolvePageTransitionEngine(transitionStyle) != NovelPageTransitionEngine.PAGE_TURN_RENDERER) {
             latestChapterNavigationRequestConsumed()
             return@LaunchedEffect
         }
@@ -469,6 +490,16 @@ internal fun SpreadPageTurnPageRenderer(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        NovelAtmosphereBackground(
+            backgroundColor = textBackground,
+            backgroundTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture,
+            nativeTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent,
+            oledEdgeGradient = activeOledEdgeGradient,
+            isDarkTheme = isDarkTheme,
+            pageEdgeShadow = pageEdgeShadow,
+            pageEdgeShadowAlpha = pageEdgeShadowAlpha,
+            backgroundImageModel = backgroundImageModel,
+        )
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -513,7 +544,7 @@ internal fun SpreadPageTurnPageRenderer(
                 textTypeface = textTypeface,
                 chapterTitleTypeface = chapterTitleTypeface,
                 contentPadding = contentPadding,
-                statusBarTopPadding = statusBarTopPadding,
+                statusBarTopPadding = 0.dp,
                 ttsHighlightState = ttsHighlightState,
                 ttsHighlightColor = ttsHighlightColor,
                 selectionSessionIdProvider = selectionSessionIdProvider,
@@ -559,7 +590,7 @@ internal fun SpreadPageTurnPageRenderer(
                 textTypeface = textTypeface,
                 chapterTitleTypeface = chapterTitleTypeface,
                 contentPadding = contentPadding,
-                statusBarTopPadding = statusBarTopPadding,
+                statusBarTopPadding = 0.dp,
                 ttsHighlightState = ttsHighlightState,
                 ttsHighlightColor = ttsHighlightColor,
                 selectionSessionIdProvider = selectionSessionIdProvider,
@@ -756,7 +787,8 @@ private fun SpreadColumnCurl(
         }
         val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
         val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
-        val pageSurfaceColor = if (isBackgroundMode) null else rendererConfig.backPageColor
+        val pageSurfaceColor = Color.Transparent
+        val spreadHalf = if (columnOffset == 0) NovelSpreadBackgroundHalf.LEFT else NovelSpreadBackgroundHalf.RIGHT
         val contentModifier = if (mirrored) {
             Modifier.fillMaxSize().graphicsLayer(scaleX = -1f)
         } else {
@@ -774,6 +806,7 @@ private fun SpreadColumnCurl(
                 pageEdgeShadow = pageEdgeShadow,
                 pageEdgeShadowAlpha = pageEdgeShadowAlpha,
                 backgroundImageModel = backgroundImageModel,
+                spreadHalf = spreadHalf,
             )
             if (boundaryPreview != null) {
                 NovelPageBoundaryPreviewContent(
