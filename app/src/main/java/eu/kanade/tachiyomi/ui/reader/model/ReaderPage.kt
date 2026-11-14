@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.model
 
+import android.graphics.Rect
 import eu.kanade.tachiyomi.source.model.Page
 import tachiyomi.core.common.util.system.ImageUtil
 import java.io.InputStream
@@ -27,4 +28,15 @@ open class ReaderPage(
      * their holders keep the viewport-sized placeholder.
      */
     var isAnimatedImage: Boolean = false
+
+    /**
+     * Cached horizontal smart-fit crop bounds keyed by the active [cropBorders] setting so
+     * rebinds do not re-open the decoder repeatedly.
+     */
+    var smartFitBounds: Pair<Boolean, Rect>? = null
+
+    /**
+     * Whether the decoded image requires HDR window color mode.
+     */
+    var isHdr: Boolean = false
 }

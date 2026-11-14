@@ -27,6 +27,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.resolveWebtoonRestoreOffsetPx
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
 import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.WebtoonAutoScrollManager
@@ -38,6 +39,8 @@ import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import java.util.Collections
+import java.util.WeakHashMap
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -87,6 +90,8 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
     private var currentPage: Any? = null
     private var lastCompletionPage: ReaderPage? = null
     private var boundarySelectionRetry: OneShotPreDrawListener? = null
+    private val activePageFrames = Collections.newSetFromMap(WeakHashMap<ReaderPageImageView, Boolean>())
+    private var hasHdrPages = false
 
     /**
      * Until this uptime timestamp a programmatic chapter switch is still settling: relayouts caused
@@ -382,7 +387,38 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         // bound holders of a swapped-out viewer keep collecting page status flows (duplicate
         // decodes) and hold their frames/bitmaps for the rest of the activity's life.
         recycler.adapter = null
+        activePageFrames.clear()
+        activity.setWindowHdrEnabled(false)
         scope.cancel()
+    }
+
+    internal fun registerPageFrame(frame: ReaderPageImageView) {
+        activePageFrames.add(frame)
+    }
+
+    internal fun updateWindowHdrState(isPageHdr: Boolean = false) {
+        if (isPageHdr) {
+            hasHdrPages = true
+        }
+        if (!hasHdrPages) return
+        val firstVisible = layoutManager.findFirstVisibleItemPosition()
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
+        var anyVisibleHdr = false
+        if (firstVisible != RecyclerView.NO_POSITION && lastVisible != RecyclerView.NO_POSITION) {
+            for (pos in firstVisible..lastVisible) {
+                val child = layoutManager.findViewByPosition(pos) ?: continue
+                val holder = recycler.getChildViewHolder(child) as? WebtoonPageHolder
+                if (holder?.isHdr == true) {
+                    anyVisibleHdr = true
+                    break
+                }
+            }
+        }
+        activity.setWindowHdrEnabled(anyVisibleHdr)
+    }
+
+    override fun trimMemory(level: Int) {
+        activePageFrames.toList().forEach { it.trimMemory(level) }
     }
 
     /**
@@ -775,6 +811,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
     }
 
     fun onScrolled(pos: Int? = null) {
+        updateWindowHdrState()
         val position = pos ?: layoutManager.findLastEndVisibleItemPosition()
         val item = adapter.items.getOrNull(position)
         val allowPreload = checkAllowPreload(item as? ReaderPage)

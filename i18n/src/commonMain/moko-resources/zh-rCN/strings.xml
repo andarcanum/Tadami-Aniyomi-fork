@@ -792,7 +792,6 @@
     <string name="pref_webtoon_disable_zoom_out">禁用缩小</string>
     <string name="action_add_anyway">依然添加</string>
     <string name="action_replace_repo">替换</string>
-    <string name="pref_display_profile">自定义校色文件</string>
     <string name="action_replace_repo_message">%1$s 仓库已经存在和 %2$s 仓库相同的签名密钥指纹。
 \n若继续，%2$s 将被替换，否则请联系你的仓库维护员。</string>
     <string name="action_replace_repo_title">签名密钥指纹已存在</string>
@@ -835,11 +834,9 @@
     <string name="pref_hardware_bitmap_threshold_default">默认 (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">如果阅读器加载空白图像，请逐步降低阈值。\n已选择： %s</string>
     <string name="pref_hardware_bitmap_threshold">自定义硬件位图阈值</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">会影响性能。仅当降低位图阈值无法解决空白图像问题时才启用</string>
     <string name="pref_incognito_mode_extension_summary">暂停记录插件的阅读历史</string>
     <string name="label_auto">自动</string>
     <string name="theme_monochrome">单色</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">在长条阅读模式中使用旧版解码器</string>
     <string name="pref_mark_duplicate_read_chapter_read">将重复的已读章节标记为已读</string>
     <string name="author">作者</string>
     <string name="action_toggle_private_off">公开记录</string>

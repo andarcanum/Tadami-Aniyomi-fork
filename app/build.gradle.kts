@@ -216,6 +216,7 @@ dependencies {
     implementation(projects.i18nAniyomi)
     implementation(projects.core.archive)
     implementation(projects.core.common)
+    implementation(projects.core.subscaleview)
     implementation(projects.coreMetadata)
     implementation(projects.sourceApi)
     implementation(projects.sourceLocal)

@@ -22,6 +22,11 @@ interface Viewer {
     fun destroy() {}
 
     /**
+     * Releases non-essential cached resources when system memory is low.
+     */
+    fun trimMemory(level: Int) {}
+
+    /**
      * Tells this viewer to set the given [chapters] as active.
      */
     fun setChapters(chapters: ViewerChapters)

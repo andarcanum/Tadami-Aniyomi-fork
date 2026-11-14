@@ -4,16 +4,21 @@ import android.animation.AnimatorSet
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import androidx.core.animation.doOnEnd
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Implementation of a [RecyclerView] used by the webtoon reader.
@@ -35,6 +40,14 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     private var firstVisibleItemPosition = 0
     private var lastVisibleItemPosition = 0
     private var currentScale = DEFAULT_RATE
+    private var lastScrollDy = 0
+    private var lastFlingVelocityY = 0
+    private val inverseMatrix = Matrix()
+    private val visibleRect = RectF()
+    private val prefetchRect = RectF()
+    private val retainRect = RectF()
+    private val childPrefetchRect = RectF()
+    private val childRetainRect = RectF()
     var zoomOutDisabled = false
         set(value) {
             field = value
@@ -76,6 +89,8 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         val layoutManager = layoutManager as? LinearLayoutManager ?: return
         lastVisibleItemPosition = layoutManager.findLastVisibleItemPosition()
         firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
+        lastScrollDy = dy
+        updateChildViewports()
     }
 
     /**
@@ -98,6 +113,162 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         val totalItemCount = layoutManager?.itemCount ?: 0
         atLastPosition = visibleItemCount > 0 && lastVisibleItemPosition == totalItemCount - 1
         atFirstPosition = firstVisibleItemPosition == 0
+        when (state) {
+            SCROLL_STATE_IDLE -> {
+                lastScrollDy = 0
+                lastFlingVelocityY = 0
+                updateChildViewports()
+            }
+            SCROLL_STATE_DRAGGING -> {
+                lastFlingVelocityY = 0
+                updateChildViewports()
+            }
+        }
+    }
+
+    override fun fling(velocityX: Int, velocityY: Int): Boolean {
+        lastFlingVelocityY = velocityY
+        val flung = super.fling(velocityX, velocityY)
+        updateChildViewports()
+        return flung
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        super.onLayout(changed, l, t, r, b)
+        updateChildViewports()
+    }
+
+    internal fun updateChildViewports() {
+        val displayScale = computeViewportBounds()
+        if (displayScale <= 0f) return
+        for (i in 0 until childCount) {
+            pushViewportToHolderChild(getChildAt(i), displayScale)
+        }
+    }
+
+    internal fun updateViewportForChild(target: WebtoonSubsamplingImageView) {
+        val displayScale = computeViewportBounds()
+        if (displayScale <= 0f) return
+        pushViewportToSubsamplingView(target, displayScale)
+    }
+
+    private fun pushViewportToHolderChild(child: View, displayScale: Float) {
+        val target = when (child) {
+            is WebtoonSubsamplingImageView -> child
+            is ReaderPageImageView -> child.getImageView() as? WebtoonSubsamplingImageView
+            else -> null
+        } ?: return
+        pushViewportToSubsamplingView(target, displayScale)
+    }
+
+    private fun pushViewportToSubsamplingView(target: WebtoonSubsamplingImageView, displayScale: Float) {
+        val childW = target.width
+        val childH = target.height
+        if (childW <= 0 || childH <= 0) return
+
+        var offsetX = 0f
+        var offsetY = 0f
+        var current: View? = target
+        while (current != null && current !== this) {
+            val parentView = current.parent as? View ?: return
+            offsetX += current.left + current.translationX - parentView.scrollX
+            offsetY += current.top + current.translationY - parentView.scrollY
+            current = parentView
+        }
+        if (current !== this) return
+
+        childPrefetchRect.set(prefetchRect)
+        childPrefetchRect.offset(-offsetX, -offsetY)
+        if (!childPrefetchRect.intersect(0f, 0f, childW.toFloat(), childH.toFloat())) {
+            childPrefetchRect.setEmpty()
+        }
+
+        childRetainRect.set(retainRect)
+        childRetainRect.offset(-offsetX, -offsetY)
+        if (!childRetainRect.intersect(0f, 0f, childW.toFloat(), childH.toFloat())) {
+            childRetainRect.setEmpty()
+        }
+
+        target.updateViewport(childPrefetchRect, childRetainRect, displayScale)
+    }
+
+    private fun computeViewportBounds(): Float {
+        if (width <= 0 || height <= 0) return 0f
+
+        var xScale = 1f
+        var yScale = 1f
+        var ancestor: View? = this
+        while (ancestor != null) {
+            xScale *= abs(ancestor.scaleX)
+            yScale *= abs(ancestor.scaleY)
+            ancestor = ancestor.parent as? View
+        }
+        val displayScale = max(xScale, yScale)
+        if (!displayScale.isFinite() || displayScale <= 0f) return 0f
+
+        val container = parent as? View
+        val containerW = container?.width?.takeIf { it > 0 } ?: width
+        val containerH = container?.height?.takeIf { it > 0 } ?: height
+        visibleRect.set(0f, 0f, containerW.toFloat(), containerH.toFloat())
+        if (container != null) {
+            visibleRect.offset(-left.toFloat(), -top.toFloat())
+        }
+        val localMatrix = matrix
+        if (!localMatrix.isIdentity) {
+            if (!localMatrix.invert(inverseMatrix)) return 0f
+            inverseMatrix.mapRect(visibleRect)
+        }
+        if (clipToPadding) {
+            val padLeft = paddingLeft.toFloat()
+            val padTop = paddingTop.toFloat()
+            val padRight = (width - paddingRight).toFloat()
+            val padBottom = (height - paddingBottom).toFloat()
+            if (!visibleRect.intersect(padLeft, padTop, padRight, padBottom)) {
+                visibleRect.setEmpty()
+            }
+        }
+
+        if (visibleRect.isEmpty) {
+            prefetchRect.setEmpty()
+            retainRect.setEmpty()
+            return displayScale
+        }
+
+        val viewportHeight = visibleRect.height()
+        val retainMargin = viewportHeight * RETAIN_VIEWPORT_MARGIN
+        retainRect.set(
+            visibleRect.left,
+            visibleRect.top - retainMargin,
+            visibleRect.right,
+            visibleRect.bottom + retainMargin,
+        )
+        prefetchRect.set(visibleRect)
+
+        val direction = when {
+            lastScrollDy != 0 -> if (lastScrollDy > 0) 1 else -1
+            scrollState == SCROLL_STATE_SETTLING && lastFlingVelocityY != 0 -> if (lastFlingVelocityY > 0) 1 else -1
+            else -> 0
+        }
+        if (scrollState != SCROLL_STATE_IDLE && direction != 0 && viewportHeight > 0f) {
+            val lookaheadFactor = if (scrollState == SCROLL_STATE_SETTLING && lastFlingVelocityY != 0) {
+                (abs(lastFlingVelocityY) / (viewportHeight * 2.5f)).coerceIn(
+                    MIN_LOOKAHEAD_FACTOR,
+                    MAX_LOOKAHEAD_FACTOR,
+                )
+            } else {
+                (abs(lastScrollDy) / (viewportHeight * 0.08f).coerceAtLeast(1f)).coerceIn(
+                    MIN_LOOKAHEAD_FACTOR,
+                    MAX_LOOKAHEAD_FACTOR,
+                )
+            }
+            val lookaheadPx = viewportHeight * lookaheadFactor
+            if (direction > 0) {
+                prefetchRect.bottom += lookaheadPx
+            } else {
+                prefetchRect.top -= lookaheadPx
+            }
+        }
+        return displayScale
     }
 
     private fun getPositionX(positionX: Float): Float {
@@ -127,10 +298,16 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         isZooming = true
         val animatorSet = AnimatorSet()
         val translationXAnimator = ValueAnimator.ofFloat(fromX, toX)
-        translationXAnimator.addUpdateListener { animation -> x = animation.animatedValue as Float }
+        translationXAnimator.addUpdateListener { animation ->
+            x = animation.animatedValue as Float
+            updateChildViewports()
+        }
 
         val translationYAnimator = ValueAnimator.ofFloat(fromY, toY)
-        translationYAnimator.addUpdateListener { animation -> y = animation.animatedValue as Float }
+        translationYAnimator.addUpdateListener { animation ->
+            y = animation.animatedValue as Float
+            updateChildViewports()
+        }
 
         val scaleAnimator = ValueAnimator.ofFloat(fromRate, toRate)
         scaleAnimator.addUpdateListener { animation ->
@@ -144,6 +321,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         animatorSet.doOnEnd {
             isZooming = false
             currentScale = toRate
+            updateChildViewports()
         }
     }
 
@@ -161,6 +339,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
                 x = getPositionX(
                     animation.animatedValue as Float,
                 )
+                updateChildViewports()
             }
             animatorSet.play(translationXAnimator)
         }
@@ -172,6 +351,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
                 y = getPositionY(
                     animation.animatedValue as Float,
                 )
+                updateChildViewports()
             }
             animatorSet.play(translationYAnimator)
         }
@@ -190,6 +370,9 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         if (dy != 0) {
             y = getPositionY(y + dy)
         }
+        if (dx != 0 || dy != 0) {
+            updateChildViewports()
+        }
     }
 
     /**
@@ -199,10 +382,13 @@ class WebtoonRecyclerView @JvmOverloads constructor(
      */
     var onZoomScaleChanged: ((scale: Float) -> Unit)? = null
 
-    private fun setScaleRate(rate: Float) {
+    private fun setScaleRate(rate: Float, pushViewports: Boolean = true) {
         scaleX = rate
         scaleY = rate
         onZoomScaleChanged?.invoke(rate)
+        if (pushViewports) {
+            updateChildViewports()
+        }
     }
 
     fun onScale(scaleFactor: Float) {
@@ -212,7 +398,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
             MAX_SCALE_RATE,
         )
 
-        setScaleRate(currentScale)
+        setScaleRate(currentScale, pushViewports = false)
 
         layoutParams.height = if (currentScale < 1) {
             (originalHeight / currentScale).toInt()
@@ -230,6 +416,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         }
 
         requestLayout()
+        updateChildViewports()
     }
 
     fun onScaleBegin() {
@@ -371,3 +558,6 @@ private const val ANIMATOR_DURATION_TIME = 200
 private const val MIN_RATE = 0.5f
 private const val DEFAULT_RATE = 1f
 private const val MAX_SCALE_RATE = 3f
+private const val MIN_LOOKAHEAD_FACTOR = 0.5f
+private const val MAX_LOOKAHEAD_FACTOR = 1.0f
+private const val RETAIN_VIEWPORT_MARGIN = 0.5f

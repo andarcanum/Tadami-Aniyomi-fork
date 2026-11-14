@@ -731,7 +731,6 @@
     <string name="information_empty_repos">Não tem repositórios definidos.</string>
     <string name="action_add_repo">Adicionar repositório</string>
     <string name="label_add_repo_input">URL do repositório</string>
-    <string name="pref_display_profile">Perfil de exibição personalizado</string>
     <string name="exception_offline">Sem conexão de internet</string>
     <string name="action_replace_repo">Substituir</string>
     <string name="action_replace_repo_title">A impressão digital da chave de assinatura já existe</string>

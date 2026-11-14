@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.content.res.Resources
+import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -107,10 +108,18 @@ class WebtoonPageHolder(
             viewer.schedulePositionPreservation(frame, oldHeight, newHeight)
         }
 
+        viewer.registerPageFrame(frame)
         frame.onImageLoaded = { onImageDecoded() }
         frame.onImageLoadError = { markDecodeError() }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
+        frame.onHdrChanged = { isHdr ->
+            page?.isHdr = isHdr
+            viewer.updateWindowHdrState(isHdr)
+        }
     }
+
+    val isHdr: Boolean
+        get() = frame.isHdr
 
     /**
      * Binds the given [page] with this view holder, subscribing to its state.
@@ -342,32 +351,58 @@ class WebtoonPageHolder(
         progressIndicator.setProgress(0)
 
         val currentPage = page ?: return
-        val streamFn = currentPage.stream ?: return
+        val streamFn = currentPage.stream ?: run {
+            markDecodeError()
+            return
+        }
 
         try {
             var sniffedDims: ImageUtil.ImageDimensions? = null
             val prepared = withIOContext {
                 when (val processed = streamFn().use { process(Buffer().readFrom(it)) }) {
                     is ProcessedPageImage.Decoded -> {
-                        sniffedDims = ImageUtil.ImageDimensions(processed.bitmap.width, processed.bitmap.height)
-                        PageImageData.Decoded(processed.bitmap)
+                        val bitmap = processed.bitmap
+                        sniffedDims = ImageUtil.ImageDimensions(bitmap.width, bitmap.height)
+                        val smartFitBounds = if (viewer.config.webtoonSmartFit) {
+                            WebtoonBorderDetector.detectContentBounds(bitmap)
+                        } else {
+                            null
+                        }
+                        PageImageData.Decoded(bitmap, smartFitBounds)
                     }
                     is ProcessedPageImage.Encoded -> {
                         val source = processed.source
+                        val unmodified = !viewer.config.dualPageSplit && !viewer.config.dualPageRotateToFit
                         // Sizes sniffed at bind time are reused here (unless the image was
                         // transformed by the dual-page options, which changes its geometry);
                         // otherwise sniff image headers here so the UI thread does not have to
                         // instantiate native decoders per page while the user is scrolling.
-                        val reusable = currentPage
-                            .takeIf { !viewer.config.dualPageSplit && !viewer.config.dualPageRotateToFit }
-                            ?.imageDimensions
+                        val reusable = currentPage.takeIf { unmodified }?.imageDimensions
                         val isAnimated = if (reusable != null) false else ImageUtil.isAnimatedAndSupported(source)
                         val dims = if (isAnimated) null else (reusable ?: ImageUtil.getImageDimensions(source))
                         sniffedDims = dims
                         if (reusable == null && dims != null) {
                             currentPage.imageDimensions = dims
                         }
-                        PageImageData.Encoded(source, isAnimated)
+                        val smartFitBounds = if (!isAnimated && viewer.config.webtoonSmartFit) {
+                            val cropBorders = viewer.config.imageCropBorders
+                            val cached = currentPage
+                                .takeIf { unmodified }
+                                ?.smartFitBounds
+                                ?.takeIf { it.first == cropBorders }
+                                ?.second
+                            cached ?: WebtoonBorderDetector.detectContentBounds(
+                                source.peek().inputStream(),
+                                cropBorders,
+                            ).also { bounds ->
+                                if (unmodified && !bounds.isEmpty) {
+                                    currentPage.smartFitBounds = cropBorders to bounds
+                                }
+                            }
+                        } else {
+                            null
+                        }
+                        PageImageData.Encoded(source, isAnimated, smartFitBounds)
                     }
                 }
             }
@@ -389,6 +424,7 @@ class WebtoonPageHolder(
                                 minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
                                 cropBorders = viewer.config.imageCropBorders,
                                 webtoonSmartFit = viewer.config.webtoonSmartFit,
+                                precomputedSmartFitBounds = prepared.smartFitBounds,
                             ),
                         )
                     }
@@ -404,6 +440,7 @@ class WebtoonPageHolder(
                                 minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
                                 cropBorders = viewer.config.imageCropBorders,
                                 webtoonSmartFit = viewer.config.webtoonSmartFit,
+                                precomputedSmartFitBounds = prepared.smartFitBounds,
                             ),
                         )
                     }
@@ -539,7 +576,11 @@ private sealed interface PageImageData {
     data class Encoded(
         val source: BufferedSource,
         val isAnimated: Boolean,
+        val smartFitBounds: Rect? = null,
     ) : PageImageData
 
-    data class Decoded(val bitmap: android.graphics.Bitmap) : PageImageData
+    data class Decoded(
+        val bitmap: android.graphics.Bitmap,
+        val smartFitBounds: Rect? = null,
+    ) : PageImageData
 }

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer
 
 import android.content.Context
 import android.graphics.PointF
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.BitmapDrawable
@@ -31,6 +32,7 @@ import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_IN_OUT
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE
 import com.github.chrisbanes.photoview.PhotoView
+import eu.kanade.tachiyomi.data.coil.AnimatedNativeDrawable
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerSubsamplingImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
@@ -46,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
+import java.io.Closeable
 
 /**
  * A wrapper view for showing page image.
@@ -69,6 +72,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     private var scope: CoroutineScope? = null
     private var smartFitJob: Job? = null
+    private var pendingSmartFit: PendingSmartFit? = null
+    private var pendingAnimatedImage: PendingSmartFit? = null
     private var landscapeZoomRunnable: Runnable? = null
 
     /**
@@ -86,6 +91,15 @@ open class ReaderPageImageView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        (pageView as? SubsamplingScaleImageView)?.setHardwareTilesEnabled(isHardwareAccelerated)
+        val pending = pendingSmartFit
+        if (pending != null && smartFitJob == null) {
+            setNonAnimatedImage(pending.data, pending.config)
+        }
+        val pendingAnim = pendingAnimatedImage
+        if (pendingAnim != null && coilDisposable == null) {
+            setAnimatedImage(pendingAnim.data, pendingAnim.config)
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -98,6 +112,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         scope = null
         smartFitJob?.cancel()
         smartFitJob = null
+        cancelCoilRequest()
         cancelLandscapeZoom()
     }
 
@@ -110,6 +125,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
     var onImageLoadError: (() -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
+    var onHdrChanged: ((Boolean) -> Unit)? = null
+
+    val isHdr: Boolean
+        get() = when (val view = pageView) {
+            is SubsamplingScaleImageView -> view.isHdr
+            is AppCompatImageView -> (view.drawable as? AnimatedNativeDrawable)?.isHdr == true
+            else -> false
+        }
 
     /**
      * For automatic background. Will be set as background color when [onImageLoaded] is called.
@@ -150,14 +173,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
                             (this@with as? PagerSubsamplingImageView)?.applySmartScaleIfNeeded()
                             setupZoom(config)
                             landscapeZoom(forward)
+                            this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
                             this@ReaderPageImageView.onImageLoaded()
                         }
 
                         override fun onImageLoadError(e: Exception) {
-                            onImageLoadError()
-                        }
-
-                        override fun onTileLoadError(e: Exception) {
                             onImageLoadError()
                         }
                     },
@@ -216,6 +236,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     fun setImage(drawable: Drawable, config: Config) {
         this.config = config
+        pendingSmartFit = null
+        pendingAnimatedImage = null
         smartFitJob?.cancel()
         smartFitJob = null
         cancelCoilRequest()
@@ -230,6 +252,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     fun setImage(source: BufferedSource, isAnimated: Boolean, config: Config) {
         this.config = config
+        pendingSmartFit = null
+        pendingAnimatedImage = null
         smartFitJob?.cancel()
         smartFitJob = null
         cancelCoilRequest()
@@ -242,18 +266,33 @@ open class ReaderPageImageView @JvmOverloads constructor(
         }
     }
 
-    fun recycle() {
+    open fun recycle() {
+        pendingSmartFit = null
+        pendingAnimatedImage = null
         smartFitJob?.cancel()
         smartFitJob = null
         cancelLandscapeZoom()
         cancelCoilRequest()
+        onHdrChanged?.invoke(false)
         pageView?.let {
             when (it) {
                 is SubsamplingScaleImageView -> it.recycle()
-                is AppCompatImageView -> it.dispose()
+                is AppCompatImageView -> releaseAnimatedDrawable(it)
             }
             it.isVisible = false
         }
+    }
+
+    private fun releaseAnimatedDrawable(view: AppCompatImageView) {
+        val current = view.drawable
+        view.setImageDrawable(null)
+        (current as? Animatable)?.stop()
+        (current as? Closeable)?.close()
+        view.dispose()
+    }
+
+    fun trimMemory(level: Int) {
+        (pageView as? SubsamplingScaleImageView)?.trimMemory(level)
     }
 
     /**
@@ -312,6 +351,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     private fun prepareNonAnimatedImageView() {
         if (pageView is SubsamplingScaleImageView) return
+        (pageView as? AppCompatImageView)?.let(::releaseAnimatedDrawable)
         removeView(pageView)
 
         pageView = if (isWebtoon) {
@@ -319,17 +359,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
         } else {
             PagerSubsamplingImageView(context)
         }.apply {
-            setMaxTileSize(minOf(ImageUtil.hardwareBitmapThreshold, 1024))
+            setMaxTileSize(minOf(ImageUtil.hardwareBitmapThreshold, 2048))
+            setHardwareTilesEnabled(this@ReaderPageImageView.isHardwareAccelerated)
             setDoubleTapZoomStyle(SubsamplingScaleImageView.ZOOM_FOCUS_CENTER)
             setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
             setMinimumTileDpi(180)
-            if (isWebtoon) {
-                // Defer high-res tile decoding until gestures/flings settle. This
-                // reduces decode churn while scrolling through long strips, which
-                // is a major source of dropped frames on high refresh rate
-                // displays (90/120Hz+).
-                setEagerLoadingEnabled(false)
-            }
             setOnStateChangedListener(
                 object : SubsamplingScaleImageView.OnStateChangedListener {
                     override fun onScaleChanged(newScale: Float, origin: Int) {
@@ -347,14 +381,18 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     private fun SubsamplingScaleImageView.setupZoom(config: Config?) {
+        val baseScale = if (this is PagerSubsamplingImageView && isSmartFitEnabled) minScale else scale
         // 5x zoom
-        maxScale = scale * MAX_ZOOM_SCALE
-        setDoubleTapZoomScale(scale * 2)
+        maxScale = baseScale * MAX_ZOOM_SCALE
+        setDoubleTapZoomScale(baseScale * 2)
 
         when (config?.zoomStartPosition) {
-            ZoomStartPosition.LEFT -> setScaleAndCenter(scale, PointF(0F, 0F))
-            ZoomStartPosition.RIGHT -> setScaleAndCenter(scale, PointF(sWidth.toFloat(), 0F))
-            ZoomStartPosition.CENTER -> setScaleAndCenter(scale, center)
+            ZoomStartPosition.LEFT -> setScaleAndCenter(baseScale, PointF(0F, 0F))
+            ZoomStartPosition.RIGHT -> setScaleAndCenter(baseScale, PointF(sWidth.toFloat(), 0F))
+            ZoomStartPosition.CENTER -> setScaleAndCenter(
+                baseScale,
+                center ?: PointF(sWidth / 2F, sHeight / 2F),
+            )
             null -> {}
         }
     }
@@ -368,6 +406,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
         setZoomEnabled(config.enablePinchToZoom)
         setDoubleTapZoomDuration(config.zoomDuration.getSystemScaledDuration())
+        setHardwareTilesEnabled(this@ReaderPageImageView.isHardwareAccelerated)
         if (isSmartFit) {
             val initialType = if (width > 0 && height > 0 && isReady) {
                 ReaderScaleUtil.resolveSmartScaleType(width, height, sWidth, sHeight)
@@ -386,14 +425,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     (this@apply as? PagerSubsamplingImageView)?.applySmartScaleIfNeeded()
                     setupZoom(config)
                     if (isVisibleOnScreen()) landscapeZoom(true)
+                    this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
                     this@ReaderPageImageView.onImageLoaded()
                 }
 
                 override fun onImageLoadError(e: Exception) {
-                    this@ReaderPageImageView.onImageLoadError()
-                }
-
-                override fun onTileLoadError(e: Exception) {
                     this@ReaderPageImageView.onImageLoadError()
                 }
             },
@@ -402,13 +438,26 @@ open class ReaderPageImageView @JvmOverloads constructor(
         when (data) {
             is BitmapDrawable -> {
                 val bitmap = data.bitmap
-                if (config.webtoonSmartFit && scope != null) {
-                    smartFitJob = scope?.launch {
-                        val bounds = withContext(Dispatchers.Default) {
-                            WebtoonBorderDetector.detectContentBounds(bitmap)
+                val precomputed = config.precomputedSmartFitBounds
+                if (precomputed != null) {
+                    val image = ImageSource.bitmap(bitmap)
+                    if (!precomputed.isEmpty) image.region(precomputed)
+                    setImage(image)
+                    isVisible = true
+                } else if (config.webtoonSmartFit) {
+                    pendingSmartFit = PendingSmartFit(data, config)
+                    scope?.let { activeScope ->
+                        smartFitJob = activeScope.launch {
+                            val bounds = withContext(Dispatchers.Default) {
+                                WebtoonBorderDetector.detectContentBounds(bitmap)
+                            }
+                            pendingSmartFit = null
+                            smartFitJob = null
+                            val image = ImageSource.bitmap(bitmap)
+                            if (!bounds.isEmpty) image.region(bounds)
+                            setImage(image)
+                            isVisible = true
                         }
-                        setImage(ImageSource.bitmap(bitmap).region(bounds))
-                        isVisible = true
                     }
                 } else {
                     setImage(ImageSource.bitmap(bitmap))
@@ -418,15 +467,29 @@ open class ReaderPageImageView @JvmOverloads constructor(
             is BufferedSource -> {
                 // Preserve original pixels for zoom, even for short webtoon pages. A fixed Coil
                 // viewport bitmap cannot recover details when its RecyclerView parent is scaled.
-                if (config.webtoonSmartFit && scope != null) {
-                    smartFitJob = scope?.launch {
-                        val bounds = withContext(Dispatchers.IO) {
-                            WebtoonBorderDetector.detectContentBounds(data.peek().inputStream(), config.cropBorders)
+                val precomputed = config.precomputedSmartFitBounds
+                if (precomputed != null) {
+                    val image = ImageSource.inputStream(data.inputStream())
+                    if (!precomputed.isEmpty) image.region(precomputed)
+                    setImage(image)
+                    isVisible = true
+                } else if (config.webtoonSmartFit) {
+                    pendingSmartFit = PendingSmartFit(data, config)
+                    scope?.let { activeScope ->
+                        smartFitJob = activeScope.launch {
+                            val bounds = withContext(Dispatchers.IO) {
+                                WebtoonBorderDetector.detectContentBounds(
+                                    data.peek().inputStream(),
+                                    config.cropBorders,
+                                )
+                            }
+                            pendingSmartFit = null
+                            smartFitJob = null
+                            val image = ImageSource.inputStream(data.inputStream())
+                            if (!bounds.isEmpty) image.region(bounds)
+                            setImage(image)
+                            isVisible = true
                         }
-                        val image = ImageSource.inputStream(data.inputStream())
-                        if (!bounds.isEmpty) image.region(bounds)
-                        setImage(image)
-                        isVisible = true
                     }
                 } else {
                     setImage(ImageSource.inputStream(data.inputStream()))
@@ -441,6 +504,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     private fun prepareAnimatedImageView() {
         if (pageView is AppCompatImageView) return
+        (pageView as? SubsamplingScaleImageView)?.recycle()
         removeView(pageView)
 
         pageView = if (isWebtoon) {
@@ -487,25 +551,44 @@ open class ReaderPageImageView @JvmOverloads constructor(
             isZoomable = config.enablePinchToZoom
         }
 
+        if (drawable !== data) {
+            releaseAnimatedDrawable(this)
+        }
+        this@ReaderPageImageView.pendingAnimatedImage = PendingSmartFit(data, config)
+        val requestData = if (data is BufferedSource) data.peek() else data
         val request = ImageRequest.Builder(context)
-            .data(data)
+            .data(requestData)
             .memoryCachePolicy(CachePolicy.DISABLED)
             .diskCachePolicy(CachePolicy.DISABLED)
             .target(
                 onSuccess = { result ->
-                    val drawable = result.asDrawable(context.resources)
-                    setImageDrawable(drawable)
-                    (drawable as? Animatable)?.start()
+                    this@ReaderPageImageView.pendingAnimatedImage = null
+                    this@ReaderPageImageView.coilDisposable = null
+                    val newDrawable = result.asDrawable(context.resources)
+                    if (drawable !== newDrawable) {
+                        releaseAnimatedDrawable(this)
+                    }
+                    setImageDrawable(newDrawable)
+                    (newDrawable as? Animatable)?.start()
                     isVisible = true
+                    this@ReaderPageImageView.onHdrChanged?.invoke(
+                        (newDrawable as? AnimatedNativeDrawable)?.isHdr == true,
+                    )
                     this@ReaderPageImageView.onImageLoaded()
                 },
                 onError = {
+                    this@ReaderPageImageView.pendingAnimatedImage = null
+                    this@ReaderPageImageView.coilDisposable = null
+                    this@ReaderPageImageView.onHdrChanged?.invoke(false)
                     this@ReaderPageImageView.onImageLoadError()
                 },
             )
             .crossfade(false)
             .build()
-        coilDisposable = context.imageLoader.enqueue(request)
+        val disposable = context.imageLoader.enqueue(request)
+        if (this@ReaderPageImageView.pendingAnimatedImage != null) {
+            coilDisposable = disposable
+        }
     }
 
     private fun Int.getSystemScaledDuration(): Int {
@@ -523,6 +606,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val zoomStartPosition: ZoomStartPosition = ZoomStartPosition.CENTER,
         val landscapeZoom: Boolean = false,
         val enablePinchToZoom: Boolean = true,
+        val precomputedSmartFitBounds: Rect? = null,
+    )
+
+    private data class PendingSmartFit(
+        val data: Any,
+        val config: Config,
     )
 
     enum class ZoomStartPosition {

@@ -1046,7 +1046,6 @@
     <string name="pref_save_long_page_position">Сохранять позицию внутри длинных страниц</string>
     <string name="action_add_anyway">Добавить в любом случае</string>
     <string name="display_name_auto_detected">Определяется автоматически</string>
-    <string name="pref_display_profile">Пользовательский профиль отображения</string>
     <string name="action_migrate_duplicate">Перенести существующую серию</string>
     <string name="action_replace_repo">Заменить</string>
     <string name="action_replace_repo_message">Репозиторий %1$s имеет тот же подписанный ключ отпечатка, что и %2$s.
@@ -1090,14 +1089,12 @@
     <string name="pref_hardware_bitmap_threshold_summary">Если читалка загружает пустое изображение, постепенно уменьшайте пороговую обработку.\nВыбрано: %s</string>
     <string name="pref_hardware_bitmap_threshold">Пользовательская аппаратная пороговая обработка растрового изображения</string>
     <string name="pref_hardware_bitmap_threshold_default">По умолчанию (%d)</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Влияет на производительность. Включите этот параметр, если пороговая обработка растрового изображения не помогает с ошибками, связанными с пустыми изображениями</string>
     <string name="pref_incognito_mode_extension_summary">Приостанавливать историю чтения для этого расширения (сохраняется после перезапуска)</string>
     <string name="label_auto">Авто</string>
     <string name="theme_monochrome">Монохром</string>
     <string name="tracked_privately">Отслеживается приватно</string>
     <string name="action_toggle_private_on">Отслеживать приватно</string>
     <string name="action_toggle_private_off">Отслеживать публично</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">Использовать старый декодер для читалки с длинными страницами</string>
     <string name="export">Экспортировать</string>
     <string name="artist">Художник</string>
     <string name="library_exported">Библиотека экспортирована</string>

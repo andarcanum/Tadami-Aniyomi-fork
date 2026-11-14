@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
 import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.PagerAutoScrollManager
+import eu.kanade.tachiyomi.widget.ViewPagerAdapter
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import tachiyomi.core.common.util.system.logcat
@@ -221,7 +222,36 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     override fun destroy() {
         super.destroy()
         autoScrollManager.destroy()
+        pager.adapter = null
+        activity.setWindowHdrEnabled(false)
         scope.cancel()
+    }
+
+    override fun trimMemory(level: Int) {
+        pager.children.forEach { child ->
+            when (child) {
+                is PagerPageHolder -> child.trimMemory(level)
+                is JoinedPagerPageHolder -> child.trimMemory(level)
+            }
+        }
+    }
+
+    internal fun updateWindowHdrState() {
+        val active = currentPage
+        val childHdr = pager.children.firstOrNull { (it as? ViewPagerAdapter.PositionableView)?.item === active }
+            ?.let { child ->
+                when (child) {
+                    is PagerPageHolder -> child.isHdr
+                    is JoinedPagerPageHolder -> child.isHdr
+                    else -> false
+                }
+            }
+        val activeHdr = childHdr ?: when (active) {
+            is ReaderPage -> active.isHdr
+            is JoinedReaderPage -> active.firstPage.isHdr || active.secondPage.isHdr
+            else -> false
+        }
+        activity.setWindowHdrEnabled(activeHdr)
     }
 
     /**
@@ -314,6 +344,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 else -> true
             }
             currentPage = page
+            updateWindowHdrState()
             when (page) {
                 is ReaderPage -> onReaderPageSelected(page, allowPreload, forward)
                 is ChapterTransition -> onTransitionSelected(page)

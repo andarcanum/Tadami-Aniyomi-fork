@@ -790,7 +790,6 @@
     <string name="manga_interval_expected_update_soon">Bald</string>
     <string name="ext_revoke_trust">Zertifikatsbestätigungen zurücknehmen</string>
     <string name="pref_webtoon_disable_zoom_out">Rauszoomen deaktivieren</string>
-    <string name="pref_display_profile">Benutzerdefiniertes Anzeigeprofil</string>
     <string name="action_add_anyway">Trotzdem hinzufügen</string>
     <string name="action_migrate_duplicate">Existierenden Eintrag migrieren</string>
     <string name="action_replace_repo">Ersetzen</string>
@@ -835,7 +834,6 @@
     <string name="pref_hardware_bitmap_threshold_summary">Reduziert stufenweise den Grenzwert, wenn der Leser nur ein leeres Bild lädt.\nAusgewählt: %s</string>
     <string name="pref_hardware_bitmap_threshold">Benutzerdefinierter Hardware-Bitmap-Grenzwert</string>
     <string name="pref_hardware_bitmap_threshold_default">Standard (%d)</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Beeinflusst die Leistung. Nur aktivieren, wenn das Reduzieren des Bitmap-Grenzwerts das Problem von leeren Bildern nicht behebt</string>
     <string name="pref_incognito_mode_extension_summary">Leseverlauf für eine Erweiterung pausieren</string>
     <string name="label_auto">Automatisch</string>
     <string name="theme_monochrome">Monochrom</string>
@@ -847,7 +845,6 @@
     <string name="author">Autor</string>
     <string name="export">Exportieren</string>
     <string name="artist">Illustrator</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">Legacy-Decoder für Langer-Streifen-Leser verwenden</string>
     <string name="pref_mark_duplicate_read_chapter_read">Doppeltes gelesenes Kapitel als gelesen markieren</string>
     <string name="action_display_unread_badge">Ungelesene Kapitel</string>
     <string name="pref_behavior">Verhalten</string>

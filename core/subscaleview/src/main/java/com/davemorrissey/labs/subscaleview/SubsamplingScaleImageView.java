@@ -1,5 +1,6 @@
 package com.davemorrissey.labs.subscaleview;
 
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
@@ -12,8 +13,9 @@ import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.AsyncTask;
 import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -27,19 +29,33 @@ import androidx.annotation.AnyThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.tadami.aurora.R.styleable;
+import com.davemorrissey.labs.subscaleview.R.styleable;
 import com.davemorrissey.labs.subscaleview.decoder.Decoder;
+import com.davemorrissey.labs.subscaleview.decoder.HardwareTileConfigurableDecoder;
+import com.davemorrissey.labs.subscaleview.decoder.HdrAwareRegionDecoder;
 import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder;
 import com.davemorrissey.labs.subscaleview.provider.InputProvider;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * <p>
@@ -133,6 +149,35 @@ public class SubsamplingScaleImageView extends View {
     private static final List<Integer> VALID_PAN_LIMITS = Arrays.asList(PAN_LIMIT_INSIDE, PAN_LIMIT_OUTSIDE, PAN_LIMIT_CENTER);
     private static final List<Integer> VALID_SCALE_TYPES = Arrays.asList(SCALE_TYPE_CENTER_CROP, SCALE_TYPE_CENTER_INSIDE, SCALE_TYPE_CUSTOM, SCALE_TYPE_FIT_WIDTH, SCALE_TYPE_FIT_HEIGHT, SCALE_TYPE_ORIGINAL_SIZE, SCALE_TYPE_SMART_FIT);
     private static final int MESSAGE_LONG_CLICK = 1;
+    private static final int MAX_TILE_RETRIES = 2;
+    private static final long TILE_RETRY_BASE_DELAY_MS = 50L;
+    private static final long TILE_FADE_DURATION_MS = 100L;
+    private static final Object TILE_RETRY_TOKEN = new Object();
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+    private static final ExecutorService DEFAULT_EXECUTOR = createDefaultExecutor();
+
+    private static ExecutorService createDefaultExecutor() {
+        int cpus = Math.max(2, Runtime.getRuntime().availableProcessors());
+        int corePoolSize = Math.min(4, cpus);
+        int maxPoolSize = Math.max(corePoolSize, Math.min(8, cpus));
+        AtomicInteger threadId = new AtomicInteger(1);
+        ThreadFactory factory = runnable -> {
+            Thread thread = new Thread(runnable, "ssiv-decode-" + threadId.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+        };
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(
+                corePoolSize,
+                maxPoolSize,
+                30L,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(),
+                factory
+        );
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
+
     // A global preference for bitmap format, available to decoder classes that respect it
     private static Bitmap.Config preferredBitmapConfig;
     private volatile long imageGeneration;
@@ -169,29 +214,110 @@ public class SubsamplingScaleImageView extends View {
     private boolean cropBorders = false;
     private boolean externalViewportEnabled;
     private final RectF externalViewport = new RectF();
+    private final RectF externalRetainViewport = new RectF();
     private float externalScale = 1f;
+    private boolean hardwareTilesEnabled = false;
+    private long tileFadeDurationMs = TILE_FADE_DURATION_MS;
+    private final Set<CancellableTask> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /** The viewport is in this view's coordinates. It does not change layout or gesture state. */
     public final void setExternalViewport(@NonNull RectF viewport, float displayScale) {
+        setExternalViewport(viewport, viewport, displayScale);
+    }
+
+    /**
+     * Updates both the visible/prefetch viewport and wider retain viewport (in this view's
+     * coordinates). Tiles in {@code prefetchViewport} are queued to decode; already-decoded
+     * non-base tiles inside {@code retainViewport} stay cached across scroll reversals.
+     */
+    public final void setExternalViewport(
+            @NonNull RectF prefetchViewport,
+            @NonNull RectF retainViewport,
+            float displayScale
+    ) {
         if (!Float.isFinite(displayScale) || displayScale <= 0f) {
             throw new IllegalArgumentException("Invalid display scale");
         }
-        if (externalViewportEnabled && externalViewport.equals(viewport) && externalScale == displayScale) return;
+        if (externalViewportEnabled
+                && externalViewport.equals(prefetchViewport)
+                && externalRetainViewport.equals(retainViewport)
+                && externalScale == displayScale) {
+            return;
+        }
         externalViewportEnabled = true;
-        externalViewport.set(viewport);
+        externalViewport.set(prefetchViewport);
+        externalRetainViewport.set(retainViewport);
         externalScale = displayScale;
-        refreshRequiredTiles(true);
-        invalidate();
+        if (refreshRequiredTiles(true)) {
+            invalidate();
+        }
+    }
+
+    public final void setHardwareTilesEnabled(boolean enabled) {
+        if (this.hardwareTilesEnabled == enabled) {
+            return;
+        }
+        this.hardwareTilesEnabled = enabled;
+        ImageRegionDecoder activeDecoder = this.decoder;
+        if (activeDecoder instanceof HardwareTileConfigurableDecoder) {
+            ((HardwareTileConfigurableDecoder) activeDecoder).setHardwareTilesEnabled(enabled);
+        }
+    }
+
+    public final boolean isHardwareTilesEnabled() {
+        return hardwareTilesEnabled;
+    }
+
+    public final boolean isHdr() {
+        ImageRegionDecoder activeDecoder = this.decoder;
+        return activeDecoder instanceof HdrAwareRegionDecoder
+                && ((HdrAwareRegionDecoder) activeDecoder).isHdr();
+    }
+
+    public final void setTileFadeDurationMs(long durationMs) {
+        this.tileFadeDurationMs = Math.max(0L, durationMs);
+    }
+
+    /** Evicts cached non-visible detail tiles under system memory pressure. */
+    @SuppressWarnings("deprecation")
+    public void trimMemory(int level) {
+        if (tileMap == null) {
+            return;
+        }
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+                || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+                || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            boolean trimmed = false;
+            for (Map.Entry<Integer, List<Tile>> entry : tileMap.entrySet()) {
+                if (entry.getKey() == fullImageSampleSize) {
+                    continue;
+                }
+                for (Tile tile : entry.getValue()) {
+                    if (!tile.visible) {
+                        cancelTileTask(tile);
+                        if (tile.bitmap != null) {
+                            tile.bitmap.recycle();
+                            tile.bitmap = null;
+                            tile.fadeStartTimeMs = 0L;
+                            trimmed = true;
+                        }
+                    }
+                }
+            }
+            if (trimmed) {
+                invalidate();
+            }
+        }
     }
 
     protected ImageRegionDecoder createRegionDecoder() {
-        return new Decoder(cropBorders);
+        return new Decoder(cropBorders, hardwareTilesEnabled);
     }
 
     private int maxTileWidth = TILE_SIZE_AUTO;
     private int maxTileHeight = TILE_SIZE_AUTO;
     // An executor service for loading of images
-    private Executor executor = AsyncTask.THREAD_POOL_EXECUTOR;
+    private Executor executor = DEFAULT_EXECUTOR;
     // Whether tiles should be loaded while gestures and animations are still in progress
     private boolean eagerLoadingEnabled = true;
     // Gesture detection settings
@@ -240,7 +366,7 @@ public class SubsamplingScaleImageView extends View {
     private GestureDetector detector;
     private GestureDetector singleDetector;
     // Tile and image decoding
-    private ImageRegionDecoder decoder;
+    private volatile ImageRegionDecoder decoder;
     // Debug values
     private PointF vCenterStart;
     private float vDistStart;
@@ -255,6 +381,8 @@ public class SubsamplingScaleImageView extends View {
     private boolean readySent;
     // Whether a base layer loaded notification has been sent to subclasses
     private boolean imageLoadedSent;
+    // Whether a fatal image load error has been sent for the current image
+    private boolean imageLoadErrorSent;
     // Event listener
     private OnImageEventListener onImageEventListener;
     // Scale and center listener
@@ -277,7 +405,7 @@ public class SubsamplingScaleImageView extends View {
         setMinimumDpi(160);
         setDoubleTapZoomDpi(160);
         setGestureDetector(context);
-        this.handler = new Handler(message -> {
+        this.handler = new Handler(Looper.getMainLooper(), message -> {
             if (message.what == MESSAGE_LONG_CLICK && onLongClickListener != null) {
                 maxTouchCount = 0;
                 SubsamplingScaleImageView.super.setOnLongClickListener(onLongClickListener);
@@ -382,7 +510,7 @@ public class SubsamplingScaleImageView extends View {
             this.provider = imageSource.getProvider();
             sRegion = imageSource.getSRegion();
             TilesInitTask task = new TilesInitTask(this, getContext(), provider);
-            execute(task);
+            executeTask(task);
         }
     }
 
@@ -393,6 +521,13 @@ public class SubsamplingScaleImageView extends View {
         debug("reset newImage=" + newImage);
         tileGeneration++;
         if (newImage) imageGeneration++;
+        handler.removeCallbacksAndMessages(TILE_RETRY_TOKEN);
+        if (newImage) {
+            handler.removeMessages(MESSAGE_LONG_CLICK);
+            cancelAllTasks();
+        } else {
+            cancelPendingTileTasks();
+        }
         scale = 0f;
         scaleStart = 0f;
         vTranslate = null;
@@ -431,6 +566,7 @@ public class SubsamplingScaleImageView extends View {
             pRegion = null;
             readySent = false;
             imageLoadedSent = false;
+            imageLoadErrorSent = false;
             bitmap = null;
             bitmapIsCached = false;
         }
@@ -438,6 +574,8 @@ public class SubsamplingScaleImageView extends View {
             for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
                 for (Tile tile : tileMapEntry.getValue()) {
                     tile.visible = false;
+                    cancelTileTask(tile);
+                    tile.fadeStartTimeMs = 0L;
                     if (tile.bitmap != null) {
                         tile.bitmap.recycle();
                         tile.bitmap = null;
@@ -447,6 +585,46 @@ public class SubsamplingScaleImageView extends View {
             tileMap = null;
         }
         setGestureDetector(getContext());
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (decoder != null && tileMap != null) {
+            if (!isBaseLayerReady()) {
+                enqueueMissingBaseTiles();
+                invalidate();
+            } else {
+                boolean needInvalidate = (!readySent && checkReady()) | (!imageLoadedSent && checkImageLoaded());
+                if (!externalViewportEnabled && refreshRequiredTiles(true)) {
+                    needInvalidate = true;
+                }
+                if (needInvalidate) {
+                    invalidate();
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        handler.removeMessages(MESSAGE_LONG_CLICK);
+        handler.removeCallbacksAndMessages(TILE_RETRY_TOKEN);
+        anim = null;
+        cancelPendingTileTasks();
+        resetTileFadeTimers();
+    }
+
+    private void resetTileFadeTimers() {
+        if (tileMap == null) {
+            return;
+        }
+        for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
+            for (Tile tile : tileMapEntry.getValue()) {
+                tile.fadeStartTimeMs = 0L;
+            }
+        }
     }
 
     private void releaseDecoder(ImageRegionDecoder oldDecoder) {
@@ -950,14 +1128,16 @@ public class SubsamplingScaleImageView extends View {
 
             // Optimum sample size for current scale
             int sampleSize = Math.min(fullImageSampleSize, calculateInSampleSize(scale));
+            long now = SystemClock.uptimeMillis();
+            boolean hasAnimatingFade = false;
 
-            // First check for missing tiles - if there are any we need the base layer underneath to avoid gaps
-            boolean hasMissingTiles = false;
+            // Keep base layer visible while fine tiles are missing OR cross-fading in.
+            boolean needBaseLayer = false;
             for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
                 if (tileMapEntry.getKey() == sampleSize) {
                     for (Tile tile : tileMapEntry.getValue()) {
-                        if (tile.visible && (tile.loading || tile.bitmap == null)) {
-                            hasMissingTiles = true;
+                        if (tile.visible && (tile.loading || tile.bitmap == null || isTileFading(tile, now))) {
+                            needBaseLayer = true;
                             break;
                         }
                     }
@@ -966,10 +1146,10 @@ public class SubsamplingScaleImageView extends View {
 
             // Render all loaded tiles. LinkedHashMap used for bottom up rendering - lower res tiles underneath.
             for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
-                if (tileMapEntry.getKey() == sampleSize || hasMissingTiles) {
+                if (tileMapEntry.getKey() == sampleSize || (needBaseLayer && tileMapEntry.getKey() == fullImageSampleSize)) {
                     for (Tile tile : tileMapEntry.getValue()) {
                         sourceToViewRect(tile.sRect, tile.vRect);
-                        if (!tile.loading && tile.bitmap != null) {
+                        if (!tile.loading && tile.bitmap != null && (tile.visible || tile.sampleSize == fullImageSampleSize)) {
                             if (tileBgPaint != null) {
                                 canvas.drawRect(tile.vRect, tileBgPaint);
                             }
@@ -990,7 +1170,21 @@ public class SubsamplingScaleImageView extends View {
                                         setMatrixArray(dstArray, tile.vRect.left, tile.vRect.bottom, tile.vRect.left, tile.vRect.top, tile.vRect.right, tile.vRect.top, tile.vRect.right, tile.vRect.bottom);
                             }
                             matrix.setPolyToPoly(srcArray, 0, dstArray, 0, 4);
-                            canvas.drawBitmap(tile.bitmap, matrix, bitmapPaint);
+                            int alpha = 255;
+                            if (tile.sampleSize < fullImageSampleSize && tile.fadeStartTimeMs > 0L && tileFadeDurationMs > 0L) {
+                                long elapsed = Math.max(0L, now - tile.fadeStartTimeMs);
+                                if (elapsed < tileFadeDurationMs) {
+                                    alpha = Math.min(255, (int) ((elapsed * 255L) / tileFadeDurationMs));
+                                    hasAnimatingFade = true;
+                                } else {
+                                    tile.fadeStartTimeMs = 0L;
+                                }
+                            }
+                            bitmapPaint.setAlpha(alpha);
+                            drawBitmapSafely(canvas, tile.bitmap, matrix, bitmapPaint);
+                            if (alpha != 255) {
+                                bitmapPaint.setAlpha(255);
+                            }
                             if (debug) {
                                 canvas.drawRect(tile.vRect, debugLinePaint);
                             }
@@ -1002,6 +1196,9 @@ public class SubsamplingScaleImageView extends View {
                         }
                     }
                 }
+            }
+            if (hasAnimatingFade) {
+                postInvalidateOnAnimation();
             }
 
         } else if (bitmap != null && !bitmap.isRecycled()) {
@@ -1030,7 +1227,7 @@ public class SubsamplingScaleImageView extends View {
                 matrix.mapRect(sRect);
                 canvas.drawRect(sRect, tileBgPaint);
             }
-            canvas.drawBitmap(bitmap, matrix, bitmapPaint);
+            drawBitmapSafely(canvas, bitmap, matrix, bitmapPaint);
 
         }
 
@@ -1166,6 +1363,39 @@ public class SubsamplingScaleImageView extends View {
     }
 
     /**
+     * Checks whether a tile is currently mid-fade.
+     */
+    private boolean isTileFading(@NonNull Tile tile, long now) {
+        return tile.sampleSize < fullImageSampleSize
+                && tile.fadeStartTimeMs > 0L
+                && tileFadeDurationMs > 0L
+                && now - tile.fadeStartTimeMs < tileFadeDurationMs;
+    }
+
+    /**
+     * Guards hardware bitmaps when drawing onto software canvases (e.g. view capture or unit tests).
+     */
+    private void drawBitmapSafely(
+            @NonNull Canvas canvas,
+            @NonNull Bitmap targetBitmap,
+            @NonNull Matrix drawMatrix,
+            @NonNull Paint paint
+    ) {
+        if (!canvas.isHardwareAccelerated() && targetBitmap.getConfig() == Bitmap.Config.HARDWARE) {
+            Bitmap softwareCopy = targetBitmap.copy(Bitmap.Config.ARGB_8888, false);
+            if (softwareCopy != null) {
+                try {
+                    canvas.drawBitmap(softwareCopy, drawMatrix, paint);
+                } finally {
+                    softwareCopy.recycle();
+                }
+            }
+            return;
+        }
+        canvas.drawBitmap(targetBitmap, drawMatrix, paint);
+    }
+
+    /**
      * Called on first draw when the view has dimensions. Calculates the initial sample size and starts async loading of
      * the base layer image - the whole source subsampled as necessary.
      */
@@ -1178,8 +1408,13 @@ public class SubsamplingScaleImageView extends View {
         // Load double resolution - next level will be split into four tiles and at the center all four are required,
         // so don't bother with tiling until the next level 16 tiles are needed.
         if (externalViewportEnabled) {
-            // A long RecyclerView item is not a viewport. Retain only a bounded fallback preview.
-            fullImageSampleSize = TileQuality.previewSample(getEffectiveSWidth(), getEffectiveSHeight());
+            // Skip redundant coarse preview when the full image fits in 1-2 tiles.
+            fullImageSampleSize = TileQuality.previewSample(
+                    getEffectiveSWidth(),
+                    getEffectiveSHeight(),
+                    maxTileDimensions.x,
+                    maxTileDimensions.y
+            );
         } else {
             fullImageSampleSize = calculateInSampleSize(satTemp.scale);
             if (fullImageSampleSize > 1) fullImageSampleSize /= 2;
@@ -1191,67 +1426,146 @@ public class SubsamplingScaleImageView extends View {
         if (baseGrid != null) {
             for (Tile baseTile : baseGrid) {
                 TileLoadTask task = new TileLoadTask(this, decoder, baseTile);
-                execute(task);
+                executeTask(task);
             }
         }
         refreshRequiredTiles(true);
     }
 
+    private void enqueueMissingBaseTiles() {
+        if (decoder == null || tileMap == null) {
+            return;
+        }
+        List<Tile> baseGrid = tileMap.get(fullImageSampleSize);
+        if (baseGrid == null) {
+            return;
+        }
+        for (Tile tile : baseGrid) {
+            if (!tile.visible) {
+                tile.visible = true;
+            }
+            if (!tile.loading && !tile.failed && !tile.retryPending && tile.bitmap == null) {
+                TileLoadTask task = new TileLoadTask(this, decoder, tile);
+                executeTask(task);
+            }
+        }
+    }
+
     /**
      * Loads the optimum tiles for display at the current scale and translate, so the screen can be filled with tiles
-     * that are at least as high resolution as the screen. Frees up bitmaps that are now off the screen.
+     * that are at least as high resolution as the screen. Frees up bitmaps that fall outside the retain viewport.
      *
      * @param load Whether to load the new tiles needed. Use false while scrolling/panning for performance.
+     * @return true if tile visibility or rendered detail state changed and requires a redraw.
      */
-    private void refreshRequiredTiles(boolean load) {
-        if (decoder == null || tileMap == null || vTranslate == null || !Float.isFinite(scale) || scale <= 0f) {
-            return;
+    private boolean refreshRequiredTiles(boolean load) {
+        if (decoder == null || tileMap == null) {
+            return false;
+        }
+        if (vTranslate == null || !Float.isFinite(scale) || scale <= 0f) {
+            if (load && !isBaseLayerReady()) {
+                enqueueMissingBaseTiles();
+            }
+            return false;
         }
 
         int sampleSize = Math.min(fullImageSampleSize, calculateInSampleSize(scale));
+        boolean changed = false;
 
-        // Load tiles of the correct sample size that are on screen. Discard tiles off screen, and those that are higher
-        // resolution than required, or lower res than required but not the base layer, so the base layer is always present.
+        // Load tiles of the correct sample size that intersect prefetch viewport. Retain decoded detail
+        // tiles inside retainViewport; discard only tiles outside retainViewport or at stale sample sizes.
         for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
             for (Tile tile : tileMapEntry.getValue()) {
                 if (tile.sampleSize < sampleSize || (tile.sampleSize > sampleSize && tile.sampleSize != fullImageSampleSize)) {
+                    if (tile.visible || tile.bitmap != null) {
+                        changed = true;
+                    }
                     tile.visible = false;
+                    cancelTileTask(tile);
+                    tile.fadeStartTimeMs = 0L;
                     if (tile.bitmap != null) {
                         tile.bitmap.recycle();
                         tile.bitmap = null;
                     }
                 }
                 if (tile.sampleSize == sampleSize) {
-                    if (tileVisible(tile)) {
-                        tile.visible = true;
-                        if (!tile.loading && tile.bitmap == null && load) {
+                    boolean shouldLoad = tileVisible(tile);
+                    boolean shouldRetain = shouldLoad
+                            || (externalViewportEnabled && tileVisibleIn(tile, externalRetainViewport));
+                    if (shouldLoad) {
+                        if (!tile.visible) {
+                            tile.visible = true;
+                            if (tile.bitmap != null || debug) {
+                                changed = true;
+                            }
+                        }
+                        if (!tile.loading && !tile.failed && !tile.retryPending && tile.bitmap == null && load) {
                             TileLoadTask task = new TileLoadTask(this, decoder, tile);
-                            execute(task);
+                            executeTask(task);
+                            if (debug) {
+                                changed = true;
+                            }
+                        }
+                    } else if (shouldRetain) {
+                        if (tile.visible) {
+                            tile.visible = false;
+                            if (tile.bitmap != null || debug) {
+                                changed = true;
+                            }
+                        }
+                        tile.fadeStartTimeMs = 0L;
+                        if (tile.bitmap == null) {
+                            cancelTileTask(tile);
                         }
                     } else if (tile.sampleSize != fullImageSampleSize) {
+                        if (tile.visible) {
+                            changed = true;
+                        }
                         tile.visible = false;
+                        cancelTileTask(tile);
+                        tile.fadeStartTimeMs = 0L;
                         if (tile.bitmap != null) {
                             tile.bitmap.recycle();
                             tile.bitmap = null;
                         }
                     }
                 } else if (tile.sampleSize == fullImageSampleSize) {
-                    tile.visible = true;
+                    if (!tile.visible) {
+                        tile.visible = true;
+                        changed = true;
+                    }
+                    if (load && !tile.loading && !tile.failed && !tile.retryPending && tile.bitmap == null) {
+                        TileLoadTask task = new TileLoadTask(this, decoder, tile);
+                        executeTask(task);
+                    }
                 }
             }
         }
-
+        return changed;
     }
 
     /**
-     * Determine whether tile is visible.
+     * Determine whether tile is visible in the active viewport.
      */
     private boolean tileVisible(Tile tile) {
-        if (externalViewportEnabled && externalViewport.isEmpty()) return false;
-        float sVisLeft = viewToSourceX(externalViewportEnabled ? externalViewport.left : 0),
-                sVisRight = viewToSourceX(externalViewportEnabled ? externalViewport.right : getWidth()),
-                sVisTop = viewToSourceY(externalViewportEnabled ? externalViewport.top : 0),
-                sVisBottom = viewToSourceY(externalViewportEnabled ? externalViewport.bottom : getHeight());
+        if (externalViewportEnabled) {
+            return tileVisibleIn(tile, externalViewport);
+        }
+        float sVisLeft = viewToSourceX(0),
+                sVisRight = viewToSourceX(getWidth()),
+                sVisTop = viewToSourceY(0),
+                sVisBottom = viewToSourceY(getHeight());
+        return !(sVisLeft > tile.sRect.right || tile.sRect.left > sVisRight || sVisTop > tile.sRect.bottom || tile.sRect.top > sVisBottom);
+    }
+
+    private boolean tileVisibleIn(Tile tile, RectF viewport) {
+        if (viewport.isEmpty()) {
+            return false;
+        }
+        float sVisLeft = viewToSourceX(viewport.left),
+                sVisRight = viewToSourceX(viewport.right),
+                sVisTop = viewToSourceY(viewport.top),
+                sVisBottom = viewToSourceY(viewport.bottom);
         return !(sVisLeft > tile.sRect.right || tile.sRect.left > sVisRight || sVisTop > tile.sRect.bottom || tile.sRect.top > sVisBottom);
     }
 
@@ -1492,10 +1806,15 @@ public class SubsamplingScaleImageView extends View {
     /**
      * Called by worker task when a tile has loaded. Redraws the view.
      */
-    private synchronized void onTileLoaded() {
+    private synchronized void onTileLoaded(@NonNull Tile loadedTile) {
         debug("onTileLoaded");
         checkReady();
         checkImageLoaded();
+        if (loadedTile.sampleSize < fullImageSampleSize && tileFadeDurationMs > 0L && isBaseLayerReady()) {
+            loadedTile.fadeStartTimeMs = SystemClock.uptimeMillis();
+        } else {
+            loadedTile.fadeStartTimeMs = 0L;
+        }
         if (isBaseLayerReady() && bitmap != null) {
             if (!bitmapIsCached) {
                 bitmap.recycle();
@@ -1504,6 +1823,44 @@ public class SubsamplingScaleImageView extends View {
             bitmapIsCached = false;
         }
         invalidate();
+    }
+
+    private void onTileDecodeFailed(@NonNull Tile tile, @NonNull Exception error) {
+        tile.retryCount++;
+        if (tile.retryCount <= MAX_TILE_RETRIES) {
+            tile.retryPending = true;
+            long expectedGen = tileGeneration;
+            Runnable retryRunnable = () -> {
+                tile.retryPending = false;
+                boolean visibleOrBase = tile.visible || tile.sampleSize == fullImageSampleSize;
+                if (expectedGen == tileGeneration
+                        && decoder != null
+                        && visibleOrBase
+                        && tile.bitmap == null
+                        && !tile.loading
+                        && !tile.failed) {
+                    TileLoadTask task = new TileLoadTask(this, decoder, tile);
+                    executeTask(task);
+                }
+            };
+            handler.postAtTime(
+                    retryRunnable,
+                    TILE_RETRY_TOKEN,
+                    SystemClock.uptimeMillis() + TILE_RETRY_BASE_DELAY_MS * tile.retryCount
+            );
+            return;
+        }
+        tile.failed = true;
+        if (onImageEventListener != null) {
+            if (tile.sampleSize == fullImageSampleSize && !readySent) {
+                if (!imageLoadErrorSent) {
+                    imageLoadErrorSent = true;
+                    onImageEventListener.onImageLoadError(error);
+                }
+            } else {
+                onImageEventListener.onTileLoadError(error);
+            }
+        }
     }
 
     /**
@@ -1531,8 +1888,61 @@ public class SubsamplingScaleImageView extends View {
         }
     }
 
-    private void execute(AsyncTask<Void, Void, ?> asyncTask) {
-        asyncTask.executeOnExecutor(executor);
+    private void executeTask(@NonNull CancellableTask task) {
+        activeTasks.add(task);
+        Runnable wrapper = () -> {
+            try {
+                task.run();
+            } finally {
+                activeTasks.remove(task);
+            }
+        };
+        Future<?> future;
+        if (executor instanceof ExecutorService) {
+            future = ((ExecutorService) executor).submit(wrapper);
+        } else {
+            FutureTask<Void> futureTask = new FutureTask<>(wrapper, null);
+            executor.execute(futureTask);
+            future = futureTask;
+        }
+        if (task instanceof TilesInitTask) {
+            ((TilesInitTask) task).future = future;
+        } else if (task instanceof TileLoadTask) {
+            ((TileLoadTask) task).future = future;
+        }
+    }
+
+    private void cancelTileTask(@NonNull Tile tile) {
+        tile.retryPending = false;
+        TileLoadTask task = tile.activeTask;
+        if (task != null) {
+            task.cancel();
+            tile.activeTask = null;
+        }
+        tile.loading = false;
+    }
+
+    private void cancelPendingTileTasks() {
+        for (CancellableTask task : activeTasks) {
+            if (task instanceof TileLoadTask) {
+                task.cancel();
+            }
+        }
+        if (tileMap == null) {
+            return;
+        }
+        for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
+            for (Tile tile : tileMapEntry.getValue()) {
+                cancelTileTask(tile);
+            }
+        }
+    }
+
+    private void cancelAllTasks() {
+        for (CancellableTask task : activeTasks) {
+            task.cancel();
+        }
+        activeTasks.clear();
     }
 
     /**
@@ -2510,9 +2920,8 @@ public class SubsamplingScaleImageView extends View {
 
     /**
      * <p>
-     * Provide an {@link Executor} to be used for loading images. By default, {@link AsyncTask#THREAD_POOL_EXECUTOR}
-     * is used to minimise contention with other background work the app is doing. You can also choose
-     * to use {@link AsyncTask#SERIAL_EXECUTOR} if you want to limit concurrent background tasks.
+     * Provide an {@link Executor} to be used for loading images. By default, an internal shared
+     * daemon thread pool is used to minimise contention with other background work the app is doing.
      * Alternatively you can supply an {@link Executor} of your own to avoid any contention. It is
      * strongly recommended to use a single executor instance for the life of your application, not
      * one per view instance.
@@ -2563,7 +2972,7 @@ public class SubsamplingScaleImageView extends View {
      * @return If an image is currently set.
      */
     public boolean hasImage() {
-        return provider != null || bitmap != null;
+        return provider != null || decoder != null || bitmap != null;
     }
 
     /**
@@ -2749,17 +3158,22 @@ public class SubsamplingScaleImageView extends View {
 
     }
 
+    private interface CancellableTask extends Runnable {
+        void cancel();
+    }
+
     /**
-     * Async task used to get image details without blocking the UI thread.
+     * Worker task used to get image details without blocking the UI thread.
      */
-    private static class TilesInitTask extends AsyncTask<Void, Void, int[]> {
+    private static class TilesInitTask implements CancellableTask {
         private final WeakReference<SubsamplingScaleImageView> viewRef;
         private final WeakReference<Context> contextRef;
         private final InputProvider provider;
         private final long generation;
         private final ImageRegionDecoder decoder;
         private final Rect region;
-        private Exception exception;
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private volatile Future<?> future;
 
         TilesInitTask(SubsamplingScaleImageView view, Context context, InputProvider provider) {
             viewRef = new WeakReference<>(view);
@@ -2771,46 +3185,82 @@ public class SubsamplingScaleImageView extends View {
         }
 
         @Override
-        protected int[] doInBackground(Void... params) {
-            try {
-                Context context = contextRef.get();
-                SubsamplingScaleImageView view = viewRef.get();
-                if (context == null || view == null || generation != view.imageGeneration || provider != view.provider) return null;
-                Point size = decoder.init(context, provider);
-                if (region == null) return new int[]{size.x, size.y};
-                if (!region.intersect(0, 0, size.x, size.y)) throw new IllegalArgumentException("Empty image region");
-                return new int[]{region.width(), region.height()};
-            } catch (Exception e) {
-                exception = e;
-            } catch (OutOfMemoryError e) {
-                exception = new RuntimeException(e);
+        public void cancel() {
+            cancelled.set(true);
+            Future<?> running = future;
+            if (running != null) {
+                running.cancel(false);
             }
-            return null;
         }
 
         @Override
-        protected void onPostExecute(int[] size) {
-            SubsamplingScaleImageView view = viewRef.get();
-            boolean current = view != null && generation == view.imageGeneration && provider == view.provider;
-            if (current && size != null) {
-                view.sRegion = region;
-                view.onTilesInited(decoder, size[0], size[1]);
-            } else {
-                if (view != null) view.releaseDecoder(decoder);
-                else AsyncTask.THREAD_POOL_EXECUTOR.execute(decoder::recycle);
-                if (current && exception != null && view.onImageEventListener != null) view.onImageEventListener.onImageLoadError(exception);
+        public void run() {
+            int[] size = null;
+            Exception error = null;
+            try {
+                Context context = contextRef.get();
+                SubsamplingScaleImageView view = viewRef.get();
+                if (!cancelled.get()
+                        && context != null
+                        && view != null
+                        && generation == view.imageGeneration
+                        && provider == view.provider) {
+                    Point decodedSize = decoder.init(context, provider);
+                    if (!cancelled.get()) {
+                        if (region == null) {
+                            size = new int[]{decodedSize.x, decodedSize.y};
+                        } else if (!region.intersect(0, 0, decodedSize.x, decodedSize.y)) {
+                            throw new IllegalArgumentException("Empty image region");
+                        } else {
+                            size = new int[]{region.width(), region.height()};
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                error = e;
+            } catch (Throwable t) {
+                error = new RuntimeException(t);
             }
+            final int[] finalSize = size;
+            final Exception finalError = error;
+            SubsamplingScaleImageView target = viewRef.get();
+            Handler postHandler = target != null ? target.handler : MAIN_HANDLER;
+            postHandler.post(() -> {
+                SubsamplingScaleImageView view = viewRef.get();
+                boolean current = view != null
+                        && !cancelled.get()
+                        && generation == view.imageGeneration
+                        && provider == view.provider;
+                if (current && finalSize != null) {
+                    view.provider = null;
+                    view.sRegion = region;
+                    view.onTilesInited(decoder, finalSize[0], finalSize[1]);
+                } else {
+                    if (current) {
+                        view.provider = null;
+                    }
+                    if (view != null) {
+                        view.releaseDecoder(decoder);
+                    } else {
+                        DEFAULT_EXECUTOR.execute(decoder::recycle);
+                    }
+                    if (current && finalError != null && view.onImageEventListener != null) {
+                        view.onImageEventListener.onImageLoadError(finalError);
+                    }
+                }
+            });
         }
     }
 
     /** A task owns its output until the current image/tile generation accepts it on the UI thread. */
-    private static class TileLoadTask extends AsyncTask<Void, Void, Bitmap> {
+    private static class TileLoadTask implements CancellableTask {
         private final WeakReference<SubsamplingScaleImageView> viewRef;
         private final ImageRegionDecoder decoder;
         private final Tile tile;
         private final long generation;
         private final Rect sourceRegion = new Rect();
-        private Exception exception;
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private volatile Future<?> future;
 
         TileLoadTask(SubsamplingScaleImageView view, ImageRegionDecoder decoder, Tile tile) {
             viewRef = new WeakReference<>(view);
@@ -2820,42 +3270,73 @@ public class SubsamplingScaleImageView extends View {
             // Snapshot geometry on UI: a rebind must not change an in-flight task's coordinates.
             view.fileSRect(tile.sRect, sourceRegion);
             if (view.sRegion != null) sourceRegion.offset(view.sRegion.left, view.sRegion.top);
+            tile.retryPending = false;
             tile.loading = true;
+            tile.activeTask = this;
         }
 
         @Override
-        protected Bitmap doInBackground(Void... params) {
+        public void cancel() {
+            cancelled.set(true);
+            Future<?> running = future;
+            if (running != null) {
+                running.cancel(false);
+            }
+        }
+
+        @Override
+        public void run() {
+            Bitmap result = null;
+            Exception error = null;
             try {
                 SubsamplingScaleImageView view = viewRef.get();
-                if (view != null && generation == view.tileGeneration && decoder == view.decoder && tile.visible && decoder.isReady()) {
-                    return decoder.decodeRegion(sourceRegion, tile.sampleSize);
+                if (!cancelled.get()
+                        && view != null
+                        && generation == view.tileGeneration
+                        && decoder == view.decoder
+                        && (tile.visible || tile.sampleSize == view.fullImageSampleSize)
+                        && decoder.isReady()) {
+                    result = decoder.decodeRegion(sourceRegion, tile.sampleSize);
                 }
             } catch (Exception e) {
-                exception = e;
-            } catch (OutOfMemoryError e) {
-                exception = new RuntimeException(e);
+                error = e;
+            } catch (Throwable t) {
+                error = new RuntimeException(t);
             }
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(Bitmap bitmap) {
-            SubsamplingScaleImageView view = viewRef.get();
-            tile.loading = false;
-            if (view == null || generation != view.tileGeneration || decoder != view.decoder || !tile.visible) {
-                if (bitmap != null) bitmap.recycle();
-                return;
-            }
-            if (bitmap != null) {
-                tile.bitmap = bitmap;
-                view.onTileLoaded();
-            } else if (exception != null && view.onImageEventListener != null) {
-                view.onImageEventListener.onTileLoadError(exception);
-            } else if (exception == null) {
-                // It was hidden when the worker ran, but became visible before this callback.
-                // loading is now clear: enqueue the still-required tile instead of staying blurry.
-                view.refreshRequiredTiles(true);
-            }
+            final Bitmap finalBitmap = result;
+            final Exception finalError = error;
+            SubsamplingScaleImageView target = viewRef.get();
+            Handler postHandler = target != null ? target.handler : MAIN_HANDLER;
+            postHandler.post(() -> {
+                SubsamplingScaleImageView view = viewRef.get();
+                if (tile.activeTask == TileLoadTask.this) {
+                    tile.activeTask = null;
+                    tile.loading = false;
+                }
+                boolean current = view != null
+                        && !cancelled.get()
+                        && generation == view.tileGeneration
+                        && decoder == view.decoder
+                        && (tile.visible || tile.sampleSize == view.fullImageSampleSize);
+                if (!current) {
+                    if (finalBitmap != null) {
+                        finalBitmap.recycle();
+                    }
+                    return;
+                }
+                if (finalBitmap != null) {
+                    tile.retryCount = 0;
+                    tile.failed = false;
+                    tile.bitmap = finalBitmap;
+                    view.onTileLoaded(tile);
+                } else if (finalError != null) {
+                    view.onTileDecodeFailed(tile, finalError);
+                } else {
+                    // It was hidden when the worker ran, but became visible before this callback.
+                    // loading is now clear: enqueue the still-required tile instead of staying blurry.
+                    view.refreshRequiredTiles(true);
+                }
+            });
         }
     }
 
@@ -2866,6 +3347,11 @@ public class SubsamplingScaleImageView extends View {
         private Bitmap bitmap;
         private volatile boolean loading;
         private volatile boolean visible;
+        private TileLoadTask activeTask;
+        private int retryCount;
+        private boolean retryPending;
+        private boolean failed;
+        private long fadeStartTimeMs;
 
         // Volatile fields instantiated once then updated before use to reduce GC.
         private Rect vRect;

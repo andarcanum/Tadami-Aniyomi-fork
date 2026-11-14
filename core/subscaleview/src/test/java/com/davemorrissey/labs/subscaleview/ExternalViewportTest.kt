@@ -139,4 +139,45 @@ class ExternalViewportTest {
         ShadowLooper.idleMainLooper()
         assertTrue(view.fake.recycled, "An initialization that completed after recycle still owns a decoder")
     }
+
+    @Test
+    fun retainViewportHysteresisPreservesTilesAcrossSmallOscillations() {
+        val view = loadedView()
+        try {
+            view.setExternalViewport(RectF(0f, 400f, 400f, 800f), RectF(0f, 0f, 400f, 1200f), 2f)
+            repeat(2) { view.render() }
+            assertTrue(
+                view.fake.requests.any { it.region.top in 4000 until 8000 && it.sample <= 4 },
+                "Detail tiles in the initial band must decode",
+            )
+
+            // Scroll down so band y=[400, 800] leaves prefetch viewport but stays inside retainViewport.
+            view.fake.requests.clear()
+            view.setExternalViewport(RectF(0f, 900f, 400f, 1300f), RectF(0f, 300f, 400f, 1700f), 2f)
+            repeat(2) { view.render() }
+
+            // Scroll back to y=[400, 800]: retained tiles should reappear without re-decoding.
+            view.fake.requests.clear()
+            view.setExternalViewport(RectF(0f, 400f, 400f, 800f), RectF(0f, 0f, 400f, 1200f), 2f)
+            repeat(2) { view.render() }
+            assertEquals(
+                0,
+                view.fake.requests.count { it.region.top in 4000 until 8000 && it.sample <= 4 },
+                "Tiles kept in retainViewport must not re-decode on oscillation back",
+            )
+
+            // Leave retainViewport completely so those tiles are evicted, then return and verify re-decode.
+            view.setExternalViewport(RectF(0f, 2000f, 400f, 2400f), RectF(0f, 1800f, 400f, 2600f), 2f)
+            repeat(2) { view.render() }
+            view.fake.requests.clear()
+            view.setExternalViewport(RectF(0f, 400f, 400f, 800f), RectF(0f, 0f, 400f, 1200f), 2f)
+            repeat(2) { view.render() }
+            assertTrue(
+                view.fake.requests.any { it.region.top in 4000 until 8000 && it.sample <= 4 },
+                "Tiles evicted after exiting retainViewport must decode again when visible",
+            )
+        } finally {
+            view.recycle()
+        }
+    }
 }

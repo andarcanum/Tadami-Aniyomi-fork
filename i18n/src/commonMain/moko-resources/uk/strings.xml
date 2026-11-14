@@ -797,7 +797,6 @@
     <string name="upcoming_calendar_prev">Попередній місяць</string>
     <string name="action_migrate_duplicate">Перенести існуючий запис</string>
     <string name="action_replace_repo">Замінити</string>
-    <string name="pref_display_profile">Власний профіль відображення</string>
     <string name="pref_webtoon_disable_zoom_out">Вимкнути зменшення масштабу</string>
     <string name="label_upcoming">Незабаром</string>
     <string name="upcoming_calendar_next">Наступний місяць</string>

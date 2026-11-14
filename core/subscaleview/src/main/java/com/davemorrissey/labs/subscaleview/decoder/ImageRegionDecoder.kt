@@ -51,3 +51,11 @@ interface ImageRegionDecoder {
      */
     fun recycle()
 }
+
+interface HdrAwareRegionDecoder : ImageRegionDecoder {
+    val isHdr: Boolean
+}
+
+interface HardwareTileConfigurableDecoder {
+    var hardwareTilesEnabled: Boolean
+}

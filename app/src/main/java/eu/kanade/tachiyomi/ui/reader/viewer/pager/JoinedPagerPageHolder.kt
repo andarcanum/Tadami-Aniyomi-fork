@@ -97,4 +97,17 @@ class JoinedPagerPageHolder(
             isSyncing = false
         }
     }
+
+    val isHdr: Boolean
+        get() = leftPageHolder.isHdr || rightPageHolder.isHdr
+
+    fun recycle() {
+        leftPageHolder.recycle()
+        rightPageHolder.recycle()
+    }
+
+    fun trimMemory(level: Int) {
+        leftPageHolder.trimMemory(level)
+        rightPageHolder.trimMemory(level)
+    }
 }

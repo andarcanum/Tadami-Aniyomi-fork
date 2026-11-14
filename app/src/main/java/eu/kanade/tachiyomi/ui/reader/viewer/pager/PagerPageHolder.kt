@@ -64,6 +64,16 @@ class PagerPageHolder(
 
     init {
         loadJob = scope.launch { loadPageAndProcessStatus() }
+        onHdrChanged = { isHdr ->
+            page.isHdr = isHdr
+            viewer.updateWindowHdrState()
+        }
+    }
+
+    override fun recycle() {
+        loadJob?.cancel()
+        loadJob = null
+        super.recycle()
     }
 
     /**
@@ -155,17 +165,23 @@ class PagerPageHolder(
                     is ProcessedPageImage.Decoded -> PageImageResult.Decoded(processed.bitmap)
                     is ProcessedPageImage.Encoded -> {
                         val source = processed.source
-                        val isAnimated = ImageUtil.isAnimatedAndSupported(source)
+                        val unmodified = !viewer.config.dualPageSplit && !viewer.config.dualPageRotateToFit
+                        val reusable = page.takeIf { unmodified }?.imageDimensions
+                        val isAnimated = if (reusable != null) false else ImageUtil.isAnimatedAndSupported(source)
                         val background = if (!isAnimated && viewer.config.automaticBackground) {
                             ImageUtil.chooseBackground(context, source.peek().inputStream())
                         } else {
                             null
                         }
+                        val dims = if (isAnimated) null else (reusable ?: ImageUtil.getImageDimensions(source))
+                        if (reusable == null && dims != null) {
+                            page.imageDimensions = dims
+                        }
                         PageImageResult.Encoded(
                             source = source,
                             isAnimated = isAnimated,
                             background = background,
-                            dimensions = ImageUtil.getImageDimensions(source),
+                            dimensions = dims,
                         )
                     }
                 }

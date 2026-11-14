@@ -5,14 +5,26 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkAll
+import io.mockk.verify
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import tachiyomi.core.common.util.image.NativeImageDecoder
+import java.io.ByteArrayInputStream
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 class WebtoonBorderDetectorTest {
+    @After
+    fun tearDown() {
+        unmockkAll()
+    }
 
     private fun createTestBitmap(
         width: Int,
@@ -96,5 +108,79 @@ class WebtoonBorderDetectorTest {
         bounds.right shouldBe 75
         bounds.top shouldBe 0
         bounds.bottom shouldBe 100
+    }
+
+    @Test
+    fun `stream smart fit skips scanning small sdr pages when cropBorders already trimmed them`() {
+        mockkObject(NativeImageDecoder.Companion)
+        val bitmap = createTestBitmap(
+            width = 100,
+            height = 100,
+            backgroundColor = Color.WHITE,
+            contentLeft = 25,
+            contentRight = 75,
+        )
+        val native = mockk<NativeImageDecoder>(relaxed = true)
+        every { native.width } returns 100
+        every { native.height } returns 100
+        every { native.isHdr } returns false
+        every { native.decode(any(), any()) } answers {
+            val rect = firstArg<Rect>()
+            Bitmap.createBitmap(bitmap, rect.left, rect.top, rect.width(), rect.height())
+        }
+        every { NativeImageDecoder.open(any(), any()) } returns native
+
+        val skippedBounds = WebtoonBorderDetector.detectContentBounds(
+            ByteArrayInputStream(byteArrayOf(1)),
+            cropBorders = true,
+        )
+        skippedBounds shouldBe Rect(0, 0, 100, 100)
+        verify(exactly = 0) { native.decode(any(), any()) }
+
+        val uncroppedBounds = WebtoonBorderDetector.detectContentBounds(
+            ByteArrayInputStream(byteArrayOf(1)),
+            cropBorders = false,
+        )
+        uncroppedBounds shouldBe Rect(25, 0, 75, 100)
+        verify(atLeast = 1) { native.decode(any(), any()) }
+        bitmap.recycle()
+    }
+
+    @Test
+    fun `stream smart fit skips scanning large sdr pages when cropBorders already trimmed them`() {
+        mockkObject(NativeImageDecoder.Companion)
+        val bitmap = createTestBitmap(
+            width = 1200,
+            height = 1000,
+            backgroundColor = Color.WHITE,
+            contentLeft = 300,
+            contentRight = 900,
+        )
+        val native = mockk<NativeImageDecoder>(relaxed = true)
+        every { native.width } returns 1200
+        every { native.height } returns 1000
+        every { native.isHdr } returns false
+        every { native.decode(any(), any()) } answers {
+            val rect = firstArg<Rect>()
+            Bitmap.createBitmap(bitmap, rect.left, rect.top, rect.width(), rect.height())
+        }
+        every { NativeImageDecoder.open(any(), any()) } returns native
+
+        val bounds = WebtoonBorderDetector.detectContentBounds(
+            ByteArrayInputStream(byteArrayOf(1)),
+            cropBorders = true,
+        )
+        bounds shouldBe Rect(0, 0, 1200, 1000)
+        verify(exactly = 0) { native.decode(any(), any()) }
+
+        // HDR images bypass NativeImageDecoder border trimming, so smart fit still scans them.
+        every { native.isHdr } returns true
+        val hdrBounds = WebtoonBorderDetector.detectContentBounds(
+            ByteArrayInputStream(byteArrayOf(1)),
+            cropBorders = true,
+        )
+        hdrBounds shouldBe Rect(300, 0, 900, 1000)
+        verify(atLeast = 1) { native.decode(any(), any()) }
+        bitmap.recycle()
     }
 }

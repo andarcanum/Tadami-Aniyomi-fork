@@ -779,7 +779,6 @@
     <string name="action_replace_repo_title">A impresión dixital da chave da firma xa existe</string>
     <string name="action_replace_repo_message">O repositorio %1$s ten a misma impresión dixital da chave da firma que %2$s.
 \nSe isto é o comportamento agardado, %2$s substituirase. Se no é así, contacta con quen mantén o repositorio.</string>
-    <string name="pref_display_profile">Perfil de visualización personalizado</string>
     <string name="private_settings">Incluír configuracións sensibles (por exemplo, as chaves de inicio de sesión en plataformas de seguimento)</string>
     <string name="action_bar_up_description">Navegar arriba</string>
     <string name="library_sync_complete">A biblioteca sincronizouse correctamente</string>
@@ -818,7 +817,6 @@
     <string name="add_repo_confirmation">Queres engadir o repositorio \"%s\"?</string>
     <string name="pref_hardware_bitmap_threshold_default">Por defecto (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">Se o lector carga unha páxina en branco, recomendámoste reducilo pouco a pouco.\nLímite actual: %s</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Afecta ao rendemento. Recomendámosche activalo só se a imaxe segue sen verse ao reducir o tamaño máximo</string>
     <string name="pref_download_new_unread_chapters_only">Omitir a descarga de capítulos duplicados xa lidos</string>
     <string name="ext_confirm_remove">Queres eliminar a extensión?</string>
     <string name="remove_private_extension_message">Seguro que queres eliminar a extensión \"%s\"?</string>

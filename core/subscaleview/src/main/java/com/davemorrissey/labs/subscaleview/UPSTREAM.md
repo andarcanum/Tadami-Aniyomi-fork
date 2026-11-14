@@ -7,7 +7,7 @@ Apache-2.0; license included in app/src/main/assets/licenses/mihon-ssiv-LICENSE.
 Only the Java/Kotlin view, image-source, state and provider surface is vendored. This is not a new reader: the public view API, gestures and image-coordinate model are retained.
 
 Local changes (keep small and review when rebasing):
-- app R import and resource declaration; no separate native crop library.
+- extracted `:core:subscaleview` module `R` / resource declaration; no separate native crop library.
 - shared core NativeImageDecoder adapter (imagedecoder18, deterministic lifecycle, bounded border analysis).
 - explicit external viewport/display scale for webtoon parent transforms; bounded base preview and fine tiles.
 - stale async decode ownership must be rejected/recycled.

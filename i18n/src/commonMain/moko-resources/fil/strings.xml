@@ -796,7 +796,6 @@
     <string name="action_replace_repo_title">Umiiral na ang Signing Key Fingerprint</string>
     <string name="action_replace_repo_message">Ang repository na %1$s ay may magkaparehong Signing Key Fingerprint sa %2$s.
 \nKung ito ay inaasahan, %2$s ang papalitan, kung hindi naman ay makipag-ugnayan sa tagapamahala ng iyong repo.</string>
-    <string name="pref_display_profile">Custom na profile sa display</string>
     <string name="label_upcoming">Paparating</string>
     <string name="upcoming_guide">Gabay sa Paparating</string>
     <string name="upcoming_calendar_next">Susunod na Buwan</string>
@@ -835,7 +834,6 @@
     <string name="pref_hardware_bitmap_threshold_summary">Kung naglo-load ang reader ng isang blangkong imahe ay unti-unting bawasan ang threshold.\nNapili: %s</string>
     <string name="pref_hardware_bitmap_threshold">Custom na threshold sa hardware bitmap</string>
     <string name="pref_hardware_bitmap_threshold_default">Default (%d)</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Nakakaapekto sa performance. Paganahin lamang kung ang pagbabawas ng bitmap threshold ay hindi nakakapag-ayos ng mga isyu sa blangkong imahe</string>
     <string name="pref_incognito_mode_extension_summary">Pinahihinto ang kasaysayan ng pagbabasa para sa extension</string>
     <string name="label_auto">Awto</string>
     <string name="action_toggle_private_off">Publikong I-track</string>
@@ -847,6 +845,5 @@
     <string name="export">I-export</string>
     <string name="library_list">Listahan ng Aklatan</string>
     <string name="theme_monochrome">Monokromatiko</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">Gamitin ang legacy decoder para sa long strip reader</string>
     <string name="pref_mark_duplicate_read_chapter_read">Markahan ang mga nadobleng nabasa na kabanata bilang nabasa na</string>
 </resources>

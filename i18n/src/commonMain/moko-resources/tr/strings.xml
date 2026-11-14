@@ -797,7 +797,6 @@
     <string name="pref_flash_duration">Işık çakma süresi</string>
     <string name="pref_flash_duration_summary">%1$s ms</string>
     <string name="pref_flash_page_interval">Işık çakma aralığı</string>
-    <string name="pref_display_profile">Özel görünüm profili</string>
     <string name="action_replace_repo_message">%1$s deposunun İmzalama Anahtarı Parmak İzi %2$s deposuyla aynı.
 \nEğer böyle olması gerekiyorsa %2$s ile değiştirilecek. Aksi takdirde depo yöneticinize ulaşın.</string>
     <string name="pref_webtoon_disable_zoom_out">Dışa yakınlaştırmayı devre dışı bırak</string>
@@ -835,7 +834,6 @@
     <string name="pref_hardware_bitmap_threshold">Özel bitmap donanım sınırı</string>
     <string name="pref_hardware_bitmap_threshold_default">Varsayılan (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">Eğer okuyucu boş bir görsel yüklerse bu sınırı kademeli olarak azaltın.\nSeçili: %s</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Performansı etkiler. Yalnızca bitmap sınırını düşürmek boş görsel sorunlarını çözmediğinde kullanın</string>
     <string name="pref_incognito_mode_extension_summary">Eklenti için okuma geçmişini duraklat</string>
     <string name="label_auto">Otomatik</string>
     <string name="theme_monochrome">Monokrom</string>
@@ -847,7 +845,6 @@
     <string name="library_list">Kitaplık Listesi</string>
     <string name="export">Dışa Aktar</string>
     <string name="action_toggle_private_off">Herkese açık olarak izle</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">Uzun şerit okuyucusu için eski çözümleyiciyi kullan</string>
     <string name="pref_mark_duplicate_read_chapter_read">Yinelenen okunmuş bölümleri okundu olarak işaretle</string>
     <string name="action_display_unread_badge">Okunmamış bölümler</string>
     <string name="pref_behavior">Davranış</string>

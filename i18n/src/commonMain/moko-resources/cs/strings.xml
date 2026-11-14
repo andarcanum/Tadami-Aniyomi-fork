@@ -805,7 +805,6 @@
     <string name="pref_flash_with">Bliknout</string>
     <string name="pref_flash_style_black">Černou</string>
     <string name="pref_flash_style_white_black">Bílou a Černou</string>
-    <string name="pref_display_profile">Vlastní profil zobrazení</string>
     <string name="action_view_upcoming">Zobrazit nadcházející aktualizace</string>
     <string name="file_picker_uri_permission_unsupported">Nepodařilo se získat trvalý přístup ke složce. Aplikace se může chovat zvláštně.</string>
     <string name="pref_auto_update_manga_on_mark_read">Aktualizovat postup po přečtení</string>
@@ -818,7 +817,6 @@
     <string name="firebase_summary">Odesílání záznamů o pádech a analytických dat nám umožní identifikovat a opravit problémy, zlepšit výkon a přizpůsobit budoucí aktualizace vašim potřebám</string>
     <string name="onboarding_permission_analytics">Povolit analytiku</string>
     <string name="add_repo_confirmation">Chcete přidat repozitář \"%s\"?</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Má dopad na výkon. Povolte pouze pokud snížení limitu bitmapy nespraví problémy s prázdnými obrázky</string>
     <string name="extensionRepo_settings">Repozitáře rozšíření</string>
     <string name="ext_remove">Odstranit</string>
     <string name="ext_confirm_remove">Odstranit rozšíření?</string>

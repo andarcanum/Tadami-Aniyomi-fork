@@ -2,34 +2,28 @@ package tachiyomi.core.common.util.system
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import androidx.test.core.app.ApplicationProvider
 import okio.Buffer
 import okio.BufferedSource
-import org.junit.Assume
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * ImageUtil.isTallImage decodes through tachiyomi.decoder.ImageDecoder, whose static initializer
- * loads the native "imagedecoder" library. That AAR ships Android ABI binaries only - there is no
- * host build - so these cases cannot run on the JVM, Robolectric included. They are skipped rather
- * than deleted: run them as an instrumentation test when the behaviour needs verifying.
+ * Pure-header dimension, tall-image, and animated-format routing tests run without JNI via
+ * `ImageHeader` and `BitmapFactory`, while pixel-decoding paths require an Android instrumentation
+ * environment with `libimagedecoder.so`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30], application = Application::class)
 class ImageUtilTest {
-
-    @Before
-    fun requireNativeDecoder() {
-        val decoderAvailable = runCatching {
-            ImageUtil.isTallImage(createImageSource(width = 10, height = 10))
-        }.isSuccess
-        Assume.assumeTrue("native imagedecoder is not available on the host JVM", decoderAvailable)
-    }
 
     @Test
     fun `very tall image is detected as tall`() {
@@ -50,6 +44,45 @@ class ImageUtilTest {
         val imageSource = createImageSource(width = 200, height = 700)
 
         assertTrue(ImageUtil.isTallImage(imageSource))
+    }
+
+    @Test
+    fun `large png header dimensions above 32767px resolve cleanly without native library`() {
+        val largePng = Buffer().write(
+            byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 17, 0, 0, -100, 65),
+        )
+        val dims = ImageUtil.getImageDimensions(largePng)
+        assertNotNull(dims)
+        assertEquals(17, dims.width)
+        assertEquals(40001, dims.height)
+        assertTrue(ImageUtil.isTallImage(largePng))
+    }
+
+    @Test
+    fun `animated format detection covers gif webp heif and avif across api levels`() {
+        val gif = Buffer().write("GIF89a\u0010\u0000\u0010\u0000".toByteArray())
+        val animWebp = Buffer().write("RIFF0000WEBPVP8X".toByteArray() + byteArrayOf(10, 0, 0, 0, 2) + ByteArray(11))
+        val staticWebp = Buffer().write("RIFF0000WEBPVP8X".toByteArray() + byteArrayOf(10, 0, 0, 0, 0) + ByteArray(11))
+        val animHeif = Buffer().write("0000ftypmsf1".toByteArray())
+        val staticHeif = Buffer().write("0000ftypheic".toByteArray())
+        val animAvif = Buffer().write("0000ftypavis".toByteArray())
+        val staticAvif = Buffer().write("0000ftypavif".toByteArray())
+
+        assertTrue(ImageUtil.isAnimatedAndSupported(gif))
+        assertTrue(ImageUtil.isAnimatedAndSupported(animWebp))
+        assertFalse(ImageUtil.isAnimatedAndSupported(staticWebp))
+        assertTrue(ImageUtil.isAnimatedAndSupported(animHeif))
+        assertFalse(ImageUtil.isAnimatedAndSupported(staticHeif))
+        assertTrue(ImageUtil.isAnimatedAndSupported(animAvif))
+        assertFalse(ImageUtil.isAnimatedAndSupported(staticAvif))
+    }
+
+    @Test
+    fun `chooseBackground handles unreadable or small streams safely`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val emptyBg = ImageUtil.chooseBackground(app, ByteArray(0).inputStream())
+        assertTrue(emptyBg is ColorDrawable)
+        assertEquals(Color.WHITE, emptyBg.color)
     }
 
     private fun createImageSource(width: Int, height: Int): BufferedSource {

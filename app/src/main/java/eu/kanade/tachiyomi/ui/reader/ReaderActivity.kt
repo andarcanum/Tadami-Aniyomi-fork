@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ColorMatrix
@@ -388,9 +389,26 @@ class ReaderActivity : BaseActivity() {
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(false)
         super.onDestroy()
         viewModel.state.value.viewer?.destroy()
+        setWindowHdrEnabled(false)
         config = null
         menuToggleToast?.cancel()
         readingModeToast?.cancel()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        viewModel.state.value.viewer?.trimMemory(level)
+    }
+
+    internal fun setWindowHdrEnabled(enabled: Boolean) {
+        val targetMode = if (enabled) {
+            ActivityInfo.COLOR_MODE_HDR
+        } else {
+            ActivityInfo.COLOR_MODE_DEFAULT
+        }
+        if (window.colorMode != targetMode) {
+            window.colorMode = targetMode
+        }
     }
 
     override fun onPause() {
@@ -1024,6 +1042,7 @@ class ReaderActivity : BaseActivity() {
             prevViewer.destroy()
             binding.viewerContainer.removeAllViews()
         }
+        setWindowHdrEnabled(false)
         viewModel.onViewerLoaded(newViewer)
         updateViewerInset(
             readerPreferences.fullscreen().get(),

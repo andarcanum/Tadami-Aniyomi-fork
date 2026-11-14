@@ -289,29 +289,63 @@ class NativeImageDecoderInstrumentedTest {
     }
 
     @Test
-    fun crop_budget_never_discards_an_unsampled_thin_fringe() {
-        val encoded = Bitmap.createBitmap(2048, 2048, Bitmap.Config.ARGB_8888).useBitmap { bitmap ->
+    fun large_png_supports_border_cropping_and_non_power_of_two_sampling() {
+        val width = 17
+        val height = 40001
+        val encoded = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).useBitmap { bitmap ->
             bitmap.eraseColor(Color.WHITE)
             android.graphics.Canvas(bitmap).drawRect(
-                200f,
-                200f,
-                1800f,
-                1800f,
-                android.graphics.Paint().apply {
-                    color =
-                        Color.BLACK
-                },
+                0f,
+                100f,
+                width.toFloat(),
+                39900f,
+                android.graphics.Paint().apply { color = Color.GREEN },
             )
-            bitmap.setPixel(10, 5, Color.BLACK) // Would disappear from the old sample=2 preview.
             ByteArrayOutputStream().use { out ->
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out))
                 out.toByteArray()
             }
         }
         NativeImageDecoder.open(encoded.inputStream(), cropBorders = true).use { decoder ->
-            assertEquals(2048, decoder.width)
-            assertEquals(2048, decoder.height)
-            decoder.decode(Rect(0, 5, 32, 6)).useBitmap { fringe ->
+            assertEquals(17, decoder.width)
+            assertEquals(39800, decoder.height)
+            decoder.decode(Rect(0, 0, 17, 1)).useBitmap { top ->
+                assertEquals(Color.GREEN, top.getPixel(8, 0))
+            }
+        }
+        NativeImageDecoder.open(encoded.inputStream()).use { decoder ->
+            decoder.decode(Rect(0, 0, 17, 40001), sampleSize = 3).useBitmap { sampled3 ->
+                assertDimensions("large PNG sampleSize=3", sampled3, 6, 13334)
+            }
+            // sampleSize=32 exceeds width=17: LargePngRegionDecoder must clamp inSampleSize instead of failing.
+            decoder.decode(Rect(0, 0, 17, 40001), sampleSize = 32).useBitmap { sampled32 ->
+                assertDimensions("large PNG sampleSize=32", sampled32, 1, 1251)
+            }
+        }
+    }
+
+    @Test
+    fun crop_budget_never_discards_an_unsampled_thin_fringe() {
+        val encoded = Bitmap.createBitmap(2048, 2048, Bitmap.Config.ARGB_8888).useBitmap { bitmap ->
+            bitmap.eraseColor(Color.WHITE)
+            val black = android.graphics.Paint().apply { color = Color.BLACK }
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.drawRect(200f, 200f, 1800f, 1800f, black)
+            // 1px-tall thin horizontal line at odd y=5: exceeds 2048px noise limit (3) yet disappears under sample=2.
+            for (x in 200 until 220) {
+                bitmap.setPixel(x, 5, Color.BLACK)
+            }
+            ByteArrayOutputStream().use { out ->
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out))
+                out.toByteArray()
+            }
+        }
+        NativeImageDecoder.open(encoded.inputStream(), cropBorders = true).use { decoder ->
+            assertFalse(decoder.isHdr)
+            assertFalse(decoder.hasGainmap)
+            assertEquals(1600, decoder.width)
+            assertEquals(1795, decoder.height)
+            decoder.decode(Rect(0, 0, 20, 1)).useBitmap { fringe ->
                 assertEquals(Color.BLACK, fringe.getPixel(10, 0))
             }
         }

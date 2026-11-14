@@ -360,7 +360,6 @@
     <string name="pref_show_page_number">পৃষ্ঠা নম্বৰ দেখুৱাওক</string>
     <string name="pref_show_reading_mode">পঢ়া মোড দেখুৱাওক</string>
     <string name="pref_show_reading_mode_summary">পঢ়ুৱৈ খোলাৰ সময়ত ক্ষণেকৰ বাবে বৰ্তমান মোড দেখুৱাওক</string>
-    <string name="pref_display_profile">নিজস্ব প্ৰদৰ্শন প্ৰফাইল</string>
     <string name="pref_crop_borders">কোনবোৰ কটক</string>
     <string name="pref_custom_brightness">নিজস্ব উজ্জ্বলতা</string>
     <string name="pref_color_filter_mode">ৰং চাবনি মিশ্ৰণ মোড</string>
@@ -835,7 +834,6 @@
     <string name="pref_hardware_bitmap_threshold">কাষ্টম হাৰ্ডৱেৰ বিটম্যাপ থ্ৰেশহোল্ড</string>
     <string name="pref_hardware_bitmap_threshold_summary">যদি পাঠকে এটা খালী ছবি লোড কৰে ক্ৰমান্বয়ে থ্ৰেছহোল্ড হ্ৰাস কৰক। \nবাচনি কৰা: %s</string>
     <string name="pref_hardware_bitmap_threshold_default">ডিফল্ট (%d)</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">কাৰ্য্যক্ষমতাক প্ৰভাৱিত কৰে। কেৱল সামৰ্থবান কৰক যদি বিটমেপ থ্ৰেছহোল্ড হ্ৰাস কৰিলে খালী প্ৰতিমুৰ্তি সমস্যা সমাধান নহয়</string>
     <string name="pref_incognito_mode_extension_summary">সম্প্ৰসাৰণৰ বাবে ইতিহাস পঢ়া বন্ধ কৰক</string>
     <string name="label_auto">অটো</string>
     <string name="theme_monochrome">একবৰ্ণী</string>

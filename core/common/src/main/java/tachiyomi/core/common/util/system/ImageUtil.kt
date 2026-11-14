@@ -5,7 +5,6 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.BitmapRegionDecoder
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Rect
@@ -21,6 +20,7 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.get
 import androidx.core.graphics.green
 import androidx.core.graphics.red
+import ca.mpreg.imagedecoder.ImageDecoder
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.util.system.GLUtil
 import logcat.LogPriority
@@ -72,16 +72,23 @@ object ImageUtil {
     fun isAnimatedAndSupported(source: BufferedSource): Boolean {
         return try {
             val type = ImageHeader.read(source.peek().inputStream()) ?: return false
-            // https://coil-kt.github.io/coil/getting_started/#supported-image-formats
             when (type.format) {
                 ImageHeader.Format.GIF -> true
-                // Animated WebP on Android 9+
-                ImageHeader.Format.WEBP -> type.animated && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                // Animated Heif on Android 11+
-                ImageHeader.Format.HEIF -> type.animated && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                ImageHeader.Format.WEBP -> type.animated
+                ImageHeader.Format.HEIF -> type.animated
+                ImageHeader.Format.AVIF -> type.animated
+                ImageHeader.Format.JXL -> {
+                    try {
+                        source.peek().inputStream().use { stream ->
+                            ImageDecoder.open(stream).use { it.isAnimated }
+                        }
+                    } catch (_: LinkageError) {
+                        false
+                    }
+                }
                 else -> false
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -120,33 +127,51 @@ object ImageUtil {
      */
     fun splitInHalf(imageSource: BufferedSource, side: Side): BufferedSource {
         val imageBitmap = decodeBitmap(imageSource)
-        val height = imageBitmap.height
-        val width = imageBitmap.width
+        return try {
+            val height = imageBitmap.height
+            val width = imageBitmap.width
 
-        val singlePage = Rect(0, 0, width / 2, height)
+            val singlePage = Rect(0, 0, width / 2, height)
 
-        val half = createBitmap(width / 2, height)
-        val part = when (side) {
-            Side.RIGHT -> Rect(width - width / 2, 0, width, height)
-            Side.LEFT -> Rect(0, 0, width / 2, height)
+            val half = createBitmap(width / 2, height)
+            try {
+                val part = when (side) {
+                    Side.RIGHT -> Rect(width - width / 2, 0, width, height)
+                    Side.LEFT -> Rect(0, 0, width / 2, height)
+                }
+                half.applyCanvas {
+                    drawBitmap(imageBitmap, part, singlePage, null)
+                }
+                val output = Buffer()
+                half.compress(Bitmap.CompressFormat.JPEG, 100, output.outputStream())
+                output
+            } finally {
+                half.recycle()
+            }
+        } finally {
+            imageBitmap.recycle()
         }
-        half.applyCanvas {
-            drawBitmap(imageBitmap, part, singlePage, null)
-        }
-        val output = Buffer()
-        half.compress(Bitmap.CompressFormat.JPEG, 100, output.outputStream())
-
-        return output
     }
 
     fun rotateImage(imageSource: BufferedSource, degrees: Float): BufferedSource {
         val imageBitmap = decodeBitmap(imageSource)
-        val rotated = rotateBitMap(imageBitmap, degrees)
+        val rotated = try {
+            rotateBitMap(imageBitmap, degrees)
+        } catch (e: Throwable) {
+            imageBitmap.recycle()
+            throw e
+        }
+        if (rotated !== imageBitmap) {
+            imageBitmap.recycle()
+        }
 
-        val output = Buffer()
-        rotated.compress(Bitmap.CompressFormat.JPEG, 100, output.outputStream())
-
-        return output
+        return try {
+            val output = Buffer()
+            rotated.compress(Bitmap.CompressFormat.JPEG, 100, output.outputStream())
+            output
+        } finally {
+            rotated.recycle()
+        }
     }
 
     private fun rotateBitMap(bitmap: Bitmap, degrees: Float): Bitmap {
@@ -159,30 +184,38 @@ object ImageUtil {
      */
     fun splitAndMerge(imageSource: BufferedSource, upperSide: Side): BufferedSource {
         val imageBitmap = decodeBitmap(imageSource)
-        val height = imageBitmap.height
-        val width = imageBitmap.width
+        return try {
+            val height = imageBitmap.height
+            val width = imageBitmap.width
 
-        val result = createBitmap(width / 2, height * 2)
-        result.applyCanvas {
-            // right -> upper
-            val rightPart = when (upperSide) {
-                Side.RIGHT -> Rect(width - width / 2, 0, width, height)
-                Side.LEFT -> Rect(0, 0, width / 2, height)
+            val result = createBitmap(width / 2, height * 2)
+            try {
+                result.applyCanvas {
+                    // right -> upper
+                    val rightPart = when (upperSide) {
+                        Side.RIGHT -> Rect(width - width / 2, 0, width, height)
+                        Side.LEFT -> Rect(0, 0, width / 2, height)
+                    }
+                    val upperPart = Rect(0, 0, width / 2, height)
+                    drawBitmap(imageBitmap, rightPart, upperPart, null)
+                    // left -> bottom
+                    val leftPart = when (upperSide) {
+                        Side.LEFT -> Rect(width - width / 2, 0, width, height)
+                        Side.RIGHT -> Rect(0, 0, width / 2, height)
+                    }
+                    val bottomPart = Rect(0, height, width / 2, height * 2)
+                    drawBitmap(imageBitmap, leftPart, bottomPart, null)
+                }
+
+                val output = Buffer()
+                result.compress(Bitmap.CompressFormat.JPEG, 100, output.outputStream())
+                output
+            } finally {
+                result.recycle()
             }
-            val upperPart = Rect(0, 0, width / 2, height)
-            drawBitmap(imageBitmap, rightPart, upperPart, null)
-            // left -> bottom
-            val leftPart = when (upperSide) {
-                Side.LEFT -> Rect(width - width / 2, 0, width, height)
-                Side.RIGHT -> Rect(0, 0, width / 2, height)
-            }
-            val bottomPart = Rect(0, height, width / 2, height * 2)
-            drawBitmap(imageBitmap, leftPart, bottomPart, null)
+        } finally {
+            imageBitmap.recycle()
         }
-
-        val output = Buffer()
-        result.compress(Bitmap.CompressFormat.JPEG, 100, output.outputStream())
-        return output
     }
 
     /**
@@ -217,17 +250,27 @@ object ImageUtil {
     }
 
     fun rotateImageBitmap(imageSource: BufferedSource, degrees: Float): Bitmap? {
+        var imageBitmap: Bitmap? = null
         return try {
-            rotateBitMap(decodeBitmap(imageSource), degrees)
+            imageBitmap = decodeBitmap(imageSource)
+            val rotated = rotateBitMap(imageBitmap, degrees)
+            if (rotated !== imageBitmap) {
+                imageBitmap.recycle()
+            }
+            rotated
         } catch (e: Exception) {
+            if (imageBitmap != null && !imageBitmap.isRecycled) {
+                imageBitmap.recycle()
+            }
             logcat(LogPriority.WARN, e) { "rotateImageBitmap failed, falling back" }
             null
         }
     }
 
     fun splitAndMergeBitmap(imageSource: BufferedSource, upperSide: Side): Bitmap? {
+        var imageBitmap: Bitmap? = null
         return try {
-            val imageBitmap = decodeBitmap(imageSource)
+            imageBitmap = decodeBitmap(imageSource)
             val height = imageBitmap.height
             val width = imageBitmap.width
             if (width <= 0 || height <= 0) return null
@@ -250,6 +293,10 @@ object ImageUtil {
         } catch (e: Exception) {
             logcat(LogPriority.WARN, e) { "splitAndMergeBitmap failed, falling back" }
             null
+        } finally {
+            if (imageBitmap != null && !imageBitmap.isRecycled) {
+                imageBitmap.recycle()
+            }
         }
     }
 
@@ -282,17 +329,17 @@ object ImageUtil {
             return true
         }
 
-        val bitmapRegionDecoder = getBitmapRegionDecoder(imageSource.peek().inputStream())
-        if (bitmapRegionDecoder == null) {
-            logcat { "Failed to create new instance of BitmapRegionDecoder" }
+        val decoder = try {
+            NativeImageDecoder.open(imageSource.peek().inputStream())
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to create image decoder for splitTallImage" }
+            return false
+        } catch (e: LinkageError) {
+            logcat(LogPriority.ERROR, e) { "Failed to load native image decoder for splitTallImage" }
             return false
         }
 
-        val options = extractImageOptions(imageSource).apply {
-            inJustDecodeBounds = false
-        }
-
-        val splitDataList = options.splitData
+        val splitDataList = computeSplitData(decoder.width, decoder.height)
 
         return try {
             splitDataList.forEach { splitData ->
@@ -309,9 +356,22 @@ object ImageUtil {
                     splitData.bottomOffset,
                 )
 
-                splitFile.openOutputStream().use { outputStream ->
-                    val splitBitmap = bitmapRegionDecoder.decodeRegion(region, options)
-                    splitBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                val decoded = decoder.decode(region)
+                val splitBitmap = if (decoded.config == Bitmap.Config.RGBA_F16) {
+                    try {
+                        decoded.copy(Bitmap.Config.ARGB_8888, false)
+                            ?: error("Failed to convert split region to ARGB_8888")
+                    } finally {
+                        decoded.recycle()
+                    }
+                } else {
+                    decoded
+                }
+                try {
+                    splitFile.openOutputStream().use { outputStream ->
+                        splitBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                    }
+                } finally {
                     splitBitmap.recycle()
                 }
                 logcat {
@@ -329,7 +389,7 @@ object ImageUtil {
             logcat(LogPriority.ERROR, e)
             false
         } finally {
-            bitmapRegionDecoder.recycle()
+            decoder.close()
         }
     }
 
@@ -338,38 +398,34 @@ object ImageUtil {
         index + 1,
     )}.jpg"
 
-    private val BitmapFactory.Options.splitData
-        get(): List<SplitData> {
-            val imageHeight = outHeight
-            val imageWidth = outWidth
+    private fun computeSplitData(imageWidth: Int, imageHeight: Int): List<SplitData> {
+        // -1 so it doesn't try to split when imageHeight = optimalImageHeight
+        val partCount = (imageHeight - 1) / optimalImageHeight + 1
+        val optimalSplitHeight = imageHeight / partCount
 
-            // -1 so it doesn't try to split when imageHeight = optimalImageHeight
-            val partCount = (imageHeight - 1) / optimalImageHeight + 1
-            val optimalSplitHeight = imageHeight / partCount
+        logcat {
+            "Generating SplitData for image (height: $imageHeight): " +
+                "$partCount parts @ ${optimalSplitHeight}px height per part"
+        }
 
-            logcat {
-                "Generating SplitData for image (height: $imageHeight): " +
-                    "$partCount parts @ ${optimalSplitHeight}px height per part"
-            }
+        return buildList {
+            val range = 0..<partCount
+            for (index in range) {
+                // Only continue if the list is empty or there is image remaining
+                if (isNotEmpty() && imageHeight <= last().bottomOffset) break
 
-            return buildList {
-                val range = 0..<partCount
-                for (index in range) {
-                    // Only continue if the list is empty or there is image remaining
-                    if (isNotEmpty() && imageHeight <= last().bottomOffset) break
+                val topOffset = index * optimalSplitHeight
+                var splitHeight = min(optimalSplitHeight, imageHeight - topOffset)
 
-                    val topOffset = index * optimalSplitHeight
-                    var splitHeight = min(optimalSplitHeight, imageHeight - topOffset)
-
-                    if (index == range.last) {
-                        val remainingHeight = imageHeight - (topOffset + splitHeight)
-                        splitHeight += remainingHeight
-                    }
-
-                    add(SplitData(index, topOffset, splitHeight, imageWidth))
+                if (index == range.last) {
+                    val remainingHeight = imageHeight - (topOffset + splitHeight)
+                    splitHeight += remainingHeight
                 }
+
+                add(SplitData(index, topOffset, splitHeight, imageWidth))
             }
         }
+    }
 
     data class SplitData(
         val index: Int,
@@ -401,10 +457,49 @@ object ImageUtil {
      * Algorithm for determining what background to accompany a comic/manga page
      */
     fun chooseBackground(context: Context, imageStream: InputStream): Drawable {
-        val image = runCatching { NativeImageDecoder.open(imageStream).use { it.decode() } }.getOrNull()
+        val image = decodeChooseBackgroundBitmap(imageStream) ?: return ColorDrawable(Color.WHITE)
+        return try {
+            computeBackgroundDrawable(context, image)
+        } finally {
+            image.recycle()
+        }
+    }
 
+    private fun decodeChooseBackgroundBitmap(imageStream: InputStream): Bitmap? {
+        return try {
+            NativeImageDecoder.open(imageStream).use { decoder ->
+                val w = decoder.width
+                val h = decoder.height
+                if (w < 50 || h < 50) return null
+                // Downsample boundedly (~512px max side) while keeping the minor axis >= 64px so edge heuristics hold.
+                val maxSampleForMax = maxOf(w, h) / 512
+                val maxSampleForMin = minOf(w, h) / 64
+                var sampleSize = minOf(maxSampleForMax, maxSampleForMin).coerceAtLeast(1)
+                while (((w.toLong() + sampleSize - 1) / sampleSize) *
+                    ((h.toLong() + sampleSize - 1) / sampleSize) > 4_194_304L
+                ) {
+                    sampleSize++
+                }
+                val decoded = decoder.decode(sampleSize = sampleSize)
+                if (decoded.config == Bitmap.Config.RGBA_F16) {
+                    try {
+                        decoded.copy(Bitmap.Config.ARGB_8888, false)
+                    } finally {
+                        decoded.recycle()
+                    }
+                } else {
+                    decoded
+                }
+            }
+        } catch (_: Exception) {
+            null
+        } catch (_: LinkageError) {
+            null
+        }
+    }
+
+    private fun computeBackgroundDrawable(context: Context, image: Bitmap): Drawable {
         val whiteColor = Color.WHITE
-        if (image == null) return ColorDrawable(whiteColor)
         if (image.width < 50 || image.height < 50) {
             return ColorDrawable(whiteColor)
         }
@@ -656,6 +751,13 @@ object ImageUtil {
      */
     private fun extractImageOptions(imageSource: BufferedSource): BitmapFactory.Options {
         try {
+            val header = ImageHeader.read(imageSource.peek().inputStream())
+            if (header?.width != null && header.height != null) {
+                return BitmapFactory.Options().apply {
+                    outWidth = header.width
+                    outHeight = header.height
+                }
+            }
             return NativeImageDecoder.open(imageSource.peek().inputStream()).use { decoder ->
                 BitmapFactory.Options().apply {
                     outWidth = decoder.width
@@ -664,6 +766,8 @@ object ImageUtil {
             }
         } catch (_: Exception) {
             // Keep the platform fallback for formats outside the native build.
+        } catch (_: LinkageError) {
+            // Keep the platform fallback when native decoder libraries are unavailable (e.g. JVM tests).
         }
 
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -685,15 +789,8 @@ object ImageUtil {
             NativeImageDecoder.open(imageSource.inputStream()).use { it.decode() }
         } catch (_: Exception) {
             null
-        }
-    }
-
-    private fun getBitmapRegionDecoder(imageStream: InputStream): BitmapRegionDecoder? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            BitmapRegionDecoder.newInstance(imageStream)
-        } else {
-            @Suppress("DEPRECATION")
-            BitmapRegionDecoder.newInstance(imageStream, false)
+        } catch (_: LinkageError) {
+            null
         }
     }
 

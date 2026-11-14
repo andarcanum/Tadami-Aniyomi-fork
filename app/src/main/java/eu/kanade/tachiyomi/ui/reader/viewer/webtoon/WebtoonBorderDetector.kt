@@ -70,6 +70,11 @@ object WebtoonBorderDetector {
                 val width = decoder.width
                 val height = decoder.height
                 if (width <= 20 || height <= 20) return Rect(0, 0, width, height)
+                // NativeImageDecoder trims uniform borders on all SDR images when cropBorders=true;
+                // re-scanning already-trimmed edges can misclassify edge artwork as margin.
+                if (cropBorders && !decoder.isHdr) {
+                    return Rect(0, 0, width, height)
+                }
                 val sampleY = listOf(height / 10, height / 3, height / 2, height * 2 / 3, height * 9 / 10)
                 var leftLimit = width
                 var rightLimit = 0
