@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -473,6 +474,7 @@ internal fun ComposePagerPageRenderer(
                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                     onPlainTap = onTextTap,
                     onImageLongClick = onImageLongClick,
+                    modifier = Modifier.absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
                 )
             } else {
                 // Two columns of one spread. Each gets a shared reader-content composable inside
@@ -481,7 +483,7 @@ internal fun ComposePagerPageRenderer(
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = spreadCutoutLeftDp, end = spreadCutoutRightDp),
+                        .absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
                 ) {
                     spreadPages.forEach { spreadPage ->
                         NovelPageReaderPageContent(

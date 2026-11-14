@@ -1775,6 +1775,17 @@ class NovelReaderScreenModel(
             bookMode = bookController.bookModeUiState(),
         )
     }
+    fun updateReadingProgressForChapter(
+        chapterId: Long,
+        currentIndex: Int,
+        totalItems: Int,
+        persistedProgress: Long? = null,
+        isInitialPositionRestored: Boolean = false,
+    ) {
+        if (currentChapter?.id != chapterId) return
+        updateReadingProgress(currentIndex, totalItems, persistedProgress, isInitialPositionRestored)
+    }
+
     fun updateReadingProgress(
         currentIndex: Int,
         totalItems: Int,

@@ -326,7 +326,7 @@ class NovelReaderScreen(
                                     navigator.pop()
                                 }
                             },
-                            onReadingProgress = screenModel::updateReadingProgress,
+                            onReadingProgress = screenModel::updateReadingProgressForChapter,
                             onSeekBookModeProgress = screenModel::seekBookModeToProgress,
                             onToggleBookmark = screenModel::toggleChapterBookmark,
                             onOpenDictionaryHistory = { navigator.push(NovelDictionaryHistoryScreen()) },

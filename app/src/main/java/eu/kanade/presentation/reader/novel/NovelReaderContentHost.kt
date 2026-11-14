@@ -108,6 +108,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.AnnotatedString
@@ -673,7 +674,7 @@ internal fun NovelReaderContentHost(
             displayRefreshHost.flash()
         }
         hasReportedReadingProgress = true
-        onReadingProgress(currentIndex, totalItems, persistedProgress, isInitialPositionRestored)
+        onReadingProgress(state.chapter.id, currentIndex, totalItems, persistedProgress, isInitialPositionRestored)
     }
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -1075,26 +1076,16 @@ internal fun NovelReaderContentHost(
         viewportHeightPx = effectivePageViewportSize.height,
         minSpreadWidthPx = novelSpreadMinWidthPx,
     )
-    // Reserve room for a display cutout on the short edges of a spread. Spread columns run to the
-    // very edge of the screen (the "spine" is just two margins meeting at center), so without this
-    // the first/last characters slide under a camera punch-hole on devices that render into the
-    // cutout area. Gated on the cutout-guard setting and only when a spread is actually active.
-    val spreadCutoutLeftPx = if (novelSpreadColumns > 1 && state.readerSettings.spreadCutoutGuard) {
-        rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())?.left ?: 0
-    } else {
-        0
-    }
-    val spreadCutoutRightPx = if (novelSpreadColumns > 1 && state.readerSettings.spreadCutoutGuard) {
-        rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())?.right ?: 0
-    } else {
-        0
-    }
-    val scrollCutoutLeftDp = with(density) {
-        (rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())?.left ?: 0).toDp()
-    }
-    val scrollCutoutRightDp = with(density) {
-        (rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())?.right ?: 0).toDp()
-    }
+    // Keep paper full-bleed, but reserve the same physical safe edges in native foreground
+    // and pagination. The spread setting may opt out of camera protection, never side navigation.
+    val pageHorizontalSafeInsets = rememberNovelHorizontalSafeInsets(
+        includeDisplayCutout = novelSpreadColumns <= 1 || state.readerSettings.spreadCutoutGuard,
+    )
+    val spreadCutoutLeftPx = with(density) { pageHorizontalSafeInsets.left.roundToPx() }
+    val spreadCutoutRightPx = with(density) { pageHorizontalSafeInsets.right.roundToPx() }
+    val scrollHorizontalSafeInsets = rememberNovelHorizontalSafeInsets()
+    val scrollCutoutLeftDp = scrollHorizontalSafeInsets.left
+    val scrollCutoutRightDp = scrollHorizontalSafeInsets.right
     // A spread page's contentPadding is bumped by a small vertical safety so the first and last
     // lines stay clear of a device's rounded screen corners. Pagination must use the same bumped
     // value (via spreadContentPaddingPx below) so the rendered page and its text box agree.
@@ -1408,6 +1399,13 @@ internal fun NovelReaderContentHost(
             activeStyle = activePageTransitionStyle,
         )
     }
+    val pagedLayoutIdentity = rememberNovelPageReaderLayoutIdentity(
+        ownerKey = documentOwnerKey,
+        contentPages = pageReaderContentPages,
+        viewportSize = effectivePageViewportSize,
+        spreadColumns = novelSpreadColumns,
+        rendererRoute = pageReaderRendererRoute,
+    )
     val pageReaderItemsCount = pageReaderContentPages.size
     // Every index-based consumer below (TTS, auto-scroll, boundary pages, progress %) keeps
     // addressing single-column pages via pageReaderItemsCount unmodified; only the pager/page-turn
@@ -1625,8 +1623,8 @@ internal fun NovelReaderContentHost(
     var currentPageAnchor by remember(state.chapter.id) {
         mutableStateOf<NovelPageReaderAnchor?>(null)
     }
-    var anchoredContentPages by remember(state.chapter.id) {
-        mutableStateOf<List<NovelPageContentPage>?>(null)
+    var acknowledgedPagedLayoutIdentity by remember(state.chapter.id) {
+        mutableStateOf<Any?>(null)
     }
     var anchoredSpreadColumns by remember(state.chapter.id) {
         mutableIntStateOf(novelSpreadColumns)
@@ -1671,16 +1669,30 @@ internal fun NovelReaderContentHost(
         val restoredRealPage = initialContentPage.coerceIn(0, pageReaderItemsCount - 1)
         currentPageAnchor = capturePageReaderAnchor(pageReaderContentPages, restoredRealPage)
         if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
-            if (pagerState.currentPage != initialPagerPage) {
-                pagerState.scrollToPage(initialPagerPage)
+            val restoreWon = pagerState.currentPage == initialPagerPage ||
+                restoreNovelPagerPageAfterUserInput(pagerState, initialPagerPage)
+            val settledRealPage = if (restoreWon) {
+                expectedInitialRestoredPage
+            } else {
+                val settledSlot = resolveComposePagerActualPageIndex(
+                    currentPage = pagerState.currentPage,
+                    contentPageCount = pageReaderSpreadSlotCount,
+                    hasPreviousChapter = composePagerHasPreviousChapter,
+                ).coerceIn(0, (pageReaderSpreadSlotCount - 1).coerceAtLeast(0))
+                resolveSpreadSlotFirstPageIndex(settledSlot, novelSpreadColumns)
+                    .coerceIn(0, pageReaderItemsCount - 1)
             }
-            pageTurnCurrentPage = expectedInitialRestoredPage
+            if (!restoreWon) {
+                currentPageAnchor = capturePageReaderAnchor(pageReaderContentPages, settledRealPage)
+                isInitialPositionRestored = true
+            }
+            pageTurnCurrentPage = settledRealPage
         } else {
             pageTurnCurrentPage = expectedInitialRestoredPage
             pageTurnRequestedPage = expectedInitialRestoredPage
         }
         appliedPagerRestoreChapterId[0] = state.chapter.id
-        anchoredContentPages = pageReaderContentPages
+        acknowledgedPagedLayoutIdentity = pagedLayoutIdentity
         anchoredSpreadColumns = novelSpreadColumns
         anchoredRendererRoute = pageReaderRendererRoute
     }
@@ -1735,22 +1747,17 @@ internal fun NovelReaderContentHost(
             appliedNativeScrollRestoreChapterId[0] == state.chapter.id
         ) {
             val safeIndex = previousAnchor.firstVisibleItemIndex.coerceIn(0, nativeScrollItemsCount - 1)
-            val newItemSize = snapshotFlow {
-                textListState.layoutInfo.visibleItemsInfo
-                    .firstOrNull { it.index == safeIndex }
-                    ?.size
+            val restored = restoreNovelNativeScrollViewportAnchor(
+                listState = textListState,
+                anchor = previousAnchor,
+                targetItemIndex = safeIndex,
+            )
+            if (restored) {
+                anchoredNativeScrollState = previousAnchor.copy(
+                    firstVisibleItemIndex = safeIndex,
+                    viewportWidthPx = targetWidthPx,
+                )
             }
-                .filterNotNull()
-                .first { it > 0 }
-            val anchoredOffsetPx = resolveAnchoredNativeScrollOffsetPx(
-                withinItemFraction = previousAnchor.withinItemFraction,
-                newItemHeightPx = newItemSize,
-            )
-            textListState.scrollToItem(safeIndex, anchoredOffsetPx)
-            anchoredNativeScrollState = previousAnchor.copy(
-                firstVisibleItemIndex = safeIndex,
-                viewportWidthPx = targetWidthPx,
-            )
         }
 
         snapshotFlow {
@@ -1814,7 +1821,7 @@ internal fun NovelReaderContentHost(
         appliedPagerRestoreChapterId[0] == state.chapter.id &&
         pageReaderItemsCount > 0 &&
         (
-            anchoredContentPages !== pageReaderContentPages ||
+            acknowledgedPagedLayoutIdentity !== pagedLayoutIdentity ||
                 anchoredSpreadColumns != novelSpreadColumns ||
                 anchoredRendererRoute != pageReaderRendererRoute
             )
@@ -1838,7 +1845,7 @@ internal fun NovelReaderContentHost(
         usePageReader,
         hasCompletedInitialReaderLayout,
         isInitialPositionRestored,
-        pageReaderContentPages,
+        pagedLayoutIdentity,
         novelSpreadColumns,
         pageReaderRendererRoute,
         composePagerHasPreviousChapter,
@@ -1852,7 +1859,7 @@ internal fun NovelReaderContentHost(
         ) {
             return@LaunchedEffect
         }
-        val reflowNeeded = anchoredContentPages !== pageReaderContentPages ||
+        val reflowNeeded = acknowledgedPagedLayoutIdentity !== pagedLayoutIdentity ||
             anchoredSpreadColumns != novelSpreadColumns ||
             anchoredRendererRoute != pageReaderRendererRoute
         if (!reflowNeeded) return@LaunchedEffect
@@ -1885,19 +1892,32 @@ internal fun NovelReaderContentHost(
             targetPageIndex = targetRealPage,
         )
         if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
-            // Scroll pager BEFORE clearing anchoredContentPages so `isPagedReflowPending` stays true
+            // Scroll pager BEFORE clearing acknowledgedPagedLayoutIdentity so `isPagedReflowPending` stays true
             // until the pager lands on `targetVirtualPage` and never self-cancels mid-scroll.
-            if (pagerState.currentPage != targetVirtualPage) {
-                pagerState.scrollToPage(targetVirtualPage)
+            val restoreWon = pagerState.currentPage == targetVirtualPage ||
+                restoreNovelPagerPageAfterUserInput(pagerState, targetVirtualPage)
+            val settledRealPage = if (restoreWon) {
+                slotFirstPage
+            } else {
+                val settledSlot = resolveComposePagerActualPageIndex(
+                    currentPage = pagerState.currentPage,
+                    contentPageCount = pageReaderSpreadSlotCount,
+                    hasPreviousChapter = composePagerHasPreviousChapter,
+                ).coerceIn(0, (pageReaderSpreadSlotCount - 1).coerceAtLeast(0))
+                resolveSpreadSlotFirstPageIndex(settledSlot, novelSpreadColumns)
+                    .coerceIn(0, pageReaderItemsCount - 1)
             }
-            pageTurnCurrentPage = slotFirstPage
-            anchoredContentPages = pageReaderContentPages
+            if (!restoreWon) {
+                currentPageAnchor = capturePageReaderAnchor(pageReaderContentPages, settledRealPage)
+            }
+            pageTurnCurrentPage = settledRealPage
+            acknowledgedPagedLayoutIdentity = pagedLayoutIdentity
             anchoredSpreadColumns = novelSpreadColumns
             anchoredRendererRoute = pageReaderRendererRoute
         } else {
             pageTurnCurrentPage = slotFirstPage
             pageTurnRequestedPage = slotFirstPage
-            anchoredContentPages = pageReaderContentPages
+            acknowledgedPagedLayoutIdentity = pagedLayoutIdentity
             anchoredSpreadColumns = novelSpreadColumns
             anchoredRendererRoute = pageReaderRendererRoute
         }
@@ -1954,6 +1974,8 @@ internal fun NovelReaderContentHost(
     val latestPageReaderItemsCount by rememberUpdatedState(pageReaderItemsCount)
     val latestHasCompletedInitialReaderLayout by rememberUpdatedState(hasCompletedInitialReaderLayout)
     val latestIsInitialPositionRestored by rememberUpdatedState(isInitialPositionRestored)
+    val latestIsPagedReflowPending by rememberUpdatedState(isPagedReflowPending)
+    val latestPageTurnRequestedPage by rememberUpdatedState(pageTurnRequestedPage)
     val pageReaderTtsPosition = remember(
         usePageReader,
         useRichPageReader,
@@ -2861,7 +2883,15 @@ internal fun NovelReaderContentHost(
                         DisposableEffect(pagerState, state.chapter.id) {
                             onDispose {
                                 val latestTotal = latestPageReaderItemsCount
-                                if (latestHasCompletedInitialReaderLayout && latestTotal > 0) {
+                                if (
+                                    shouldReportPageReaderProgressOnDispose(
+                                        hasCompletedInitialLayout = latestHasCompletedInitialReaderLayout,
+                                        isInitialPositionRestored = latestIsInitialPositionRestored,
+                                        isPagedReflowPending = latestIsPagedReflowPending,
+                                        requestedPage = latestPageTurnRequestedPage,
+                                        totalItems = latestTotal,
+                                    )
+                                ) {
                                     val latestIndex = latestPageReaderProgressPageIndex
                                     reportReadingProgress(
                                         latestIndex,
@@ -3121,6 +3151,7 @@ internal fun NovelReaderContentHost(
                         // anchors at the spine like a real book page.
                         SpreadPageTurnPageRenderer(
                             chapterId = state.chapter.id,
+                            layoutGeneration = pagedLayoutIdentity.generation,
                             contentPages = pageReaderContentPages,
                             transitionStyle = activePageTransitionStyle,
                             showBoundaryChapterPages = !seamlessChapterTransitionEnabled,
@@ -3176,6 +3207,7 @@ internal fun NovelReaderContentHost(
                     } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
                         PageTurnPageRenderer(
                             chapterId = state.chapter.id,
+                            layoutGeneration = pagedLayoutIdentity.generation,
                             contentPages = pageReaderContentPages,
                             spreadColumns = novelSpreadColumns,
                             transitionStyle = activePageTransitionStyle,
@@ -3413,8 +3445,24 @@ internal fun NovelReaderContentHost(
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                                 top = contentPaddingPx + ttsScrollTopPadding,
                                 bottom = contentPaddingPx,
-                                start = state.readerSettings.margin.dp + scrollCutoutLeftDp,
-                                end = state.readerSettings.margin.dp + scrollCutoutRightDp,
+                                start =
+                                state.readerSettings.margin.dp +
+                                    if (LocalLayoutDirection.current ==
+                                        androidx.compose.ui.unit.LayoutDirection.Rtl
+                                    ) {
+                                        scrollCutoutRightDp
+                                    } else {
+                                        scrollCutoutLeftDp
+                                    },
+                                end =
+                                state.readerSettings.margin.dp +
+                                    if (LocalLayoutDirection.current ==
+                                        androidx.compose.ui.unit.LayoutDirection.Rtl
+                                    ) {
+                                        scrollCutoutLeftDp
+                                    } else {
+                                        scrollCutoutRightDp
+                                    },
                             ),
                         ) {
                             if (useRichNativeScroll) {
@@ -3672,6 +3720,47 @@ internal fun NovelReaderContentHost(
                     val initialFontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
                     val latestShouldRestoreWebScroll by rememberUpdatedState(shouldRestoreWebScroll)
                     val latestWebViewPageReady by rememberUpdatedState(webViewPageReadyForAutoScroll)
+                    val latestWebScrollProgressHandler by rememberUpdatedState<
+                        (
+                            WebView,
+                            Int,
+                        ) -> Unit,
+                        > { webView, scrollY ->
+                        if (!shouldTrackWebViewProgress(latestShouldRestoreWebScroll)) {
+                            return@rememberUpdatedState
+                        }
+                        val totalScrollable = resolveWebViewTotalScrollablePx(
+                            contentHeightPx = webView.resolveWebViewContentHeightPx(),
+                            viewHeightPx = webView.height,
+                        )
+                        if (anchoredWebViewWidthPx[0] <= 0 && webView.width > 0) {
+                            anchoredWebViewWidthPx[0] = webView.width
+                        }
+                        if (webView.width == anchoredWebViewWidthPx[0] && totalScrollable > 0) {
+                            lastWebScrollFraction[0] =
+                                (scrollY.toFloat() / totalScrollable.toFloat()).coerceIn(0f, 1f)
+                        }
+                        webAutoScrollNearEnd = resolveWebViewAutoScrollNearEnd(
+                            totalScrollablePx = totalScrollable,
+                            scrollYPx = scrollY,
+                            endOffsetPx = state.readerSettings.autoScrollOffset,
+                        )
+                        val newPercent = webView.resolveCurrentWebViewProgressPercent(scrollYOverride = scrollY)
+                        if (
+                            shouldDispatchWebProgressUpdate(
+                                latestShouldRestoreWebScroll,
+                                newPercent,
+                                webProgressPercent,
+                            )
+                        ) {
+                            webProgressPercent = newPercent
+                            reportReadingProgress(
+                                newPercent,
+                                100,
+                                encodeWebScrollProgressPercent(newPercent),
+                            )
+                        }
+                    }
 
                     val webReaderDocumentTag: Any = state.html
                     AndroidView(
@@ -3898,45 +3987,7 @@ internal fun NovelReaderContentHost(
                                 webViewClient = factoryWebViewClient
                                 setOnScrollChangeListener { view, _, scrollY, _, _ ->
                                     val webView = view as? WebView ?: return@setOnScrollChangeListener
-                                    if (!shouldTrackWebViewProgress(latestShouldRestoreWebScroll)) {
-                                        return@setOnScrollChangeListener
-                                    }
-                                    val totalScrollable = resolveWebViewTotalScrollablePx(
-                                        contentHeightPx = webView.resolveWebViewContentHeightPx(),
-                                        viewHeightPx = webView.height,
-                                    )
-                                    if (anchoredWebViewWidthPx[0] <= 0 && webView.width > 0) {
-                                        anchoredWebViewWidthPx[0] = webView.width
-                                    }
-                                    if (
-                                        webView.width == anchoredWebViewWidthPx[0] &&
-                                        totalScrollable > 0
-                                    ) {
-                                        lastWebScrollFraction[0] =
-                                            (scrollY.toFloat() / totalScrollable.toFloat()).coerceIn(0f, 1f)
-                                    }
-                                    webAutoScrollNearEnd = resolveWebViewAutoScrollNearEnd(
-                                        totalScrollablePx = totalScrollable,
-                                        scrollYPx = scrollY,
-                                        endOffsetPx = state.readerSettings.autoScrollOffset,
-                                    )
-                                    val newPercent = webView.resolveCurrentWebViewProgressPercent(
-                                        scrollYOverride = scrollY,
-                                    )
-
-                                    if (shouldDispatchWebProgressUpdate(
-                                            latestShouldRestoreWebScroll,
-                                            newPercent,
-                                            webProgressPercent,
-                                        )
-                                    ) {
-                                        webProgressPercent = newPercent
-                                        reportReadingProgress(
-                                            newPercent,
-                                            100,
-                                            encodeWebScrollProgressPercent(newPercent),
-                                        )
-                                    }
+                                    latestWebScrollProgressHandler(webView, scrollY)
                                 }
                                 addOnLayoutChangeListener { view, left, _, right, _, oldLeft, _, oldRight, _ ->
                                     val webView = view as? WebView ?: return@addOnLayoutChangeListener

@@ -6,20 +6,25 @@ import android.graphics.Typeface
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector4D
 import androidx.compose.animation.core.keyframes
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -48,7 +53,6 @@ import eu.wewox.pagecurl.config.PageCurlConfig
 import eu.wewox.pagecurl.config.rememberPageCurlConfig
 import eu.wewox.pagecurl.page.Edge
 import eu.wewox.pagecurl.page.PageCurl
-import eu.wewox.pagecurl.page.rememberPageCurlState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -572,423 +576,443 @@ internal fun PageTurnPageRenderer(
     onTextTap: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> onToggleUi() },
     selectionSessionIdProvider: () -> Long = { 0L },
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
+    layoutGeneration: Long = 0L,
 ) {
-    // Chapter neighbour availability drives two different things: the extra boundary placeholder
-    // page (renderer geometry) and whether an edge tap may switch chapters (navigation). When the
-    // placeholder pages are disabled the extra slots have to disappear, otherwise the edge page
-    // renders clamped content and the last page of the chapter shows up twice.
-    val hasPreviousChapterNavigation = hasPreviousChapter
-    val hasNextChapterNavigation = hasNextChapter
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // Chapter neighbour availability drives two different things: the extra boundary placeholder
+        // page (renderer geometry) and whether an edge tap may switch chapters (navigation). When the
+        // placeholder pages are disabled the extra slots have to disappear, otherwise the edge page
+        // renders clamped content and the last page of the chapter shows up twice.
+        val hasPreviousChapterNavigation = hasPreviousChapter
+        val hasNextChapterNavigation = hasNextChapter
 
-    @Suppress("NAME_SHADOWING")
-    val hasPreviousChapter = hasPreviousChapter && showBoundaryChapterPages
+        @Suppress("NAME_SHADOWING")
+        val hasPreviousChapter = hasPreviousChapter && showBoundaryChapterPages
 
-    @Suppress("NAME_SHADOWING")
-    val hasNextChapter = hasNextChapter && showBoundaryChapterPages
-    val safeContentPages = remember(contentPages) {
-        contentPages.ifEmpty { listOf(NovelPageContentPage(emptyList())) }
-    }
-    // The curl renderer's own index space is expressed in spread slots (see spreadColumns on the
-    // signature), the same way the pager's page count is: a slot addresses
-    // [slot * spreadColumns, slot * spreadColumns + spreadColumns - 1] of safeContentPages.
-    val actualPageCount = resolveSpreadSlotCount(safeContentPages.size, spreadColumns)
-    val virtualPageCount = remember(actualPageCount, hasPreviousChapter, hasNextChapter) {
-        resolvePageTurnRendererVirtualPageCount(
-            contentPageCount = actualPageCount,
-            hasPreviousChapter = hasPreviousChapter,
-            hasNextChapter = hasNextChapter,
-        )
-    }
-    val syncedSlot = resolvePageTurnRendererSyncedSlot(
-        syncedContentPageIndex = syncedContentPageIndex,
-        contentPageCount = safeContentPages.size,
-        spreadColumns = spreadColumns,
-    )
-    val initialVirtualPage = remember(chapterId, spreadColumns) {
-        resolvePageTurnRendererVirtualPageIndex(
-            actualPageIndex = syncedSlot,
-            hasPreviousChapter = hasPreviousChapter,
-        )
-    }
-    val pageCurlState = rememberPageCurlState(initialCurrent = initialVirtualPage)
-    val currentPage = pageCurlState.current.coerceIn(0, virtualPageCount - 1)
-    val currentActualPage = resolvePageTurnRendererProgressPageIndex(
-        currentPage = currentPage,
-        contentPageCount = actualPageCount,
-        hasPreviousChapter = hasPreviousChapter,
-    )
-    val tapCoroutineScope = rememberCoroutineScope()
-    val rendererConfig = remember(
-        transitionStyle,
-        readerSettings.pageTurnSpeed,
-        readerSettings.pageTurnIntensity,
-        readerSettings.pageTurnShadowIntensity,
-        readerSettings.pageTurnActivationZone,
-        textBackground,
-    ) {
-        resolveNovelPageTurnRendererConfig(
-            style = transitionStyle,
-            speed = readerSettings.pageTurnSpeed,
-            intensity = readerSettings.pageTurnIntensity,
-            shadowIntensity = readerSettings.pageTurnShadowIntensity,
-            activationZone = readerSettings.pageTurnActivationZone,
-            textBackground = textBackground,
-            canMoveBackward = true,
-            canMoveForward = true,
-        )
-    }
-    val dragInteraction = remember(rendererConfig) {
-        createPageTurnDragInteraction(rendererConfig)
-    }
-    val tapInteraction = remember(rendererConfig) {
-        createPageTurnTapInteraction(rendererConfig)
-    }
-    val latestToggleUi by rememberUpdatedState(onToggleUi)
-    val latestRequestedPage by rememberUpdatedState(requestedPage)
-    val latestRequestedPageConsumed by rememberUpdatedState(onRequestedPageConsumed)
-    val latestCurrentPageChange by rememberUpdatedState(onCurrentPageChange)
-    val latestOpenPreviousChapter by rememberUpdatedState(onOpenPreviousChapter)
-    val latestOpenNextChapter by rememberUpdatedState(onOpenNextChapter)
-    val latestChapterNavigationRequest by rememberUpdatedState(chapterNavigationRequest)
-    val latestChapterNavigationRequestConsumed by rememberUpdatedState(onChapterNavigationRequestConsumed)
-    val latestRendererConfig by rememberUpdatedState(rendererConfig)
-    val latestPageCount by rememberUpdatedState(actualPageCount)
-    val latestHasPreviousBoundaryPage by rememberUpdatedState(hasPreviousChapter)
-    val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapterNavigation)
-    val latestHasNextChapter by rememberUpdatedState(hasNextChapterNavigation)
-    val latestSuppressBoundaryNavigation by rememberUpdatedState(suppressBoundaryChapterNavigation)
-    val latestTapToScrollEnabled by rememberUpdatedState(readerSettings.tapToScroll)
-    val latestCustomTapZonesEnabled by rememberUpdatedState(readerSettings.customTapZones)
-    val latestTapZoneActions by rememberUpdatedState(
-        parseNovelReaderTapZoneActions(readerSettings.tapZoneActions),
-    )
-    val pageCurlConfig = rememberPageCurlConfig(
-        onCustomTap = { size, offset ->
-            val currentTapPage = resolvePageTurnRendererProgressPageIndex(
-                currentPage = pageCurlState.current,
-                contentPageCount = latestPageCount,
-                hasPreviousChapter = latestHasPreviousBoundaryPage,
+        @Suppress("NAME_SHADOWING")
+        val hasNextChapter = hasNextChapter && showBoundaryChapterPages
+        val safeContentPages = remember(contentPages) {
+            contentPages.ifEmpty { listOf(NovelPageContentPage(emptyList())) }
+        }
+        // The curl renderer's own index space is expressed in spread slots (see spreadColumns on the
+        // signature), the same way the pager's page count is: a slot addresses
+        // [slot * spreadColumns, slot * spreadColumns + spreadColumns - 1] of safeContentPages.
+        val actualPageCount = resolveSpreadSlotCount(safeContentPages.size, spreadColumns)
+        val virtualPageCount = remember(actualPageCount, hasPreviousChapter, hasNextChapter) {
+            resolvePageTurnRendererVirtualPageCount(
+                contentPageCount = actualPageCount,
+                hasPreviousChapter = hasPreviousChapter,
+                hasNextChapter = hasNextChapter,
             )
-            val customTapAction = if (latestCustomTapZonesEnabled) {
-                resolvePageTurnConfiguredTapAction(
-                    zoneAction = resolveConfiguredNovelReaderTapAction(
-                        tapX = offset.x,
-                        tapY = offset.y,
-                        width = size.width.toFloat(),
-                        height = size.height.toFloat(),
-                        customTapZonesEnabled = true,
-                        tapZoneActions = latestTapZoneActions,
-                        tapToScrollEnabled = latestTapToScrollEnabled,
-                    ),
-                    currentPage = currentTapPage,
-                    pageCount = latestPageCount.coerceAtLeast(1),
-                    hasPreviousChapter = latestHasPreviousChapter,
-                    hasNextChapter = latestHasNextChapter,
-                    animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
+        }
+        val syncedSlot = resolvePageTurnRendererSyncedSlot(
+            syncedContentPageIndex = syncedContentPageIndex,
+            contentPageCount = safeContentPages.size,
+            spreadColumns = spreadColumns,
+        )
+        val initialVirtualPage = remember(chapterId, spreadColumns) {
+            resolvePageTurnRendererVirtualPageIndex(
+                actualPageIndex = syncedSlot,
+                hasPreviousChapter = hasPreviousChapter,
+            )
+        }
+        val runtime =
+            rememberSaveable(chapterId, spreadColumns, initialVirtualPage, saver = NovelPageTurnRuntime.Saver) {
+                NovelPageTurnRuntime(eu.wewox.pagecurl.page.PageCurlState(initialCurrent = initialVirtualPage))
+            }
+        val generationInitialSlot = if (requestedPage >= 0) {
+            resolveSpreadSlotForPageIndex(requestedPage.coerceIn(0, safeContentPages.lastIndex), spreadColumns)
+        } else {
+            syncedSlot
+        }
+        val generation = runtime.generation(
+            layoutKey = NovelPageTurnLayoutKey(
+                chapterId = chapterId,
+                layoutGeneration = layoutGeneration,
+                constraints = constraints,
+                contentPages = contentPages,
+                spreadColumns = spreadColumns,
+                virtualPageCount = virtualPageCount,
+                hasPreviousChapter = hasPreviousChapter,
+                hasNextChapter = hasNextChapter,
+                horizontalPadding = DpOffset(spreadCutoutLeftDp, spreadCutoutRightDp),
+            ),
+            initialPrimaryPage = resolvePageTurnRendererVirtualPageIndex(
+                actualPageIndex = generationInitialSlot,
+                hasPreviousChapter = hasPreviousChapter,
+            ),
+            requestedPage = requestedPage,
+        )
+        key(generation) {
+            DisposableEffect(generation) { onDispose { generation.dispose() } }
+            val pageCurlState = generation.primaryState
+            val currentPage = pageCurlState.current.coerceIn(0, virtualPageCount - 1)
+            val currentActualPage = resolvePageTurnRendererProgressPageIndex(
+                currentPage = currentPage,
+                contentPageCount = actualPageCount,
+                hasPreviousChapter = hasPreviousChapter,
+            )
+            val guardedSelectionChanged by rememberUpdatedState<(NovelSelectedTextSelection?) -> Unit> { selection ->
+                generation.publish { onSelectedTextSelectionChanged(selection) }
+            }
+            val guardedTextTap by rememberUpdatedState<(Float, Float, Float, Float) -> Unit> { x, y, width, height ->
+                generation.publish { onTextTap(x, y, width, height) }
+            }
+            val tapCoroutineScope = rememberCoroutineScope()
+            val rendererConfig = remember(
+                transitionStyle,
+                readerSettings.pageTurnSpeed,
+                readerSettings.pageTurnIntensity,
+                readerSettings.pageTurnShadowIntensity,
+                readerSettings.pageTurnActivationZone,
+                textBackground,
+            ) {
+                resolveNovelPageTurnRendererConfig(
+                    style = transitionStyle,
+                    speed = readerSettings.pageTurnSpeed,
+                    intensity = readerSettings.pageTurnIntensity,
+                    shadowIntensity = readerSettings.pageTurnShadowIntensity,
+                    activationZone = readerSettings.pageTurnActivationZone,
+                    textBackground = textBackground,
+                    canMoveBackward = true,
+                    canMoveForward = true,
                 )
-            } else {
-                resolvePageTurnCustomTapAction(
-                    tapXFraction = if (size.width > 0) {
-                        offset.x / size.width.toFloat()
+            }
+            val dragInteraction = remember(rendererConfig) {
+                createPageTurnDragInteraction(rendererConfig)
+            }
+            val tapInteraction = remember(rendererConfig) {
+                createPageTurnTapInteraction(rendererConfig)
+            }
+            val latestToggleUi by rememberUpdatedState({ generation.publish(onToggleUi) })
+            val latestRequestedPage by rememberUpdatedState(requestedPage)
+            val latestRequestedPageConsumed by rememberUpdatedState({ generation.publish(onRequestedPageConsumed) })
+            val latestCurrentPageChange by rememberUpdatedState({ page: Int ->
+                generation.publish { onCurrentPageChange(page) }
+            })
+            val latestOpenPreviousChapter by rememberUpdatedState({ generation.publish(onOpenPreviousChapter) })
+            val latestOpenNextChapter by rememberUpdatedState({ generation.publish(onOpenNextChapter) })
+            val latestChapterNavigationRequest by rememberUpdatedState(chapterNavigationRequest)
+            val latestChapterNavigationRequestConsumed by rememberUpdatedState({
+                generation.publish(onChapterNavigationRequestConsumed)
+            })
+            val latestRendererConfig by rememberUpdatedState(rendererConfig)
+            val latestPageCount by rememberUpdatedState(actualPageCount)
+            val latestHasPreviousBoundaryPage by rememberUpdatedState(hasPreviousChapter)
+            val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapterNavigation)
+            val latestHasNextChapter by rememberUpdatedState(hasNextChapterNavigation)
+            val latestSuppressBoundaryNavigation by rememberUpdatedState(suppressBoundaryChapterNavigation)
+            val latestTapToScrollEnabled by rememberUpdatedState(readerSettings.tapToScroll)
+            val latestCustomTapZonesEnabled by rememberUpdatedState(readerSettings.customTapZones)
+            val latestTapZoneActions by rememberUpdatedState(
+                parseNovelReaderTapZoneActions(readerSettings.tapZoneActions),
+            )
+            val pageCurlConfig = rememberPageCurlConfig(
+                onCustomTap = { size, offset ->
+                    val currentTapPage = resolvePageTurnRendererProgressPageIndex(
+                        currentPage = pageCurlState.current,
+                        contentPageCount = latestPageCount,
+                        hasPreviousChapter = latestHasPreviousBoundaryPage,
+                    )
+                    val customTapAction = if (latestCustomTapZonesEnabled) {
+                        resolvePageTurnConfiguredTapAction(
+                            zoneAction = resolveConfiguredNovelReaderTapAction(
+                                tapX = offset.x,
+                                tapY = offset.y,
+                                width = size.width.toFloat(),
+                                height = size.height.toFloat(),
+                                customTapZonesEnabled = true,
+                                tapZoneActions = latestTapZoneActions,
+                                tapToScrollEnabled = latestTapToScrollEnabled,
+                            ),
+                            currentPage = currentTapPage,
+                            pageCount = latestPageCount.coerceAtLeast(1),
+                            hasPreviousChapter = latestHasPreviousChapter,
+                            hasNextChapter = latestHasNextChapter,
+                            animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
+                        )
                     } else {
-                        0.5f
-                    },
-                    currentPage = currentTapPage,
-                    pageCount = latestPageCount.coerceAtLeast(1),
-                    centerTapWidthFraction = latestRendererConfig.centerTapWidthFraction,
-                    hasPreviousChapter = latestHasPreviousChapter,
-                    hasNextChapter = latestHasNextChapter,
-                    tapToScrollEnabled = latestTapToScrollEnabled,
-                    animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
-                )
-            }
-            when (customTapAction) {
-                PageTurnCustomTapAction.TOGGLE_UI -> {
-                    latestToggleUi()
-                    true
-                }
-                PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE -> {
-                    tapCoroutineScope.launch {
-                        pageCurlState.prev(
-                            createPageTurnAnimation(
-                                animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
-                                forward = false,
-                                curlAmount = latestRendererConfig.preset.curlAmount,
-                            ),
+                        resolvePageTurnCustomTapAction(
+                            tapXFraction = if (size.width > 0) {
+                                offset.x / size.width.toFloat()
+                            } else {
+                                0.5f
+                            },
+                            currentPage = currentTapPage,
+                            pageCount = latestPageCount.coerceAtLeast(1),
+                            centerTapWidthFraction = latestRendererConfig.centerTapWidthFraction,
+                            hasPreviousChapter = latestHasPreviousChapter,
+                            hasNextChapter = latestHasNextChapter,
+                            tapToScrollEnabled = latestTapToScrollEnabled,
+                            animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
                         )
                     }
-                    true
-                }
-                PageTurnCustomTapAction.MOVE_NEXT_PAGE -> {
-                    tapCoroutineScope.launch {
-                        pageCurlState.next(
-                            createPageTurnAnimation(
-                                animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
-                                forward = true,
-                                curlAmount = latestRendererConfig.preset.curlAmount,
-                            ),
-                        )
-                    }
-                    true
-                }
-                PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER -> {
-                    latestOpenPreviousChapter()
-                    true
-                }
-                PageTurnCustomTapAction.OPEN_NEXT_CHAPTER -> {
-                    latestOpenNextChapter()
-                    true
-                }
-                PageTurnCustomTapAction.NONE -> false
-            }
-        },
-    )
-
-    SideEffect {
-        pageCurlConfig.backPageColor = rendererConfig.backPageColor
-        pageCurlConfig.backPageContentAlpha = 0f
-        pageCurlConfig.shadowColor = rendererConfig.shadowColor
-        pageCurlConfig.shadowAlpha = rendererConfig.preset.shadowAlpha
-        pageCurlConfig.shadowRadius = rendererConfig.shadowRadiusDp.dp
-        pageCurlConfig.shadowOffset = DpOffset(rendererConfig.shadowOffsetXDp.dp, 0.dp)
-        pageCurlConfig.dragBackwardEnabled = currentPage > 0
-        pageCurlConfig.dragForwardEnabled = currentPage < virtualPageCount - 1
-        pageCurlConfig.tapBackwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
-            customTapZonesEnabled = latestCustomTapZonesEnabled,
-            tapToScrollEnabled = latestTapToScrollEnabled,
-            canMoveInDirection = currentActualPage > 0,
-        )
-        pageCurlConfig.tapForwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
-            customTapZonesEnabled = latestCustomTapZonesEnabled,
-            tapToScrollEnabled = latestTapToScrollEnabled,
-            canMoveInDirection = currentActualPage < actualPageCount - 1,
-        )
-        pageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
-        pageCurlConfig.dragInteraction = dragInteraction
-        pageCurlConfig.tapInteraction = tapInteraction
-    }
-
-    // Fix: include chapterId so pageCurlState always resets when the chapter
-    // changes, even if syncedSlot / actualPageCount / hasPreviousChapter
-    // happen to be the same values as the previous chapter. Never read pagerState
-    // here because HorizontalPager is not mounted in the page-turn route.
-    LaunchedEffect(chapterId, syncedSlot, actualPageCount, hasPreviousChapter) {
-        if (latestSuppressBoundaryNavigation || latestRequestedPage >= 0 || pageCurlState.progress > 0f) {
-            return@LaunchedEffect
-        }
-        val targetVirtualPage = resolvePageTurnRendererVirtualPageIndex(
-            actualPageIndex = syncedSlot,
-            hasPreviousChapter = hasPreviousChapter,
-        )
-        if (pageCurlState.current != targetVirtualPage) {
-            pageCurlState.snapTo(targetVirtualPage)
-        }
-    }
-
-    // Fix: one-shot guard – reset when chapter, pageCount or chapter-neighbour
-    // availability changes so stale boundary state from the previous chapter
-    // cannot re-trigger a chapter transition before Compose finishes rebuilding.
-    var consumedBoundaryNavigation by remember(chapterId, actualPageCount, hasPreviousChapter, hasNextChapter) {
-        mutableStateOf<HorizontalChapterSwipeAction?>(null)
-    }
-    LaunchedEffect(pageCurlState, actualPageCount, hasPreviousChapter, hasNextChapter) {
-        snapshotFlow { pageCurlState.current.coerceIn(0, virtualPageCount - 1) to pageCurlState.progress }
-            .distinctUntilChanged()
-            .collectLatest { (targetVirtualPage, progress) ->
-                if (latestSuppressBoundaryNavigation || latestRequestedPage >= 0) return@collectLatest
-                when (
-                    resolvePageTurnRendererSettledBoundaryChapterTarget(
-                        currentPage = targetVirtualPage,
-                        progress = progress,
-                        contentPageCount = actualPageCount,
-                        hasPreviousChapter = hasPreviousChapter,
-                        hasNextChapter = hasNextChapter,
-                    )
-                ) {
-                    HorizontalChapterSwipeAction.PREVIOUS -> {
-                        if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.PREVIOUS) {
-                            consumedBoundaryNavigation = HorizontalChapterSwipeAction.PREVIOUS
+                    when (customTapAction) {
+                        PageTurnCustomTapAction.TOGGLE_UI -> {
+                            latestToggleUi()
+                            true
+                        }
+                        PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE -> {
+                            tapCoroutineScope.launch {
+                                pageCurlState.prev(
+                                    createPageTurnAnimation(
+                                        animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                        forward = false,
+                                        curlAmount = latestRendererConfig.preset.curlAmount,
+                                    ),
+                                )
+                            }
+                            true
+                        }
+                        PageTurnCustomTapAction.MOVE_NEXT_PAGE -> {
+                            tapCoroutineScope.launch {
+                                pageCurlState.next(
+                                    createPageTurnAnimation(
+                                        animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                        forward = true,
+                                        curlAmount = latestRendererConfig.preset.curlAmount,
+                                    ),
+                                )
+                            }
+                            true
+                        }
+                        PageTurnCustomTapAction.OPEN_PREVIOUS_CHAPTER -> {
                             latestOpenPreviousChapter()
+                            true
                         }
-                    }
-                    HorizontalChapterSwipeAction.NEXT -> {
-                        if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.NEXT) {
-                            consumedBoundaryNavigation = HorizontalChapterSwipeAction.NEXT
+                        PageTurnCustomTapAction.OPEN_NEXT_CHAPTER -> {
                             latestOpenNextChapter()
+                            true
+                        }
+                        PageTurnCustomTapAction.NONE -> false
+                    }
+                },
+            )
+
+            SideEffect {
+                pageCurlConfig.backPageColor = rendererConfig.backPageColor
+                pageCurlConfig.backPageContentAlpha = 0f
+                pageCurlConfig.shadowColor = rendererConfig.shadowColor
+                pageCurlConfig.shadowAlpha = rendererConfig.preset.shadowAlpha
+                pageCurlConfig.shadowRadius = rendererConfig.shadowRadiusDp.dp
+                pageCurlConfig.shadowOffset = DpOffset(rendererConfig.shadowOffsetXDp.dp, 0.dp)
+                pageCurlConfig.dragBackwardEnabled = currentPage > 0
+                pageCurlConfig.dragForwardEnabled = currentPage < virtualPageCount - 1
+                pageCurlConfig.tapBackwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+                    customTapZonesEnabled = latestCustomTapZonesEnabled,
+                    tapToScrollEnabled = latestTapToScrollEnabled,
+                    canMoveInDirection = currentActualPage > 0,
+                )
+                pageCurlConfig.tapForwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+                    customTapZonesEnabled = latestCustomTapZonesEnabled,
+                    tapToScrollEnabled = latestTapToScrollEnabled,
+                    canMoveInDirection = currentActualPage < actualPageCount - 1,
+                )
+                pageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
+                pageCurlConfig.dragInteraction = dragInteraction
+                pageCurlConfig.tapInteraction = tapInteraction
+            }
+
+            // Fix: include chapterId so pageCurlState always resets when the chapter
+            // changes, even if syncedSlot / actualPageCount / hasPreviousChapter
+            // happen to be the same values as the previous chapter. Never read pagerState
+            // here because HorizontalPager is not mounted in the page-turn route.
+            LaunchedEffect(chapterId, syncedSlot, actualPageCount, hasPreviousChapter) {
+                if (!generation.isActive) return@LaunchedEffect
+                if (latestSuppressBoundaryNavigation || latestRequestedPage >= 0 || pageCurlState.progress > 0f) {
+                    return@LaunchedEffect
+                }
+                val targetVirtualPage = resolvePageTurnRendererVirtualPageIndex(
+                    actualPageIndex = syncedSlot,
+                    hasPreviousChapter = hasPreviousChapter,
+                )
+                if (pageCurlState.current != targetVirtualPage) {
+                    pageCurlState.snapTo(targetVirtualPage)
+                }
+            }
+
+            // Fix: one-shot guard – reset when chapter, pageCount or chapter-neighbour
+            // availability changes so stale boundary state from the previous chapter
+            // cannot re-trigger a chapter transition before Compose finishes rebuilding.
+            var consumedBoundaryNavigation by remember(chapterId, actualPageCount, hasPreviousChapter, hasNextChapter) {
+                mutableStateOf<HorizontalChapterSwipeAction?>(null)
+            }
+            LaunchedEffect(pageCurlState, actualPageCount, hasPreviousChapter, hasNextChapter) {
+                if (!generation.isActive) return@LaunchedEffect
+                snapshotFlow { pageCurlState.current.coerceIn(0, virtualPageCount - 1) to pageCurlState.progress }
+                    .distinctUntilChanged()
+                    .collectLatest { (targetVirtualPage, progress) ->
+                        if (!generation.isActive || latestSuppressBoundaryNavigation ||
+                            latestRequestedPage >= 0
+                        ) {
+                            return@collectLatest
+                        }
+                        when (
+                            resolvePageTurnRendererSettledBoundaryChapterTarget(
+                                currentPage = targetVirtualPage,
+                                progress = progress,
+                                contentPageCount = actualPageCount,
+                                hasPreviousChapter = hasPreviousChapter,
+                                hasNextChapter = hasNextChapter,
+                            )
+                        ) {
+                            HorizontalChapterSwipeAction.PREVIOUS -> {
+                                if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.PREVIOUS) {
+                                    consumedBoundaryNavigation = HorizontalChapterSwipeAction.PREVIOUS
+                                    latestOpenPreviousChapter()
+                                }
+                            }
+                            HorizontalChapterSwipeAction.NEXT -> {
+                                if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.NEXT) {
+                                    consumedBoundaryNavigation = HorizontalChapterSwipeAction.NEXT
+                                    latestOpenNextChapter()
+                                }
+                            }
+                            HorizontalChapterSwipeAction.NONE -> {}
                         }
                     }
-                    HorizontalChapterSwipeAction.NONE -> {}
-                }
             }
-    }
 
-    LaunchedEffect(pageCurlState, actualPageCount, hasPreviousChapter, hasNextChapter) {
-        snapshotFlow {
-            Triple(
-                pageCurlState.current.coerceIn(0, virtualPageCount - 1),
-                latestSuppressBoundaryNavigation,
-                latestRequestedPage,
-            )
-        }
-            .distinctUntilChanged()
-            .collectLatest { (targetVirtualPage, suppressNavigation, pendingRequestedPage) ->
-                if (suppressNavigation || pendingRequestedPage >= 0) return@collectLatest
-                val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
-                    currentPage = targetVirtualPage,
-                    contentPageCount = actualPageCount,
-                    hasPreviousChapter = hasPreviousChapter,
-                    hasNextChapter = hasNextChapter,
-                )
-                if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
-                    val targetSpreadSlot = resolvePageTurnRendererProgressPageIndex(
-                        currentPage = targetVirtualPage,
-                        contentPageCount = actualPageCount,
-                        hasPreviousChapter = hasPreviousChapter,
+            LaunchedEffect(pageCurlState, actualPageCount, hasPreviousChapter, hasNextChapter) {
+                if (!generation.isActive) return@LaunchedEffect
+                snapshotFlow {
+                    Triple(
+                        pageCurlState.current.coerceIn(0, virtualPageCount - 1),
+                        latestSuppressBoundaryNavigation,
+                        latestRequestedPage,
                     )
-                    // onCurrentPageChange reports a real page index (its callers persist/compare it
-                    // against pageReaderItemsCount). Do not call pagerState.scrollToPage here:
-                    // HorizontalPager is unmounted in this route, so scrollToPage suspends forever.
-                    latestCurrentPageChange(resolveSpreadSlotFirstPageIndex(targetSpreadSlot, spreadColumns))
                 }
-            }
-    }
-
-    LaunchedEffect(latestRequestedPage, actualPageCount, hasPreviousChapter) {
-        val targetPage = latestRequestedPage
-        if (targetPage < 0 || safeContentPages.isEmpty()) return@LaunchedEffect
-        val targetSpreadSlot = resolveSpreadSlotForPageIndex(
-            targetPage.coerceIn(0, safeContentPages.lastIndex),
-            spreadColumns,
-        )
-        val clampedTarget = resolvePageTurnRendererVirtualPageIndex(
-            actualPageIndex = targetSpreadSlot,
-            hasPreviousChapter = hasPreviousChapter,
-        )
-        if (pageCurlState.current != clampedTarget) {
-            pageCurlState.snapTo(clampedTarget)
-        }
-        latestCurrentPageChange(resolveSpreadSlotFirstPageIndex(targetSpreadSlot, spreadColumns))
-        latestRequestedPageConsumed()
-    }
-
-    BoxWithConstraints(
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        PageCurl(
-            count = virtualPageCount,
-            key = { it },
-            state = pageCurlState,
-            config = pageCurlConfig,
-            modifier = Modifier.fillMaxSize(),
-        ) { page ->
-            val boundaryPreview = if (!showBoundaryChapterPages) {
-                null
-            } else {
-                when (
-                    resolvePageTurnRendererBoundaryChapterTarget(
-                        currentPage = page,
-                        contentPageCount = actualPageCount,
-                        hasPreviousChapter = hasPreviousChapter,
-                        hasNextChapter = hasNextChapter,
-                    )
-                ) {
-                    HorizontalChapterSwipeAction.PREVIOUS,
-                    HorizontalChapterSwipeAction.NEXT,
-                    -> {
-                        createNovelPageBoundaryPreviewData(
-                            chapterLabel = if (page <= 0) {
-                                previousChapterLabel
-                            } else {
-                                nextChapterLabel
-                            },
-                            chapterName = if (page <= 0) {
-                                previousChapterName
-                            } else {
-                                nextChapterName
-                            },
-                            chapterHint = boundaryChapterHint,
+                    .distinctUntilChanged()
+                    .collectLatest { (targetVirtualPage, suppressNavigation, pendingRequestedPage) ->
+                        if (!generation.isActive || suppressNavigation ||
+                            pendingRequestedPage >= 0
+                        ) {
+                            return@collectLatest
+                        }
+                        val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
+                            currentPage = targetVirtualPage,
+                            contentPageCount = actualPageCount,
+                            hasPreviousChapter = hasPreviousChapter,
+                            hasNextChapter = hasNextChapter,
                         )
+                        if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
+                            val targetSpreadSlot = resolvePageTurnRendererProgressPageIndex(
+                                currentPage = targetVirtualPage,
+                                contentPageCount = actualPageCount,
+                                hasPreviousChapter = hasPreviousChapter,
+                            )
+                            // onCurrentPageChange reports a real page index (its callers persist/compare it
+                            // against pageReaderItemsCount). Do not call pagerState.scrollToPage here:
+                            // HorizontalPager is unmounted in this route, so scrollToPage suspends forever.
+                            latestCurrentPageChange(resolveSpreadSlotFirstPageIndex(targetSpreadSlot, spreadColumns))
+                        }
                     }
-                    HorizontalChapterSwipeAction.NONE -> null
-                }
             }
-            val spreadPages = if (boundaryPreview == null) {
-                val spreadSlot = resolvePageTurnRendererProgressPageIndex(
-                    currentPage = page,
-                    contentPageCount = actualPageCount,
+
+            LaunchedEffect(latestRequestedPage, actualPageCount, hasPreviousChapter) {
+                if (!generation.isActive) return@LaunchedEffect
+                val targetPage = latestRequestedPage
+                if (targetPage < 0 || safeContentPages.isEmpty()) return@LaunchedEffect
+                val targetSpreadSlot = resolveSpreadSlotForPageIndex(
+                    targetPage.coerceIn(0, safeContentPages.lastIndex),
+                    spreadColumns,
+                )
+                val clampedTarget = resolvePageTurnRendererVirtualPageIndex(
+                    actualPageIndex = targetSpreadSlot,
                     hasPreviousChapter = hasPreviousChapter,
                 )
-                val firstPage = resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
-                (firstPage until firstPage + spreadColumns).map { index ->
-                    safeContentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
+                if (pageCurlState.current != clampedTarget) {
+                    pageCurlState.snapTo(clampedTarget)
                 }
-            } else {
-                listOf(NovelPageContentPage(emptyList()))
+                latestCurrentPageChange(resolveSpreadSlotFirstPageIndex(targetSpreadSlot, spreadColumns))
+                latestRequestedPageConsumed()
             }
-            val contentPage = spreadPages.first()
-            val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
-            val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
-            val pageSurfaceColor = Color.Transparent
-            NovelPageTurnSnapshotRenderer(
+
+            Box(
                 modifier = Modifier.fillMaxSize(),
             ) {
-                NovelAtmosphereBackground(
-                    backgroundColor = textBackground,
-                    backgroundTexture = pageTexture,
-                    nativeTextureStrengthPercent = pageTextureStrengthPercent,
-                    oledEdgeGradient = activeOledEdgeGradient,
-                    isDarkTheme = isDarkTheme,
-                    pageEdgeShadow = pageEdgeShadow,
-                    pageEdgeShadowAlpha = pageEdgeShadowAlpha,
-                    backgroundImageModel = backgroundImageModel,
-                )
-                if (boundaryPreview != null) {
-                    NovelPageBoundaryPreviewContent(
-                        preview = boundaryPreview,
-                        textColor = textColor,
-                        chapterTitleTextColor = chapterTitleTextColor,
-                        textBackground = textBackground,
-                        contentPadding = contentPadding,
-                        statusBarTopPadding = statusBarTopPadding,
-                        textTypeface = textTypeface,
-                        chapterTitleTypeface = chapterTitleTypeface,
-                    )
-                } else if (spreadPages.size <= 1) {
-                    NovelPageReaderPageContent(
-                        contentPage = contentPage,
-                        readerSettings = readerSettings,
-                        textColor = textColor,
-                        textBackground = textBackground,
-                        pageSurfaceColor = pageSurfaceColor,
-                        backgroundTexture = pageTexture,
-                        nativeTextureStrengthPercent = pageTextureStrengthPercent,
-                        chapterTitleTextColor = chapterTitleTextColor,
-                        textTypeface = textTypeface,
-                        chapterTitleTypeface = chapterTitleTypeface,
-                        textShadowEnabled = readerSettings.textShadow,
-                        textShadowColor = readerSettings.textShadowColor,
-                        textShadowBlur = readerSettings.textShadowBlur,
-                        textShadowX = readerSettings.textShadowX,
-                        textShadowY = readerSettings.textShadowY,
-                        contentPadding = contentPadding,
-                        statusBarTopPadding = statusBarTopPadding,
-                        ttsHighlightState = ttsHighlightState,
-                        ttsHighlightColor = ttsHighlightColor,
-                        selectionSessionIdProvider = selectionSessionIdProvider,
-                        selectionAnchorChapterId = chapterId,
-                        onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                        onPlainTap = onTextTap,
-                        touchHandlingEnabled = false,
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = spreadCutoutLeftDp, end = spreadCutoutRightDp),
+                PageCurl(
+                    count = virtualPageCount,
+                    key = { it },
+                    state = pageCurlState,
+                    config = pageCurlConfig,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    val boundaryPreview = if (!showBoundaryChapterPages) {
+                        null
+                    } else {
+                        when (
+                            resolvePageTurnRendererBoundaryChapterTarget(
+                                currentPage = page,
+                                contentPageCount = actualPageCount,
+                                hasPreviousChapter = hasPreviousChapter,
+                                hasNextChapter = hasNextChapter,
+                            )
+                        ) {
+                            HorizontalChapterSwipeAction.PREVIOUS,
+                            HorizontalChapterSwipeAction.NEXT,
+                            -> {
+                                createNovelPageBoundaryPreviewData(
+                                    chapterLabel = if (page <= 0) {
+                                        previousChapterLabel
+                                    } else {
+                                        nextChapterLabel
+                                    },
+                                    chapterName = if (page <= 0) {
+                                        previousChapterName
+                                    } else {
+                                        nextChapterName
+                                    },
+                                    chapterHint = boundaryChapterHint,
+                                )
+                            }
+                            HorizontalChapterSwipeAction.NONE -> null
+                        }
+                    }
+                    val spreadPages = if (boundaryPreview == null) {
+                        val spreadSlot = resolvePageTurnRendererProgressPageIndex(
+                            currentPage = page,
+                            contentPageCount = actualPageCount,
+                            hasPreviousChapter = hasPreviousChapter,
+                        )
+                        val firstPage = resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
+                        (firstPage until firstPage + spreadColumns).map { index ->
+                            safeContentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
+                        }
+                    } else {
+                        listOf(NovelPageContentPage(emptyList()))
+                    }
+                    val contentPage = spreadPages.first()
+                    val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
+                    val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
+                    val pageSurfaceColor = Color.Transparent
+                    NovelPageTurnSnapshotRenderer(
+                        modifier = Modifier.fillMaxSize(),
                     ) {
-                        spreadPages.forEach { spreadPage ->
+                        NovelAtmosphereBackground(
+                            backgroundColor = textBackground,
+                            backgroundTexture = pageTexture,
+                            nativeTextureStrengthPercent = pageTextureStrengthPercent,
+                            oledEdgeGradient = activeOledEdgeGradient,
+                            isDarkTheme = isDarkTheme,
+                            pageEdgeShadow = pageEdgeShadow,
+                            pageEdgeShadowAlpha = pageEdgeShadowAlpha,
+                            backgroundImageModel = backgroundImageModel,
+                        )
+                        if (boundaryPreview != null) {
+                            NovelPageBoundaryPreviewContent(
+                                preview = boundaryPreview,
+                                textColor = textColor,
+                                chapterTitleTextColor = chapterTitleTextColor,
+                                textBackground = textBackground,
+                                contentPadding = contentPadding,
+                                statusBarTopPadding = statusBarTopPadding,
+                                textTypeface = textTypeface,
+                                chapterTitleTypeface = chapterTitleTypeface,
+                            )
+                        } else if (spreadPages.size <= 1) {
                             NovelPageReaderPageContent(
-                                contentPage = spreadPage,
+                                contentPage = contentPage,
                                 readerSettings = readerSettings,
                                 textColor = textColor,
                                 textBackground = textBackground,
@@ -1004,54 +1028,94 @@ internal fun PageTurnPageRenderer(
                                 textShadowX = readerSettings.textShadowX,
                                 textShadowY = readerSettings.textShadowY,
                                 contentPadding = contentPadding,
-                                statusBarTopPadding = if (spreadPages.size > 1) 0.dp else statusBarTopPadding,
+                                statusBarTopPadding = statusBarTopPadding,
                                 ttsHighlightState = ttsHighlightState,
                                 ttsHighlightColor = ttsHighlightColor,
                                 selectionSessionIdProvider = selectionSessionIdProvider,
                                 selectionAnchorChapterId = chapterId,
-                                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                onPlainTap = onTextTap,
+                                onSelectedTextSelectionChanged = guardedSelectionChanged,
+                                onPlainTap = guardedTextTap,
                                 touchHandlingEnabled = false,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.absolutePadding(
+                                    left = spreadCutoutLeftDp,
+                                    right = spreadCutoutRightDp,
+                                ),
                             )
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
+                            ) {
+                                spreadPages.forEach { spreadPage ->
+                                    NovelPageReaderPageContent(
+                                        contentPage = spreadPage,
+                                        readerSettings = readerSettings,
+                                        textColor = textColor,
+                                        textBackground = textBackground,
+                                        pageSurfaceColor = pageSurfaceColor,
+                                        backgroundTexture = pageTexture,
+                                        nativeTextureStrengthPercent = pageTextureStrengthPercent,
+                                        chapterTitleTextColor = chapterTitleTextColor,
+                                        textTypeface = textTypeface,
+                                        chapterTitleTypeface = chapterTitleTypeface,
+                                        textShadowEnabled = readerSettings.textShadow,
+                                        textShadowColor = readerSettings.textShadowColor,
+                                        textShadowBlur = readerSettings.textShadowBlur,
+                                        textShadowX = readerSettings.textShadowX,
+                                        textShadowY = readerSettings.textShadowY,
+                                        contentPadding = contentPadding,
+                                        statusBarTopPadding = if (spreadPages.size > 1) 0.dp else statusBarTopPadding,
+                                        ttsHighlightState = ttsHighlightState,
+                                        ttsHighlightColor = ttsHighlightColor,
+                                        selectionSessionIdProvider = selectionSessionIdProvider,
+                                        selectionAnchorChapterId = chapterId,
+                                        onSelectedTextSelectionChanged = guardedSelectionChanged,
+                                        onPlainTap = guardedTextTap,
+                                        touchHandlingEnabled = false,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-    }
 
-    LaunchedEffect(latestChapterNavigationRequest, transitionStyle) {
-        val request = latestChapterNavigationRequest ?: return@LaunchedEffect
-        if (resolvePageTransitionEngine(transitionStyle) != NovelPageTransitionEngine.PAGE_TURN_RENDERER) {
-            latestChapterNavigationRequestConsumed()
-            return@LaunchedEffect
-        }
+            LaunchedEffect(latestChapterNavigationRequest, transitionStyle) {
+                if (!generation.isActive) return@LaunchedEffect
+                val request = latestChapterNavigationRequest ?: return@LaunchedEffect
+                if (resolvePageTransitionEngine(transitionStyle) != NovelPageTransitionEngine.PAGE_TURN_RENDERER) {
+                    latestChapterNavigationRequestConsumed()
+                    return@LaunchedEffect
+                }
 
-        when (request.direction) {
-            PageTurnChapterNavigationDirection.PREVIOUS -> {
-                tapCoroutineScope.launch {
-                    pageCurlState.prev(
-                        createPageTurnAnimation(
-                            animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
-                            forward = false,
-                            curlAmount = latestRendererConfig.preset.curlAmount,
-                        ),
-                    )
+                when (request.direction) {
+                    PageTurnChapterNavigationDirection.PREVIOUS -> {
+                        tapCoroutineScope.launch {
+                            pageCurlState.prev(
+                                createPageTurnAnimation(
+                                    animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                    forward = false,
+                                    curlAmount = latestRendererConfig.preset.curlAmount,
+                                ),
+                            )
+                        }
+                    }
+                    PageTurnChapterNavigationDirection.NEXT -> {
+                        tapCoroutineScope.launch {
+                            pageCurlState.next(
+                                createPageTurnAnimation(
+                                    animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                    forward = true,
+                                    curlAmount = latestRendererConfig.preset.curlAmount,
+                                ),
+                            )
+                        }
+                    }
                 }
-            }
-            PageTurnChapterNavigationDirection.NEXT -> {
-                tapCoroutineScope.launch {
-                    pageCurlState.next(
-                        createPageTurnAnimation(
-                            animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
-                            forward = true,
-                            curlAmount = latestRendererConfig.preset.curlAmount,
-                        ),
-                    )
-                }
+                latestChapterNavigationRequestConsumed()
             }
         }
-        latestChapterNavigationRequestConsumed()
     }
 }

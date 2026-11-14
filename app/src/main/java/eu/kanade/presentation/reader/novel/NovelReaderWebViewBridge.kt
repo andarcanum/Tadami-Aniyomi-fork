@@ -341,6 +341,15 @@ private const val NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS = 2_000L
 /** Invalidates any in-flight restore so its retries and completion cannot outlive this document. */
 internal fun WebView.cancelReaderScrollRestore() {
     novelReaderScrollRestoreRequests.remove(this)
+    evaluateJavascript(
+        """
+        (function() {
+            const reflow = document.__anReaderCssReflow;
+            if (reflow) reflow.release();
+        })();
+        """.trimIndent(),
+        null,
+    )
 }
 
 internal fun WebView.restoreWebViewScroll(
@@ -519,12 +528,20 @@ internal fun WebView.applyReaderCss(
         """
         (function() {
             const docEl = document.documentElement;
+            const previousReflow = document.__anReaderCssReflow;
+            const activeFraction = previousReflow && previousReflow.isCurrent()
+                ? previousReflow.fraction
+                : null;
+            if (previousReflow) previousReflow.release();
             const prevTotalScrollable = ($preserveScrollFlag && docEl)
                 ? Math.max(0, docEl.scrollHeight - window.innerHeight)
                 : 0;
-            const preservedFraction = prevTotalScrollable > 0
-                ? Math.min(1, Math.max(0, window.scrollY / prevTotalScrollable))
-                : null;
+            // An overlapping CSS update must not recapture a resize-clamped position.
+            const preservedFraction = !$preserveScrollFlag ? null : activeFraction !== null
+                ? activeFraction
+                : prevTotalScrollable > 0
+                    ? Math.min(1, Math.max(0, window.scrollY / prevTotalScrollable))
+                    : null;
             const styleId = '$WEB_READER_STYLE_ELEMENT_ID';
             let style = document.getElementById(styleId);
             if (!style) {
@@ -588,15 +605,70 @@ internal fun WebView.applyReaderCss(
                 }
             }
             if (preservedFraction !== null && docEl) {
+                let frameId = null;
+                let expectedScrollY = window.scrollY;
+                let expectedTotalScrollable = Math.max(0, docEl.scrollHeight - window.innerHeight);
+                const inputEvents = ['pointerdown', 'touchstart', 'wheel', 'keydown'];
+                const isCurrent = function() {
+                    if (document.documentElement !== docEl || document.body !== root ||
+                        document.__anReaderCssReflow !== reflow) return false;
+                    const nextTotal = Math.max(0, docEl.scrollHeight - window.innerHeight);
+                    const currentY = window.scrollY;
+                    // Own scroll events arrive asynchronously and may coalesce with a
+                    // resize clamp or the native rotation restore. Neither is navigation.
+                    const followsReflow = currentY === expectedScrollY ||
+                        currentY === Math.round(preservedFraction * nextTotal) ||
+                        (nextTotal !== expectedTotalScrollable && currentY === Math.min(expectedScrollY, nextTotal));
+                    if (!followsReflow) return false;
+                    // Remember accepted geometry for a rapid resize back, but keep the
+                    // original fraction until this request settles or navigation cancels it.
+                    expectedScrollY = currentY;
+                    expectedTotalScrollable = nextTotal;
+                    return true;
+                };
+                const release = function() {
+                    if (document.__anReaderCssReflow === reflow) document.__anReaderCssReflow = null;
+                    if (frameId !== null) window.cancelAnimationFrame(frameId);
+                    frameId = null;
+                    window.removeEventListener('scroll', onViewportChanged, true);
+                    window.removeEventListener('resize', onViewportChanged, true);
+                    window.removeEventListener('pagehide', release, true);
+                    for (const event of inputEvents) window.removeEventListener(event, release, true);
+                };
+                const onViewportChanged = function() {
+                    if (!isCurrent()) release();
+                };
+                const reflow = { fraction: preservedFraction, isCurrent: isCurrent, release: release };
+                document.__anReaderCssReflow = reflow;
+                // These passive guards live only for this bounded two-frame request.
+                window.addEventListener('scroll', onViewportChanged, { passive: true, capture: true });
+                window.addEventListener('resize', onViewportChanged, { passive: true, capture: true });
+                window.addEventListener('pagehide', release, true);
+                for (const event of inputEvents) {
+                    window.addEventListener(event, release, { passive: true, capture: true });
+                }
                 const applyPreservedScroll = function() {
-                    const nextTotalScrollable = Math.max(0, docEl.scrollHeight - window.innerHeight);
-                    if (nextTotalScrollable > 0) {
-                        window.scrollTo(0, Math.round(preservedFraction * nextTotalScrollable));
+                    if (!isCurrent()) {
+                        release();
+                        return;
                     }
+                    const nextTotalScrollable = Math.max(0, docEl.scrollHeight - window.innerHeight);
+                    window.scrollTo(0, Math.round(preservedFraction * nextTotalScrollable));
+                    expectedScrollY = window.scrollY;
+                    expectedTotalScrollable = nextTotalScrollable;
                 };
                 applyPreservedScroll();
-                requestAnimationFrame(function() {
-                    requestAnimationFrame(applyPreservedScroll);
+                frameId = window.requestAnimationFrame(function() {
+                    frameId = null;
+                    if (!isCurrent()) {
+                        release();
+                        return;
+                    }
+                    frameId = window.requestAnimationFrame(function() {
+                        frameId = null;
+                        applyPreservedScroll();
+                        release();
+                    });
                 });
             }
         })();

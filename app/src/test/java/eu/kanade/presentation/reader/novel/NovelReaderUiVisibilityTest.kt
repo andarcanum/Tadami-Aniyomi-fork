@@ -2860,18 +2860,40 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `native scroll still shows atmosphere background for book flip style`() {
+    fun `book flip keeps viewport backfill when a moving page leaves an edge uncovered`() {
         assertTrue(
             shouldShowNovelAtmosphereBackground(
                 usePageReader = false,
                 activePageTransitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
             ),
         )
-        assertFalse(
+        assertTrue(
             shouldShowNovelAtmosphereBackground(
                 usePageReader = true,
                 activePageTransitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
             ),
+        )
+    }
+
+    @Test
+    fun `page disposal reports only a settled acknowledged layout epoch`() {
+        assertTrue(
+            shouldReportPageReaderProgressOnDispose(
+                hasCompletedInitialLayout = true,
+                isInitialPositionRestored = true,
+                isPagedReflowPending = false,
+                requestedPage = -1,
+                totalItems = 5,
+            ),
+        )
+        assertFalse(
+            shouldReportPageReaderProgressOnDispose(true, true, true, -1, 5),
+        )
+        assertFalse(
+            shouldReportPageReaderProgressOnDispose(true, true, false, 2, 5),
+        )
+        assertFalse(
+            shouldReportPageReaderProgressOnDispose(true, false, false, -1, 5),
         )
     }
 

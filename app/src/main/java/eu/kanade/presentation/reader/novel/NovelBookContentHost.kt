@@ -272,11 +272,16 @@ internal fun NovelBookContentHost(
         var lastSectionIndex = -1
         var lastSectionFraction = -1f
         snapshotFlow {
-            textListState.firstVisibleItemIndex to textListState.firstVisibleItemScrollOffset
+            Triple(
+                textListState.firstVisibleItemIndex,
+                textListState.firstVisibleItemScrollOffset,
+                pendingWidthReflowAnchor,
+            )
         }
             .distinctUntilChanged()
             .collect {
-                if (pendingWidthReflowAnchor == null && nativeListWidthPx > 0) {
+                if (pendingWidthReflowAnchor != null) return@collect
+                if (nativeListWidthPx > 0) {
                     val visibleIndex = textListState.firstVisibleItemIndex
                     val visibleOffsetPx = textListState.firstVisibleItemScrollOffset
                     val visibleItemHeightPx = textListState.layoutInfo.visibleItemsInfo
@@ -367,25 +372,17 @@ internal fun NovelBookContentHost(
         if (!useNativeBookScroll || nativeListWidthPx <= 0) return@LaunchedEffect
         val maxIndex = (nativeEntries.size - 1).coerceAtLeast(0)
         val targetIndex = anchor.firstVisibleItemIndex.coerceIn(0, maxIndex)
-        textListState.scrollToItem(targetIndex, 0)
-        withFrameNanos { }
-        val measuredHeight = textListState.layoutInfo.visibleItemsInfo
-            .firstOrNull { it.index == targetIndex }
-            ?.size
-            ?: 0
-        val targetOffsetPx = resolveAnchoredNativeScrollOffsetPx(
-            withinItemFraction = anchor.withinItemFraction,
-            newItemHeightPx = measuredHeight,
-        )
-        if (targetOffsetPx > 0) {
-            textListState.scrollToItem(targetIndex, targetOffsetPx)
+        val restored = restoreNovelNativeScrollViewportAnchor(textListState, anchor, targetIndex)
+        if (restored) {
+            settledNativeAnchor = NovelNativeScrollViewportAnchor(
+                firstVisibleItemIndex = targetIndex,
+                withinItemFraction = anchor.withinItemFraction,
+                viewportWidthPx = nativeListWidthPx,
+            )
         }
-        settledNativeAnchor = NovelNativeScrollViewportAnchor(
-            firstVisibleItemIndex = targetIndex,
-            withinItemFraction = anchor.withinItemFraction,
-            viewportWidthPx = nativeListWidthPx,
-        )
-        pendingWidthReflowAnchor = null
+        // This effect is still active, so only this captured request can be pending. If a newer
+        // width replaced it the effect was cancelled and the helper propagated that cancellation.
+        if (pendingWidthReflowAnchor === anchor) pendingWidthReflowAnchor = null
     }
     val horizontalSafeInsets = rememberNovelHorizontalSafeInsets()
     val layoutDirection = LocalLayoutDirection.current

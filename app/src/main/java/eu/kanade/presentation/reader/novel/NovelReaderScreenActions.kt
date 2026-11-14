@@ -24,6 +24,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest
 data class NovelReaderScreenActions(
     val onBack: () -> Unit,
     val onReadingProgress: (
+        chapterId: Long,
         currentIndex: Int,
         totalItems: Int,
         persistedProgress: Long?,

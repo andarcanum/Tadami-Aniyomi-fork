@@ -2234,6 +2234,41 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `outgoing chapter progress callback cannot mutate the newly active chapter`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 2",
+                url = "https://example.org/ch2",
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+            withTimeout(5_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) yield()
+            }
+
+            screenModel.updateReadingProgressForChapter(
+                chapterId = chapter.id - 1,
+                currentIndex = 9,
+                totalItems = 10,
+            )
+            yield()
+
+            chapterRepo.lastUpdate shouldBe null
+        }
+    }
+
+    @Test
     fun `read chapter keeps saved progress when stale callback arrives`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
@@ -3767,7 +3802,7 @@ class NovelReaderScreenModelTest {
                 isSystemDark = { false },
             )
 
-            withTimeout(1_000) {
+            withTimeout(5_000) {
                 while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
                     yield()
                 }

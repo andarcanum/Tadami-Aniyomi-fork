@@ -708,17 +708,29 @@ internal fun resolveActivePageTransitionStyle(
     return requestedStyle
 }
 
+@Suppress("UNUSED_PARAMETER")
 internal fun shouldShowNovelAtmosphereBackground(
     usePageReader: Boolean,
     activePageTransitionStyle: NovelPageTransitionStyle,
     isBookMode: Boolean = false,
 ): Boolean {
-    // The Compose-pager Book Flip draws opaque page cards, so the atmosphere layer behind them
-    // was skipped there. The book engine's flip is a CSS turn INSIDE the transparent WebView:
-    // the atmosphere layer behind the document is exactly what the reader must see through it,
-    // and the engine stylesheet already forces html/body transparent, so it can never double.
-    if (isBookMode) return true
-    return !usePageReader || activePageTransitionStyle != NovelPageTransitionStyle.BOOK_FLIP
+    // Moving page surfaces carry their own paper, but resize/remount/fold gaps must expose the
+    // same full-viewport background, never just the solid window fallback. Keep it in every route.
+    return true
+}
+
+internal fun shouldReportPageReaderProgressOnDispose(
+    hasCompletedInitialLayout: Boolean,
+    isInitialPositionRestored: Boolean,
+    isPagedReflowPending: Boolean,
+    requestedPage: Int,
+    totalItems: Int,
+): Boolean {
+    return hasCompletedInitialLayout &&
+        isInitialPositionRestored &&
+        !isPagedReflowPending &&
+        requestedPage < 0 &&
+        totalItems > 0
 }
 
 internal enum class NovelPageReaderRendererRoute {
