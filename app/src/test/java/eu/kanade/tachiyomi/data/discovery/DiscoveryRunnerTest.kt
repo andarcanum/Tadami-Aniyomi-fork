@@ -1964,4 +1964,32 @@ class DiscoveryRunnerTest {
         runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
         repo.lastRetirementPolicy shouldBe tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy.SEEN_ONLY
     }
+
+    @Test
+    fun `newly installed plugin in manual mode is auto excluded instead of participating`() = runTest {
+        val captured = mutableListOf<DiscoveryBuildContext>()
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore()).apply {
+            discoverySourceMode(DiscoveryMediaType.MANGA).set("manual")
+            discoverySourceKnown(DiscoveryMediaType.MANGA).set("p1,p2")
+            discoverySourceExcluded(DiscoveryMediaType.MANGA).set("p2")
+        }
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = prefs,
+            seedSources = weightedSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(capturingBuilder(captured))) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = {
+                listOf(
+                    DiscoveryInstalledPlugin("p1", listOf(11L)),
+                    DiscoveryInstalledPlugin("p2", listOf(22L)),
+                    DiscoveryInstalledPlugin("p3", listOf(33L)),
+                )
+            },
+        )
+        runner.run(listOf(DiscoveryMediaType.MANGA))
+        captured.single().sourceIds shouldBe listOf(11L)
+        parseKeyCsv(prefs.discoverySourceExcluded(DiscoveryMediaType.MANGA).get()) shouldBe setOf("p2", "p3")
+        parseKeyCsv(prefs.discoverySourceKnown(DiscoveryMediaType.MANGA).get()) shouldBe setOf("p1", "p2", "p3")
+    }
 }

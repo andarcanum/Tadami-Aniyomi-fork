@@ -292,6 +292,8 @@ class DiscoveryPreferencesTest {
         val prefs = DiscoveryPreferences(InMemoryPreferenceStore())
         prefs.discoverySourceMode(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe "auto"
         prefs.discoverySourceExcluded(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe ""
+        prefs.discoverySourceKnown(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe ""
+        prefs.lastSourcesMediaType().get() shouldBe DiscoveryMediaType.ANIME.key
     }
 
     @Test

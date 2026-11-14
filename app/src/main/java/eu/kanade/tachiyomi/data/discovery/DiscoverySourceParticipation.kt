@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+
 /**
  * Результат резолва участия плагинов в подборках «Для тебя»:
  * упорядоченный пул для ряда SOURCE и первичный источник для TASTE/TREND.
@@ -8,6 +11,90 @@ data class SourceParticipation(
     val sourceIds: List<Long>,
     val primarySourceId: Long,
 )
+
+/** Результат сверки установленных плагинов с известным снимком [knownKeys]. */
+internal data class PluginKnownReconciliation(
+    val excludedKeys: Set<String>,
+    val knownKeys: Set<String>,
+    val changedExcluded: Boolean,
+    val changedKnown: Boolean,
+)
+
+/**
+ * Защищает ручной список источников от автодобавления вновь установленных плагинов:
+ * - Если [installedKeys] пуст или [mode] != "manual" — состояние не меняется.
+ * - При первом входе в ручной режим ([knownKeys] пуст) фиксирует текущие установленные плагины
+ *   как базовый снимок без их исключения.
+ * - Далее любой новый ключ (`key !in knownKeys`) автоматически добавляется в [excludedKeys] и [knownKeys].
+ */
+internal fun reconcileKnownPlugins(
+    mode: String,
+    installedKeys: Collection<String>,
+    excludedKeys: Set<String>,
+    knownKeys: Set<String>,
+): PluginKnownReconciliation {
+    val installedSet = installedKeys.asSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .toSet()
+    if (installedSet.isEmpty() || mode != "manual") {
+        return PluginKnownReconciliation(
+            excludedKeys = excludedKeys,
+            knownKeys = knownKeys,
+            changedExcluded = false,
+            changedKnown = false,
+        )
+    }
+    if (knownKeys.isEmpty()) {
+        return PluginKnownReconciliation(
+            excludedKeys = excludedKeys,
+            knownKeys = installedSet,
+            changedExcluded = false,
+            changedKnown = true,
+        )
+    }
+    val newKeys = installedSet - knownKeys
+    if (newKeys.isEmpty()) {
+        return PluginKnownReconciliation(
+            excludedKeys = excludedKeys,
+            knownKeys = knownKeys,
+            changedExcluded = false,
+            changedKnown = false,
+        )
+    }
+    val nextExcluded = excludedKeys + newKeys
+    val nextKnown = knownKeys + installedSet
+    return PluginKnownReconciliation(
+        excludedKeys = nextExcluded,
+        knownKeys = nextKnown,
+        changedExcluded = nextExcluded != excludedKeys,
+        changedKnown = nextKnown != knownKeys,
+    )
+}
+
+/** Применяет [reconcileKnownPlugins] к prefs для [mediaType] и персистит изменения. */
+internal fun reconcileDiscoverySourcePreferences(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    installedKeys: Collection<String>,
+): PluginKnownReconciliation {
+    val mode = preferences.discoverySourceMode(mediaType).get()
+    val excludedPref = preferences.discoverySourceExcluded(mediaType)
+    val knownPref = preferences.discoverySourceKnown(mediaType)
+    val result = reconcileKnownPlugins(
+        mode = mode,
+        installedKeys = installedKeys,
+        excludedKeys = parseKeyCsv(excludedPref.get()),
+        knownKeys = parseKeyCsv(knownPref.get()),
+    )
+    if (result.changedExcluded) {
+        excludedPref.set(formatKeyCsv(result.excludedKeys))
+    }
+    if (result.changedKnown) {
+        knownPref.set(formatKeyCsv(result.knownKeys))
+    }
+    return result
+}
 
 /**
  * CSV ключей плагинов (pkgName расширений / id novel-плагинов) → множество.

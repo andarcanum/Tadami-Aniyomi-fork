@@ -370,7 +370,15 @@ class DiscoveryRunner(
             val reliability = calculateSourceReliabilityFactor(it.representative, sourceFailureHistory, runnerNow)
             it.representative to (base * reliability)
         }
-        val excludedKeys = parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
+        val excludedKeys = if (pluginStats.isNotEmpty()) {
+            reconcileDiscoverySourcePreferences(
+                preferences = preferences,
+                mediaType = mediaType,
+                installedKeys = pluginStats.map { it.key },
+            ).excludedKeys
+        } else {
+            parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
+        }
         val participation = if (pluginStats.isEmpty()) {
             // Плагины неизвестны (юнит-тесты / расширения ещё не загружены при раннем старте):
             // легаси-порядок по весу библиотеки без исключений (нет маппинга ключ→источник).

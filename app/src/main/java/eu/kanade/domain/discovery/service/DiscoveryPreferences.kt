@@ -257,11 +257,26 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
     /**
      * CSV исключённых ключей плагинов (pkgName расширений / id novel-плагинов):
-     * хранятся ВЫКЛЮЧЕННЫЕ — новый плагин участвует автоматически.
+     * хранятся выключенные ключи. В ручном режиме (`manual`) вновь установленный плагин,
+     * отсутствующий в [discoverySourceKnown], автоматически попадает сюда и не добавляется в подборку.
      * Ключ объединяет все языковые варианты расширения. Учитывается в обоих режимах.
      */
     fun discoverySourceExcluded(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString("discovery_source_excluded_" + mediaType.key, "")
+
+    /**
+     * CSV ключей плагинов, уже зафиксированных для ручной выборки на [mediaType].
+     * Пустая строка означает, что снимок ещё не зафиксирован; после фиксации новые плагины
+     * автоматически добавляются в [discoverySourceExcluded].
+     */
+    fun discoverySourceKnown(mediaType: DiscoveryMediaType): Preference<String> =
+        preferenceStore.getString("discovery_source_known_" + mediaType.key, "")
+
+    /** Последний выбранный раздел на экране источников подборок (app-state, не входит в backup). */
+    fun lastSourcesMediaType(): Preference<String> = preferenceStore.getString(
+        Preference.appStateKey("discovery_sources_media_type"),
+        DiscoveryMediaType.ANIME.key,
+    )
 
     /**
      * Version code, при котором уже выполнен backfill-чек привязок подборок:

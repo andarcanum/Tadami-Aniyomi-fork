@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.formatKeyCsv
 import eu.kanade.tachiyomi.data.discovery.groupSourcesByPlugin
 import eu.kanade.tachiyomi.data.discovery.parseKeyCsv
+import eu.kanade.tachiyomi.data.discovery.reconcileDiscoverySourcePreferences
 import eu.kanade.tachiyomi.data.discovery.selectPluginRepresentative
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
@@ -47,7 +48,7 @@ sealed interface DiscoverySourcesToast {
 }
 
 data class DiscoverySourcesUiState(
-    val mediaType: DiscoveryMediaType = DiscoveryMediaType.NOVEL,
+    val mediaType: DiscoveryMediaType = DiscoveryMediaType.ANIME,
     val mode: String = "auto",
     val query: String = "",
     val entries: List<SourcePickUi> = emptyList(),
@@ -88,6 +89,9 @@ internal fun isOverloadWarn(entries: List<SourcePickUi>): Boolean =
 internal fun selectedFirst(entries: List<SourcePickUi>): List<SourcePickUi> =
     entries.sortedBy { it.excluded }
 
+internal fun resolveSourcesMediaType(savedKey: String): DiscoveryMediaType =
+    DiscoveryMediaType.fromKey(savedKey) ?: DiscoveryMediaType.ANIME
+
 /**
  * ScreenModel пикера «Источники подборок»: установленные плагины (расширения) на медиатип,
  * веса библиотеки, режим/исключения из prefs. Единица участия — расширение: все языковые
@@ -122,8 +126,18 @@ class DiscoverySourcesScreenModel(
     private var mediaData: Map<DiscoveryMediaType, MediaData> = emptyMap()
 
     init {
+        val initialMedia = resolveSourcesMediaType(discoveryPreferences.lastSourcesMediaType().get())
+        mutableState.update { it.copy(mediaType = initialMedia) }
         screenModelScope.launchIO {
-            mediaData = DiscoveryMediaType.entries.associateWith { loadMedia(it) }
+            mediaData = DiscoveryMediaType.entries.associateWith { media ->
+                val data = loadMedia(media)
+                reconcileDiscoverySourcePreferences(
+                    preferences = discoveryPreferences,
+                    mediaType = media,
+                    installedKeys = data.ordered.map { it.key },
+                )
+                data
+            }
             rebuild()
         }
     }
@@ -249,6 +263,7 @@ class DiscoverySourcesScreenModel(
     }
 
     fun switchMedia(mediaType: DiscoveryMediaType) {
+        discoveryPreferences.lastSourcesMediaType().set(mediaType.key)
         mutableState.update { it.copy(mediaType = mediaType, query = "", toast = null) }
         rebuild()
     }
@@ -257,6 +272,13 @@ class DiscoverySourcesScreenModel(
         val mediaType = state.value.mediaType
         if (discoveryPreferences.discoverySourceMode(mediaType).get() == mode) return
         discoveryPreferences.discoverySourceMode(mediaType).set(mode)
+        mediaData[mediaType]?.let { data ->
+            reconcileDiscoverySourcePreferences(
+                preferences = discoveryPreferences,
+                mediaType = mediaType,
+                installedKeys = data.ordered.map { it.key },
+            )
+        }
         rebuild()
         notifyConfigurationChanged(mediaType)
     }
@@ -289,8 +311,13 @@ class DiscoverySourcesScreenModel(
 
     fun selectAll() {
         val mediaType = state.value.mediaType
-        if (mediaData[mediaType] == null) return
+        val data = mediaData[mediaType] ?: return
         discoveryPreferences.discoverySourceExcluded(mediaType).set("")
+        reconcileDiscoverySourcePreferences(
+            preferences = discoveryPreferences,
+            mediaType = mediaType,
+            installedKeys = data.ordered.map { it.key },
+        )
         rebuild()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.SelectAll) }
         notifyConfigurationChanged(mediaType)
