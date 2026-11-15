@@ -1408,7 +1408,7 @@ public class SubsamplingScaleImageView extends View {
         // Load double resolution - next level will be split into four tiles and at the center all four are required,
         // so don't bother with tiling until the next level 16 tiles are needed.
         if (externalViewportEnabled) {
-            // Skip redundant coarse preview when the full image fits in 1-2 tiles.
+            // Retain a bounded fallback even when full resolution would fit in 1-2 tiles.
             fullImageSampleSize = TileQuality.previewSample(
                     getEffectiveSWidth(),
                     getEffectiveSHeight(),
@@ -1749,6 +1749,21 @@ public class SubsamplingScaleImageView extends View {
                 sTileHeight = sHeight / yTiles;
                 subTileHeight = sTileHeight / sampleSize;
             }
+            if (externalViewportEnabled && sampleSize == fullImageSampleSize) {
+                // Sum the actual grid's ceil-rounded dimensions, including its remainder edges.
+                long decodedWidth = (xTiles - 1L) * ((sTileWidth + (long) sampleSize - 1) / sampleSize)
+                        + ((sWidth - (xTiles - 1L) * sTileWidth + sampleSize - 1) / sampleSize);
+                long decodedHeight = (yTiles - 1L) * ((sTileHeight + (long) sampleSize - 1) / sampleSize)
+                        + ((sHeight - (yTiles - 1L) * sTileHeight + sampleSize - 1) / sampleSize);
+                if (decodedWidth * decodedHeight > TileQuality.PREVIEW_PIXELS) {
+                    // Retry only the base grid before allocating tiles, detail grids, or decode tasks.
+                    fullImageSampleSize *= 2;
+                    sampleSize = fullImageSampleSize;
+                    xTiles = 1;
+                    yTiles = 1;
+                    continue;
+                }
+            }
             List<Tile> tileGrid = new ArrayList<>(xTiles * yTiles);
             for (int x = 0; x < xTiles; x++) {
                 for (int y = 0; y < yTiles; y++) {
@@ -1790,6 +1805,9 @@ public class SubsamplingScaleImageView extends View {
                 bitmap = null;
                 bitmapIsCached = false;
             }
+        }
+        if (decoder instanceof HardwareTileConfigurableDecoder) {
+            ((HardwareTileConfigurableDecoder) decoder).setHardwareTilesEnabled(hardwareTilesEnabled);
         }
         this.decoder = decoder;
         this.sWidth = sWidth;
@@ -1889,27 +1907,63 @@ public class SubsamplingScaleImageView extends View {
     }
 
     private void executeTask(@NonNull CancellableTask task) {
+        Executor submittingExecutor = executor;
         activeTasks.add(task);
-        Runnable wrapper = () -> {
-            try {
-                task.run();
-            } finally {
-                activeTasks.remove(task);
-            }
-        };
-        Future<?> future;
-        if (executor instanceof ExecutorService) {
-            future = ((ExecutorService) executor).submit(wrapper);
-        } else {
-            FutureTask<Void> futureTask = new FutureTask<>(wrapper, null);
-            executor.execute(futureTask);
-            future = futureTask;
-        }
+        FutureTask<Void> future = createTaskFuture(task, activeTasks, submittingExecutor);
         if (task instanceof TilesInitTask) {
             ((TilesInitTask) task).future = future;
         } else if (task instanceof TileLoadTask) {
             ((TileLoadTask) task).future = future;
         }
+        try {
+            // Keep the same cancellation/ownership future for every Executor implementation.
+            submittingExecutor.execute(future);
+        } catch (RuntimeException | Error error) {
+            if (task instanceof TileLoadTask) {
+                cancelTileTask(((TileLoadTask) task).tile);
+            } else {
+                task.cancel();
+            }
+            throw error;
+        }
+    }
+
+    private static FutureTask<Void> createTaskFuture(
+            CancellableTask task, Set<CancellableTask> registry, Executor submittingExecutor
+    ) {
+        final int queued = 0, running = 1, terminal = 2;
+        AtomicInteger state = new AtomicInteger(queued);
+        WeakReference<CancellableTask> queuedTaskRef = new WeakReference<>(task);
+        WeakReference<ThreadPoolExecutor> poolRef = submittingExecutor instanceof ThreadPoolExecutor
+                ? new WeakReference<>((ThreadPoolExecutor) submittingExecutor) : null;
+        return new FutureTask<>(() -> {
+            // Cancellation can win after FutureTask enters run but before this wrapper starts.
+            if (!state.compareAndSet(queued, running)) {
+                return;
+            }
+            try {
+                task.run();
+            } finally {
+                state.set(terminal);
+                registry.remove(task);
+            }
+        }, null) {
+            @Override
+            protected void done() {
+                // cancel(false) also marks a running Future done: only queued work ends here.
+                if (state.compareAndSet(queued, terminal)) {
+                    CancellableTask queuedTask = queuedTaskRef.get();
+                    if (queuedTask != null) {
+                        registry.remove(queuedTask);
+                    }
+                    // Use the original submitting pool, not the view's possibly replaced Executor.
+                    ThreadPoolExecutor pool = poolRef == null ? null : poolRef.get();
+                    if (pool != null) {
+                        pool.remove(this);
+                    }
+                }
+            }
+        };
     }
 
     private void cancelTileTask(@NonNull Tile tile) {
@@ -1942,7 +1996,7 @@ public class SubsamplingScaleImageView extends View {
         for (CancellableTask task : activeTasks) {
             task.cancel();
         }
-        activeTasks.clear();
+        // Running tasks remain owned until their execution finally, not Future cancellation.
     }
 
     /**

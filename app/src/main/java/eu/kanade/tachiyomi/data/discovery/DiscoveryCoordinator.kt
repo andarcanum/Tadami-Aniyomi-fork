@@ -23,6 +23,7 @@ data class DiscoveryFeed(
     val exhaustionEvidence: List<DiscoveryQueryEvidence>? = null,
     val failedSourceIds: Set<Long> = emptySet(),
     val degradedSourceIds: Set<Long> = emptySet(),
+    val successfulSourceIds: Set<Long> = emptySet(),
 )
 
 /**
@@ -146,6 +147,7 @@ class DiscoveryCoordinator(
             },
             failedSourceIds = rowBuilders.flatMap { it.failedSourceIds }.toSet(),
             degradedSourceIds = rowBuilders.flatMap { it.degradedSourceIds }.toSet(),
+            successfulSourceIds = rowBuilders.flatMap { it.successfulSourceIds }.toSet(),
         )
     }
 

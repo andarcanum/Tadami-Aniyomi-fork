@@ -106,4 +106,13 @@ internal data class GenreSourceVerification(
     val detailsUsed: Int = 0,
     val hasNextPage: Boolean = true,
     val queryKey: String = "",
-)
+    /** Positive transport evidence: catalogue pages actually returned during this pass. */
+    val successfulPages: Int = 0,
+) {
+    val canRewardReliability: Boolean
+        get() = successfulPages > 0 && failure == null && pending == 0 && !summary.hasCoverageGap &&
+            (
+                stopReason == DiscoveryFillStopReason.TARGET_REACHED ||
+                    stopReason == DiscoveryFillStopReason.SOURCE_EXHAUSTED
+                )
+}

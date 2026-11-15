@@ -89,7 +89,7 @@ class MangaSeriesScreenModelReorderTest {
         every { getMangaSeriesWithEntries.subscribe(seriesId) } returns seriesFlow
         coEvery { mangaHistoryRepository.getHistoryByMangaId(any()) } returns emptyList()
         every { getVisibleMangaCategories.subscribe() } returns flowOf(emptyList())
-        coEvery { getChaptersByMangaId.await(any()) } returns emptyList()
+        coEvery { getChaptersByMangaId.await(any(), applyScanlatorFilter = true) } returns emptyList()
         coJustRun { reorderSeriesEntries.await(any()) }
     }
 
@@ -128,7 +128,7 @@ class MangaSeriesScreenModelReorderTest {
 
     @Test
     fun `fetches chapters in ascending order for all chapters view`() = runTest(testDispatcher) {
-        coEvery { getChaptersByMangaId.await(10L) } returns listOf(
+        coEvery { getChaptersByMangaId.await(10L, applyScanlatorFilter = true) } returns listOf(
             chapter(id = 3L, sourceOrder = 3L, chapterNumber = 3.0),
             chapter(id = 1L, sourceOrder = 1L, chapterNumber = 1.0),
             chapter(id = 2L, sourceOrder = 2L, chapterNumber = 2.0),
@@ -149,7 +149,7 @@ class MangaSeriesScreenModelReorderTest {
 
     @Test
     fun `chapter number dominates source order in all chapters view`() = runTest(testDispatcher) {
-        coEvery { getChaptersByMangaId.await(10L) } returns listOf(
+        coEvery { getChaptersByMangaId.await(10L, applyScanlatorFilter = true) } returns listOf(
             chapter(id = 30L, sourceOrder = 1L, chapterNumber = 3.0),
             chapter(id = 10L, sourceOrder = 3L, chapterNumber = 1.0),
             chapter(id = 20L, sourceOrder = 2L, chapterNumber = 2.0),

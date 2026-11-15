@@ -6,7 +6,6 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Process-wide coordinator for [MangaSource.getMangaUpdate] calls.
@@ -17,18 +16,50 @@ import java.util.concurrent.ConcurrentHashMap
  * fetchers, background jobs) are serialized per entry rather than crashing with IllegalStateException.
  */
 object MangaSourceUpdateLock {
-    private val locks = ConcurrentHashMap<String, Mutex>()
+    private val coordinator = MangaSourceUpdateCoordinator()
+
+    suspend fun <T> withLock(sourceId: Long, mangaUrl: String, block: suspend () -> T): T {
+        return coordinator.withLock(sourceId, mangaUrl, block)
+    }
+}
+
+internal class MangaSourceUpdateCoordinator(
+    private val mutexFactory: (Long, String) -> Mutex = { _, _ -> Mutex() },
+) {
+    private val locks = mutableMapOf<String, Entry>()
 
     private fun key(sourceId: Long, mangaUrl: String): String = "$sourceId:$mangaUrl"
 
     suspend fun <T> withLock(sourceId: Long, mangaUrl: String, block: suspend () -> T): T {
-        val mutex = locks.computeIfAbsent(key(sourceId, mangaUrl)) { Mutex() }
-        val result = mutex.withLock { block() }
-        if (locks.size > 500) {
-            locks.entries.removeIf { !it.value.isLocked }
+        val entryKey = key(sourceId, mangaUrl)
+        // A reference belongs to the caller before acquisition, including suspended waiters.
+        val entry = synchronized(locks) {
+            locks.getOrPut(entryKey) { Entry(mutexFactory(sourceId, mangaUrl)) }
+                .also { it.users++ }
         }
-        return result
+        try {
+            return entry.mutex.withLock { block() }
+        } finally {
+            synchronized(locks) {
+                entry.users--
+                if (entry.users == 0) {
+                    locks.remove(entryKey)
+                }
+            }
+        }
     }
+
+    private class Entry(val mutex: Mutex, var users: Int = 0)
+}
+
+/** Chapter-only combined API boundary for migration and deep-link resolution. */
+internal suspend fun MangaSource.fetchMangaChaptersForUpdate(manga: SManga): List<SChapter> {
+    return getMangaUpdateLocked(
+        manga = manga,
+        chapters = emptyList(),
+        fetchDetails = false,
+        fetchChapters = true,
+    ).chapters
 }
 
 /**

@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import eu.kanade.tachiyomi.data.suggestions.util.bestMatchScoreFor
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -428,6 +429,9 @@ class DiscoveryTasteRowBuilder(
     override var degradedSourceIds: Set<Long> = emptySet()
         private set
 
+    override var successfulSourceIds: Set<Long> = emptySet()
+        private set
+
     override var exhaustionEvidence: List<tachiyomi.domain.discovery.model.DiscoveryQueryEvidence>? = null
         private set
 
@@ -435,6 +439,7 @@ class DiscoveryTasteRowBuilder(
         isDegraded = false
         failedSourceIds = emptySet()
         degradedSourceIds = emptySet()
+        successfulSourceIds = emptySet()
         val policy = context.candidatePolicy
         val activeProfile = resolveDiscoveryTasteProfile(context.tasteProfile, policy)
         if (activeProfile.isEmpty()) {
@@ -481,7 +486,7 @@ class DiscoveryTasteRowBuilder(
             if (includeExternal && !required && genreNames.size > 1 && trendingResult?.isSuccess == true &&
                 initial.isEmpty()
             ) {
-                fetchSplitExternalGenres(context, genreNames, context.pageOffset, policy.requiredMatchMode)
+                fetchSplitExternalGenres(context, genreNames.take(3), context.pageOffset, policy.requiredMatchMode)
                     .flatMap { it.getOrNull().orEmpty() }
                     .distinctBy { it.cleanTitle }
             } else {
@@ -573,6 +578,7 @@ class DiscoveryTasteRowBuilder(
                     it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED
                 )
         }.map { it.sourceId }.toSet()
+        successfulSourceIds = sourceResults.filter { it.canRewardReliability }.map { it.sourceId }.toSet()
         exhaustionEvidence = if (includeExternal) null else sourceResults.map { it.toExhaustionEvidence() }
         // In the cheap path cards without genres were never going to be hydrated,
         // so an "unattempted" count there is by design and not a degraded row.
@@ -660,20 +666,43 @@ class DiscoveryTasteRowBuilder(
         page: Int,
         matchMode: RequiredMatchMode,
     ): List<Result<List<DiscoveryTrendingItem>>> = supervisorScope {
-        genreNames.take(3).map { genre ->
-            async {
-                runCatchingUnlessCancelled {
-                    trending.fetchByGenres(
-                        context.mediaType,
-                        listOf(genre),
-                        sortProvider(),
-                        page = page,
-                        releaseStatuses = context.releaseStatuses,
-                        matchMode = matchMode,
-                    )
+        val waves = genreNames.chunked(3)
+        val budget = context.verificationBudget
+        val results = ArrayList<Result<List<DiscoveryTrendingItem>>>(genreNames.size)
+        for ((waveIndex, genres) in waves.withIndex()) {
+            coroutineContext.ensureActive()
+            val remainingMs = budget?.remainingMs()
+            if (remainingMs == 0L) break
+            // Reserve time for later genres instead of letting slow head queries own the whole pass.
+            val waveTimeoutMs = remainingMs?.let { (it / (waves.size - waveIndex)).coerceAtLeast(1L) }
+            val waveResults = genres.map { genre ->
+                async {
+                    runCatchingUnlessCancelled {
+                        coroutineContext.ensureActive()
+                        val fetch = suspend {
+                            trending.fetchByGenres(
+                                context.mediaType,
+                                listOf(genre),
+                                sortProvider(),
+                                page = page,
+                                releaseStatuses = context.releaseStatuses,
+                                matchMode = matchMode,
+                            )
+                        }
+                        if (waveTimeoutMs == null) {
+                            fetch()
+                        } else {
+                            // A scheduled coroutine may start after the wave's original budget snapshot.
+                            withTimeoutOrNull(minOf(waveTimeoutMs, budget?.remainingMs() ?: waveTimeoutMs)) {
+                                fetch()
+                            } ?: throw IOException("external genre query exceeded its shared budget")
+                        }
+                    }
                 }
-            }
-        }.awaitAll()
+            }.awaitAll()
+            results += waveResults
+        }
+        results
     }
 }
 
@@ -701,6 +730,9 @@ class DiscoverySourceRowBuilder(
     override var degradedSourceIds: Set<Long> = emptySet()
         private set
 
+    override var successfulSourceIds: Set<Long> = emptySet()
+        private set
+
     override var exhaustionEvidence: List<tachiyomi.domain.discovery.model.DiscoveryQueryEvidence>? = null
         private set
 
@@ -708,6 +740,7 @@ class DiscoverySourceRowBuilder(
         isDegraded = false
         failedSourceIds = emptySet()
         degradedSourceIds = emptySet()
+        successfulSourceIds = emptySet()
         val ids = context.sourceIds.filter { it > 0 }
             .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
         if (ids.isEmpty()) return emptyList()
@@ -750,6 +783,7 @@ class DiscoverySourceRowBuilder(
                         it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED
                     )
             }.map { it.sourceId }.toSet()
+            successfulSourceIds = results.filter { it.canRewardReliability }.map { it.sourceId }.toSet()
             exhaustionEvidence = results.map { it.toExhaustionEvidence() }
             isDegraded = results.any {
                 it.failure != null || it.summary.hasCoverageGap ||
@@ -781,6 +815,8 @@ class DiscoverySourceRowBuilder(
             var latestFailed = false
             var popularFailed = false
             var queried = false
+            var successfulFetches = 0
+            var metadataIncomplete = false
             fun finished() = (latestNext == false || latestFailed) && (popularNext == false || popularFailed)
             fun hasFresh() = latest.isNotEmpty() || popular.isNotEmpty()
         }
@@ -849,22 +885,30 @@ class DiscoverySourceRowBuilder(
                             suspend fun filterAndHydrate(items: List<DiscoveryRowItem>): List<DiscoveryRowItem> {
                                 val candidates = items
                                     .filterNot { it.isExcludedBy(context.exclusionKeys, context.mediaType) }
+                                val missingGenres = candidates.any { it.genres.isEmpty() }
                                 val hydrated = if (
                                     needsGenreHydration &&
                                     budget != null &&
                                     !budget.isExpired() &&
-                                    candidates.any { it.genres.isEmpty() }
+                                    missingGenres
                                 ) {
-                                    runCatchingUnlessCancelled {
+                                    val page = runCatchingUnlessCancelled {
                                         catalog.hydrateGenres(
                                             mediaType = context.mediaType,
                                             sourceId = state.id,
                                             items = candidates,
                                             budget = budget,
                                             maxDetails = 8,
-                                        ).items
-                                    }.getOrDefault(candidates)
+                                        )
+                                    }.getOrNull()
+                                    if (page == null || page.unattempted > 0 || page.pending.isNotEmpty() ||
+                                        page.metadataUnavailable > 0 || page.transientFailures > 0
+                                    ) {
+                                        state.metadataIncomplete = true
+                                    }
+                                    page?.items ?: candidates
                                 } else {
+                                    if (budget != null && missingGenres) state.metadataIncomplete = true
                                     candidates
                                 }
                                 return policy.filterRowCandidates(hydrated, { it.genres })
@@ -875,6 +919,7 @@ class DiscoverySourceRowBuilder(
                                     state.latestFailed = true
                                 } else {
                                     state.latestNext = response.hasNextPage
+                                    state.successfulFetches++
                                     state.latest += filterAndHydrate(response.items)
                                 }
                             }
@@ -884,6 +929,7 @@ class DiscoverySourceRowBuilder(
                                     state.popularFailed = true
                                 } else {
                                     state.popularNext = response.hasNextPage
+                                    state.successfulFetches++
                                     state.popular += filterAndHydrate(response.items)
                                 }
                             }
@@ -934,6 +980,16 @@ class DiscoverySourceRowBuilder(
         }
         val backfill = policy.filterRowCandidates(interleaveSourceParts(surplus, rowCap - selected.size), { it.genres })
         val fresh = (selected + backfill).take(rowCap)
+        degradedSourceIds = states.filter { state ->
+            state.latestFailed || state.popularFailed || state.metadataIncomplete ||
+                (
+                    !state.finished() && (state.latest + state.popular).distinctBy { it.cleanTitle }.size <
+                        slotAllocations.getValue(state.id)
+                    )
+        }.map { it.id }.toSet()
+        successfulSourceIds = states.filter { state ->
+            state.successfulFetches > 0 && state.id !in degradedSourceIds
+        }.map { it.id }.toSet()
         isDegraded = states.any { it.latestFailed || it.popularFailed } ||
             (fresh.size < rowCap && states.any { !it.finished() })
         return mergeExistingRowItems(

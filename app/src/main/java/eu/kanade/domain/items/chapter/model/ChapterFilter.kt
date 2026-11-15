@@ -53,9 +53,10 @@ fun List<ChapterList.Item>.applyFilters(
     val unreadFilter = manga.unreadFilter
     val downloadedFilter = manga.effectiveDownloadedFilter(downloadedOnly)
     val bookmarkedFilter = manga.bookmarkedFilter
+    val chapterSort = getChapterSort(manga)
     return asSequence()
         .filter { (chapter) -> applyFilter(unreadFilter) { !chapter.read } }
         .filter { (chapter) -> applyFilter(bookmarkedFilter) { chapter.bookmark } }
         .filter { applyFilter(downloadedFilter) { it.isDownloaded || isLocalManga } }
-        .sortedWith { (chapter1), (chapter2) -> getChapterSort(manga).invoke(chapter1, chapter2) }
+        .sortedWith { (chapter1), (chapter2) -> chapterSort.invoke(chapter1, chapter2) }
 }

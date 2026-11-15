@@ -34,12 +34,14 @@ import coil3.request.maxBitmapSize
 import coil3.size.Precision
 import coil3.size.Scale
 import coil3.size.Size
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
@@ -51,6 +53,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
 /**
@@ -315,6 +318,7 @@ class AnimatedNativeDrawable internal constructor(
     private val intrinsicW = displayBitmap.width
     private val intrinsicH = displayBitmap.height
     private val closed = AtomicBoolean(false)
+    private val decoderOwnership = AtomicInteger(DECODER_IDLE)
 
     private var playJob: Job? = null
 
@@ -475,27 +479,43 @@ class AnimatedNativeDrawable internal constructor(
                 val nextFrame = try {
                     withContext(Dispatchers.IO) {
                         synchronized(decoderLock) {
-                            val scratchInts = intScratch
-                            val scratchHdr = hdrScratch
-                            if (closed.get() || !isRunning) return@withContext null
-                            val frame = source.decodeNext()
+                            coroutineContext.ensureActive()
+                            if (!decoderOwnership.compareAndSet(DECODER_IDLE, DECODER_IN_FLIGHT)) {
+                                return@withContext null
+                            }
                             try {
-                                unpackFrame(
-                                    frame = frame,
-                                    isHdr = isHdr,
-                                    targetWidth = intrinsicW,
-                                    targetHeight = intrinsicH,
-                                    intScratch = scratchInts,
-                                    hdrScratch = scratchHdr,
-                                )
-                                FrameStep(frame.index, isLastFrame(frame.index, pageCount), frame.duration)
+                                val scratchInts = intScratch
+                                val scratchHdr = hdrScratch
+                                if (closed.get() || !isRunning) return@withContext null
+                                val frame = source.decodeNext()
+                                try {
+                                    unpackFrame(
+                                        frame = frame,
+                                        isHdr = isHdr,
+                                        targetWidth = intrinsicW,
+                                        targetHeight = intrinsicH,
+                                        intScratch = scratchInts,
+                                        hdrScratch = scratchHdr,
+                                    )
+                                    FrameStep(frame.index, isLastFrame(frame.index, pageCount), frame.duration)
+                                } finally {
+                                    frame.close()
+                                }
                             } finally {
-                                frame.close()
+                                // Publish IDLE only after the last native/frame access. A close that
+                                // changed IN_FLIGHT to CLOSED hands teardown exclusively to this IO owner.
+                                if (!decoderOwnership.compareAndSet(DECODER_IN_FLIGHT, DECODER_IDLE)) {
+                                    releaseDecoderResources()
+                                }
                             }
                         }
                     }
+                } catch (error: CancellationException) {
+                    throw error
                 } catch (_: Exception) {
-                    stop()
+                    if (isActive && playJob === coroutineContext[Job]) {
+                        stop()
+                    }
                     break
                 } ?: break
 
@@ -543,29 +563,43 @@ class AnimatedNativeDrawable internal constructor(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        shouldResumeOnVisible = false
-        startDispatched = false
-        isRunning = false
-        playJob?.cancel()
-        playJob = null
-        scope.cancel()
-        callbacks.clear()
-        synchronized(bitmapLock) {
-            if (!displayBitmap.isRecycled) {
-                displayBitmap.recycle()
+        val previousOwnership = decoderOwnership.getAndSet(DECODER_CLOSED)
+        try {
+            shouldResumeOnVisible = false
+            startDispatched = false
+            isRunning = false
+            playJob?.cancel()
+            playJob = null
+            scope.cancel()
+            callbacks.clear()
+            synchronized(bitmapLock) {
+                if (!displayBitmap.isRecycled) {
+                    displayBitmap.recycle()
+                }
+            }
+        } finally {
+            // The atomic IDLE -> CLOSED transition grants exclusive teardown without waiting
+            // for decoderLock. Otherwise the running IO owner releases resources in its finally.
+            if (previousOwnership == DECODER_IDLE) {
+                releaseDecoderResources()
             }
         }
-        synchronized(decoderLock) {
-            intScratch = null
-            hdrScratch = null
-            source.close()
-        }
+    }
+
+    private fun releaseDecoderResources() {
+        intScratch = null
+        hdrScratch = null
+        source.close()
     }
 
     private class FrameStep(val index: Int, val last: Boolean, val duration: Int)
 
     companion object {
         const val REPEAT_INFINITE = -1
+
+        private const val DECODER_IDLE = 0
+        private const val DECODER_IN_FLIGHT = 1
+        private const val DECODER_CLOSED = 2
     }
 }
 

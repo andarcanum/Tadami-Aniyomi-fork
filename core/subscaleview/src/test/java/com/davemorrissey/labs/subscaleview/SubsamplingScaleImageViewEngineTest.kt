@@ -21,9 +21,18 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -35,6 +44,8 @@ class SubsamplingScaleImageViewEngineTest {
         var failDetailPredicate: ((Rect, Int) -> Boolean)? = null
         val decodedRegions = mutableListOf<Pair<Rect, Int>>()
         var returnHardwareBitmap = false
+        var beforeDecode: ((Rect, Int) -> Unit)? = null
+        var onDecoded: ((Bitmap) -> Unit)? = null
 
         override fun init(context: Context, provider: InputProvider): Point {
             provider.openStream()?.close()
@@ -43,6 +54,7 @@ class SubsamplingScaleImageViewEngineTest {
 
         override fun decodeRegion(sRect: Rect, sampleSize: Int): Bitmap {
             decodedRegions += Rect(sRect) to sampleSize
+            beforeDecode?.invoke(sRect, sampleSize)
             if (failDetailPredicate?.invoke(sRect, sampleSize) == true) {
                 throw IllegalStateException("Transient tile decode failure")
             }
@@ -55,9 +67,11 @@ class SubsamplingScaleImageViewEngineTest {
                 val hw = runCatching { software.copy(Bitmap.Config.HARDWARE, false) }.getOrNull()
                 if (hw != null) {
                     software.recycle()
+                    onDecoded?.invoke(hw)
                     return hw
                 }
             }
+            onDecoded?.invoke(software)
             return software
         }
 
@@ -73,6 +87,16 @@ class SubsamplingScaleImageViewEngineTest {
     ) : SubsamplingScaleImageView(ApplicationProvider.getApplicationContext<Context>()) {
         override fun createRegionDecoder(): ImageRegionDecoder = fake
     }
+
+    // Observe the owned-work budget without adding a production API just for test cleanup.
+    private fun ownedTasks(view: SubsamplingScaleImageView): Set<*> {
+        val field = SubsamplingScaleImageView::class.java.getDeclaredField("activeTasks").apply {
+            isAccessible = true
+        }
+        return field.get(view) as Set<*>
+    }
+
+    private fun ownedTaskCount(view: SubsamplingScaleImageView): Int = ownedTasks(view).size
 
     private class RecordingCanvas(target: Bitmap) : Canvas(target) {
         val draws = mutableListOf<Pair<Int, Int>>()
@@ -100,6 +124,289 @@ class SubsamplingScaleImageViewEngineTest {
         val recording = RecordingCanvas(canvasBitmap)
         draw(recording)
         return recording.draws
+    }
+
+    @Test
+    fun cancelledQueuedTilesDeregisterWithoutResettingTheImage() {
+        val view = EngineTestView().apply {
+            setExecutor(Executor { it.run() })
+            setMaxTileSize(512)
+            setMinimumTileDpi(0)
+            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH)
+            setExternalViewport(RectF(), 1f)
+            setImage(ImageSource.inputStream(byteArrayOf(1).inputStream()))
+            ShadowLooper.idleMainLooper()
+        }
+        val target = Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+        val queuedTasks = java.util.ArrayDeque<Runnable>()
+
+        try {
+            repeat(3) { view.render(target) }
+            assertTrue(view.isReady, "The base layer must be loaded before queuing detail work")
+            assertEquals(0, ownedTaskCount(view))
+            view.setExecutor(Executor { queuedTasks.addLast(it) })
+
+            repeat(8) { cycle ->
+                view.setExternalViewport(RectF(0f, 800f, 400f, 1200f), 2f)
+                assertTrue(queuedTasks.isNotEmpty(), "The visible band must queue detail tiles")
+                assertTrue(ownedTaskCount(view) > 0)
+
+                // Leaving the band cancels its real FutureTasks before their wrappers can run.
+                view.setExternalViewport(RectF(), 2f)
+                while (queuedTasks.isNotEmpty()) {
+                    queuedTasks.removeFirst().run()
+                }
+                ShadowLooper.idleMainLooper()
+
+                assertEquals(
+                    0,
+                    ownedTaskCount(view),
+                    "Cancelled queued tiles must leave the owned-work budget without rebind (cycle $cycle)",
+                )
+                assertTrue(view.hasImage(), "Viewport cancellation must preserve the current image")
+                assertTrue(view.isReady)
+                assertFalse(view.fake.recycled, "Viewport cancellation must not recycle the decoder")
+                assertTrue(
+                    view.fake.decodedRegions.none { it.second < 8 },
+                    "Cancelled queued detail tiles must never enter the decoder",
+                )
+            }
+        } finally {
+            view.setExecutor(Executor { it.run() })
+            view.recycle()
+            while (queuedTasks.isNotEmpty()) {
+                queuedTasks.removeFirst().run()
+            }
+            ShadowLooper.idleMainLooper()
+            target.recycle()
+        }
+    }
+
+    @Test
+    fun cancelledRunningTileRemainsOwnedUntilDecodeFinishesAndRecyclesItsLateOutput() {
+        val view = EngineTestView().apply {
+            setExecutor(Executor { it.run() })
+            setMaxTileSize(512)
+            setMinimumTileDpi(0)
+            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH)
+            setExternalViewport(RectF(), 1f)
+            setImage(ImageSource.inputStream(byteArrayOf(1).inputStream()))
+            ShadowLooper.idleMainLooper()
+        }
+        val target = Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+        val pool = Executors.newSingleThreadExecutor()
+        val decodeStarted = CountDownLatch(1)
+        val releaseDecode = CountDownLatch(1)
+        val lateOutput = AtomicReference<Bitmap>()
+
+        try {
+            repeat(3) { view.render(target) }
+            view.fake.beforeDecode = { _, sample ->
+                if (sample < 8) {
+                    decodeStarted.countDown()
+                    check(releaseDecode.await(10, TimeUnit.SECONDS)) { "Test decode gate was not released" }
+                }
+            }
+            view.fake.onDecoded = { lateOutput.set(it) }
+            view.setExecutor(pool)
+            view.setExternalViewport(RectF(0f, 800f, 400f, 1200f), 2f)
+            assertTrue(decodeStarted.await(5, TimeUnit.SECONDS), "A detail decode must enter its slow boundary")
+
+            view.recycle()
+            assertEquals(
+                1,
+                ownedTaskCount(view),
+                "Only the cancelled running decode must remain owned until its actual execution ends",
+            )
+            assertFalse(view.fake.recycled, "Decoder cleanup must wait behind the in-flight execution")
+            assertFalse(view.hasImage())
+
+            releaseDecode.countDown()
+            pool.submit {}.get(5, TimeUnit.SECONDS)
+            ShadowLooper.idleMainLooper()
+
+            assertEquals(0, ownedTaskCount(view))
+            assertTrue(
+                checkNotNull(lateOutput.get()).isRecycled,
+                "An obsolete output must never be installed or leaked",
+            )
+            assertTrue(view.fake.recycled)
+            assertFalse(view.isReady)
+            assertFalse(view.hasImage())
+        } finally {
+            releaseDecode.countDown()
+            view.recycle()
+            pool.shutdown()
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                pool.shutdownNow()
+            }
+            ShadowLooper.idleMainLooper()
+            target.recycle()
+        }
+    }
+
+    @Test
+    fun rejectedDetailExecutionReleasesOwnershipAndCanRecoverWithAWorkingExecutor() {
+        val view = EngineTestView().apply {
+            setExecutor(Executor { it.run() })
+            setMaxTileSize(512)
+            setMinimumTileDpi(0)
+            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH)
+            setExternalViewport(RectF(), 1f)
+            setImage(ImageSource.inputStream(byteArrayOf(1).inputStream()))
+            ShadowLooper.idleMainLooper()
+        }
+        val target = Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+        try {
+            repeat(3) { view.render(target) }
+            view.setExecutor(Executor { throw RejectedExecutionException("Test executor refuses queued work") })
+
+            assertFailsWith<RejectedExecutionException> {
+                view.setExternalViewport(RectF(0f, 800f, 400f, 1200f), 2f)
+            }
+            assertEquals(0, ownedTaskCount(view), "A refused submission must not retain a task")
+
+            view.setExecutor(Executor { it.run() })
+            repeat(3) { view.render(target) }
+            assertTrue(
+                view.fake.decodedRegions.any {
+                    it.second < 8
+                },
+                "The refused tile must be eligible for another load",
+            )
+            assertTrue(view.render(target).any { it.first == 4 }, "Recovered detail must be drawn")
+            assertTrue(view.isReady)
+            assertFalse(view.fake.recycled)
+            assertEquals(0, ownedTaskCount(view))
+        } finally {
+            view.setExecutor(Executor { it.run() })
+            view.recycle()
+            ShadowLooper.idleMainLooper()
+            target.recycle()
+        }
+    }
+
+    @Test
+    fun rejectedImageInitializationReleasesOwnershipAndAllowsANewImage() {
+        val view = EngineTestView().apply {
+            setExecutor(Executor { throw RejectedExecutionException("Test executor refuses image initialization") })
+            setMaxTileSize(512)
+            setMinimumTileDpi(0)
+            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH)
+            setExternalViewport(RectF(), 1f)
+        }
+        val target = Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+        try {
+            assertFailsWith<RejectedExecutionException> {
+                view.setImage(ImageSource.inputStream(byteArrayOf(1).inputStream()))
+            }
+            assertEquals(0, ownedTaskCount(view), "A refused initialization must not retain its queued task")
+
+            view.setExecutor(Executor { it.run() })
+            view.setImage(ImageSource.inputStream(byteArrayOf(2).inputStream()))
+            ShadowLooper.idleMainLooper()
+            repeat(3) { view.render(target) }
+            assertTrue(view.isReady, "A new image must still load after an initialization was refused")
+            assertEquals(0, ownedTaskCount(view))
+        } finally {
+            view.setExecutor(Executor { it.run() })
+            view.recycle()
+            ShadowLooper.idleMainLooper()
+            target.recycle()
+        }
+    }
+
+    @Test
+    fun cancelledThreadPoolQueueTombstonesAreRemovedAcrossThousandViewportOscillations() {
+        val view = EngineTestView().apply {
+            setExecutor(Executor { it.run() })
+            setMaxTileSize(512)
+            setMinimumTileDpi(0)
+            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH)
+            setExternalViewport(RectF(), 1f)
+            setImage(ImageSource.inputStream(byteArrayOf(1).inputStream()))
+            ShadowLooper.idleMainLooper()
+        }
+        val target = Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+        // An isolated held worker reproduces the default pool's unbounded LinkedBlockingQueue behavior.
+        val pool = ThreadPoolExecutor(1, 1, 30L, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>())
+        val workerStarted = CountDownLatch(1)
+        val releaseWorker = CountDownLatch(1)
+        val runningTileDecodes = AtomicInteger()
+        var peakOwned = 0
+        var peakQueued = 0
+        var firstFuture: Future<*>? = null
+        var firstTasks: Set<*> = emptySet<Any>()
+
+        try {
+            repeat(3) { view.render(target) }
+            view.fake.decodedRegions.clear()
+            view.fake.beforeDecode = { _, _ -> runningTileDecodes.incrementAndGet() }
+            view.fake.onDecoded = { runningTileDecodes.decrementAndGet() }
+            pool.submit {
+                workerStarted.countDown()
+                check(releaseWorker.await(30, TimeUnit.SECONDS)) { "Test worker gate was not released" }
+            }
+            assertTrue(
+                workerStarted.await(5, TimeUnit.SECONDS),
+                "The executor worker must be held before queuing tiles",
+            )
+            view.setExecutor(pool)
+
+            repeat(1000) { cycle ->
+                view.setExecutor(pool)
+                view.setExternalViewport(RectF(0f, 800f, 400f, 1200f), 2f)
+                peakOwned = maxOf(peakOwned, ownedTaskCount(view))
+                peakQueued = maxOf(peakQueued, pool.queue.size)
+                if (cycle == 0) {
+                    firstTasks = ownedTasks(view).toSet()
+                    firstFuture = pool.queue.first() as Future<*>
+                }
+                // Cancellation must remove from the submitting pool even after a public executor swap.
+                view.setExecutor(Executor { it.run() })
+                view.setExternalViewport(RectF(), 2f)
+            }
+
+            val queued = pool.queue.toList()
+            val queuedFutures = queued.filterIsInstance<Future<*>>()
+            val cancelledQueued = queuedFutures.count { it.isCancelled }
+            val uncancelledQueued = queuedFutures.size - cancelledQueued
+            println(
+                "M04 held-TPE stress cycles=1000 owned=" + ownedTaskCount(view) +
+                    " peakOwned=" + peakOwned + " queued=" + queued.size + " peakQueued=" + peakQueued +
+                    " uncancelledQueued=" + uncancelledQueued + " cancelledQueued=" + cancelledQueued +
+                    " runningTileDecodes=" + runningTileDecodes.get() + " executorRunning=" + pool.activeCount +
+                    "; executorRunning is an external gate, not native decode or RSS",
+            )
+            assertTrue(peakOwned > 0 && peakQueued > 0, "The real viewport path must have submitted queued work")
+            assertEquals(0, ownedTaskCount(view), "Queued cancellation must still release task ownership")
+            assertEquals(0, runningTileDecodes.get())
+            assertEquals(0, uncancelledQueued)
+            assertTrue(view.fake.decodedRegions.isEmpty(), "Cancelled queued work must not enter the decoder")
+
+            val cancelledFuture = checkNotNull(firstFuture)
+            assertTrue(cancelledFuture.isCancelled)
+            // Inspect only captures in our future subclass; no JDK-private reflection or GC timing oracle.
+            val captures = cancelledFuture.javaClass.declaredFields.map { field ->
+                field.isAccessible = true
+                field.get(cancelledFuture)
+            }
+            assertFalse(
+                captures.any { value -> value === view || value === view.fake || firstTasks.any { it === value } },
+                "Surviving canceled-future captures must not strongly hold the task, view, or decoder",
+            )
+            assertEquals(0, cancelledQueued, "Cancelled TPE queue tombstones must not accumulate behind a held worker")
+        } finally {
+            releaseWorker.countDown()
+            view.setExecutor(Executor { it.run() })
+            view.recycle()
+            pool.shutdown()
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                pool.shutdownNow()
+            }
+            ShadowLooper.idleMainLooper()
+            target.recycle()
+        }
     }
 
     @Test

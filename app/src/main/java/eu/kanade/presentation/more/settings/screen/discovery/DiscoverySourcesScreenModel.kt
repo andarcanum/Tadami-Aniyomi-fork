@@ -41,7 +41,7 @@ data class SourcePickUi(
 )
 
 sealed interface DiscoverySourcesToast {
-    data class Excluded(val name: String, val undoCsv: String) : DiscoverySourcesToast
+    data class Excluded(val name: String, val pluginKey: String) : DiscoverySourcesToast
     data object LastGuard : DiscoverySourcesToast
     data class DeselectAllKeep(val keptName: String) : DiscoverySourcesToast
     data object SelectAll : DiscoverySourcesToast
@@ -56,7 +56,7 @@ data class DiscoverySourcesUiState(
     val toast: DiscoverySourcesToast? = null,
 )
 
-// ── Чистая UI-логика (internal — под DiscoverySourcesLogicTest) ─────────────────
+// ── Правила выбора и атомарные мутации настроек источников ─────────────────────
 
 /**
  * Новый набор исключённых ключей плагинов при переключении [key]; null = сработала
@@ -71,6 +71,68 @@ internal fun toggleExcluded(currentExcluded: Set<String>, key: String, allKeys: 
 /** «Снять все» с защитой минимума: исключается всё, кроме топ-1 по весу. */
 internal fun deselectAllKeepTop1(allowedKeysWeightOrder: List<String>): Set<String> =
     allowedKeysWeightOrder.drop(1).toSet()
+
+/** Persists a mode change and its installed snapshot within the shared source mutation boundary. */
+internal fun setDiscoverySourceMode(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    mode: String,
+    installedKeys: Collection<String>,
+): Boolean = preferences.withSourcePreferencesLock(mediaType) {
+    val modePreference = preferences.discoverySourceMode(mediaType)
+    if (modePreference.get() == mode) return@withSourcePreferencesLock false
+    modePreference.set(mode)
+    reconcileDiscoverySourcePreferences(preferences, mediaType, installedKeys)
+    true
+}
+
+/** Returns whether the source became excluded; null means the last-source guard rejected the change. */
+internal fun toggleDiscoverySource(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    pluginKey: String,
+    allKeys: Set<String>,
+): Boolean? = preferences.withSourcePreferencesLock(mediaType) {
+    val excludedPreference = preferences.discoverySourceExcluded(mediaType)
+    val excluded = parseKeyCsv(excludedPreference.get())
+    val next = toggleExcluded(excluded, pluginKey, allKeys) ?: return@withSourcePreferencesLock null
+    excludedPreference.set(formatKeyCsv(next))
+    pluginKey !in excluded
+}
+
+/** Explicitly selects the displayed extensions without clearing newly installed or removed keys outside that set. */
+internal fun selectAllDiscoverySources(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    installedKeys: Collection<String>,
+) = preferences.withSourcePreferencesLock(mediaType) {
+    reconcileDiscoverySourcePreferences(preferences, mediaType, installedKeys)
+    val excludedPreference = preferences.discoverySourceExcluded(mediaType)
+    excludedPreference.set(formatKeyCsv(parseKeyCsv(excludedPreference.get()) - installedKeys.toSet()))
+}
+
+internal fun deselectAllDiscoverySources(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    orderedKeys: List<String>,
+): String? = preferences.withSourcePreferencesLock(mediaType) {
+    val excludedPreference = preferences.discoverySourceExcluded(mediaType)
+    val excluded = parseKeyCsv(excludedPreference.get())
+    val allowed = orderedKeys.filterNot { it in excluded }
+    val kept = allowed.firstOrNull() ?: return@withSourcePreferencesLock null
+    excludedPreference.set(formatKeyCsv(excluded + deselectAllKeepTop1(allowed)))
+    kept
+}
+
+/** Undo affects only the extension from that action, not a stale snapshot of other consumers' choices. */
+internal fun undoDiscoverySourceExclusion(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    pluginKey: String,
+) = preferences.withSourcePreferencesLock(mediaType) {
+    val excludedPreference = preferences.discoverySourceExcluded(mediaType)
+    excludedPreference.set(formatKeyCsv(parseKeyCsv(excludedPreference.get()) - pluginKey))
+}
 
 internal fun filterSourcePicks(entries: List<SourcePickUi>, query: String): List<SourcePickUi> {
     val q = query.trim()
@@ -270,15 +332,13 @@ class DiscoverySourcesScreenModel(
 
     fun setMode(mode: String) {
         val mediaType = state.value.mediaType
-        if (discoveryPreferences.discoverySourceMode(mediaType).get() == mode) return
-        discoveryPreferences.discoverySourceMode(mediaType).set(mode)
-        mediaData[mediaType]?.let { data ->
-            reconcileDiscoverySourcePreferences(
-                preferences = discoveryPreferences,
-                mediaType = mediaType,
-                installedKeys = data.ordered.map { it.key },
-            )
-        }
+        val changed = setDiscoverySourceMode(
+            preferences = discoveryPreferences,
+            mediaType = mediaType,
+            mode = mode,
+            installedKeys = mediaData[mediaType]?.ordered.orEmpty().map { it.key },
+        )
+        if (!changed) return
         rebuild()
         notifyConfigurationChanged(mediaType)
     }
@@ -290,17 +350,19 @@ class DiscoverySourcesScreenModel(
     fun toggleSource(pluginKey: String) {
         val mediaType = state.value.mediaType
         val data = mediaData[mediaType] ?: return
-        val currentExcluded = parseKeyCsv(discoveryPreferences.discoverySourceExcluded(mediaType).get())
-        val next = toggleExcluded(currentExcluded, pluginKey, data.ordered.mapTo(HashSet()) { it.key })
-        if (next == null) {
+        val becameExcluded = toggleDiscoverySource(
+            preferences = discoveryPreferences,
+            mediaType = mediaType,
+            pluginKey = pluginKey,
+            allKeys = data.ordered.mapTo(HashSet()) { it.key },
+        )
+        if (becameExcluded == null) {
             mutableState.update { it.copy(toast = DiscoverySourcesToast.LastGuard) }
             return
         }
-        discoveryPreferences.discoverySourceExcluded(mediaType).set(formatKeyCsv(next))
-        val becameExcluded = pluginKey !in currentExcluded
         val name = data.ordered.firstOrNull { it.key == pluginKey }?.name.orEmpty()
         val toast = if (becameExcluded) {
-            DiscoverySourcesToast.Excluded(name, formatKeyCsv(currentExcluded))
+            DiscoverySourcesToast.Excluded(name, pluginKey)
         } else {
             null
         }
@@ -312,8 +374,7 @@ class DiscoverySourcesScreenModel(
     fun selectAll() {
         val mediaType = state.value.mediaType
         val data = mediaData[mediaType] ?: return
-        discoveryPreferences.discoverySourceExcluded(mediaType).set("")
-        reconcileDiscoverySourcePreferences(
+        selectAllDiscoverySources(
             preferences = discoveryPreferences,
             mediaType = mediaType,
             installedKeys = data.ordered.map { it.key },
@@ -326,13 +387,11 @@ class DiscoverySourcesScreenModel(
     fun deselectAll() {
         val mediaType = state.value.mediaType
         val data = mediaData[mediaType] ?: return
-        val excluded = parseKeyCsv(discoveryPreferences.discoverySourceExcluded(mediaType).get())
-        val allowedOrder = data.ordered.filterNot { it.key in excluded }.map { it.key }
-        val keep = allowedOrder.firstOrNull() ?: return
-        // Союз, а не перезапись: stale-ключи удалённых плагинов остаются в CSV
-        // (переустановка = снова исключён).
-        discoveryPreferences.discoverySourceExcluded(mediaType)
-            .set(formatKeyCsv(excluded + deselectAllKeepTop1(allowedOrder)))
+        val keep = deselectAllDiscoverySources(
+            preferences = discoveryPreferences,
+            mediaType = mediaType,
+            orderedKeys = data.ordered.map { it.key },
+        ) ?: return
         rebuild()
         val keepName = data.ordered.firstOrNull { it.key == keep }?.name.orEmpty()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.DeselectAllKeep(keepName)) }
@@ -342,7 +401,7 @@ class DiscoverySourcesScreenModel(
     fun undoLast() {
         val toast = state.value.toast as? DiscoverySourcesToast.Excluded ?: return
         val mediaType = state.value.mediaType
-        discoveryPreferences.discoverySourceExcluded(mediaType).set(toast.undoCsv)
+        undoDiscoverySourceExclusion(discoveryPreferences, mediaType, toast.pluginKey)
         rebuild()
         mutableState.update { it.copy(toast = null) }
         notifyConfigurationChanged(mediaType)

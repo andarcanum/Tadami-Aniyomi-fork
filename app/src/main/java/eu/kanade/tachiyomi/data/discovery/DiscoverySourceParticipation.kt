@@ -77,7 +77,7 @@ internal fun reconcileDiscoverySourcePreferences(
     preferences: DiscoveryPreferences,
     mediaType: DiscoveryMediaType,
     installedKeys: Collection<String>,
-): PluginKnownReconciliation {
+): PluginKnownReconciliation = preferences.withSourcePreferencesLock(mediaType) {
     val mode = preferences.discoverySourceMode(mediaType).get()
     val excludedPref = preferences.discoverySourceExcluded(mediaType)
     val knownPref = preferences.discoverySourceKnown(mediaType)
@@ -93,7 +93,7 @@ internal fun reconcileDiscoverySourcePreferences(
     if (result.changedKnown) {
         knownPref.set(formatKeyCsv(result.knownKeys))
     }
-    return result
+    result
 }
 
 /**

@@ -598,9 +598,11 @@ object ImageUtil {
             var blackStreak = false
             var whiteStreak = false
             val notOffset = x == left || x == right
+            val pixelOffX = (x + (if (x < image.width / 2) -offsetX else offsetX))
+                .coerceIn(0, image.width - 1)
             inner@ for ((index, y) in (0..<image.height step image.height / 25).withIndex()) {
                 val pixel = image[x, y]
-                val pixelOff = image[x + (if (x < image.width / 2) -offsetX else offsetX), y]
+                val pixelOff = image[pixelOffX, y]
                 if (pixel.isWhite()) {
                     whitePixelsStreak++
                     whitePixels++

@@ -117,6 +117,9 @@ interface DiscoveryRowBuilder {
     /** Source ids whose genre coverage is incomplete by the same rule as [isDegraded]. */
     val degradedSourceIds: Set<Long> get() = emptySet()
 
+    /** Source ids with an observed successful attempt whose coverage is not degraded. */
+    val successfulSourceIds: Set<Long> get() = emptySet()
+
     /** Null means the builder cannot prove an exhaustive catalogue result. */
     val exhaustionEvidence: List<DiscoveryQueryEvidence>? get() = null
     suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem>

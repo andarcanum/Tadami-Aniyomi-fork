@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorStore
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags
 import eu.kanade.tachiyomi.ui.browse.manga.migration.list.search.SmartSourceSearchEngine
+import eu.kanade.tachiyomi.util.manga.fetchMangaChaptersForUpdate
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -114,12 +115,9 @@ class MigrationListScreenModel(
         manga: Manga,
     ): ChapterInfo {
         return try {
-            source.getMangaUpdate(
+            source.fetchMangaChaptersForUpdate(
                 manga = manga.toSManga(),
-                chapters = emptyList(),
-                fetchDetails = false,
-                fetchChapters = true,
-            ).chapters.let { chapters ->
+            ).let { chapters ->
                 ChapterInfo(
                     latestChapter = chapters.maxOfOrNull { it.chapter_number.toDouble() },
                     chapterCount = chapters.size,

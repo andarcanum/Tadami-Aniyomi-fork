@@ -15,7 +15,7 @@ final class TileQuality {
     }
 
     /**
-     * Skips a separate downsampled preview when the full-resolution image already fits in 1-2 tiles.
+     * Skips a separate preview only when full resolution also fits the permanent pixel budget.
      */
     static int previewSample(int width, int height, int maxTileWidth, int maxTileHeight) {
         if (width <= 0 || height <= 0 || maxTileWidth <= 0 || maxTileHeight <= 0) {
@@ -25,7 +25,7 @@ final class TileQuality {
         int effectiveMaxH = maxTileHeight > 2 ? maxTileHeight - 2 : maxTileHeight;
         long xTiles = ((long) width + effectiveMaxW - 1) / effectiveMaxW;
         long yTiles = ((long) height + effectiveMaxH - 1) / effectiveMaxH;
-        if (xTiles * yTiles <= 2L) {
+        if (xTiles * yTiles <= 2L && (long) width * height <= PREVIEW_PIXELS) {
             return 1;
         }
         return previewSample(width, height);

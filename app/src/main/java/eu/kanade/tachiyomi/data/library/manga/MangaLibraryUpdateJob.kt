@@ -28,9 +28,12 @@ import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorStore
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.util.manga.MangaMemoRepairHelper
+import eu.kanade.tachiyomi.util.manga.getMangaUpdateLocked
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import eu.kanade.tachiyomi.util.system.isCharging
@@ -77,6 +80,15 @@ import java.time.ZonedDateTime
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+
+internal suspend fun MangaSource.fetchMangaLibraryUpdate(manga: SManga, fetchDetails: Boolean): SMangaUpdate {
+    return getMangaUpdateLocked(
+        manga = manga,
+        chapters = emptyList(),
+        fetchDetails = fetchDetails,
+        fetchChapters = true,
+    )
+}
 
 class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
@@ -521,11 +533,9 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         // still calls getMangaDetails/getChapterList, while a 1.6 extension can answer both from a
         // single request instead of failing on the legacy entry points it no longer implements.
         val fetchDetails = libraryPreferences.autoUpdateMetadata().get()
-        val update = source.getMangaUpdate(
+        val update = source.fetchMangaLibraryUpdate(
             manga = MangaMemoRepairHelper.getOrRepairMangaRequest(manga, source, updateManga),
-            chapters = emptyList(),
             fetchDetails = fetchDetails,
-            fetchChapters = true,
         )
         if (fetchDetails) {
             updateManga.awaitUpdateFromSource(manga, update.manga, manualFetch = false, coverCache)

@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.SChapter
+import eu.kanade.tachiyomi.util.manga.fetchMangaChaptersForUpdate
 import tachiyomi.core.common.util.lang.withNonCancellableContext
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
@@ -63,12 +64,9 @@ class MigrateMangaUseCase(
         val localNewManga = networkToLocalManga.await(newManga)
         if (oldManga.id == localNewManga.id) return
 
-        val chapters = source.getMangaUpdate(
+        val chapters = source.fetchMangaChaptersForUpdate(
             manga = localNewManga.toSManga(),
-            chapters = emptyList(),
-            fetchDetails = false,
-            fetchChapters = true,
-        ).chapters
+        )
 
         migrateMangaInternal(
             oldSource = prevSource,

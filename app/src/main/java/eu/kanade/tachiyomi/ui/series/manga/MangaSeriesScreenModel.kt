@@ -63,7 +63,7 @@ class MangaSeriesScreenModel(
             flow {
                 emit(
                     wrapper.series.entries.map { entry ->
-                        entry to getChaptersByMangaId.await(entry.id)
+                        entry to getChaptersByMangaId.await(entry.id, applyScanlatorFilter = true)
                             .sortedWith(
                                 compareBy<Chapter> { it.chapterNumber }
                                     .thenBy { it.sourceOrder }

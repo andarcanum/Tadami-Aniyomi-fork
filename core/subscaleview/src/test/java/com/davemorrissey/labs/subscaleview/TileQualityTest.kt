@@ -25,18 +25,12 @@ class TileQualityTest {
     }
 
     @Test
-    fun `preview sample skips downsampling when grid fits at most two tiles`() {
-        assertEquals(1, TileQuality.previewSample(1000, 1000, 1024, 1024))
-        assertEquals(1, TileQuality.previewSample(1000, 1800, 1024, 1024))
-        assertEquals(1, TileQuality.previewSample(1800, 1000, 1024, 1024))
-        // 2x2 tiles (> 2) or tiny tile limits still downsample to the preview budget.
-        assertEquals(
-            TileQuality.previewSample(1800, 1800),
-            TileQuality.previewSample(1800, 1800, 1024, 1024),
-        )
-        assertEquals(
-            TileQuality.previewSample(4000, 40000),
-            TileQuality.previewSample(4000, 40000, 2, 2),
-        )
+    fun `one and two tile images still obey the permanent preview budget`() {
+        assertEquals(1, TileQuality.previewSample(400, 400, 1024, 1024))
+        assertEquals(2, TileQuality.previewSample(1000, 1000, 1024, 1024))
+        assertEquals(4, TileQuality.previewSample(1000, 1800, 1024, 1024))
+        assertEquals(4, TileQuality.previewSample(1800, 1000, 1024, 1024))
+        assertEquals(4, TileQuality.previewSample(1800, 1800, 1024, 1024))
+        assertEquals(32, TileQuality.previewSample(4000, 40000, 2, 2))
     }
 }

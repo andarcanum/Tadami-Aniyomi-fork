@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
 import eu.kanade.tachiyomi.data.suggestions.SuggestionFetchResult
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
+import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -20,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
@@ -1325,6 +1327,200 @@ class DiscoveryRunnerTest {
     }
 
     // ── Source participation (Task 2) ────────────────────────────────────────────
+
+    @Test
+    fun `manga resilience TREND-only refresh keeps unqueried source failure history`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val history = "11:$failedAt:2,22:$failedAt:3"
+        val preferences = resiliencePreferences(history, trendOnly = true)
+        val repository = FakeRepository()
+        val catalog = ResilienceSourceCatalog()
+
+        val outcome = resilienceRunner(repository, preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+        repository.publishedPools.single().map { it.title } shouldBe listOf("External Resilience Manga")
+        (catalog.latestRequests + catalog.popularRequests + catalog.genreRequests) shouldBe emptyList()
+        preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get() shouldBe history
+    }
+
+    @Test
+    fun `manga resilience terminal catalogue successes reduce their source histories`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val preferences = resiliencePreferences("11:$failedAt:2,22:$failedAt:3", trendOnly = false)
+        val catalog = ResilienceSourceCatalog()
+
+        val outcome = resilienceRunner(FakeRepository(), preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+        catalog.latestRequests.toSet() shouldBe setOf(11L, 22L)
+        catalog.popularRequests.toSet() shouldBe setOf(11L, 22L)
+        parseSourceFailureHistory(preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get())
+            .mapValues { it.value.failCount } shouldBe mapOf(11L to 1, 22L to 2)
+    }
+
+    @Test
+    fun `manga resilience incomplete catalogue coverage cannot reward source histories`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val history = "11:$failedAt:2,22:$failedAt:3"
+        val preferences = resiliencePreferences(history, trendOnly = false)
+        val catalog = ResilienceSourceCatalog(incomplete = true)
+
+        val outcome = resilienceRunner(FakeRepository(), preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.PARTIAL
+        outcome.degradedRows shouldBe setOf(DiscoveryRowType.SOURCE)
+        catalog.latestRequests.toSet() shouldBe setOf(11L, 22L)
+        catalog.popularRequests.toSet() shouldBe setOf(11L, 22L)
+        preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get() shouldBe history
+    }
+
+    @Test
+    fun `manga resilience successful source is rewarded beside a failed source`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val preferences = resiliencePreferences("11:$failedAt:2,22:$failedAt:3", trendOnly = false)
+        val catalog = ResilienceSourceCatalog(failedSourceIds = setOf(22L))
+
+        val outcome = resilienceRunner(FakeRepository(), preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.PARTIAL
+        catalog.latestRequests.toSet() shouldBe setOf(11L, 22L)
+        catalog.popularRequests.toSet() shouldBe setOf(11L, 22L)
+        parseSourceFailureHistory(preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get())
+            .mapValues { it.value.failCount } shouldBe mapOf(11L to 1, 22L to 4)
+    }
+
+    private fun resiliencePreferences(history: String, trendOnly: Boolean) =
+        DiscoveryPreferences(PersistingPreferenceStore()).apply {
+            rowLikeEnabled().set(false)
+            rowTasteEnabled().set(false)
+            rowTrendEnabled().set(trendOnly)
+            rowSourceEnabled().set(!trendOnly)
+            sourceFailureHistory(DiscoveryMediaType.MANGA).set(history)
+        }
+
+    private fun resilienceRunner(
+        repository: FakeRepository,
+        preferences: DiscoveryPreferences,
+        catalog: DiscoverySourceCatalog,
+    ) = DiscoveryRunner(
+        repository = repository,
+        preferences = preferences,
+        seedSources = weightedSeedSources(),
+        sourcePreferencesProvider = ::testSourcePrefs,
+        installedPluginsProvider = { emptyList() },
+        fallbackSourceIdProvider = { -1L },
+        sourceCatalog = catalog,
+        trendingFactory = {
+            object : DiscoveryTrendingSource {
+                override suspend fun fetch(
+                    mediaType: DiscoveryMediaType,
+                    season: TrendSeason,
+                    sort: TrendSort,
+                    page: Int,
+                    releaseStatuses: Set<DiscoveryReleaseStatus>,
+                ) = listOf(
+                    DiscoveryTrendingItem(
+                        title = "External Resilience Manga",
+                        cleanTitle = "external resilience manga",
+                        coverUrl = null,
+                        seasonLabel = null,
+                        genres = listOf("Comedy"),
+                        provider = "resilience-trending",
+                    ),
+                )
+
+                override suspend fun fetchByGenres(
+                    mediaType: DiscoveryMediaType,
+                    genres: List<String>,
+                    sort: TrendSort,
+                    page: Int,
+                    releaseStatuses: Set<DiscoveryReleaseStatus>,
+                ) = emptyList<DiscoveryTrendingItem>()
+
+                override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? = null
+            }
+        },
+    )
+
+    private class ResilienceSourceCatalog(
+        private val incomplete: Boolean = false,
+        private val failedSourceIds: Set<Long> = emptySet(),
+    ) : DiscoverySourceCatalog {
+        val latestRequests = mutableListOf<Long>()
+        val popularRequests = mutableListOf<Long>()
+        val genreRequests = mutableListOf<Long>()
+
+        override suspend fun latestPage(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+            budget: DiscoveryVerificationBudget?,
+        ): DiscoveryBrowsePage {
+            latestRequests += sourceId
+            if (sourceId in failedSourceIds) throw IOException("catalogue unavailable")
+            return DiscoveryBrowsePage(
+                items = listOf(
+                    DiscoveryRowItem(
+                        title = "Fresh Source $sourceId",
+                        cleanTitle = "fresh source $sourceId",
+                        coverUrl = null,
+                        reason = null,
+                        seedTitle = null,
+                        provider = "resilience-catalogue",
+                        score = 1.0,
+                        sourceId = sourceId,
+                        sourceUrl = "/fresh/$sourceId",
+                        genres = listOf("Action"),
+                    ),
+                ),
+                hasNextPage = if (incomplete) null else false,
+            )
+        }
+
+        override suspend fun popularPage(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+            budget: DiscoveryVerificationBudget?,
+        ): DiscoveryBrowsePage {
+            popularRequests += sourceId
+            if (sourceId in failedSourceIds) throw IOException("catalogue unavailable")
+            return DiscoveryBrowsePage(emptyList(), hasNextPage = if (incomplete) null else false)
+        }
+
+        override suspend fun latest(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+        ) = latestPage(mediaType, sourceId, page, releaseStatuses, null).items
+
+        override suspend fun popular(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+        ) = popularPage(mediaType, sourceId, page, releaseStatuses, null).items
+
+        override suspend fun popularWithGenres(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            genres: List<String>,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+        ): List<DiscoveryRowItem> {
+            genreRequests += sourceId
+            if (sourceId in failedSourceIds) throw IOException("catalogue unavailable")
+            return emptyList()
+        }
+    }
 
     private fun weightedSeedSources() = object : DiscoverySeedSources {
         override suspend fun candidates(mediaType: DiscoveryMediaType) = listOf(

@@ -369,6 +369,7 @@ private class SourceQueryState(
             detailsUsed = detailsUsed,
             hasNextPage = hasNextPage,
             queryKey = queryKey,
+            successfulPages = successfulPages,
         )
     }
 }

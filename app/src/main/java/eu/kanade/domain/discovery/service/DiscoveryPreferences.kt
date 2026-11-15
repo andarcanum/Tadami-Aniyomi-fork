@@ -251,6 +251,10 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun lastTopUpAdded(mediaType: DiscoveryMediaType): Preference<Int> =
         preferenceStore.getInt("discovery_last_top_up_added_" + mediaType.key, -1)
 
+    /** Keeps synchronous source preference mutations atomic across consumers and preference instances. */
+    internal fun <T> withSourcePreferencesLock(mediaType: DiscoveryMediaType, block: () -> T): T =
+        synchronized(sourcePreferenceLocks.getValue(mediaType), block)
+
     /** Режим участия плагинов в подборках: "auto" (топ-3 по весу библиотеки) | "manual" (свой набор). */
     fun discoverySourceMode(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString("discovery_source_mode_" + mediaType.key, "auto")
@@ -320,6 +324,7 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
         private val manualRefreshLock = Any()
         private val genreFilterMigrationLock = Any()
+        private val sourcePreferenceLocks = DiscoveryMediaType.entries.associateWith { Any() }
 
         const val MANUAL_REFRESH_COOLDOWN_MS = 5 * 60_000L
         const val CURRENT_RETIREMENT_RESET_VERSION = 1

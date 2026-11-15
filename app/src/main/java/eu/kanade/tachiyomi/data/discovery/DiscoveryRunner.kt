@@ -645,7 +645,7 @@ class DiscoveryRunner(
         val sourceFailures = feed.failedSourceIds.size
         val sourceDegraded = feed.degradedSourceIds.size
         preferences.lastSourceFailureCount(mediaType).set(sourceFailures)
-        val successfulSourceIds = (context.sourceIds - feed.failedSourceIds).toSet()
+        val successfulSourceIds = feed.successfulSourceIds - feed.failedSourceIds
         val updatedFailureHistory = updateSourceFailures(
             currentHistory = sourceFailureHistory,
             failedIds = feed.failedSourceIds,

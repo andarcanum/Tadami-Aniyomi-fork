@@ -1,10 +1,13 @@
 package eu.kanade.tachiyomi.ui.reader.image
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.ColorSpace
 import android.graphics.Rect
+import android.graphics.drawable.ColorDrawable
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -14,19 +17,53 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import tachiyomi.core.common.util.image.NativeImageDecoder
+import tachiyomi.core.common.util.system.ImageUtil
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 
 /**
- * Real JNI acceptance tests; no ImageUtil, activity, application DI, or runtime network access.
+ * Real JNI acceptance tests, including the shared background boundary; no activity, application DI,
+ * or runtime network access.
  * Fixtures are original synthetic pixels encoded locally by Android's Bitmap.compress. The EXIF
  * APP1 segment below is authored here, not copied from an external image. No bundled assets needed.
  * This SDR slice does not establish embedded-profile, HDR, AVIF, or JPEG XL coverage.
  */
 @RunWith(AndroidJUnit4::class)
 class NativeImageDecoderInstrumentedTest {
+
+    @Test
+    fun auto_background_keeps_encoded_1600x8192_white_margin_page_loadable() {
+        val encoded = Bitmap.createBitmap(1600, 8192, Bitmap.Config.ARGB_8888).useBitmap { bitmap ->
+            bitmap.eraseColor(Color.WHITE)
+            android.graphics.Canvas(bitmap).drawRect(
+                320f,
+                1024f,
+                1280f,
+                7168f,
+                android.graphics.Paint().apply { color = Color.BLACK },
+            )
+            ByteArrayOutputStream().use { output ->
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+                output.toByteArray()
+            }
+        }
+        NativeImageDecoder.open(encoded.inputStream()).use { decoder ->
+            decoder.decode(sampleSize = 16).useBitmap { preview ->
+                assertDimensions("Background preview", preview, 100, 512)
+                assertEquals("White margin must survive JNI sampling", Color.WHITE, preview.getPixel(0, 0))
+                assertEquals("Black art must survive JNI sampling", Color.BLACK, preview.getPixel(50, 256))
+            }
+        }
+        val input = CloseTrackingInputStream(encoded)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val background = ImageUtil.chooseBackground(context, input)
+
+        assertTrue("Valid encoded page must keep its white background", background is ColorDrawable)
+        assertEquals(Color.WHITE, (background as ColorDrawable).color)
+        assertTrue("Background decode must close its input", input.closed)
+    }
 
     @Test
     fun png_alpha_tiles_reassemble_odd_sized_full_decode() {

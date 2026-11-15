@@ -117,12 +117,14 @@ class DiscoveryCoordinatorTest {
             override val rowType = DiscoveryRowType.TASTE
             override val failedSourceIds = setOf(7L)
             override val degradedSourceIds = setOf(8L)
+            override val successfulSourceIds = setOf(9L, 10L)
             override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = emptyList()
         }
         val source = object : DiscoveryRowBuilder {
             override val rowType = DiscoveryRowType.SOURCE
             override val failedSourceIds = setOf(7L)
             override val degradedSourceIds = setOf(8L)
+            override val successfulSourceIds = setOf(10L, 11L)
             override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = emptyList()
         }
 
@@ -130,6 +132,7 @@ class DiscoveryCoordinatorTest {
 
         feed.failedSourceIds shouldBe setOf(7L)
         feed.degradedSourceIds shouldBe setOf(8L)
+        feed.successfulSourceIds shouldBe setOf(9L, 10L, 11L)
     }
 
     @Test

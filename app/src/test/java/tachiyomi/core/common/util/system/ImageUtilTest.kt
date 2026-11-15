@@ -5,12 +5,18 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import androidx.test.core.app.ApplicationProvider
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import io.mockk.verify
 import okio.Buffer
 import okio.BufferedSource
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import tachiyomi.core.common.util.image.NativeImageDecoder
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -83,6 +89,44 @@ class ImageUtilTest {
         val emptyBg = ImageUtil.chooseBackground(app, ByteArray(0).inputStream())
         assertTrue(emptyBg is ColorDrawable)
         assertEquals(Color.WHITE, emptyBg.color)
+    }
+
+    @Test
+    fun `chooseBackground keeps downsampled white-margin pages loadable`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        mockkObject(NativeImageDecoder.Companion)
+        try {
+            for (previewWidth in 100..109) {
+                val preview = Bitmap.createBitmap(previewWidth, 512, Bitmap.Config.ARGB_8888).apply {
+                    val pixels = IntArray(previewWidth * 512) { index ->
+                        val x = index % previewWidth
+                        val y = index / previewWidth
+                        if (x in 20 until previewWidth - 20 && y in 64 until 448) Color.BLACK else Color.WHITE
+                    }
+                    setPixels(pixels, 0, previewWidth, 0, 0, previewWidth, 512)
+                }
+                val decoder = mockk<NativeImageDecoder>()
+                every { decoder.width } returns previewWidth * 16
+                every { decoder.height } returns 8192
+                every { decoder.decode(any(), any()) } returns preview
+                every { decoder.close() } returns Unit
+                try {
+                    // Only JNI opening/decoding is replaced; sampling and background heuristics stay real.
+                    every { NativeImageDecoder.open(any(), any()) } returns decoder
+                    val background = byteArrayOf(1).inputStream().use { ImageUtil.chooseBackground(app, it) }
+
+                    assertTrue(background is ColorDrawable, "Preview width $previewWidth")
+                    assertEquals(Color.WHITE, background.color, "Preview width $previewWidth")
+                    verify(exactly = 1) { decoder.decode(sampleSize = 16) }
+                    verify(exactly = 1) { decoder.close() }
+                    assertTrue(preview.isRecycled)
+                } finally {
+                    if (!preview.isRecycled) preview.recycle()
+                }
+            }
+        } finally {
+            unmockkObject(NativeImageDecoder.Companion)
+        }
     }
 
     private fun createImageSource(width: Int, height: Int): BufferedSource {
