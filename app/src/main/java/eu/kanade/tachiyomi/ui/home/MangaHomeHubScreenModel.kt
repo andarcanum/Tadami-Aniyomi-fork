@@ -10,12 +10,15 @@ import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
+import tachiyomi.domain.entries.manga.interactor.GetManga
 import tachiyomi.domain.entries.manga.interactor.GetMangaWithChapters
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.history.manga.interactor.GetMangaHistory
@@ -88,6 +91,7 @@ internal class MangaHomeHubScreenModel(
 ) {
 
     private val getMangaHistory: GetMangaHistory by injectLazy()
+    private val getManga: GetManga by injectLazy()
     private val getMangaWithChapters: GetMangaWithChapters by injectLazy()
     private val getLibraryManga: GetLibraryManga by injectLazy()
     private val getMangaCategories: GetMangaCategories by injectLazy()
@@ -302,8 +306,14 @@ internal class MangaHomeHubScreenModel(
     }
 
     private suspend fun loadHeroChapter(mangaId: Long, chapterId: Long) {
+        val manga = getManga.await(mangaId)
+        currentCoroutineContext().ensureActive()
+        if (manga == null) {
+            heroChapter = null
+            return
+        }
         val chapters = getMangaWithChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
-        heroChapter = resolveMangaResumeChapter(chapters, chapterId)
+        heroChapter = resolveMangaResumeChapter(manga, chapters, chapterId)
     }
 
     fun readHeroChapter(context: Context) {

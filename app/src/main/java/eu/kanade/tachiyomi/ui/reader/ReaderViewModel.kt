@@ -18,7 +18,6 @@ import eu.kanade.domain.source.interactor.ForegroundIncognitoState
 import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
 import eu.kanade.domain.track.manga.interactor.TrackChapter
 import eu.kanade.domain.track.service.TrackPreferences
-import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialState
 import eu.kanade.presentation.reader.manga.resolveMangaSeriesInterstitialState
 import eu.kanade.tachiyomi.data.database.models.manga.Chapter
@@ -122,7 +121,6 @@ class ReaderViewModel @JvmOverloads constructor(
     private val downloadProvider: MangaDownloadProvider = Injekt.get(),
     private val imageSaver: ImageSaver = Injekt.get(),
     val readerPreferences: ReaderPreferences = Injekt.get(),
-    private val uiPreferences: UiPreferences = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
@@ -269,8 +267,6 @@ class ReaderViewModel @JvmOverloads constructor(
             .map(::ReaderChapter)
     }
 
-    private val isAuroraTheme by lazy { uiPreferences.appTheme().get().isAuroraStyle }
-
     /**
      * Chapter list for the active manga. It's retrieved lazily and should be accessed for the first
      * time in a background thread to avoid blocking the UI.
@@ -340,7 +336,7 @@ class ReaderViewModel @JvmOverloads constructor(
                 }
             }
             .run {
-                if (readerPreferences.skipDupe().get() || isAuroraTheme) {
+                if (readerPreferences.skipDupe().get()) {
                     removeDuplicates(selectedChapter)
                 } else {
                     this
@@ -841,7 +837,7 @@ class ReaderViewModel @JvmOverloads constructor(
 
             val chaptersToDownload = getNextChapters.await(manga.id, nextChapter.id!!)
                 .run {
-                    if (readerPreferences.skipDupe().get() || isAuroraTheme) {
+                    if (readerPreferences.skipDupe().get()) {
                         removeDuplicates(nextChapter.toDomainChapter()!!)
                     } else {
                         this
@@ -1036,7 +1032,7 @@ class ReaderViewModel @JvmOverloads constructor(
         if (!markDuplicateAsRead) return
 
         // Duplicates by chapter number are searched in the FULL snapshot as well: the dedupe
-        // filters (skipDupe / forced Aurora dedupe) remove exactly those duplicates from
+        // filters (skipDupe) remove exactly those duplicates from
         // chapterList, so the feature was dead whenever dedupe was active.
         val duplicateUnreadChapters = completionChapters
             .filter {
@@ -1067,7 +1063,7 @@ class ReaderViewModel @JvmOverloads constructor(
         val wrapper = getMangaSeriesWithEntries.subscribe(targetSeriesId).first() ?: return null
         val chaptersByManga = withIOContext {
             wrapper.series.entries.map { entry ->
-                entry to getChaptersByMangaId.await(entry.id)
+                entry to getChaptersByMangaId.await(entry.id, applyScanlatorFilter = true)
             }
         }
         val currentChapter = chapter.chapter.toDomainChapter() ?: return null

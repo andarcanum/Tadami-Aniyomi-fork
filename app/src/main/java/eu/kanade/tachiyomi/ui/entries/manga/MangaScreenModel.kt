@@ -40,7 +40,6 @@ import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
-import eu.kanade.presentation.series.manga.mangaChapterResumeComparator
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapterFromSorted
 import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.presentation.util.formattedMessage
@@ -1550,26 +1549,13 @@ class MangaScreenModel(
             .maxByOrNull { it.readAt?.time ?: Long.MIN_VALUE }
             ?.chapterId
         resolveMangaResumeChapterFromSorted(
-            sortedChapters = sortedResumeChapters(successState.chapters),
+            sortedChapters = resumeChapterCache.get(successState.chapters, successState.manga),
             fromChapterId = historyChapterId,
         )
     }
 
-    // PERF: cache the resume-order sorted chapter list across CTA taps; invalidated by the
-    // reference of the state list (a new list instance is created on every state update).
-    private var sortedResumeChaptersOwner: Any? = null
-    private var sortedResumeChaptersCache: List<Chapter> = emptyList()
-
-    private fun sortedResumeChapters(chapters: List<ChapterList.Item>): List<Chapter> {
-        val owner: Any = chapters
-        if (sortedResumeChaptersOwner !== owner) {
-            sortedResumeChaptersCache = chapters
-                .map { it.chapter }
-                .sortedWith(mangaChapterResumeComparator)
-            sortedResumeChaptersOwner = owner
-        }
-        return sortedResumeChaptersCache
-    }
+    // Cache keys include both chapter-list identity and the configured reading sort.
+    private val resumeChapterCache = MangaResumeChapterCache()
 
     fun saveScrollPosition(index: Int, offset: Int) {
         updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }

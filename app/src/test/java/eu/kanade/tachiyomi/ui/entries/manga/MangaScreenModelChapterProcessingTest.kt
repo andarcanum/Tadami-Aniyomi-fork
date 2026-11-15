@@ -21,17 +21,17 @@ class MangaScreenModelChapterProcessingTest {
             isFromSource = false,
             chapters = listOf(
                 ChapterList.Item(
-                    chapter(id = 1L, chapterNumber = 1.0, scanlator = "Main"),
+                    chapter(id = 1L, chapterNumber = 1.0, scanlator = "Main", sourceOrder = 2L),
                     MangaDownload.State.NOT_DOWNLOADED,
                     0,
                 ),
                 ChapterList.Item(
-                    chapter(id = 2L, chapterNumber = 1.0, scanlator = "Side"),
+                    chapter(id = 2L, chapterNumber = 1.0, scanlator = "Side", sourceOrder = 1L),
                     MangaDownload.State.NOT_DOWNLOADED,
                     0,
                 ),
                 ChapterList.Item(
-                    chapter(id = 3L, chapterNumber = 2.0, scanlator = "Main"),
+                    chapter(id = 3L, chapterNumber = 2.0, scanlator = "Main", sourceOrder = 0L),
                     MangaDownload.State.NOT_DOWNLOADED,
                     0,
                 ),
@@ -48,12 +48,13 @@ class MangaScreenModelChapterProcessingTest {
         id: Long,
         chapterNumber: Double,
         scanlator: String?,
+        sourceOrder: Long,
     ): Chapter {
         return Chapter.create().copy(
             id = id,
             chapterNumber = chapterNumber,
             scanlator = scanlator,
-            sourceOrder = id,
+            sourceOrder = sourceOrder,
         )
     }
 }
