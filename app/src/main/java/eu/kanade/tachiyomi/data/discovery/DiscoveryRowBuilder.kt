@@ -4,6 +4,7 @@ import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 
 data class DiscoveryRowItem(
     val title: String,
@@ -80,12 +81,51 @@ data class DiscoveryBuildContext(
      */
     val sharedGenreQuery: SharedRequiredGenreQuery? = null,
     val eligibilitySnapshot: DiscoveryEligibilitySnapshot? = null,
+    /** Authorization captured for this run; missing inventory never authorizes a native source. */
+    val sourcePolicy: DiscoverySourcePolicy = DiscoverySourcePolicy(
+        mediaType = mediaType,
+        revision = "unavailable",
+        inventoryComplete = false,
+        allowedPluginKeys = emptySet(),
+        pluginMembers = emptyMap(),
+    ),
 ) {
     /** Titles that must not consume row slots: known, shown, and the previous pool. */
     val exclusionKeys: Set<String>
         get() = libraryCleanTitles + historyCleanTitles + hiddenCleanTitles +
             recentCleanTitles + currentFeedCleanTitles +
             eligibilitySnapshot?.excludedIdentityKeys.orEmpty() + eligibilitySnapshot?.excludedLookupKeys.orEmpty()
+
+    val nativeQuerySourceIds: List<Long>
+        get() = if (sourcePolicy.mediaType != mediaType) {
+            emptyList()
+        } else {
+            sourceIds.ifEmpty { sourcePolicy.representativeSourceIds }
+                .filter(sourcePolicy::allowsNative).distinct()
+        }
+
+    fun eligibleCandidates(rowType: DiscoveryRowType, items: List<DiscoveryRowItem>): List<DiscoveryRowItem> {
+        if (sourcePolicy.mediaType != mediaType) return emptyList()
+        val excluded = exclusionKeys
+        return items.filter { sourcePolicy.allows(rowType, it.sourceId, it.provider) }
+            .filterNot { it.isExcludedBy(excluded, mediaType) }
+    }
+
+    /** Keep BEST_EFFORT lower tiers until the coordinator knows cross-row eligibility. */
+    fun admittedCandidates(rowType: DiscoveryRowType, items: List<DiscoveryRowItem>): List<DiscoveryRowItem> {
+        val policy = candidatePolicy
+        val admitted = eligibleCandidates(rowType, items).filter {
+            policy.evaluate(it.genres) is CandidateVerdict.Admitted
+        }
+        if (policy.priorityGenres.isEmpty()) return admitted
+        val rankOnly = DiscoveryCandidatePolicy(
+            blacklistedTags = policy.blacklistedTags,
+            ignoredGenres = policy.ignoredGenres,
+            priorityGenres = policy.priorityGenres,
+            unknownGenrePolicy = policy.unknownGenrePolicy,
+        )
+        return rankOnly.filterRowCandidates(admitted, { it.genres })
+    }
 
     val candidatePolicy: DiscoveryCandidatePolicy
         get() {

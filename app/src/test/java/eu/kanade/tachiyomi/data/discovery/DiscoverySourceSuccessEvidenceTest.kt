@@ -99,7 +99,12 @@ class DiscoverySourceSuccessEvidenceTest {
         val budget = DiscoveryVerificationBudget(budgetMs = 10, maxDetails = 0, clock = { 0L })
         val builder = DiscoverySourceRowBuilder(catalog, rowCap = 1)
 
-        builder.build(context(budget).copy(sourceIds = listOf(11L, 22L)))
+        builder.build(
+            context(budget).copy(
+                sourceIds = listOf(11L, 22L),
+                sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(11L, 22L)),
+            ),
+        )
 
         builder.successfulSourceIds shouldBe setOf(11L)
         catalog.browseRequests shouldBe 2
@@ -173,6 +178,7 @@ class DiscoverySourceSuccessEvidenceTest {
         hiddenCleanTitles = emptySet(),
         sourceId = 11L,
         sourceIds = listOf(11L),
+        sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(11L)),
         verificationBudget = budget,
         genreFilterSpec = if (required) GenreFilterSpec(requiredGenres = setOf("Action")) else GenreFilterSpec(),
     )

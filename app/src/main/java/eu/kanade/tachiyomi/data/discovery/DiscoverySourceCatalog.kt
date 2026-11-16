@@ -14,18 +14,25 @@ import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.IOException
+import kotlin.coroutines.coroutineContext
 
 data class DiscoveryBrowsePage(
     val items: List<DiscoveryRowItem>,
@@ -214,9 +221,154 @@ interface DiscoverySourceCatalog {
 
 class AppDiscoverySourceCatalog(
     private val mangaSourceManagerProvider: () -> MangaSourceManager = { Injekt.get<MangaSourceManager>() },
+    private val sourcePolicyProvider: () -> DiscoverySourcePolicyProvider = {
+        Injekt.get<DiscoverySourcePolicyProvider>()
+    },
+    private val animeSourceManagerProvider: () -> AnimeSourceManager = { Injekt.get<AnimeSourceManager>() },
+    private val novelSourceManagerProvider: () -> NovelSourceManager = { Injekt.get<NovelSourceManager>() },
+    private val sourceBindingValidator: ((DiscoveryMediaType, Long, Any) -> Boolean)? = null,
 ) : DiscoverySourceCatalog {
 
     private val genreHydrator = DiscoveryGenreHydrator()
+
+    private fun sourceAllowed(mediaType: DiscoveryMediaType, sourceId: Long): Boolean = try {
+        val policy = sourcePolicyProvider().current(mediaType)
+        policy.mediaType == mediaType && policy.allowsNative(sourceId)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun requireSourceAllowed(mediaType: DiscoveryMediaType, sourceId: Long) {
+        if (!sourceAllowed(mediaType, sourceId)) throw CancellationException("Discovery source participation changed")
+    }
+
+    private fun sourceMatches(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        source: Any,
+        revision: String? = null,
+    ): Boolean = try {
+        val policy = sourcePolicyProvider().current(mediaType)
+        policy.allowsNative(sourceId) && (revision == null || policy.revision == revision) &&
+            (
+                sourceBindingValidator?.invoke(mediaType, sourceId, source)
+                    ?: (
+                        (sourcePolicyProvider() as? DiscoverySdkBindingAuthority)?.isCurrentSourceBinding(
+                            mediaType,
+                            sourceId,
+                            source,
+                            revision,
+                        ) ==
+                            true
+                        )
+                )
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun requireSourceAllowed(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        source: Any,
+        revision: String? = null,
+    ) {
+        if (!sourceMatches(
+                mediaType,
+                sourceId,
+                source,
+                revision,
+            )
+        ) {
+            throw CancellationException("Discovery raw source binding changed")
+        }
+    }
+
+    private class SdkHydrationNamespace(val revision: String, val source: Any) {
+        override fun equals(
+            other: Any?,
+        ): Boolean = other is SdkHydrationNamespace && revision == other.revision && source === other.source
+        override fun hashCode(): Int = 31 * revision.hashCode() + System.identityHashCode(source)
+    }
+
+    private fun registeredSource(mediaType: DiscoveryMediaType, sourceId: Long): Any? = when (mediaType) {
+        DiscoveryMediaType.MANGA -> mangaSourceManagerProvider().getOrStub(sourceId) as? CatalogueSource
+        DiscoveryMediaType.ANIME -> animeSourceManagerProvider().getOrStub(sourceId) as? AnimeCatalogueSource
+        DiscoveryMediaType.NOVEL -> novelSourceManagerProvider().getOrStub(sourceId) as? NovelCatalogueSource
+    }
+
+    private suspend fun <T : Any> resolveLiveCatalogueSource(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        readRaw: () -> T?,
+        isInitializedFlow: () -> StateFlow<Boolean>,
+        catalogueIdsFlow: () -> Flow<Set<Long>>,
+    ): T? {
+        readRaw()?.let { return it }
+        if (!sourceAllowed(mediaType, sourceId)) return null
+        // Cold start / extension-update handoff: SourceManager populates sourcesMapFlow asynchronously on IO.
+        runCatchingUnlessCancelled {
+            withTimeoutOrNull(SOURCE_READY_WAIT_MS) {
+                if (!isInitializedFlow().value) {
+                    isInitializedFlow().first { it }
+                }
+                if (readRaw() == null && sourceAllowed(mediaType, sourceId)) {
+                    catalogueIdsFlow().first { sourceId in it }
+                }
+            }
+        }
+        return readRaw()
+    }
+
+    private suspend fun mangaCatalogueSource(sourceId: Long): CatalogueSource? {
+        val manager = mangaSourceManagerProvider()
+        return resolveLiveCatalogueSource(
+            mediaType = DiscoveryMediaType.MANGA,
+            sourceId = sourceId,
+            readRaw = { manager.getOrStub(sourceId) as? CatalogueSource },
+            isInitializedFlow = manager::isInitialized,
+            catalogueIdsFlow = { manager.catalogueSources.map { list -> list.mapTo(HashSet()) { it.id } } },
+        )
+    }
+
+    private suspend fun animeCatalogueSource(sourceId: Long): AnimeCatalogueSource? {
+        val manager = animeSourceManagerProvider()
+        return resolveLiveCatalogueSource(
+            mediaType = DiscoveryMediaType.ANIME,
+            sourceId = sourceId,
+            readRaw = { manager.getOrStub(sourceId) as? AnimeCatalogueSource },
+            isInitializedFlow = manager::isInitialized,
+            catalogueIdsFlow = { manager.catalogueSources.map { list -> list.mapTo(HashSet()) { it.id } } },
+        )
+    }
+
+    private suspend fun novelCatalogueSource(sourceId: Long): NovelCatalogueSource? {
+        val manager = novelSourceManagerProvider()
+        return resolveLiveCatalogueSource(
+            mediaType = DiscoveryMediaType.NOVEL,
+            sourceId = sourceId,
+            readRaw = { manager.getOrStub(sourceId) as? NovelCatalogueSource },
+            isInitializedFlow = manager::isInitialized,
+            catalogueIdsFlow = { manager.catalogueSources.map { list -> list.mapTo(HashSet()) { it.id } } },
+        )
+    }
+
+    private suspend fun <T> guardedSourceCall(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        source: Any,
+        call: suspend () -> T,
+    ): T {
+        coroutineContext.ensureActive()
+        requireSourceAllowed(mediaType, sourceId, source)
+        val result = call()
+        coroutineContext.ensureActive()
+        requireSourceAllowed(mediaType, sourceId, source)
+        return result
+    }
 
     /** M2: перевод непонятых чекбоксов жанров — ленивый, кэш внутри фолбэка. */
     private val genreFallback by lazy {
@@ -379,6 +531,7 @@ class AppDiscoverySourceCatalog(
         budget: DiscoveryVerificationBudget?,
         maxDetails: Int,
     ): DiscoveryGenrePage {
+        requireSourceAllowed(mediaType, sourceId)
         if (budget == null) {
             return DiscoveryGenrePage(
                 items = items,
@@ -401,11 +554,27 @@ class AppDiscoverySourceCatalog(
         maxDetails: Int,
     ): DiscoveryGenrePage {
         val byUrl = items.associateBy { it.sourceUrl }
-        return hydrateDiscoveryBatchUntilSettled(items, maxDetails) { batch, allowance ->
-            genreHydrator.hydrate(mediaType, sourceId, batch, budget, maxDetails = allowance) { url ->
-                fetchItemGenres(mediaType, sourceId, url, byUrl[url]?.title.orEmpty())
+        val revision = sourcePolicyProvider().current(mediaType).revision
+        val source =
+            registeredSource(mediaType, sourceId) ?: throw CancellationException("Discovery source is unavailable")
+        val validate = { requireSourceAllowed(mediaType, sourceId, source, revision) }
+        validate()
+        val namespace = SdkHydrationNamespace(revision, source)
+        val result = hydrateDiscoveryBatchUntilSettled(items, maxDetails) { batch, allowance ->
+            genreHydrator.hydrate(
+                mediaType,
+                sourceId,
+                batch,
+                budget,
+                maxDetails = allowance,
+                cacheNamespace = namespace,
+                validate = validate,
+            ) { url ->
+                fetchItemGenres(mediaType, sourceId, url, byUrl[url]?.title.orEmpty(), source, revision)
             }
         }
+        validate()
+        return result
     }
 
     private suspend fun fetchItemGenres(
@@ -413,31 +582,40 @@ class AppDiscoverySourceCatalog(
         sourceId: Long,
         url: String,
         title: String,
+        expectedSource: Any,
+        revision: String,
     ): List<String> {
+        requireSourceAllowed(mediaType, sourceId, expectedSource, revision)
         val observed = when (mediaType) {
             DiscoveryMediaType.MANGA -> {
-                val source = mangaSourceManagerProvider().getOrStub(sourceId) as? CatalogueSource
+                val source = expectedSource as? CatalogueSource
                 val entry = SManga.create().apply {
                     this.url = url
                     this.title = title
                 }
-                source?.let { fetchDiscoveryMangaDetails(it, entry) }?.genre
+                source?.let {
+                    guardedSourceCall(mediaType, sourceId, it) {
+                        fetchDiscoveryMangaDetails(it, entry) {
+                            requireSourceAllowed(mediaType, sourceId, it, revision)
+                        }
+                    }
+                }?.genre
             }
             DiscoveryMediaType.ANIME -> {
-                val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
+                val source = expectedSource as? AnimeCatalogueSource
                 val entry = SAnime.create().apply {
                     this.url = url
                     this.title = title
                 }
-                source?.getAnimeDetails(entry)?.genre
+                source?.let { guardedSourceCall(mediaType, sourceId, it) { it.getAnimeDetails(entry) } }?.genre
             }
             DiscoveryMediaType.NOVEL -> {
-                val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
+                val source = expectedSource as? NovelCatalogueSource
                 val entry = SNovel.create().apply {
                     this.url = url
                     this.title = title
                 }
-                source?.getNovelDetails(entry)?.genre
+                source?.let { guardedSourceCall(mediaType, sourceId, it) { it.getNovelDetails(entry) } }?.genre
             }
         }
         return parseGenres(observed)
@@ -445,10 +623,12 @@ class AppDiscoverySourceCatalog(
 
     override fun queryableSourceIds(mediaType: DiscoveryMediaType, sourceIds: List<Long>): List<Long> =
         sourceIds.filter { id ->
-            when (mediaType) {
-                DiscoveryMediaType.MANGA -> mangaSourceManagerProvider().getOrStub(id) is CatalogueSource
-                DiscoveryMediaType.ANIME -> Injekt.get<AnimeSourceManager>().getOrStub(id) is AnimeCatalogueSource
-                DiscoveryMediaType.NOVEL -> Injekt.get<NovelSourceManager>().getOrStub(id) is NovelCatalogueSource
+            if (!sourceAllowed(mediaType, id)) {
+                false
+            } else {
+                registeredSource(mediaType, id)?.let {
+                    sourceMatches(mediaType, id, it)
+                } == true
             }
         }
 
@@ -477,6 +657,7 @@ class AppDiscoverySourceCatalog(
         page: Int,
         releaseStatuses: Set<DiscoveryReleaseStatus>,
     ): List<DiscoveryRowItem> = try {
+        requireSourceAllowed(mediaType, sourceId)
         // V4.1: при выбранном статусе latest-лента источника не выражает фильтр
         // (getLatestUpdates не принимает FilterList, а статус в списках обычно UNKNOWN).
         // Если источник умеет статус своим фильтром — ряд строится из search-выдачи
@@ -486,20 +667,60 @@ class AppDiscoverySourceCatalog(
         }
         when (mediaType) {
             DiscoveryMediaType.MANGA -> {
-                val source = mangaSourceManagerProvider().getOrStub(sourceId) as? CatalogueSource
+                val source = mangaCatalogueSource(sourceId)
                     ?: return emptyList()
                 val pageData = if (source.supportsLatest) {
-                    runCatching { source.getLatestUpdates(page) }.getOrNull()?.takeIf { it.mangas.isNotEmpty() }
+                    runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getLatestUpdates(page)
+                        }
+                    }.getOrNull()?.takeIf {
+                        it.mangas.isNotEmpty()
+                    }
                         ?: if (page > 1) {
-                            runCatching { source.getLatestUpdates(1) }.getOrNull()?.takeIf { it.mangas.isNotEmpty() }
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getLatestUpdates(1)
+                                }
+                            }.getOrNull()?.takeIf {
+                                it.mangas.isNotEmpty()
+                            }
                         } else {
                             null
                         }
-                        ?: runCatching { source.getPopularManga(page) }.getOrNull()?.takeIf { it.mangas.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularManga(1) }.getOrNull() else null
+                        ?: runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getPopularManga(page)
+                            }
+                        }.getOrNull()?.takeIf {
+                            it.mangas.isNotEmpty()
+                        }
+                        ?: if (page > 1) {
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getPopularManga(1)
+                                }
+                            }.getOrNull()
+                        } else {
+                            null
+                        }
                 } else {
-                    runCatching { source.getPopularManga(page) }.getOrNull()?.takeIf { it.mangas.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularManga(1) }.getOrNull() else null
+                    runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getPopularManga(page)
+                        }
+                    }.getOrNull()?.takeIf {
+                        it.mangas.isNotEmpty()
+                    }
+                        ?: if (page > 1) {
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getPopularManga(1)
+                                }
+                            }.getOrNull()
+                        } else {
+                            null
+                        }
                 } ?: return emptyList()
                 val keptMangas = pageData.mangas
                     .filter { SourceStatusFilterMatcher.entryPasses(it.status, releaseStatuses) }
@@ -514,20 +735,60 @@ class AppDiscoverySourceCatalog(
                 }
             }
             DiscoveryMediaType.ANIME -> {
-                val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
+                val source = animeCatalogueSource(sourceId)
                     ?: return emptyList()
                 val pageData = if (source.supportsLatest) {
-                    runCatching { source.getLatestUpdates(page) }.getOrNull()?.takeIf { it.animes.isNotEmpty() }
+                    runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getLatestUpdates(page)
+                        }
+                    }.getOrNull()?.takeIf {
+                        it.animes.isNotEmpty()
+                    }
                         ?: if (page > 1) {
-                            runCatching { source.getLatestUpdates(1) }.getOrNull()?.takeIf { it.animes.isNotEmpty() }
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getLatestUpdates(1)
+                                }
+                            }.getOrNull()?.takeIf {
+                                it.animes.isNotEmpty()
+                            }
                         } else {
                             null
                         }
-                        ?: runCatching { source.getPopularAnime(page) }.getOrNull()?.takeIf { it.animes.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularAnime(1) }.getOrNull() else null
+                        ?: runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getPopularAnime(page)
+                            }
+                        }.getOrNull()?.takeIf {
+                            it.animes.isNotEmpty()
+                        }
+                        ?: if (page > 1) {
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getPopularAnime(1)
+                                }
+                            }.getOrNull()
+                        } else {
+                            null
+                        }
                 } else {
-                    runCatching { source.getPopularAnime(page) }.getOrNull()?.takeIf { it.animes.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularAnime(1) }.getOrNull() else null
+                    runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getPopularAnime(page)
+                        }
+                    }.getOrNull()?.takeIf {
+                        it.animes.isNotEmpty()
+                    }
+                        ?: if (page > 1) {
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getPopularAnime(1)
+                                }
+                            }.getOrNull()
+                        } else {
+                            null
+                        }
                 } ?: return emptyList()
                 val keptAnimes = pageData.animes
                     .filter { SourceStatusFilterMatcher.entryPasses(it.status, releaseStatuses) }
@@ -542,20 +803,60 @@ class AppDiscoverySourceCatalog(
                 }
             }
             DiscoveryMediaType.NOVEL -> {
-                val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
+                val source = novelCatalogueSource(sourceId)
                     ?: return emptyList()
                 val pageData = if (source.supportsLatest) {
-                    runCatching { source.getLatestUpdates(page) }.getOrNull()?.takeIf { it.novels.isNotEmpty() }
+                    runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getLatestUpdates(page)
+                        }
+                    }.getOrNull()?.takeIf {
+                        it.novels.isNotEmpty()
+                    }
                         ?: if (page > 1) {
-                            runCatching { source.getLatestUpdates(1) }.getOrNull()?.takeIf { it.novels.isNotEmpty() }
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getLatestUpdates(1)
+                                }
+                            }.getOrNull()?.takeIf {
+                                it.novels.isNotEmpty()
+                            }
                         } else {
                             null
                         }
-                        ?: runCatching { source.getPopularNovels(page) }.getOrNull()?.takeIf { it.novels.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularNovels(1) }.getOrNull() else null
+                        ?: runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getPopularNovels(page)
+                            }
+                        }.getOrNull()?.takeIf {
+                            it.novels.isNotEmpty()
+                        }
+                        ?: if (page > 1) {
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getPopularNovels(1)
+                                }
+                            }.getOrNull()
+                        } else {
+                            null
+                        }
                 } else {
-                    runCatching { source.getPopularNovels(page) }.getOrNull()?.takeIf { it.novels.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularNovels(1) }.getOrNull() else null
+                    runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getPopularNovels(page)
+                        }
+                    }.getOrNull()?.takeIf {
+                        it.novels.isNotEmpty()
+                    }
+                        ?: if (page > 1) {
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) {
+                                    source.getPopularNovels(1)
+                                }
+                            }.getOrNull()
+                        } else {
+                            null
+                        }
                 } ?: return emptyList()
                 val keptNovels = pageData.novels
                     .filter { SourceStatusFilterMatcher.entryPasses(it.status, releaseStatuses) }
@@ -596,15 +897,23 @@ class AppDiscoverySourceCatalog(
     ): List<DiscoveryRowItem>? = try {
         when (mediaType) {
             DiscoveryMediaType.MANGA -> {
-                val source = mangaSourceManagerProvider().getOrStub(sourceId) as? CatalogueSource
+                val source = mangaCatalogueSource(sourceId)
                     ?: return null
-                val filters = source.getFilterList()
+                val filters = guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                 if (!applyMangaStatusFilter(filters, releaseStatuses)) return null
                 logcat { "[DiscoverySourceCatalog] statusSearch hit source=$sourceId statuses=$releaseStatuses" }
-                val pageData = runCatching { source.getSearchManga(page, "", filters) }
+                val pageData = runCatchingUnlessCancelled {
+                    guardedSourceCall(mediaType, sourceId, source) {
+                        source.getSearchManga(page, "", filters)
+                    }
+                }
                     .getOrNull()?.takeIf { it.mangas.isNotEmpty() }
                     ?: if (page > 1) {
-                        runCatching { source.getSearchManga(1, "", filters) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchManga(1, "", filters)
+                            }
+                        }.getOrNull()
                     } else {
                         null
                     }
@@ -616,15 +925,23 @@ class AppDiscoverySourceCatalog(
                 }
             }
             DiscoveryMediaType.ANIME -> {
-                val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
+                val source = animeCatalogueSource(sourceId)
                     ?: return null
-                val filters = source.getFilterList()
+                val filters = guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                 if (!applyAnimeStatusFilter(filters, releaseStatuses)) return null
                 logcat { "[DiscoverySourceCatalog] statusSearch hit source=$sourceId statuses=$releaseStatuses" }
-                val pageData = runCatching { source.getSearchAnime(page, "", filters) }
+                val pageData = runCatchingUnlessCancelled {
+                    guardedSourceCall(mediaType, sourceId, source) {
+                        source.getSearchAnime(page, "", filters)
+                    }
+                }
                     .getOrNull()?.takeIf { it.animes.isNotEmpty() }
                     ?: if (page > 1) {
-                        runCatching { source.getSearchAnime(1, "", filters) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchAnime(1, "", filters)
+                            }
+                        }.getOrNull()
                     } else {
                         null
                     }
@@ -636,15 +953,23 @@ class AppDiscoverySourceCatalog(
                 }
             }
             DiscoveryMediaType.NOVEL -> {
-                val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
+                val source = novelCatalogueSource(sourceId)
                     ?: return null
-                val filters = source.getFilterList()
+                val filters = guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                 if (!applyNovelStatusFilter(filters, releaseStatuses)) return null
                 logcat { "[DiscoverySourceCatalog] statusSearch hit source=$sourceId statuses=$releaseStatuses" }
-                val pageData = runCatching { source.getSearchNovels(page, "", filters) }
+                val pageData = runCatchingUnlessCancelled {
+                    guardedSourceCall(mediaType, sourceId, source) {
+                        source.getSearchNovels(page, "", filters)
+                    }
+                }
                     .getOrNull()?.takeIf { it.novels.isNotEmpty() }
                     ?: if (page > 1) {
-                        runCatching { source.getSearchNovels(1, "", filters) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchNovels(1, "", filters)
+                            }
+                        }.getOrNull()
                     } else {
                         null
                     }
@@ -723,9 +1048,10 @@ class AppDiscoverySourceCatalog(
         strictPage: Boolean = false,
         latest: Boolean = false,
     ): FetchedPage = try {
+        requireSourceAllowed(mediaType, sourceId)
         when (mediaType) {
             DiscoveryMediaType.MANGA -> {
-                val source = mangaSourceManagerProvider().getOrStub(sourceId) as? CatalogueSource
+                val source = mangaCatalogueSource(sourceId)
                     ?: if (strictPage) {
                         throw IOException("source $sourceId is not a catalogue source")
                     } else {
@@ -734,7 +1060,13 @@ class AppDiscoverySourceCatalog(
                 var filters = if (genres !=
                     null
                 ) {
-                    withMangaGenreFilters(source.getFilterList(), genres, source.lang)
+                    withMangaGenreFilters(
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getFilterList()
+                        },
+                        genres,
+                        source.lang,
+                    )
                 } else {
                     null
                 }
@@ -743,7 +1075,7 @@ class AppDiscoverySourceCatalog(
                 // V4: статус выпуска — в тот же FilterList поверх жанров; не применим
                 // (нет фильтра / одиночный Select при 2+ статусах) — best-effort без него.
                 if (releaseStatuses.isNotEmpty()) {
-                    val candidate = filters ?: source.getFilterList()
+                    val candidate = filters ?: guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                     val applied = applyMangaStatusFilter(candidate, releaseStatuses)
                     if (applied) filters = candidate
                     logcat {
@@ -757,8 +1089,18 @@ class AppDiscoverySourceCatalog(
                         genres = genres,
                         lang = source.lang,
                         page = page,
-                        filters = filters ?: runCatching { source.getFilterList() }.getOrElse { FilterList() },
-                        search = { query, searchFilters -> source.getSearchManga(page, query, searchFilters) },
+                        filters = filters ?: runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getFilterList()
+                            }
+                        }.getOrElse {
+                            FilterList()
+                        },
+                        search = { query, searchFilters ->
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchManga(page, query, searchFilters)
+                            }
+                        },
                         hasItems = { it.mangas.isNotEmpty() },
                     )
                 } else {
@@ -766,13 +1108,17 @@ class AppDiscoverySourceCatalog(
                 }
                 val rawPage = when {
                     genreSearch != null -> genreSearch
-                    filters != null -> runCatching { source.getSearchManga(page, "", filters) }
+                    filters != null -> runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getSearchManga(page, "", filters)
+                        }
+                    }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
-                    else -> runCatching {
+                    else -> runCatchingUnlessCancelled {
                         if (latest && source.supportsLatest) {
-                            source.getLatestUpdates(page)
+                            guardedSourceCall(mediaType, sourceId, source) { source.getLatestUpdates(page) }
                         } else {
-                            source.getPopularManga(page)
+                            guardedSourceCall(mediaType, sourceId, source) { source.getPopularManga(page) }
                         }
                     }.let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
                 }
@@ -782,9 +1128,17 @@ class AppDiscoverySourceCatalog(
                 val usedFallback = !strictPage && nonEmptyPage == null && genres == null && page > 1
                 val pageData = nonEmptyPage ?: if (usedFallback) {
                     if (filters == null) {
-                        runCatching { source.getPopularManga(1) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getPopularManga(1)
+                            }
+                        }.getOrNull()
                     } else {
-                        runCatching { source.getSearchManga(1, "", filters) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchManga(1, "", filters)
+                            }
+                        }.getOrNull()
                     }
                 } else {
                     rawPage
@@ -824,7 +1178,7 @@ class AppDiscoverySourceCatalog(
                 )
             }
             DiscoveryMediaType.ANIME -> {
-                val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
+                val source = animeCatalogueSource(sourceId)
                     ?: if (strictPage) {
                         throw IOException("source $sourceId is not a catalogue source")
                     } else {
@@ -833,13 +1187,19 @@ class AppDiscoverySourceCatalog(
                 var filters = if (genres !=
                     null
                 ) {
-                    withAnimeGenreFilters(source.getFilterList(), genres, source.lang)
+                    withAnimeGenreFilters(
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getFilterList()
+                        },
+                        genres,
+                        source.lang,
+                    )
                 } else {
                     null
                 }
                 val genreFilterApplied = genres != null && filters != null
                 if (releaseStatuses.isNotEmpty()) {
-                    val candidate = filters ?: source.getFilterList()
+                    val candidate = filters ?: guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                     val applied = applyAnimeStatusFilter(candidate, releaseStatuses)
                     if (applied) filters = candidate
                     logcat {
@@ -853,8 +1213,18 @@ class AppDiscoverySourceCatalog(
                         genres = genres,
                         lang = source.lang,
                         page = page,
-                        filters = filters ?: runCatching { source.getFilterList() }.getOrElse { AnimeFilterList() },
-                        search = { query, searchFilters -> source.getSearchAnime(page, query, searchFilters) },
+                        filters = filters ?: runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getFilterList()
+                            }
+                        }.getOrElse {
+                            AnimeFilterList()
+                        },
+                        search = { query, searchFilters ->
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchAnime(page, query, searchFilters)
+                            }
+                        },
                         hasItems = { it.animes.isNotEmpty() },
                     )
                 } else {
@@ -862,13 +1232,17 @@ class AppDiscoverySourceCatalog(
                 }
                 val rawPage = when {
                     genreSearch != null -> genreSearch
-                    filters != null -> runCatching { source.getSearchAnime(page, "", filters) }
+                    filters != null -> runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getSearchAnime(page, "", filters)
+                        }
+                    }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
-                    else -> runCatching {
+                    else -> runCatchingUnlessCancelled {
                         if (latest && source.supportsLatest) {
-                            source.getLatestUpdates(page)
+                            guardedSourceCall(mediaType, sourceId, source) { source.getLatestUpdates(page) }
                         } else {
-                            source.getPopularAnime(page)
+                            guardedSourceCall(mediaType, sourceId, source) { source.getPopularAnime(page) }
                         }
                     }.let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
                 }
@@ -876,9 +1250,17 @@ class AppDiscoverySourceCatalog(
                 val usedFallback = !strictPage && nonEmptyPage == null && genres == null && page > 1
                 val pageData = nonEmptyPage ?: if (usedFallback) {
                     if (filters == null) {
-                        runCatching { source.getPopularAnime(1) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getPopularAnime(1)
+                            }
+                        }.getOrNull()
                     } else {
-                        runCatching { source.getSearchAnime(1, "", filters) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchAnime(1, "", filters)
+                            }
+                        }.getOrNull()
                     }
                 } else {
                     rawPage
@@ -918,7 +1300,7 @@ class AppDiscoverySourceCatalog(
                 )
             }
             DiscoveryMediaType.NOVEL -> {
-                val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
+                val source = novelCatalogueSource(sourceId)
                     ?: if (strictPage) {
                         throw IOException("source $sourceId is not a catalogue source")
                     } else {
@@ -927,13 +1309,19 @@ class AppDiscoverySourceCatalog(
                 var filters = if (genres !=
                     null
                 ) {
-                    withNovelGenreFilters(source.getFilterList(), genres, source.lang)
+                    withNovelGenreFilters(
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getFilterList()
+                        },
+                        genres,
+                        source.lang,
+                    )
                 } else {
                     null
                 }
                 val genreFilterApplied = genres != null && filters != null
                 if (releaseStatuses.isNotEmpty()) {
-                    val candidate = filters ?: source.getFilterList()
+                    val candidate = filters ?: guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                     val applied = applyNovelStatusFilter(candidate, releaseStatuses)
                     if (applied) filters = candidate
                     logcat {
@@ -947,8 +1335,18 @@ class AppDiscoverySourceCatalog(
                         genres = genres,
                         lang = source.lang,
                         page = page,
-                        filters = filters ?: runCatching { source.getFilterList() }.getOrElse { NovelFilterList() },
-                        search = { query, searchFilters -> source.getSearchNovels(page, query, searchFilters) },
+                        filters = filters ?: runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getFilterList()
+                            }
+                        }.getOrElse {
+                            NovelFilterList()
+                        },
+                        search = { query, searchFilters ->
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchNovels(page, query, searchFilters)
+                            }
+                        },
                         hasItems = { it.novels.isNotEmpty() },
                     )
                 } else {
@@ -956,13 +1354,17 @@ class AppDiscoverySourceCatalog(
                 }
                 val rawPage = when {
                     genreSearch != null -> genreSearch
-                    filters != null -> runCatching { source.getSearchNovels(page, "", filters) }
+                    filters != null -> runCatchingUnlessCancelled {
+                        guardedSourceCall(mediaType, sourceId, source) {
+                            source.getSearchNovels(page, "", filters)
+                        }
+                    }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
-                    else -> runCatching {
+                    else -> runCatchingUnlessCancelled {
                         if (latest && source.supportsLatest) {
-                            source.getLatestUpdates(page)
+                            guardedSourceCall(mediaType, sourceId, source) { source.getLatestUpdates(page) }
                         } else {
-                            source.getPopularNovels(page)
+                            guardedSourceCall(mediaType, sourceId, source) { source.getPopularNovels(page) }
                         }
                     }.let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
                 }
@@ -970,9 +1372,17 @@ class AppDiscoverySourceCatalog(
                 val usedFallback = !strictPage && nonEmptyPage == null && genres == null && page > 1
                 val pageData = nonEmptyPage ?: if (usedFallback) {
                     if (filters == null) {
-                        runCatching { source.getPopularNovels(1) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getPopularNovels(1)
+                            }
+                        }.getOrNull()
                     } else {
-                        runCatching { source.getSearchNovels(1, "", filters) }.getOrNull()
+                        runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchNovels(1, "", filters)
+                            }
+                        }.getOrNull()
                     }
                 } else {
                     rawPage
@@ -1351,7 +1761,13 @@ class AppDiscoverySourceCatalog(
         budget,
         maxDetails,
         status = { it.status },
-    ) { fetchDiscoveryMangaDetails(source, it) }
+    ) { item ->
+        guardedSourceCall(DiscoveryMediaType.MANGA, source.id, source) {
+            fetchDiscoveryMangaDetails(source, item) {
+                requireSourceAllowed(DiscoveryMediaType.MANGA, source.id, source)
+            }
+        }
+    }
 
     private suspend fun enrichAnimesWithStatus(
         source: AnimeCatalogueSource,
@@ -1365,7 +1781,7 @@ class AppDiscoverySourceCatalog(
         budget,
         maxDetails,
         status = { it.status },
-    ) { source.getAnimeDetails(it) }
+    ) { item -> guardedSourceCall(DiscoveryMediaType.ANIME, source.id, source) { source.getAnimeDetails(item) } }
 
     private suspend fun enrichNovelsWithStatus(
         source: NovelCatalogueSource,
@@ -1379,7 +1795,7 @@ class AppDiscoverySourceCatalog(
         budget,
         maxDetails,
         status = { it.status },
-    ) { source.getNovelDetails(it) }
+    ) { item -> guardedSourceCall(DiscoveryMediaType.NOVEL, source.id, source) { source.getNovelDetails(item) } }
 
     private suspend fun <T> enrichItemsWithStatus(
         items: List<T>,
@@ -1414,6 +1830,7 @@ class AppDiscoverySourceCatalog(
 
     private companion object {
         const val DETAILS_ENRICH_CAP = 24
+        const val SOURCE_READY_WAIT_MS = 2_000L
     }
 }
 

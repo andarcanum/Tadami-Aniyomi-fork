@@ -1,8 +1,13 @@
 package eu.kanade.domain.discovery.service
 
 import eu.kanade.domain.ui.model.HomeHeroMode
+import eu.kanade.tachiyomi.data.discovery.CandidateVerdict
+import eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
+import eu.kanade.tachiyomi.data.discovery.GenreFilterSpec
 import eu.kanade.tachiyomi.data.discovery.RequiredEnforcement
 import eu.kanade.tachiyomi.data.discovery.RequiredMatchMode
+import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
+import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import io.kotest.matchers.shouldBe
 import org.junit.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
@@ -17,10 +22,41 @@ import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 
 class DiscoveryPreferencesTest {
+    @Test
+    fun `direct mixed requirements use the same effective ALL denominator as their public fields`() {
+        val specPolicy = DiscoveryCandidatePolicy(GenreFilterSpec(requiredGenres = setOf("action", "🔥")))
+        val primaryPolicy = DiscoveryCandidatePolicy(
+            requiredGenres = setOf("action", "a".repeat(65)),
+            strictRequired = true,
+        )
+        for (policy in listOf(specPolicy, primaryPolicy)) {
+            policy.requiredGenres shouldBe setOf("action")
+            val verdict = policy.evaluate(listOf("Action"))
+            (verdict is CandidateVerdict.Admitted && verdict.matchesRequired) shouldBe true
+        }
+    }
+
+    @Test
+    fun `restored inert raw tokens do not poison effective ALL while stored CSV and draft remain intact`() {
+        val preferences = DiscoveryPreferences(PersistingPreferenceStore())
+        val csv = "action,raw:🔥,raw:" + "a".repeat(65)
+        preferences.requiredGenres(DiscoveryMediaType.NOVEL).set(csv)
+        val policy = DiscoveryCandidatePolicy(preferences.genreFilterSpec(DiscoveryMediaType.NOVEL))
+        (policy.evaluate(listOf("Action")) is CandidateVerdict.Admitted) shouldBe true
+        preferences.requiredGenres(DiscoveryMediaType.NOVEL).get() shouldBe csv
+        parseGenreFilterCsv(csv).second.size shouldBe 2
+    }
+
+    @Test
+    fun `only inert direct-spec requirements do not disallow incomplete metadata`() {
+        val policy =
+            DiscoveryCandidatePolicy(GenreFilterSpec(requiredGenres = parseGenreFilterCsv("raw:🔥").second.toSet()))
+        (policy.evaluate(emptyList()) is CandidateVerdict.Admitted) shouldBe true
+    }
 
     @Test
     fun `concurrent failure claims across preference instances admit one surface`() {
-        val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val store = PersistingPreferenceStore()
         val preferences = List(2) { DiscoveryPreferences(store) }
         preferences.first().manualRefreshWorkId(DiscoveryMediaType.ANIME).set("failed")
         val executor = Executors.newFixedThreadPool(2)
@@ -41,7 +77,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `failure claim survives recreation and rejects replaced requests independently per media`() {
-        val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val store = PersistingPreferenceStore()
         val first = DiscoveryPreferences(store)
         val second = DiscoveryPreferences(store)
         first.manualRefreshWorkId(DiscoveryMediaType.NOVEL).set("current")
@@ -57,7 +93,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `concurrent manual refreshes across preference instances admit exactly one request`() {
-        val backing = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val backing = PersistingPreferenceStore()
         val readBarrier = CyclicBarrier(2)
         val coordinateReads = AtomicBoolean(false)
         val store = object : PreferenceStore by backing {
@@ -110,7 +146,7 @@ class DiscoveryPreferencesTest {
             Triple(120L, 240L, 480L) to 480L,
         )
         cases.forEach { (timestamps, expected) ->
-            val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+            val store = PersistingPreferenceStore()
             val prefs = DiscoveryPreferences(store)
             prefs.homeManualRefreshAt(DiscoveryMediaType.ANIME).set(timestamps.first)
             prefs.feedManualRefreshAt(DiscoveryMediaType.ANIME).set(timestamps.second)
@@ -125,7 +161,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `cancel before migration clears only its media and cannot restore legacy cooldown`() {
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
         prefs.homeManualRefreshAt(DiscoveryMediaType.ANIME).set(120L)
         prefs.feedManualRefreshAt(DiscoveryMediaType.MANGA).set(240L)
         prefs.homeManualRefreshAt(DiscoveryMediaType.NOVEL).set(360L)
@@ -139,7 +175,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `manual cooldown admits one refresh then allows a new refresh at five minutes`() {
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
         prefs.tryStartManualRefresh(DiscoveryMediaType.ANIME, 1_000_000L) shouldBe true
         prefs.tryStartManualRefresh(DiscoveryMediaType.ANIME, 1_000_000L) shouldBe false
         prefs.tryStartManualRefresh(DiscoveryMediaType.ANIME, 1_299_999L) shouldBe false
@@ -155,7 +191,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `manual refresh work IDs persist independently for each media`() {
-        val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val store = PersistingPreferenceStore()
         val prefs = DiscoveryPreferences(store)
         prefs.manualRefreshWorkId(DiscoveryMediaType.NOVEL).get() shouldBe ""
         prefs.manualRefreshWorkId(DiscoveryMediaType.NOVEL).set("novel-work")
@@ -168,7 +204,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `genre preferences persist independently per media`() {
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
         val values = mapOf(
             DiscoveryMediaType.ANIME to Triple("action", "comedy", "horror"),
             DiscoveryMediaType.MANGA to Triple("romance", "drama", "ecchi"),
@@ -190,7 +226,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `legacy genre preferences migrate only to manga without deleting legacy values`() {
-        val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val store = PersistingPreferenceStore()
         val prefs = DiscoveryPreferences(store)
         store.getString("discovery_priority_genres", "").set("legacy-priority")
         store.getString("discovery_required_genres", "").set("legacy-required")
@@ -215,7 +251,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `legacy migration preserves already-set targets for every media`() {
-        val store = eu.kanade.tachiyomi.test.PersistingPreferenceStore()
+        val store = PersistingPreferenceStore()
         val prefs = DiscoveryPreferences(store)
         store.getString("discovery_priority_genres", "").set("legacy")
         store.getString("discovery_priority_genres_anime", "").set("anime-specific")
@@ -229,7 +265,7 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `genre filter spec reads media values and global required modes`() {
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
         prefs.priorityGenres(DiscoveryMediaType.ANIME).set("action,raw:Space Opera")
         prefs.requiredGenres(DiscoveryMediaType.ANIME).set("comedy")
         prefs.ignoredGenres(DiscoveryMediaType.ANIME).set("horror")
@@ -280,19 +316,19 @@ class DiscoveryPreferencesTest {
         prefs.collageAnimationSpeed().get() shouldBe "normal"
         prefs.collageLastRotationTime(DiscoveryMediaType.ANIME).get() shouldBe 0L
         prefs.collageOffset(DiscoveryMediaType.ANIME).get() shouldBe 0
-        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0L
-        prefs.homeManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0L
-        prefs.manualRefreshCount(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0
+        prefs.feedManualRefreshAt(DiscoveryMediaType.ANIME).get() shouldBe 0L
+        prefs.homeManualRefreshAt(DiscoveryMediaType.ANIME).get() shouldBe 0L
+        prefs.manualRefreshCount(DiscoveryMediaType.ANIME).get() shouldBe 0
         prefs.filterNsfw().get() shouldBe true
-        prefs.lastFailedRows(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe ""
+        prefs.lastFailedRows(DiscoveryMediaType.ANIME).get() shouldBe ""
     }
 
     @Test
     fun `source participation defaults keep current behaviour`() {
         val prefs = DiscoveryPreferences(InMemoryPreferenceStore())
-        prefs.discoverySourceMode(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe "auto"
-        prefs.discoverySourceExcluded(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe ""
-        prefs.discoverySourceKnown(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe ""
+        prefs.discoverySourceMode(DiscoveryMediaType.NOVEL).get() shouldBe "auto"
+        prefs.discoverySourceExcluded(DiscoveryMediaType.NOVEL).get() shouldBe ""
+        prefs.discoverySourceKnown(DiscoveryMediaType.NOVEL).get() shouldBe ""
         prefs.lastSourcesMediaType().get() shouldBe DiscoveryMediaType.ANIME.key
     }
 
@@ -307,10 +343,10 @@ class DiscoveryPreferencesTest {
 
     @Test
     fun `feed refresh cooldown preference is scoped per media type`() {
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
-        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe 0L
-        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).set(123L)
-        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0L
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+        prefs.feedManualRefreshAt(DiscoveryMediaType.NOVEL).get() shouldBe 0L
+        prefs.feedManualRefreshAt(DiscoveryMediaType.NOVEL).set(123L)
+        prefs.feedManualRefreshAt(DiscoveryMediaType.ANIME).get() shouldBe 0L
     }
 
     @Test
@@ -320,5 +356,15 @@ class DiscoveryPreferencesTest {
         prefs.collageOffset(DiscoveryMediaType.NOVEL).get() shouldBe 0
         prefs.stageLastRotationTime(DiscoveryMediaType.MANGA).set(777L)
         prefs.stageLastRotationTime(DiscoveryMediaType.ANIME).get() shouldBe 0L
+    }
+
+    @Test
+    fun `runtime state preferences are excluded from portable backup and restore`() {
+        val prefs = DiscoveryPreferences(InMemoryPreferenceStore())
+        DiscoveryPreferences.isRuntimeStateKey(prefs.lastFailedRows(DiscoveryMediaType.ANIME).key()) shouldBe true
+        DiscoveryPreferences.isRuntimeStateKey(prefs.bindingBackfillVersion().key()) shouldBe true
+        DiscoveryPreferences.isRuntimeStateKey(prefs.bootstrapAttemptAt(DiscoveryMediaType.NOVEL).key()) shouldBe true
+        DiscoveryPreferences.isRuntimeStateKey("discovery_manual_refresh_at_anime") shouldBe true
+        DiscoveryPreferences.isRuntimeStateKey("discovery_priority_genres_manga") shouldBe false
     }
 }

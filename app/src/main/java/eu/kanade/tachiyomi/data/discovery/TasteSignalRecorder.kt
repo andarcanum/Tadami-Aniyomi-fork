@@ -6,6 +6,8 @@ import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tachiyomi.domain.discovery.model.DiscoveryFactKind
@@ -17,6 +19,7 @@ import tachiyomi.domain.discovery.model.DiscoveryTasteMetadata
 import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.model.canonicalDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.domain.source.novel.model.StubNovelSource
@@ -95,6 +98,7 @@ object TasteSignalRecorder {
         ) -> List<String> = { mediaType, sourceId, sourceUrl ->
             fetchLocalGenres(mediaType, sourceId, sourceUrl)
         },
+        sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
     ): Boolean {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
         var genres = snapshotGenres(item)
@@ -188,6 +192,7 @@ object TasteSignalRecorder {
                     sourceKey = sourceKey,
                     expectedCreatedAt = recordedTimestamp,
                     sourceDetailsResolver = sourceDetailsResolver,
+                    sourcePolicyProvider = sourcePolicyProvider,
                 )
             }
         }
@@ -206,7 +211,12 @@ object TasteSignalRecorder {
         ) -> List<String> = { mediaType, sourceId, sourceUrl ->
             fetchSourceGenres(mediaType, sourceId, sourceUrl)
         },
+        sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
     ) {
+        val policies = runCatchingUnlessCancelled {
+            sourcePolicyProvider ?: Injekt.get<DiscoverySourcePolicyProvider>()
+        }.getOrNull() ?: return
+        if (!policies.current(item.mediaType).allows(item)) return
         if ((item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
             val sourceId = item.sourceId!!
             val sourceUrl = item.sourceUrl!!
@@ -405,12 +415,27 @@ object TasteSignalRecorder {
         sourceId: Long,
         sourceUrl: String,
     ): List<String> = runCatchingUnlessCancelled {
+        val context = currentCoroutineContext()
+        context.ensureActive()
+        val policies = Injekt.get<DiscoverySourcePolicyProvider>()
+        val authority = policies as? DiscoverySdkBindingAuthority ?: return@runCatchingUnlessCancelled emptyList()
+        val revision = policies.current(mediaType).revision
+        fun guard(source: Any) {
+            context.ensureActive()
+            if (!policies.current(mediaType).allowsNative(sourceId) ||
+                !authority.isCurrentSourceBinding(mediaType, sourceId, source, revision)
+            ) {
+                throw kotlinx.coroutines.CancellationException("Discovery source binding changed")
+            }
+        }
         when (mediaType) {
             DiscoveryMediaType.MANGA -> {
                 val source = Injekt.get<tachiyomi.domain.source.manga.service.MangaSourceManager>().get(sourceId)
                 if (source != null && source !is StubMangaSource) {
-                    val sManga = SManga.create().apply { url = sourceUrl }
-                    val details = fetchDiscoveryMangaDetails(source, sManga)
+                    guard(source)
+                    val entry = SManga.create().apply { url = sourceUrl }
+                    val details = fetchDiscoveryMangaDetails(source, entry) { guard(source) }
+                    guard(source)
                     parseGenres(details.genre)
                 } else {
                     emptyList()
@@ -419,8 +444,9 @@ object TasteSignalRecorder {
             DiscoveryMediaType.ANIME -> {
                 val source = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>().get(sourceId)
                 if (source != null && source !is StubAnimeSource) {
-                    val sAnime = SAnime.create().apply { url = sourceUrl }
-                    val details = source.getAnimeDetails(sAnime)
+                    guard(source)
+                    val details = source.getAnimeDetails(SAnime.create().apply { url = sourceUrl })
+                    guard(source)
                     parseGenres(details.genre)
                 } else {
                     emptyList()
@@ -429,8 +455,9 @@ object TasteSignalRecorder {
             DiscoveryMediaType.NOVEL -> {
                 val source = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>().get(sourceId)
                 if (source != null && source !is StubNovelSource) {
-                    val sNovel = SNovel.create().apply { url = sourceUrl }
-                    val details = source.getNovelDetails(sNovel)
+                    guard(source)
+                    val details = source.getNovelDetails(SNovel.create().apply { url = sourceUrl })
+                    guard(source)
                     parseGenres(details.genre)
                 } else {
                     emptyList()

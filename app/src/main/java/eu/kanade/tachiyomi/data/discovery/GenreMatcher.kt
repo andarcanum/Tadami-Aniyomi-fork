@@ -104,6 +104,25 @@ object GenreMatcher {
         return out
     }
 
+    /** The same matchable, CSV-safe domain used for input and effective saved constraints. Stored drafts are not rewritten. */
+    internal fun normalizeRawConstraint(value: String): String? {
+        val raw = value.trim().replace(',', ' ').replace('\n', ' ').trim()
+        return raw.takeIf { variants(it).isNotEmpty() }
+    }
+
+    /** Known aliases share one taste identity; ambiguous ontology names keep their raw meaning. */
+    internal fun identityKey(genre: String): String {
+        val valid = normalizeRawConstraint(genre) ?: return ""
+        val canonical = resolve(valid)
+        if (canonical.size == 1) return canonical.single()
+        val raw = normalize(valid)
+        if (canonical.isNotEmpty() || raw.isEmpty()) return raw
+        // Keep bilingual raw-tag equivalence transitive and keyed by declared dictionary keys.
+        return eu.kanade.tachiyomi.data.suggestions.MultilingualQueryHelper.canonicalDictionaryKey(valid)
+            ?: eu.kanade.tachiyomi.data.suggestions.MultilingualQueryHelper.canonicalDictionaryKey(raw)
+            ?: raw
+    }
+
     /** Классический Левенштейн (DP, O(n·m)); входы уже ≤64 символов. */
     fun levenshtein(a: String, b: String): Int {
         if (a == b) return 0

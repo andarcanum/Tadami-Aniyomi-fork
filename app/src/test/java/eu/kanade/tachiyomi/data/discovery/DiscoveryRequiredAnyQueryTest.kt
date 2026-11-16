@@ -10,8 +10,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
+import tachiyomi.domain.discovery.model.DiscoveryRowType
 import java.util.concurrent.atomic.AtomicLong
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -117,32 +119,33 @@ class DiscoveryRequiredAnyQueryTest {
     }
 
     @Test
-    fun `non-required external fallback keeps its original three genre query limit`() = runTest {
-        val source = RecordingTrendingSource {
-            delay(1)
-            emptyList()
+    fun `soft interests query the six-genre union independently of required mode`() =
+        runTest {
+            val source = RecordingTrendingSource {
+                delay(1)
+                emptyList()
+            }
+            val builder = DiscoveryTasteRowBuilder(source, MissingMangaCatalog(), { TrendSort.POPULARITY })
+            val budget =
+                DiscoveryVerificationBudget(budgetMs = 1_000, maxDetails = 0, clock = { testScheduler.currentTime })
+            val context = requiredAnyContext(budget).copy(
+                genreFilterSpec = GenreFilterSpec(),
+                tasteProfile = listOf(
+                    "action" to 6.0,
+                    "comedy" to 5.0,
+                    "fantasy" to 4.0,
+                    "romance" to 3.0,
+                    "mystery" to 2.0,
+                    "drama" to 1.0,
+                ),
+            )
+
+            builder.build(context)
+
+            source.queries.filter { it.genres.size == 1 }.map { it.genres.single() } shouldBe
+                listOf("action", "comedy", "fantasy", "romance", "mystery", "drama")
+            source.queries.all { it.page == 1 } shouldBe true
         }
-        val builder = DiscoveryTasteRowBuilder(source, MissingMangaCatalog(), { TrendSort.POPULARITY })
-        val budget =
-            DiscoveryVerificationBudget(budgetMs = 1_000, maxDetails = 0, clock = { testScheduler.currentTime })
-        val context = requiredAnyContext(budget).copy(
-            genreFilterSpec = GenreFilterSpec(),
-            tasteProfile = listOf(
-                "action" to 6.0,
-                "comedy" to 5.0,
-                "fantasy" to 4.0,
-                "romance" to 3.0,
-                "mystery" to 2.0,
-                "drama" to 1.0,
-            ),
-        )
-
-        builder.build(context)
-
-        source.queries.filter { it.genres.size == 1 }.map { it.genres.single() } shouldBe
-            listOf("action", "comedy", "fantasy")
-        source.queries.all { it.page == 1 } shouldBe true
-    }
 
     private fun requiredAnyContext(budget: DiscoveryVerificationBudget? = null) = DiscoveryBuildContext(
         mediaType = DiscoveryMediaType.MANGA,
@@ -157,6 +160,11 @@ class DiscoveryRequiredAnyQueryTest {
         ),
         sourceId = 111L,
         sourceIds = listOf(111L),
+        sourcePolicy = discoveryQueryPolicyFixture(
+            DiscoveryMediaType.MANGA,
+            listOf(111L),
+            mapOf(DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST)),
+        ),
         verificationBudget = budget,
     )
 
@@ -170,7 +178,7 @@ class DiscoveryRequiredAnyQueryTest {
                     coverUrl = null,
                     seasonLabel = null,
                     genres = listOf("Romance"),
-                    provider = "test-trending",
+                    provider = "anilist_trend",
                 ),
             )
             "mystery" -> listOf(
@@ -180,7 +188,7 @@ class DiscoveryRequiredAnyQueryTest {
                     coverUrl = null,
                     seasonLabel = null,
                     genres = listOf("Mystery"),
-                    provider = "test-trending",
+                    provider = "anilist_trend",
                 ),
             )
             else -> emptyList()

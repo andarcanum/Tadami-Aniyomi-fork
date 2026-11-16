@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.discovery
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.discovery.model.DiscoveryBlacklistEntry
@@ -12,9 +13,19 @@ import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 
 class TasteSignalRecorderAltKeyTest {
+
+    private val metadataSourcePolicies = object : DiscoverySourcePolicyProvider {
+        override fun current(
+            mediaType: DiscoveryMediaType,
+        ) = discoveryQueryPolicyFixture(mediaType, nativeIds = listOf(42L))
+        override fun observe(mediaType: DiscoveryMediaType) = flowOf(current(mediaType))
+        override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = current(mediaType)
+    }
 
     @Test
     fun `consumedAltKey normalizes alt title and skips blanks and duplicates`() {
@@ -129,7 +140,7 @@ class TasteSignalRecorderAltKeyTest {
 
         val failingRepo = object : RecordingFakeRepository() {
             override suspend fun recordTaste(
-                identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+                identity: DiscoveryTitleIdentity,
                 kind: DiscoverySignalType,
                 metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
             ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
@@ -158,6 +169,7 @@ class TasteSignalRecorderAltKeyTest {
             item = item,
             signalType = DiscoverySignalType.LIKE,
             enrichmentScope = this,
+            sourcePolicyProvider = metadataSourcePolicies,
             sourceDetailsResolver = { mediaType, sourceId, sourceUrl ->
                 resolverCalled = true
                 sourceId shouldBe 42L
@@ -187,6 +199,7 @@ class TasteSignalRecorderAltKeyTest {
             item = item,
             signalType = DiscoverySignalType.LIKE,
             enrichmentScope = this,
+            sourcePolicyProvider = metadataSourcePolicies,
             sourceDetailsResolver = { _, _, _ ->
                 resolverEntered.complete(Unit)
                 allowResolverToFinish.await()
@@ -224,6 +237,7 @@ class TasteSignalRecorderAltKeyTest {
                 sourceUrl shouldBe "/manga/solo-leveling"
                 listOf("Action", "Fantasy")
             },
+            sourcePolicyProvider = metadataSourcePolicies,
             sourceDetailsResolver = { _, _, _ ->
                 sourceResolverCalled = true
                 listOf("NetworkAction")
@@ -250,6 +264,7 @@ class TasteSignalRecorderAltKeyTest {
             signalType = DiscoverySignalType.CLICK,
             enrichmentScope = this,
             localEntryResolver = { _, _, _ -> emptyList() },
+            sourcePolicyProvider = metadataSourcePolicies,
             sourceDetailsResolver = { _, _, _ ->
                 sourceResolverCalled = true
                 listOf("NetworkAction")
@@ -304,7 +319,7 @@ class TasteSignalRecorderAltKeyTest {
             }
 
             override suspend fun recordTaste(
-                identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+                identity: DiscoveryTitleIdentity,
                 kind: DiscoverySignalType,
                 metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
             ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
@@ -344,6 +359,7 @@ class TasteSignalRecorderAltKeyTest {
             item = suggestionOf("Receipt Regression").copy(sourceId = 42L, sourceUrl = "/receipt"),
             signalType = DiscoverySignalType.LIKE,
             enrichmentScope = this,
+            sourcePolicyProvider = metadataSourcePolicies,
             sourceDetailsResolver = { _, _, _ -> listOf("Fantasy") },
             localEntryResolver = { _, _, _ -> emptyList() },
         ) shouldBe true
@@ -380,7 +396,7 @@ private open class RecordingFakeRepository : FakeDiscoveryRepositoryBase() {
     val recordedGenres = mutableListOf<List<String>>()
 
     override suspend fun recordTaste(
-        identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+        identity: DiscoveryTitleIdentity,
         kind: DiscoverySignalType,
         metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
     ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {

@@ -6,7 +6,11 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.data.discovery.AppDiscoverySeedSources
+import eu.kanade.tachiyomi.data.discovery.DiscoverySeedSources
+import eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
+import eu.kanade.tachiyomi.data.discovery.computeDiscoveryConfigurationKey
+import eu.kanade.tachiyomi.data.discovery.foldLearnedTasteProfile
 import eu.kanade.tachiyomi.data.discovery.formatKeyCsv
 import eu.kanade.tachiyomi.data.discovery.groupSourcesByPlugin
 import eu.kanade.tachiyomi.data.discovery.parseKeyCsv
@@ -17,16 +21,25 @@ import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
+import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.ConcurrentHashMap
 
 /** Строка пикера: один плагин (расширение) со всеми его языковыми вариантами. */
 data class SourcePickUi(
@@ -54,6 +67,8 @@ data class DiscoverySourcesUiState(
     val entries: List<SourcePickUi> = emptyList(),
     val counts: Map<DiscoveryMediaType, Int> = emptyMap(),
     val toast: DiscoverySourcesToast? = null,
+    val isLoadingInventory: Boolean = true,
+    val hasInventoryError: Boolean = false,
 )
 
 // ── Правила выбора и атомарные мутации настроек источников ─────────────────────
@@ -151,6 +166,18 @@ internal fun isOverloadWarn(entries: List<SourcePickUi>): Boolean =
 internal fun selectedFirst(entries: List<SourcePickUi>): List<SourcePickUi> =
     entries.sortedBy { it.excluded }
 
+/** AUTO badges reflect the same effective representatives used by generation, not raw library weights. */
+internal fun projectDiscoverySourcePicks(
+    entries: List<SourcePickUi>,
+    sourcePolicy: DiscoverySourcePolicy,
+): List<SourcePickUi> {
+    val representatives = sourcePolicy.representativeSourceIds.take(3).toSet()
+    val top3Auto = sourcePolicy.pluginMembers.filterValues { members ->
+        members.any { it in representatives }
+    }.keys
+    return entries.map { it.copy(isTop3Auto = it.pluginKey in top3Auto) }
+}
+
 internal fun resolveSourcesMediaType(savedKey: String): DiscoveryMediaType =
     DiscoveryMediaType.fromKey(savedKey) ?: DiscoveryMediaType.ANIME
 
@@ -163,11 +190,14 @@ internal fun resolveSourcesMediaType(savedKey: String): DiscoveryMediaType =
  */
 class DiscoverySourcesScreenModel(
     private val context: Context,
+    private val discoveryPreferences: DiscoveryPreferences = Injekt.get(),
+    private val sourcePreferences: SourcePreferences = Injekt.get(),
+    private val seedSources: DiscoverySeedSources = AppDiscoverySeedSources(),
+    sourcePolicies: DiscoverySourcePolicyProvider? = null,
+    private val repositoryProvider: () -> DiscoveryRepository = { Injekt.get() },
 ) : StateScreenModel<DiscoverySourcesUiState>(DiscoverySourcesUiState()) {
 
-    private val discoveryPreferences = Injekt.get<DiscoveryPreferences>()
-    private val sourcePreferences = Injekt.get<SourcePreferences>()
-    private val seedSources = AppDiscoverySeedSources()
+    private val sourcePolicyProvider by lazy { sourcePolicies ?: Injekt.get<DiscoverySourcePolicyProvider>() }
 
     private data class PluginEntry(
         val key: String,
@@ -185,107 +215,146 @@ class DiscoverySourcesScreenModel(
         val novelIcons: Map<String, NovelPlugin.Installed> = emptyMap(),
     )
 
-    private var mediaData: Map<DiscoveryMediaType, MediaData> = emptyMap()
+    private val mediaData = ConcurrentHashMap<DiscoveryMediaType, MediaData>()
+    private val failedMedia = ConcurrentHashMap<DiscoveryMediaType, Boolean>()
+    private val retryTrigger = MutableStateFlow(0)
+    private val initialConfigKeys = DiscoveryMediaType.entries.associateWith { media ->
+        computeDiscoveryConfigurationKey(discoveryPreferences, media, sourcePreferences)
+    }
+
+    @Volatile
+    private var refreshOnDispose: Boolean = true
+
+    internal fun setRefreshOnDispose(enabled: Boolean) {
+        refreshOnDispose = enabled
+    }
 
     init {
         val initialMedia = resolveSourcesMediaType(discoveryPreferences.lastSourcesMediaType().get())
         mutableState.update { it.copy(mediaType = initialMedia) }
         screenModelScope.launchIO {
-            mediaData = DiscoveryMediaType.entries.associateWith { media ->
-                val data = loadMedia(media)
-                reconcileDiscoverySourcePreferences(
-                    preferences = discoveryPreferences,
-                    mediaType = media,
-                    installedKeys = data.ordered.map { it.key },
-                )
-                data
+            val loadedPluginMembers = mutableMapOf<DiscoveryMediaType, Map<String, Set<Long>>>()
+            val policyFlows = DiscoveryMediaType.entries.map { media ->
+                val failureFlow = (sourcePolicyProvider as? DiscoverySourcePolicyResolver)
+                    ?.observeInventoryFailure(media)
+                    ?: flowOf(null)
+                combine(sourcePolicyProvider.observe(media), failureFlow) { policy, failure ->
+                    policy to failure
+                }
             }
-            rebuild()
+            // Sequential collection: preparing IO weights emits a policy update, but must not cancel/restart that preparation.
+            combine(combine(policyFlows) { it.toList() }, retryTrigger) { snapshots, _ ->
+                snapshots
+            }.collect { snapshots ->
+                for ((snapshot, failure) in snapshots) {
+                    val media = snapshot.mediaType
+                    try {
+                        val current = sourcePolicyProvider.current(media)
+                        if (!current.inventoryComplete) {
+                            mediaData[media] = MediaData(emptyList(), -1L)
+                            loadedPluginMembers.remove(media)
+                            failedMedia[media] = (failure != null)
+                            continue
+                        }
+                        failedMedia[media] = false
+                        if (loadedPluginMembers[media] != current.pluginMembers) {
+                            reconcileDiscoverySourcePreferences(discoveryPreferences, media, current.pluginMembers.keys)
+                            val prepared = sourcePolicyProvider.current(media)
+                            if (!prepared.inventoryComplete) {
+                                mediaData[media] = MediaData(emptyList(), -1L)
+                                loadedPluginMembers.remove(media)
+                                continue
+                            }
+                            mediaData[media] = loadMedia(media, prepared)
+                            loadedPluginMembers[media] = prepared.pluginMembers
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        mediaData[media] = MediaData(emptyList(), -1L)
+                        loadedPluginMembers.remove(media)
+                        failedMedia[media] = true
+                    }
+                }
+                rebuild()
+            }
         }
     }
 
-    private suspend fun loadMedia(mediaType: DiscoveryMediaType): MediaData {
-        data class PluginRaw(
-            val key: String,
-            val name: String,
-            val memberIds: List<Long>,
-            val langs: Map<Long, String> = emptyMap(),
-        )
-        val catalogueIds: Set<Long>
+    private suspend fun loadMedia(mediaType: DiscoveryMediaType, sourcePolicy: DiscoverySourcePolicy): MediaData {
+        val lastUsedId = when (mediaType) {
+            DiscoveryMediaType.ANIME -> sourcePreferences.lastUsedAnimeSource().get()
+            DiscoveryMediaType.MANGA -> sourcePreferences.lastUsedMangaSource().get()
+            DiscoveryMediaType.NOVEL -> sourcePreferences.lastUsedNovelSource().get()
+        }
+        if (sourcePolicy.pluginMembers.isEmpty()) return MediaData(emptyList(), lastUsedId)
+        data class PluginRaw(val key: String, val name: String, val memberIds: Set<Long>, val langs: Map<Long, String>)
         val raws: List<PluginRaw>
         var mangaIcons = emptyMap<String, MangaExtension.Installed>()
         var animeIcons = emptyMap<String, AnimeExtension.Installed>()
         var novelIcons = emptyMap<String, NovelPlugin.Installed>()
         when (mediaType) {
             DiscoveryMediaType.MANGA -> {
-                catalogueIds = Injekt.get<MangaSourceManager>().getCatalogueSources().mapTo(HashSet()) { it.id }
-                val extensions = Injekt.get<MangaExtensionManager>().installedExtensionsFlow.first()
-                mangaIcons = extensions.associateBy { it.pkgName }
-                raws = extensions.map { ext ->
+                mangaIcons =
+                    Injekt.get<MangaExtensionManager>().installedExtensionsFlow.first().associateBy { it.pkgName }
+                raws = sourcePolicy.pluginMembers.map { (key, ids) ->
+                    val extension = mangaIcons[key]
                     PluginRaw(
-                        key = ext.pkgName,
-                        name = ext.name,
-                        memberIds = ext.sources.map { it.id }.filter { it in catalogueIds },
-                        langs = ext.sources.filter { it.id in catalogueIds }.associate { it.id to it.lang },
+                        key,
+                        extension?.name ?: key,
+                        ids,
+                        extension?.sources.orEmpty().filter {
+                            it.id in ids
+                        }.associate {
+                            it.id to
+                                it.lang
+                        },
                     )
                 }
             }
             DiscoveryMediaType.ANIME -> {
-                catalogueIds = Injekt.get<AnimeSourceManager>().getCatalogueSources().mapTo(HashSet()) { it.id }
-                val extensions = Injekt.get<AnimeExtensionManager>().installedExtensionsFlow.first()
-                animeIcons = extensions.associateBy { it.pkgName }
-                raws = extensions.map { ext ->
+                animeIcons =
+                    Injekt.get<AnimeExtensionManager>().installedExtensionsFlow.first().associateBy { it.pkgName }
+                raws = sourcePolicy.pluginMembers.map { (key, ids) ->
+                    val extension = animeIcons[key]
                     PluginRaw(
-                        key = ext.pkgName,
-                        name = ext.name,
-                        memberIds = ext.sources.map { it.id }.filter { it in catalogueIds },
-                        langs = ext.sources.filter { it.id in catalogueIds }.associate { it.id to it.lang },
+                        key,
+                        extension?.name ?: key,
+                        ids,
+                        extension?.sources.orEmpty().filter {
+                            it.id in ids
+                        }.associate {
+                            it.id to
+                                it.lang
+                        },
                     )
                 }
             }
             DiscoveryMediaType.NOVEL -> {
-                val novelSourceManager = Injekt.get<NovelSourceManager>()
-                catalogueIds = novelSourceManager.getCatalogueSources().mapTo(HashSet()) { it.id }
-                val manager = Injekt.get<NovelExtensionManager>()
-                val plugins = manager.installedPluginsFlow.first()
-                novelIcons = plugins.associateBy { it.id }
-                raws = groupSourcesByPlugin(catalogueIds) { manager.getPluginId(it) }.map { (key, ids) ->
-                    val langs = ids.mapNotNull { id ->
-                        runCatching { id to novelSourceManager.getOrStub(id).lang }.getOrNull()
-                    }.toMap()
-                    PluginRaw(
-                        key = key,
-                        name = plugins.firstOrNull { it.id == key }?.name ?: key,
-                        memberIds = ids,
-                        langs = langs,
-                    )
+                novelIcons = Injekt.get<NovelExtensionManager>().installedPluginsFlow.first().associateBy { it.id }
+                raws = sourcePolicy.pluginMembers.map { (key, ids) ->
+                    val plugin = novelIcons[key]
+                    PluginRaw(key, plugin?.name ?: key, ids, ids.associateWith { plugin?.lang.orEmpty() })
                 }
             }
         }
         val candidates = seedSources.candidates(mediaType)
         val weights = candidates.filter { it.sourceId > 0 }.groupingBy { it.sourceId }.eachCount()
+        val affinity = foldLearnedTasteProfile(signals = repositoryProvider().getSignals(mediaType)).sourceAffinity
+        (sourcePolicyProvider as? DiscoverySourcePolicyResolver)?.updateRetrievalWeights(mediaType, weights, affinity)
+        val rankedPolicy = sourcePolicyProvider.current(mediaType)
         val ordered = raws.mapNotNull { raw ->
-            val representative = selectPluginRepresentative(
-                memberIds = raw.memberIds.toSet(),
-                weights = weights,
-                langs = raw.langs,
-                appLang = java.util.Locale.getDefault().language.lowercase(),
-            ) ?: return@mapNotNull null
-            PluginEntry(
-                key = raw.key,
-                name = raw.name,
-                repId = representative,
-                memberIds = raw.memberIds.toSet(),
-                weight = raw.memberIds.sumOf { weights[it] ?: 0 },
-            )
-        }
-            .filter { it.memberIds.isNotEmpty() }
+            val representative = rankedPolicy.sourceWeights.keys.firstOrNull { it in raw.memberIds }
+                ?: selectPluginRepresentative(
+                    raw.memberIds,
+                    weights,
+                    raw.langs,
+                    java.util.Locale.getDefault().language.lowercase(),
+                )
+                ?: return@mapNotNull null
+            PluginEntry(raw.key, raw.name, representative, raw.memberIds, raw.memberIds.sumOf { weights[it] ?: 0 })
+        }.filter { it.memberIds.isNotEmpty() }
             .sortedWith(compareByDescending<PluginEntry> { it.weight }.thenBy { it.repId })
-        val lastUsedId = when (mediaType) {
-            DiscoveryMediaType.ANIME -> sourcePreferences.lastUsedAnimeSource().get()
-            DiscoveryMediaType.MANGA -> sourcePreferences.lastUsedMangaSource().get()
-            DiscoveryMediaType.NOVEL -> sourcePreferences.lastUsedNovelSource().get()
-        }
         return MediaData(ordered, lastUsedId, mangaIcons, animeIcons, novelIcons)
     }
 
@@ -293,35 +362,60 @@ class DiscoverySourcesScreenModel(
         val rebuilt = DiscoveryMediaType.entries.mapNotNull { media ->
             val data = mediaData[media] ?: return@mapNotNull null
             val excluded = parseKeyCsv(discoveryPreferences.discoverySourceExcluded(media).get())
-            val top3Auto = data.ordered.filterNot { it.key in excluded }.take(3).map { it.key }.toSet()
-            media to data.ordered.map { entry ->
+            val picks = data.ordered.map { entry ->
                 SourcePickUi(
                     id = entry.repId,
                     pluginKey = entry.key,
                     name = entry.name,
                     weight = entry.weight,
                     isLastUsed = data.lastUsedId in entry.memberIds,
-                    isTop3Auto = entry.key in top3Auto,
+                    isTop3Auto = false,
                     excluded = entry.key in excluded,
                 )
             }
+            media to projectDiscoverySourcePicks(picks, sourcePolicyProvider.current(media))
         }.toMap()
         // mediaType читается внутри update-лямбды: rebuild() вызывается конкурентно
         // из init-launchIO и switchMedia — запись должна идти в активный таб.
         mutableState.update {
             val current = it.mediaType
+            val policyComplete = sourcePolicyProvider.current(current).inventoryComplete
+            val hasError = failedMedia[current] == true
+            val isLoading = !policyComplete && !hasError
             it.copy(
                 mode = discoveryPreferences.discoverySourceMode(current).get(),
                 entries = rebuilt[current].orEmpty(),
                 counts = rebuilt.mapValues { entry -> entry.value.size },
+                isLoadingInventory = isLoading,
+                hasInventoryError = hasError,
             )
         }
     }
 
-    private fun notifyConfigurationChanged(mediaType: DiscoveryMediaType) {
-        runCatching<Unit> {
-            DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
+    fun retryInventoryLoad() {
+        val mediaType = state.value.mediaType
+        failedMedia[mediaType] = false
+        rebuild()
+        (sourcePolicyProvider as? DiscoverySourcePolicyResolver)?.retryInventoryLoad(mediaType)
+        retryTrigger.update { it + 1 }
+    }
+
+    private fun flushConfigurationRefresh() {
+        DiscoveryMediaType.entries.forEach { mediaType ->
+            val currentKey = computeDiscoveryConfigurationKey(discoveryPreferences, mediaType, sourcePreferences)
+            if (currentKey != initialConfigKeys[mediaType]) {
+                runCatching<Unit> {
+                    DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
+                }
+            }
         }
+    }
+
+    override fun onDispose() {
+        if (refreshOnDispose) {
+            flushConfigurationRefresh()
+        }
+        super.onDispose()
     }
 
     fun switchMedia(mediaType: DiscoveryMediaType) {
@@ -340,7 +434,6 @@ class DiscoverySourcesScreenModel(
         )
         if (!changed) return
         rebuild()
-        notifyConfigurationChanged(mediaType)
     }
 
     fun setQuery(query: String) {
@@ -368,7 +461,6 @@ class DiscoverySourcesScreenModel(
         }
         rebuild()
         mutableState.update { it.copy(toast = toast) }
-        notifyConfigurationChanged(mediaType)
     }
 
     fun selectAll() {
@@ -381,7 +473,6 @@ class DiscoverySourcesScreenModel(
         )
         rebuild()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.SelectAll) }
-        notifyConfigurationChanged(mediaType)
     }
 
     fun deselectAll() {
@@ -395,7 +486,6 @@ class DiscoverySourcesScreenModel(
         rebuild()
         val keepName = data.ordered.firstOrNull { it.key == keep }?.name.orEmpty()
         mutableState.update { it.copy(toast = DiscoverySourcesToast.DeselectAllKeep(keepName)) }
-        notifyConfigurationChanged(mediaType)
     }
 
     fun undoLast() {
@@ -404,7 +494,6 @@ class DiscoverySourcesScreenModel(
         undoDiscoverySourceExclusion(discoveryPreferences, mediaType, toast.pluginKey)
         rebuild()
         mutableState.update { it.copy(toast = null) }
-        notifyConfigurationChanged(mediaType)
     }
 
     fun clearToast() {

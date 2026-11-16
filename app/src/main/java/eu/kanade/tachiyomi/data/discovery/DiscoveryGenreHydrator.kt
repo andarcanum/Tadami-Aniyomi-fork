@@ -44,7 +44,7 @@ internal class DiscoveryGenreHydrator(
     private val clock: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
     private enum class Kind { RESOLVED, METADATA_UNAVAILABLE, TRANSIENT }
-    private data class Key(val media: DiscoveryMediaType, val source: Long, val url: String)
+    private data class Key(val media: DiscoveryMediaType, val source: Long, val url: String, val namespace: Any?)
     private data class Entry(val genres: List<String>, val at: Long, val kind: Kind)
 
     private val cache = DiscoveryLruCache<Key, Entry>(256)
@@ -63,8 +63,11 @@ internal class DiscoveryGenreHydrator(
         budget: DiscoveryVerificationBudget,
         /** Remaining allowance of the whole source; one call never exceeds [maxDetailsPerCall]. */
         maxDetails: Int = maxDetailsPerCall,
+        cacheNamespace: Any? = null,
+        validate: () -> Unit = {},
         fetchDetails: suspend (String) -> List<String>,
     ): HydrationResult = coroutineScope {
+        validate()
         require(maxDetails >= 0) { "maxDetails must be >= 0" }
         val batchLimit = minOf(maxDetails, maxDetailsPerCall)
         val outcomes = HashMap<String, Entry>()
@@ -76,7 +79,8 @@ internal class DiscoveryGenreHydrator(
             if (item.genres.isNotEmpty()) continue
             val url = item.sourceUrl
             if (url.isNullOrBlank()) continue
-            val key = Key(media, sourceId, url)
+            val key = Key(media, sourceId, url, cacheNamespace)
+            validate()
             val cached = cache.get(key)
             if (cached != null && isFresh(cached)) {
                 outcomes[url] = cached
@@ -93,6 +97,7 @@ internal class DiscoveryGenreHydrator(
             async {
                 val mutex = locks[(key.hashCode() and Int.MAX_VALUE) % locks.size]
                 mutex.withLock {
+                    validate()
                     val cached = cache.get(key)
                     if (cached != null && isFresh(cached)) {
                         return@withLock url to cached
@@ -101,11 +106,16 @@ internal class DiscoveryGenreHydrator(
                         budget.detailPermits.withPermit {
                             val remaining = budget.remainingMs()
                             // Charge only the real lookup, after coalescing and after waiting for IO capacity.
+                            validate()
                             if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
                             charged.incrementAndGet()
                             val timeout = minOf(detailTimeoutMs, remaining)
                             try {
-                                val observed = withTimeoutOrNull(timeout) { fetchDetails(url) }
+                                val observed =
+                                    withTimeoutOrNull(timeout) {
+                                        validate()
+                                        fetchDetails(url).also { validate() }
+                                    }
                                 when {
                                     observed == null -> Entry(emptyList(), clock(), Kind.TRANSIENT)
                                     else -> {
@@ -126,6 +136,7 @@ internal class DiscoveryGenreHydrator(
                             }
                         }
                     }
+                    validate()
                     if (entry != null) cache.put(key, entry)
                     url to entry
                 }
@@ -178,6 +189,7 @@ internal class DiscoveryGenreHydrator(
             if (url in outcomes || url in fetched) continue
             pendingItems.putIfAbsent(url, item)
         }
+        validate()
         HydrationResult(
             items = resolvedItems,
             verified = verified,

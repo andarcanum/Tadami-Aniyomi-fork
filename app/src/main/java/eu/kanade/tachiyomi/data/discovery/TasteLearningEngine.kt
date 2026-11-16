@@ -28,7 +28,7 @@ internal fun foldLearnedTasteProfile(
     val genreTitleCount = mutableMapOf<String, Int>()
     val sourceAffinity = mutableMapOf<String, Double>()
 
-    val vetoKeys = vetoGenres.mapNotNull { it.trim().lowercase().takeIf(String::isNotEmpty) }.toSet()
+    val vetoKeys = vetoGenres.mapNotNull { GenreMatcher.identityKey(it).takeIf(String::isNotEmpty) }.toSet()
 
     signals.forEach { signal ->
         // Дрейф вкуса: вклад затухает по возрасту сигнала.
@@ -36,7 +36,7 @@ internal fun foldLearnedTasteProfile(
         val signalWeight = signal.signalType.weight
 
         signal.genres
-            .map { it.trim().lowercase() }
+            .map(GenreMatcher::identityKey)
             .filter { it.isNotEmpty() && it !in vetoKeys }
             .toSet()
             .forEach { genre ->
@@ -83,15 +83,25 @@ internal fun mergeTasteProfiles(
     learned: LearnedTasteProfile,
     rampUpSignals: Int = 20,
 ): List<Pair<String, Double>> {
-    if (learned.genres.isEmpty()) return libraryProfile
     val blend = (learned.signalCount.toDouble() / rampUpSignals).coerceAtMost(1.0)
 
     val merged = linkedMapOf<String, Double>()
+    val displayNames = linkedMapOf<String, String>()
     libraryProfile.forEach { (genre, weight) ->
-        merged[genre.trim().lowercase()] = weight
+        val key = GenreMatcher.identityKey(genre)
+        if (key.isNotEmpty()) {
+            merged[key] = maxOf(merged[key] ?: 0.0, weight)
+            if (key !in GenreOntology.displayNames) {
+                displayNames.putIfAbsent(key, genre.trim())
+            }
+        }
     }
     learned.genres.forEach { (genre, learnedWeight) ->
-        val key = genre.trim().lowercase()
+        val key = GenreMatcher.identityKey(genre)
+        if (key.isEmpty()) return@forEach
+        if (key !in GenreOntology.displayNames) {
+            displayNames.putIfAbsent(key, genre.trim())
+        }
         val scaled = learnedWeight * blend
         if (learnedWeight >= 0.0) {
             merged[key] = maxOf(merged[key] ?: 0.0, scaled)
@@ -102,7 +112,7 @@ internal fun mergeTasteProfiles(
     return merged.entries
         .filter { it.value > 0.0 }
         .sortedByDescending { it.value }
-        .map { it.key to it.value }
+        .map { (displayNames[it.key] ?: it.key) to it.value }
 }
 
 /**

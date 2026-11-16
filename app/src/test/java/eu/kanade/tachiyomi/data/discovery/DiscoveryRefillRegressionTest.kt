@@ -88,7 +88,7 @@ class DiscoveryRefillRegressionTest {
             budget: DiscoveryVerificationBudget,
             maxDetails: Int,
         ): DiscoveryGenrePage {
-            val r = hydrator.hydrate(mediaType, sourceId, items, budget, maxDetails, details)
+            val r = hydrator.hydrate(mediaType, sourceId, items, budget, maxDetails, fetchDetails = details)
             return DiscoveryGenrePage(
                 items = r.items,
                 verified = r.verified,
@@ -107,8 +107,14 @@ class DiscoveryRefillRegressionTest {
         excluded: Set<String> = emptySet(),
         target: Int = 30,
     ) = queryDiscoveryGenreSources(
-        catalog = catalog, media = media, sourceIds = sources, genres = listOf("Fantasy"), page = 1,
-        releaseStatuses = emptySet(), policy = fantasy, budget = DiscoveryVerificationBudget(maxDetails = 160),
+        catalog = catalog,
+        media = media,
+        sourceIds = sources,
+        genres = listOf("Fantasy"),
+        page = 1,
+        releaseStatuses = emptySet(),
+        policy = fantasy,
+        budget = DiscoveryVerificationBudget(maxDetails = 160),
         excludedKeys = excluded, targetItems = target,
     )
 
@@ -245,7 +251,13 @@ class DiscoveryRefillRegressionTest {
         val result = DiscoverySourceRowBuilder(
             c,
             rowCap = 20,
-        ).build(sourceContext().copy(sourceIds = (1L..5L).toList(), harvestPages = 2))
+        ).build(
+            sourceContext().copy(
+                sourceIds = (1L..5L).toList(),
+                sourcePolicy = discoveryQueryPolicyFixture(media, (1L..5L).toList()),
+                harvestPages = 2,
+            ),
+        )
         (c.browseCalls.indexOfLast { it.second == 1 } < c.browseCalls.indexOfFirst { it.second == 2 }) shouldBe true
         result.map { it.provider }.toSet() shouldBe (1L..5L).map { "source-$it" }.toSet()
     }
@@ -274,6 +286,7 @@ class DiscoveryRefillRegressionTest {
         historyCleanTitles = emptySet(),
         hiddenCleanTitles = emptySet(),
         sourceIds = listOf(1L),
+        sourcePolicy = discoveryQueryPolicyFixture(media, listOf(1L)),
         harvestPages = 4,
     )
 

@@ -364,6 +364,16 @@ class HomeHubForYouCompositionTest {
             lastUpdatedAt = 123456789L,
             isFailed = false,
         ) shouldBe null
+
+        // Cold startup waiting on SourceManager / inventory keeps skeleton instead of flashing empty
+        resolveForYouEmptyState(
+            discoveryEnabled = true,
+            isRefreshing = false,
+            hasItems = false,
+            lastUpdatedAt = 123456789L,
+            isFailed = false,
+            isLoading = true,
+        ) shouldBe ForYouEmptyState.REFRESHING
     }
 
     @Test

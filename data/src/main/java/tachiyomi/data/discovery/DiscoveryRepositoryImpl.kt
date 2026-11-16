@@ -748,7 +748,9 @@ class DiscoveryRepositoryImpl(
     ): DiscoveryGenerationToken? = handler.await(inTransaction = true) { db ->
         db.discovery_publicationQueries.ensureRow(media.key)
         val row = db.discovery_publicationQueries.selectByMedia(media.key).executeAsOne()
-        if (row.generation != expectedGeneration) {
+        if (row.generation != expectedGeneration ||
+            (row.desired_configuration_key.isNotEmpty() && row.desired_configuration_key != configurationKey)
+        ) {
             return@await null
         }
         val revision = row.owner_revision + 1
@@ -779,7 +781,12 @@ class DiscoveryRepositoryImpl(
             val publication = db.discovery_publicationQueries.selectByMedia(token.mediaType.key).executeAsOne()
             if (publication.generation != token.expectedGeneration ||
                 publication.owner_request_id != token.requestId ||
-                publication.owner_revision != token.ownerRevision
+                publication.owner_revision != token.ownerRevision ||
+                (
+                    publication.desired_configuration_key.isNotEmpty() &&
+                        publication.desired_configuration_key != token.configurationKey
+                    ) ||
+                !candidateValidator.isConfigurationCurrent(token.mediaType, token.configurationKey)
             ) {
                 return@await DiscoveryPublishReceipt.Superseded(publication.generation)
             }
@@ -1094,6 +1101,14 @@ class DiscoveryRepositoryImpl(
             }
             if (publication.owner_request_id != null) {
                 return@await DiscoveryTopUpReceipt.Busy
+            }
+            if ((
+                    publication.desired_configuration_key.isNotEmpty() &&
+                        publication.configuration_key != publication.desired_configuration_key
+                    ) ||
+                !candidateValidator.isConfigurationCurrent(media, publication.configuration_key)
+            ) {
+                return@await DiscoveryTopUpReceipt.Superseded(publication.generation)
             }
 
             val memory = readMemory(db, media)

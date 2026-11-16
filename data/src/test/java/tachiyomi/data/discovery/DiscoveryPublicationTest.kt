@@ -104,6 +104,48 @@ class DiscoveryPublicationTest {
     }
 
     @Test
+    fun `top up cannot append a captured configuration after a different desired key is installed`() = runTest {
+        repository.installConfigurationKey(media, "policy-a")
+        val published = publish(
+            "initial",
+            DiscoveryPreparedPool.Fresh(listOf(suggestion(1)), partial = false),
+            configurationKey = "policy-a",
+        ) as DiscoveryPublishReceipt.Published
+        repository.installConfigurationKey(media, "policy-b")
+        val before = repository.publication(media)
+        val receipt = repository.topUpPool(
+            media,
+            published.snapshot.generation,
+            listOf(suggestion(2)),
+            listOf(DiscoverySourceCursor(1L, "policy-a", 3, false)),
+            50,
+        )
+        (receipt is DiscoveryTopUpReceipt.Superseded) shouldBe true
+        val after = repository.publication(media)
+        after.suggestions shouldBe before.suggestions
+        after.cursors shouldBe before.cursors
+        after.projectionVersion shouldBe before.projectionVersion
+        after.generation shouldBe before.generation
+    }
+
+    @Test
+    fun `configuration changed after reservation supersedes the captured generation`() = runTest {
+        repository.installConfigurationKey(media, "policy-a")
+        val token = repository.reserveGeneration(media, "captured-policy", 0L, "policy-a")!!
+        repository.installConfigurationKey(media, "policy-b")
+
+        val receipt = repository.publishGeneration(
+            token,
+            DiscoveryPreparedPool.Fresh(listOf(suggestion(1)), partial = false),
+            DiscoveryRetirementPolicy.NONE,
+        )
+
+        (receipt is DiscoveryPublishReceipt.Superseded) shouldBe true
+        repository.publication(media).generation shouldBe 0L
+        repository.subscribe(media).first().shouldBeEmpty()
+    }
+
+    @Test
     fun `published generation replaces the pool and next batch never returns retired titles`() = runTest {
         val first = publish("req-1", DiscoveryPreparedPool.Fresh((1..25).map(::suggestion), partial = false))
         val firstSnapshot = (first as DiscoveryPublishReceipt.Published).snapshot

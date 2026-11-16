@@ -3,6 +3,7 @@ package eu.kanade.domain.discovery.service
 import eu.kanade.tachiyomi.data.discovery.GenreFilterSpec
 import eu.kanade.tachiyomi.data.discovery.RequiredEnforcement
 import eu.kanade.tachiyomi.data.discovery.RequiredMatchMode
+import eu.kanade.tachiyomi.data.discovery.effective
 import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -68,12 +69,15 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
         preferenceStore.getLong("discovery_feed_manual_refresh_at_" + mediaType.key, 0L)
 
     fun manualRefreshWorkId(mediaType: DiscoveryMediaType): Preference<String> =
-        preferenceStore.getString("discovery_manual_refresh_work_id_" + mediaType.key, "")
+        preferenceStore.getString(Preference.appStateKey("discovery_manual_refresh_work_id_" + mediaType.key), "")
 
     fun claimManualRefreshFailure(mediaType: DiscoveryMediaType, requestId: String): Boolean =
         synchronized(manualRefreshLock) {
             if (requestId.isBlank() || manualRefreshWorkId(mediaType).get() != requestId) return@synchronized false
-            val shown = preferenceStore.getString("discovery_manual_refresh_failure_shown_" + mediaType.key, "")
+            val shown = preferenceStore.getString(
+                Preference.appStateKey("discovery_manual_refresh_failure_shown_" + mediaType.key),
+                "",
+            )
             if (shown.get() == requestId) return@synchronized false
             shown.set(requestId)
             true
@@ -85,11 +89,11 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
     /** Число ручных обновлений per-media для динамической ротации сидов и страниц источников. */
     fun manualRefreshCount(mediaType: DiscoveryMediaType): Preference<Int> =
-        preferenceStore.getInt("discovery_manual_refresh_count_" + mediaType.key, 0)
+        preferenceStore.getInt(Preference.appStateKey("discovery_manual_refresh_count_" + mediaType.key), 0)
 
     /** Число фоновых циклов обновления per-media — ротация страниц провайдеров для авто-обновлений. */
     fun backgroundCycleCount(mediaType: DiscoveryMediaType): Preference<Int> =
-        preferenceStore.getInt("discovery_background_cycle_count_" + mediaType.key, 0)
+        preferenceStore.getInt(Preference.appStateKey("discovery_background_cycle_count_" + mediaType.key), 0)
 
     /**
      * Внешние сервисы рекомендаций (AniList, Shikimori, MAL, Jikan, MangaDex, MU/NU):
@@ -104,7 +108,7 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
      * при стойких неудачах генерации вход на вкладку не должен перезапускать её).
      */
     fun bootstrapAttemptAt(mediaType: DiscoveryMediaType): Preference<Long> =
-        preferenceStore.getLong("discovery_bootstrap_attempt_at_" + mediaType.key, 0L)
+        preferenceStore.getLong(Preference.appStateKey("discovery_bootstrap_attempt_at_" + mediaType.key), 0L)
 
     /**
      * Независимый фильтр контента 18+ во внешних провайдерах подборок.
@@ -222,12 +226,12 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
             priorityGenres = priCanon + priRaw.toSet(),
             requiredMatchMode = matchMode,
             requiredEnforcement = enforcement,
-        )
+        ).effective()
     }
 
     /** CSV ключей рядов, упавших при последней генерации (для баннера «показан кэш»). */
     fun lastFailedRows(mediaType: DiscoveryMediaType): Preference<String> =
-        preferenceStore.getString("discovery_failed_rows_" + mediaType.key, "")
+        preferenceStore.getString(Preference.appStateKey("discovery_failed_rows_" + mediaType.key), "")
 
     /** Число source-level сбоев последней генерации; app-state, не входит в backup. */
     fun lastSourceFailureCount(mediaType: DiscoveryMediaType): Preference<Int> =
@@ -239,17 +243,17 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
     /** Статус последней генерации per-media: "SUCCESS", "PARTIAL", "FAILED", "SKIPPED", "" (не запускалось). */
     fun lastGenerationStatus(mediaType: DiscoveryMediaType): Preference<String> =
-        preferenceStore.getString("discovery_last_gen_status_" + mediaType.key, "")
+        preferenceStore.getString(Preference.appStateKey("discovery_last_gen_status_" + mediaType.key), "")
 
     /** Время завершения последней попытки генерации per-media. */
     fun lastGenerationAt(mediaType: DiscoveryMediaType): Preference<Long> =
-        preferenceStore.getLong("discovery_last_gen_at_" + mediaType.key, 0L)
+        preferenceStore.getLong(Preference.appStateKey("discovery_last_gen_at_" + mediaType.key), 0L)
 
     fun lastTopUpAt(mediaType: DiscoveryMediaType): Preference<Long> =
-        preferenceStore.getLong("discovery_last_top_up_at_" + mediaType.key, 0L)
+        preferenceStore.getLong(Preference.appStateKey("discovery_last_top_up_at_" + mediaType.key), 0L)
 
     fun lastTopUpAdded(mediaType: DiscoveryMediaType): Preference<Int> =
-        preferenceStore.getInt("discovery_last_top_up_added_" + mediaType.key, -1)
+        preferenceStore.getInt(Preference.appStateKey("discovery_last_top_up_added_" + mediaType.key), -1)
 
     /** Keeps synchronous source preference mutations atomic across consumers and preference instances. */
     internal fun <T> withSourcePreferencesLock(mediaType: DiscoveryMediaType, block: () -> T): T =
@@ -288,10 +292,10 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
      * и при наличии запрашивает тихую перегенерацию ленты.
      */
     fun bindingBackfillVersion(): Preference<Int> =
-        preferenceStore.getInt("discovery_binding_backfill_version", 0)
+        preferenceStore.getInt(Preference.appStateKey("discovery_binding_backfill_version"), 0)
 
     fun retirementResetVersion(): Preference<Int> =
-        preferenceStore.getInt("discovery_retirement_reset_version", 0)
+        preferenceStore.getInt(Preference.appStateKey("discovery_retirement_reset_version"), 0)
 
     /** Последний выбранный раздел в диалоге жанровых фильтров (app-state, не входит в backup). */
     fun lastGenreDialogMediaType(): Preference<String> = preferenceStore.getString(
@@ -305,16 +309,16 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun collageRotationIntervalHours(): Preference<Int> = preferenceStore.getInt("collage_rotation_interval_hours", 2)
     fun collageAnimationSpeed(): Preference<String> = preferenceStore.getString("collage_animation_speed", "normal")
     fun collageLastRotationTime(mediaType: DiscoveryMediaType): Preference<Long> =
-        preferenceStore.getLong("collage_last_rotation_time_" + mediaType.key, 0L)
+        preferenceStore.getLong(Preference.appStateKey("collage_last_rotation_time_" + mediaType.key), 0L)
     fun collageOffset(mediaType: DiscoveryMediaType): Preference<Int> =
-        preferenceStore.getInt("collage_offset_" + mediaType.key, 0)
+        preferenceStore.getInt(Preference.appStateKey("collage_offset_" + mediaType.key), 0)
 
     fun stageRotationIntervalHours(): Preference<Int> = preferenceStore.getInt("stage_rotation_interval_hours", 2)
     fun stageAnimationSpeed(): Preference<String> = preferenceStore.getString("stage_animation_speed", "normal")
     fun stageLastRotationTime(mediaType: DiscoveryMediaType): Preference<Long> =
-        preferenceStore.getLong("stage_last_rotation_time_" + mediaType.key, 0L)
+        preferenceStore.getLong(Preference.appStateKey("stage_last_rotation_time_" + mediaType.key), 0L)
     fun stageOffset(mediaType: DiscoveryMediaType): Preference<Int> =
-        preferenceStore.getInt("stage_offset_" + mediaType.key, 0)
+        preferenceStore.getInt(Preference.appStateKey("stage_offset_" + mediaType.key), 0)
 
     companion object {
         private const val PRIORITY_GENRES_KEY = "discovery_priority_genres"
@@ -328,5 +332,47 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
         const val MANUAL_REFRESH_COOLDOWN_MS = 5 * 60_000L
         const val CURRENT_RETIREMENT_RESET_VERSION = 1
+
+        private val runtimeStatePrefixes = listOf(
+            "discovery_manual_refresh_",
+            "discovery_feed_manual_refresh_at_",
+            "discovery_home_manual_refresh_at_",
+            "discovery_background_cycle_count_",
+            "discovery_bootstrap_attempt_at_",
+            "discovery_failed_rows_",
+            "discovery_source_failures_",
+            "discovery_source_fail_history_",
+            "discovery_last_gen_",
+            "discovery_last_top_up_",
+            "discovery_binding_backfill_version",
+            "discovery_retirement_reset_version",
+            "discovery_sources_media_type",
+            "discovery_genre_dialog_media_type",
+            "discovery_genre_filters_per_media_migrated",
+            "collage_last_rotation_time_",
+            "collage_offset_",
+            "stage_last_rotation_time_",
+            "stage_offset_",
+        )
+
+        private val globalGenerationConfigPrefixes = listOf(
+            "discovery_enabled",
+            "discovery_external_providers",
+            "discovery_filter_nsfw",
+            "discovery_release_status_filter",
+            "discovery_required_match_mode",
+            "discovery_required_enforcement",
+            "discovery_row_",
+            "discovery_seed_",
+            "discovery_trend_",
+        )
+
+        fun isRuntimeStateKey(key: String): Boolean {
+            if (Preference.isAppState(key)) return true
+            return runtimeStatePrefixes.any { key.startsWith(it) }
+        }
+
+        fun isGenerationConfigKey(key: String): Boolean =
+            globalGenerationConfigPrefixes.any { key.startsWith(it) }
     }
 }

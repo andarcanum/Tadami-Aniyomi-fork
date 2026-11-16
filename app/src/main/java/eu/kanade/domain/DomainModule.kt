@@ -697,9 +697,17 @@ class DomainModule : InjektModule {
                 get<NovelDatabaseHandler>(),
             )
         }
-        addSingletonFactory<DiscoveryCandidateValidator> { AppDiscoveryCandidateValidator(get()) }
+        addSingletonFactory<eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver> {
+            eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver(get(), get())
+        }
+        addSingletonFactory<tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider> {
+            get<eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver>()
+        }
+        addSingletonFactory<DiscoveryCandidateValidator> { AppDiscoveryCandidateValidator(get(), get()) }
         addSingletonFactory<DiscoverySeedSources> { AppDiscoverySeedSources() }
-        addSingletonFactory<DiscoveryRunner> { DiscoveryRunner(get(), get(), get()) }
+        addSingletonFactory<DiscoveryRunner> {
+            DiscoveryRunner(get(), get(), get(), sourcePolicyProvider = get())
+        }
 
         addFactory { DeleteChapterDownload(get(), get()) }
 

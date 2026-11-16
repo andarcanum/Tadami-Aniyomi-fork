@@ -1,7 +1,17 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import java.util.concurrent.CopyOnWriteArrayList
 
 class ShikimoriTrendingSourceTest {
 
@@ -76,6 +86,75 @@ class ShikimoriTrendingSourceTest {
         plain.contains("censored=false") shouldBe true
         plain.contains("genre=") shouldBe false
         plain.contains("status=") shouldBe false
+    }
+
+    @Test
+    fun `same Shikimori title metadata is resolved separately for anime and manga`(): Unit = runBlocking {
+        val requestedPaths = CopyOnWriteArrayList<String>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val path = chain.request().url.encodedPath
+                requestedPaths += path
+                val body = when (path) {
+                    "/api/animes" -> """
+                        [{"id":101,"name":"Same Shikimori Cache Title","russian":"Anime alias",
+                          "image":null,"score":8.0,"status":"released","kind":"tv",
+                          "description":null,"genres":null,"url":"/animes/101"}]
+                    """.trimIndent()
+                    "/api/mangas" -> """
+                        [{"id":202,"name":"Same Shikimori Cache Title","russian":"Manga alias",
+                          "image":null,"score":8.0,"status":"released","kind":"manga",
+                          "description":null,"genres":null,"url":"/mangas/202"}]
+                    """.trimIndent()
+                    "/api/animes/101" -> """
+                        {"id":101,"name":"Same Shikimori Cache Title","russian":"Anime alias",
+                         "image":null,"score":8.0,"status":"released","kind":"tv",
+                         "description":"Anime-only synopsis",
+                         "genres":[{"id":1,"name":"Action","russian":"Экшен"}],"url":"/animes/101"}
+                    """.trimIndent()
+                    "/api/mangas/202" -> """
+                        {"id":202,"name":"Same Shikimori Cache Title","russian":"Manga alias",
+                         "image":null,"score":8.0,"status":"released","kind":"manga",
+                         "description":"Manga-only synopsis",
+                         "genres":[{"id":2,"name":"Romance","russian":"Романтика"}],"url":"/mangas/202"}
+                    """.trimIndent()
+                    else -> "[]"
+                }
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(body.toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+        try {
+            val source = ShikimoriTrendingSource(
+                clientProvider = { client },
+                jsonProvider = { Json },
+                isRussianLocaleProvider = { false },
+                nsfwFilterProvider = { true },
+            )
+            withTimeout(10_000L) {
+                val anime = DiscoveryMeta("Anime-only synopsis", listOf("Action"), "Anime alias")
+                val manga = DiscoveryMeta("Manga-only synopsis", listOf("Romance"), "Manga alias")
+                source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.ANIME) shouldBe anime
+                source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.MANGA) shouldBe manga
+                source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.ANIME) shouldBe anime
+                source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.MANGA) shouldBe manga
+                source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.NOVEL) shouldBe null
+                requestedPaths.toList() shouldBe listOf(
+                    "/api/animes",
+                    "/api/animes/101",
+                    "/api/mangas",
+                    "/api/mangas/202",
+                )
+            }
+        } finally {
+            client.dispatcher.executorService.shutdownNow()
+            client.connectionPool.evictAll()
+        }
     }
 
     @Test

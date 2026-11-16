@@ -163,7 +163,7 @@ open class ShikimoriTrendingSource(
     private val nsfwFilterProvider: () -> Boolean = { discoveryNsfwFilterEnabled() },
 ) : DiscoveryTrendingSource {
 
-    private val metaCache = DiscoveryLruCache<String, DiscoveryMeta>(200)
+    private val metaCache = DiscoveryLruCache<DiscoveryMetadataCacheKey, DiscoveryMeta>(200)
 
     private val headers = Headers.Builder()
         .add("User-Agent", "Tadami/1.0 (Android)")
@@ -310,7 +310,9 @@ open class ShikimoriTrendingSource(
 
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
         if (mediaType == DiscoveryMediaType.NOVEL) return null
-        metaCache.get(title)?.let { return it }
+        val filterNsfw = nsfwFilterProvider()
+        val cacheKey = DiscoveryMetadataCacheKey(mediaType, title, filterNsfw)
+        metaCache.get(cacheKey)?.let { return it.takeIf { nsfwFilterProvider() == filterNsfw } }
 
         return try {
             val endpoint = if (mediaType == DiscoveryMediaType.ANIME) "animes" else "mangas"
@@ -342,7 +344,8 @@ open class ShikimoriTrendingSource(
                 genres = genreNames,
                 altTitle = altTitle,
             )
-            metaCache.put(title, meta)
+            if (nsfwFilterProvider() != filterNsfw) return null
+            metaCache.put(cacheKey, meta)
             meta
         } catch (e: CancellationException) {
             throw e

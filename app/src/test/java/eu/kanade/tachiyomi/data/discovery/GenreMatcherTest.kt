@@ -280,4 +280,12 @@ class GenreMatcherTest {
         GenreMatcher.matchesConstraint("shonen ai", "Shounen Ai") shouldBe true
         GenreMatcher.matchesConstraint("shonen ai", "Yaoi") shouldBe false
     }
+
+    @Test
+    fun `identityKey сохраняет основной словарный ключ и транзитивность RU-EN алиасов`() {
+        GenreMatcher.identityKey("Milf") shouldBe "milf"
+        GenreMatcher.identityKey("Милфа") shouldBe "milf"
+        GenreMatcher.identityKey("Яндэре") shouldBe GenreMatcher.identityKey("Yandere")
+        GenreMatcher.identityKey("Умный гг") shouldBe GenreMatcher.identityKey("Smart MC")
+    }
 }

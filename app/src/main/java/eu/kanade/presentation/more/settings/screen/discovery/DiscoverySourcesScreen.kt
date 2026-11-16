@@ -26,11 +26,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -87,13 +89,19 @@ import eu.kanade.presentation.util.Screen as ParentScreen
  * (resolveAuroraTabContainerColor + rim-light): тонкие, округлые, прозрачные,
  * без сероватого frost-налёта. Единица списка — плагин (расширение), не языковой вариант.
  */
-class DiscoverySourcesScreen : ParentScreen() {
+class DiscoverySourcesScreen(
+    private val deferRefreshToParentSession: Boolean = false,
+) : ParentScreen() {
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
-        val model = rememberScreenModel { DiscoverySourcesScreenModel(context.applicationContext) }
+        val model = rememberScreenModel {
+            DiscoverySourcesScreenModel(context.applicationContext).apply {
+                setRefreshOnDispose(!deferRefreshToParentSession)
+            }
+        }
         val state by model.state.collectAsState()
         val colors = AuroraTheme.colors
 
@@ -175,7 +183,23 @@ class DiscoverySourcesScreen : ParentScreen() {
                                     AutoTopCard(state = state, model = model, colors = colors)
                                 }
                             }
-                            if (state.entries.isNotEmpty()) {
+                            if (state.entries.isEmpty() && state.hasInventoryError) {
+                                item(key = "inventory_error") {
+                                    InventoryStatusCard(
+                                        isError = true,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (state.entries.isEmpty() && state.isLoadingInventory) {
+                                item(key = "inventory_loading") {
+                                    InventoryStatusCard(
+                                        isError = false,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (state.entries.isNotEmpty()) {
                                 item(key = "auto_preview") {
                                     Box(modifier = Modifier.padding(bottom = 10.dp).alpha(0.38f)) {
                                         SourceSectionCard(
@@ -209,7 +233,23 @@ class DiscoverySourcesScreen : ParentScreen() {
                                     }
                                 }
                             }
-                            if (filtered.isEmpty()) {
+                            if (state.entries.isEmpty() && state.hasInventoryError) {
+                                item(key = "inventory_error") {
+                                    InventoryStatusCard(
+                                        isError = true,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (state.entries.isEmpty() && state.isLoadingInventory) {
+                                item(key = "inventory_loading") {
+                                    InventoryStatusCard(
+                                        isError = false,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (filtered.isEmpty()) {
                                 item(key = "empty") {
                                     Box(modifier = Modifier.padding(bottom = 10.dp)) {
                                         Text(
@@ -285,6 +325,51 @@ private fun Modifier.sectionSurface(colors: AuroraColors, shape: Shape): Modifie
     .clip(shape)
     .background(resolveAuroraTabContainerColor(colors))
     .border(width = 1.dp, brush = auroraMenuRimLightBrush(colors), shape = shape)
+
+@Composable
+private fun InventoryStatusCard(
+    isError: Boolean,
+    colors: AuroraColors,
+    onRetry: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+            .sectionSurface(colors, RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (isError) {
+            Text(
+                text = stringResource(MR.strings.unknown_error),
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = onRetry) {
+                Text(
+                    text = stringResource(MR.strings.action_retry),
+                    color = colors.accent,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.5.dp,
+                color = colors.accent,
+            )
+            Text(
+                text = stringResource(MR.strings.loading),
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
 
 @Composable
 private fun DiscoveryMediaTabs(

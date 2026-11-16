@@ -803,6 +803,7 @@ private fun HomeHubScreen(
                                 hasItems = discovery.isNotEmpty(),
                                 lastUpdatedAt = state.discoveryLastUpdated,
                                 isFailed = state.isDiscoveryFailed,
+                                isLoading = state.isDiscoveryLoading,
                             ),
                         )
                     }
@@ -841,6 +842,7 @@ private fun HomeHubScreen(
                                         hasItems = heroFeedItems.isNotEmpty(),
                                         lastUpdatedAt = state.discoveryLastUpdated,
                                         isFailed = state.isDiscoveryFailed,
+                                        isLoading = state.isDiscoveryLoading,
                                     ),
                                 )
                             }
@@ -962,6 +964,7 @@ private fun HomeHubScreen(
                                 hasItems = forYouItems.isNotEmpty(),
                                 lastUpdatedAt = state.discoveryLastUpdated,
                                 isFailed = state.isDiscoveryFailed,
+                                isLoading = state.isDiscoveryLoading,
                             ),
                         )
                     }
@@ -1022,7 +1025,7 @@ private fun HomeHubScreen(
                     previewItem = null
                     scope.launch {
                         val adder = DiscoveryLibraryAdder()
-                        val added = adder.addFromProvider(item.mediaType, item.title, item.provider)
+                        val added = adder.add(item.toDiscoverySuggestion())
                         if (added) {
                             context.toast(
                                 context.contextStringResource(AYMR.strings.for_you_added_snackbar, item.title),

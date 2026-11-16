@@ -401,12 +401,14 @@ object SettingsDiscoveryScreen : SearchableSettings {
 
         // V3: диалог жанров (игнор / приоритет / обязательные), отдельно для каждого медиараздела.
         if (showGenreDialog) {
-            val initialFilters = DiscoveryMediaType.entries.associateWith { mediaType ->
-                DiscoveryGenreFilterValues(
-                    priorityCsv = discoveryPreferences.priorityGenres(mediaType).get(),
-                    requiredCsv = discoveryPreferences.requiredGenres(mediaType).get(),
-                    ignoredCsv = discoveryPreferences.ignoredGenres(mediaType).get(),
-                )
+            val initialFilters = remember(showGenreDialog) {
+                DiscoveryMediaType.entries.associateWith { mediaType ->
+                    DiscoveryGenreFilterValues(
+                        priorityCsv = discoveryPreferences.priorityGenres(mediaType).get(),
+                        requiredCsv = discoveryPreferences.requiredGenres(mediaType).get(),
+                        ignoredCsv = discoveryPreferences.ignoredGenres(mediaType).get(),
+                    )
+                }
             }
             val initialMediaType = remember(showGenreDialog) {
                 resolveGenreDialogMediaType(discoveryPreferences.lastGenreDialogMediaType().get())
@@ -711,7 +713,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         title = stringResource(AYMR.strings.pref_discovery_sources_title),
                         subtitle = stringResource(AYMR.strings.pref_discovery_sources_summary),
                         icon = Icons.Outlined.Tune,
-                        onClick = { navigator.push(DiscoverySourcesScreen()) },
+                        onClick = { navigator.push(DiscoverySourcesScreen(deferRefreshToParentSession = true)) },
                         enabled = enabled,
                     ),
                 ),
@@ -875,8 +877,11 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             if (signals == 0) {
                                 stringResource(AYMR.strings.pref_discovery_taste_empty)
                             } else {
-                                stringResource(AYMR.strings.pref_discovery_taste_signal_count, signals) +
-                                    " · " + tasteTopGenres.joinToString { it.first }
+                                val topSuffix = tasteTopGenres.takeIf { it.isNotEmpty() }
+                                    ?.joinToString { it.first }
+                                    ?.let { " · $it" }
+                                    .orEmpty()
+                                stringResource(AYMR.strings.pref_discovery_taste_signal_count, signals) + topSuffix
                             }
                         },
                         icon = Icons.Outlined.AutoAwesome,
@@ -1113,11 +1118,23 @@ private fun GenreFilterDialog(
         1 -> priorityRaw
         else -> requiredRaw
     }
-    // «Занят другим режимом»: жанр состоит в любом из двух прочих наборов текущего раздела.
+    // «Занят другим режимом»: жанр (включая raw-эквивалент) состоит в любом из двух прочих наборов.
     val othersCanon: Set<String> = when (mode) {
-        0 -> priorityCan + requiredCan
-        1 -> ignoredCan + requiredCan
-        else -> ignoredCan + priorityCan
+        0 -> (
+            priorityCan + requiredCan + (priorityRaw + requiredRaw).mapNotNull {
+                eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it).takeIf(String::isNotEmpty)
+            }
+            ).toSet()
+        1 -> (
+            ignoredCan + requiredCan + (ignoredRaw + requiredRaw).mapNotNull {
+                eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it).takeIf(String::isNotEmpty)
+            }
+            ).toSet()
+        else -> (
+            ignoredCan + priorityCan + (ignoredRaw + priorityRaw).mapNotNull {
+                eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it).takeIf(String::isNotEmpty)
+            }
+            ).toSet()
     }
     val selectedColor = colors.accent
 
@@ -1125,10 +1142,13 @@ private fun GenreFilterDialog(
         // Сначала взаимоисключение: жанр вычищается из всех наборов (включая активный),
         // и только затем добавляется в активный. Иначе remove из активного набора
         // гасил только что сделанный add — чипы не подсвечивались.
-        priorityCan.remove(key)
-        requiredCan.remove(key)
-        ignoredCan.remove(key)
-        activeCanon.add(key)
+        moveDiscoveryGenreSelection(
+            key,
+            true,
+            mode,
+            listOf(ignoredCan, priorityCan, requiredCan),
+            listOf(ignoredRaw, priorityRaw, requiredRaw),
+        )
     }
 
     val toggleCanon: (String) -> Unit = { key ->
@@ -1567,55 +1587,61 @@ private fun GenreFilterDialog(
                             fontSize = 12.sp,
                             color = colors.textSecondary,
                         )
-                        // Совпадений нет — предлагаем добавить запрос как есть в активный
-                        // режим: каноническим ключом, если матчер резолвит, иначе raw-строкой.
-                        Spacer(Modifier.height(10.dp))
-                        Row(
-                            Modifier
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            selectedColor.copy(alpha = if (colors.isDark) 0.16f else 0.10f),
-                                            selectedColor.copy(alpha = if (colors.isDark) 0.06f else 0.04f),
+                        val pendingCustom = resolveUserGenreInput(search)
+                        if (pendingCustom.first.isNotBlank()) {
+                            // Совпадений нет — предлагаем добавить валидный запрос в активный
+                            // режим: каноническим ключом, если матчер резолвит, иначе raw-строкой.
+                            Spacer(Modifier.height(10.dp))
+                            Row(
+                                Modifier
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                selectedColor.copy(alpha = if (colors.isDark) 0.16f else 0.10f),
+                                                selectedColor.copy(alpha = if (colors.isDark) 0.06f else 0.04f),
+                                            ),
                                         ),
-                                    ),
-                                    CircleShape,
-                                )
-                                .border(1.dp, selectedColor.copy(alpha = 0.40f), CircleShape)
-                                .clickable {
-                                    appHaptics.tap()
-                                    val (resolved, isCanonical) = resolveUserGenreInput(search)
-                                    if (resolved.isNotBlank()) {
-                                        if (isCanonical) {
-                                            selectCanon(resolved)
-                                        } else {
-                                            priorityRaw.removeAll { it.equals(resolved, ignoreCase = true) }
-                                            requiredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
-                                            ignoredRaw.removeAll { it.equals(resolved, ignoreCase = true) }
-                                            activeRaw.add(resolved)
+                                        CircleShape,
+                                    )
+                                    .border(1.dp, selectedColor.copy(alpha = 0.40f), CircleShape)
+                                    .clickable {
+                                        appHaptics.tap()
+                                        val (resolved, isCanonical) = resolveUserGenreInput(search)
+                                        if (resolved.isNotBlank()) {
+                                            if (isCanonical) {
+                                                selectCanon(resolved)
+                                            } else {
+                                                moveDiscoveryGenreSelection(
+                                                    resolved,
+                                                    false,
+                                                    mode,
+                                                    listOf(ignoredCan, priorityCan, requiredCan),
+                                                    listOf(ignoredRaw, priorityRaw, requiredRaw),
+                                                )
+                                            }
+                                            search = ""
                                         }
                                     }
-                                    search = ""
-                                }
-                                .padding(horizontal = 14.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.Add,
-                                contentDescription = null,
-                                tint = selectedColor,
-                                modifier = Modifier.size(15.dp),
-                            )
-                            Text(
-                                stringResource(AYMR.strings.pref_discovery_genre_add_custom, search.trim()),
-                                color = selectedColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Add,
+                                    contentDescription = null,
+                                    tint = selectedColor,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                                Text(
+                                    stringResource(AYMR.strings.pref_discovery_genre_add_custom, search.trim()),
+                                    color = selectedColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     } else if (visibleChips.isNotEmpty()) {
                         FlowRow(
@@ -1913,6 +1939,36 @@ internal data class SelectedGenrePill(
     val label: String,
     val isCustom: Boolean,
 )
+
+/** Explicit moves clear only equal semantic identities, not a partially overlapping ambiguous constraint. */
+internal fun moveDiscoveryGenreSelection(
+    value: String,
+    isCanonical: Boolean,
+    mode: Int,
+    canonicalSets: List<MutableSet<String>>,
+    rawLists: List<MutableList<String>>,
+) {
+    val identity = eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(value)
+    if (identity.isEmpty()) return
+    val target = when (mode) {
+        0 -> 0
+        1 -> 1
+        else -> 2
+    }
+    canonicalSets.forEach { values ->
+        values.removeAll {
+            eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it) ==
+                identity
+        }
+    }
+    rawLists.forEach { values ->
+        values.removeAll {
+            eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it) ==
+                identity
+        }
+    }
+    if (isCanonical) canonicalSets[target].add(value) else rawLists[target].add(value)
+}
 
 internal fun resolveGenreDialogMediaType(savedKey: String): DiscoveryMediaType =
     DiscoveryMediaType.fromKey(savedKey) ?: DiscoveryMediaType.ANIME

@@ -44,11 +44,13 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
 import tachiyomi.domain.discovery.model.identityKeys
 import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
 import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
@@ -242,23 +244,29 @@ internal class DiscoveryFeedScreenModel(
     initialMedia: DiscoveryMediaType,
     private val context: Context,
     private val repository: DiscoveryRepository = Injekt.get(),
-    private val adder: DiscoveryLibraryAdder = DiscoveryLibraryAdder(),
     private val preferences: DiscoveryPreferences = Injekt.get(),
     private val trendingSource: DiscoveryTrendingSource = CompositeTrendingSource(),
     private val networkToLocalManga: NetworkToLocalManga = Injekt.get(),
     private val networkToLocalAnime: NetworkToLocalAnime = Injekt.get(),
     private val networkToLocalNovel: NetworkToLocalNovel = Injekt.get(),
+    sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
+    private val adder: DiscoveryLibraryAdder = DiscoveryLibraryAdder(
+        sourcePolicyProvider = { sourcePolicyProvider ?: Injekt.get() },
+    ),
 ) : StateScreenModel<DiscoveryFeedUiState>(DiscoveryFeedUiState(mediaType = initialMedia)) {
 
+    private val sourcePolicies by lazy { sourcePolicyProvider ?: Injekt.get<DiscoverySourcePolicyProvider>() }
     private var observeJob: Job? = null
     private var progressJob: Job? = null
     private var failureJob: Job? = null
+    private var visibleTabsJob: Job? = null
     private var prefetchJob: Job? = null
     private val hideUndoOperations = DiscoveryHideUndoQueue(screenModelScope)
     private var lastHidden: DiscoverySuggestion? = null
     private var lastHiddenTab: FeedSignalTab = FeedSignalTab.MIX
     private var lastBlacklistedTag: String? = null
     private var lastObservedPriorityGenres: Set<String>? = null
+    private var lastObservedInventoryComplete: Boolean? = null
 
     fun start() {
         observeMedia(state.value.mediaType)
@@ -286,7 +294,8 @@ internal class DiscoveryFeedScreenModel(
 
     /** Табы по настройкам рядов/провайдеров: выключенный ряд — мёртвый таб, скрываем. */
     private fun observeVisibleTabs() {
-        screenModelScope.launchIO {
+        visibleTabsJob?.cancel()
+        visibleTabsJob = screenModelScope.launchIO {
             combine(
                 preferences.rowLikeEnabled().changes(),
                 preferences.rowTrendEnabled().changes(),
@@ -309,6 +318,7 @@ internal class DiscoveryFeedScreenModel(
 
     private fun observeMedia(mediaType: DiscoveryMediaType) {
         lastObservedPriorityGenres = null
+        lastObservedInventoryComplete = null
         observeProgress(mediaType)
         failureJob?.cancel()
         failureJob = screenModelScope.launchIO {
@@ -335,42 +345,43 @@ internal class DiscoveryFeedScreenModel(
                 combine(
                     repository.subscribeBlacklist(mediaType),
                     preferences.observeGenreFilterSpec(mediaType),
-                ) { blacklist, filterSpec ->
+                    sourcePolicies.observe(mediaType),
+                ) { blacklist, filterSpec, sourcePolicy ->
                     DiscoveryCandidatePolicy(
                         spec = filterSpec,
                         blacklistedTags = blacklist,
-                    )
+                    ) to sourcePolicy
                 },
-            ) { all, refreshing, exclusions, failedCsv, policy ->
+            ) { all, refreshing, exclusions, failedCsv, policyPair ->
                 FeedSources(
                     all = all,
                     refreshing = refreshing,
                     hidden = exclusions.first,
                     failedCsv = failedCsv,
-                    policy = policy,
+                    policy = policyPair.first,
+                    sourcePolicy = policyPair.second,
                     consumed = exclusions.second,
                     memory = exclusions.third,
                 )
             }
-                .collectLatest { (all, refreshing, hidden, failedCsv, policy, consumed, memory) ->
+                .collectLatest { (all, refreshing, hidden, failedCsv, policy, sources, consumed, memory) ->
                     val priorityChanged = lastObservedPriorityGenres != null &&
                         lastObservedPriorityGenres != policy.priorityGenres
                     lastObservedPriorityGenres = policy.priorityGenres
+                    val inventoryJustCompleted =
+                        lastObservedInventoryComplete == false && sources.inventoryComplete
+                    lastObservedInventoryComplete = sources.inventoryComplete
+                    val resetWindows = priorityChanged || inventoryJustCompleted
                     // Кросс-рядовой дедуп: упавший ряд живёт старым кэшем и может
                     // содержать тайтлы свежих рядов — приоритет у rowType.ordinal.
-                    val allowed = filterFeedVisibleByExclusions(
+                    val eligible = filterFeedVisibleByExclusions(
                         items = all,
                         mediaType = mediaType,
                         hidden = hidden,
                         consumed = consumed,
                         memory = memory,
-                    ).filter { policy.isAllowed(it) }
-                    val visible = dedupeCrossRow(
-                        allowed.groupBy { it.rowType }
-                            .flatMap { (_, items) ->
-                                policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
-                            },
                     )
+                    val visible = projectCandidates(eligible, policy, sources)
                     val rows = groupFeedRows(visible)
                     // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
                     val mixTotal = DiscoveryMixQuotas().total
@@ -388,23 +399,30 @@ internal class DiscoveryFeedScreenModel(
                         interleaveTier(visible, mixTotal)
                     }
                     mutableState.update { current ->
+                        if (current.mediaType != mediaType) return@update current
+                        val liveMix = mix.filter(sources::allows)
+                        val liveRows = rows.mapValues { (_, row) ->
+                            row.filter(sources::allows)
+                        }.filterValues {
+                            it.isNotEmpty()
+                        }
                         val currentWindows = current.activeWindows
                         val updatedWindows = if (currentWindows.isEmpty() ||
                             currentWindows[FeedSignalTab.MIX].isNullOrEmpty()
                         ) {
-                            if (mix.isNotEmpty()) {
-                                mapOf(FeedSignalTab.MIX to sliceFeedWindow(mix, 0, FEED_WINDOW_SIZE))
+                            if (liveMix.isNotEmpty()) {
+                                mapOf(FeedSignalTab.MIX to sliceFeedWindow(liveMix, 0, FEED_WINDOW_SIZE))
                             } else {
                                 emptyMap()
                             }
-                        } else if (priorityChanged) {
+                        } else if (resetWindows) {
                             currentWindows.mapValues { (tab, _) ->
-                                val pool = if (tab == FeedSignalTab.MIX) mix else rows[tab.rowType()].orEmpty()
+                                val pool = if (tab == FeedSignalTab.MIX) liveMix else liveRows[tab.rowType()].orEmpty()
                                 sliceFeedWindow(pool, 0, FEED_WINDOW_SIZE)
                             }
                         } else {
                             currentWindows.mapValues { (tab, currentWindow) ->
-                                val pool = if (tab == FeedSignalTab.MIX) mix else rows[tab.rowType()].orEmpty()
+                                val pool = if (tab == FeedSignalTab.MIX) liveMix else liveRows[tab.rowType()].orEmpty()
                                 reconcileFeedWindow(
                                     currentWindow = currentWindow,
                                     pool = pool,
@@ -413,14 +431,14 @@ internal class DiscoveryFeedScreenModel(
                             }
                         }
                         current.copy(
-                            rows = rows,
-                            mix = mix,
+                            rows = liveRows,
+                            mix = liveMix,
                             hidden = hidden,
                             lastUpdatedAt = all.maxOfOrNull { s -> s.createdAt },
                             isRefreshing = refreshing,
-                            isLoading = false,
+                            isLoading = liveMix.isEmpty() && !sources.inventoryComplete,
                             failedRows = parseFailedRows(failedCsv),
-                            tabOffsets = if (priorityChanged) emptyMap() else current.tabOffsets,
+                            tabOffsets = if (resetWindows) emptyMap() else current.tabOffsets,
                             activeWindows = updatedWindows,
                         )
                     }
@@ -449,12 +467,26 @@ internal class DiscoveryFeedScreenModel(
             .mapNotNull { row -> byCleanTitle[row.cleanTitle] }
     }
 
+    private fun projectCandidates(
+        items: List<DiscoverySuggestion>,
+        policy: DiscoveryCandidatePolicy,
+        sources: DiscoverySourcePolicy = sourcePolicies.current(state.value.mediaType),
+    ): List<DiscoverySuggestion> {
+        val eligible = items.filter { sources.allows(it) && policy.isAllowed(it) }
+        return dedupeCrossRow(
+            eligible.groupBy { it.rowType }.flatMap { (_, row) ->
+                policy.filterRowCandidates(row, { it.genres }, scoreSelector = { it.score })
+            },
+        )
+    }
+
     private data class FeedSources(
         val all: List<DiscoverySuggestion>,
         val refreshing: Boolean,
         val hidden: Set<String>,
         val failedCsv: String,
         val policy: DiscoveryCandidatePolicy,
+        val sourcePolicy: DiscoverySourcePolicy,
         val consumed: Set<String>,
         val memory: List<DiscoveryTitleMemory>,
     )
@@ -488,7 +520,7 @@ internal class DiscoveryFeedScreenModel(
             val offset = state.value.tabOffsets[tab] ?: 0
             sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
         }
-        return filterByProvider(window, provider)
+        return filterByProvider(window.filter(sourcePolicies.current(state.value.mediaType)::allows), provider)
     }
 
     fun onTabSelected(tab: FeedSignalTab) {
@@ -572,37 +604,50 @@ internal class DiscoveryFeedScreenModel(
         lastHidden = null
         hideUndoOperations.enqueue {
             repository.undoHide(item.mediaType, item.cleanTitle)
-            val freshItem = repository.subscribe(item.mediaType).first()
-                .firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@enqueue
-            val consumed = repository.getSignals(item.mediaType)
-                .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
-            if (consumed || item.cleanTitle in repository.getHiddenTitles(item.mediaType)) return@enqueue
-            val eligibility = runCatching { repository.eligibility(item.mediaType) }.getOrNull()
-            if (eligibility != null && (
-                    freshItem.cleanTitle in eligibility.excludedIdentityKeys ||
-                        legacyDiscoveryKey(item.mediaType, freshItem.cleanTitle) in eligibility.excludedLookupKeys ||
-                        freshItem.identityKeys().any { it in eligibility.excludedIdentityKeys }
-                    )
-            ) {
-                return@enqueue
+            val rawPool = repository.subscribe(item.mediaType).first()
+            val consumed = repository.getSignals(item.mediaType).filter {
+                it.signalType.excludesFromFeed
+            }.mapTo(HashSet()) {
+                it.cleanTitle
             }
+            val hidden = repository.getHiddenTitles(item.mediaType)
+            val eligibility = eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
+                repository.eligibility(item.mediaType)
+            }.getOrNull()
             val blacklist = repository.getBlacklistedTags(item.mediaType)
-            val policy = DiscoveryCandidatePolicy(
-                spec = preferences.genreFilterSpec(item.mediaType),
-                blacklistedTags = blacklist,
-            )
-            if (!preferences.discoveryEnabled().get() || !policy.isAllowed(freshItem)) return@enqueue
-
+            val policy =
+                DiscoveryCandidatePolicy(
+                    spec = preferences.genreFilterSpec(item.mediaType),
+                    blacklistedTags = blacklist,
+                )
+            if (!preferences.discoveryEnabled().get() || state.value.mediaType != item.mediaType) return@enqueue
+            val excludedIdentities = eligibility?.excludedIdentityKeys.orEmpty()
+            val excludedLookups = eligibility?.excludedLookupKeys.orEmpty()
+            val eligible = rawPool.filterNot { candidate ->
+                candidate.cleanTitle in consumed || candidate.cleanTitle in hidden ||
+                    candidate.cleanTitle in excludedIdentities ||
+                    legacyDiscoveryKey(item.mediaType, candidate.cleanTitle) in excludedLookups ||
+                    candidate.identityKeys().any { it in excludedIdentities }
+            }
+            val projected = projectCandidates(eligible, policy)
+            val tabPool = if (tab == FeedSignalTab.MIX) projected else projected.filter { it.rowType == tab.rowType() }
+            val freshItem = tabPool.firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@enqueue
             mutableState.update { current ->
                 if (current.mediaType != item.mediaType) return@update current
                 val window = current.activeWindows[tab]
-                val updatedWindow = if (window != null && window.none { it.cleanTitle == freshItem.cleanTitle }) {
-                    listOf(freshItem) + window.dropLast(1)
+                val validWindow = window?.let { reconcileFeedWindow(it, tabPool, it.size) }
+                val updatedWindow = if (validWindow != null && validWindow.none {
+                        it.cleanTitle == freshItem.cleanTitle
+                    }
+                ) {
+                    (listOf(freshItem) + validWindow).take(window.size.coerceAtLeast(1))
                 } else {
-                    window
+                    validWindow
                 }
                 current.copy(
-                    activeWindows = if (updatedWindow != null) {
+                    activeWindows = if (updatedWindow !=
+                        null
+                    ) {
                         current.activeWindows + (tab to updatedWindow)
                     } else {
                         current.activeWindows
@@ -640,7 +685,7 @@ internal class DiscoveryFeedScreenModel(
         mutableState.update { it.copy(addingTitles = it.addingTitles + item.title) }
         screenModelScope.launchIO {
             val ok = try {
-                adder.addFromProvider(state.value.mediaType, item.title, item.provider)
+                adder.add(item)
             } finally {
                 mutableState.update { it.copy(addingTitles = it.addingTitles - item.title) }
             }
@@ -705,6 +750,7 @@ internal class DiscoveryFeedScreenModel(
         networkToLocalManga = networkToLocalManga,
         networkToLocalAnime = networkToLocalAnime,
         networkToLocalNovel = networkToLocalNovel,
+        sourcePolicyProvider = sourcePolicies,
     )
 }
 

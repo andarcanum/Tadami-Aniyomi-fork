@@ -97,16 +97,9 @@ internal fun DiscoveryPreviewSheet(
     val context = LocalContext.current
     val appHaptics = LocalAppHaptics.current
     val coverReloadTick = rememberCoverReloadTick()
-    val coverRequest = remember(context, item.coverUrl, item.provider, coverReloadTick) {
-        buildAuroraCoverImageRequest(
-            context,
-            discoveryCoverData(
-                coverMediaType,
-                item.provider,
-                item.coverUrl,
-                DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle),
-            ),
-        )
+    val coverModel = rememberDiscoveryCoverData(item, DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle))
+    val coverRequest = remember(context, coverModel, coverReloadTick) {
+        buildAuroraCoverImageRequest(context, coverModel)
     }
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Portrait)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

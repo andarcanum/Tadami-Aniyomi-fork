@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.home
 import android.content.Context
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.discovery.FakeDiscoveryRepositoryBase
+import eu.kanade.tachiyomi.data.discovery.discoveryQueryPolicyFixture
 import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
@@ -14,15 +15,34 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import tachiyomi.domain.discovery.model.DiscoveryBlacklistEntry
+import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryHiddenEntry
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 
 class HomeDiscoveryControllerTest {
+    private val sourcePolicies = object : DiscoverySourcePolicyProvider {
+        override fun current(
+            mediaType: DiscoveryMediaType,
+        ) = discoveryQueryPolicyFixture(
+            mediaType,
+            listOf(42L),
+            mapOf(
+                DiscoveryRowType.LIKE to setOf(DiscoveryExternalProvider.ANILIST),
+                DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST),
+                DiscoveryRowType.TREND to setOf(DiscoveryExternalProvider.ANILIST),
+            ),
+        )
+        override fun observe(mediaType: DiscoveryMediaType) = kotlinx.coroutines.flow.flowOf(current(mediaType))
+        override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = current(mediaType)
+    }
 
     private fun testSuggestion(title: String) = DiscoverySuggestion(
         id = 0L,
@@ -33,7 +53,7 @@ class HomeDiscoveryControllerTest {
         coverUrl = "cover_$title",
         reason = null,
         seedTitle = null,
-        provider = "test",
+        provider = "anilist_trend",
         score = 1.0,
         position = 0L,
         createdAt = 0L,
@@ -47,7 +67,7 @@ class HomeDiscoveryControllerTest {
         val recordedSignals = mutableListOf<Triple<String, DiscoverySignalType, List<String>>>()
 
         override suspend fun recordTaste(
-            identity: tachiyomi.domain.discovery.model.DiscoveryTitleIdentity,
+            identity: DiscoveryTitleIdentity,
             kind: DiscoverySignalType,
             metadata: tachiyomi.domain.discovery.model.DiscoveryTasteMetadata,
         ): tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt {
@@ -213,6 +233,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -260,6 +281,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -311,6 +333,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -359,6 +382,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -376,7 +400,7 @@ class HomeDiscoveryControllerTest {
                 title = "Consumed Card",
                 signalType = DiscoverySignalType.CONSUMED,
                 genres = emptyList(),
-                provider = "test",
+                provider = "anilist_trend",
                 sourceKey = null,
                 createdAt = 1000L,
             )
@@ -412,6 +436,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -448,6 +473,7 @@ class HomeDiscoveryControllerTest {
             showWelcome = false,
         )
         val controller = HomeDiscoveryController(
+            sourcePolicyProvider = sourcePolicies,
             mediaType = DiscoveryMediaType.ANIME,
             repository = repo,
             preferences = prefs,
@@ -478,6 +504,7 @@ class HomeDiscoveryControllerTest {
             showWelcome = false,
         )
         val controller = HomeDiscoveryController(
+            sourcePolicyProvider = sourcePolicies,
             mediaType = DiscoveryMediaType.ANIME,
             repository = repo,
             preferences = prefs,
@@ -509,6 +536,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -545,6 +573,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -602,6 +631,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -655,6 +685,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -701,6 +732,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -749,6 +781,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -786,6 +819,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -842,6 +876,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val animeController = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.ANIME,
                 repository = repo,
                 preferences = prefs,
@@ -853,6 +888,7 @@ class HomeDiscoveryControllerTest {
             )
 
             val novelController = HomeDiscoveryController(
+                sourcePolicyProvider = sourcePolicies,
                 mediaType = DiscoveryMediaType.NOVEL,
                 repository = repo,
                 preferences = prefs,
@@ -869,6 +905,72 @@ class HomeDiscoveryControllerTest {
             waitUntil { animeState.isDiscoveryFailed }
             animeState.isDiscoveryFailed shouldBe true
             novelState.isDiscoveryFailed shouldBe false
+        }
+    }
+
+    @Test
+    fun `incomplete inventory keeps isDiscoveryLoading true until native cache unlocks`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo().apply {
+                poolFlow.value = listOf(
+                    testSuggestion("Native Cached").copy(sourceId = 42L, provider = "Plugin"),
+                )
+            }
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
+                discoveryEnabled().set(true)
+                lastGenerationAt(DiscoveryMediaType.ANIME).set(10_000L)
+            }
+            val incompletePolicy = DiscoverySourcePolicy(
+                mediaType = DiscoveryMediaType.ANIME,
+                revision = "cold",
+                inventoryComplete = false,
+                allowedPluginKeys = emptySet(),
+                pluginMembers = emptyMap(),
+            )
+            val completePolicy = discoveryQueryPolicyFixture(
+                DiscoveryMediaType.ANIME,
+                listOf(42L),
+            )
+            val policyFlow = MutableStateFlow(incompletePolicy)
+            val dynamicPolicies = object : DiscoverySourcePolicyProvider {
+                override fun current(mediaType: DiscoveryMediaType) = policyFlow.value
+                override fun observe(mediaType: DiscoveryMediaType) = policyFlow
+                override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = completePolicy
+            }
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+            )
+            val controller = HomeDiscoveryController(
+                sourcePolicyProvider = dynamicPolicies,
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = mockk(relaxed = true),
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            controller.startObserving()
+            waitUntil { currentState.discoveryEnabled && currentState.isDiscoveryLoading }
+            resolveForYouEmptyState(
+                discoveryEnabled = currentState.discoveryEnabled,
+                isRefreshing = currentState.isDiscoveryRefreshing,
+                hasItems = currentState.discovery.isNotEmpty(),
+                lastUpdatedAt = currentState.discoveryLastUpdated,
+                isFailed = currentState.isDiscoveryFailed,
+                isLoading = currentState.isDiscoveryLoading,
+            ) shouldBe ForYouEmptyState.REFRESHING
+
+            policyFlow.value = completePolicy
+            waitUntil { currentState.discovery.isNotEmpty() && !currentState.isDiscoveryLoading }
+            currentState.discovery.map { it.title } shouldBe listOf("Native Cached")
         }
     }
 

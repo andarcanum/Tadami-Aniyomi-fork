@@ -138,6 +138,7 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import eu.kanade.tachiyomi.ui.discovery.discoveryCoverData
+import eu.kanade.tachiyomi.ui.discovery.rememberDiscoveryCoverData
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -773,7 +774,11 @@ internal fun resolveHybridDiscoveryStripLayoutSpec(deviceClass: AuroraDeviceClas
     }
 }
 
-/** Карточка discovery: гармонизирована с HomeHubRecentPosterCard (постер 0.9, скругление 16dp/18dp, текст под постером). */
+/** Карточка discovery: гармонизирована с HomeHubRecentPosterCard (
+ постер 0.9,
+ скругление 16dp/18dp,
+ текст под постером,
+). */
 @Composable
 internal fun DiscoveryPosterCard(
     title: String,
@@ -787,6 +792,7 @@ internal fun DiscoveryPosterCard(
     onLongClick: (() -> Unit)? = null,
     // Бейдж «откроется напрямую»: микро-молния в углу постера, читается до тапа.
     showsDirectOpenBadge: Boolean = false,
+    suggestion: tachiyomi.domain.discovery.model.DiscoverySuggestion? = null,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
@@ -841,16 +847,20 @@ internal fun DiscoveryPosterCard(
             ) {
                 val posterContext = LocalContext.current
                 val posterCoverReloadTick = rememberCoverReloadTick()
+                val sourceBoundCoverData = if (suggestion != null) rememberDiscoveryCoverData(suggestion) else null
+                val posterCoverData = if (suggestion != null) {
+                    sourceBoundCoverData
+                } else {
+                    discoveryCoverData(coverMediaType, coverProvider, coverUrl)
+                }
                 val posterCoverRequest = remember(
                     posterContext,
-                    coverUrl,
-                    coverMediaType,
-                    coverProvider,
+                    posterCoverData,
                     posterCoverReloadTick,
                 ) {
                     buildAuroraCoverImageRequest(
                         posterContext,
-                        discoveryCoverData(coverMediaType, coverProvider, coverUrl),
+                        posterCoverData,
                     )
                 }
                 AsyncImage(
@@ -1258,6 +1268,7 @@ internal fun ForYouSection(
                     coverMediaType = coverMediaType,
                     coverProvider = item.provider,
                     showsDirectOpenBadge = item.showsDirectOpenBadge(),
+                    suggestion = remember(item) { item.toDiscoverySuggestion() },
                     onLongClick = onLongClick?.let { { it(item) } },
                     onClick = {
                         appHaptics.tap()
@@ -1380,6 +1391,7 @@ internal fun HybridDiscoveryStrip(
                     coverMediaType = coverMediaType,
                     coverProvider = item.provider,
                     showsDirectOpenBadge = item.showsDirectOpenBadge(),
+                    suggestion = remember(item) { item.toDiscoverySuggestion() },
                     onClick = {
                         appHaptics.tap()
                         onItemClick(item)
@@ -2748,8 +2760,9 @@ private fun BoxScope.StageSlot(
     val appHaptics = LocalAppHaptics.current
     val context = LocalContext.current
     val coverReloadTick = rememberCoverReloadTick()
-    val coverRequest = remember(context, item.coverUrl, coverMediaType, item.provider, coverReloadTick) {
-        buildAuroraCoverImageRequest(context, discoveryCoverData(coverMediaType, item.provider, item.coverUrl))
+    val coverModel = rememberDiscoveryCoverData(item.toDiscoverySuggestion())
+    val coverRequest = remember(context, coverModel, coverReloadTick) {
+        buildAuroraCoverImageRequest(context, coverModel)
     }
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
     val tileShape = RoundedCornerShape(18.dp)
@@ -2923,8 +2936,9 @@ private fun CollageTile(
     val appHaptics = LocalAppHaptics.current
     val context = LocalContext.current
     val coverReloadTick = rememberCoverReloadTick()
-    val coverRequest = remember(context, item.coverUrl, coverMediaType, coverProvider, coverReloadTick) {
-        buildAuroraCoverImageRequest(context, discoveryCoverData(coverMediaType, coverProvider, item.coverUrl))
+    val coverModel = rememberDiscoveryCoverData(item.toDiscoverySuggestion())
+    val coverRequest = remember(context, coverModel, coverReloadTick) {
+        buildAuroraCoverImageRequest(context, coverModel)
     }
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
     val tileShape = RoundedCornerShape(16.dp)
@@ -3023,11 +3037,12 @@ internal fun resolveForYouEmptyState(
     hasItems: Boolean,
     lastUpdatedAt: Long?,
     isFailed: Boolean,
+    isLoading: Boolean = false,
 ): ForYouEmptyState? {
     if (hasItems) return null
     return when {
         !discoveryEnabled -> ForYouEmptyState.DISABLED
-        isRefreshing -> ForYouEmptyState.REFRESHING
+        isRefreshing || isLoading -> ForYouEmptyState.REFRESHING
         isFailed -> ForYouEmptyState.FAILED
         lastUpdatedAt == null || lastUpdatedAt == 0L -> ForYouEmptyState.NOT_LOADED_YET
         else -> ForYouEmptyState.NO_CANDIDATES

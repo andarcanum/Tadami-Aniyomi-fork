@@ -34,7 +34,9 @@ class DiscoverySourceRowBuilderTest {
             requested += sourceId
             requestedPopular += sourceId to page
             if (sourceId in failing) throw IOException("boom $sourceId")
-            return itemsByPage[sourceId to page] ?: itemsBySource[sourceId].orEmpty()
+            return (itemsByPage[sourceId to page] ?: itemsBySource[sourceId].orEmpty()).map {
+                it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+            }
         }
 
         override suspend fun popularPage(
@@ -85,7 +87,9 @@ class DiscoverySourceRowBuilderTest {
             genres: List<String>,
             page: Int,
             releaseStatuses: Set<DiscoveryReleaseStatus>,
-        ): List<DiscoveryRowItem> = genreItemsBySource[sourceId].orEmpty()
+        ): List<DiscoveryRowItem> = genreItemsBySource[sourceId].orEmpty().map {
+            it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+        }
 
         override suspend fun latest(
             mediaType: DiscoveryMediaType,
@@ -96,7 +100,9 @@ class DiscoverySourceRowBuilderTest {
             beforePage()
             requestedLatest += sourceId to page
             if (sourceId in failingLatest) throw IOException("latest boom $sourceId")
-            return itemsByPage[sourceId to page] ?: latestBySource[sourceId].orEmpty()
+            return (itemsByPage[sourceId to page] ?: latestBySource[sourceId].orEmpty()).map {
+                it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+            }
         }
     }
 
@@ -116,6 +122,14 @@ class DiscoverySourceRowBuilderTest {
         hiddenCleanTitles = emptySet(),
         sourceId = sourceId,
         sourceIds = sourceIds,
+        sourcePolicy = discoveryQueryPolicyFixture(
+            DiscoveryMediaType.MANGA,
+            sourceIds.ifEmpty {
+                listOf(sourceId).filter {
+                    it > 0L
+                }
+            },
+        ),
         pageOffset = pageOffset,
     )
 

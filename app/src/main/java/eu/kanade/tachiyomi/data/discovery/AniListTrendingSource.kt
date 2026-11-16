@@ -91,9 +91,31 @@ internal fun resolveSeasonWindow(nowMonth: Int, nowYear: Int, next: Boolean): Pa
 internal fun buildSeasonQuery(hasStatuses: Boolean): String {
     val statusArg = if (hasStatuses) ", status_in: \$statuses" else ""
     return """
-        query (${'$'}season: MediaSeason, ${'$'}year: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""}) {
+        query (${
+        '$'
+    }season: MediaSeason, ${
+        '$'
+    }year: Int, ${
+        '$'
+    }sort: [MediaSort], ${
+        '$'
+    }page: Int, ${
+        '$'
+    }isAdult: Boolean${
+        if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""
+    }) {
+
           Page(page: ${'$'}page, perPage: 50) {
-            media(type: ANIME, season: ${'$'}season, seasonYear: ${'$'}year, sort: ${'$'}sort, isAdult: ${'$'}isAdult$statusArg) {
+            media(type: ANIME, season: ${
+        '$'
+    }season, seasonYear: ${
+        '$'
+    }year, sort: ${
+        '$'
+    }sort, isAdult: ${
+        '$'
+    }isAdult$statusArg) {
+
               id title { romaji english native } coverImage { large } genres
             }
           }
@@ -105,7 +127,20 @@ internal fun buildPopularQuery(format: String?, hasStatuses: Boolean): String {
     val formatArg = if (format != null) ", format: \$format" else ""
     val statusArg = if (hasStatuses) ", status_in: \$statuses" else ""
     return """
-        query (${'$'}type: MediaType, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (format != null) ", ${'$'}format: MediaFormat" else ""}${if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""}) {
+        query (${
+        '$'
+    }type: MediaType, ${
+        '$'
+    }sort: [MediaSort], ${
+        '$'
+    }page: Int, ${
+        '$'
+    }isAdult: Boolean${
+        if (format != null) ", ${'$'}format: MediaFormat" else ""
+    }${
+        if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""
+    }) {
+
           Page(page: ${'$'}page, perPage: 50) {
             media(type: ${'$'}type, sort: ${'$'}sort, isAdult: ${'$'}isAdult$formatArg$statusArg) {
               id title { romaji english native } coverImage { large } genres
@@ -150,7 +185,7 @@ open class AniListTrendingSource(
     private val nsfwFilterProvider: () -> Boolean = { discoveryNsfwFilterEnabled() },
 ) : DiscoveryTrendingSource {
 
-    private val metaCache = DiscoveryLruCache<String, DiscoveryMeta>(200)
+    private val metaCache = DiscoveryLruCache<DiscoveryMetadataCacheKey, DiscoveryMeta>(200)
 
     /**
      * isAdult=false исключает взрослый контент серверной фильтрацией AniList;
@@ -351,9 +386,33 @@ open class AniListTrendingSource(
         val formatArg = if (format != null) ", format: ${'$'}format" else ""
         val statusArg = if (releaseStatuses.isNotEmpty()) ", status_in: ${'$'}statuses" else ""
         val query = """
-            query (${'$'}type: MediaType, ${'$'}genres: [String], ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (format != null) ", ${'$'}format: MediaFormat" else ""}${if (releaseStatuses.isNotEmpty()) ", ${'$'}statuses: [MediaStatus]" else ""}) {
+            query (${
+            '$'
+        }type: MediaType, ${
+            '$'
+        }genres: [String], ${
+            '$'
+        }sort: [MediaSort], ${
+            '$'
+        }page: Int, ${
+            '$'
+        }isAdult: Boolean${
+            if (format != null) ", ${'$'}format: MediaFormat" else ""
+        }${
+            if (releaseStatuses.isNotEmpty()) ", ${'$'}statuses: [MediaStatus]" else ""
+        }) {
+
               Page(page: ${'$'}page, perPage: 50) {
-                media(type: ${'$'}type, genre_in: ${'$'}genres, sort: ${'$'}sort, isAdult: ${'$'}isAdult$formatArg$statusArg) {
+                media(type: ${
+            '$'
+        }type, genre_in: ${
+            '$'
+        }genres, sort: ${
+            '$'
+        }sort, isAdult: ${
+            '$'
+        }isAdult$formatArg$statusArg) {
+
                   id title { romaji english native } coverImage { large } genres
                 }
               }
@@ -396,7 +455,9 @@ open class AniListTrendingSource(
 
     /** Лёгкие метаданные для превью-листа: описание/жанры/альт-тайтл по тайтлу (кэш в памяти). */
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
-        metaCache.get(title)?.let { return it }
+        val filterNsfw = nsfwFilterProvider()
+        val cacheKey = DiscoveryMetadataCacheKey(mediaType, title, filterNsfw)
+        metaCache.get(cacheKey)?.let { return it.takeIf { nsfwFilterProvider() == filterNsfw } }
         return try {
             val type = when (mediaType) {
                 DiscoveryMediaType.ANIME -> "ANIME"
@@ -425,7 +486,7 @@ open class AniListTrendingSource(
                     buildJsonObject {
                         put("search", title)
                         put("type", type)
-                        put("isAdult", adultVariableValue())
+                        put("isAdult", if (filterNsfw) false else null)
                     },
                 )
             }
@@ -456,7 +517,8 @@ open class AniListTrendingSource(
                 },
                 coverUrl = (media["coverImage"] as? JsonObject)?.get("large")?.jsonPrimitive?.contentOrNull,
             )
-            metaCache.put(title, meta)
+            if (nsfwFilterProvider() != filterNsfw) return null
+            metaCache.put(cacheKey, meta)
             meta
         } catch (e: CancellationException) {
             throw e

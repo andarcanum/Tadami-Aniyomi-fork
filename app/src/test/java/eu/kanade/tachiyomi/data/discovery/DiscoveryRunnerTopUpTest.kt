@@ -42,6 +42,14 @@ class DiscoveryRunnerTopUpTest {
     )
 
     private fun testSourcePrefs() = SourcePreferences(InMemoryPreferenceStore())
+    private val fixturePolicy = fixedDiscoveryQueryPolicyProvider(discoveryQueryPolicyFixture(media, listOf(1L)))
+    private fun fixtureConfig() =
+        computeDiscoveryConfigurationKey(
+            DiscoveryPreferences(InMemoryPreferenceStore()),
+            media,
+            testSourcePrefs(),
+            fixturePolicy.current(media).revision,
+        )
 
     private class TopUpTestRepository(
         var poolSnapshot: DiscoveryPublicationSnapshot,
@@ -121,8 +129,8 @@ class DiscoveryRunnerTopUpTest {
                 mediaType = media,
                 generation = 5L,
                 projectionVersion = 5L,
-                configurationKey = "cfg",
-                desiredConfigurationKey = "cfg",
+                configurationKey = fixtureConfig(),
+                desiredConfigurationKey = fixtureConfig(),
                 publishedByRequestId = null,
                 committedAt = 1000L,
                 outcome = null,
@@ -167,7 +175,7 @@ class DiscoveryRunnerTopUpTest {
                 },
                 coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
                 sourcePreferencesProvider = ::testSourcePrefs,
-                installedPluginsProvider = { emptyList() },
+                sourcePolicyProvider = fixturePolicy,
                 fallbackSourceIdProvider = { 1L },
             )
 
@@ -187,8 +195,8 @@ class DiscoveryRunnerTopUpTest {
             mediaType = media,
             generation = 5L,
             projectionVersion = 5L,
-            configurationKey = "cfg",
-            desiredConfigurationKey = "cfg",
+            configurationKey = fixtureConfig(),
+            desiredConfigurationKey = fixtureConfig(),
             publishedByRequestId = null,
             committedAt = 1000L,
             outcome = null,
@@ -221,7 +229,7 @@ class DiscoveryRunnerTopUpTest {
             },
             coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
             sourcePreferencesProvider = ::testSourcePrefs,
-            installedPluginsProvider = { emptyList() },
+            sourcePolicyProvider = fixturePolicy,
             fallbackSourceIdProvider = { 1L },
         )
 
@@ -238,8 +246,8 @@ class DiscoveryRunnerTopUpTest {
             mediaType = media,
             generation = 5L,
             projectionVersion = 5L,
-            configurationKey = "cfg",
-            desiredConfigurationKey = "cfg",
+            configurationKey = fixtureConfig(),
+            desiredConfigurationKey = fixtureConfig(),
             publishedByRequestId = null,
             committedAt = 1000L,
             outcome = null,
@@ -292,10 +300,17 @@ class DiscoveryRunnerTopUpTest {
             },
             coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
             sourcePreferencesProvider = ::testSourcePrefs,
-            installedPluginsProvider = { emptyList() },
+            sourcePolicyProvider = fixturePolicy,
             fallbackSourceIdProvider = { 1L },
         )
 
+        val key = computeDiscoveryConfigurationKey(
+            preferences,
+            media,
+            testSourcePrefs(),
+            fixturePolicy.current(media).revision,
+        )
+        repo.poolSnapshot = repo.poolSnapshot.copy(configurationKey = key, desiredConfigurationKey = key)
         val outcome = runner.run(listOf(media), topUp = true).getValue(media)
 
         repo.topUpPoolCalled shouldBe true

@@ -8,7 +8,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
 import tachiyomi.domain.discovery.model.DiscoveryPublicationOutcome
@@ -19,10 +21,12 @@ import tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySourceCursor
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -87,6 +91,9 @@ private const val WORKER_BUDGET_MARGIN_MS = 10_000L
 /** Even with many media types, one run must keep enough time to be useful. */
 private const val MIN_MEDIA_BUDGET_MS = 20_000L
 
+/** Startup must not consume the whole media deadline when external rows can still be useful. */
+private const val SOURCE_INVENTORY_WAIT_MS = 5_000L
+
 /**
  * Оркестратор фонового обновления ленты «Для тебя»:
  * сиды → строители рядов → [DiscoveryCoordinator] → персист успешных рядов.
@@ -106,6 +113,8 @@ class DiscoveryRunner(
         SuggestionCoordinator(sourcePreferencesProvider())
     },
     private val sourceCatalog: DiscoverySourceCatalog = AppDiscoverySourceCatalog(),
+    /** Production injects the live module; null is reserved for explicit legacy inventory fixtures. */
+    private val sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
     /** Сигнал о провале рядов для UI-баннера «показан кэш»; дефолт персистит CSV в prefs. */
     private val failedRowsSink: suspend (DiscoveryMediaType, Set<DiscoveryRowType>) -> Unit = { media, rows ->
         preferences.lastFailedRows(media).set(rows.joinToString(",") { it.key })
@@ -258,7 +267,12 @@ class DiscoveryRunner(
         mediaBudgetMs: Long? = null,
         isConfigurationRefresh: Boolean = false,
         topUp: Boolean = false,
+        allowColdInventoryRetry: Boolean = true,
     ): DiscoveryRunOutcome {
+        val mediaStartedAt = System.nanoTime() / 1_000_000L
+        val totalMediaBudgetMs = mediaBudgetMs ?: DiscoveryVerificationBudget.DEFAULT_MEDIA_BUDGET_MS
+        fun remainingMediaMs(): Long =
+            (totalMediaBudgetMs - (System.nanoTime() / 1_000_000L - mediaStartedAt)).coerceAtLeast(0L)
         DiscoveryProgressTracker.update(
             isRunning = true,
             mediaType = mediaType,
@@ -302,10 +316,7 @@ class DiscoveryRunner(
             }
         }
         val eligibilitySnapshot = repository.eligibility(mediaType)
-        val configurationKey = discoveryConfigurationKey(mediaType)
         val harvestPages = if (isManualRefresh) MAX_MANUAL_HARVEST_PAGES else 1
-        val resumeCursor = previousPool?.cursors.orEmpty()
-            .firstOrNull { it.queryKey == configurationKey && !it.exhausted }
         val feedbackSeeds = selectFeedbackSeeds(allSignals, mediaType, limit = minOf(2, totalSeedBudget))
         val librarySeedBudget = (totalSeedBudget - feedbackSeeds.size).coerceAtLeast(0)
         val feedbackCleanTitles = feedbackSeeds.mapTo(HashSet()) { it.cleanTitle }
@@ -336,84 +347,50 @@ class DiscoveryRunner(
             DiscoveryMediaType.MANGA -> sourcePreferences.lastUsedMangaSource().get()
             DiscoveryMediaType.NOVEL -> sourcePreferences.lastUsedNovelSource().get()
         }
-        // Участие плагинов: единица — расширение (все языковые варианты), не источник.
-        // auto = топ-3 плагинов по весу библиотеки, manual = набор пользователя (cap 8).
-        val plugins = installedPluginsProvider(mediaType)
         val sourceWeights = candidates.filter { it.sourceId > 0 }.groupingBy { it.sourceId }.eachCount()
-        val isManualMode = preferences.discoverySourceMode(mediaType).get() == "manual"
         val learnedSourceAffinity = foldLearnedTasteProfile(signals = allSignals).sourceAffinity
         val sourceFailureHistory = parseSourceFailureHistory(preferences.sourceFailureHistory(mediaType).get())
         val runnerNow = System.currentTimeMillis()
-        val pluginStats = plugins.mapNotNull { plugin ->
-            val representative = selectPluginRepresentative(
-                memberIds = plugin.sourceIds.toSet(),
-                weights = sourceWeights,
-                langs = plugin.langs,
-                appLang = java.util.Locale.getDefault().language.lowercase(),
-            ) ?: return@mapNotNull null
-            DiscoveryPluginStat(
-                key = plugin.key,
-                representative = representative,
-                memberIds = plugin.sourceIds.toSet(),
-                weight = if (isManualMode) 1 else plugin.sourceIds.sumOf { sourceWeights[it] ?: 0 },
-                affinity = learnedSourceAffinity[plugin.key] ?: 0.0,
-            )
-        }.sortedWith(
-            compareByDescending<DiscoveryPluginStat> {
-                val base = applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
-                val reliability = calculateSourceReliabilityFactor(it.representative, sourceFailureHistory, runnerNow)
-                base * reliability
-            }.thenBy { it.representative },
-        )
-        val effectiveSourceWeights = pluginStats.associate {
-            val base = applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
-            val reliability = calculateSourceReliabilityFactor(it.representative, sourceFailureHistory, runnerNow)
-            it.representative to (base * reliability)
-        }
-        val excludedKeys = if (pluginStats.isNotEmpty()) {
-            reconcileDiscoverySourcePreferences(
-                preferences = preferences,
-                mediaType = mediaType,
-                installedKeys = pluginStats.map { it.key },
-            ).excludedKeys
+        val legacyPlugins = if (sourcePolicyProvider == null) {
+            installedPluginsProvider(mediaType).map {
+                it.copy(sourceIds = it.sourceIds.toList(), langs = it.langs.toMap())
+            }
         } else {
-            parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
+            emptyList()
         }
-        val participation = if (pluginStats.isEmpty()) {
-            // Плагины неизвестны (юнит-тесты / расширения ещё не загружены при раннем старте):
-            // легаси-порядок по весу библиотеки без исключений (нет маппинга ключ→источник).
-            resolveSourceParticipation(
-                mode = preferences.discoverySourceMode(mediaType).get(),
-                excludedIds = emptySet(),
-                weightOrder = rankSourceIds(candidates, limit = Int.MAX_VALUE),
-                lastUsedId = preferredSourceId,
-                fallbackId = fallbackSourceIdProvider(mediaType),
+        if (sourcePolicyProvider != null) {
+            (sourcePolicyProvider as? DiscoverySourcePolicyResolver)?.updateRetrievalWeights(
+                mediaType,
+                sourceWeights,
+                learnedSourceAffinity,
+                capturedAt = runnerNow,
             )
-        } else {
-            val excludedIds = pluginStats.filter { it.key in excludedKeys }.mapTo(HashSet()) { it.representative }
-            // lastUsed/fallback исключённого плагина не должен просочиться в primary.
-            val lastUsedPlugin = pluginStats.firstOrNull { preferredSourceId in it.memberIds }
-            val effectiveLastUsed = if (lastUsedPlugin == null || lastUsedPlugin.key !in excludedKeys) {
-                preferredSourceId
+            val beforeReadiness = sourcePolicyProvider.current(mediaType)
+            if (beforeReadiness.inventoryComplete) {
+                reconcileDiscoverySourcePreferences(preferences, mediaType, beforeReadiness.pluginMembers.keys)
             } else {
-                -1L
+                val waitMs = minOf(SOURCE_INVENTORY_WAIT_MS, remainingMediaMs())
+                if (waitMs > 0L) {
+                    withTimeoutOrNull(waitMs) {
+                        runCatchingUnlessCancelled { sourcePolicyProvider.awaitComplete(mediaType) }.getOrNull()
+                    }
+                }
             }
-            val rawFallback = fallbackSourceIdProvider(mediaType)
-            val fallbackPlugin = pluginStats.firstOrNull { rawFallback in it.memberIds }
-            val effectiveFallback = when {
-                rawFallback <= 0 -> rawFallback
-                fallbackPlugin == null -> rawFallback
-                fallbackPlugin.key in excludedKeys -> -1L
-                else -> fallbackPlugin.representative
-            }
-            resolveSourceParticipation(
-                mode = preferences.discoverySourceMode(mediaType).get(),
-                excludedIds = excludedIds,
-                weightOrder = pluginStats.map { it.representative },
-                lastUsedId = effectiveLastUsed,
-                fallbackId = effectiveFallback,
-            )
+        } else if (legacyPlugins.isNotEmpty()) {
+            // Explicit legacy fixtures assert a complete ownership list; they never authorize by library/fallback id.
+            reconcileDiscoverySourcePreferences(preferences, mediaType, legacyPlugins.map { it.key })
         }
+        fun currentSourcePolicy(): DiscoverySourcePolicy =
+            sourcePolicyProvider?.current(mediaType) ?: legacySourcePolicy(
+                mediaType,
+                legacyPlugins,
+                sourceWeights,
+                learnedSourceAffinity,
+                sourceFailureHistory,
+                runnerNow,
+                sourcePreferences,
+            )
+        var sourcePolicy = currentSourcePolicy()
 
         val seedsWithTracks = seeds.map { seed ->
             val trackTitles = runCatching { trackTitles(mediaType, seed.entryId) }.getOrDefault(emptyList())
@@ -440,14 +417,6 @@ class DiscoveryRunner(
         }.getOrDefault(emptyMap())
         val shownTitles = shownCutoffMap.keys
         val recentCleanTitles = shownTitles
-        val pageOffset = when {
-            isConfigurationRefresh -> 1
-            // A manual refresh scans from the top until enough genuinely new
-            // titles are collected; the persisted cursor is for background cycles.
-            isManualRefresh -> 1
-            resumeCursor != null -> resumeCursor.nextPage.coerceAtLeast(1)
-            else -> backgroundPageOffset(candidateBackgroundCycle)
-        }
 
         // Taste Learning Engine: fold сигнал-лога и слияние с библиотечным профилем.
         // Плавный старт (blend) — при пустом логе merge возвращает библиотечный профиль как есть.
@@ -482,12 +451,59 @@ class DiscoveryRunner(
             .mapTo(HashSet()) { it.cleanTitle }
 
         val genreFilterSpec = preferences.genreFilterSpec(mediaType)
+        sourcePolicy = currentSourcePolicy()
+        val initialInventoryComplete = sourcePolicy.inventoryComplete
+        val configurationKey = discoveryConfigurationKey(mediaType, sourcePreferences, sourcePolicy.revision)
+        val resumeCursor = previousPool?.cursors.orEmpty()
+            .firstOrNull { it.queryKey == configurationKey && !it.exhausted }
+        val pageOffset = when {
+            isConfigurationRefresh || isManualRefresh -> 1
+            resumeCursor != null -> resumeCursor.nextPage.coerceAtLeast(1)
+            else -> backgroundPageOffset(candidateBackgroundCycle)
+        }
+        var configurationSuperseded = false
+        suspend fun configurationIsCurrent(): Boolean {
+            val livePolicy = currentSourcePolicy()
+            val liveKey = discoveryConfigurationKey(mediaType, sourcePreferences, livePolicy.revision)
+            if (livePolicy.revision == sourcePolicy.revision && liveKey == configurationKey) return true
+            // Only a freshly read desired key may supersede this request; never reinstall its captured old key after IO.
+            repository.installConfigurationKey(mediaType, liveKey)
+            configurationSuperseded = true
+            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+            return false
+        }
+        var remainingBudgetMs = remainingMediaMs()
+        if (remainingBudgetMs <= 0L) {
+            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+            return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED)
+        }
+        repository.installConfigurationKey(mediaType, configurationKey)
+        if (!configurationIsCurrent()) return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED)
+        remainingBudgetMs = remainingMediaMs()
+        if (remainingBudgetMs <= 0L) return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED)
+        if (topUp && previousPool?.configurationKey != configurationKey) {
+            return runForLocked(
+                mediaType,
+                isManualRefresh = false,
+                mediaBudgetMs = remainingMediaMs(),
+                isConfigurationRefresh = true,
+                topUp = false,
+            )
+        }
+        val primary = sourcePolicy.primarySourceId(preferredSourceId)
+        val primarySourceId = if (primary > 0L) {
+            primary
+        } else {
+            val fallback = if (sourcePolicyProvider == null) fallbackSourceIdProvider(mediaType) else -1L
+            fallback.takeIf { sourcePolicy.allowsNative(it) } ?: -1L
+        }
         // One budget for the whole media run: every row shares the deadline and
         // the details allowance, so rows cannot multiply the worker cost.
         // Genre-selected mode verifies deep pages of a few rich sources, so it
         // gets a larger allowance; the deadline remains the real guard.
         val verificationBudget = DiscoveryVerificationBudget(
-            budgetMs = mediaBudgetMs ?: DiscoveryVerificationBudget.DEFAULT_MEDIA_BUDGET_MS,
+            budgetMs = remainingBudgetMs,
             maxDetails = if (genreFilterSpec.requiredGenres.isNotEmpty()) {
                 DiscoveryVerificationBudget.DEFAULT_REQUIRED_MAX_DETAILS
             } else {
@@ -510,11 +526,10 @@ class DiscoveryRunner(
             priorityGenres = genreFilterSpec.priorityGenres,
             requiredGenres = genreFilterSpec.requiredGenres,
             genreFilterSpec = genreFilterSpec,
-            sourceId = participation.primarySourceId,
-            // C1 + участие плагинов: состав определяет resolveSourceParticipation
-            // (auto — топ-3 по весу библиотеки, manual — все выбранные).
-            sourceIds = participation.sourceIds,
-            sourceWeights = effectiveSourceWeights,
+            sourceId = primarySourceId,
+            sourceIds = sourcePolicy.representativeSourceIds,
+            sourceWeights = sourcePolicy.sourceWeights,
+            sourcePolicy = sourcePolicy,
             recentCleanTitles = recentCleanTitles,
             shownCutoffMap = shownCutoffMap,
             // Ручной рефреш: тайтлы текущей ленты не возвращаются stale-добором —
@@ -535,8 +550,8 @@ class DiscoveryRunner(
             preferences.rowTasteEnabled().get() &&
             preferences.rowSourceEnabled().get()
         ) {
-            val ids = participation.sourceIds.filter { it > 0L }
-                .ifEmpty { listOf(participation.primarySourceId).filter { it > 0L } }
+            val ids = sourcePolicy.representativeSourceIds.filter { sourcePolicy.allowsNative(it) }
+                .ifEmpty { listOf(primarySourceId).filter { sourcePolicy.allowsNative(it) } }
             if (ids.isEmpty()) {
                 null
             } else {
@@ -713,6 +728,24 @@ class DiscoveryRunner(
             else -> null
         }
 
+        if (!configurationIsCurrent()) {
+            if (allowColdInventoryRetry && !initialInventoryComplete &&
+                currentSourcePolicy().inventoryComplete && remainingMediaMs() >= MIN_MEDIA_BUDGET_MS
+            ) {
+                return runForLocked(
+                    mediaType = mediaType,
+                    isManualRefresh = isManualRefresh,
+                    mediaBudgetMs = remainingMediaMs(),
+                    isConfigurationRefresh = isConfigurationRefresh,
+                    topUp = topUp,
+                    allowColdInventoryRetry = false,
+                )
+            }
+            if (previousPool == null && !initialInventoryComplete) {
+                preferences.bootstrapAttemptAt(mediaType).set(0L)
+            }
+            return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED, attemptedRows = attemptedRows)
+        }
         if (topUp) {
             val topUpReceipt = repository.topUpPool(
                 media = mediaType,
@@ -752,7 +785,7 @@ class DiscoveryRunner(
                         return runForLocked(
                             mediaType = mediaType,
                             isManualRefresh = false,
-                            mediaBudgetMs = mediaBudgetMs,
+                            mediaBudgetMs = remainingMediaMs(),
                             isConfigurationRefresh = isConfigurationRefresh,
                             topUp = false,
                         )
@@ -781,14 +814,13 @@ class DiscoveryRunner(
             }
         }
 
-        repository.installConfigurationKey(mediaType, configurationKey)
         val requestId = java.util.UUID.randomUUID().toString()
         val token = if (prepared != null) {
             repository.reserveGeneration(mediaType, requestId, expectedGeneration, configurationKey)
         } else {
             null
         }
-        val publishReceipt = if (prepared != null && token != null) {
+        val publishReceipt = if (prepared != null && token != null && configurationIsCurrent()) {
             val retirement = when {
                 isConfigurationRefresh -> DiscoveryRetirementPolicy.NONE
                 isManualRefresh -> DiscoveryRetirementPolicy.RETIRE_ALL
@@ -796,12 +828,13 @@ class DiscoveryRunner(
             }
             repository.publishGeneration(token, prepared, retirement)
         } else {
+            if (token != null) repository.revokeGeneration(mediaType, requestId)
             null
         }
         val published = publishReceipt as? DiscoveryPublishReceipt.Published
 
         var keptTopUpReceipt: DiscoveryTopUpReceipt? = null
-        if (publishReceipt is DiscoveryPublishReceipt.KeptExisting) {
+        if (publishReceipt is DiscoveryPublishReceipt.KeptExisting && configurationIsCurrent()) {
             val additions = if (prepared is DiscoveryPreparedPool.Fresh) topUpAdditions else emptyList()
             val cursors = when (prepared) {
                 is DiscoveryPreparedPool.Fresh -> prepared.cursors
@@ -846,6 +879,7 @@ class DiscoveryRunner(
         }
 
         val status = when {
+            configurationSuperseded -> DiscoveryRunStatus.SKIPPED
             publishReceipt is DiscoveryPublishReceipt.Superseded -> DiscoveryRunStatus.SKIPPED
             allExecutedFailed -> DiscoveryRunStatus.FAILED
             publishReceipt is DiscoveryPublishReceipt.KeptExisting ->
@@ -864,7 +898,8 @@ class DiscoveryRunner(
             else -> DiscoveryRunStatus.SUCCESS
         }
 
-        val poolAdvanced = published != null || topUpAdded || publishReceipt is DiscoveryPublishReceipt.KeptExisting
+        val poolAdvanced = !configurationSuperseded &&
+            (published != null || topUpAdded || publishReceipt is DiscoveryPublishReceipt.KeptExisting)
         if (actualExecutedRows.isNotEmpty() && !allExecutedFailed && poolAdvanced) {
             if (isManualRefresh) {
                 preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
@@ -883,6 +918,11 @@ class DiscoveryRunner(
 
         preferences.lastGenerationStatus(mediaType).set(status.name)
         preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+        if (previousPool == null && !initialInventoryComplete &&
+            (status == DiscoveryRunStatus.SKIPPED || status == DiscoveryRunStatus.FAILED)
+        ) {
+            preferences.bootstrapAttemptAt(mediaType).set(0L)
+        }
 
         return DiscoveryRunOutcome(
             mediaType = mediaType,
@@ -893,8 +933,127 @@ class DiscoveryRunner(
             persistedRows = persistedRows,
         )
     }
-    private fun discoveryConfigurationKey(mediaType: DiscoveryMediaType): String =
-        computeDiscoveryConfigurationKey(preferences, mediaType)
+    private fun legacySourcePolicy(
+        mediaType: DiscoveryMediaType,
+        installed: List<DiscoveryInstalledPlugin>,
+        libraryWeights: Map<Long, Int>,
+        learnedAffinity: Map<String, Double>,
+        history: Map<Long, SourceFailureRecord>,
+        now: Long,
+        sourcePreferences: SourcePreferences,
+    ): DiscoverySourcePolicy = preferences.withSourcePreferencesLock(mediaType) {
+        val plugins = installed.filter { it.key.isNotBlank() }.groupBy { it.key }.map { (key, variants) ->
+            DiscoveryInstalledPlugin(
+                key,
+                variants.flatMap { it.sourceIds }.distinct(),
+                variants.flatMap { it.langs.entries }.associate { it.key to it.value },
+            )
+        }
+        val mode = preferences.discoverySourceMode(mediaType).get()
+        val excluded = parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
+        val known = parseKeyCsv(preferences.discoverySourceKnown(mediaType).get())
+        val members = plugins.associate { it.key to it.sourceIds.toSet() }
+        val allowedKeys = members.keys.filterTo(LinkedHashSet()) {
+            it !in excluded && (mode != "manual" || known.isEmpty() || it in known)
+        }
+        val allExternal = if (preferences.externalProvidersEnabled().get()) {
+            DiscoveryExternalProvider.entries.toSet()
+        } else {
+            emptySet()
+        }
+        val similarExternal = allExternal - buildSet {
+            if (!sourcePreferences.suggestionsUseShikimori().get()) add(DiscoveryExternalProvider.SHIKIMORI)
+            if (!sourcePreferences.suggestionsUseMangaUpdatesNovel().get()) add(DiscoveryExternalProvider.MANGA_UPDATES)
+            if (!sourcePreferences.suggestionsUseNovelUpdates().get()) add(DiscoveryExternalProvider.NOVEL_UPDATES)
+        }
+        val external = mapOf(
+            DiscoveryRowType.LIKE to similarExternal,
+            DiscoveryRowType.TASTE to allExternal,
+            DiscoveryRowType.TREND to allExternal,
+        )
+        val revision = if (installed.isEmpty()) {
+            ""
+        } else {
+            buildString {
+                fun value(text: String) {
+                    append(text.length).append(':').append(text)
+                }
+                value("legacy-source")
+                value(mediaType.key)
+                value(mode)
+                excluded.sorted().forEach {
+                    value("excluded")
+                    value(it)
+                }
+                known.sorted().forEach {
+                    value("known")
+                    value(it)
+                }
+                plugins.sortedBy { it.key }.forEach { plugin ->
+                    value("plugin")
+                    value(plugin.key)
+                    plugin.sourceIds.sorted().forEach { id ->
+                        value(id.toString())
+                        value(plugin.langs[id].orEmpty())
+                    }
+                }
+                external.entries.sortedBy { it.key.key }.forEach { (row, providers) ->
+                    value(row.key)
+                    providers.sortedBy { it.name }.forEach { value(it.name) }
+                }
+            }
+        }
+        val ownership = DiscoverySourcePolicy(
+            mediaType,
+            revision,
+            installed.isNotEmpty(),
+            allowedKeys,
+            members,
+            allowedExternalProviders = external,
+        )
+        val ranked = plugins.filter { it.key in allowedKeys }.mapNotNull { plugin ->
+            val representative = selectPluginRepresentative(
+                plugin.sourceIds.filterTo(LinkedHashSet()) { ownership.allowsNative(it) },
+                libraryWeights,
+                plugin.langs,
+                java.util.Locale.getDefault().language.lowercase(),
+            ) ?: return@mapNotNull null
+            val libraryWeight = if (mode == "manual") 1 else plugin.sourceIds.sumOf { libraryWeights[it] ?: 0 }
+            DiscoveryPluginStat(
+                plugin.key,
+                representative,
+                plugin.sourceIds.toSet(),
+                libraryWeight,
+                learnedAffinity[plugin.key] ?: 0.0,
+            )
+        }.sortedWith(
+            compareByDescending<DiscoveryPluginStat> {
+                applySourceAffinity(it.weight, it.affinity, isManualMode = mode == "manual") *
+                    calculateSourceReliabilityFactor(it.representative, history, now)
+            }.thenBy { it.representative },
+        )
+        DiscoverySourcePolicy(
+            mediaType = mediaType,
+            revision = revision,
+            inventoryComplete = installed.isNotEmpty(),
+            allowedPluginKeys = allowedKeys,
+            pluginMembers = members,
+            representativeSourceIds = (if (mode == "manual") ranked else ranked.take(3)).map { it.representative },
+            sourceWeights = ranked.associate {
+                it.representative to (
+                    applySourceAffinity(it.weight, it.affinity, isManualMode = mode == "manual") *
+                        calculateSourceReliabilityFactor(it.representative, history, now)
+                    )
+            },
+            allowedExternalProviders = external,
+        )
+    }
+
+    private fun discoveryConfigurationKey(
+        mediaType: DiscoveryMediaType,
+        sourcePreferences: SourcePreferences,
+        sourcePolicyRevision: String,
+    ): String = computeDiscoveryConfigurationKey(preferences, mediaType, sourcePreferences, sourcePolicyRevision)
 }
 
 /**
@@ -932,6 +1091,8 @@ internal fun backgroundPageOffset(cycleCount: Int): Int = ((cycleCount - 1).mod(
 internal fun computeDiscoveryConfigurationKey(
     preferences: DiscoveryPreferences,
     mediaType: DiscoveryMediaType,
+    sourcePreferences: SourcePreferences? = null,
+    sourcePolicyRevision: String = "",
 ): String {
     val spec = preferences.genreFilterSpec(mediaType)
     val parts = listOf(
@@ -947,10 +1108,29 @@ internal fun computeDiscoveryConfigurationKey(
         spec.requiredMatchMode.name, spec.requiredEnforcement.name, spec.unknownGenrePolicy.name,
         "sources", preferences.externalProvidersEnabled().get(),
         preferences.discoverySourceMode(mediaType).get(),
-        preferences.discoverySourceExcluded(mediaType).get(),
+        parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get()).sorted(),
+        parseKeyCsv(preferences.discoverySourceKnown(mediaType).get()).sorted(),
+        "source-policy", sourcePolicyRevision,
+        "similar-providers", sourcePreferences?.suggestionsUseShikimori()?.get(),
+        if (mediaType !=
+            DiscoveryMediaType.ANIME
+        ) {
+            sourcePreferences?.suggestionsUseMangaUpdatesNovel()?.get()
+        } else {
+            null
+        },
+        if (mediaType == DiscoveryMediaType.NOVEL) sourcePreferences?.suggestionsUseNovelUpdates()?.get() else null,
         "nsfw", preferences.filterNsfw().get(),
     )
-    return parts.joinToString("|").hashCode().toUInt().toString(16)
+    val canonical = buildString {
+        parts.forEach { value ->
+            val text = value.toString()
+            append(text.length).append(':').append(text)
+        }
+    }
+    return java.security.MessageDigest.getInstance("SHA-256")
+        .digest(canonical.toByteArray(Charsets.UTF_8))
+        .joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 }
 
 /** Page budget for a manual refresh: the loop stops as soon as enough fresh titles are collected. */

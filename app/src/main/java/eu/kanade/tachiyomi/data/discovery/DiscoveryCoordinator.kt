@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.discovery
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import tachiyomi.core.common.util.system.logcat
@@ -9,6 +10,7 @@ import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.canonicalDiscoveryKey
 import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 
@@ -52,15 +54,19 @@ class DiscoveryCoordinator(
 
         val jobs = rowBuilders.map { builder ->
             launch {
-                val items = try {
-                    builder.build(context)
+                var items: List<DiscoveryRowItem>? = null
+                try {
+                    items = builder.build(context)
                 } catch (e: CancellationException) {
-                    throw e
+                    if (!this@supervisorScope.isActive) throw e
+                    logcat { "[DiscoveryCoordinator] row ${builder.rowType} cancelled: ${e.message}" }
                 } catch (e: Exception) {
                     logcat { "[DiscoveryCoordinator] row ${builder.rowType} FAILED: ${e.message}" }
-                    null
+                } finally {
+                    if (this@supervisorScope.isActive) {
+                        channel.trySend(Triple(builder.rowType, items, builder.isDegraded))
+                    }
                 }
-                channel.send(Triple(builder.rowType, items, builder.isDegraded))
             }
         }
 
@@ -95,19 +101,22 @@ class DiscoveryCoordinator(
 
                 for (pType in DiscoveryRowType.entries) {
                     val candidates = rawCandidates[pType] ?: continue
-                    val policyFiltered = context.candidatePolicy.filterRowCandidates(
-                        candidates,
-                        genresSelector = { it.genres },
-                    )
-                    val selected = selectRowItems(
-                        items = policyFiltered,
+                    val eligible = filterEligibleRowItems(
+                        items = candidates,
                         mediaType = context.mediaType,
+                        rowType = pType,
+                        sourcePolicy = context.sourcePolicy,
                         excluded = excluded,
                         seen = seenSoFar,
                         recentCleanTitles = context.recentCleanTitles,
                         currentFeedCleanTitles = context.currentFeedCleanTitles,
                         eligibilitySnapshot = context.eligibilitySnapshot,
                     )
+                    val policyFiltered = context.candidatePolicy.filterRowCandidates(
+                        eligible,
+                        genresSelector = { it.genres },
+                    )
+                    val selected = selectRowItems(policyFiltered)
                     logcat {
                         "[DiscoverySelection] media=${context.mediaType} row=$pType raw=${candidates.size} " +
                             "genre=${policyFiltered.size} selected=${selected.size} " +
@@ -154,9 +163,11 @@ class DiscoveryCoordinator(
     suspend fun buildFeed(context: DiscoveryBuildContext): DiscoveryFeed =
         streamFeed(context) { _, _ -> }
 
-    private fun selectRowItems(
+    private fun filterEligibleRowItems(
         items: List<DiscoveryRowItem>,
         mediaType: DiscoveryMediaType,
+        rowType: DiscoveryRowType,
+        sourcePolicy: DiscoverySourcePolicy,
         excluded: Set<String>,
         seen: Set<String>,
         recentCleanTitles: Set<String>,
@@ -167,10 +178,19 @@ class DiscoveryCoordinator(
             ?.takeIf { it.mediaType == mediaType }
             ?.let { it.excludedIdentityKeys + it.excludedLookupKeys }
             .orEmpty()
-        val valid = items
+        return items
             .filterNot { item ->
+                if (sourcePolicy.mediaType != mediaType ||
+                    !sourcePolicy.allows(rowType, item.sourceId, item.provider)
+                ) {
+                    return@filterNot true
+                }
                 val keys = listOf(item.cleanTitle) + item.altCleanTitles
-                if (keys.any { it.isBlank() || it in excluded || it in seen || it in currentFeedCleanTitles }) {
+                if (keys.any {
+                        it.isBlank() || it in excluded || it in seen ||
+                            it in currentFeedCleanTitles || it in recentCleanTitles
+                    }
+                ) {
                     return@filterNot true
                 }
                 if (blockedEligibility.isNotEmpty()) {
@@ -185,15 +205,8 @@ class DiscoveryCoordinator(
                 }
                 false
             }
-            .distinctBy { it.cleanTitle }
-
-        val clustered = filterFranchiseClustering(valid, maxPerSeries = 2)
-
-        return clustered
-            .filterNot { item ->
-                val keys = listOf(item.cleanTitle) + item.altCleanTitles
-                keys.any { it in recentCleanTitles }
-            }
-            .take(rowLimit)
     }
+
+    private fun selectRowItems(items: List<DiscoveryRowItem>): List<DiscoveryRowItem> =
+        filterFranchiseClustering(items.distinctBy { it.cleanTitle }, maxPerSeries = 2).take(rowLimit)
 }

@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import java.io.IOException
@@ -16,7 +17,7 @@ class DiscoveryCoordinatorStreamTest {
         coverUrl = null,
         reason = null,
         seedTitle = null,
-        provider = "test",
+        provider = "AniList",
         score = score,
     )
 
@@ -40,6 +41,15 @@ class DiscoveryCoordinatorStreamTest {
         libraryCleanTitles = emptySet(),
         historyCleanTitles = emptySet(),
         hiddenCleanTitles = emptySet(),
+        sourcePolicy = discoveryQueryPolicyFixture(
+            DiscoveryMediaType.MANGA,
+            emptyList(),
+            mapOf(
+                DiscoveryRowType.LIKE to setOf(DiscoveryExternalProvider.ANILIST),
+                DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST),
+                DiscoveryRowType.TREND to setOf(DiscoveryExternalProvider.ANILIST),
+            ),
+        ),
     )
 
     @Test
@@ -183,5 +193,27 @@ class DiscoveryCoordinatorStreamTest {
         io.kotest.assertions.throwables.shouldThrow<kotlinx.coroutines.CancellationException> {
             builder.build(baseContext)
         }
+    }
+
+    @Test
+    fun `streamFeed completes without hanging when a single builder throws local CancellationException`() = runTest {
+        val cancellingSource = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                throw kotlinx.coroutines.CancellationException("source binding changed")
+            }
+        }
+        val survivingTrend = delayedBuilder(
+            DiscoveryRowType.TREND,
+            listOf(item("Surviving Trend")),
+            delayMs = 10,
+        )
+
+        val feed = kotlinx.coroutines.withTimeout(1_000L) {
+            DiscoveryCoordinator(listOf(cancellingSource, survivingTrend)).streamFeed(baseContext) { _, _ -> }
+        }
+
+        feed.failedRows shouldBe setOf(DiscoveryRowType.SOURCE)
+        feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("Surviving Trend")
     }
 }

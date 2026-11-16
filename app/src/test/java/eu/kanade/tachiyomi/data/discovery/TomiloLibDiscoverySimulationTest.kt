@@ -375,7 +375,7 @@ class TomiloLibDiscoverySimulationTest {
             coordinatorFactory = { DiscoveryCoordinator(listOf(tomiloRowBuilder)) },
             trendingFactory = { mockk(relaxed = true) },
             sourcePreferencesProvider = { SourcePreferences(PersistingPreferenceStore()) },
-            installedPluginsProvider = { emptyList() },
+            installedPluginsProvider = { listOf(DiscoveryInstalledPlugin("tomilo-fixture", listOf(100L))) },
             fallbackSourceIdProvider = { -1L },
         )
 

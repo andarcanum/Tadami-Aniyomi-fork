@@ -13,10 +13,14 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
+import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import java.io.IOException
 
@@ -39,7 +43,15 @@ class DiscoverySourceCatalogPageTest {
     private fun catalog(source: MangaSource): AppDiscoverySourceCatalog {
         val manager = mockk<MangaSourceManager>()
         every { manager.getOrStub(sourceId) } returns source
-        return AppDiscoverySourceCatalog(mangaSourceManagerProvider = { manager })
+        return AppDiscoverySourceCatalog(
+            mangaSourceManagerProvider = { manager },
+            sourcePolicyProvider = {
+                fixedDiscoveryQueryPolicyProvider(
+                    discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(sourceId)),
+                    mapOf(sourceId to source),
+                )
+            },
+        )
     }
 
     private fun manga(
@@ -503,5 +515,72 @@ class DiscoverySourceCatalogPageTest {
         )
 
         result.items.map { it.sourceUrl } shouldBe listOf("/searched-default")
+    }
+
+    @Test
+    fun `latest aborts immediately when source policy revokes participation`(): Unit = runTest {
+        val source = source()
+        val allowed = java.util.concurrent.atomic.AtomicBoolean(true)
+        val manager = mockk<MangaSourceManager>()
+        every { manager.getOrStub(sourceId) } returns source
+        val catalog = AppDiscoverySourceCatalog(
+            mangaSourceManagerProvider = { manager },
+            sourcePolicyProvider = {
+                val ids = if (allowed.get()) listOf(sourceId) else emptyList()
+                fixedDiscoveryQueryPolicyProvider(
+                    discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, ids),
+                    mapOf(sourceId to source),
+                )
+            },
+        )
+        coEvery { source.getLatestUpdates(2) } coAnswers {
+            allowed.set(false)
+            MangasPage(listOf(manga("Stale", "/stale")), hasNextPage = true)
+        }
+
+        shouldThrow<kotlinx.coroutines.CancellationException> {
+            catalog.latest(media, sourceId, page = 2)
+        }
+        coVerify(exactly = 0) { source.getLatestUpdates(1) }
+        coVerify(exactly = 0) { source.getPopularManga(any()) }
+    }
+
+    @Test
+    fun `popularPage waits for cold sourceManager init instead of failing on stub`(): Unit = runTest {
+        val source = source()
+        coEvery { source.getPopularManga(1) } returns MangasPage(
+            listOf(manga("Live Title", "/live-title")),
+            hasNextPage = false,
+        )
+        val initialized = MutableStateFlow(false)
+        val catalogueSources = MutableStateFlow(emptyList<CatalogueSource>())
+        val stub = StubMangaSource(sourceId, "Fixture", "en")
+        val manager = object : MangaSourceManager {
+            override val isInitialized = initialized
+            override val catalogueSources = catalogueSources
+            override fun get(sourceKey: Long) = if (initialized.value && sourceKey == sourceId) source else null
+            override fun getOrStub(sourceKey: Long) = get(sourceKey) ?: stub
+            override fun getOnlineSources() = emptyList<eu.kanade.tachiyomi.source.online.HttpSource>()
+            override fun getCatalogueSources() = catalogueSources.value
+            override fun getStubSources() = listOf(stub)
+        }
+        val catalog = AppDiscoverySourceCatalog(
+            mangaSourceManagerProvider = { manager },
+            sourcePolicyProvider = {
+                fixedDiscoveryQueryPolicyProvider(
+                    discoveryQueryPolicyFixture(media, listOf(sourceId)),
+                    mapOf(sourceId to source),
+                )
+            },
+        )
+
+        val job = async { catalog.popularPage(media, sourceId, page = 1) }
+        delay(50)
+        job.isCompleted shouldBe false
+
+        catalogueSources.value = listOf(source)
+        initialized.value = true
+        val page = job.await()
+        page.items.map { it.title } shouldBe listOf("Live Title")
     }
 }

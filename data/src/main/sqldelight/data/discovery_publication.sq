@@ -65,7 +65,10 @@ UPDATE discovery_publication SET desired_configuration_key = ? WHERE media_type 
 
 installConfigurationKeyIfChanged:
 UPDATE discovery_publication
-SET desired_configuration_key = ?, projection_version = projection_version + 1
+SET desired_configuration_key = ?,
+    projection_version = projection_version + 1,
+    owner_request_id = NULL,
+    owner_revision = owner_revision + 1
 WHERE media_type = ? AND desired_configuration_key != ?;
 
 setTasteResetAt:

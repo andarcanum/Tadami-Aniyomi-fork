@@ -35,6 +35,19 @@ data class GenreFilterSpec(
     val unknownGenrePolicy: UnknownGenrePolicy = UnknownGenrePolicy.ALLOW_AS_INCOMPLETE,
 )
 
+internal fun effectiveGenreConstraints(values: Set<String>): Set<String> = values.mapNotNullTo(
+    LinkedHashSet(),
+) { value ->
+    val valid = GenreMatcher.normalizeRawConstraint(value) ?: return@mapNotNullTo null
+    valid
+}
+
+internal fun GenreFilterSpec.effective(): GenreFilterSpec = copy(
+    ignoredGenres = effectiveGenreConstraints(ignoredGenres),
+    requiredGenres = effectiveGenreConstraints(requiredGenres),
+    priorityGenres = effectiveGenreConstraints(priorityGenres),
+)
+
 /**
  * Причина отклонения кандидата политикой [DiscoveryCandidatePolicy].
  */
@@ -81,16 +94,21 @@ sealed interface CandidateVerdict {
  *   а не «доказанное соответствие».
  */
 class DiscoveryCandidatePolicy(
-    val blacklistedTags: Set<String> = emptySet(),
-    val ignoredGenres: Set<String> = emptySet(),
-    val requiredGenres: Set<String> = emptySet(),
-    val priorityGenres: Set<String> = emptySet(),
+    blacklistedTags: Set<String> = emptySet(),
+    ignoredGenres: Set<String> = emptySet(),
+    requiredGenres: Set<String> = emptySet(),
+    priorityGenres: Set<String> = emptySet(),
     val unknownGenrePolicy: UnknownGenrePolicy = UnknownGenrePolicy.ALLOW_AS_INCOMPLETE,
     val strictRequired: Boolean = false,
     val requiredMatchMode: RequiredMatchMode = RequiredMatchMode.ALL,
     val requiredEnforcement: RequiredEnforcement =
         if (strictRequired) RequiredEnforcement.STRICT else RequiredEnforcement.BEST_EFFORT,
 ) {
+    val blacklistedTags: Set<String> = effectiveGenreConstraints(blacklistedTags)
+    val ignoredGenres: Set<String> = effectiveGenreConstraints(ignoredGenres)
+    val requiredGenres: Set<String> = effectiveGenreConstraints(requiredGenres)
+    val priorityGenres: Set<String> = effectiveGenreConstraints(priorityGenres)
+
     constructor(
         spec: GenreFilterSpec,
         blacklistedTags: Set<String> = emptySet(),
@@ -109,12 +127,12 @@ class DiscoveryCandidatePolicy(
         get() = strictRequired || requiredEnforcement == RequiredEnforcement.STRICT
 
     // Предварительно развёрнутые множества жанров для быстрого сопоставления с учётом RU/EN переводов
-    private val expandedBlacklist: Set<String> = expandGenreSet(blacklistedTags.toList())
-    private val expandedIgnored: Set<String> = expandGenreSet(ignoredGenres.toList())
-    private val expandedRequired: Set<String> = expandGenreSet(requiredGenres.toList())
-    private val expandedPriority: Set<String> = expandGenreSet(priorityGenres.toList())
-    private val expandedRequiredByGenre: List<Set<String>> = requiredGenres.map { expandGenreSet(listOf(it)) }
-    private val expandedPriorityByGenre: List<Set<String>> = priorityGenres.map { expandGenreSet(listOf(it)) }
+    private val expandedBlacklist: Set<String> = expandGenreSet(this.blacklistedTags.toList())
+    private val expandedIgnored: Set<String> = expandGenreSet(this.ignoredGenres.toList())
+    private val expandedRequired: Set<String> = expandGenreSet(this.requiredGenres.toList())
+    private val expandedPriority: Set<String> = expandGenreSet(this.priorityGenres.toList())
+    private val expandedRequiredByGenre: List<Set<String>> = this.requiredGenres.map { expandGenreSet(listOf(it)) }
+    private val expandedPriorityByGenre: List<Set<String>> = this.priorityGenres.map { expandGenreSet(listOf(it)) }
 
     /**
      * Возвращает true, если переданный список жанров содержит запрещённый (блэклист или глобальный игнор).
@@ -357,6 +375,8 @@ class DiscoveryCandidatePolicy(
             RequiredMatchMode.ALL -> matchCount == expandedRequiredByGenre.size
         }
     }
+
+    internal fun countRequiredMatchTier(itemGenres: List<String>): Int = countRequiredMatches(itemGenres)
 
     private fun countRequiredMatches(itemGenres: List<String>): Int {
         if (requiredGenres.isEmpty() || itemGenres.isEmpty()) return 0

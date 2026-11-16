@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.extension.manga
+package eu.kanade.tachiyomi.extension.manga
 
 import android.content.Context
 import android.graphics.drawable.Drawable
@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.extension.manga.model.selectMangaReinstallCandidates
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallReceiver
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstaller
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionLoader
+import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +42,8 @@ import logcat.LogPriority
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.discovery.model.DiscoverySourceInventory
+import tachiyomi.domain.discovery.model.DiscoverySourcePlugin
 import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
@@ -101,6 +104,45 @@ class MangaExtensionManager(
 
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Installed>())
     val installedExtensionsFlow = installedExtensionsMapFlow.mapExtensions(scope)
+
+    /** Raw installed inventory is loaded synchronously before this manager is published. */
+    fun discoverySourceInventory(): DiscoverySourceInventory =
+        discoveryInventory(installedExtensionsMapFlow.value.values)
+
+    internal fun isDiscoverySourceBinding(
+        sourceId: Long,
+        source: Any,
+        allowedOwners: Set<String>,
+        expected: DiscoverySourceInventory,
+    ): Boolean {
+        val current = installedExtensionsMapFlow.value.values
+        val inventory = discoveryInventory(current)
+        return inventory.complete == expected.complete && inventory.plugins.toSet() == expected.plugins.toSet() &&
+            current.any { extension ->
+                extension.pkgName in allowedOwners && extension.sources.any {
+                    it is CatalogueSource && it.id == sourceId && it === source
+                }
+            }
+    }
+
+    val discoverySourceInventoryChanges: Flow<DiscoverySourceInventory> = installedExtensionsMapFlow.map {
+        discoveryInventory(it.values)
+    }
+
+    private fun discoveryInventory(extensions: Collection<MangaExtension.Installed>): DiscoverySourceInventory =
+        DiscoverySourceInventory(
+            complete = true,
+            plugins = extensions.mapNotNull { extension ->
+                val sources = extension.sources.filterIsInstance<CatalogueSource>()
+                if (sources.isEmpty()) return@mapNotNull null
+                DiscoverySourcePlugin(
+                    key = extension.pkgName,
+                    sourceIds = sources.map { it.id },
+                    langs = sources.associate { it.id to it.lang },
+                    version = extension.versionCode.toString(),
+                )
+            },
+        )
 
     private val availableExtensionsStateFlow = MutableStateFlow(emptyList<MangaExtension.Available>())
     val availableExtensionsFlow: StateFlow<List<MangaExtension.Available>> = availableExtensionsStateFlow.asStateFlow()

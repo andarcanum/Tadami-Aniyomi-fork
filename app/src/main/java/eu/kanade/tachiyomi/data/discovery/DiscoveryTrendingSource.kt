@@ -42,6 +42,12 @@ interface DiscoveryTrendingSource {
     suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta?
 }
 
+internal data class DiscoveryMetadataCacheKey(
+    val mediaType: DiscoveryMediaType,
+    val title: String,
+    val filterNsfw: Boolean,
+)
+
 /**
  * fetchMeta ищет тайтл по имени и раньше брал ПЕРВЫЙ результат поиска — при
  * коллизиях названий в превью попадал чужой синопсис. Проверяем совпадение:

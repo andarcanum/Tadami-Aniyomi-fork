@@ -18,6 +18,8 @@ internal inline fun <T> runCatchingUnlessCancelled(block: () -> T): Result<T> = 
     Result.success(block())
 } catch (e: kotlinx.coroutines.CancellationException) {
     throw e
+} catch (e: VirtualMachineError) {
+    throw e
 } catch (e: Throwable) {
     Result.failure(e)
 }
@@ -212,6 +214,20 @@ internal fun mergeNormalized(
         .map { it.first }
 }
 
+/** One whole observed copy per title; conflicting known copies retain their existing first-known precedence. */
+internal fun seedResultRepresentatives(perSeed: List<List<DiscoveryRowItem>>): Map<String, DiscoveryRowItem> {
+    val representatives = LinkedHashMap<String, DiscoveryRowItem>()
+    perSeed.forEach { items ->
+        items.forEach { item ->
+            val previous = representatives[item.cleanTitle]
+            if (previous == null || (previous.genres.isEmpty() && item.genres.isNotEmpty())) {
+                representatives[item.cleanTitle] = item
+            }
+        }
+    }
+    return representatives
+}
+
 /**
  * Комбинаторика пересечений: cleanTitle, рекомендованный k разными сидами,
  * получает score = maxScore * (1 + overlapMultiplier * (k - 1)); в reason-payload
@@ -223,29 +239,31 @@ internal fun mergeSeedResults(
     perSeedCap: Int = 15,
     overlapMultiplier: Double = 0.5,
 ): List<DiscoveryRowItem> {
-    class Acc(val template: DiscoveryRowItem) {
-        var maxScore: Double = template.score
+    class Acc(val template: DiscoveryRowItem, score: Double) {
+        var maxScore: Double = score
         val seeds = linkedSetOf<String>()
     }
-
+    val representatives = seedResultRepresentatives(perSeed)
     val byTitle = LinkedHashMap<String, Acc>()
-    perSeed.forEach { seedItems ->
-        seedItems.take(perSeedCap).forEach { item ->
-            val seedTitle = item.seedTitle ?: return@forEach
-            val acc = byTitle.getOrPut(item.cleanTitle) { Acc(item) }
+    perSeed.forEach { items ->
+        val selectedTitles = LinkedHashSet<String>()
+        items.forEach { item ->
+            val seed = item.seedTitle ?: return@forEach
+            if (item.cleanTitle !in selectedTitles) {
+                if (selectedTitles.size >= perSeedCap) return@forEach
+                selectedTitles += item.cleanTitle
+            }
+            val acc = byTitle.getOrPut(item.cleanTitle) { Acc(representatives.getValue(item.cleanTitle), item.score) }
             acc.maxScore = maxOf(acc.maxScore, item.score)
-            acc.seeds += seedTitle
+            acc.seeds += seed
         }
     }
-    return byTitle.values
-        .map { acc ->
-            val k = acc.seeds.size
-            acc.template.copy(
-                score = acc.maxScore * (1.0 + overlapMultiplier * (k - 1)),
-                seedTitle = acc.seeds.take(2).joinToString(", "),
-            )
-        }
-        .sortedByDescending { it.score }
+    return byTitle.values.map { acc ->
+        acc.template.copy(
+            score = acc.maxScore * (1.0 + overlapMultiplier * (acc.seeds.size - 1)),
+            seedTitle = acc.seeds.take(2).joinToString(", "),
+        )
+    }.sortedByDescending { it.score }
 }
 
 /** Вклад дропнутого тайтла в каждый его жанр вместо положительного freshness. */
@@ -253,7 +271,7 @@ internal const val DROPPED_GENRE_PENALTY = 0.5
 
 /** Категория жанра: фундаментальные вкусы живут годами, трендовые приедаются. */
 internal fun genreDecayDays(genre: String): Double {
-    val g = genre.trim().lowercase()
+    val g = GenreMatcher.identityKey(genre)
     return when (g) {
         in FUNDAMENTAL_GENRES -> 180.0
         in TRENDY_GENRES -> 20.0
@@ -293,21 +311,25 @@ internal fun buildTasteProfile(
 ): List<Pair<String, Double>> {
     val windowStart = nowMs - windowDays * DAY_MS
     val weights = mutableMapOf<String, Double>()
+    val displayNames = mutableMapOf<String, String>()
     candidates.forEach { candidate ->
         val interaction = (candidate.lastInteraction ?: candidate.dateAdded)
         if (interaction < windowStart) return@forEach
         val ageDays = ((nowMs - interaction) / DAY_MS).coerceAtLeast(0)
-        candidate.genres.forEach { genre ->
-            val freshness = 1.0 / (1.0 + ageDays / genreDecayDays(genre))
+        candidate.genres.distinctBy(GenreMatcher::identityKey).forEach genreLoop@{ genre ->
+            val key = GenreMatcher.identityKey(genre)
+            if (key.isEmpty()) return@genreLoop
+            displayNames.putIfAbsent(key, genre)
+            val freshness = 1.0 / (1.0 + ageDays / genreDecayDays(key))
             val contribution = if (candidate.isDropped) -DROPPED_GENRE_PENALTY else freshness
-            weights[genre] = (weights[genre] ?: 0.0) + contribution
+            weights[key] = (weights[key] ?: 0.0) + contribution
         }
     }
     return weights.entries
         .filter { it.value > 0.0 }
         .sortedByDescending { it.value }
         .take(topN)
-        .map { it.key to it.value }
+        .map { displayNames.getValue(it.key) to it.value }
 }
 
 /**
@@ -330,23 +352,20 @@ internal fun expandGenreSet(genres: List<String>): Set<String> {
     return out
 }
 
-private fun genreVariants(genre: String): Set<String> = expandGenreSet(listOf(genre))
-
-/** Веса профиля, развёрнутые по всем языковым вариантам каждого жанра. */
+/** Веса по семантической идентичности: эквивалентные алиасы не складываются. */
 internal fun expandedTasteWeights(profile: List<Pair<String, Double>>): Map<String, Double> {
     val map = mutableMapOf<String, Double>()
     profile.forEach { (genre, weight) ->
-        genreVariants(genre).forEach { variant ->
-            map[variant] = maxOf(map[variant] ?: 0.0, weight)
-        }
+        val key = GenreMatcher.identityKey(genre)
+        if (key.isNotEmpty()) map[key] = maxOf(map[key] ?: 0.0, weight)
     }
     return map
 }
 
-/** Скор кандидата по профилю вкуса: сумма весов совпавших жанров с учётом RU↔EN переводов. */
+/** Скор кандидата: один вклад на совпавший жанр независимо от языка и числа его алиасов. */
 internal fun tasteScore(itemGenres: List<String>, profile: List<Pair<String, Double>>): Double {
     val weights = expandedTasteWeights(profile)
-    return itemGenres.mapTo(HashSet()) { it.trim().lowercase() }
+    return itemGenres.mapTo(HashSet(), GenreMatcher::identityKey)
         .sumOf { weights[it] ?: 0.0 }
 }
 
@@ -356,9 +375,9 @@ internal fun tasteScore(itemGenres: List<String>, profile: List<Pair<String, Dou
  */
 internal fun matchedGenres(itemGenres: List<String>, profile: List<Pair<String, Double>>): List<String> {
     return itemGenres.mapNotNull { itemGenre ->
-        val key = itemGenre.trim().lowercase()
+        val key = GenreMatcher.identityKey(itemGenre)
         if (key.isEmpty()) return@mapNotNull null
-        profile.firstOrNull { (genre, _) -> key in genreVariants(genre) }?.first
+        profile.firstOrNull { (genre, _) -> key == GenreMatcher.identityKey(genre) }?.first
     }.distinct().take(2)
 }
 
@@ -461,14 +480,13 @@ internal fun serializeGenreFilterCsv(canonical: Set<String>, raw: List<String>):
 
 /**
  * V3: резолв введённого пользователем жанра: канонический → canonical key;
- * незнакомый → raw string «как есть».
+ * незнакомый или неоднозначный → raw string «как есть».
  */
 internal fun resolveUserGenreInput(input: String): Pair<String, Boolean> {
     // Запятая — разделитель CSV-хранилища: в жанре она превратится в пробел,
     // иначе raw-строка распадётся на два битых элемента при следующем чтении.
-    val trimmed = input.trim().replace(',', ' ').replace('\n', ' ').trim()
-    if (trimmed.isEmpty()) return "" to false
-    val canonical = GenreMatcher.resolve(trimmed).firstOrNull()
+    val trimmed = GenreMatcher.normalizeRawConstraint(input) ?: return "" to false
+    val canonical = GenreMatcher.resolve(trimmed).singleOrNull()
     return if (canonical != null) canonical to true else trimmed to false
 }
 

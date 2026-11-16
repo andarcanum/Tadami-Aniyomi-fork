@@ -55,6 +55,7 @@ import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.discovery.DiscoveryRepositoryImpl
 import tachiyomi.data.handlers.manga.AndroidMangaDatabaseHandler
 import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
+import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
 import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
@@ -66,10 +67,31 @@ import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 import tachiyomi.domain.discovery.repository.DiscoveryKnownTitlesProvider
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import java.io.IOException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DiscoveryAdversarialStressTest {
+    private val fixtureSources = SourcePreferences(PersistingPreferenceStore())
+    private val fixturePolicies = object : DiscoverySourcePolicyProvider {
+        override fun current(
+            mediaType: DiscoveryMediaType,
+        ) = discoveryQueryPolicyFixture(
+            mediaType,
+            listOf(1L),
+            mapOf(
+                DiscoveryRowType.LIKE to setOf(DiscoveryExternalProvider.ANILIST),
+                DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST),
+                DiscoveryRowType.TREND to setOf(DiscoveryExternalProvider.ANILIST),
+            ),
+        )
+        override fun observe(mediaType: DiscoveryMediaType) = flowOf(current(mediaType))
+        override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = current(mediaType)
+    }
+    private fun fixtureConfig(
+        preferences: DiscoveryPreferences,
+        media: DiscoveryMediaType,
+    ) = computeDiscoveryConfigurationKey(preferences, media, fixtureSources, fixturePolicies.current(media).revision)
 
     private fun suggestion(
         title: String,
@@ -178,7 +200,7 @@ class DiscoveryAdversarialStressTest {
         return driver to DiscoveryRepositoryImpl(
             handler = handler,
             knownTitlesProvider = knownProvider,
-            candidateValidator = AppDiscoveryCandidateValidator(preferences),
+            candidateValidator = AppDiscoveryCandidateValidator(preferences, fixturePolicies) { fixtureSources },
         )
     }
 
@@ -209,6 +231,7 @@ class DiscoveryAdversarialStressTest {
             )
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = fixturePolicies,
                 mediaType = DiscoveryMediaType.MANGA,
                 repository = repo,
                 preferences = prefs,
@@ -288,6 +311,7 @@ class DiscoveryAdversarialStressTest {
             }
             val context = DiscoveryBuildContext(
                 mediaType = DiscoveryMediaType.MANGA,
+                sourcePolicy = fixturePolicies.current(DiscoveryMediaType.MANGA),
                 seeds = emptyList(),
                 libraryCleanTitles = emptySet(),
                 historyCleanTitles = emptySet(),
@@ -300,7 +324,14 @@ class DiscoveryAdversarialStressTest {
                 sourceIds = listOf(7L),
                 verificationBudget = DiscoveryVerificationBudget(),
             )
-            val built = DiscoverySourceRowBuilder(catalog).build(context)
+            val built = DiscoverySourceRowBuilder(catalog).build(
+                context.copy(
+                    sourcePolicy = discoveryQueryPolicyFixture(
+                        DiscoveryMediaType.MANGA,
+                        listOf(7L),
+                    ),
+                ),
+            )
             built.map { it.title } shouldBe listOf("Source Safe Comedy")
         }
     }
@@ -411,6 +442,7 @@ class DiscoveryAdversarialStressTest {
                 // Check DiscoveryFeedScreenModel MIX tab
                 val model = DiscoveryFeedScreenModel(
                     initialMedia = DiscoveryMediaType.NOVEL,
+                    sourcePolicyProvider = fixturePolicies,
                     context = context,
                     repository = repo,
                     adder = mockk(relaxed = true),
@@ -532,6 +564,7 @@ class DiscoveryAdversarialStressTest {
             val builder = DiscoveryTasteRowBuilder(trending, catalog, { TrendSort.POPULARITY }, includeExternal = true)
             val context = DiscoveryBuildContext(
                 mediaType = DiscoveryMediaType.MANGA,
+                sourcePolicy = fixturePolicies.current(DiscoveryMediaType.MANGA),
                 seeds = emptyList(),
                 libraryCleanTitles = emptySet(),
                 historyCleanTitles = emptySet(),
@@ -573,6 +606,7 @@ class DiscoveryAdversarialStressTest {
             repo.poolFlow.value = listOf(itemAB, itemA, itemC, itemEmpty)
 
             val controller = HomeDiscoveryController(
+                sourcePolicyProvider = fixturePolicies,
                 mediaType = DiscoveryMediaType.MANGA,
                 repository = repo,
                 preferences = prefs,
@@ -659,6 +693,7 @@ class DiscoveryAdversarialStressTest {
             val builder = DiscoveryTasteRowBuilder(trending, catalog, { TrendSort.POPULARITY }, includeExternal = true)
             val context = DiscoveryBuildContext(
                 mediaType = DiscoveryMediaType.MANGA,
+                sourcePolicy = fixturePolicies.current(DiscoveryMediaType.MANGA),
                 seeds = emptyList(),
                 libraryCleanTitles = emptySet(),
                 historyCleanTitles = emptySet(),
@@ -748,7 +783,12 @@ class DiscoveryAdversarialStressTest {
                     ),
                 )
 
-                val token = repo.reserveGeneration(DiscoveryMediaType.MANGA, "req-1", 0L, "cfg")!!
+                val token = repo.reserveGeneration(
+                    DiscoveryMediaType.MANGA,
+                    "req-1",
+                    0L,
+                    fixtureConfig(prefs, DiscoveryMediaType.MANGA),
+                )!!
                 val receipt = repo.publishGeneration(
                     token = token,
                     prepared = DiscoveryPreparedPool.Fresh(items, partial = false),
@@ -794,7 +834,7 @@ class DiscoveryAdversarialStressTest {
             val (driver, repo) = newDbRepo(prefs)
             try {
                 // Seed initial pool with 45 items (< low water 50, target 60 -> room = 15)
-                val cfgKey = computeDiscoveryConfigurationKey(prefs, DiscoveryMediaType.NOVEL)
+                val cfgKey = fixtureConfig(prefs, DiscoveryMediaType.NOVEL)
                 val initial = (1..45).map { i ->
                     suggestion(
                         "Existing $i",
@@ -840,8 +880,8 @@ class DiscoveryAdversarialStressTest {
                             ),
                         )
                     },
-                    sourcePreferencesProvider = { SourcePreferences(InMemoryPreferenceStore()) },
-                    installedPluginsProvider = { emptyList() },
+                    sourcePreferencesProvider = { fixtureSources },
+                    sourcePolicyProvider = fixturePolicies,
                     fallbackSourceIdProvider = { 1L },
                 )
 
@@ -886,6 +926,7 @@ class DiscoveryAdversarialStressTest {
             )
             val context = DiscoveryBuildContext(
                 mediaType = DiscoveryMediaType.MANGA,
+                sourcePolicy = fixturePolicies.current(DiscoveryMediaType.MANGA),
                 seeds = emptyList(),
                 libraryCleanTitles = emptySet(),
                 historyCleanTitles = emptySet(),
@@ -967,6 +1008,7 @@ class DiscoveryAdversarialStressTest {
             }
             val context = DiscoveryBuildContext(
                 mediaType = DiscoveryMediaType.NOVEL,
+                sourcePolicy = fixturePolicies.current(DiscoveryMediaType.NOVEL),
                 seeds = emptyList(),
                 libraryCleanTitles = emptySet(),
                 historyCleanTitles = emptySet(),
@@ -989,7 +1031,9 @@ class DiscoveryAdversarialStressTest {
                 sharedGenreQuery = sharedQuery,
             )
             // TASTE builder fails/returns empty; SOURCE builder uses parity=1 and loses index-0 item!
-            val sourceItems = DiscoverySourceRowBuilder(catalog).build(context)
+            val sourceItems = DiscoverySourceRowBuilder(
+                catalog,
+            ).build(context.copy(sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.NOVEL, listOf(7L))))
             sourceItems.map { it.title } shouldBe listOf("Only Fantasy Novel")
         }
 
@@ -1021,7 +1065,12 @@ class DiscoveryAdversarialStressTest {
             val item2 = suggestion("Hidden Title", rowType = DiscoveryRowType.LIKE, position = 1L)
             val item3 = suggestion("Fresh Title", rowType = DiscoveryRowType.SOURCE, position = 2L)
 
-            val token = repo.reserveGeneration(DiscoveryMediaType.MANGA, "g1", 0L, "cfg")!!
+            val token = repo.reserveGeneration(
+                DiscoveryMediaType.MANGA,
+                "g1",
+                0L,
+                fixtureConfig(prefs, DiscoveryMediaType.MANGA),
+            )!!
             repo.publishGeneration(
                 token,
                 DiscoveryPreparedPool.Fresh(listOf(item1, item2, item3), partial = false),

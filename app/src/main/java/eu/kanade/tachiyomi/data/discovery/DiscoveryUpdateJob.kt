@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.UUID
@@ -32,6 +33,28 @@ internal enum class DiscoveryProviderSetting {
     SHIKIMORI,
     MANGA_UPDATES,
     NOVEL_UPDATES,
+}
+
+/** Completion belongs to the actual binding postcondition, not a transferable preference marker. */
+internal suspend fun scheduleDiscoveryBindingBackfill(
+    preferences: DiscoveryPreferences,
+    repository: DiscoveryRepository,
+    currentVersion: Int,
+    enqueue: () -> Unit,
+) {
+    if (!repository.hasUnboundSourceRows()) {
+        markDiscoveryBindingBackfillComplete(preferences, currentVersion)
+    } else if (preferences.discoveryEnabled().get()) {
+        enqueue()
+    }
+}
+
+private fun markDiscoveryBindingBackfillComplete(preferences: DiscoveryPreferences, currentVersion: Int) {
+    if (preferences.bindingBackfillVersion().get() <
+        currentVersion
+    ) {
+        preferences.bindingBackfillVersion().set(currentVersion)
+    }
 }
 
 internal fun resolveWorkResult(
@@ -125,6 +148,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                     null
                 }
                 try {
+                    val batchStartedAt = System.currentTimeMillis()
                     val completed = withTimeoutOrNull(WORKER_TIMEOUT_MS) {
                         Injekt.get<DiscoveryRunner>().run(
                             mediaTypes,
@@ -135,12 +159,28 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                         )
                     }
                     if (completed != null) {
-                        resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)
+                        if (tags.contains(TAG_BACKFILL)) {
+                            val generationSucceeded = completed.values.all { it.isSuccess || it.isSkipped }
+                            val bindingComplete =
+                                generationSucceeded && !Injekt.get<DiscoveryRepository>().hasUnboundSourceRows()
+                            if (bindingComplete) {
+                                markDiscoveryBindingBackfillComplete(
+                                    preferences,
+                                    eu.kanade.tachiyomi.AppInfo.getVersionCode(),
+                                )
+                            }
+                            resolveWorkResult(false, runAttemptCount, isSuccess = bindingComplete)
+                        } else {
+                            resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)
+                        }
                     } else {
                         logcat { "[DiscoveryUpdateJob] TIMEOUT after ${WORKER_TIMEOUT_MS}ms" }
+                        val timedOutAt = System.currentTimeMillis()
                         mediaTypes.forEach { mediaType ->
-                            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
-                            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+                            if (preferences.lastGenerationAt(mediaType).get() < batchStartedAt) {
+                                preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
+                                preferences.lastGenerationAt(mediaType).set(timedOutAt)
+                            }
                         }
                         resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
                     }
@@ -334,7 +374,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                         .build(),
                 )
                 .build()
-            context.workManager.enqueueUniqueWork(TAG_BACKFILL, ExistingWorkPolicy.REPLACE, request)
+            context.workManager.enqueueUniqueWork(TAG_BACKFILL, ExistingWorkPolicy.KEEP, request)
         }
 
         private const val TAG_AFTER_CONSUMED = "DiscoveryRefillAfterConsumed"

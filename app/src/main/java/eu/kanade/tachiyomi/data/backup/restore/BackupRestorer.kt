@@ -2,9 +2,12 @@ package eu.kanade.tachiyomi.data.backup.restore
 
 import android.content.Context
 import android.net.Uri
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.BackupDiagnosticLog
+import eu.kanade.tachiyomi.data.backup.BackupImportPolicy
 import eu.kanade.tachiyomi.data.backup.BackupNotifier
+import eu.kanade.tachiyomi.data.backup.DecodedBackup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCustomButtons
@@ -40,6 +43,8 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFavoritesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFollowsRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.TranslationConfigurationRestorer
+import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
+import eu.kanade.tachiyomi.data.discovery.reconcileDiscoverySourcePreferences
 import eu.kanade.tachiyomi.data.translation.profile.LegacyMigrationStatus
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import kotlinx.coroutines.CancellationException
@@ -49,8 +54,12 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Collections
@@ -93,6 +102,12 @@ class BackupRestorer(
     private val extensionsRestorer: ExtensionsRestorer = ExtensionsRestorer(context),
     private val achievementRestorer: AchievementRestorer = AchievementRestorer(),
     private val translationConfigurationRestorer: TranslationConfigurationRestorer = TranslationConfigurationRestorer(),
+    private val decodeBackup: (Uri, BackupImportPolicy) -> DecodedBackup = { uri, policy ->
+        BackupDecoder(context).decodeDetailed(uri, policy)
+    },
+    private val afterRestoreDiscovery: suspend (Set<DiscoveryMediaType>) -> Unit = { media ->
+        settleRestoredDiscovery(context, media)
+    },
 ) {
 
     private var restoreAmount = 0
@@ -170,8 +185,8 @@ class BackupRestorer(
         BackupDiagnosticLog.log(context, "restore_summary", summary)
     }
 
-    private suspend fun restoreFromFile(uri: Uri, options: RestoreOptions) {
-        val decoded = BackupDecoder(context).decodeDetailed(uri, options.importPolicy())
+    internal suspend fun restoreFromFile(uri: Uri, options: RestoreOptions) {
+        val decoded = decodeBackup(uri, options.importPolicy())
         val backup = decoded.backup
 
         BackupDiagnosticLog.log(
@@ -381,6 +396,54 @@ class BackupRestorer(
         if (options.appSettings) {
             restoreTranslationConfiguration(backup.backupTranslationConfiguration, options)
         }
+        kotlin.coroutines.coroutineContext.ensureActive()
+        val affected = buildSet {
+            if (shouldRestoreAnime && backup.backupAnime.isNotEmpty()) add(DiscoveryMediaType.ANIME)
+            if (shouldRestoreManga && backup.backupManga.isNotEmpty()) add(DiscoveryMediaType.MANGA)
+            if (shouldRestoreNovel && backup.backupNovel.isNotEmpty()) add(DiscoveryMediaType.NOVEL)
+            if (options.appSettings) {
+                backup.backupPreferences.forEach { preference ->
+                    val key = preference.key
+                    if (eu.kanade.domain.discovery.service.DiscoveryPreferences.isRuntimeStateKey(key)) {
+                        return@forEach
+                    }
+                    val perMedia = DiscoveryMediaType.entries.firstOrNull { type ->
+                        key.endsWith("_" + type.key) && (
+                            key.startsWith("discovery_source_") ||
+                                key.startsWith("discovery_priority_genres_") ||
+                                key.startsWith("discovery_required_genres_") ||
+                                key.startsWith("discovery_ignored_genres_")
+                            )
+                    }
+                    when {
+                        perMedia != null -> add(perMedia)
+                        key == "suggestions_use_mangaupdates_novel" -> {
+                            add(DiscoveryMediaType.MANGA)
+                            add(DiscoveryMediaType.NOVEL)
+                        }
+                        key == "suggestions_use_novelupdates" -> add(DiscoveryMediaType.NOVEL)
+                        key == "suggestions_use_shikimori" ||
+                            eu.kanade.domain.discovery.service.DiscoveryPreferences.isGenerationConfigKey(key) ->
+                            addAll(DiscoveryMediaType.entries)
+                    }
+                }
+            }
+            if (options.extensions && backup.backupExtensions.isNotEmpty()) {
+                addAll(DiscoveryMediaType.entries)
+            }
+            if (options.discoveryData) {
+                backup.backupDiscoveryHidden.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoveryBlacklistTags.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoverySignals.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+            }
+        }
+        if (affected.isNotEmpty()) afterRestoreDiscovery(affected)
     }
 
     private fun CoroutineScope.restoreCategories(
@@ -813,4 +876,24 @@ internal fun legacyExtensionRepoBackupsToRestore(
     storeBackups: List<BackupExtensionStore>,
 ): List<BackupExtensionRepos> {
     return if (storeBackups.isEmpty()) repoBackups else emptyList()
+}
+
+/** Settles current ownership after the entire restore scope, without pretending an Android installer has finished. */
+internal suspend fun settleRestoredDiscovery(
+    context: Context,
+    mediaTypes: Set<DiscoveryMediaType>,
+    preferences: DiscoveryPreferences = Injekt.get(),
+    sourcePolicies: DiscoverySourcePolicyProvider = Injekt.get(),
+    reschedule: () -> Unit = { DiscoveryUpdateJob.setupTask(context) },
+    refresh: (DiscoveryMediaType) -> Unit = { DiscoveryUpdateJob.refreshConfiguration(context, it) },
+) {
+    if (mediaTypes.isEmpty()) return
+    kotlin.coroutines.coroutineContext.ensureActive()
+    reschedule()
+    for (media in mediaTypes) {
+        kotlin.coroutines.coroutineContext.ensureActive()
+        val policy = sourcePolicies.current(media)
+        if (policy.inventoryComplete) reconcileDiscoverySourcePreferences(preferences, media, policy.pluginMembers.keys)
+        refresh(media)
+    }
 }

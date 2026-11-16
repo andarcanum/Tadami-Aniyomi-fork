@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.backup.restore.restorers
 
 import android.content.Context
 import android.util.Log
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
@@ -23,6 +24,7 @@ import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.library.service.LibraryPreferences
 import uy.kohesive.injekt.Injekt
@@ -39,8 +41,12 @@ class PreferenceRestorer(
         preferences: List<BackupPreference>,
         backupCategories: List<BackupCategory>?,
     ) {
+        val sourceKeys = restoreDiscoverySourcePreferences(preferences)
         restorePreferences(
-            preferences,
+            preferences.filterNot {
+                it.key in sourceKeys ||
+                    DiscoveryPreferences.isRuntimeStateKey(it.key)
+            },
             preferenceStore,
             backupCategories,
         )
@@ -49,6 +55,31 @@ class PreferenceRestorer(
         MangaLibraryUpdateJob.setupTask(context)
         NovelLibraryUpdateJob.setupTask(context)
         BackupCreateJob.setupTask(context)
+    }
+
+    /** Source selection is one mutation per media, not three unrelated generic preference writes. */
+    private fun restoreDiscoverySourcePreferences(toRestore: List<BackupPreference>): Set<String> {
+        val discoveryPreferences = DiscoveryPreferences(preferenceStore)
+        val sourceKeys = LinkedHashSet<String>()
+        DiscoveryMediaType.entries.forEach { mediaType ->
+            val targets = listOf(
+                discoveryPreferences.discoverySourceMode(mediaType),
+                discoveryPreferences.discoverySourceExcluded(mediaType),
+                discoveryPreferences.discoverySourceKnown(mediaType),
+            ).associateBy { it.key() }
+            sourceKeys += targets.keys
+            val supplied = toRestore.filter { it.key in targets }
+            if (supplied.isEmpty()) return@forEach
+            discoveryPreferences.withSourcePreferencesLock(mediaType) {
+                val existing = preferenceStore.getAll()
+                supplied.forEach { (key, value) ->
+                    if (value is StringPreferenceValue && existing[key] is String?) {
+                        targets.getValue(key).set(value.value)
+                    }
+                }
+            }
+        }
+        return sourceKeys
     }
 
     suspend fun restoreSource(preferences: List<BackupSourcePreferences>) {

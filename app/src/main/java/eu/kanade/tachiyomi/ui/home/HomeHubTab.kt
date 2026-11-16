@@ -683,6 +683,7 @@ internal data class HomeHubUiState(
      */
     val discoveryPool: List<HomeHubDiscoveryItem> = emptyList(),
     val discoveryEnabled: Boolean = false,
+    val isDiscoveryLoading: Boolean = false,
     val isDiscoveryRefreshing: Boolean = false,
     val isDiscoveryFailed: Boolean = false,
     val discoveryFailedSourceCount: Int = 0,
@@ -766,6 +767,7 @@ object HomeHubTab : Tab {
     private val userProfilePreferences: UserProfilePreferences by injectLazy()
     private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
+    private val checkedBindingBackfillInProcess = java.util.concurrent.atomic.AtomicBoolean(false)
 
     override val options: TabOptions
         @Composable
@@ -978,13 +980,12 @@ object HomeHubTab : Tab {
             // привязки (source_id NULL) — на них direct open деградировал бы в шторку,
             // пока ленту не обновили вручную. Разовый чек на версию приложения + тихая
             // перегенерация при наличии непривязанных SOURCE-строк.
-            val backfillDoneVersion = discoveryPreferences.bindingBackfillVersion().get()
-            val currentVersion = eu.kanade.tachiyomi.AppInfo.getVersionCode()
-            if (backfillDoneVersion < currentVersion) {
-                discoveryPreferences.bindingBackfillVersion().set(currentVersion)
-                if (discoveryRepository.hasUnboundSourceRows()) {
-                    eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.backfillRefresh(context)
-                }
+            if (checkedBindingBackfillInProcess.compareAndSet(false, true)) {
+                eu.kanade.tachiyomi.data.discovery.scheduleDiscoveryBindingBackfill(
+                    discoveryPreferences,
+                    discoveryRepository,
+                    eu.kanade.tachiyomi.AppInfo.getVersionCode(),
+                ) { eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.backfillRefresh(context) }
             }
             if (discoveryPreferences.retirementResetVersion().get() <
                 eu.kanade.domain.discovery.service.DiscoveryPreferences.CURRENT_RETIREMENT_RESET_VERSION

@@ -192,14 +192,9 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
             scope.launch {
                 if (item.rowType == DiscoveryRowType.SOURCE) {
                     // Ряд источника: открываем каталог источника напрямую, без глобального поиска.
-                    val sourceId = when (state.mediaType) {
-                        DiscoveryMediaType.ANIME -> Injekt.get<GetEnabledAnimeSources>()
-                            .subscribe().first().firstOrNull { it.name == item.provider }?.id
-                        DiscoveryMediaType.MANGA -> Injekt.get<GetEnabledMangaSources>()
-                            .subscribe().first().firstOrNull { it.name == item.provider }?.id
-                        DiscoveryMediaType.NOVEL -> Injekt.get<GetEnabledNovelSources>()
-                            .subscribe().first().firstOrNull { it.name == item.provider }?.id
-                    }
+                    val policy = Injekt.get<tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider>()
+                        .current(item.mediaType)
+                    val sourceId = item.sourceId?.takeIf { policy.allows(item) }
                     if (sourceId != null) {
                         navigator.push(
                             when (state.mediaType) {
@@ -978,16 +973,9 @@ private fun FeedCard(
     val context = LocalContext.current
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Portrait)
     val coverReloadTick = rememberCoverReloadTick()
-    val coverRequest = remember(context, item.coverUrl, item.provider, coverReloadTick, coverRecoveryTick) {
-        buildAuroraCoverImageRequest(
-            context,
-            discoveryCoverData(
-                coverMediaType,
-                item.provider,
-                item.coverUrl,
-                DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle),
-            ),
-        )
+    val coverModel = rememberDiscoveryCoverData(item, DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle))
+    val coverRequest = remember(context, coverModel, coverReloadTick, coverRecoveryTick) {
+        buildAuroraCoverImageRequest(context, coverModel)
     }
     val containerShape = RoundedCornerShape(18.dp)
     val posterShape = RoundedCornerShape(16.dp)

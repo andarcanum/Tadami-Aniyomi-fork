@@ -20,6 +20,7 @@ class CompositeTrendingSource(
     private val isRussianLocaleProvider: () -> Boolean = {
         java.util.Locale.getDefault().language.equals("ru", ignoreCase = true)
     },
+    private val nsfwFilterProvider: () -> Boolean = ::discoveryNsfwFilterEnabled,
     private val translationServiceProvider: () -> GoogleTranslationService? = {
         try {
             Injekt.get<GoogleTranslationService>()
@@ -153,8 +154,9 @@ class CompositeTrendingSource(
     }
 
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
-        val cacheKey = "${mediaType.key}:${normalizeDiscoveryTitle(title)}"
-        globalMetaCache.get(cacheKey)?.let { return it }
+        val filterNsfw = nsfwFilterProvider()
+        val cacheKey = DiscoveryMetadataCacheKey(mediaType, normalizeDiscoveryTitle(title), filterNsfw)
+        globalMetaCache.get(cacheKey)?.let { return it.takeIf { nsfwFilterProvider() == filterNsfw } }
 
         val isRu = isRussianLocaleProvider()
         val providers: List<Pair<String, suspend () -> DiscoveryMeta?>> = when (mediaType) {
@@ -184,6 +186,7 @@ class CompositeTrendingSource(
         for ((name, action) in providers) {
             try {
                 val meta = action()
+                if (nsfwFilterProvider() != filterNsfw) return null
                 if (meta != null && (!meta.description.isNullOrBlank() || meta.genres.isNotEmpty())) {
                     val resolvedMeta = if (isRu && !meta.description.isNullOrBlank() &&
                         !hasCyrillic(meta.description)
@@ -199,6 +202,7 @@ class CompositeTrendingSource(
                     } else {
                         meta
                     }
+                    if (nsfwFilterProvider() != filterNsfw) return null
                     globalMetaCache.put(cacheKey, resolvedMeta)
                     return resolvedMeta
                 }
@@ -214,11 +218,15 @@ class CompositeTrendingSource(
     private fun hasCyrillic(text: String): Boolean = cyrillicRegex.containsMatchIn(text)
 
     companion object {
-        private val globalMetaCache = DiscoveryLruCache<String, DiscoveryMeta>(100)
+        private val globalMetaCache = DiscoveryLruCache<DiscoveryMetadataCacheKey, DiscoveryMeta>(100)
         private val cyrillicRegex = Regex("[а-яА-ЯёЁ]")
 
         fun getCachedMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
-            val cacheKey = "${mediaType.key}:${normalizeDiscoveryTitle(title)}"
+            val cacheKey = DiscoveryMetadataCacheKey(
+                mediaType,
+                normalizeDiscoveryTitle(title),
+                discoveryNsfwFilterEnabled(),
+            )
             return globalMetaCache.get(cacheKey)
         }
     }

@@ -1,12 +1,27 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import java.io.IOException
+import java.util.concurrent.CopyOnWriteArrayList
 
 class DiscoveryTasteRowBuilderTest {
 
@@ -64,7 +79,9 @@ class DiscoveryTasteRowBuilderTest {
             releaseStatuses: Set<DiscoveryReleaseStatus>,
         ): List<DiscoveryRowItem> {
             if (shouldFail) throw IOException("catalog boom")
-            return perSourceGenreItems[sourceId] ?: genreItems
+            return (perSourceGenreItems[sourceId] ?: genreItems).map {
+                it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+            }
         }
 
         override suspend fun latest(
@@ -87,10 +104,95 @@ class DiscoveryTasteRowBuilderTest {
         tasteProfile = profile,
         blacklistedTags = blacklistedTags,
         sourceId = 7L,
+        sourcePolicy = discoveryQueryPolicyFixture(
+            DiscoveryMediaType.MANGA,
+            listOf(7L),
+            mapOf(DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST)),
+        ),
     )
 
     private fun builder(trending: DiscoveryTrendingSource, catalog: DiscoverySourceCatalog) =
         DiscoveryTasteRowBuilder(trending, catalog, sortProvider = { TrendSort.POPULARITY })
+
+    @Test
+    fun `soft priority preserves novel interests with empty required genres and default ALL`(): Unit =
+        runBlocking {
+            val requestedGenres = CopyOnWriteArrayList<List<String>>()
+            val client = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val buffer = Buffer()
+                    chain.request().body!!.writeTo(buffer)
+                    val variables = Json.parseToJsonElement(buffer.readUtf8()).jsonObject
+                        .getValue("variables").jsonObject
+                    val genres = variables.getValue("genres").jsonArray.map { it.jsonPrimitive.content }
+                    requestedGenres += genres
+                    val media = buildList {
+                        if (genres.any { it.equals("Action", ignoreCase = true) }) {
+                            add(
+                                """{"id":101,"title":{"romaji":"Action interest","english":null,"native":null},
+                                  "coverImage":{"large":null},"genres":["Action"]}""",
+                            )
+                        }
+                        if (genres.any { it.equals("Romance", ignoreCase = true) }) {
+                            add(
+                                """{"id":102,"title":{"romaji":"Romance interest","english":null,"native":null},
+                                  "coverImage":{"large":null},"genres":["Romance"]}""",
+                            )
+                        }
+                    }
+                    val body = "{\"data\":{\"Page\":{\"media\":[" + media.joinToString(",") + "]}}}"
+                    Response.Builder()
+                        .request(chain.request())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType()))
+                        .build()
+                }
+                .build()
+            try {
+                val sourcePolicy = DiscoverySourcePolicy(
+                    mediaType = DiscoveryMediaType.NOVEL,
+                    revision = "novel-soft-interest-fixture",
+                    inventoryComplete = true,
+                    allowedPluginKeys = emptySet(),
+                    pluginMembers = emptyMap(),
+                    allowedExternalProviders = mapOf(
+                        DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST),
+                    ),
+                )
+                val anilist = AniListTrendingSource(
+                    clientProvider = { client },
+                    jsonProvider = { Json },
+                    nsfwFilterProvider = { true },
+                )
+                val builder = DiscoveryTasteRowBuilder(anilist, FakeCatalog(), { TrendSort.POPULARITY })
+                val context = DiscoveryBuildContext(
+                    mediaType = DiscoveryMediaType.NOVEL,
+                    seeds = emptyList(),
+                    libraryCleanTitles = emptySet(),
+                    historyCleanTitles = emptySet(),
+                    hiddenCleanTitles = emptySet(),
+                    tasteProfile = listOf("Romance" to 2.0),
+                    genreFilterSpec = GenreFilterSpec(
+                        priorityGenres = setOf("Action"),
+                        requiredGenres = emptySet(),
+                    ),
+                    sourcePolicy = sourcePolicy,
+                    sourceIds = sourcePolicy.representativeSourceIds,
+                    verificationBudget = DiscoveryVerificationBudget(budgetMs = 5_000, maxDetails = 0),
+                )
+
+                val items = withTimeout(5_000L) { builder.build(context) }
+
+                items.map { it.title }.toSet() shouldBe setOf("Action interest", "Romance interest")
+                items.all { it.sourceId == null } shouldBe true
+                requestedGenres.flatten().any { it.equals("Romance", ignoreCase = true) } shouldBe true
+            } finally {
+                client.dispatcher.executorService.shutdownNow()
+                client.connectionPool.evictAll()
+            }
+        }
 
     @Test
     fun `empty taste profile yields empty row without calls`() = runTest {
@@ -217,6 +319,11 @@ class DiscoveryTasteRowBuilderTest {
         val ctx = context().copy(
             sourceId = 10L,
             sourceIds = listOf(10L, 20L),
+            sourcePolicy = discoveryQueryPolicyFixture(
+                DiscoveryMediaType.MANGA,
+                listOf(10L, 20L),
+                mapOf(DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST)),
+            ),
         )
         val result = DiscoveryTasteRowBuilder(
             trending = FakeTrending(shouldFail = true),
@@ -243,6 +350,11 @@ class DiscoveryTasteRowBuilderTest {
         val ctx = context().copy(
             sourceId = 10L,
             sourceIds = listOf(10L, 20L),
+            sourcePolicy = discoveryQueryPolicyFixture(
+                DiscoveryMediaType.MANGA,
+                listOf(10L, 20L),
+                mapOf(DiscoveryRowType.TASTE to setOf(DiscoveryExternalProvider.ANILIST)),
+            ),
         )
         val result = DiscoveryTasteRowBuilder(
             trending = FakeTrending(shouldFail = true),
@@ -342,5 +454,138 @@ class DiscoveryTasteRowBuilderTest {
 
         result.size shouldBe 10
         trending.queriedPages shouldBe listOf(1, 2)
+    }
+
+    @Test
+    fun `best effort required taste keeps paging external provider past page one non-matches`() =
+        runTest {
+            val page1NonMatches = (1..30).map { index ->
+                DiscoveryTrendingItem(
+                    "Drama $index",
+                    "drama $index",
+                    null,
+                    index.toLong(),
+                    null,
+                    genres = listOf("Drama"),
+                )
+            }
+            val page2Matches = (1..30).map { index ->
+                DiscoveryTrendingItem(
+                    "Milf $index",
+                    "milf $index",
+                    null,
+                    100L + index,
+                    null,
+                    genres = listOf("Milf"),
+                )
+            }
+            val trending = FakeTrending(
+                pageItems = mapOf(1 to page1NonMatches, 2 to page2Matches),
+            )
+            val spec = GenreFilterSpec(
+                requiredGenres = setOf("Milf"),
+                requiredEnforcement = RequiredEnforcement.BEST_EFFORT,
+            )
+            val ctx = context(profile = emptyList()).copy(
+                requiredGenres = setOf("Milf"),
+                genreFilterSpec = spec,
+            )
+
+            val result = builder(trending, FakeCatalog()).build(ctx)
+
+            trending.queriedPages shouldBe listOf(1, 2)
+            result.take(30).all { "Milf" in it.genres } shouldBe true
+        }
+
+    @Test
+    fun `ordinary taste row keeps non-required native query unsplit and unhydrated even with active budget`() =
+        runTest {
+            var calls = 0
+            val catalog = object : DiscoverySourceCatalog {
+                override suspend fun popular(
+                    mediaType: DiscoveryMediaType,
+                    sourceId: Long,
+                    page: Int,
+                    releaseStatuses: Set<DiscoveryReleaseStatus>,
+                ) = emptyList<DiscoveryRowItem>()
+
+                override suspend fun popularWithGenres(
+                    mediaType: DiscoveryMediaType,
+                    sourceId: Long,
+                    genres: List<String>,
+                    page: Int,
+                    releaseStatuses: Set<DiscoveryReleaseStatus>,
+                ): List<DiscoveryRowItem> {
+                    calls++
+                    return emptyList()
+                }
+
+                override suspend fun latest(
+                    mediaType: DiscoveryMediaType,
+                    sourceId: Long,
+                    page: Int,
+                    releaseStatuses: Set<DiscoveryReleaseStatus>,
+                ) = emptyList<DiscoveryRowItem>()
+            }
+            val ctx = context(profile = listOf("Action" to 5.0, "Comedy" to 4.0, "Drama" to 3.0)).copy(
+                verificationBudget = DiscoveryVerificationBudget(budgetMs = 5_000L, maxDetails = 10),
+            )
+            DiscoveryTasteRowBuilder(FakeTrending(), catalog, { TrendSort.POPULARITY }, includeExternal = false)
+                .build(ctx)
+
+            calls shouldBe 1
+        }
+
+    @Test
+    fun `split queries without item genres use queried genre not head profile genres`() = runTest {
+        val trending = object : DiscoveryTrendingSource {
+            override suspend fun fetch(
+                mediaType: DiscoveryMediaType,
+                season: TrendSeason,
+                sort: TrendSort,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryTrendingItem>()
+
+            override suspend fun fetchByGenres(
+                mediaType: DiscoveryMediaType,
+                genres: List<String>,
+                sort: TrendSort,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ) = when (genres.singleOrNull()) {
+                "Mystery" -> listOf(
+                    DiscoveryTrendingItem("Shikimori Mystery", "shikimori mystery", null, 1L, null, emptyList()),
+                )
+                else -> emptyList()
+            }
+
+            override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? = null
+        }
+        val profile = listOf("Action" to 5.0, "Comedy" to 4.0, "Mystery" to 3.0)
+        val result = builder(trending, FakeCatalog()).build(context(profile = profile))
+        result.single { it.title == "Shikimori Mystery" }.reason shouldBe "Mystery"
+    }
+
+    @Test
+    fun `fallback items with disjoint genres do not fabricate top profile genres in reason`() = runTest {
+        val trending = FakeTrending(
+            genreItems = listOf(
+                DiscoveryTrendingItem("Drama Fallback", "drama fallback", null, 1L, null, genres = listOf("Drama")),
+                DiscoveryTrendingItem("Action Match", "action match", null, 2L, null, genres = listOf("Action")),
+            ),
+        )
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Action", "Fantasy"),
+            requiredMatchMode = RequiredMatchMode.ANY,
+            requiredEnforcement = RequiredEnforcement.BEST_EFFORT,
+        )
+        val ctx = context(profile = listOf("Action" to 5.0, "Fantasy" to 4.0)).copy(
+            requiredGenres = setOf("Action", "Fantasy"),
+            genreFilterSpec = spec,
+        )
+        val result = builder(trending, FakeCatalog()).build(ctx)
+        result.single { it.title == "Action Match" }.reason shouldBe "Action"
+        result.single { it.title == "Drama Fallback" }.reason shouldBe null
     }
 }

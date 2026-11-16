@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder
 import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.isBlacklisted
+import eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled
 import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +27,9 @@ import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
 import tachiyomi.domain.discovery.model.identityKeys
 import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 /**
  * Единый контроллер Home-discovery (PR 3):
@@ -41,15 +45,62 @@ internal class HomeDiscoveryController(
     private val onStateUpdate: ((HomeHubUiState) -> HomeHubUiState) -> Unit,
     private val currentState: () -> HomeHubUiState,
     private val onEmitEffect: (HomeHubEffect) -> Unit,
+    sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
 ) {
+    private val sourcePolicies by lazy { sourcePolicyProvider ?: Injekt.get<DiscoverySourcePolicyProvider>() }
     private val mutex = Mutex()
     private var cachedDiscoveryPool: List<DiscoverySuggestion> = emptyList()
     private var cachedPolicy: DiscoveryCandidatePolicy = DiscoveryCandidatePolicy()
     private var hasObservedPolicy: Boolean = false
+    private var lastObservedInventoryComplete: Boolean? = null
     private var discoveryOffset: Int = 0
     private var lastReentryTime: Long = 0L
     private var lastRefreshClickTime: Long = 0L
     private var dismissedSessionTitles = mutableSetOf<String>()
+
+    private fun publishState(updater: (HomeHubUiState) -> HomeHubUiState) {
+        onStateUpdate { current ->
+            val updated = updater(current)
+            val policy = sourcePolicies.current(mediaType)
+            updated.copy(
+                discovery = updated.discovery.filter { item ->
+                    item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())
+                },
+                discoveryPool = updated.discoveryPool.filter { item ->
+                    item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())
+                },
+            )
+        }
+    }
+
+    private fun projectPool(
+        items: List<DiscoverySuggestion>,
+        policy: DiscoveryCandidatePolicy,
+    ): List<DiscoverySuggestion> {
+        val sources = sourcePolicies.current(mediaType)
+        val eligible = items.filter { sources.allows(it) && it.cleanTitle !in dismissedSessionTitles }
+        val filtered = eligible.groupBy { it.rowType }.flatMap { (_, row) ->
+            policy.filterRowCandidates(row, { it.genres }, scoreSelector = { it.score }).map { item ->
+                if (policy.hasPriorityBoost(item)) {
+                    item.copy(
+                        score = maxOf(
+                            item.score * 1.5,
+                            item.score + 10.0,
+                        ),
+                    )
+                } else {
+                    item
+                }
+            }
+        }
+        val deduped = dedupeCrossRow(filtered)
+        return if (policy.priorityGenres.isNotEmpty()) {
+            val (boosted, normal) = deduped.partition { policy.hasPriorityBoost(it) }
+            boosted + normal
+        } else {
+            deduped
+        }
+    }
 
     fun startObserving() {
         scope.launchIO {
@@ -62,14 +113,14 @@ internal class HomeDiscoveryController(
             }.getOrNull() ?: return@launchIO
 
             refreshFlow.collectLatest { refreshing ->
-                onStateUpdate { it.copy(isDiscoveryRefreshing = refreshing) }
+                publishState { it.copy(isDiscoveryRefreshing = refreshing) }
                 if (wasRefreshing && !refreshing) {
                     mutex.withLock {
                         val failedCsv = preferences.lastFailedRows(mediaType).get()
                         val lastStatus = preferences.lastGenerationStatus(mediaType).get()
                         val isFailed =
                             (lastStatus == "FAILED") || (failedCsv.isNotBlank() && cachedDiscoveryPool.isEmpty())
-                        onStateUpdate { it.copy(isDiscoveryFailed = isFailed) }
+                        publishState { it.copy(isDiscoveryFailed = isFailed) }
                         updateDiscoveryTeaserLocked(
                             advanceOffset = false,
                             forceUpdate = true,
@@ -94,6 +145,7 @@ internal class HomeDiscoveryController(
                 combine(
                     repository.subscribeBlacklist(mediaType),
                     preferences.observeGenreFilterSpec(mediaType),
+                    sourcePolicies.observe(mediaType),
                     combine(
                         preferences.lastFailedRows(mediaType).changes(),
                         preferences.lastGenerationStatus(mediaType).changes(),
@@ -102,16 +154,16 @@ internal class HomeDiscoveryController(
                     ) { failedCsv, lastStatus, lastGenAt, sourceFailureCount ->
                         DiscoveryStatusSnapshot(failedCsv, lastStatus, lastGenAt, sourceFailureCount)
                     },
-                ) { blacklist, filterSpec, status ->
+                ) { blacklist, filterSpec, sourcePolicy, status ->
                     DiscoveryCandidatePolicy(
                         spec = filterSpec,
                         blacklistedTags = blacklist,
-                    ) to status
+                    ).let { policy -> Triple(policy, status, sourcePolicy) }
                 },
-            ) { items, enabled, count, exclusions, (policy, status) ->
+            ) { items, enabled, count, exclusions, (policy, status, sourcePolicy) ->
                 val (hidden, consumed, memory) = exclusions
                 val visible = filterVisibleByExclusions(
-                    items = items,
+                    items = items.filter(sourcePolicy::allows),
                     mediaType = mediaType,
                     hidden = hidden,
                     consumed = consumed,
@@ -126,19 +178,24 @@ internal class HomeDiscoveryController(
                     lastStatus = status.lastStatus,
                     lastGenAt = status.lastGenAt,
                     sourceFailureCount = status.sourceFailureCount,
+                    inventoryComplete = sourcePolicy.inventoryComplete,
                 )
             }.collectLatest { obs ->
                 mutex.withLock {
                     val previousPriorityGenres = cachedPolicy.priorityGenres
                     val hadObservedPolicy = hasObservedPolicy
+                    val inventoryJustCompleted =
+                        lastObservedInventoryComplete == false && obs.inventoryComplete
+                    lastObservedInventoryComplete = obs.inventoryComplete
                     cachedPolicy = obs.policy
                     hasObservedPolicy = true
                     if (!obs.enabled) {
                         cachedDiscoveryPool = emptyList()
-                        onStateUpdate {
+                        publishState {
                             it.copy(
                                 discovery = emptyList(),
                                 discoveryEnabled = false,
+                                isDiscoveryLoading = false,
                                 discoveryPool = emptyList(),
                                 isDiscoveryFailed = false,
                                 discoveryFailedSourceCount = 0,
@@ -146,26 +203,8 @@ internal class HomeDiscoveryController(
                         }
                         return@collectLatest
                     }
-                    val filtered = obs.visible
-                        .groupBy { it.rowType }
-                        .flatMap { (_, items) ->
-                            obs.policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
-                                .map { item ->
-                                    if (obs.policy.hasPriorityBoost(item)) {
-                                        item.copy(score = maxOf(item.score * 1.5, item.score + 10.0))
-                                    } else {
-                                        item
-                                    }
-                                }
-                        }
-                    val deduped = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
-                    cachedDiscoveryPool = if (obs.policy.priorityGenres.isNotEmpty()) {
-                        val (boosted, normal) = deduped.partition { obs.policy.hasPriorityBoost(it) }
-                        boosted + normal
-                    } else {
-                        deduped
-                    }
-                    val shownAtByTitle = runCatching {
+                    cachedDiscoveryPool = projectPool(obs.visible, obs.policy)
+                    val shownAtByTitle = eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
                         repository.getRecentExclusionsWithTimestamp(mediaType)
                     }.getOrDefault(emptyMap())
 
@@ -176,14 +215,18 @@ internal class HomeDiscoveryController(
                         )
                     }
                     val lastUpdated = obs.visible.maxOfOrNull { it.createdAt }
-                        ?: runCatching { repository.lastUpdatedAt(mediaType) }.getOrNull()
+                        ?: eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
+                            repository.lastUpdatedAt(mediaType)
+                        }.getOrNull()
                         ?: obs.lastGenAt.takeIf { it > 0L }
                     val isFailed =
                         (obs.lastStatus == "FAILED") || (obs.failedCsv.isNotBlank() && cachedDiscoveryPool.isEmpty())
-                    onStateUpdate {
+                    val waitingInventory = !obs.inventoryComplete && cachedDiscoveryPool.isEmpty()
+                    publishState {
                         it.copy(
                             discoveryPool = updatedPool,
                             discoveryEnabled = true,
+                            isDiscoveryLoading = waitingInventory,
                             discoveryLastUpdated = lastUpdated,
                             isDiscoveryFailed = isFailed,
                             discoveryFailedSourceCount = obs.sourceFailureCount,
@@ -192,11 +235,12 @@ internal class HomeDiscoveryController(
 
                     val isFirstTeaserLoad = currentState().discovery.isEmpty()
                     val priorityChanged = hadObservedPolicy && obs.policy.priorityGenres != previousPriorityGenres
+                    val forceRebalance = isFirstTeaserLoad || priorityChanged || inventoryJustCompleted
                     updateDiscoveryTeaserLocked(
                         advanceOffset = false,
-                        forceUpdate = isFirstTeaserLoad || priorityChanged,
+                        forceUpdate = forceRebalance,
                         teaserCount = obs.count,
-                        avoidCurrentTitles = !priorityChanged,
+                        avoidCurrentTitles = !(priorityChanged || inventoryJustCompleted),
                     )
                 }
             }
@@ -211,13 +255,13 @@ internal class HomeDiscoveryController(
         avoidCurrentTitles: Boolean = true,
     ) {
         if (!preferences.discoveryEnabled().get()) {
-            onStateUpdate { it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList()) }
+            publishState { it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList()) }
             return
         }
         val count = teaserCount ?: preferences.teaserCount().get().coerceIn(3, 20)
         val pool = cachedDiscoveryPool
         if (pool.isEmpty()) {
-            onStateUpdate { it.copy(discovery = emptyList(), discoveryEnabled = true, discoveryPool = emptyList()) }
+            publishState { it.copy(discovery = emptyList(), discoveryEnabled = true, discoveryPool = emptyList()) }
             return
         }
 
@@ -226,7 +270,7 @@ internal class HomeDiscoveryController(
         val priorityCheck: (DiscoverySuggestion) -> Boolean = { activePolicy.hasPriorityBoost(it) }
         if (!forceUpdate && !advanceOffset && state.discovery.isNotEmpty()) {
             val validCleanTitles = pool.mapTo(HashSet()) { it.cleanTitle }
-            val shownMap = runCatching {
+            val shownMap = runCatchingUnlessCancelled {
                 repository.getRecentExclusionsWithTimestamp(mediaType)
             }.getOrDefault(emptyMap())
 
@@ -249,7 +293,7 @@ internal class HomeDiscoveryController(
             }
 
             if (patched != state.discovery || updatedPool != state.discoveryPool) {
-                onStateUpdate {
+                publishState {
                     it.copy(
                         discovery = patched,
                         discoveryEnabled = true,
@@ -265,7 +309,7 @@ internal class HomeDiscoveryController(
             discoveryOffset = (discoveryOffset + step) % pool.size
         }
 
-        val shownMap = runCatching {
+        val shownMap = runCatchingUnlessCancelled {
             repository.getRecentExclusionsWithTimestamp(mediaType)
         }.getOrDefault(emptyMap())
         val shownTitles = shownMap.keys
@@ -298,7 +342,7 @@ internal class HomeDiscoveryController(
                 hasPriorityBoost = priorityCheck(p),
             )
         }
-        onStateUpdate {
+        publishState {
             it.copy(
                 discovery = teaser,
                 discoveryEnabled = true,
@@ -344,7 +388,7 @@ internal class HomeDiscoveryController(
 
         scope.launchIO {
             mutex.withLock {
-                val snapshot = runCatching { repository.publication(mediaType) }.getOrNull()
+                val snapshot = runCatchingUnlessCancelled { repository.publication(mediaType) }.getOrNull()
                 val rankedKeys = cachedDiscoveryPool
                     .flatMap { suggestion -> suggestion.identityKeys().toList() }
                 val receipt = if (snapshot == null) {
@@ -362,7 +406,7 @@ internal class HomeDiscoveryController(
                     }
 
                     is DiscoveryBatchReceipt.NeedsSourceRefresh, null -> {
-                        onStateUpdate { it.copy(isDiscoveryRefreshing = true) }
+                        publishState { it.copy(isDiscoveryRefreshing = true) }
                         DiscoveryUpdateJob.refreshNow(context, mediaType)
                     }
                 }
@@ -375,10 +419,15 @@ internal class HomeDiscoveryController(
         snapshot.eligibleSuggestions.forEach { suggestion ->
             suggestion.identityKeys().forEach { key -> byKey.putIfAbsent(key, suggestion) }
         }
+        val sourcePolicy = sourcePolicies.current(mediaType)
         val selected = snapshot.homeBatchKeys
             .mapNotNull { byKey[it] }
             .distinctBy { it.cleanTitle }
-            .filter { cachedPolicy.isAllowed(it) && it.cleanTitle !in dismissedSessionTitles }
+            .filter {
+                cachedPolicy.isAllowed(it) &&
+                    sourcePolicy.allows(it) &&
+                    it.cleanTitle !in dismissedSessionTitles
+            }
         if (selected.isEmpty()) {
             updateDiscoveryTeaserLocked(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
             return
@@ -414,45 +463,53 @@ internal class HomeDiscoveryController(
             repository.undoHide(item.mediaType, item.cleanTitle)
             mutex.withLock {
                 dismissedSessionTitles -= item.cleanTitle
-                val suggestion = repository.subscribe(mediaType).first()
-                    .firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@withLock
-                val consumed = repository.getSignals(mediaType)
-                    .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
-                if (consumed || item.cleanTitle in repository.getHiddenTitles(mediaType)) return@withLock
-                val eligibility = runCatching { repository.eligibility(mediaType) }.getOrNull()
-                if (eligibility != null && (
-                        suggestion.cleanTitle in eligibility.excludedIdentityKeys ||
-                            legacyDiscoveryKey(mediaType, suggestion.cleanTitle) in eligibility.excludedLookupKeys ||
-                            suggestion.identityKeys().any { it in eligibility.excludedIdentityKeys }
-                        )
-                ) {
-                    return@withLock
+                val rawPool = repository.subscribe(mediaType).first()
+                val consumed = repository.getSignals(mediaType).filter {
+                    it.signalType.excludesFromFeed
+                }.mapTo(HashSet()) {
+                    it.cleanTitle
                 }
+                val hidden = repository.getHiddenTitles(mediaType)
+                val eligibility = eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
+                    repository.eligibility(mediaType)
+                }.getOrNull()
                 val blacklist = repository.getBlacklistedTags(mediaType)
                 val shownMap = repository.getRecentExclusionsWithTimestamp(mediaType)
-                // Read preferences after the suspend points, immediately before publishing.
                 val policy = DiscoveryCandidatePolicy(
                     spec = preferences.genreFilterSpec(mediaType),
                     blacklistedTags = blacklist,
                 )
-                if (!preferences.discoveryEnabled().get() || !policy.isAllowed(suggestion)) return@withLock
+                if (!preferences.discoveryEnabled().get()) return@withLock
+                val excludedIdentities = eligibility?.excludedIdentityKeys.orEmpty()
+                val excludedLookups = eligibility?.excludedLookupKeys.orEmpty()
+                val eligible = rawPool.filterNot { candidate ->
+                    candidate.cleanTitle in consumed || candidate.cleanTitle in hidden ||
+                        candidate.cleanTitle in excludedIdentities ||
+                        legacyDiscoveryKey(mediaType, candidate.cleanTitle) in excludedLookups ||
+                        candidate.identityKeys().any { it in excludedIdentities }
+                }
+                val projected = projectPool(eligible, policy)
+                val suggestion = projected.firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@withLock
                 val freshItem = suggestion.toHomeHubDiscoveryItem(
                     shownAt = shownMap[item.cleanTitle],
                     hasPriorityBoost = policy.hasPriorityBoost(suggestion),
                 )
-                cachedDiscoveryPool = listOf(suggestion) +
-                    cachedDiscoveryPool.filterNot { it.cleanTitle == suggestion.cleanTitle }
-                onStateUpdate { current ->
-                    val updatedDiscovery = restoreTeaserItem(
-                        current = current.discovery,
-                        restored = freshItem,
-                        targetCount = current.discovery.size,
-                    )
-                    val updatedPool =
-                        listOf(freshItem) + current.discoveryPool.filterNot { it.cleanTitle == freshItem.cleanTitle }
+                cachedPolicy = policy
+                cachedDiscoveryPool = projected
+                val allowedTitles = projected.mapTo(HashSet()) { it.cleanTitle }
+                publishState { current ->
                     current.copy(
-                        discovery = updatedDiscovery,
-                        discoveryPool = updatedPool,
+                        discovery = restoreTeaserItem(
+                            current = current.discovery.filter { it.cleanTitle in allowedTitles },
+                            restored = freshItem,
+                            targetCount = current.discovery.size,
+                        ),
+                        discoveryPool = projected.map { candidate ->
+                            candidate.toHomeHubDiscoveryItem(
+                                shownAt = shownMap[candidate.cleanTitle],
+                                hasPriorityBoost = policy.hasPriorityBoost(candidate),
+                            )
+                        },
                         discoveryEnabled = true,
                     )
                 }
@@ -501,6 +558,7 @@ private data class DiscoveryObservationState(
     val lastStatus: String,
     val lastGenAt: Long,
     val sourceFailureCount: Int,
+    val inventoryComplete: Boolean = true,
 )
 
 private fun filterVisibleByExclusions(

@@ -3,20 +3,19 @@ package eu.kanade.tachiyomi.data.discovery
 import eu.kanade.domain.entries.anime.model.toDomainAnime
 import eu.kanade.domain.entries.manga.model.toDomainManga
 import eu.kanade.domain.entries.novel.model.toDomainNovel
-import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
-import eu.kanade.domain.source.manga.interactor.GetEnabledMangaSources
-import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
+import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.source.CatalogueSource
+import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
-import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
+import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
 import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
@@ -26,76 +25,85 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-/**
- * «+» на карточке подборки: добавление имеет смысл только для рекомендаций,
- * пришедших из установленного источника (provider = имя источника, а тайтл
- * взят из его же каталога), поэтому поиск идёт точечно в этом источнике и
- * точное совпадение практически гарантировано. Для внешних провайдеров
- * (anilist_trend, jikan_trend, mangaupdates, ...) provider не резолвится в
- * источник, а точный поиск по чужим источникам почти никогда не совпадал —
- * в этих случаях сразу возвращает false, и UI открывает глобальный поиск
- * вместо слепого перебора.
- */
-class DiscoveryLibraryAdder {
+/** Adds a source-bound recommendation by its exact identity, never by a provider display name. */
+class DiscoveryLibraryAdder(
+    private val sourcePolicyProvider: () -> DiscoverySourcePolicyProvider = { Injekt.get() },
+) {
 
     companion object {
         const val SOURCE_TIMEOUT_MS = 8_000L
     }
 
-    suspend fun addFromProvider(mediaType: DiscoveryMediaType, title: String, provider: String?): Boolean =
-        withContext(Dispatchers.IO) {
-            if (provider.isNullOrBlank()) return@withContext false
-            val clean = normalizeDiscoveryTitle(title)
-            try {
-                when (mediaType) {
-                    DiscoveryMediaType.MANGA -> addManga(provider, clean, title)
-                    DiscoveryMediaType.ANIME -> addAnime(provider, clean, title)
-                    DiscoveryMediaType.NOVEL -> addNovel(provider, clean, title)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                logcat { "[DiscoveryAdd] FAILED '$title' via '$provider': ${e.message}" }
-                false
+    suspend fun add(item: DiscoverySuggestion): Boolean = withContext(Dispatchers.IO) {
+        val sourceId = item.sourceId?.takeIf { it > 0L } ?: return@withContext false
+        val sourceUrl = item.sourceUrl?.takeIf { it.isNotBlank() } ?: return@withContext false
+        try {
+            if (!isAllowed(item)) return@withContext false
+            when (item.mediaType) {
+                DiscoveryMediaType.MANGA -> addManga(item, sourceId, sourceUrl)
+                DiscoveryMediaType.ANIME -> addAnime(item, sourceId, sourceUrl)
+                DiscoveryMediaType.NOVEL -> addNovel(item, sourceId, sourceUrl)
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat { "[DiscoveryAdd] FAILED '${item.title}' from source=$sourceId: ${e.message}" }
+            false
         }
-
-    private suspend fun addManga(provider: String, clean: String, query: String): Boolean {
-        val sourceId = Injekt.get<GetEnabledMangaSources>().subscribe().first()
-            .firstOrNull { it.name == provider }?.id ?: return false
-        val source = Injekt.get<MangaSourceManager>().getOrStub(sourceId) as? CatalogueSource ?: return false
-        val page = withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
-            source.getSearchManga(1, query, source.getFilterList())
-        } ?: return false
-        val match = page.mangas.firstOrNull { normalizeDiscoveryTitle(it.title) == clean } ?: return false
-        val added = Injekt.get<NetworkToLocalManga>()
-            .await(listOf(match.toDomainManga(sourceId)), autoFavorite = true)
-        return added.isNotEmpty()
     }
 
-    private suspend fun addAnime(provider: String, clean: String, query: String): Boolean {
-        val sourceId = Injekt.get<GetEnabledAnimeSources>().subscribe().first()
-            .firstOrNull { it.name == provider }?.id ?: return false
-        val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource ?: return false
-        val page = withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
-            source.getSearchAnime(1, query, source.getFilterList())
-        } ?: return false
-        val match = page.animes.firstOrNull { normalizeDiscoveryTitle(it.title) == clean } ?: return false
-        val added = Injekt.get<NetworkToLocalAnime>()
-            .await(listOf(match.toDomainAnime(sourceId)), autoFavorite = true)
-        return added.isNotEmpty()
+    /** Unbound legacy callers retain their explicit Find fallback instead of guessing ownership. */
+    @Deprecated("Use add(item) with its exact native source binding")
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun addFromProvider(mediaType: DiscoveryMediaType, title: String, provider: String?): Boolean = false
+
+    private fun isAllowed(item: DiscoverySuggestion): Boolean =
+        sourcePolicyProvider().current(item.mediaType).allows(item)
+
+    private fun bindingAllowed(item: DiscoverySuggestion, source: Any): Boolean =
+        (sourcePolicyProvider() as? DiscoverySdkBindingAuthority)?.isCurrentSourceBinding(
+            item.mediaType,
+            item.sourceId ?: -1L,
+            source,
+        ) ==
+            true
+
+    private suspend fun addManga(item: DiscoverySuggestion, sourceId: Long, sourceUrl: String): Boolean {
+        val source = Injekt.get<MangaSourceManager>().get(sourceId) as? CatalogueSource ?: return false
+        if (!bindingAllowed(item, source)) return false
+        val manga = SManga.create().apply {
+            url = sourceUrl
+            title = item.title
+            thumbnail_url = item.coverUrl
+        }.toDomainManga(sourceId).copy(genre = item.genres.takeIf { it.isNotEmpty() }?.toList())
+        val materializer = Injekt.get<NetworkToLocalManga>()
+        if (!isAllowed(item) || !bindingAllowed(item, source)) return false
+        return materializer.await(listOf(manga), autoFavorite = true).isNotEmpty()
     }
 
-    private suspend fun addNovel(provider: String, clean: String, query: String): Boolean {
-        val sourceId = Injekt.get<GetEnabledNovelSources>().subscribe().first()
-            .firstOrNull { it.name == provider }?.id ?: return false
-        val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource ?: return false
-        val page = withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
-            source.getSearchNovels(1, query, source.getFilterList())
-        } ?: return false
-        val match = page.novels.firstOrNull { normalizeDiscoveryTitle(it.title) == clean } ?: return false
-        val added = Injekt.get<NetworkToLocalNovel>()
-            .await(listOf(match.toDomainNovel(sourceId)), autoFavorite = true)
-        return added.isNotEmpty()
+    private suspend fun addAnime(item: DiscoverySuggestion, sourceId: Long, sourceUrl: String): Boolean {
+        val source = Injekt.get<AnimeSourceManager>().get(sourceId) as? AnimeCatalogueSource ?: return false
+        if (!bindingAllowed(item, source)) return false
+        val anime = SAnime.create().apply {
+            url = sourceUrl
+            title = item.title
+            thumbnail_url = item.coverUrl
+        }.toDomainAnime(sourceId).copy(genre = item.genres.takeIf { it.isNotEmpty() }?.toList())
+        val materializer = Injekt.get<NetworkToLocalAnime>()
+        if (!isAllowed(item) || !bindingAllowed(item, source)) return false
+        return materializer.await(listOf(anime), autoFavorite = true).isNotEmpty()
+    }
+
+    private suspend fun addNovel(item: DiscoverySuggestion, sourceId: Long, sourceUrl: String): Boolean {
+        val source = Injekt.get<NovelSourceManager>().get(sourceId) as? NovelCatalogueSource ?: return false
+        if (!bindingAllowed(item, source)) return false
+        val novel = SNovel.create().apply {
+            url = sourceUrl
+            title = item.title
+            thumbnail_url = item.coverUrl
+        }.toDomainNovel(sourceId).copy(genre = item.genres.takeIf { it.isNotEmpty() }?.toList())
+        val materializer = Injekt.get<NetworkToLocalNovel>()
+        if (!isAllowed(item) || !bindingAllowed(item, source)) return false
+        return materializer.await(listOf(novel), autoFavorite = true).isNotEmpty()
     }
 }

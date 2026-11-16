@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import org.junit.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -54,6 +55,65 @@ class TasteLearningEngineTest {
             nowMs = now,
         )
         negative.genres.first { it.first == "harem" }.second shouldBe (-1.0)
+    }
+
+    @Test
+    fun `cross language hide feedback lowers the matching library genre score`() {
+        val signals = listOf(signal("Hidden action", DiscoverySignalType.HIDE, listOf("Action"))) +
+            List(19) { index -> signal("Other click $index", DiscoverySignalType.CLICK) }
+        val learned = foldLearnedTasteProfile(signals, nowMs = now)
+
+        val merged = mergeTasteProfiles(listOf("Экшен" to 2.0), learned)
+
+        tasteScore(listOf("Action"), merged) shouldBe 1.0
+    }
+
+    @Test
+    fun `synonymous tags in one hide signal lower the genre only once`() {
+        val signals = listOf(
+            signal("Hidden action", DiscoverySignalType.HIDE, listOf("Action", "Экшен")),
+        ) + List(19) { index -> signal("Other click $index", DiscoverySignalType.CLICK) }
+        val learned = foldLearnedTasteProfile(signals, nowMs = now)
+
+        val merged = mergeTasteProfiles(listOf("Экшен" to 2.0), learned)
+
+        tasteScore(listOf("Action"), merged) shouldBe 1.0
+    }
+
+    @Test
+    fun `cross language positive feedback uses max rather than adding library weight`() {
+        val signals = listOf(
+            signal("Liked action", DiscoverySignalType.LIKE, listOf("Action", "Экшен")),
+        ) + List(19) { index -> signal("Other click $index", DiscoverySignalType.CLICK) }
+        val learned = foldLearnedTasteProfile(signals, nowMs = now)
+
+        val merged = mergeTasteProfiles(listOf("Экшен" to 2.0), learned)
+
+        tasteScore(listOf("Action"), merged) shouldBe 2.0
+    }
+
+    @Test
+    fun `a cold cross language negative retains the existing linear ramp up`() {
+        val learned = foldLearnedTasteProfile(
+            listOf(signal("Hidden action", DiscoverySignalType.HIDE, listOf("Экшен"))),
+            nowMs = now,
+        )
+
+        val merged = mergeTasteProfiles(listOf("Action" to 2.0), learned)
+
+        tasteScore(listOf("Экшен"), merged) shouldBe (1.95 plusOrMinus 1e-9)
+    }
+
+    @Test
+    fun `a cross language fundamental genre keeps its slower decay`() {
+        val signals = listOf(
+            signal("Old drama", DiscoverySignalType.HIDE, listOf("Drama"), createdAt = now - 90L * DAY_MS_TEST),
+        ) + List(19) { index -> signal("Other click $index", DiscoverySignalType.CLICK) }
+        val learned = foldLearnedTasteProfile(signals, nowMs = now)
+
+        val merged = mergeTasteProfiles(listOf("Драма" to 2.0), learned)
+
+        tasteScore(listOf("Drama"), merged) shouldBe (1.3333333333333333 plusOrMinus 1e-9)
     }
 
     @Test
@@ -281,6 +341,22 @@ class TasteLearningEngineTest {
     fun `applySourceAffinity in manual mode does not drop below 1_0 for negative affinity`() {
         val negative = applySourceAffinity(libraryWeight = 100, affinity = -5.0, isManualMode = true)
         negative shouldBe 1.0
+    }
+
+    @Test
+    fun `mergeTasteProfiles preserves user non-ontology genre spelling while folding cross-language weights`() {
+        val library = listOf("Яндэре" to 2.0, "Умный гг" to 1.5, "Milf" to 1.2)
+        val learned = LearnedTasteProfile(
+            genres = listOf("Yandere" to 3.0, "Smart MC" to -0.5),
+            signalCount = 20,
+        )
+
+        val merged = mergeTasteProfiles(library, learned).toMap()
+
+        merged.getValue("Яндэре") shouldBe 3.0
+        merged.getValue("Умный гг") shouldBe 1.0
+        merged.getValue("Milf") shouldBe 1.2
+        merged.containsKey("cougar") shouldBe false
     }
 
     private companion object {

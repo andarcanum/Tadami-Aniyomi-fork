@@ -15,7 +15,7 @@ internal fun computeDiscoverySessionFingerprint(
     sourcePreferences: SourcePreferences,
     mediaType: DiscoveryMediaType,
 ): String {
-    val configKey = computeDiscoveryConfigurationKey(preferences, mediaType)
+    val configKey = computeDiscoveryConfigurationKey(preferences, mediaType, sourcePreferences)
     val shikimori = sourcePreferences.suggestionsUseShikimori().get()
     val providers = when (mediaType) {
         DiscoveryMediaType.MANGA -> {
