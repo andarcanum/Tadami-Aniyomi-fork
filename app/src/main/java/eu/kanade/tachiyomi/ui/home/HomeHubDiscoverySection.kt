@@ -1058,7 +1058,7 @@ private fun discoveryReasonOrNull(item: HomeHubDiscoveryItem): String? {
 
 /** Круглая кнопка обновления ленты (общая для заголовка ForYouSection и Hybrid-полосы). */
 @Composable
-private fun DiscoveryRefreshIconButton(isRefreshing: Boolean, onClick: () -> Unit) {
+internal fun DiscoveryRefreshIconButton(isRefreshing: Boolean, onClick: () -> Unit) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val rotationAnim = rememberInfiniteTransition(label = "discovery_refresh_rot")
@@ -1148,6 +1148,133 @@ private fun DiscoveryRefreshIconButton(isRefreshing: Boolean, onClick: () -> Uni
     }
 }
 
+/** Общая шапка секции «Для тебя» (используется и в загруженной ленте, и в её скелете). */
+@Composable
+internal fun ForYouHeaderRow(
+    contentMaxWidthDp: Int?,
+    sectionHorizontalPadding: Dp,
+    isRefreshing: Boolean,
+    onRefreshClick: (() -> Unit)?,
+    onMoreClick: () -> Unit,
+) {
+    val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .auroraCenteredMaxWidth(contentMaxWidthDp)
+            .padding(horizontal = sectionHorizontalPadding),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(AYMR.strings.aurora_for_you),
+                color = colors.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+            )
+            if (onRefreshClick != null) {
+                Spacer(Modifier.width(10.dp))
+                DiscoveryRefreshIconButton(isRefreshing = isRefreshing, onClick = onRefreshClick)
+            }
+        }
+        Text(
+            stringResource(AYMR.strings.aurora_more),
+            color = colors.accent,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable {
+                appHaptics.tap()
+                onMoreClick()
+            },
+        )
+    }
+}
+
+/** Общая шапка гибридной полосы «Для тебя» (общая для данных и скелета). */
+@Composable
+internal fun HybridDiscoveryHeaderRow(
+    sectionHorizontalPadding: Dp,
+    isRefreshing: Boolean,
+    onRefreshClick: (() -> Unit)?,
+    onMoreClick: () -> Unit,
+) {
+    val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = sectionHorizontalPadding),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(AYMR.strings.aurora_for_you),
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            if (onRefreshClick != null) {
+                Spacer(Modifier.width(10.dp))
+                DiscoveryRefreshIconButton(isRefreshing = isRefreshing, onClick = onRefreshClick)
+            }
+        }
+        Text(
+            stringResource(AYMR.strings.for_you_all_picks),
+            color = colors.accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable {
+                appHaptics.tap()
+                onMoreClick()
+            },
+        )
+    }
+}
+
+/** Общая CTA-пилюля «Все подборки» для Stage / Collage и их скелетов. */
+@Composable
+internal fun DiscoveryAllPicksPill(
+    onMoreClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val appHaptics = LocalAppHaptics.current
+    val buttonInteractionSource = remember { MutableInteractionSource() }
+    AuroraGlassCtaSurface(
+        mode = AuroraHeroCtaMode.Aurora,
+        onClick = {
+            appHaptics.tap()
+            onMoreClick()
+        },
+        modifier = modifier.height(44.dp),
+        isHome = true,
+        shape = CircleShape,
+        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
+        interactionSource = buttonInteractionSource,
+    ) { contentColor ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.AutoAwesome,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                stringResource(AYMR.strings.for_you_all_picks),
+                color = contentColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
 /** Тизер-секция «Для тебя» на Home Hub: заголовок + «Ещё» + горизонтальный рельс карточек. */
 @Composable
 internal fun ForYouSection(
@@ -1172,12 +1299,20 @@ internal fun ForYouSection(
             isRefreshing -> ForYouEmptyState.REFRESHING
             else -> ForYouEmptyState.NOT_LOADED_YET
         }
-        EmptyForYouCard(
-            emptyState = resolvedEmpty,
-            onMoreClick = onMoreClick,
-            isRefreshing = isRefreshing,
-            onRefreshClick = onRefreshClick,
-        )
+        if (resolvedEmpty == ForYouEmptyState.REFRESHING) {
+            eu.kanade.tachiyomi.ui.discovery.ForYouSectionSkeleton(
+                isRefreshing = isRefreshing,
+                onRefreshClick = onRefreshClick,
+                onMoreClick = onMoreClick,
+            )
+        } else {
+            EmptyForYouCard(
+                emptyState = resolvedEmpty,
+                onMoreClick = onMoreClick,
+                isRefreshing = isRefreshing,
+                onRefreshClick = onRefreshClick,
+            )
+        }
         return
     }
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
@@ -1199,37 +1334,13 @@ internal fun ForYouSection(
     }
 
     Column(modifier = Modifier.padding(top = 32.dp)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .auroraCenteredMaxWidth(contentMaxWidthDp)
-                .padding(horizontal = sectionHorizontalPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(AYMR.strings.aurora_for_you),
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                )
-                if (onRefreshClick != null) {
-                    Spacer(Modifier.width(10.dp))
-                    DiscoveryRefreshIconButton(isRefreshing = isRefreshing, onClick = onRefreshClick)
-                }
-            }
-            Text(
-                stringResource(AYMR.strings.aurora_more),
-                color = colors.accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable {
-                    appHaptics.tap()
-                    onMoreClick()
-                },
-            )
-        }
+        ForYouHeaderRow(
+            contentMaxWidthDp = contentMaxWidthDp,
+            sectionHorizontalPadding = sectionHorizontalPadding,
+            isRefreshing = isRefreshing,
+            onRefreshClick = onRefreshClick,
+            onMoreClick = onMoreClick,
+        )
         Spacer(Modifier.height(16.dp))
         LazyRow(
             modifier = Modifier
@@ -1333,36 +1444,12 @@ internal fun HybridDiscoveryStrip(
             .auroraCenteredMaxWidth(stripMaxWidthDp)
             .padding(top = 12.dp, bottom = 16.dp),
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = sectionHorizontalPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(AYMR.strings.aurora_for_you),
-                    color = colors.textSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (onRefreshClick != null) {
-                    Spacer(Modifier.width(10.dp))
-                    DiscoveryRefreshIconButton(isRefreshing = isRefreshing, onClick = onRefreshClick)
-                }
-            }
-            Text(
-                stringResource(AYMR.strings.for_you_all_picks),
-                color = colors.accent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable {
-                    appHaptics.tap()
-                    onMoreClick()
-                },
-            )
-        }
+        HybridDiscoveryHeaderRow(
+            sectionHorizontalPadding = sectionHorizontalPadding,
+            isRefreshing = isRefreshing,
+            onRefreshClick = onRefreshClick,
+            onMoreClick = onMoreClick,
+        )
         Spacer(Modifier.height(10.dp))
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
@@ -1790,38 +1877,7 @@ internal fun DiscoveryHeroCollage(
 
         // Кнопка перехода в стиле Aurora Hero CTA («Продолжить / Читать»)
         Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp)) {
-            val buttonInteractionSource = remember { MutableInteractionSource() }
-            AuroraGlassCtaSurface(
-                mode = AuroraHeroCtaMode.Aurora,
-                onClick = {
-                    appHaptics.tap()
-                    onMoreClick()
-                },
-                modifier = Modifier.height(44.dp),
-                isHome = true,
-                shape = CircleShape,
-                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
-                interactionSource = buttonInteractionSource,
-            ) { contentColor ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.AutoAwesome,
-                        contentDescription = null,
-                        tint = contentColor,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(AYMR.strings.for_you_all_picks),
-                        color = contentColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+            DiscoveryAllPicksPill(onMoreClick = onMoreClick)
         }
     }
 }
@@ -2647,38 +2703,7 @@ internal fun DiscoveryHeroStage(
         }
 
         Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp)) {
-            val buttonInteractionSource = remember { MutableInteractionSource() }
-            AuroraGlassCtaSurface(
-                mode = AuroraHeroCtaMode.Aurora,
-                onClick = {
-                    appHaptics.tap()
-                    onMoreClick()
-                },
-                modifier = Modifier.height(44.dp),
-                isHome = true,
-                shape = CircleShape,
-                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
-                interactionSource = buttonInteractionSource,
-            ) { contentColor ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.AutoAwesome,
-                        contentDescription = null,
-                        tint = contentColor,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(AYMR.strings.for_you_all_picks),
-                        color = contentColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+            DiscoveryAllPicksPill(onMoreClick = onMoreClick)
         }
     }
 }

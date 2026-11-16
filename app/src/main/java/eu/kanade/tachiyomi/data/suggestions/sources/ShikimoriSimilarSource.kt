@@ -154,8 +154,8 @@ internal fun selectShikimoriBestMatch(
     .mapNotNull { item ->
         val score = candidates.maxOfOrNull { candidate ->
             maxOf(
-                SuggestionTitleResolver.scoreMatch(candidate, item.name),
-                item.russian?.let { SuggestionTitleResolver.scoreMatch(candidate, it) } ?: 0,
+                SuggestionTitleResolver.scoreBaseTitleMatch(candidate, item.name),
+                item.russian?.let { SuggestionTitleResolver.scoreBaseTitleMatch(candidate, it) } ?: 0,
             )
         } ?: 0
         if (score > 0) item to score else null

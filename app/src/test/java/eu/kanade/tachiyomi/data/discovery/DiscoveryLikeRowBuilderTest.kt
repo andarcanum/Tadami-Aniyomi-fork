@@ -144,39 +144,69 @@ class DiscoveryLikeRowBuilderTest {
     }
 
     @Test
-    fun `includeExternal false queries catalog with seed genres and attaches seedTitle`() = runTest {
-        val catalog = FakeCatalog(
-            items = listOf(
-                DiscoveryRowItem("Rec Title", "rec title", null, null, null, "Catalog", 0.9),
-            ),
-        )
-        val builder = DiscoveryLikeRowBuilder(
-            suggestionCoordinator = SuggestionCoordinator(),
-            catalog = catalog,
-            includeExternal = false,
-        )
-        val context = DiscoveryBuildContext(
-            mediaType = DiscoveryMediaType.MANGA,
-            seeds = emptyList(),
-            feedbackSeeds = listOf(
-                DiscoveryFeedbackSeed(
-                    title = "Seed Title",
-                    cleanTitle = "seed title",
-                    genres = listOf("Action", "Fantasy"),
+    fun `includeExternal false queries catalog with seed genres and attaches seedTitle when at least 4 genres match`() =
+        runTest {
+            val sharedGenres = listOf("Action", "Fantasy", "Adventure", "Comedy")
+            val catalog = FakeCatalog(
+                items = listOf(
+                    DiscoveryRowItem(
+                        title = "Rec Title",
+                        cleanTitle = "rec title",
+                        coverUrl = null,
+                        reason = null,
+                        seedTitle = null,
+                        provider = "Catalog",
+                        score = 0.9,
+                        genres = sharedGenres,
+                    ),
+                    DiscoveryRowItem(
+                        title = "Unrelated Popular",
+                        cleanTitle = "unrelated popular",
+                        coverUrl = null,
+                        reason = null,
+                        seedTitle = null,
+                        provider = "Catalog",
+                        score = 1.0,
+                        genres = listOf("Action", "Drama"),
+                    ),
+                    DiscoveryRowItem(
+                        title = "Unknown Genres",
+                        cleanTitle = "unknown genres",
+                        coverUrl = null,
+                        reason = null,
+                        seedTitle = null,
+                        provider = "Catalog",
+                        score = 1.0,
+                        genres = emptyList(),
+                    ),
                 ),
-            ),
-            libraryCleanTitles = emptySet(),
-            historyCleanTitles = emptySet(),
-            hiddenCleanTitles = emptySet(),
-            sourceId = 1L,
-            sourceIds = listOf(1L),
-            sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L)),
-        )
-        val results = builder.build(context)
-        results.size shouldBe 1
-        results.first().title shouldBe "Rec Title"
-        results.first().seedTitle shouldBe "Seed Title"
-    }
+            )
+            val builder = DiscoveryLikeRowBuilder(
+                suggestionCoordinator = SuggestionCoordinator(),
+                catalog = catalog,
+                includeExternal = false,
+            )
+            val context = DiscoveryBuildContext(
+                mediaType = DiscoveryMediaType.MANGA,
+                seeds = emptyList(),
+                feedbackSeeds = listOf(
+                    DiscoveryFeedbackSeed(
+                        title = "Seed Title",
+                        cleanTitle = "seed title",
+                        genres = sharedGenres,
+                    ),
+                ),
+                libraryCleanTitles = emptySet(),
+                historyCleanTitles = emptySet(),
+                hiddenCleanTitles = emptySet(),
+                sourceId = 1L,
+                sourceIds = listOf(1L),
+                sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L)),
+            )
+            val results = builder.build(context)
+            results.map { it.title } shouldBe listOf("Rec Title")
+            results.first().seedTitle shouldBe "Seed Title"
+        }
 
     @Test
     fun `plugins-only LIKE includes a title found only in the second required ANY genre`(): Unit = runTest {
@@ -209,7 +239,7 @@ class DiscoveryLikeRowBuilderTest {
                     SManga.create().apply {
                         title = "Romance-only pick"
                         url = "/romance-only"
-                        genre = "Romance"
+                        genre = "Romance, Comedy, Drama, Fantasy"
                         status = SManga.ONGOING
                     },
                 )
@@ -235,7 +265,13 @@ class DiscoveryLikeRowBuilderTest {
         )
         val context = DiscoveryBuildContext(
             mediaType = DiscoveryMediaType.MANGA,
-            seeds = listOf(DiscoverySeedInput(entryId = 1L, title = "Romance seed", genres = listOf("Romance"))),
+            seeds = listOf(
+                DiscoverySeedInput(
+                    entryId = 1L,
+                    title = "Romance seed",
+                    genres = listOf("Romance", "Comedy", "Drama", "Fantasy"),
+                ),
+            ),
             libraryCleanTitles = setOf("romance seed"),
             historyCleanTitles = emptySet(),
             hiddenCleanTitles = emptySet(),
@@ -255,7 +291,7 @@ class DiscoveryLikeRowBuilderTest {
         items.map { it.title } shouldBe listOf("Romance-only pick")
         items.single().sourceId shouldBe 7L
         items.single().sourceUrl shouldBe "/romance-only"
-        items.single().genres shouldBe listOf("Romance")
+        items.single().genres shouldBe listOf("Romance", "Comedy", "Drama", "Fantasy")
         items.single().seedTitle shouldBe "Romance seed"
     }
 
@@ -289,12 +325,12 @@ class DiscoveryLikeRowBuilderTest {
                     listOf("Action") -> SManga.create().apply {
                         title = "Action pick"
                         url = "/action"
-                        genre = "Action"
+                        genre = "Action, Comedy, Fantasy, Mystery"
                     }
                     listOf("Romance") -> SManga.create().apply {
                         title = "Romance pick"
                         url = "/romance"
-                        genre = "Romance"
+                        genre = "Romance, Comedy, Fantasy, Drama, Adventure"
                     }
                     else -> null
                 }
@@ -366,7 +402,7 @@ class DiscoveryLikeRowBuilderTest {
                             score = 0.9,
                             sourceId = sourceId,
                             sourceUrl = "/tail-$sourceId",
-                            genres = listOf("Mystery"),
+                            genres = listOf("Mystery", "Action", "Comedy", "Fantasy", "Drama"),
                         ),
                     )
                 } else {
@@ -428,7 +464,7 @@ class DiscoveryLikeRowBuilderTest {
                         score = 0.9,
                         sourceId = sourceId,
                         sourceUrl = "/budget-survivor",
-                        genres = listOf("Mystery"),
+                        genres = listOf("Mystery", "Action", "Comedy", "Fantasy", "Drama"),
                     ),
                 )
                 else -> awaitCancellation()
@@ -440,7 +476,7 @@ class DiscoveryLikeRowBuilderTest {
         val items = builder.build(nativeAnyContext(budget))
 
         items.map { it.title } shouldBe listOf("Budget survivor")
-        items.single().genres shouldBe listOf("Mystery")
+        items.single().genres shouldBe listOf("Mystery", "Action", "Comedy", "Fantasy", "Drama")
         catalog.currentConcurrent.get() shouldBe 0
         (testScheduler.currentTime <= 100L) shouldBe true
     }
@@ -468,8 +504,9 @@ class DiscoveryLikeRowBuilderTest {
 
     @Test
     fun `native LIKE keeps the observed duplicate with zero details allowance`() = runTest {
+        val sharedGenres = listOf("Romance", "Action", "Comedy", "Fantasy", "Drama")
         val catalog = FakeCatalog(genreResponse = { _, genres ->
-            listOf(g5Item("Shared", if (genres.single() == "Romance") listOf("Romance") else emptyList()))
+            listOf(g5Item("Shared", if (genres.single() == "Romance") sharedGenres else emptyList()))
         })
         val budget = DiscoveryVerificationBudget(maxDetails = 0, clock = { testScheduler.currentTime })
         val context = nativeAnyContext(budget).copy(
@@ -482,7 +519,7 @@ class DiscoveryLikeRowBuilderTest {
         val rows = DiscoveryCoordinator(listOf(builder)).streamFeed(context) { _, _ ->
         }.rows[DiscoveryRowType.LIKE].orEmpty()
         rows.map { it.title } shouldBe listOf("Shared")
-        rows.single().genres shouldBe listOf("Romance")
+        rows.single().genres shouldBe sharedGenres
         rows.single().sourceId shouldBe 7L
         budget.detailsUsed shouldBe 0
     }
@@ -522,10 +559,14 @@ class DiscoveryLikeRowBuilderTest {
         runTest {
             for (external in listOf(false, true)) {
                 for (veto in listOf(false, true)) {
-                    val rejectedGenre = if (veto) "Romance" else "Drama"
+                    val rejectedGenres = if (veto) {
+                        listOf("Romance", "Action", "Comedy", "Fantasy", "Mystery")
+                    } else {
+                        listOf("Drama", "Comedy", "Fantasy", "Mystery", "Adventure")
+                    }
                     val payload = (1..15).map {
-                        g5Item("Rejected $it", listOf(rejectedGenre))
-                    } + g5Item("Lawful", listOf("Action"))
+                        g5Item("Rejected $it", rejectedGenres)
+                    } + g5Item("Lawful", listOf("Action", "Comedy", "Fantasy", "Mystery", "Adventure"))
                     val spec = if (veto) {
                         GenreFilterSpec(
                             ignoredGenres = setOf("romance"),
@@ -565,8 +606,8 @@ class DiscoveryLikeRowBuilderTest {
 
     @Test
     fun `native LIKE legacy excluded exact prefix leaves the lawful best effort fallback`() = runTest {
-        val exact = (1..15).map { g5Item("Retired $it", listOf("Fantasy")) }
-        val fallback = g5Item("Fallback", listOf("Drama"))
+        val exact = (1..15).map { g5Item("Retired $it", listOf("Fantasy", "Action", "Comedy", "Mystery", "Drama")) }
+        val fallback = g5Item("Fallback", listOf("Drama", "Action", "Comedy", "Mystery", "Adventure"))
         val budget = DiscoveryVerificationBudget(maxDetails = 0, clock = { testScheduler.currentTime })
         val context = nativeAnyContext(budget).copy(
             genreFilterSpec = GenreFilterSpec(
@@ -594,9 +635,10 @@ class DiscoveryLikeRowBuilderTest {
 
     @Test
     fun `a duplicate after raw position fifteen still upgrades the selected native identity`() = runTest {
+        val sharedGenres = listOf("Action", "Comedy", "Fantasy", "Mystery", "Drama")
         val payload = listOf(g5Item("Shared", emptyList())) + (1..14).map {
-            g5Item("Rejected $it", listOf("Drama"))
-        } + g5Item("Shared", listOf("Action"))
+            g5Item("Rejected $it", listOf("Drama", "Comedy", "Fantasy", "Mystery", "Adventure"))
+        } + g5Item("Shared", sharedGenres)
         val budget = DiscoveryVerificationBudget(maxDetails = 0, clock = { testScheduler.currentTime })
         val context = nativeAnyContext(budget).copy(genreFilterSpec = GenreFilterSpec(requiredGenres = setOf("action")))
         val builder = DiscoveryLikeRowBuilder(
@@ -607,7 +649,7 @@ class DiscoveryLikeRowBuilderTest {
         val rows = DiscoveryCoordinator(listOf(builder)).streamFeed(context) { _, _ ->
         }.rows[DiscoveryRowType.LIKE].orEmpty()
         rows.map { it.title } shouldBe listOf("Shared")
-        rows.single().genres shouldBe listOf("Action")
+        rows.single().genres shouldBe sharedGenres
         budget.detailsUsed shouldBe 0
     }
 
@@ -649,7 +691,13 @@ class DiscoveryLikeRowBuilderTest {
         sourceIds: List<Long> = listOf(7L),
     ) = DiscoveryBuildContext(
         mediaType = DiscoveryMediaType.MANGA,
-        seeds = listOf(DiscoverySeedInput(entryId = 1L, title = "Budget seed", genres = listOf("Action"))),
+        seeds = listOf(
+            DiscoverySeedInput(
+                entryId = 1L,
+                title = "Budget seed",
+                genres = listOf("Action", "Comedy", "Fantasy", "Mystery", "Drama", "Adventure"),
+            ),
+        ),
         libraryCleanTitles = setOf("budget seed"),
         historyCleanTitles = emptySet(),
         hiddenCleanTitles = emptySet(),
@@ -668,7 +716,16 @@ class DiscoveryLikeRowBuilderTest {
     fun `multiple seeds are queried concurrently`() = runTest {
         val catalog = FakeCatalog(
             items = listOf(
-                DiscoveryRowItem("Rec Title", "rec title", null, null, null, "Catalog", 0.9),
+                DiscoveryRowItem(
+                    "Rec Title",
+                    "rec title",
+                    null,
+                    null,
+                    null,
+                    "Catalog",
+                    0.9,
+                    genres = listOf("Action", "Comedy", "Drama", "Fantasy", "Adventure"),
+                ),
             ),
             delayMs = 50L,
         )
@@ -681,9 +738,9 @@ class DiscoveryLikeRowBuilderTest {
             mediaType = DiscoveryMediaType.MANGA,
             seeds = emptyList(),
             feedbackSeeds = listOf(
-                DiscoveryFeedbackSeed("Seed 1", "seed 1", listOf("Action")),
-                DiscoveryFeedbackSeed("Seed 2", "seed 2", listOf("Comedy")),
-                DiscoveryFeedbackSeed("Seed 3", "seed 3", listOf("Drama")),
+                DiscoveryFeedbackSeed("Seed 1", "seed 1", listOf("Action", "Comedy", "Drama", "Fantasy")),
+                DiscoveryFeedbackSeed("Seed 2", "seed 2", listOf("Comedy", "Drama", "Fantasy", "Adventure")),
+                DiscoveryFeedbackSeed("Seed 3", "seed 3", listOf("Drama", "Action", "Comedy", "Adventure")),
             ),
             libraryCleanTitles = emptySet(),
             historyCleanTitles = emptySet(),
@@ -810,4 +867,126 @@ class DiscoveryLikeRowBuilderTest {
         val result = builder.build(ctx)
         result.first().title shouldBe "Late Fantasy Match"
     }
+
+    @Test
+    fun `native LIKE requires 5 shared genres when both sets are rich and rejects 3-4 shallow overlaps`() =
+        runTest {
+            val seedGenres = listOf("Action", "Adventure", "Fantasy", "Magic", "Comedy", "Drama")
+            val catalog = FakeCatalog(
+                items = listOf(
+                    g5Item("Three Only", listOf("Action", "Adventure", "Fantasy", "Horror", "Sci-Fi", "Thriller")),
+                    g5Item("Four Only", listOf("Action", "Adventure", "Fantasy", "Magic", "Horror", "Sci-Fi")),
+                    g5Item("Five Match", listOf("Action", "Adventure", "Fantasy", "Magic", "Comedy", "Sci-Fi")),
+                ),
+            )
+            val builder = DiscoveryLikeRowBuilder(SuggestionCoordinator(), catalog, includeExternal = false)
+            val context = DiscoveryBuildContext(
+                mediaType = DiscoveryMediaType.MANGA,
+                seeds = listOf(DiscoverySeedInput(entryId = 1L, title = "Rich Seed", genres = seedGenres)),
+                libraryCleanTitles = setOf("rich seed"),
+                historyCleanTitles = emptySet(),
+                hiddenCleanTitles = emptySet(),
+                sourceId = 1L,
+                sourceIds = listOf(1L),
+                sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L)),
+            )
+
+            val result = builder.build(context)
+
+            result.map { it.title } shouldBe listOf("Five Match")
+            result.single().seedTitle shouldBe "Rich Seed"
+        }
+
+    @Test
+    fun `native LIKE recognizes bilingual RU-EN genres through canonical GenreMatcher equivalence`() =
+        runTest {
+            val seedRu = listOf("Экшен", "Фэнтези", "Романтика", "Приключения")
+            val candidateEn = listOf("Action", "Fantasy", "Romance", "Adventure")
+            val catalog = FakeCatalog(
+                items = listOf(g5Item("Bilingual Hit", candidateEn)),
+            )
+            val builder = DiscoveryLikeRowBuilder(SuggestionCoordinator(), catalog, includeExternal = false)
+            val context = DiscoveryBuildContext(
+                mediaType = DiscoveryMediaType.MANGA,
+                seeds = listOf(DiscoverySeedInput(entryId = 1L, title = "Ру Тайтл", genres = seedRu)),
+                libraryCleanTitles = setOf("ру тайтл"),
+                historyCleanTitles = emptySet(),
+                hiddenCleanTitles = emptySet(),
+                sourceId = 1L,
+                sourceIds = listOf(1L),
+                sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L)),
+            )
+
+            val result = builder.build(context)
+
+            result.map { it.title } shouldBe listOf("Bilingual Hit")
+            result.single().seedTitle shouldBe "Ру Тайтл"
+        }
+
+    @Test
+    fun `native LIKE with requiredGenres never labels an unrelated title with seedTitle`() = runTest {
+        val seedGenres = listOf("Drama", "Psychological", "Mystery", "Thriller", "Tragedy")
+        val catalog = FakeCatalog(
+            items = listOf(
+                g5Item("Wrong Comedy", listOf("Comedy", "Slice of Life", "School", "Romance")),
+                g5Item("True Match", listOf("Drama", "Psychological", "Mystery", "Thriller", "Comedy")),
+            ),
+        )
+        val builder = DiscoveryLikeRowBuilder(SuggestionCoordinator(), catalog, includeExternal = false)
+        val context = DiscoveryBuildContext(
+            mediaType = DiscoveryMediaType.MANGA,
+            seeds = listOf(DiscoverySeedInput(entryId = 1L, title = "Dark Seed", genres = seedGenres)),
+            libraryCleanTitles = setOf("dark seed"),
+            historyCleanTitles = emptySet(),
+            hiddenCleanTitles = emptySet(),
+            genreFilterSpec = GenreFilterSpec(requiredGenres = setOf("Comedy")),
+            sourceId = 1L,
+            sourceIds = listOf(1L),
+            sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L)),
+            verificationBudget = DiscoveryVerificationBudget(maxDetails = 0, clock = { 0L }),
+        )
+
+        val result = builder.build(context)
+
+        result.map { it.title } shouldBe listOf("True Match")
+        result.single().seedTitle shouldBe "Dark Seed"
+    }
+
+    @Test
+    fun `external LIKE rejects zero-overlap rich-genre outliers while keeping genreless MAL-NU items`() =
+        runTest {
+            val suggestions = mockk<SuggestionCoordinator>()
+            coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns SuggestionFetchResult(
+                listOf(
+                    g5Suggestion("Absurd RomCom", listOf("Comedy", "Romance", "Slice of Life")),
+                    g5Suggestion("Honest Thriller", listOf("Mystery", "Thriller", "Drama")),
+                    g5Suggestion("MAL Without Genres", emptyList()),
+                ),
+                attemptedSources = 2,
+                failedSources = 0,
+            )
+            val builder = DiscoveryLikeRowBuilder(suggestions)
+            val context = DiscoveryBuildContext(
+                mediaType = DiscoveryMediaType.NOVEL,
+                seeds = listOf(
+                    DiscoverySeedInput(
+                        entryId = 1L,
+                        title = "Dark Thriller",
+                        genres = listOf("Mystery", "Thriller", "Psychological", "Drama"),
+                    ),
+                ),
+                libraryCleanTitles = setOf("dark thriller"),
+                historyCleanTitles = emptySet(),
+                hiddenCleanTitles = emptySet(),
+                sourcePolicy = discoveryQueryPolicyFixture(
+                    DiscoveryMediaType.NOVEL,
+                    emptyList(),
+                    mapOf(DiscoveryRowType.LIKE to setOf(DiscoveryExternalProvider.ANILIST)),
+                ),
+            )
+
+            val result = builder.build(context)
+
+            result.map { it.title } shouldBe listOf("Honest Thriller", "MAL Without Genres")
+        }
 }

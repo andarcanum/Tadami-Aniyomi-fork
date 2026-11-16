@@ -30,6 +30,7 @@ import uy.kohesive.injekt.injectLazy
 internal class HomeHubScreenModel(
     context: android.content.Context = Injekt.get<android.app.Application>(),
     userProfilePreferences: UserProfilePreferences = Injekt.get(),
+    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences = Injekt.get(),
 ) : BaseHomeHubScreenModel(
     context = context,
     initialState = run {
@@ -82,7 +83,10 @@ internal class HomeHubScreenModel(
                 isLoading = true,
                 showWelcome = true,
             )
-        }
+        }.withInitialDiscoveryPreferences(
+            preferences = discoveryPreferences,
+            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
+        )
     },
     userProfilePreferences = userProfilePreferences,
 ) {
@@ -98,7 +102,6 @@ internal class HomeHubScreenModel(
     private val streakChecker: tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker by injectLazy()
     private val activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
-    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
 
     override val discoveryController: HomeDiscoveryController by lazy {
         HomeDiscoveryController(

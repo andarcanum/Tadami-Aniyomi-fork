@@ -83,7 +83,7 @@ class NovelUpdatesSimilarSource(
             val bestMatch = searchResults
                 .mapNotNull { stub ->
                     val score = seed.candidateTitles.maxOfOrNull { c ->
-                        SuggestionTitleResolver.scoreMatch(stub.title, c)
+                        SuggestionTitleResolver.scoreBaseTitleMatch(stub.title, c)
                     } ?: 0
                     if (score > 0) stub to score else null
                 }

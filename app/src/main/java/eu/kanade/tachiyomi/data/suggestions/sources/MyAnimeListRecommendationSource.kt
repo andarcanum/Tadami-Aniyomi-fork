@@ -62,7 +62,7 @@ class MyAnimeListRecommendationSource(
 
             val entryWithScore = allSearchEntries.distinctBy { it.malId }.map { entry ->
                 val score = seed.candidateTitles.maxOfOrNull { candidate ->
-                    SuggestionTitleResolver.scoreMatch(entry.title, candidate)
+                    SuggestionTitleResolver.scoreBaseTitleMatch(entry.title, candidate)
                 } ?: 0
                 Pair(entry, score)
             }

@@ -32,6 +32,7 @@ import uy.kohesive.injekt.injectLazy
 internal class NovelHomeHubScreenModel(
     context: android.content.Context = Injekt.get<android.app.Application>(),
     userProfilePreferences: UserProfilePreferences = Injekt.get(),
+    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences = Injekt.get(),
 ) : BaseHomeHubScreenModel(
     context = context,
     initialState = run {
@@ -96,7 +97,10 @@ internal class NovelHomeHubScreenModel(
                 isLoading = true,
                 showWelcome = true,
             )
-        }
+        }.withInitialDiscoveryPreferences(
+            preferences = discoveryPreferences,
+            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
+        )
     },
     userProfilePreferences = userProfilePreferences,
 ) {
@@ -113,7 +117,6 @@ internal class NovelHomeHubScreenModel(
     private val novelExtensionManager: eu.kanade.tachiyomi.extension.novel.NovelExtensionManager by injectLazy()
     private val localNovelSourceFileSystem: LocalNovelSourceFileSystem by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
-    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
 
     override val discoveryController: HomeDiscoveryController by lazy {
         HomeDiscoveryController(

@@ -20,9 +20,87 @@ import java.io.IOException
 
 internal const val SOURCE_FETCH_TIMEOUT_MS = 6_000L
 private const val LIKE_ANY_QUERY_CONCURRENCY = 3
+internal const val MIN_NATIVE_LIKE_GENRE_OVERLAP = 4
+private const val NATIVE_LIKE_RICH_GENRE_OVERLAP = 5
+private const val NATIVE_LIKE_QUERY_GENRE_CAP = 5
+private const val NATIVE_LIKE_HYDRATE_MAX_DETAILS = 15
 
 /** A provider with plenty of matching titles should fill a required row in one pass. */
 private const val MAX_REQUIRED_EXTERNAL_PAGES = 3
+
+internal data class NativeSeedSimilarity(
+    val sharedGenres: Int,
+    val jaccard: Double,
+) {
+    val score: Double get() = sharedGenres * 10.0 + jaccard * 5.0
+}
+
+private fun canonicalGenreKeySet(genres: List<String>): Set<String> =
+    genres.asSequence()
+        .map { GenreMatcher.identityKey(it) }
+        .filter { it.isNotEmpty() }
+        .toSet()
+
+/**
+ * Verifies genuine genre-level similarity between a library seed and a native catalogue
+ * candidate so "Similar to <title>" never labels unrelated works: requires empty-free genres
+ * and >=5 shared genres when both titles expose rich (>=6) genre sets, or >=4 shared genres
+ * for smaller 4-5 genre sets.
+ */
+internal fun verifyNativeSeedSimilarity(
+    seedGenres: List<String>,
+    candidateGenres: List<String>,
+): NativeSeedSimilarity? {
+    val seedKeys = canonicalGenreKeySet(seedGenres)
+    val itemKeys = canonicalGenreKeySet(candidateGenres)
+    if (seedKeys.size < MIN_NATIVE_LIKE_GENRE_OVERLAP || itemKeys.size < MIN_NATIVE_LIKE_GENRE_OVERLAP) {
+        return null
+    }
+    val shared = seedKeys.intersect(itemKeys).size
+    val requiredOverlap = if (minOf(seedKeys.size, itemKeys.size) >= 6) {
+        NATIVE_LIKE_RICH_GENRE_OVERLAP
+    } else {
+        MIN_NATIVE_LIKE_GENRE_OVERLAP
+    }
+    if (shared < requiredOverlap) return null
+    val union = seedKeys.union(itemKeys).size.coerceAtLeast(1)
+    return NativeSeedSimilarity(
+        sharedGenres = shared,
+        jaccard = shared.toDouble() / union.toDouble(),
+    )
+}
+
+/**
+ * Sanity check for external LIKE recommendations: when both the seed and the external
+ * item provide rich genre lists (>=3 genres), reject obvious junk matches with <2 shared
+ * genres, while preserving items from providers without genre metadata (MAL, NU).
+ */
+internal fun verifyExternalSeedCompatibility(
+    seedGenres: List<String>,
+    candidateGenres: List<String>,
+): Boolean {
+    val seedKeys = canonicalGenreKeySet(seedGenres)
+    val itemKeys = canonicalGenreKeySet(candidateGenres)
+    if (seedKeys.size < 3 || itemKeys.size < 3) return true
+    return seedKeys.intersect(itemKeys).size >= 2
+}
+
+/** Selects up to 5 seed genres for native catalogue filtering (retaining ALL required genres when set). */
+internal fun selectNativeLikeQueryGenres(
+    seedGenres: List<String>,
+    policy: DiscoveryCandidatePolicy,
+): List<String> {
+    val distinctSeed = seedGenres
+        .filter { it.isNotBlank() }
+        .distinctBy { GenreMatcher.identityKey(it).ifEmpty { it.lowercase() } }
+    if (policy.requiredGenres.isEmpty()) {
+        return distinctSeed.take(NATIVE_LIKE_QUERY_GENRE_CAP)
+    }
+    return (policy.requiredGenres.toList() + distinctSeed)
+        .filter { it.isNotBlank() }
+        .distinctBy { GenreMatcher.identityKey(it).ifEmpty { it.lowercase() } }
+        .take(maxOf(NATIVE_LIKE_QUERY_GENRE_CAP, policy.requiredGenres.size))
+}
 
 /** Кандидаты LIKE-сида: resolver дополняет сырой тайтл оригиналом из описания и нормализованными вариантами. */
 internal fun likeSeedCandidateTitles(seed: DiscoverySeedInput): List<String> =
@@ -64,7 +142,7 @@ class DiscoveryLikeRowBuilder(
             var fullyFailedSeeds = 0
             var hasFailedSources = false
             var hasRawResults = false
-            val feedbackPerSeed = buildList {
+            val feedbackGroups = buildList {
                 for (feedbackSeed in context.feedbackSeeds) {
                     if (context.verificationBudget?.isExpired() == true) break
                     attemptedSeeds++
@@ -91,22 +169,26 @@ class DiscoveryLikeRowBuilder(
                         fullyFailedSeeds++
                     }
                     add(
-                        result.items.map { item ->
-                            DiscoveryRowItem(
-                                title = item.title,
-                                cleanTitle = normalizeDiscoveryTitle(item.title),
-                                coverUrl = item.thumbnailUrl,
-                                reason = null,
-                                seedTitle = feedbackSeed.title,
-                                provider = item.providerName,
-                                score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
-                                genres = item.genres,
-                            )
-                        },
+                        SeedCandidateGroup(
+                            seedTitle = feedbackSeed.title,
+                            seedGenres = feedbackSeed.genres,
+                            items = result.items.map { item ->
+                                DiscoveryRowItem(
+                                    title = item.title,
+                                    cleanTitle = normalizeDiscoveryTitle(item.title),
+                                    coverUrl = item.thumbnailUrl,
+                                    reason = null,
+                                    seedTitle = feedbackSeed.title,
+                                    provider = item.providerName,
+                                    score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                                    genres = item.genres,
+                                )
+                            },
+                        ),
                     )
                 }
             }
-            val libraryPerSeed = buildList {
+            val libraryGroups = buildList {
                 for (seed in context.seeds) {
                     if (context.verificationBudget?.isExpired() == true) break
                     attemptedSeeds++
@@ -133,29 +215,35 @@ class DiscoveryLikeRowBuilder(
                         fullyFailedSeeds++
                     }
                     add(
-                        result.items.map { item ->
-                            DiscoveryRowItem(
-                                title = item.title,
-                                cleanTitle = normalizeDiscoveryTitle(item.title),
-                                coverUrl = item.thumbnailUrl,
-                                // Локализованный текст «Похоже на „X“» композится на рендере из seedTitle.
-                                reason = null,
-                                seedTitle = seed.title,
-                                provider = item.providerName,
-                                score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
-                                genres = item.genres,
-                            )
-                        },
+                        SeedCandidateGroup(
+                            seedTitle = seed.title,
+                            seedGenres = seed.genres,
+                            items = result.items.map { item ->
+                                DiscoveryRowItem(
+                                    title = item.title,
+                                    cleanTitle = normalizeDiscoveryTitle(item.title),
+                                    coverUrl = item.thumbnailUrl,
+                                    // Локализованный текст «Похоже на „X“» композится на рендере из seedTitle.
+                                    reason = null,
+                                    seedTitle = seed.title,
+                                    provider = item.providerName,
+                                    score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                                    genres = item.genres,
+                                )
+                            },
+                        ),
                     )
                 }
             }
-            val perSeed = (feedbackPerSeed + libraryPerSeed).map { context.eligibleCandidates(rowType, it) }
-            val hasEligibleResults = perSeed.any { it.isNotEmpty() }
+            val filteredGroups = (feedbackGroups + libraryGroups).map {
+                it.copy(items = context.eligibleCandidates(rowType, it.items))
+            }
+            val hasEligibleResults = filteredGroups.any { it.items.isNotEmpty() }
             if (hasFailedSources) isDegraded = true
             if (!hasEligibleResults && !hasRawResults && attemptedSeeds > 0 && fullyFailedSeeds == attemptedSeeds) {
                 throw IOException("all suggestion providers failed for every seed")
             }
-            return prepareSeedResults(perSeed, context)
+            return prepareSeedResults(filteredGroups, context)
         } else {
             if (catalog == null) return emptyList()
             val sourceIds = context.nativeQuerySourceIds
@@ -164,7 +252,7 @@ class DiscoveryLikeRowBuilder(
             val allSeeds = (
                 context.feedbackSeeds.map { it.title to it.genres } +
                     context.seeds.map { it.title to it.genres }
-                ).filter { it.second.isNotEmpty() }
+                ).filter { canonicalGenreKeySet(it.second).size >= MIN_NATIVE_LIKE_GENRE_OVERLAP }
             if (allSeeds.isEmpty()) {
                 exhaustionEvidence = emptyList()
                 return emptyList()
@@ -179,7 +267,8 @@ class DiscoveryLikeRowBuilder(
             }
 
             val anyQueryPermits = Semaphore(LIKE_ANY_QUERY_CONCURRENCY)
-            val perSeed = supervisorScope {
+            val budget = context.verificationBudget
+            val seedGroups = supervisorScope {
                 allSeeds.mapIndexed { seedIndex, (seedTitle, genres) ->
                     async {
                         val seedSources = if (sourceIds.size <= 2) {
@@ -188,7 +277,7 @@ class DiscoveryLikeRowBuilder(
                             val start = (seedIndex * 2) % sourceIds.size
                             listOf(sourceIds[start], sourceIds[(start + 1) % sourceIds.size])
                         }
-                        seedSources.map { sourceId ->
+                        val items = seedSources.map { sourceId ->
                             async {
                                 if (policy.requiredMatchMode == RequiredMatchMode.ANY &&
                                     policy.requiredGenres.size > 1
@@ -201,22 +290,27 @@ class DiscoveryLikeRowBuilder(
                                         permits = anyQueryPermits,
                                     )
                                 } else {
-                                    val queryGenres = if (policy.requiredGenres.isNotEmpty()) {
-                                        policy.requiredGenres.take(3)
+                                    val queryGenres = selectNativeLikeQueryGenres(genres, policy)
+                                    val primary = fetchNativeSeedPage(
+                                        catalog = catalog,
+                                        context = context,
+                                        sourceId = sourceId,
+                                        genres = queryGenres,
+                                        budget = budget,
+                                    )
+                                    if (primary.isEmpty() && policy.requiredGenres.isEmpty() && queryGenres.size >= 4) {
+                                        // Fallback on narrow 4-5 checkbox conjunctions: narrow to top 3 and
+                                        // still enforce strict 4-5 genre verification in prepareSeedResults.
+                                        fetchNativeSeedPage(
+                                            catalog = catalog,
+                                            context = context,
+                                            sourceId = sourceId,
+                                            genres = queryGenres.take(3),
+                                            budget = budget,
+                                        )
                                     } else {
-                                        genres.take(3)
+                                        primary
                                     }
-                                    runCatchingUnlessCancelled {
-                                        withTimeoutOrNull(SOURCE_FETCH_TIMEOUT_MS) {
-                                            catalog.popularWithGenres(
-                                                context.mediaType,
-                                                sourceId,
-                                                genres = queryGenres,
-                                                page = 1,
-                                                releaseStatuses = context.releaseStatuses,
-                                            )
-                                        }
-                                    }.getOrNull().orEmpty()
                                 }
                             }
                         }.awaitAll().flatten().map { item ->
@@ -225,27 +319,89 @@ class DiscoveryLikeRowBuilder(
                                 reason = null,
                             )
                         }
+                        SeedCandidateGroup(seedTitle = seedTitle, seedGenres = genres, items = items)
                     }
                 }.awaitAll()
             }
-            return prepareSeedResults(perSeed.map { context.eligibleCandidates(rowType, it) }, context)
+            return prepareSeedResults(
+                seedGroups.map { it.copy(items = context.eligibleCandidates(rowType, it.items)) },
+                context,
+            )
         }
     }
 
+    private data class SeedCandidateGroup(
+        val seedTitle: String,
+        val seedGenres: List<String>,
+        val items: List<DiscoveryRowItem>,
+    )
+
+    private suspend fun fetchNativeSeedPage(
+        catalog: DiscoverySourceCatalog,
+        context: DiscoveryBuildContext,
+        sourceId: Long,
+        genres: List<String>,
+        budget: DiscoveryVerificationBudget?,
+    ): List<DiscoveryRowItem> {
+        val remainingMs = budget?.remainingMs() ?: SOURCE_FETCH_TIMEOUT_MS
+        if (remainingMs <= 0L) return emptyList()
+        val timeoutMs = minOf(SOURCE_FETCH_TIMEOUT_MS, remainingMs)
+        return runCatchingUnlessCancelled {
+            withTimeoutOrNull(timeoutMs) {
+                if (budget == null) {
+                    catalog.popularWithGenres(
+                        context.mediaType,
+                        sourceId,
+                        genres = genres,
+                        page = 1,
+                        releaseStatuses = context.releaseStatuses,
+                    )
+                } else {
+                    catalog.popularWithGenresAllocated(
+                        context.mediaType,
+                        sourceId,
+                        genres = genres,
+                        page = 1,
+                        releaseStatuses = context.releaseStatuses,
+                        budget = budget,
+                        maxDetails = minOf(NATIVE_LIKE_HYDRATE_MAX_DETAILS, budget.remainingDetails),
+                        excludedKeys = context.exclusionKeys,
+                    ).items
+                }
+            }
+        }.getOrNull().orEmpty()
+    }
+
     private suspend fun prepareSeedResults(
-        perSeed: List<List<DiscoveryRowItem>>,
+        groups: List<SeedCandidateGroup>,
         context: DiscoveryBuildContext,
     ): List<DiscoveryRowItem> {
         val policy = context.candidatePolicy
         val needsTierSort = policy.requiredGenres.isNotEmpty() || policy.priorityGenres.isNotEmpty()
-        val representatives = seedResultRepresentatives(perSeed).values.toList()
-        val hydrated =
-            hydrateEmptyGenreItems(catalog, context.mediaType, representatives, context.verificationBudget, 6)
+        val representatives = seedResultRepresentatives(groups.map { it.items }).values.toList()
+        val hydrateCap = if (includeExternal) 6 else NATIVE_LIKE_HYDRATE_MAX_DETAILS
+        val hydrated = hydrateEmptyGenreItems(
+            catalog,
+            context.mediaType,
+            representatives,
+            context.verificationBudget,
+            hydrateCap,
+        )
         // Admission precedes the per-seed quota; preserve required/priority tier order before perSeedCap cuts.
         val admitted = context.admittedCandidates(rowType, hydrated).associateBy { it.cleanTitle }
-        val eligiblePerSeed = perSeed.map { items ->
-            val mapped = items.mapNotNull { original ->
-                admitted[original.cleanTitle]?.copy(score = original.score, seedTitle = original.seedTitle)
+        val eligiblePerSeed = groups.map { group ->
+            val mapped = group.items.mapNotNull { original ->
+                val resolved = admitted[original.cleanTitle] ?: return@mapNotNull null
+                if (!includeExternal) {
+                    val similarity = verifyNativeSeedSimilarity(group.seedGenres, resolved.genres)
+                        ?: return@mapNotNull null
+                    resolved.copy(score = similarity.score, seedTitle = group.seedTitle)
+                } else {
+                    if (!verifyExternalSeedCompatibility(group.seedGenres, resolved.genres)) {
+                        return@mapNotNull null
+                    }
+                    resolved.copy(score = original.score, seedTitle = group.seedTitle)
+                }
             }
             if (!needsTierSort) {
                 mapped

@@ -79,7 +79,10 @@ import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.discovery.DiscoveryDirectOpenResolver
 import eu.kanade.tachiyomi.ui.discovery.DiscoveryFeedScreen
+import eu.kanade.tachiyomi.ui.discovery.DiscoveryHeroCollageSkeleton
+import eu.kanade.tachiyomi.ui.discovery.DiscoveryHeroStageSkeleton
 import eu.kanade.tachiyomi.ui.discovery.DiscoveryPreviewSheet
+import eu.kanade.tachiyomi.ui.discovery.HybridDiscoveryStripSkeleton
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
@@ -819,32 +822,78 @@ private fun HomeHubScreen(
                 ) {
                     item(key = "hero", contentType = "home_hub_hero") {
                         when {
-                            keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue -> Box(
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                ForYouSection(
-                                    items = heroFeedItems,
-                                    coverMediaType = section.toDiscoveryMediaType(),
-                                    onMoreClick = onForYouMoreClick,
-                                    onItemClick = { openTeaser(it) },
-                                    onLongClick = { longPressItem = it },
+                            keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue -> {
+                                val heroEmptyState = resolveForYouEmptyState(
+                                    discoveryEnabled = state.discoveryEnabled,
                                     isRefreshing = state.isDiscoveryRefreshing,
-                                    onRefreshClick = onDiscoveryRefreshClick,
-                                    tracker = exposureTracker,
-                                    isSectionActive = isSectionActive,
-                                    isResumed = isResumed,
-                                    poolSize = state.discoveryPool.size,
-                                    failedSourceCount = state.discoveryFailedSourceCount,
-                                    emptyState = resolveForYouEmptyState(
-                                        discoveryEnabled = state.discoveryEnabled,
-                                        isRefreshing = state.isDiscoveryRefreshing,
-                                        hasItems = heroFeedItems.isNotEmpty(),
-                                        lastUpdatedAt = state.discoveryLastUpdated,
-                                        isFailed = state.isDiscoveryFailed,
-                                        isLoading = state.isDiscoveryLoading,
-                                    ),
+                                    hasItems = heroFeedItems.isNotEmpty(),
+                                    lastUpdatedAt = state.discoveryLastUpdated,
+                                    isFailed = state.isDiscoveryFailed,
+                                    isLoading = state.isDiscoveryLoading,
                                 )
+                                val skeletonStyle = if (
+                                    heroFeedItems.isEmpty() && heroEmptyState == ForYouEmptyState.REFRESHING
+                                ) {
+                                    resolveDiscoveryHeroSkeletonStyle(
+                                        preferredMode = heroMode,
+                                        discoveryEnabled = state.discoveryEnabled,
+                                        isFiltering = isFiltering,
+                                        keepDiscoveryHeroSlot = keepDiscoveryHeroSlot,
+                                    )
+                                } else {
+                                    null
+                                }
+                                when (skeletonStyle) {
+                                    DiscoveryHeroSkeletonStyle.STAGE -> DiscoveryHeroStageSkeleton(
+                                        onMoreClick = onForYouMoreClick,
+                                    )
+                                    DiscoveryHeroSkeletonStyle.COLLAGE -> DiscoveryHeroCollageSkeleton(
+                                        onMoreClick = onForYouMoreClick,
+                                    )
+                                    DiscoveryHeroSkeletonStyle.HYBRID -> if (hero != null) {
+                                        Column {
+                                            HeroSection(
+                                                hero = hero,
+                                                section = section,
+                                                ctaMode = heroCtaMode,
+                                                compact = true,
+                                                onPlayClick = onPlayHero,
+                                                onEntryClick = { onEntryClick(hero.entryId) },
+                                            )
+                                            HybridDiscoveryStripSkeleton(
+                                                onMoreClick = onForYouMoreClick,
+                                                isRefreshing = state.isDiscoveryRefreshing,
+                                                onRefreshClick = onDiscoveryRefreshClick,
+                                            )
+                                        }
+                                    } else {
+                                        HybridDiscoveryStripSkeleton(
+                                            onMoreClick = onForYouMoreClick,
+                                            isRefreshing = state.isDiscoveryRefreshing,
+                                            onRefreshClick = onDiscoveryRefreshClick,
+                                        )
+                                    }
+                                    DiscoveryHeroSkeletonStyle.TEASER_ROW, null -> Box(
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        ForYouSection(
+                                            items = heroFeedItems,
+                                            coverMediaType = section.toDiscoveryMediaType(),
+                                            onMoreClick = onForYouMoreClick,
+                                            onItemClick = { openTeaser(it) },
+                                            onLongClick = { longPressItem = it },
+                                            isRefreshing = state.isDiscoveryRefreshing,
+                                            onRefreshClick = onDiscoveryRefreshClick,
+                                            tracker = exposureTracker,
+                                            isSectionActive = isSectionActive,
+                                            isResumed = isResumed,
+                                            poolSize = state.discoveryPool.size,
+                                            failedSourceCount = state.discoveryFailedSourceCount,
+                                            emptyState = heroEmptyState,
+                                        )
+                                    }
+                                }
                             }
                             // Ветка stage идёт первой: при наличии hero она обязана перебивать HeroSection,
                             // иначе режим не отрисуется никогда.

@@ -208,3 +208,20 @@ internal fun pruneDismissedSessionTitles(
     if (titles.size <= maxLimit) return titles
     return titles.toList().takeLast(keepRecent).toSet()
 }
+
+/**
+ * Seeds frame-0 discovery flags from synchronous [DiscoveryPreferences] so cold-start
+ * skeletons match the user's configured hero/discovery layout before async flows emit.
+ */
+internal fun HomeHubUiState.withInitialDiscoveryPreferences(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+): HomeHubUiState {
+    val enabled = preferences.discoveryEnabled().get()
+    val lastGenAt = preferences.lastGenerationAt(mediaType).get().takeIf { it > 0L }
+    return copy(
+        discoveryEnabled = enabled,
+        isDiscoveryLoading = enabled,
+        discoveryLastUpdated = lastGenAt,
+    )
+}

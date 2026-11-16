@@ -33,6 +33,7 @@ import uy.kohesive.injekt.injectLazy
 internal class MangaHomeHubScreenModel(
     context: android.content.Context = Injekt.get<android.app.Application>(),
     userProfilePreferences: UserProfilePreferences = Injekt.get(),
+    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences = Injekt.get(),
 ) : BaseHomeHubScreenModel(
     context = context,
     initialState = run {
@@ -85,7 +86,10 @@ internal class MangaHomeHubScreenModel(
                 isLoading = true,
                 showWelcome = true,
             )
-        }
+        }.withInitialDiscoveryPreferences(
+            preferences = discoveryPreferences,
+            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
+        )
     },
     userProfilePreferences = userProfilePreferences,
 ) {
@@ -100,7 +104,6 @@ internal class MangaHomeHubScreenModel(
     private val sourceManager: MangaSourceManager by injectLazy()
     private val mangaExtensionManager: MangaExtensionManager by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
-    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
 
     override val discoveryController: HomeDiscoveryController by lazy {
         HomeDiscoveryController(

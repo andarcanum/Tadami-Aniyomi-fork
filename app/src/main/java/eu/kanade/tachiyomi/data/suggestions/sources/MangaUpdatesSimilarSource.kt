@@ -97,7 +97,7 @@ class MangaUpdatesSimilarSource(
                 val titles = listOfNotNull(record.title, result.hitTitle)
                 val maxScore = titles.maxOfOrNull { t ->
                     seed.candidateTitles.maxOfOrNull { candidate ->
-                        SuggestionTitleResolver.scoreMatch(t, candidate)
+                        SuggestionTitleResolver.scoreBaseTitleMatch(t, candidate)
                     } ?: 0
                 } ?: 0
 
