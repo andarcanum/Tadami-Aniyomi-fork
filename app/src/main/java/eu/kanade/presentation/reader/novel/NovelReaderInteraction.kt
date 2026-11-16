@@ -12,6 +12,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.decodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTapZoneAction
 import eu.kanade.tachiyomi.ui.reader.novel.setting.resolveConfiguredNovelReaderTapAction
@@ -915,6 +918,28 @@ internal fun resolveBookFlipPageAnimationDurationMillis(
         NovelBookFlipAnimationSpeed.SLOW -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS
         NovelBookFlipAnimationSpeed.NORMAL -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS
         NovelBookFlipAnimationSpeed.FAST -> BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS
+    }
+}
+
+internal fun resolveComposePagerPageTurnAnimationDurationMillis(
+    transitionStyle: NovelPageTransitionStyle,
+    bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed,
+    pageTurnSpeed: NovelPageTurnSpeed,
+): Int? {
+    return when (transitionStyle) {
+        NovelPageTransitionStyle.BOOK_FLIP -> resolveBookFlipPageAnimationDurationMillis(
+            transitionStyle = transitionStyle,
+            animationSpeed = bookFlipAnimationSpeed,
+        )
+        NovelPageTransitionStyle.SLIDE,
+        NovelPageTransitionStyle.DEPTH,
+        -> resolveNovelPageTurnPreset(
+            style = transitionStyle,
+            speed = pageTurnSpeed,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        ).animationDurationMillis
+        else -> null
     }
 }
 

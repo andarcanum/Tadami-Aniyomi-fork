@@ -306,6 +306,8 @@ internal fun SpreadPageTurnPageRenderer(
                         latestToggleUi = latestToggleUi,
                         onTurnForward = ::turnForward,
                         onTurnBackward = ::turnBackward,
+                        hasPreviousChapter = latestHasPreviousChapter,
+                        hasNextChapter = latestHasNextChapter,
                         latestOpenPreviousChapter = latestOpenPreviousChapter,
                         latestOpenNextChapter = latestOpenNextChapter,
                     )
@@ -327,6 +329,8 @@ internal fun SpreadPageTurnPageRenderer(
                         latestToggleUi = latestToggleUi,
                         onTurnForward = ::turnForward,
                         onTurnBackward = ::turnBackward,
+                        hasPreviousChapter = latestHasPreviousChapter,
+                        hasNextChapter = latestHasNextChapter,
                         latestOpenPreviousChapter = latestOpenPreviousChapter,
                         latestOpenNextChapter = latestOpenNextChapter,
                     )
@@ -352,7 +356,11 @@ internal fun SpreadPageTurnPageRenderer(
                 leftPageCurlConfig.dragForwardEnabled = currentVirtualSlot > 0
                 leftPageCurlConfig.dragBackwardEnabled = false
                 leftPageCurlConfig.tapBackwardEnabled = false
-                leftPageCurlConfig.tapForwardEnabled = latestTapToScrollEnabled && currentSpreadSlot > 0
+                leftPageCurlConfig.tapForwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+                    customTapZonesEnabled = latestCustomTapZonesEnabled,
+                    tapToScrollEnabled = latestTapToScrollEnabled,
+                    canMoveInDirection = currentSpreadSlot > 0,
+                )
                 leftPageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
                 leftPageCurlConfig.dragInteraction = PageCurlConfig.StartEndDragInteraction(
                     pointerBehavior = rendererConfig.dragPointerBehavior,
@@ -377,8 +385,11 @@ internal fun SpreadPageTurnPageRenderer(
                 rightPageCurlConfig.dragForwardEnabled = currentVirtualSlot < virtualSlotCount - 1
                 rightPageCurlConfig.dragBackwardEnabled = false
                 rightPageCurlConfig.tapBackwardEnabled = false
-                rightPageCurlConfig.tapForwardEnabled =
-                    latestTapToScrollEnabled && currentSpreadSlot < spreadSlotCount - 1
+                rightPageCurlConfig.tapForwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+                    customTapZonesEnabled = latestCustomTapZonesEnabled,
+                    tapToScrollEnabled = latestTapToScrollEnabled,
+                    canMoveInDirection = currentSpreadSlot < spreadSlotCount - 1,
+                )
                 rightPageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
                 rightPageCurlConfig.dragInteraction = PageCurlConfig.StartEndDragInteraction(
                     pointerBehavior = rendererConfig.dragPointerBehavior,
@@ -697,6 +708,8 @@ private fun handleSpreadCustomTap(
     latestToggleUi: () -> Unit,
     onTurnForward: () -> Unit,
     onTurnBackward: () -> Unit,
+    hasPreviousChapter: Boolean,
+    hasNextChapter: Boolean,
     latestOpenPreviousChapter: () -> Unit,
     latestOpenNextChapter: () -> Unit,
 ): Boolean {
@@ -720,8 +733,8 @@ private fun handleSpreadCustomTap(
             ),
             currentPage = currentSpreadSlot,
             pageCount = spreadSlotCount.coerceAtLeast(1),
-            hasPreviousChapter = latestRendererConfig.dragBackwardEnabled,
-            hasNextChapter = latestRendererConfig.dragForwardEnabled,
+            hasPreviousChapter = hasPreviousChapter,
+            hasNextChapter = hasNextChapter,
             animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
         )
     } else {
@@ -730,8 +743,8 @@ private fun handleSpreadCustomTap(
             currentPage = currentSpreadSlot,
             pageCount = spreadSlotCount.coerceAtLeast(1),
             centerTapWidthFraction = latestRendererConfig.centerTapWidthFraction,
-            hasPreviousChapter = latestRendererConfig.dragBackwardEnabled,
-            hasNextChapter = latestRendererConfig.dragForwardEnabled,
+            hasPreviousChapter = hasPreviousChapter,
+            hasNextChapter = hasNextChapter,
             tapToScrollEnabled = latestTapToScrollEnabled,
             animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
         )

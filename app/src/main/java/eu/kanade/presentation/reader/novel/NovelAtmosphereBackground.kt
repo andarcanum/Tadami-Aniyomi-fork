@@ -129,34 +129,6 @@ internal fun NovelAtmosphereBackground(
                         )
                     }
                 }
-
-                if (backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val center1 = Offset(size.width * 0.2f, size.height * 0.2f)
-                        val center2 = Offset(size.width * 0.8f, size.height * 0.75f)
-                        val agingRadius = (minOf(size.width, size.height) * 0.9f).coerceAtLeast(1f)
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colorStops = arrayOf(
-                                    0.0f to Color.White.copy(alpha = 0.14f),
-                                    0.45f to Color.Transparent,
-                                ),
-                                center = center1,
-                                radius = agingRadius,
-                            ),
-                        )
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colorStops = arrayOf(
-                                    0.0f to Color.Black.copy(alpha = 0.12f),
-                                    0.42f to Color.Transparent,
-                                ),
-                                center = center2,
-                                radius = agingRadius,
-                            ),
-                        )
-                    }
-                }
             }
 
             if (radialLayers.isNotEmpty()) {

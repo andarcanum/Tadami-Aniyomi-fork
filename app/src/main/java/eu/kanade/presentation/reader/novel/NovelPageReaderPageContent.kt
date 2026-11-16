@@ -1155,6 +1155,7 @@ internal fun NovelPageReaderPageContent(
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
     onPlainTap: ((Float, Float, Float, Float) -> Unit)? = null,
     onImageLongClick: ((String) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
     touchHandlingEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -1259,11 +1260,7 @@ internal fun NovelPageReaderPageContent(
                                     ),
                                     textTypeface = textTypeface,
                                     chapterTitleTypeface = chapterTitleTypeface,
-                                    chapterTitleTextColor = if (block.isChapterTitle) {
-                                        Color.Black
-                                    } else {
-                                        chapterTitleTextColor
-                                    },
+                                    chapterTitleTextColor = chapterTitleTextColor,
                                     textShadowEnabled = readerSettings.textShadow,
                                     textShadowColor = readerSettings.textShadowColor,
                                     textShadowBlur = readerSettings.textShadowBlur,
@@ -1283,6 +1280,7 @@ internal fun NovelPageReaderPageContent(
                                     selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                     onPlainTap = onPlainTap,
+                                    onUrlClick = onUrlClick,
                                     touchHandlingEnabled = touchHandlingEnabled,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -1311,11 +1309,7 @@ internal fun NovelPageReaderPageContent(
                                     ),
                                     textTypeface = textTypeface,
                                     chapterTitleTypeface = chapterTitleTypeface,
-                                    chapterTitleTextColor = if (block.isChapterTitle) {
-                                        Color.Black
-                                    } else {
-                                        chapterTitleTextColor
-                                    },
+                                    chapterTitleTextColor = chapterTitleTextColor,
                                     textShadowEnabled = readerSettings.textShadow,
                                     textShadowColor = readerSettings.textShadowColor,
                                     textShadowBlur = readerSettings.textShadowBlur,
@@ -1335,6 +1329,7 @@ internal fun NovelPageReaderPageContent(
                                     selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                     onPlainTap = onPlainTap,
+                                    onUrlClick = onUrlClick,
                                     touchHandlingEnabled = touchHandlingEnabled,
                                     modifier = Modifier.fillMaxWidth(),
                                 )

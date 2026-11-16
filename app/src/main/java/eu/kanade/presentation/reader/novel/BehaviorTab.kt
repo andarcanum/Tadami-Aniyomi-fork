@@ -130,7 +130,7 @@ fun BehaviorTab(
                             )
                         },
                     )
-                } else if (settings.pageTransitionStyle != NovelPageTransitionStyle.INSTANT) {
+                } else if (settings.pageTransitionStyle != NovelPageTransitionStyle.INSTANT && !showPageTurnTuning) {
                     LnReaderSliderRow(
                         label = stringResource(AYMR.strings.novel_reader_page_turn_speed),
                         valueText = { value ->
@@ -304,6 +304,7 @@ fun BehaviorTab(
                 label = stringResource(AYMR.strings.novel_reader_swipe_gestures),
                 subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
                 checked = settings.swipeGestures,
+                enabled = chapterSwipeControlsEnabled,
                 onClick = {
                     update(
                         !settings.swipeGestures,
@@ -495,7 +496,7 @@ fun BehaviorTab(
                 committedValue = settings.autoScrollOffset.toFloat(),
                 range = 0f..2000f,
                 steps = 1999,
-                enabled = true,
+                enabled = chapterSwipeControlsEnabled,
                 onCommit = {
                     update(
                         it.roundToInt(),

@@ -73,6 +73,7 @@ import eu.kanade.presentation.reader.novel.NovelReaderCustomBackgroundCard
 import eu.kanade.presentation.reader.novel.NovelReaderFontOption
 import eu.kanade.presentation.reader.novel.NovelReaderFontSource
 import eu.kanade.presentation.reader.novel.NovelReaderTapZonesEditor
+import eu.kanade.presentation.reader.novel.RendererSettingDisableReason
 import eu.kanade.presentation.reader.novel.areChapterSwipeControlsEnabled
 import eu.kanade.presentation.reader.novel.autoScrollSpeedToInterval
 import eu.kanade.presentation.reader.novel.buildNovelReaderBackgroundCardsFromCustomItems
@@ -908,6 +909,9 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val pageReaderPref = prefs.pageReader()
         val pageReader by pageReaderPref.collectAsState()
         val showPageChapterTitlePref = prefs.showPageChapterTitle()
+        val twoPageLandscapePref = prefs.twoPageLandscape()
+        val twoPageLandscape by twoPageLandscapePref.collectAsState()
+        val spreadCutoutGuardPref = prefs.spreadCutoutGuard()
         val pageTransitionStylePref = prefs.pageTransitionStyle()
         val pageTransitionStyle by pageTransitionStylePref.collectAsState()
         val bookFlipAnimationSpeedPref = prefs.bookFlipAnimationSpeed()
@@ -1009,10 +1013,14 @@ object SettingsNovelReaderScreen : SearchableSettings {
             enabled = rendererAvailability.preferWebViewEnabled,
             reason = stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary),
         )
-        val richNativeDisableReason = when {
-            pageReader -> stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary)
-            bionicReading -> stringResource(AYMR.strings.novel_reader_renderer_disabled_bionic_summary)
-            else -> stringResource(AYMR.strings.novel_reader_renderer_disabled_webview_summary)
+        val richNativeDisableReason = when (rendererAvailability.richNativeReason) {
+            RendererSettingDisableReason.PAGE_MODE ->
+                stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary)
+            RendererSettingDisableReason.BIONIC_READING ->
+                stringResource(AYMR.strings.novel_reader_renderer_disabled_bionic_summary)
+            RendererSettingDisableReason.WEBVIEW_ACTIVE,
+            null,
+            -> stringResource(AYMR.strings.novel_reader_renderer_disabled_webview_summary)
         }
         val richNativeSubtitle = rendererSubtitle(
             baseSubtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
@@ -1038,6 +1046,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     preference = swipeGesturesPref,
                     title = stringResource(AYMR.strings.novel_reader_swipe_gestures),
                     subtitle = stringResource(AYMR.strings.novel_reader_swipe_gestures_summary),
+                    enabled = chapterSwipeControlsEnabled,
                 ),
             )
             add(
@@ -1100,6 +1109,22 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         subtitle = stringResource(AYMR.strings.novel_reader_show_page_chapter_title_summary),
                     ),
                 )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = twoPageLandscapePref,
+                        title = stringResource(AYMR.strings.novel_reader_two_page_landscape),
+                        subtitle = stringResource(AYMR.strings.novel_reader_two_page_landscape_summary),
+                    ),
+                )
+                if (twoPageLandscape) {
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = spreadCutoutGuardPref,
+                            title = stringResource(AYMR.strings.novel_reader_spread_cutout_guard),
+                            subtitle = stringResource(AYMR.strings.novel_reader_spread_cutout_guard_summary),
+                        ),
+                    )
+                }
             }
             add(
                 Preference.PreferenceItem.ListPreference(
@@ -1129,6 +1154,22 @@ object SettingsNovelReaderScreen : SearchableSettings {
                             true
                         },
                         enabled = pageReader,
+                    ),
+                )
+            } else if (pageReader && pageTransitionStyle != NovelPageTransitionStyle.INSTANT && !showPageTurnTuning) {
+                add(
+                    Preference.PreferenceItem.SliderPreference(
+                        value = novelPageTurnSpeedSliderIndex(pageTurnSpeed),
+                        title = stringResource(AYMR.strings.novel_reader_page_turn_speed),
+                        subtitle = resolveNovelPageTurnSliderLabel(
+                            value = pageTurnSpeed,
+                            entries = pageTurnSpeedEntries,
+                        ),
+                        valueRange = 0..(pageTurnSpeedEntries.size - 1),
+                        onValueChanged = { value ->
+                            pageTurnSpeedPref.set(resolveNovelPageTurnSpeedSliderValue(value))
+                            true
+                        },
                     ),
                 )
             }
@@ -1296,7 +1337,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.novel_reader_auto_scroll_offset),
                     subtitle = autoScrollOffset.toString(),
                     valueRange = 0..2000,
-                    enabled = true,
+                    enabled = chapterSwipeControlsEnabled,
                     onValueChanged = {
                         autoScrollOffsetPref.set(it)
                         true

@@ -1113,12 +1113,20 @@ internal fun NovelReaderContentHost(
         cutoutBottomPx = pageReaderCutoutBottomPx,
         navigationBarHeightPx = navigationBarHeight,
     )
+    val shouldPaginateRichForPageReader = shouldUseRichNativePageRenderer(
+        richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
+        pageReaderEnabled = shouldPaginatePageReader,
+        bionicReadingEnabled = state.readerSettings.bionicReading,
+        richContentBlocks = state.richContentBlocks,
+        richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
+    )
+    val shouldPaginatePlainForPageReader = shouldPaginatePageReader && !shouldPaginateRichForPageReader
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
         pageReaderTextBlocks,
         pageReaderImageBlocks,
         showPageChapterTitle,
-        shouldPaginatePageReader,
+        shouldPaginatePlainForPageReader,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
         state.readerSettings.margin,
@@ -1140,7 +1148,7 @@ internal fun NovelReaderContentHost(
         spreadCutoutLeftPx,
         spreadCutoutRightPx,
     ) {
-        if (!shouldPaginatePageReader || (pageReaderTextBlocks.isEmpty() && pageReaderImageBlocks.isEmpty())) {
+        if (!shouldPaginatePlainForPageReader || (pageReaderTextBlocks.isEmpty() && pageReaderImageBlocks.isEmpty())) {
             emptyList()
         } else {
             val screenWidthPx = effectivePageViewportSize.width
@@ -1244,13 +1252,6 @@ internal fun NovelReaderContentHost(
             )
         }
     }
-    val shouldPaginateRichForPageReader = shouldUseRichNativePageRenderer(
-        richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
-        pageReaderEnabled = shouldPaginatePageReader,
-        bionicReadingEnabled = state.readerSettings.bionicReading,
-        richContentBlocks = state.richContentBlocks,
-        richContentUnsupportedFeaturesDetected = state.richContentUnsupportedFeaturesDetected,
-    )
     val richPageReaderPagination = remember(
         state.chapter.id,
         pageReaderRichBlocks,
@@ -2325,9 +2326,10 @@ internal fun NovelReaderContentHost(
     val coroutineScope = rememberCoroutineScope()
     val latestShowReaderUi by rememberUpdatedState(showReaderUi)
     val latestTapToScrollEnabled by rememberUpdatedState(state.readerSettings.tapToScroll)
-    val bookFlipPageAnimationDurationMillis = resolveBookFlipPageAnimationDurationMillis(
+    val bookFlipPageAnimationDurationMillis = resolveComposePagerPageTurnAnimationDurationMillis(
         transitionStyle = activePageTransitionStyle,
-        animationSpeed = state.readerSettings.bookFlipAnimationSpeed,
+        bookFlipAnimationSpeed = state.readerSettings.bookFlipAnimationSpeed,
+        pageTurnSpeed = state.readerSettings.pageTurnSpeed,
     )
 
     // Chapter navigation and auto-scroll end handling live in a plain class with provider lambdas,
@@ -3079,6 +3081,27 @@ internal fun NovelReaderContentHost(
                             bookRendererDecision = bookRendererDecision,
                         )
                     } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+                        val latestUrlLinkState by rememberUpdatedState(state)
+                        val onReaderUrlClick: (String) -> Unit = remember(context) {
+                            { rawUrl ->
+                                val currentState = latestUrlLinkState
+                                val resolvedUrl = resolveNovelReaderLinkUrl(
+                                    rawUrl = rawUrl,
+                                    chapterWebUrl = currentState.chapterWebUrl,
+                                    novelUrl = currentState.novel.url,
+                                )
+                                if (!resolvedUrl.isNullOrBlank()) {
+                                    context.startActivity(
+                                        WebViewActivity.newIntent(
+                                            context = context,
+                                            url = resolvedUrl,
+                                            sourceId = currentState.novel.source,
+                                            title = currentState.novel.title,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
                         ComposePagerPageRenderer(
                             pagerState = pagerState,
                             contentPages = pageReaderContentPages,
@@ -3138,6 +3161,7 @@ internal fun NovelReaderContentHost(
                             onImageLongClick = { url ->
                                 activeImageActionsUrl = url
                             },
+                            onUrlClick = onReaderUrlClick,
                             selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                         )

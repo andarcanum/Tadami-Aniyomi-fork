@@ -2,7 +2,9 @@ package eu.kanade.presentation.reader.novel
 
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -562,5 +564,29 @@ class NovelReaderInteractionTest {
             seamlessChapterTransitionEnabled = true,
             activePageTransitionStyle = NovelPageTransitionStyle.SLIDE,
         ) shouldBe false
+    }
+
+    @Test
+    fun `compose pager page turn animation duration respects style and speed`() {
+        resolveComposePagerPageTurnAnimationDurationMillis(
+            transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+            bookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.FAST,
+            pageTurnSpeed = NovelPageTurnSpeed.NORMAL,
+        ) shouldBe 500
+        resolveComposePagerPageTurnAnimationDurationMillis(
+            transitionStyle = NovelPageTransitionStyle.SLIDE,
+            bookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.SLOW,
+            pageTurnSpeed = NovelPageTurnSpeed.FAST,
+        ) shouldBe 300
+        resolveComposePagerPageTurnAnimationDurationMillis(
+            transitionStyle = NovelPageTransitionStyle.DEPTH,
+            bookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.SLOW,
+            pageTurnSpeed = NovelPageTurnSpeed.SLOW,
+        ) shouldBe 680
+        resolveComposePagerPageTurnAnimationDurationMillis(
+            transitionStyle = NovelPageTransitionStyle.INSTANT,
+            bookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.SLOW,
+            pageTurnSpeed = NovelPageTurnSpeed.FAST,
+        ) shouldBe null
     }
 }

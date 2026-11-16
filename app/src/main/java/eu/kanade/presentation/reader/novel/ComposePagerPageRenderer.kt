@@ -231,6 +231,7 @@ internal fun ComposePagerPageRenderer(
     onOpenNextChapter: () -> Unit,
     onTextTap: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> onToggleUi() },
     onImageLongClick: ((String) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
     selectionSessionIdProvider: () -> Long = { 0L },
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
 ) {
@@ -474,6 +475,7 @@ internal fun ComposePagerPageRenderer(
                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                     onPlainTap = onTextTap,
                     onImageLongClick = onImageLongClick,
+                    onUrlClick = onUrlClick,
                     modifier = Modifier.absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
                 )
             } else {
@@ -512,6 +514,7 @@ internal fun ComposePagerPageRenderer(
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                             onPlainTap = onTextTap,
                             onImageLongClick = onImageLongClick,
+                            onUrlClick = onUrlClick,
                             modifier = Modifier.weight(1f),
                         )
                     }
