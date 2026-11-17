@@ -114,6 +114,7 @@ data class NovelReaderSettings(
     val fullScreenMode: Boolean,
     val keepScreenOn: Boolean,
     val showScrollPercentage: Boolean,
+    val showPageFooter: Boolean = true,
     val showBatteryAndTime: Boolean,
     val showKindleInfoBlock: Boolean,
     val showTimeToEnd: Boolean,
@@ -410,6 +411,7 @@ data class NovelReaderOverride(
     val fullScreenMode: Boolean? = null,
     val keepScreenOn: Boolean? = null,
     val showScrollPercentage: Boolean? = null,
+    val showPageFooter: Boolean? = null,
     val showBatteryAndTime: Boolean? = null,
     val showKindleInfoBlock: Boolean? = null,
     val showTimeToEnd: Boolean? = null,
@@ -797,6 +799,11 @@ class NovelReaderPreferences(
 
     fun showScrollPercentage() = preferenceStore.getBoolean(
         "novel_reader_show_scroll_percentage",
+        true,
+    )
+
+    fun showPageFooter() = preferenceStore.getBoolean(
+        "novel_reader_show_page_footer",
         true,
     )
 
@@ -1257,6 +1264,7 @@ class NovelReaderPreferences(
                 fullScreenMode = fullScreenMode().get(),
                 keepScreenOn = keepScreenOn().get(),
                 showScrollPercentage = showScrollPercentage().get(),
+                showPageFooter = showPageFooter().get(),
                 showBatteryAndTime = showBatteryAndTime().get(),
                 showKindleInfoBlock = showKindleInfoBlock().get(),
                 showTimeToEnd = showTimeToEnd().get(),
@@ -1429,6 +1437,7 @@ class NovelReaderPreferences(
             fullScreenMode = override?.fullScreenMode ?: fullScreenMode().get(),
             keepScreenOn = override?.keepScreenOn ?: keepScreenOn().get(),
             showScrollPercentage = override?.showScrollPercentage ?: showScrollPercentage().get(),
+            showPageFooter = override?.showPageFooter ?: showPageFooter().get(),
             showBatteryAndTime = override?.showBatteryAndTime ?: showBatteryAndTime().get(),
             showKindleInfoBlock = override?.showKindleInfoBlock ?: showKindleInfoBlock().get(),
             showTimeToEnd = override?.showTimeToEnd ?: showTimeToEnd().get(),
@@ -1715,6 +1724,7 @@ class NovelReaderPreferences(
             showTimeToEnd().changes(),
             showWordCount().changes(),
             bionicReading().changes(),
+            showPageFooter().changes(),
         ) { values: Array<Any?> ->
             AccessibilitySettings(
                 fullScreenMode = values[0] as Boolean,
@@ -1725,6 +1735,7 @@ class NovelReaderPreferences(
                 showTimeToEnd = values[5] as Boolean,
                 showWordCount = values[6] as Boolean,
                 bionicReading = values[7] as Boolean,
+                showPageFooter = values[8] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1991,6 +2002,7 @@ class NovelReaderPreferences(
                 fullScreenMode = override?.fullScreenMode ?: accessibility.fullScreenMode,
                 keepScreenOn = override?.keepScreenOn ?: accessibility.keepScreenOn,
                 showScrollPercentage = override?.showScrollPercentage ?: accessibility.showScrollPercentage,
+                showPageFooter = override?.showPageFooter ?: accessibility.showPageFooter,
                 showBatteryAndTime = override?.showBatteryAndTime ?: accessibility.showBatteryAndTime,
                 showKindleInfoBlock = override?.showKindleInfoBlock ?: accessibility.showKindleInfoBlock,
                 showTimeToEnd = override?.showTimeToEnd ?: accessibility.showTimeToEnd,
@@ -2154,6 +2166,7 @@ class NovelReaderPreferences(
         val showTimeToEnd: Boolean,
         val showWordCount: Boolean,
         val bionicReading: Boolean,
+        val showPageFooter: Boolean,
     )
 
     private data class AdvancedSettings(

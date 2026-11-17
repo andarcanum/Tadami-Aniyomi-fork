@@ -574,6 +574,9 @@ internal fun PageTurnPageRenderer(
     chapterNavigationRequest: PageTurnChapterNavigationRequest? = null,
     onChapterNavigationRequestConsumed: () -> Unit = {},
     onTextTap: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> onToggleUi() },
+    onImageClick: ((String) -> Unit)? = null,
+    onImageLongClick: ((String) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
     selectionSessionIdProvider: () -> Long = { 0L },
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
     layoutGeneration: Long = 0L,
@@ -657,6 +660,15 @@ internal fun PageTurnPageRenderer(
             }
             val guardedTextTap by rememberUpdatedState<(Float, Float, Float, Float) -> Unit> { x, y, width, height ->
                 generation.publish { onTextTap(x, y, width, height) }
+            }
+            val guardedImageClick by rememberUpdatedState<((String) -> Unit)?> { url ->
+                generation.publish { onImageClick?.invoke(url) }
+            }
+            val guardedImageLongClick by rememberUpdatedState<((String) -> Unit)?> { url ->
+                generation.publish { onImageLongClick?.invoke(url) }
+            }
+            val guardedUrlClick by rememberUpdatedState<((String) -> Unit)?> { url ->
+                generation.publish { onUrlClick?.invoke(url) }
             }
             val tapCoroutineScope = rememberCoroutineScope()
             val rendererConfig = remember(
@@ -969,14 +981,18 @@ internal fun PageTurnPageRenderer(
                             HorizontalChapterSwipeAction.NONE -> null
                         }
                     }
-                    val spreadPages = if (boundaryPreview == null) {
+                    val spreadFirstPage = if (boundaryPreview == null) {
                         val spreadSlot = resolvePageTurnRendererProgressPageIndex(
                             currentPage = page,
                             contentPageCount = actualPageCount,
                             hasPreviousChapter = hasPreviousChapter,
                         )
-                        val firstPage = resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
-                        (firstPage until firstPage + spreadColumns).map { index ->
+                        resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
+                    } else {
+                        -1
+                    }
+                    val spreadPages = if (boundaryPreview == null) {
+                        (spreadFirstPage until spreadFirstPage + spreadColumns).map { index ->
                             safeContentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
                         }
                     } else {
@@ -986,7 +1002,14 @@ internal fun PageTurnPageRenderer(
                     val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
                     val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
                     val pageSurfaceColor = Color.Transparent
+                    val isCurlSettled = abs(pageCurlState.progress) < 0.001f
+                    val isInteractiveCurrentPage =
+                        isCurlSettled &&
+                            page == currentPage &&
+                            boundaryPreview == null &&
+                            !latestSuppressBoundaryNavigation
                     NovelPageTurnSnapshotRenderer(
+                        useSnapshotLayer = !isCurlSettled,
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         NovelAtmosphereBackground(
@@ -1035,7 +1058,19 @@ internal fun PageTurnPageRenderer(
                                 selectionAnchorChapterId = chapterId,
                                 onSelectedTextSelectionChanged = guardedSelectionChanged,
                                 onPlainTap = guardedTextTap,
-                                touchHandlingEnabled = false,
+                                onImageClick = if (onImageClick != null) guardedImageClick else null,
+                                onImageLongClick = if (onImageLongClick != null) guardedImageLongClick else null,
+                                onUrlClick = if (onUrlClick != null) guardedUrlClick else null,
+                                touchHandlingEnabled = isInteractiveCurrentPage,
+                                renderAsStaticCanvas = page != currentPage,
+                                pageNumber = if (spreadFirstPage in
+                                    safeContentPages.indices
+                                ) {
+                                    spreadFirstPage + 1
+                                } else {
+                                    null
+                                },
+                                totalPages = safeContentPages.size,
                                 modifier = Modifier.absolutePadding(
                                     left = spreadCutoutLeftDp,
                                     right = spreadCutoutRightDp,
@@ -1047,7 +1082,8 @@ internal fun PageTurnPageRenderer(
                                     .fillMaxSize()
                                     .absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
                             ) {
-                                spreadPages.forEach { spreadPage ->
+                                spreadPages.forEachIndexed { columnOffset, spreadPage ->
+                                    val pageIdx = spreadFirstPage + columnOffset
                                     NovelPageReaderPageContent(
                                         contentPage = spreadPage,
                                         readerSettings = readerSettings,
@@ -1072,7 +1108,19 @@ internal fun PageTurnPageRenderer(
                                         selectionAnchorChapterId = chapterId,
                                         onSelectedTextSelectionChanged = guardedSelectionChanged,
                                         onPlainTap = guardedTextTap,
-                                        touchHandlingEnabled = false,
+                                        onImageClick = if (onImageClick != null) guardedImageClick else null,
+                                        onImageLongClick = if (onImageLongClick !=
+                                            null
+                                        ) {
+                                            guardedImageLongClick
+                                        } else {
+                                            null
+                                        },
+                                        onUrlClick = if (onUrlClick != null) guardedUrlClick else null,
+                                        touchHandlingEnabled = isInteractiveCurrentPage,
+                                        renderAsStaticCanvas = page != currentPage,
+                                        pageNumber = if (pageIdx in safeContentPages.indices) pageIdx + 1 else null,
+                                        totalPages = safeContentPages.size,
                                         modifier = Modifier.weight(1f),
                                     )
                                 }

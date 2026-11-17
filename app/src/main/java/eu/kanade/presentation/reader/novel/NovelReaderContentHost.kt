@@ -468,6 +468,8 @@ internal fun NovelReaderContentHost(
     var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var showGoogleDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var activeImageActionsUrl by remember(state.chapter.id) { mutableStateOf<String?>(null) }
+    var activeImageViewerUrl by remember(state.chapter.id) { mutableStateOf<String?>(null) }
+    var activeFootnoteDialog by remember(state.chapter.id) { mutableStateOf<NovelFootnoteDialogData?>(null) }
     var translationSwitchRequest by remember(state.chapter.id) {
         mutableStateOf<TranslationSwitchRequest?>(null)
     }
@@ -1090,15 +1092,12 @@ internal fun NovelReaderContentHost(
             isEInkMode = isEInkMode,
         )
     }
-    // PageTextView enables DynamicLayout only when selectable (`setTextIsSelectable(true)`), and
-    // PageTurnRenderer disables selection; non-selectable text renders via BoringLayout / StaticLayout.
+    // PageTextView enables DynamicLayout only when selectable (`setTextIsSelectable(true)`).
+    // Non-selectable text renders via BoringLayout / StaticLayout.
     val pageReaderTextSelectable =
-        resolvePageTransitionEngine(activePageTransitionStyle) != NovelPageTransitionEngine.PAGE_TURN_RENDERER &&
-            (
-                state.readerSettings.textSelectionEnabled ||
-                    state.readerSettings.selectedTextTranslationEnabled ||
-                    state.readerSettings.novelDictionaryEnabled
-                )
+        state.readerSettings.textSelectionEnabled ||
+            state.readerSettings.selectedTextTranslationEnabled ||
+            state.readerSettings.novelDictionaryEnabled
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
         pageReaderTextBlocks,
@@ -2962,6 +2961,44 @@ internal fun NovelReaderContentHost(
                             bookHorizontalCutoutCss
                     }
 
+                    val latestUrlLinkState by rememberUpdatedState(state)
+                    val onReaderUrlClick: (String) -> Unit = remember(context) {
+                        { rawUrl ->
+                            val currentState = latestUrlLinkState
+                            val footnote = resolveNovelFootnoteFromHtml(
+                                rawUrl = rawUrl,
+                                rawHtml = currentState.html,
+                                chapterWebUrl = currentState.chapterWebUrl,
+                                novelUrl = currentState.novel.url,
+                            )
+                            if (footnote != null) {
+                                activeFootnoteDialog = footnote
+                            } else {
+                                val resolvedUrl = resolveNovelReaderLinkUrl(
+                                    rawUrl = rawUrl,
+                                    chapterWebUrl = currentState.chapterWebUrl,
+                                    novelUrl = currentState.novel.url,
+                                )
+                                if (!resolvedUrl.isNullOrBlank()) {
+                                    context.startActivity(
+                                        WebViewActivity.newIntent(
+                                            context = context,
+                                            url = resolvedUrl,
+                                            sourceId = currentState.novel.source,
+                                            title = currentState.novel.title,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    val onReaderImageClick: (String) -> Unit = remember {
+                        { url -> activeImageViewerUrl = url }
+                    }
+                    val onReaderImageLongClick: (String) -> Unit = remember {
+                        { url -> activeImageActionsUrl = url }
+                    }
+
                     if (isBookMode) {
                         NovelBookContentHost(
                             state = state,
@@ -3023,27 +3060,6 @@ internal fun NovelReaderContentHost(
                             bookRendererDecision = bookRendererDecision,
                         )
                     } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
-                        val latestUrlLinkState by rememberUpdatedState(state)
-                        val onReaderUrlClick: (String) -> Unit = remember(context) {
-                            { rawUrl ->
-                                val currentState = latestUrlLinkState
-                                val resolvedUrl = resolveNovelReaderLinkUrl(
-                                    rawUrl = rawUrl,
-                                    chapterWebUrl = currentState.chapterWebUrl,
-                                    novelUrl = currentState.novel.url,
-                                )
-                                if (!resolvedUrl.isNullOrBlank()) {
-                                    context.startActivity(
-                                        WebViewActivity.newIntent(
-                                            context = context,
-                                            url = resolvedUrl,
-                                            sourceId = currentState.novel.source,
-                                            title = currentState.novel.title,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
                         ComposePagerPageRenderer(
                             pagerState = pagerState,
                             contentPages = pageReaderContentPages,
@@ -3100,9 +3116,8 @@ internal fun NovelReaderContentHost(
                             onTextTap = { tapX, tapY, width, height ->
                                 latestReaderShortTapHandler(tapX, tapY, width, height)
                             },
-                            onImageLongClick = { url ->
-                                activeImageActionsUrl = url
-                            },
+                            onImageClick = onReaderImageClick,
+                            onImageLongClick = onReaderImageLongClick,
                             onUrlClick = onReaderUrlClick,
                             selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
@@ -3167,6 +3182,9 @@ internal fun NovelReaderContentHost(
                             onTextTap = { tapX, tapY, width, height ->
                                 latestReaderShortTapHandler(tapX, tapY, width, height)
                             },
+                            onImageClick = onReaderImageClick,
+                            onImageLongClick = onReaderImageLongClick,
+                            onUrlClick = onReaderUrlClick,
                             selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                         )
@@ -3226,6 +3244,9 @@ internal fun NovelReaderContentHost(
                             onTextTap = { tapX, tapY, width, height ->
                                 latestReaderShortTapHandler(tapX, tapY, width, height)
                             },
+                            onImageClick = onReaderImageClick,
+                            onImageLongClick = onReaderImageLongClick,
+                            onUrlClick = onReaderUrlClick,
                             selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                         )
@@ -3263,6 +3284,9 @@ internal fun NovelReaderContentHost(
                             onReaderShortTap = { tapX, tapY, width, height ->
                                 latestReaderShortTapHandler(tapX, tapY, width, height)
                             },
+                            onUrlClick = onReaderUrlClick,
+                            onImageClick = onReaderImageClick,
+                            onImageLongClick = onReaderImageLongClick,
                         )
                     }
                 } else {
@@ -4598,41 +4622,74 @@ internal fun NovelReaderContentHost(
                 ),
             )
 
+            val imageActionContext = androidx.compose.ui.platform.LocalContext.current
+            fun saveReaderImage(targetUrl: String) {
+                coroutineScope.launch {
+                    val file = NovelImageActionHelper.resolveImageFile(imageActionContext, targetUrl)
+                    if (file != null) {
+                        val imageSaver = eu.kanade.tachiyomi.data.saver.ImageSaver(imageActionContext)
+                        val uri = runCatching {
+                            imageSaver.save(
+                                eu.kanade.tachiyomi.data.saver.Image.Page(
+                                    inputStream = { file.inputStream() },
+                                    name = "novel_${state.chapter.name}_${file.nameWithoutExtension}",
+                                    location = eu.kanade.tachiyomi.data.saver.Location.Pictures("Novel"),
+                                ),
+                            )
+                        }.getOrDefault(android.net.Uri.fromFile(file))
+                        val notifier = eu.kanade.tachiyomi.ui.reader.SaveImageNotifier(imageActionContext)
+                        notifier.onComplete(uri)
+                    } else {
+                        val notifier = eu.kanade.tachiyomi.ui.reader.SaveImageNotifier(imageActionContext)
+                        notifier.onError("Failed to resolve image")
+                    }
+                }
+            }
+
+            fun shareReaderImage(targetUrl: String) {
+                coroutineScope.launch {
+                    val file = NovelImageActionHelper.resolveImageFile(imageActionContext, targetUrl)
+                    NovelImageActionHelper.shareImage(imageActionContext, targetUrl, file)
+                }
+            }
+
+            fun copyReaderImageLink(targetUrl: String) {
+                NovelImageActionHelper.copyToClipboard(imageActionContext, "Image Link", targetUrl)
+            }
+
             activeImageActionsUrl?.let { imageUrl ->
-                val localContext = androidx.compose.ui.platform.LocalContext.current
                 NovelImageActionsDialog(
                     imageUrl = imageUrl,
                     onDismissRequest = { activeImageActionsUrl = null },
-                    onSaveImage = {
-                        coroutineScope.launch {
-                            val file = NovelImageActionHelper.resolveImageFile(localContext, imageUrl)
-                            if (file != null) {
-                                val imageSaver = eu.kanade.tachiyomi.data.saver.ImageSaver(localContext)
-                                val uri = runCatching {
-                                    imageSaver.save(
-                                        eu.kanade.tachiyomi.data.saver.Image.Page(
-                                            inputStream = { file.inputStream() },
-                                            name = "novel_${state.chapter.name}_${file.nameWithoutExtension}",
-                                            location = eu.kanade.tachiyomi.data.saver.Location.Pictures("Novel"),
-                                        ),
-                                    )
-                                }.getOrDefault(android.net.Uri.fromFile(file))
-                                val notifier = eu.kanade.tachiyomi.ui.reader.SaveImageNotifier(localContext)
-                                notifier.onComplete(uri)
-                            } else {
-                                val notifier = eu.kanade.tachiyomi.ui.reader.SaveImageNotifier(localContext)
-                                notifier.onError("Failed to resolve image")
-                            }
-                        }
-                    },
-                    onShareImage = {
-                        coroutineScope.launch {
-                            val file = NovelImageActionHelper.resolveImageFile(localContext, imageUrl)
-                            NovelImageActionHelper.shareImage(localContext, imageUrl, file)
-                        }
-                    },
-                    onCopyLink = {
-                        NovelImageActionHelper.copyToClipboard(localContext, "Image Link", imageUrl)
+                    onSaveImage = { saveReaderImage(imageUrl) },
+                    onShareImage = { shareReaderImage(imageUrl) },
+                    onCopyLink = { copyReaderImageLink(imageUrl) },
+                )
+            }
+
+            activeImageViewerUrl?.let { imageUrl ->
+                NovelImageViewerDialog(
+                    imageUrl = imageUrl,
+                    onDismiss = { activeImageViewerUrl = null },
+                    onSaveImage = { saveReaderImage(imageUrl) },
+                    onShareImage = { shareReaderImage(imageUrl) },
+                    onCopyLink = { copyReaderImageLink(imageUrl) },
+                )
+            }
+
+            activeFootnoteDialog?.let { footnote ->
+                NovelFootnoteDialog(
+                    footnote = footnote,
+                    onDismiss = { activeFootnoteDialog = null },
+                    onOpenExternalUrl = { externalUrl ->
+                        imageActionContext.startActivity(
+                            WebViewActivity.newIntent(
+                                context = imageActionContext,
+                                url = externalUrl,
+                                sourceId = state.novel.source,
+                                title = state.novel.title,
+                            ),
+                        )
                     },
                 )
             }
@@ -4681,6 +4738,9 @@ private fun NovelNativeScrollReaderContent(
     openPreviousChapterFromReader: () -> Unit,
     openNextChapterFromReader: () -> Unit,
     onReaderShortTap: (Float, Float, Float, Float) -> Unit,
+    onUrlClick: ((String) -> Unit)? = null,
+    onImageClick: ((String) -> Unit)? = null,
+    onImageLongClick: ((String) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val viewConfiguration = LocalViewConfiguration.current
@@ -4914,6 +4974,9 @@ private fun NovelNativeScrollReaderContent(
                     onPlainTap = { tapX, tapY, width, height ->
                         currentShortTapHandler(tapX, tapY, width, height)
                     },
+                    onUrlClick = onUrlClick,
+                    onImageClick = onImageClick,
+                    onImageLongClick = onImageLongClick,
                 )
             }
         } else {
@@ -5046,6 +5109,18 @@ private fun NovelNativeScrollReaderContent(
                             contentScale = ContentScale.FillWidth,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .then(
+                                    if (onImageClick != null || onImageLongClick != null) {
+                                        Modifier.pointerInput(block.url, onImageClick, onImageLongClick) {
+                                            detectTapGestures(
+                                                onTap = { onImageClick?.invoke(block.url) },
+                                                onLongPress = { onImageLongClick?.invoke(block.url) },
+                                            )
+                                        }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
                                 .padding(
                                     top = if (index == 0) statusBarTopPadding else 0.dp,
                                     bottom = if (index ==

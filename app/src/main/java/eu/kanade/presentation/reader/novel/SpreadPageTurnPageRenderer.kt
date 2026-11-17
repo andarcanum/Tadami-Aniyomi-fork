@@ -52,6 +52,7 @@ import eu.wewox.pagecurl.page.PageCurlState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * Two-page spread variant of [PageTurnPageRenderer].
@@ -119,6 +120,9 @@ internal fun SpreadPageTurnPageRenderer(
     chapterNavigationRequest: PageTurnChapterNavigationRequest? = null,
     onChapterNavigationRequestConsumed: () -> Unit = {},
     onTextTap: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> onToggleUi() },
+    onImageClick: ((String) -> Unit)? = null,
+    onImageLongClick: ((String) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
     selectionSessionIdProvider: () -> Long = { 0L },
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
     layoutGeneration: Long = 0L,
@@ -208,6 +212,15 @@ internal fun SpreadPageTurnPageRenderer(
             }
             val guardedTextTap by rememberUpdatedState<(Float, Float, Float, Float) -> Unit> { x, y, width, height ->
                 generation.publish { onTextTap(x, y, width, height) }
+            }
+            val guardedImageClick by rememberUpdatedState<((String) -> Unit)?> { url ->
+                generation.publish { onImageClick?.invoke(url) }
+            }
+            val guardedImageLongClick by rememberUpdatedState<((String) -> Unit)?> { url ->
+                generation.publish { onImageLongClick?.invoke(url) }
+            }
+            val guardedUrlClick by rememberUpdatedState<((String) -> Unit)?> { url ->
+                generation.publish { onUrlClick?.invoke(url) }
             }
             val tapCoroutineScope = rememberCoroutineScope()
             val rendererConfig = remember(
@@ -584,6 +597,10 @@ internal fun SpreadPageTurnPageRenderer(
                     pageEdgeShadowAlpha = pageEdgeShadowAlpha,
                     backgroundImageModel = backgroundImageModel,
                 )
+                val isSpreadSettled =
+                    abs(leftCurlState.progress) < 0.001f &&
+                        abs(rightCurlState.progress) < 0.001f &&
+                        !latestSuppressBoundaryNavigation
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -596,6 +613,7 @@ internal fun SpreadPageTurnPageRenderer(
                         mirrored = true,
                         invertPage = true,
                         columnOffset = 0,
+                        isSpreadSettled = isSpreadSettled,
                         pageCurlState = leftCurlState,
                         pageCurlConfig = leftPageCurlConfig,
                         virtualSlotCount = virtualSlotCount,
@@ -634,6 +652,9 @@ internal fun SpreadPageTurnPageRenderer(
                         selectionSessionIdProvider = selectionSessionIdProvider,
                         onSelectedTextSelectionChanged = guardedSelectionChanged,
                         onTextTap = guardedTextTap,
+                        onImageClick = if (onImageClick != null) guardedImageClick else null,
+                        onImageLongClick = if (onImageLongClick != null) guardedImageLongClick else null,
+                        onUrlClick = if (onUrlClick != null) guardedUrlClick else null,
                     )
                     SpreadColumnCurl(
                         modifier = Modifier
@@ -642,6 +663,7 @@ internal fun SpreadPageTurnPageRenderer(
                         mirrored = false,
                         invertPage = false,
                         columnOffset = 1,
+                        isSpreadSettled = isSpreadSettled,
                         pageCurlState = rightCurlState,
                         pageCurlConfig = rightPageCurlConfig,
                         virtualSlotCount = virtualSlotCount,
@@ -680,6 +702,9 @@ internal fun SpreadPageTurnPageRenderer(
                         selectionSessionIdProvider = selectionSessionIdProvider,
                         onSelectedTextSelectionChanged = guardedSelectionChanged,
                         onTextTap = guardedTextTap,
+                        onImageClick = if (onImageClick != null) guardedImageClick else null,
+                        onImageLongClick = if (onImageLongClick != null) guardedImageLongClick else null,
+                        onUrlClick = if (onUrlClick != null) guardedUrlClick else null,
                     )
                 }
             }
@@ -787,6 +812,7 @@ private fun SpreadColumnCurl(
     mirrored: Boolean,
     invertPage: Boolean,
     columnOffset: Int,
+    isSpreadSettled: Boolean,
     pageCurlState: PageCurlState,
     pageCurlConfig: PageCurlConfig,
     virtualSlotCount: Int,
@@ -825,6 +851,9 @@ private fun SpreadColumnCurl(
     selectionSessionIdProvider: () -> Long,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
     onTextTap: (Float, Float, Float, Float) -> Unit,
+    onImageClick: ((String) -> Unit)? = null,
+    onImageLongClick: ((String) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
 ) {
     val curlModifier = if (mirrored) {
         modifier.fillMaxSize().graphicsLayer(scaleX = -1f)
@@ -862,14 +891,19 @@ private fun SpreadColumnCurl(
                 HorizontalChapterSwipeAction.NONE -> null
             }
         }
-        val contentPage = if (boundaryPreview == null) {
+        val columnPageIndex = if (boundaryPreview == null) {
             val spreadSlot = resolvePageTurnRendererProgressPageIndex(
                 currentPage = actualPage,
                 contentPageCount = spreadSlotCount,
                 hasPreviousChapter = hasPreviousChapter,
             )
             val firstPage = resolveSpreadSlotFirstPageIndex(spreadSlot, 2)
-            safeContentPages.getOrElse(firstPage + columnOffset) { NovelPageContentPage(emptyList()) }
+            firstPage + columnOffset
+        } else {
+            -1
+        }
+        val contentPage = if (boundaryPreview == null) {
+            safeContentPages.getOrElse(columnPageIndex) { NovelPageContentPage(emptyList()) }
         } else {
             NovelPageContentPage(emptyList())
         }
@@ -882,7 +916,9 @@ private fun SpreadColumnCurl(
         } else {
             Modifier.fillMaxSize()
         }
+        val isInteractiveCurrentPage = isSpreadSettled && page == pageCurlState.current && boundaryPreview == null
         NovelPageTurnSnapshotRenderer(
+            useSnapshotLayer = !isSpreadSettled,
             modifier = contentModifier,
         ) {
             NovelAtmosphereBackground(
@@ -932,7 +968,13 @@ private fun SpreadColumnCurl(
                     selectionAnchorChapterId = chapterId,
                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                     onPlainTap = onTextTap,
-                    touchHandlingEnabled = false,
+                    onImageClick = onImageClick,
+                    onImageLongClick = onImageLongClick,
+                    onUrlClick = onUrlClick,
+                    touchHandlingEnabled = isInteractiveCurrentPage,
+                    renderAsStaticCanvas = page != pageCurlState.current,
+                    pageNumber = if (columnPageIndex in safeContentPages.indices) columnPageIndex + 1 else null,
+                    totalPages = safeContentPages.size,
                 )
             }
         }

@@ -2,6 +2,7 @@ package eu.kanade.presentation.reader.novel
 
 import android.graphics.Typeface
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -135,23 +137,30 @@ internal fun NovelRichNativeScrollItem(
     selectionSessionIdProvider: () -> Long,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
     onPlainTap: ((Float, Float, Float, Float) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
+    onImageClick: ((String) -> Unit)? = null,
+    onImageLongClick: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val onLinkClick: (String) -> Unit = { rawUrl ->
-        val resolvedUrl = resolveNovelReaderLinkUrl(
-            rawUrl = rawUrl,
-            chapterWebUrl = chapterWebUrl,
-            novelUrl = novelUrl,
-        )
-        if (!resolvedUrl.isNullOrBlank()) {
-            context.startActivity(
-                WebViewActivity.newIntent(
-                    context = context,
-                    url = resolvedUrl,
-                    sourceId = sourceId,
-                    title = novelTitle,
-                ),
+        if (onUrlClick != null) {
+            onUrlClick(rawUrl)
+        } else {
+            val resolvedUrl = resolveNovelReaderLinkUrl(
+                rawUrl = rawUrl,
+                chapterWebUrl = chapterWebUrl,
+                novelUrl = novelUrl,
             )
+            if (!resolvedUrl.isNullOrBlank()) {
+                context.startActivity(
+                    WebViewActivity.newIntent(
+                        context = context,
+                        url = resolvedUrl,
+                        sourceId = sourceId,
+                        title = novelTitle,
+                    ),
+                )
+            }
         }
     }
     when (block) {
@@ -383,6 +392,18 @@ internal fun NovelRichNativeScrollItem(
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(
+                        if (onImageClick != null || onImageLongClick != null) {
+                            Modifier.pointerInput(block.url, onImageClick, onImageLongClick) {
+                                detectTapGestures(
+                                    onTap = { onImageClick?.invoke(block.url) },
+                                    onLongPress = { onImageLongClick?.invoke(block.url) },
+                                )
+                            }
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(
                         top = if (index == 0) statusBarTopPadding else 0.dp,
                         bottom = if (index == lastIndex) 0.dp else paragraphSpacing,

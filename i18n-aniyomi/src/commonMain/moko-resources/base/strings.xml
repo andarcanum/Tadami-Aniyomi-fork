@@ -827,6 +827,7 @@
     <string name="novel_reader_keep_screen_on">Keep screen on</string>
     <string name="novel_reader_keep_screen_on_summary">Prevent screen from turning off while reading</string>
     <string name="novel_reader_show_scroll_percentage">Show reading progress</string>
+    <string name="novel_reader_show_page_footer">Show mini page footer</string>
     <string name="novel_reader_show_battery_time">Show battery and time</string>
     <string name="novel_reader_show_kindle_info_block">Show Kindle info block</string>
     <string name="novel_reader_show_kindle_info_block_summary">Master switch for Time-to-end and Word counter</string>
@@ -835,6 +836,14 @@
     <string name="novel_reader_time_to_end_unknown">ETA: calculating…</string>
     <string name="novel_reader_time_to_end_minutes">ETA: ~%1$d min</string>
     <string name="novel_reader_words_progress">Words: %1$d/%2$d</string>
+    <string name="novel_reader_footnote_title">Note %1$s</string>
+    <string name="novel_reader_footnote_title_default">Footnote</string>
+    <string name="novel_reader_footnote_missing">Footnote text was not found in this chapter.</string>
+    <string name="novel_reader_footnote_open_external">Open link</string>
+    <string name="novel_reader_image_viewer_reset_zoom">Reset zoom</string>
+    <string name="novel_reader_image_viewer_save">Save</string>
+    <string name="novel_reader_image_viewer_share">Share</string>
+    <string name="novel_reader_image_viewer_copy_link">Copy link</string>
     <string name="novel_reader_bionic_reading">Bionic reading</string>
     <string name="novel_reader_background_texture">Background texture</string>
     <string name="novel_reader_background_texture_none">None</string>

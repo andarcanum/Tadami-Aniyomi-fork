@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
  */
 @Composable
 internal fun NovelPageTurnSnapshotRenderer(
+    useSnapshotLayer: Boolean = true,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -21,12 +22,18 @@ internal fun NovelPageTurnSnapshotRenderer(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .drawWithContent {
-                graphicsLayer.record {
-                    this@drawWithContent.drawContent()
-                }
-                drawLayer(graphicsLayer)
-            },
+            .then(
+                if (useSnapshotLayer) {
+                    Modifier.drawWithContent {
+                        graphicsLayer.record {
+                            this@drawWithContent.drawContent()
+                        }
+                        drawLayer(graphicsLayer)
+                    }
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         content()
     }

@@ -545,6 +545,17 @@ fun BehaviorTab(
                 },
             )
             AuroraToggleRow(
+                label = stringResource(AYMR.strings.novel_reader_show_page_footer),
+                checked = settings.showPageFooter,
+                onClick = {
+                    update(
+                        !settings.showPageFooter,
+                        { o, v -> o.copy(showPageFooter = v) },
+                        { preferences.showPageFooter().set(it) },
+                    )
+                },
+            )
+            AuroraToggleRow(
                 label = stringResource(AYMR.strings.novel_reader_show_battery_time),
                 checked = settings.showBatteryAndTime,
                 onClick = {

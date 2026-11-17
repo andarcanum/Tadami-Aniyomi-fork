@@ -230,6 +230,7 @@ internal fun ComposePagerPageRenderer(
     onOpenPreviousChapter: () -> Unit,
     onOpenNextChapter: () -> Unit,
     onTextTap: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> onToggleUi() },
+    onImageClick: ((String) -> Unit)? = null,
     onImageLongClick: ((String) -> Unit)? = null,
     onUrlClick: ((String) -> Unit)? = null,
     selectionSessionIdProvider: () -> Long = { 0L },
@@ -387,14 +388,18 @@ internal fun ComposePagerPageRenderer(
                 HorizontalChapterSwipeAction.NONE -> null
             }
         }
-        val spreadPages = if (boundaryPreview == null) {
+        val spreadFirstPage = if (boundaryPreview == null) {
             val spreadSlot = resolveComposePagerActualPageIndex(
                 currentPage = page,
                 contentPageCount = contentPageCount,
                 hasPreviousChapter = hasPreviousChapter,
             )
-            val firstPage = resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
-            (firstPage until firstPage + spreadColumns).map { index ->
+            resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
+        } else {
+            -1
+        }
+        val spreadPages = if (boundaryPreview == null) {
+            (spreadFirstPage until spreadFirstPage + spreadColumns).map { index ->
                 contentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
             }
         } else {
@@ -474,8 +479,11 @@ internal fun ComposePagerPageRenderer(
                     selectionAnchorChapterId = chapterId,
                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                     onPlainTap = onTextTap,
+                    onImageClick = onImageClick,
                     onImageLongClick = onImageLongClick,
                     onUrlClick = onUrlClick,
+                    pageNumber = if (spreadFirstPage in contentPages.indices) spreadFirstPage + 1 else null,
+                    totalPages = contentPages.size,
                     modifier = Modifier.absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
                 )
             } else {
@@ -487,7 +495,8 @@ internal fun ComposePagerPageRenderer(
                         .fillMaxSize()
                         .absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
                 ) {
-                    spreadPages.forEach { spreadPage ->
+                    spreadPages.forEachIndexed { columnOffset, spreadPage ->
+                        val pageIdx = spreadFirstPage + columnOffset
                         NovelPageReaderPageContent(
                             contentPage = spreadPage,
                             readerSettings = readerSettings,
@@ -513,8 +522,11 @@ internal fun ComposePagerPageRenderer(
                             selectionAnchorChapterId = chapterId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                             onPlainTap = onTextTap,
+                            onImageClick = onImageClick,
                             onImageLongClick = onImageLongClick,
                             onUrlClick = onUrlClick,
+                            pageNumber = if (pageIdx in contentPages.indices) pageIdx + 1 else null,
+                            totalPages = contentPages.size,
                             modifier = Modifier.weight(1f),
                         )
                     }

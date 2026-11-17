@@ -2554,6 +2554,7 @@
     <string name="novel_reader_chapter_cache_size_summary_limited">%1$s • %2$s записей • лимит %3$s / %4$s глав</string>
     <string name="novel_reader_chapter_cache_size_summary_unlimited">%1$s • %2$s записей • без лимита</string>
     <string name="novel_reader_show_scroll_percentage">Показывать процент чтения</string>
+    <string name="novel_reader_show_page_footer">Показывать мини-футер страниц</string>
     <string name="novel_reader_show_battery_time">Показывать батарею и время</string>
     <string name="novel_reader_show_kindle_info_block">Показывать блок До конца и Слова</string>
     <string name="novel_reader_show_kindle_info_block_summary">Главный переключатель для информеров времени и слов</string>
@@ -2562,6 +2563,14 @@
     <string name="novel_reader_time_to_end_unknown">До конца: расчет…</string>
     <string name="novel_reader_time_to_end_minutes">До конца: ~%1$d мин</string>
     <string name="novel_reader_words_progress">Слова: %1$d/%2$d</string>
+    <string name="novel_reader_footnote_title">Примечание %1$s</string>
+    <string name="novel_reader_footnote_title_default">Сноска</string>
+    <string name="novel_reader_footnote_missing">Текст сноски не найден в текущей главе.</string>
+    <string name="novel_reader_footnote_open_external">Открыть ссылку</string>
+    <string name="novel_reader_image_viewer_reset_zoom">Сбросить масштаб</string>
+    <string name="novel_reader_image_viewer_save">Сохранить</string>
+    <string name="novel_reader_image_viewer_share">Поделиться</string>
+    <string name="novel_reader_image_viewer_copy_link">Ссылка</string>
     <string name="novel_reader_background_texture">Текстура фона</string>
     <string name="novel_reader_background_texture_none">Без текстуры</string>
     <string name="novel_reader_background_texture_paper_grain">Бумажное зерно</string>
