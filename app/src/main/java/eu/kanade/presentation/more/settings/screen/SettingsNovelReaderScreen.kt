@@ -365,6 +365,11 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     subtitle = stringResource(AYMR.strings.novel_reader_force_paragraph_indent_summary),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
+                    preference = prefs.hyphenationEnabled(),
+                    title = stringResource(AYMR.strings.novel_reader_hyphenation),
+                    subtitle = stringResource(AYMR.strings.novel_reader_hyphenation_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
                     preference = forceBoldTextPref,
                     title = stringResource(AYMR.strings.novel_reader_force_bold_text),
                     subtitle = stringResource(AYMR.strings.novel_reader_force_bold_text_summary),

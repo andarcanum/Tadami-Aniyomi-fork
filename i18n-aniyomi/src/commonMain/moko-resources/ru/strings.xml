@@ -395,6 +395,8 @@
     <string name="novel_reader_text_align_center">По центру</string>
     <string name="novel_reader_text_align_justify">По ширине</string>
     <string name="novel_reader_text_align_right">По правому краю</string>
+    <string name="novel_reader_hyphenation">Перенос слов через дефис</string>
+    <string name="novel_reader_hyphenation_summary">Переносить длинные слова по слогам для ровных краёв и аккуратного выравнивания по ширине</string>
     <string name="novel_reader_force_paragraph_indent">Принудительная красная строка для абзацев</string>
     <string name="novel_reader_force_paragraph_indent_summary">Добавлять фиксированный отступ первой строки для каждого абзаца в режиме чтения</string>
     <string name="novel_reader_force_bold_text">Жирный текст</string>

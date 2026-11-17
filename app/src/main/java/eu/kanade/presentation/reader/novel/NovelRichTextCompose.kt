@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -128,6 +129,7 @@ internal fun NovelRichNativeScrollItem(
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
     paragraphSpacing: androidx.compose.ui.unit.Dp,
+    availableWidthPx: Int? = null,
     ttsHighlightState: NovelReaderTtsHighlightState? = null,
     ttsHighlightColor: Color = Color.Transparent,
     selectionSessionIdProvider: () -> Long,
@@ -196,6 +198,7 @@ internal fun NovelRichNativeScrollItem(
                         textShadowBlur = readerSettings.textShadowBlur,
                         textShadowX = readerSettings.textShadowX,
                         textShadowY = readerSettings.textShadowY,
+                        availableWidthPx = availableWidthPx,
                         layoutMode = NovelPageReaderLayoutMode.SCROLL,
                         selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                         selectionSessionIdProvider = selectionSessionIdProvider,
@@ -231,6 +234,7 @@ internal fun NovelRichNativeScrollItem(
                     textShadowBlur = readerSettings.textShadowBlur,
                     textShadowX = readerSettings.textShadowX,
                     textShadowY = readerSettings.textShadowY,
+                    availableWidthPx = availableWidthPx,
                     layoutMode = NovelPageReaderLayoutMode.SCROLL,
                     selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                     selectionSessionIdProvider = selectionSessionIdProvider,
@@ -284,6 +288,7 @@ internal fun NovelRichNativeScrollItem(
                 fontSizeMultiplier = headingScale,
                 lineHeightMultiplier = 1.1f,
                 baseTypefaceStyle = Typeface.BOLD,
+                availableWidthPx = availableWidthPx,
                 layoutMode = NovelPageReaderLayoutMode.SCROLL,
                 selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                 selectionSessionIdProvider = selectionSessionIdProvider,
@@ -300,6 +305,8 @@ internal fun NovelRichNativeScrollItem(
         }
         is NovelRichContentBlock.BlockQuote -> {
             val baseText = buildNovelRichAnnotatedString(block.segments)
+            val quoteIndentPx = with(LocalDensity.current) { 12.dp.roundToPx() }
+            val quoteAvailableWidthPx = availableWidthPx?.let { (it - quoteIndentPx).coerceAtLeast(1) }
             NovelPageReaderTextBlock(
                 text = applyNovelReaderTtsHighlight(
                     text = baseText,
@@ -328,6 +335,7 @@ internal fun NovelRichNativeScrollItem(
                 textShadowX = readerSettings.textShadowX,
                 textShadowY = readerSettings.textShadowY,
                 textColorOverride = textColor.copy(alpha = 0.92f),
+                availableWidthPx = quoteAvailableWidthPx,
                 layoutMode = NovelPageReaderLayoutMode.SCROLL,
                 selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                 selectionSessionIdProvider = selectionSessionIdProvider,

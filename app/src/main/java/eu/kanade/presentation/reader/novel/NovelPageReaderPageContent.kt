@@ -6,11 +6,12 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
-import android.icu.text.BreakIterator
+import android.graphics.text.LineBreakConfig
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -40,8 +41,10 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +57,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
@@ -290,10 +295,26 @@ internal fun resolveNovelPageReaderRenderedTextSignature(
     text: AnnotatedString,
     firstLineIndentPx: Int?,
     forcedTypefaceStyle: Int,
+    hyphenationEnabled: Boolean = false,
+    availableWidthPx: Int? = null,
+    textSizePx: Float = 0f,
+    lineSpacingMultiplier: Float = 1f,
+    textAlign: ReaderTextAlign = ReaderTextAlign.LEFT,
+    typefaceHash: Int = 0,
+    textLocaleTag: String? = null,
 ): Int {
     var result = text.hashCode()
     result = 31 * result + (firstLineIndentPx ?: 0)
     result = 31 * result + forcedTypefaceStyle
+    result = 31 * result + if (hyphenationEnabled) 1 else 0
+    result = 31 * result + textAlign.ordinal
+    if (hyphenationEnabled || textAlign == ReaderTextAlign.JUSTIFY) {
+        result = 31 * result + (availableWidthPx ?: 0)
+        result = 31 * result + textSizePx.toBits()
+        result = 31 * result + lineSpacingMultiplier.toBits()
+        result = 31 * result + typefaceHash
+        result = 31 * result + (textLocaleTag?.hashCode() ?: 0)
+    }
     return result
 }
 
@@ -316,6 +337,8 @@ internal data class NovelPageReaderTextViewMetrics(
     val textAlign: ReaderTextAlign,
     val shadow: Shadow?,
     val isPageMode: Boolean = false,
+    val hyphenationEnabled: Boolean = false,
+    val textLocale: Locale? = null,
 )
 
 /**
@@ -334,6 +357,8 @@ internal fun resolveNovelPageReaderTextViewMetrics(
     textAlign: ReaderTextAlign,
     shadow: Shadow?,
     isPageMode: Boolean = false,
+    hyphenationEnabled: Boolean = false,
+    textLocale: Locale? = null,
 ): NovelPageReaderTextViewMetrics {
     return NovelPageReaderTextViewMetrics(
         textSizePx = textSizePx,
@@ -342,6 +367,8 @@ internal fun resolveNovelPageReaderTextViewMetrics(
         textAlign = textAlign,
         shadow = shadow,
         isPageMode = isPageMode,
+        hyphenationEnabled = hyphenationEnabled,
+        textLocale = textLocale,
     )
 }
 
@@ -352,10 +379,21 @@ internal fun applyNovelPageReaderTextViewMetrics(
     textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, metrics.textSizePx)
     textView.setLineSpacing(0f, metrics.lineSpacingMultiplier)
     textView.typeface = metrics.typeface
+    if (metrics.textLocale != null) {
+        textView.textLocale = metrics.textLocale
+    }
     textView.gravity = resolveNovelPageReaderTextGravity(metrics.textAlign)
+    val resolvedBreakStrategy = resolveNovelPageReaderBreakStrategy(
+        isPageMode = metrics.isPageMode,
+        hyphenationEnabled = metrics.hyphenationEnabled,
+        textAlign = metrics.textAlign,
+    )
+    val resolvedHyphenationFrequency = resolveNovelPageReaderHyphenationFrequency(
+        hyphenationEnabled = metrics.hyphenationEnabled,
+    )
     if (metrics.isPageMode) {
-        textView.breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
-        textView.hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
+        textView.breakStrategy = resolvedBreakStrategy
+        textView.hyphenationFrequency = resolvedHyphenationFrequency
         // Page mode must match buildReaderStaticLayout: fallback spacing there is disabled since
         // API 28 (the TextView API's own introduction level), not only since Q, or the paginator
         // and the rendered TextView would measure different line heights on Android 9.
@@ -364,8 +402,8 @@ internal fun applyNovelPageReaderTextViewMetrics(
         }
     } else {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            textView.breakStrategy = Layout.BREAK_STRATEGY_HIGH_QUALITY
-            textView.hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
+            textView.breakStrategy = resolvedBreakStrategy
+            textView.hyphenationFrequency = resolvedHyphenationFrequency
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             textView.isFallbackLineSpacing = true
@@ -380,12 +418,21 @@ internal fun applyNovelPageReaderTextViewMetrics(
         )
     } ?: textView.setShadowLayer(0f, 0f, 0f, Color.Transparent.toArgb())
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        textView.justificationMode = if (metrics.textAlign == ReaderTextAlign.JUSTIFY) {
-            Layout.JUSTIFICATION_MODE_INTER_WORD
-        } else {
-            Layout.JUSTIFICATION_MODE_NONE
-        }
+        textView.justificationMode = Layout.JUSTIFICATION_MODE_NONE
     }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        textView.lineBreakStyle = LineBreakConfig.LINE_BREAK_STYLE_NONE
+        textView.lineBreakWordStyle = LineBreakConfig.LINE_BREAK_WORD_STYLE_NONE
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+        textView.useBoundsForWidth = true
+    }
+    // TextView initializes its TextPaint without SUBPIXEL_TEXT_FLAG while
+    // resolveReaderMeasurementTextPaint enables it; sync both paints so marginal lines and
+    // justified spacing agree between measurement and TextView rendering.
+    textView.paint.flags = textView.paint.flags or Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
+    textView.paint.isAntiAlias = true
+    textView.paint.isSubpixelText = true
 }
 
 internal fun combineTypefaceStyles(
@@ -494,6 +541,14 @@ private fun logNovelPageReaderTextViewState(
         append(" viewHardware=").append(textView.isHardwareAccelerated)
         append(" canvasHardware=").append(canvas?.isHardwareAccelerated ?: "n/a")
         append(" gravity=").append(textView.gravity)
+        append(" bs=").append(textView.breakStrategy)
+        append(" hf=").append(textView.hyphenationFrequency)
+        append(" ta=").append(textView.textAlignment)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            append(" just=").append(textView.justificationMode)
+            append(" lJust=").append(layout?.justificationMode ?: -1)
+        }
+        append(" lAlign=").append(layout?.alignment)
         append(" parent=").append(textView.parent?.javaClass?.simpleName ?: "null")
     }
     if (loggedTextViewStates.put(textView, state) == state) return
@@ -560,11 +615,47 @@ internal class NovelPageReaderTextView constructor(
     var selectionAnchorChapterId: Long? = null
     var selectionAnchorBlockIndex: Int = 0
     var selectionAnchorTextStartInBlock: Int = 0
+    var displayToSourceOffsets: IntArray? = null
+    var syntheticHyphenDisplayOffsets: BooleanArray? = null
     private var isDetaching = false
+    private var layoutProbeTextView: TextView? = null
+
+    internal fun measureLayoutWithProbe(
+        candidateText: CharSequence,
+        widthPx: Int,
+        metrics: NovelPageReaderTextViewMetrics,
+        selectionEnabled: Boolean,
+        bottomPadPx: Int,
+    ): Layout? {
+        val probe = layoutProbeTextView ?: TextView(context).also { created ->
+            created.layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+            created.includeFontPadding = true
+            layoutProbeTextView = created
+        }
+        if (probe.isTextSelectable != selectionEnabled) {
+            probe.setTextIsSelectable(selectionEnabled)
+        }
+        probe.setPadding(0, 0, 0, bottomPadPx)
+        applyNovelPageReaderTextViewMetrics(probe, metrics)
+        probe.text = candidateText
+        probe.measure(
+            MeasureSpec.makeMeasureSpec(widthPx.coerceAtLeast(1), MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+        )
+        return probe.layout
+    }
+
+    internal fun clearLayoutProbe() {
+        layoutProbeTextView?.text = ""
+    }
 
     override fun onDetachedFromWindow() {
         isDetaching = true
         finishSelectionActionMode()
+        layoutProbeTextView = null
         super.onDetachedFromWindow()
         isDetaching = false
     }
@@ -897,13 +988,13 @@ internal class NovelPageReaderTextView constructor(
 
     private fun copyToClipboard(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-        clipboard.setPrimaryClip(ClipData.newPlainText(null, text))
+        clipboard.setPrimaryClip(ClipData.newPlainText(null, stripSoftHyphens(text)))
     }
 
     private fun shareSelectedText(text: String) {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_TEXT, stripSoftHyphens(text))
         }
         val chooser = Intent.createChooser(shareIntent, null)
         if (context !is Activity) {
@@ -967,9 +1058,17 @@ internal class NovelPageReaderTextView constructor(
             isExecutingAction = false
             return
         }
+        val maxSelectionRight = layout.width.toFloat().coerceAtLeast(1f)
+        bounds.left = bounds.left.coerceIn(0f, maxSelectionRight)
+        bounds.right = bounds.right.coerceIn(bounds.left, maxSelectionRight)
         selectionBoundsInView.set(bounds)
 
-        val selectedText = currentText.substring(start, end)
+        val selectedText = extractReaderSourceTextForDisplayRange(
+            displayText = currentText,
+            start = start,
+            endExclusive = end,
+            syntheticHyphenDisplayOffsets = syntheticHyphenDisplayOffsets,
+        )
         if (selectedText.isBlank()) {
             localSelection = null
             publishSelectionCleared()
@@ -979,12 +1078,14 @@ internal class NovelPageReaderTextView constructor(
 
         val locationOnScreen = IntArray(2)
         getLocationOnScreen(locationOnScreen)
+        val mappedStart = mapDisplayOffsetToSourceOffset(start, displayToSourceOffsets, currentText.length)
+        val mappedEnd = mapDisplayOffsetToSourceOffset(end, displayToSourceOffsets, currentText.length)
         val selectionAnchor = selectionAnchorChapterId?.let { chapterId ->
             NovelSelectionAnchor(
                 chapterId = chapterId,
                 blockIndex = selectionAnchorBlockIndex,
-                charStart = selectionAnchorTextStartInBlock + start,
-                charEndExclusive = selectionAnchorTextStartInBlock + end,
+                charStart = selectionAnchorTextStartInBlock + mappedStart,
+                charEndExclusive = selectionAnchorTextStartInBlock + mappedEnd.coerceAtLeast(mappedStart),
             )
         }
         localSelection = NovelSelectedTextSelection(
@@ -1097,16 +1198,11 @@ internal class NovelPageReaderTextView constructor(
             .coerceIn(0, currentText.length)
         if (offset >= currentText.length) return null
 
-        val wordIterator = BreakIterator.getWordInstance(Locale.getDefault()).apply {
-            setText(currentText)
-        }
-        val safeOffset = offset.coerceIn(0, currentText.length)
-        val start = wordIterator.preceding(safeOffset)
-        val end = wordIterator.following(safeOffset)
-        if (start < 0 || end < 0 || start >= end) return null
-        val selectionText = currentText.substring(start, end)
-        if (selectionText.isBlank()) return null
-        return start until end
+        return resolveReaderWordDisplayRangeForOffset(
+            displayText = currentText,
+            displayOffset = offset,
+            syntheticHyphenDisplayOffsets = syntheticHyphenDisplayOffsets,
+        )
     }
 
     fun updatePlainTapHandler(handler: ((Float, Float, Float, Float) -> Unit)?) {
@@ -1212,12 +1308,13 @@ internal fun NovelPageReaderPageContent(
             )
             return@Box
         }
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(contentLayout.textPadding)
                 .padding(bottom = bookBottomInset),
         ) {
+            val pageColumnWidthPx = constraints.maxWidth.coerceAtLeast(1)
             Column(
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -1272,6 +1369,7 @@ internal fun NovelPageReaderPageContent(
                                         Typeface.NORMAL
                                     },
                                     predictedContentHeightPx = block.measuredHeightPx,
+                                    availableWidthPx = pageColumnWidthPx,
                                     layoutMode = NovelPageReaderLayoutMode.PAGE,
                                     selectionRenderer = selectionRenderer,
                                     selectionSessionIdProvider = selectionSessionIdProvider,
@@ -1286,53 +1384,118 @@ internal fun NovelPageReaderPageContent(
                                 )
                             }
                             is NovelPageContentBlock.Rich -> {
-                                NovelPageReaderTextBlock(
-                                    text = applyNovelReaderTtsHighlight(
-                                        text = block.text,
-                                        blockText = block.text.text,
-                                        sourceBlockIndex = block.sourceBlockIndex,
-                                        pageIndex = contentPage.pageIndex,
-                                        pageBlockTextStart = block.sourceTextStart,
-                                        pageBlockTextEndExclusive = block.sourceTextEndExclusive,
-                                        highlightState = ttsHighlightState,
-                                        highlightColor = ttsHighlightColor,
-                                    ),
-                                    isChapterTitle = block.isChapterTitle,
-                                    firstLineIndentEm = block.firstLineIndentEm,
-                                    readerSettings = readerSettings,
-                                    textColor = textColor,
-                                    textBackground = textBackground,
-                                    textAlign = resolveNativeReaderTextAlign(
-                                        globalTextAlign = readerSettings.textAlign,
-                                        preserveSourceTextAlignInNative = preserveSourceAlign,
-                                        sourceTextAlign = block.sourceTextAlign,
-                                    ),
-                                    textTypeface = textTypeface,
-                                    chapterTitleTypeface = chapterTitleTypeface,
-                                    chapterTitleTextColor = chapterTitleTextColor,
-                                    textShadowEnabled = readerSettings.textShadow,
-                                    textShadowColor = readerSettings.textShadowColor,
-                                    textShadowBlur = readerSettings.textShadowBlur,
-                                    textShadowX = readerSettings.textShadowX,
-                                    textShadowY = readerSettings.textShadowY,
-                                    baseTypefaceStyle = if (block.isChapterTitle) {
-                                        Typeface.BOLD
+                                if (block.isHorizontalRule) {
+                                    val ruleContainerHeight = block.measuredHeightPx
+                                        .takeIf { it > 0 }
+                                        ?.let { px -> with(density) { px.toDp() } }
+                                        ?: 20.dp
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(ruleContainerHeight),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth(0.42f)
+                                                .height(1.dp)
+                                                .background(textColor.copy(alpha = 0.25f)),
+                                        )
+                                    }
+                                } else {
+                                    val hasQuoteStartIndent = block.isBlockQuote &&
+                                        !block.isChapterTitle &&
+                                        block.startIndentDp > 0
+                                    val blockModifier = if (hasQuoteStartIndent) {
+                                        val quoteBarColor = textColor.copy(alpha = 0.28f)
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .drawBehind {
+                                                val barX = 3.dp.toPx()
+                                                val strokeWidth = 2.dp.toPx()
+                                                val topY = 2.dp.toPx()
+                                                val bottomY = (size.height - 2.dp.toPx()).coerceAtLeast(topY)
+                                                drawLine(
+                                                    color = quoteBarColor,
+                                                    start = Offset(barX, topY),
+                                                    end = Offset(barX, bottomY),
+                                                    strokeWidth = strokeWidth,
+                                                )
+                                            }
+                                            .padding(start = block.startIndentDp.dp)
                                     } else {
-                                        Typeface.NORMAL
-                                    },
-                                    predictedContentHeightPx = block.measuredHeightPx,
-                                    layoutMode = NovelPageReaderLayoutMode.PAGE,
-                                    selectionRenderer = selectionRenderer,
-                                    selectionSessionIdProvider = selectionSessionIdProvider,
-                                    selectionAnchorChapterId = selectionAnchorChapterId,
-                                    selectionAnchorBlockIndex = block.sourceBlockIndex,
-                                    selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
-                                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                    onPlainTap = onPlainTap,
-                                    onUrlClick = onUrlClick,
-                                    touchHandlingEnabled = touchHandlingEnabled,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                                        Modifier.fillMaxWidth()
+                                    }
+                                    val richAvailableWidthPx = if (hasQuoteStartIndent) {
+                                        (pageColumnWidthPx - with(density) { block.startIndentDp.dp.roundToPx() })
+                                            .coerceAtLeast(1)
+                                    } else {
+                                        pageColumnWidthPx
+                                    }
+                                    NovelPageReaderTextBlock(
+                                        text = applyNovelReaderTtsHighlight(
+                                            text = block.text,
+                                            blockText = block.text.text,
+                                            sourceBlockIndex = block.sourceBlockIndex,
+                                            pageIndex = contentPage.pageIndex,
+                                            pageBlockTextStart = block.sourceTextStart,
+                                            pageBlockTextEndExclusive = block.sourceTextEndExclusive,
+                                            highlightState = ttsHighlightState,
+                                            highlightColor = ttsHighlightColor,
+                                        ),
+                                        isChapterTitle = block.isChapterTitle,
+                                        firstLineIndentEm = block.firstLineIndentEm,
+                                        readerSettings = readerSettings,
+                                        textColor = textColor,
+                                        textBackground = textBackground,
+                                        textAlign = resolveNativeReaderTextAlign(
+                                            globalTextAlign = readerSettings.textAlign,
+                                            preserveSourceTextAlignInNative = preserveSourceAlign,
+                                            sourceTextAlign = block.sourceTextAlign,
+                                        ),
+                                        textTypeface = textTypeface,
+                                        chapterTitleTypeface = chapterTitleTypeface,
+                                        chapterTitleTextColor = chapterTitleTextColor,
+                                        textShadowEnabled = readerSettings.textShadow,
+                                        textShadowColor = readerSettings.textShadowColor,
+                                        textShadowBlur = readerSettings.textShadowBlur,
+                                        textShadowX = readerSettings.textShadowX,
+                                        textShadowY = readerSettings.textShadowY,
+                                        fontSizeMultiplier = if (block.isChapterTitle) {
+                                            PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
+                                        } else {
+                                            block.fontSizeMultiplier
+                                        },
+                                        lineHeightMultiplier = if (block.isChapterTitle) {
+                                            PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
+                                        } else {
+                                            block.lineHeightMultiplier
+                                        },
+                                        textColorOverride = if (block.isBlockQuote && !block.isChapterTitle) {
+                                            textColor.copy(alpha = 0.90f)
+                                        } else {
+                                            null
+                                        },
+                                        baseTypefaceStyle = if (block.isChapterTitle) {
+                                            Typeface.BOLD
+                                        } else {
+                                            block.baseTypefaceStyle
+                                        },
+                                        predictedContentHeightPx = block.measuredHeightPx,
+                                        availableWidthPx = richAvailableWidthPx,
+                                        layoutMode = NovelPageReaderLayoutMode.PAGE,
+                                        selectionRenderer = selectionRenderer,
+                                        selectionSessionIdProvider = selectionSessionIdProvider,
+                                        selectionAnchorChapterId = selectionAnchorChapterId,
+                                        selectionAnchorBlockIndex = block.sourceBlockIndex,
+                                        selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
+                                        onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                        onPlainTap = onPlainTap,
+                                        onUrlClick = onUrlClick,
+                                        touchHandlingEnabled = touchHandlingEnabled,
+                                        modifier = blockModifier,
+                                    )
+                                }
                             }
                             is NovelPageContentBlock.Image -> {
                                 NovelPageReaderImageBlock(
@@ -1341,6 +1504,7 @@ internal fun NovelPageReaderPageContent(
                                     contentLayout = contentLayout,
                                     bookBottomInset = bookBottomInset,
                                     fullPage = false,
+                                    maxHeightPx = block.maxHeightPx,
                                     onPlainTap = onPlainTap,
                                     onImageLongClick = onImageLongClick,
                                     touchHandlingEnabled = touchHandlingEnabled,
@@ -1361,10 +1525,12 @@ private fun NovelPageReaderImageBlock(
     contentLayout: NovelPageReaderContentLayout,
     bookBottomInset: Dp,
     fullPage: Boolean,
+    maxHeightPx: Int? = null,
     onPlainTap: ((Float, Float, Float, Float) -> Unit)? = null,
     onImageLongClick: ((String) -> Unit)? = null,
     touchHandlingEnabled: Boolean = true,
 ) {
+    val density = LocalDensity.current
     val referer = LocalNovelReaderReferer.current
     val imageModel = if (NovelPluginImage.isSupported(imageUrl)) {
         NovelPluginImage(imageUrl)
@@ -1409,6 +1575,11 @@ private fun NovelPageReaderImageBlock(
             )
         }
     } else {
+        val defaultMaxHeight = 420.dp
+        val constrainedMaxHeight = maxHeightPx
+            ?.takeIf { it > 0 }
+            ?.let { px -> with(density) { px.toDp() }.coerceAtMost(defaultMaxHeight) }
+            ?: defaultMaxHeight
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1421,7 +1592,7 @@ private fun NovelPageReaderImageBlock(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 420.dp),
+                    .heightIn(max = constrainedMaxHeight),
             )
         }
     }
@@ -1449,6 +1620,7 @@ internal fun NovelPageReaderTextBlock(
     textColorOverride: Color? = null,
     baseTypefaceStyle: Int = Typeface.NORMAL,
     predictedContentHeightPx: Int = 0,
+    availableWidthPx: Int? = null,
     layoutMode: NovelPageReaderLayoutMode,
     selectionRenderer: NovelSelectedTextRenderer? = null,
     selectionSessionIdProvider: () -> Long = { 0L },
@@ -1497,6 +1669,8 @@ internal fun NovelPageReaderTextBlock(
         backgroundColor = textBackground,
     )
     val isPageMode = layoutMode == NovelPageReaderLayoutMode.PAGE
+    val hyphenationEnabled = readerSettings.hyphenationEnabled
+    val blockTextLocale = if (hyphenationEnabled) resolveNovelReaderTextLocale(text.text) else null
     val blockTextViewMetrics = resolveNovelPageReaderTextViewMetrics(
         textSizePx = blockTextSizePx,
         lineSpacingMultiplier = blockLineSpacingMultiplier,
@@ -1504,6 +1678,8 @@ internal fun NovelPageReaderTextBlock(
         textAlign = textAlign,
         shadow = blockTextShadow,
         isPageMode = isPageMode,
+        hyphenationEnabled = hyphenationEnabled,
+        textLocale = blockTextLocale,
     )
     val selectionInteractionEnabled =
         touchHandlingEnabled &&
@@ -1526,7 +1702,9 @@ internal fun NovelPageReaderTextBlock(
             ).apply {
                 val glyphPadBottom = resolvePageReaderGlyphOverflowPaddingPx(blockTextSizePx)
                 setPadding(0, 0, 0, glyphPadBottom)
-                includeFontPadding = false
+                // Keep bottom font padding enabled so descenders (y, g, p) at small font sizes
+                // have full fontMetrics.bottom clearance and are not clipped by TextView.onDraw.
+                includeFontPadding = true
                 setTextColor(blockTextColor.toArgb())
                 applyNovelPageReaderTextViewMetrics(textView = this, metrics = blockTextViewMetrics)
             }
@@ -1554,14 +1732,87 @@ internal fun NovelPageReaderTextBlock(
                 text = text,
                 firstLineIndentPx = blockFirstLineIndentPx,
                 forcedTypefaceStyle = forcedTypefaceStyle,
+                hyphenationEnabled = hyphenationEnabled,
+                availableWidthPx = availableWidthPx,
+                textSizePx = blockTextSizePx,
+                lineSpacingMultiplier = blockLineSpacingMultiplier,
+                textAlign = textAlign,
+                typefaceHash = blockTypeface?.hashCode() ?: 0,
+                textLocaleTag = blockTextLocale?.toLanguageTag(),
             )
             if (textView.renderedTextSignature != renderedTextSignature) {
-                textView.text = buildNovelPageReaderSpannableText(
+                val baseSpannable = buildNovelPageReaderSpannableText(
                     text = text,
                     firstLineIndentPx = blockFirstLineIndentPx,
                     forcedTypefaceStyle = forcedTypefaceStyle,
                     onUrlClick = onUrlClick,
                 )
+                val resolvedAvailableWidthPx = availableWidthPx
+                    ?.takeIf { it > 0 }
+                    ?.let { width ->
+                        (width - textView.compoundPaddingLeft - textView.compoundPaddingRight).coerceAtLeast(1)
+                    }
+                if ((hyphenationEnabled || textAlign == ReaderTextAlign.JUSTIFY) && resolvedAvailableWidthPx != null) {
+                    fun solveWidthHyphenated(
+                        layoutOverride: ((CharSequence) -> Layout?)? = null,
+                    ) = resolveWidthHyphenatedReaderTextAndLayout(
+                        source = baseSpannable,
+                        widthPx = resolvedAvailableWidthPx,
+                        textSizePx = blockTextSizePx,
+                        lineHeightMultiplier = blockLineSpacingMultiplier,
+                        typeface = blockTypeface,
+                        textAlign = textAlign,
+                        firstLineIndentPx = null,
+                        density = density.density,
+                        measurementPaint = textView.paint,
+                        preferDynamicLayout = selectionInteractionEnabled,
+                        hyphenationEnabled = hyphenationEnabled,
+                        textLocale = blockTextLocale,
+                        isPageMode = isPageMode,
+                        applyJustifySpacing = textAlign == ReaderTextAlign.JUSTIFY,
+                        layoutBuilderOverride = layoutOverride,
+                    )
+                    val initialHyphenated = solveWidthHyphenated()
+                    val hyphenated = try {
+                        val probeLayout = textView.measureLayoutWithProbe(
+                            candidateText = initialHyphenated.prepared.text,
+                            widthPx = resolvedAvailableWidthPx,
+                            metrics = blockTextViewMetrics,
+                            selectionEnabled = selectionInteractionEnabled,
+                            bottomPadPx = glyphPadBottom,
+                        )
+                        val needsTextViewReconcile = probeLayout != null && (
+                            !doLayoutsMatchLineStarts(initialHyphenated.layout, probeLayout) ||
+                                hasMidLineSyntheticHyphen(probeLayout, initialHyphenated.prepared)
+                            )
+                        if (needsTextViewReconcile) {
+                            solveWidthHyphenated { candidate ->
+                                textView.measureLayoutWithProbe(
+                                    candidateText = candidate,
+                                    widthPx = resolvedAvailableWidthPx,
+                                    metrics = blockTextViewMetrics,
+                                    selectionEnabled = selectionInteractionEnabled,
+                                    bottomPadPx = glyphPadBottom,
+                                )
+                            }
+                        } else {
+                            initialHyphenated
+                        }
+                    } finally {
+                        textView.clearLayoutProbe()
+                    }
+                    textView.displayToSourceOffsets = hyphenated.prepared.displayToSourceOffsets
+                    textView.syntheticHyphenDisplayOffsets = hyphenated.prepared.syntheticHyphenDisplayOffsets
+                    textView.text = hyphenated.prepared.text
+                } else {
+                    textView.displayToSourceOffsets = null
+                    textView.syntheticHyphenDisplayOffsets = null
+                    textView.text = if (hyphenationEnabled) {
+                        normalizeCurlyApostrophesForDisplay(baseSpannable)
+                    } else {
+                        baseSpannable
+                    }
+                }
                 textView.renderedTextSignature = renderedTextSignature
             }
             textView.setTextColor(blockTextColor.toArgb())

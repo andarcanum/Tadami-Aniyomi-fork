@@ -464,4 +464,42 @@ class NovelRichContentParserTest {
         heading.bookRange shouldBe null
         blocks[1].bookRange shouldBe null
     }
+
+    @Test
+    fun `parser collapses raw html formatting newlines inside paragraph with nbsp indent`() {
+        val html = "<p>&nbsp;My hour shift,\nconsists of me cutting\nbamboo\n  vertically.</p>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        val paragraph = result.blocks.first() as NovelRichContentBlock.Paragraph
+        paragraph.firstLineIndentEm shouldBe null
+        paragraph.segments.joinToString(separator = "") { it.text } shouldBe
+            "\u00A0My hour shift, consists of me cutting bamboo vertically."
+    }
+
+    @Test
+    fun `parser collapses raw html newlines with inferred ideographic indent while keeping br newlines`() {
+        val html = "<p>\u3000\u3000First\nline wraps\nhere<br>Explicit break</p>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        val paragraph = result.blocks.first() as NovelRichContentBlock.Paragraph
+        paragraph.firstLineIndentEm shouldBe 2f
+        paragraph.segments.joinToString(separator = "") { it.text } shouldBe
+            "First line wraps here\nExplicit break"
+    }
+
+    @Test
+    fun `parser trims leading formatting whitespace from paragraph text`() {
+        val html = "<p>\n  <span>  </span>Leading formatting spaces</p>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        val paragraph = result.blocks.first() as NovelRichContentBlock.Paragraph
+        paragraph.firstLineIndentEm shouldBe null
+        paragraph.segments.joinToString(separator = "") { it.text } shouldBe "Leading formatting spaces"
+    }
 }

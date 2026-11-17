@@ -640,6 +640,8 @@
     <string name="novel_reader_text_align_center">Center</string>
     <string name="novel_reader_text_align_justify">Justify</string>
     <string name="novel_reader_text_align_right">Right</string>
+    <string name="novel_reader_hyphenation">Word hyphenation</string>
+    <string name="novel_reader_hyphenation_summary">Break long words with hyphens for balanced line endings and cleaner justification</string>
     <string name="novel_reader_force_paragraph_indent">Force first-line indent for paragraphs</string>
     <string name="novel_reader_force_paragraph_indent_summary">Apply a fixed first-line indent to each paragraph in reader mode</string>
     <string name="novel_reader_force_bold_text">Bold text</string>

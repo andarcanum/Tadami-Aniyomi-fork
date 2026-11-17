@@ -62,6 +62,7 @@ data class NovelReaderSettings(
     val pageEdgeShadow: Boolean,
     val pageEdgeShadowAlpha: Float,
     val typographyPreset: NovelReaderTypographyPreset = NovelReaderTypographyPreset.CUSTOM,
+    val hyphenationEnabled: Boolean = false,
 
     // Theme
     val theme: NovelReaderTheme,
@@ -358,6 +359,7 @@ data class NovelReaderOverride(
     val pageEdgeShadow: Boolean? = null,
     val pageEdgeShadowAlpha: Float? = null,
     val typographyPreset: NovelReaderTypographyPreset? = null,
+    val hyphenationEnabled: Boolean? = null,
 
     // Theme
     val theme: NovelReaderTheme? = null,
@@ -564,6 +566,8 @@ class NovelReaderPreferences(
     fun margin() = preferenceStore.getInt("novel_reader_margins", DEFAULT_MARGIN)
 
     fun textAlign() = preferenceStore.getEnum("novel_reader_text_align", TextAlign.SOURCE)
+
+    fun hyphenationEnabled() = preferenceStore.getBoolean("novel_reader_hyphenation_enabled", true)
 
     fun paragraphSpacing() =
         preferenceStore.getInt("novel_reader_paragraph_spacing_dp", DEFAULT_PARAGRAPH_SPACING_DP)
@@ -1209,6 +1213,7 @@ class NovelReaderPreferences(
                 textShadowY = textShadowY().get(),
                 pageEdgeShadow = pageEdgeShadow().get(),
                 pageEdgeShadowAlpha = pageEdgeShadowAlpha().get(),
+                hyphenationEnabled = hyphenationEnabled().get(),
                 theme = theme().get(),
                 backgroundColor = backgroundColor().get(),
                 textColor = textColor().get(),
@@ -1370,6 +1375,7 @@ class NovelReaderPreferences(
             textShadowY = override?.textShadowY ?: textShadowY().get(),
             pageEdgeShadow = override?.pageEdgeShadow ?: pageEdgeShadow().get(),
             pageEdgeShadowAlpha = override?.pageEdgeShadowAlpha ?: pageEdgeShadowAlpha().get(),
+            hyphenationEnabled = override?.hyphenationEnabled ?: hyphenationEnabled().get(),
             theme = override?.theme ?: theme().get(),
             backgroundColor = override?.backgroundColor ?: backgroundColor().get(),
             textColor = override?.textColor ?: textColor().get(),
@@ -1577,6 +1583,7 @@ class NovelReaderPreferences(
             pageEdgeShadow().changes(),
             pageEdgeShadowAlpha().changes(),
             typographyPreset().changes(),
+            hyphenationEnabled().changes(),
         ) { values: Array<Any?> ->
             DisplaySettings(
                 values[0] as Int,
@@ -1597,6 +1604,7 @@ class NovelReaderPreferences(
                 values[15] as Boolean,
                 values[16] as Float,
                 (values[17] as? NovelReaderTypographyPreset) ?: NovelReaderTypographyPreset.CUSTOM,
+                values[18] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1929,6 +1937,7 @@ class NovelReaderPreferences(
                 pageEdgeShadow = override?.pageEdgeShadow ?: display.pageEdgeShadow,
                 pageEdgeShadowAlpha = override?.pageEdgeShadowAlpha ?: display.pageEdgeShadowAlpha,
                 typographyPreset = preset,
+                hyphenationEnabled = override?.hyphenationEnabled ?: display.hyphenationEnabled,
                 theme = override?.theme ?: theme.theme,
                 backgroundColor = override?.backgroundColor ?: theme.backgroundColor,
                 textColor = override?.textColor ?: theme.textColor,
@@ -2085,6 +2094,7 @@ class NovelReaderPreferences(
         val pageEdgeShadow: Boolean,
         val pageEdgeShadowAlpha: Float,
         val typographyPreset: NovelReaderTypographyPreset,
+        val hyphenationEnabled: Boolean,
     )
 
     private data class ThemeSettings(

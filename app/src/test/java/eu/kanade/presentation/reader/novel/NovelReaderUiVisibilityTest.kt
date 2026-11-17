@@ -1529,13 +1529,15 @@ class NovelReaderUiVisibilityTest {
             "First line\nSecond line",
         )
 
-        // heightPx = 84 carries a spare line for the paginator's measure-parity reserve.
+        // heightPx = 80 carries a spare line (24px) for the paginator's measure-parity reserve,
+        // leaving 56px: Intro (29px) leaves 27px (22px after next glyphPad < 24px line height), so
+        // the two-line block stays intact on page 2.
         val pages = paginatePlainPageBlocks(
             measurement = ReaderTextMeasurement.APPROXIMATE,
             textBlocks = textBlocks.asPlainPageReaderBlocks(),
             paragraphSpacingPx = 0,
             widthPx = 600,
-            heightPx = 84,
+            heightPx = 80,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -1563,13 +1565,15 @@ class NovelReaderUiVisibilityTest {
             ),
         )
 
-        // heightPx = 84 carries a spare line for the paginator's measure-parity reserve.
+        // heightPx = 80 carries a spare line (24px) for the paginator's measure-parity reserve,
+        // leaving 56px: Intro (29px) leaves 27px (22px after next glyphPad < 24px line height), so
+        // the two-line block stays intact on page 2.
         val pages = paginateRichPageBlocks(
             measurement = ReaderTextMeasurement.APPROXIMATE,
             blockTexts = blockTexts,
             paragraphSpacingPx = 0,
             widthPx = 600,
-            heightPx = 84,
+            heightPx = 80,
             textSizePx = 20f,
             lineHeightMultiplier = 1.2f,
             typeface = null,
@@ -5709,6 +5713,231 @@ class NovelReaderUiVisibilityTest {
         assertTrue(css.contains("html {"))
         assertTrue(css.contains("background-size: cover !important;"))
         assertTrue(css.contains("body {\n  background: transparent !important;\n}"))
+    }
+
+    @Test
+    fun `inter-block spacing tracks small paragraph gaps monotonically and zeroes baseline overhang`() {
+        val zeroGap = resolvePageReaderInterBlockSpacingPx(
+            paragraphSpacingPx = 0,
+            textSizePx = 54f,
+            lineHeightMultiplier = 1.6f,
+        )
+        val smallGap = resolvePageReaderInterBlockSpacingPx(
+            paragraphSpacingPx = 12,
+            textSizePx = 54f,
+            lineHeightMultiplier = 1.6f,
+        )
+        val mediumGap = resolvePageReaderInterBlockSpacingPx(
+            paragraphSpacingPx = 24,
+            textSizePx = 54f,
+            lineHeightMultiplier = 1.6f,
+        )
+
+        // leadingGap = 32, glyphPad = 14 -> compensation = 18; each step adds exact paragraphSpacing.
+        assertEquals(18, zeroGap)
+        assertEquals(30, smallGap)
+        assertEquals(42, mediumGap)
+    }
+
+    @Test
+    fun `trailing page and zero paragraph spacing do not stretch inter-paragraph gaps via justify fill`() {
+        val spacedBlocks = listOf(
+            PlainPageReaderTextBlock(0, "First paragraph"),
+            PlainPageReaderTextBlock(1, "Second paragraph"),
+            PlainPageReaderTextBlock(2, "Third paragraph"),
+        )
+        // Height holds all 3 short paragraphs on one trailing page with plenty of leftover budget.
+        val trailingPages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
+            textBlocks = spacedBlocks,
+            paragraphSpacingPx = 12,
+            widthPx = 600,
+            heightPx = 500,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        )
+        assertEquals(1, trailingPages.size)
+        val trailingGaps = trailingPages.single()
+            .filterIsInstance<PlainPageSlice.Text>()
+            .map { it.spacingBeforePx }
+        assertEquals(listOf(0, 12, 12), trailingGaps)
+
+        // With 0dp paragraph spacing and multiple full pages, mid-chapter pages must not inject gaps.
+        val manyParagraphs = (0 until 12).map { index ->
+            PlainPageReaderTextBlock(index, "Short line $index")
+        }
+        val zeroGapPages = paginatePlainPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
+            textBlocks = manyParagraphs,
+            paragraphSpacingPx = 0,
+            widthPx = 600,
+            heightPx = 220,
+            textSizePx = 30f,
+            lineHeightMultiplier = 1.6f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+        )
+        assertTrue(zeroGapPages.size > 1)
+        val expectedZeroGap = resolvePageReaderInterBlockSpacingPx(
+            paragraphSpacingPx = 0,
+            textSizePx = 30f,
+            lineHeightMultiplier = 1.6f,
+        )
+        zeroGapPages.first()
+            .filterIsInstance<PlainPageSlice.Text>()
+            .drop(1)
+            .forEach { slice ->
+                assertEquals(expectedZeroGap, slice.spacingBeforePx)
+            }
+    }
+
+    @Test
+    fun `inline image moves to next page when remaining vertical room is cramped even after short text`() {
+        // Three short lines (< 180 chars total) consume 254px of the 260px safe height on page 0.
+        val shortTextBlocks = (0..2).map { index ->
+            PlainPageReaderTextBlock(index, "Line $index.")
+        }
+        val imageBlocks = listOf(
+            PlainPageImageBlock(
+                sourceBlockIndex = 3,
+                imageUrl = "https://example.org/tight.jpg",
+                contentDescription = null,
+            ),
+        )
+        val crampedPages = paginatePlainPageBlocksWithImages(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
+            textBlocks = shortTextBlocks,
+            imageBlocks = imageBlocks,
+            paragraphSpacingPx = 12,
+            widthPx = 600,
+            heightPx = 320,
+            textSizePx = 40f,
+            lineHeightMultiplier = 1.5f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            density = 1f,
+        )
+
+        // Only ~6px left on page 0, so the image moves to page 1 instead of clipping.
+        assertEquals(2, crampedPages.size)
+        val imagePage = crampedPages.last()
+        assertEquals(1, imagePage.size)
+        assertTrue(imagePage.single() is PlainPageSlice.Image)
+
+        // When ample vertical height remains, inline image stays attached and carries a height cap.
+        val spaciousPages = paginatePlainPageBlocksWithImages(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
+            textBlocks = listOf(PlainPageReaderTextBlock(0, "Short caption.")),
+            imageBlocks = listOf(
+                PlainPageImageBlock(
+                    sourceBlockIndex = 1,
+                    imageUrl = "https://example.org/spacious.jpg",
+                    contentDescription = null,
+                ),
+            ),
+            paragraphSpacingPx = 12,
+            widthPx = 600,
+            heightPx = 700,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.2f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            density = 1f,
+        )
+        assertEquals(1, spaciousPages.size)
+        val attachedImage = spaciousPages.single().last() as PlainPageSlice.Image
+        assertTrue((attachedImage.maxHeightPx ?: 0) >= 180)
+    }
+
+    @Test
+    fun `rich paged blocks preserve heading quote and horizontal rule semantics`() {
+        val blocks = listOf(
+            IndexedValue(
+                0,
+                NovelRichContentBlock.Heading(
+                    level = 2,
+                    segments = listOf(NovelRichTextSegment("Part II")),
+                ),
+            ),
+            IndexedValue(
+                1,
+                NovelRichContentBlock.BlockQuote(
+                    segments = listOf(NovelRichTextSegment("A quoted passage")),
+                ),
+            ),
+            IndexedValue(
+                2,
+                NovelRichContentBlock.HorizontalRule(),
+            ),
+        )
+        val pagination = paginateMixedRichPageBlocks(
+            measurement = ReaderTextMeasurement.APPROXIMATE,
+            richBlocks = blocks,
+            paragraphSpacingPx = 12,
+            widthPx = 600,
+            heightPx = 800,
+            textSizePx = 20f,
+            lineHeightMultiplier = 1.4f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            forceParagraphIndent = true,
+            chapterTitle = null,
+        )
+        val contentPages = normalizePageReaderContentPages(
+            useRichPageReader = true,
+            plainPages = emptyList(),
+            richPages = pagination.pages,
+            plainTextBlocks = emptyList(),
+            richBlockTexts = pagination.blockTexts,
+            paragraphSpacingPx = 12,
+            forceParagraphIndent = true,
+            chapterTitle = null,
+        )
+
+        val richBlocks = contentPages.single().blocks.filterIsInstance<NovelPageContentBlock.Rich>()
+        assertEquals(3, richBlocks.size)
+
+        val heading = richBlocks[0]
+        assertEquals(1.18f, heading.fontSizeMultiplier)
+        assertEquals(1.1f, heading.lineHeightMultiplier)
+        assertEquals(Typeface.BOLD, heading.baseTypefaceStyle)
+        assertNull(heading.firstLineIndentEm)
+
+        val quote = richBlocks[1]
+        assertTrue(quote.isBlockQuote)
+        assertEquals(12, quote.startIndentDp)
+        assertNull(quote.firstLineIndentEm)
+
+        val hr = richBlocks[2]
+        assertTrue(hr.isHorizontalRule)
+        assertEquals(NovelRichBlockTextAlign.CENTER, hr.sourceTextAlign)
+    }
+
+    @Test
+    fun `page reader budget drops redundant pageFitSafety reserve`() {
+        val density = Density(density = 3f, fontScale = 1f)
+        val budget = resolveNovelPageReaderPageBudget(
+            screenWidthPx = 1080,
+            screenHeightPx = 2200,
+            density = density,
+            fontSize = 18,
+            lineHeight = 1.6f,
+            marginDp = 16,
+            contentPaddingDp = 8.dp,
+            spreadContentPaddingPx = 24,
+            statusBarTopPaddingDp = 24.dp,
+            navigationBarHeightPx = 48,
+            spreadColumns = 1,
+            cutoutLeftPx = 0,
+            cutoutRightPx = 0,
+        )
+
+        // top = 32dp = 96px; bottom = 8dp = 24px; bookInset = round(18*1.6*1.25*3) = 108px
+        // navBar 48px is fully covered by 24 + 108 = 132px; no extra pageFitSafety subtracted.
+        val expectedHeight = 2200 - (96 + 24 + 108)
+        assertEquals(expectedHeight, budget.heightPx)
     }
 }
 

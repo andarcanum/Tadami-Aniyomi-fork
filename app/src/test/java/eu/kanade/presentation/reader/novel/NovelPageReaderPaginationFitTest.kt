@@ -233,9 +233,9 @@ class NovelPageReaderPaginationFitTest {
         )
 
         val textView = TextView(ApplicationProvider.getApplicationContext())
-        // The production page-mode TextView is created with includeFontPadding = false in the
-        // NovelPageReaderTextBlock factory, and the measurement mirrors it.
-        textView.includeFontPadding = false
+        // The production page-mode TextView is created with includeFontPadding = true so
+        // descenders (y, g, p) at small font sizes are not clipped at fontMetrics.descent.
+        textView.includeFontPadding = true
         textView.setPadding(0, 0, 0, glyphPadPx)
         applyNovelPageReaderTextViewMetrics(
             textView = textView,
@@ -259,5 +259,152 @@ class NovelPageReaderPaginationFitTest {
             textView.measuredHeight - textView.paddingBottom,
             "paginator measurement and TextView layout disagree",
         )
+    }
+
+    @Test
+    fun `block split across pages never emits two slices of the same block on one page`() {
+        val lineHeightMult = 1.6f
+        val blocks = listOf(
+            PlainPageReaderTextBlock(0, "Opening paragraph."),
+            PlainPageReaderTextBlock(1, "Alpha line\nBeta line\nGamma line\nDelta line"),
+        )
+        val spacing = resolvePageReaderInterBlockSpacingPx(
+            paragraphSpacingPx = paragraphSpacingPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+        )
+        val topHeight = measurePlainPageSliceStandaloneHeight(
+            sliceText = blocks[0].text,
+            widthPx = widthPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        val threeLineStandalone = measurePlainPageSliceStandaloneHeight(
+            sliceText = "Alpha line\nBeta line\nGamma line",
+            widthPx = widthPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        // Budget intentionally sits just below 3 standalone lines while still leaving enough
+        // remainingHeight after 2 lines + glyphPad for another single line, matching the device
+        // scenario that previously stacked two slices of block 108 onto one page.
+        val desiredSafeHeight = topHeight + glyphPadPx + spacing + threeLineStandalone - 4 + glyphPadPx
+        val reservePx = 1000 - resolvePageReaderSafeHeightPx(1000, textSizePx, lineHeightMult)
+
+        val plainPages = paginatePlainPageBlocks(
+            textBlocks = blocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = desiredSafeHeight + reservePx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        plainPages.forEachIndexed { pageIndex, page ->
+            val blockIds = page.filterIsInstance<PlainPageSlice.Text>().map { it.blockIndex }
+            assertEquals(
+                blockIds.distinct().size,
+                blockIds.size,
+                "plain page $pageIndex emitted multiple slices of the same block: $blockIds",
+            )
+        }
+
+        val richBlocks = blocks.map { block ->
+            RichPageBlockText(
+                sourceBlockIndex = block.sourceBlockIndex,
+                text = AnnotatedString(block.text),
+                firstLineIndentEm = null,
+                sourceTextAlign = null,
+            )
+        }
+        val richPages = paginateRichPageBlocks(
+            blockTexts = richBlocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = desiredSafeHeight + reservePx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        richPages.forEachIndexed { pageIndex, page ->
+            val blockIds = page.map { it.blockIndex }
+            assertEquals(
+                blockIds.distinct().size,
+                blockIds.size,
+                "rich page $pageIndex emitted multiple slices of the same block: $blockIds",
+            )
+        }
+    }
+
+    @Test
+    fun `standalone slice fit keeps last fitting line together when whole block spacing overflows`() {
+        val lineHeightMult = 1.6f
+        val blocks = listOf(
+            PlainPageReaderTextBlock(0, "Opening paragraph."),
+            PlainPageReaderTextBlock(1, "Alpha line\nBeta line\nGamma line\nDelta line"),
+        )
+        val wholeLayout = buildReaderTextLayout(
+            text = blocks[1].text,
+            widthPx = widthPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        val whole3LineBottom = wholeLayout.getLineBottom(2) - wholeLayout.getLineTop(0)
+        val standalone3LineHeight = measurePlainPageSliceStandaloneHeight(
+            sliceText = "Alpha line\nBeta line\nGamma line",
+            widthPx = widthPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        assertTrue(
+            whole3LineBottom > standalone3LineHeight,
+            "expected whole-block trailing line spacing ($whole3LineBottom) > standalone ($standalone3LineHeight)",
+        )
+        val spacing = resolvePageReaderInterBlockSpacingPx(
+            paragraphSpacingPx = paragraphSpacingPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+        )
+        val topHeight = measurePlainPageSliceStandaloneHeight(
+            sliceText = blocks[0].text,
+            widthPx = widthPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        val midAvailableHeight = (standalone3LineHeight + whole3LineBottom) / 2
+        val desiredSafeHeight = topHeight + glyphPadPx + spacing + midAvailableHeight + glyphPadPx
+        val reservePx = 1000 - resolvePageReaderSafeHeightPx(1000, textSizePx, lineHeightMult)
+
+        val pages = paginatePlainPageBlocks(
+            textBlocks = blocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = desiredSafeHeight + reservePx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMult,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        val block1SlicesPage0 = pages.first()
+            .filterIsInstance<PlainPageSlice.Text>()
+            .filter { it.blockIndex == 1 }
+        assertEquals(1, block1SlicesPage0.size)
+        val page0SliceText = blocks[1].text.substring(
+            block1SlicesPage0.first().range.start,
+            block1SlicesPage0.first().range.endExclusive,
+        )
+        assertEquals("Alpha line\nBeta line\nGamma line", page0SliceText)
     }
 }
