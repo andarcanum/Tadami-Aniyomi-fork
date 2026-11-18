@@ -644,6 +644,18 @@ internal class NovelPageReaderTextView constructor(
     var mergedSegments: List<MergedTextBlockSegment> = emptyList()
     private var isDetaching = false
     private var layoutProbeTextView: TextView? = null
+    private var focusReleaseScheduled = false
+    private val focusReleaseRunnable = Runnable {
+        focusReleaseScheduled = false
+        if (!isAttachedToWindow || isDetaching) return@Runnable
+        if (!selectionInteractionEnabled || !hasActiveSelection()) {
+            isFocusable = false
+            isFocusableInTouchMode = false
+            if (hasFocus() && !isInLayout) {
+                super.clearFocus()
+            }
+        }
+    }
 
     internal fun measureLayoutWithProbe(
         candidateText: CharSequence,
@@ -679,6 +691,8 @@ internal class NovelPageReaderTextView constructor(
 
     override fun onDetachedFromWindow() {
         isDetaching = true
+        focusReleaseScheduled = false
+        removeCallbacks(focusReleaseRunnable)
         finishSelectionActionMode()
         layoutProbeTextView = null
         super.onDetachedFromWindow()
@@ -715,6 +729,10 @@ internal class NovelPageReaderTextView constructor(
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
         logNovelPageReaderTextViewState(this, "focus=$gainFocus")
+        if (!gainFocus && !hasActiveSelection() && !hasFocus() && !isDetachingFromCompose() && !isInLayout) {
+            isFocusable = false
+            isFocusableInTouchMode = false
+        }
     }
 
     override fun scrollTo(x: Int, y: Int) {
@@ -843,15 +861,19 @@ internal class NovelPageReaderTextView constructor(
             }
 
             override fun onDestroyActionMode(mode: ActionMode?) {
+                selectionActionMode = null
                 // Mirror the framework behavior: collapse the selection when the toolbar
                 // closes (back / tap outside / after an action). publishSelection() skips the
                 // null event while isExecutingAction is set, so dictionary/translation flows
                 // are not cancelled.
-                val spannable = text as? Spannable ?: return
-                val selectionEnd = Selection.getSelectionEnd(spannable)
-                if (selectionEnd >= 0) {
-                    Selection.setSelection(spannable, selectionEnd)
+                val spannable = text as? Spannable
+                if (spannable != null) {
+                    val selectionEnd = Selection.getSelectionEnd(spannable)
+                    if (selectionEnd >= 0) {
+                        Selection.setSelection(spannable, selectionEnd)
+                    }
                 }
+                releaseSelectionFocusIfSafe()
             }
 
             override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
@@ -879,6 +901,46 @@ internal class NovelPageReaderTextView constructor(
         }
     }
 
+    private fun acquireSelectionFocus() {
+        if (!selectionInteractionEnabled || isDetachingFromCompose()) return
+        focusReleaseScheduled = false
+        removeCallbacks(focusReleaseRunnable)
+        if (!isFocusable) isFocusable = true
+        if (!isFocusableInTouchMode) isFocusableInTouchMode = true
+        if (!isFocused) {
+            requestFocus()
+        }
+    }
+
+    private fun scheduleFocusReleaseAfterApply() {
+        if (focusReleaseScheduled || isDetachingFromCompose()) return
+        focusReleaseScheduled = true
+        post(focusReleaseRunnable)
+    }
+
+    private fun releaseSelectionFocusIfSafe() {
+        if (isDetachingFromCompose()) return
+        focusReleaseScheduled = false
+        removeCallbacks(focusReleaseRunnable)
+        if (!hasFocus()) {
+            isFocusable = false
+            isFocusableInTouchMode = false
+        } else if (!isInLayout) {
+            isFocusable = false
+            isFocusableInTouchMode = false
+        } else {
+            scheduleFocusReleaseAfterApply()
+        }
+    }
+
+    fun clearActiveSelectionAndFocus() {
+        clearSelectionPromotion()
+        selectionPromotedByLongPress = false
+        clearSelection()
+        finishSelectionActionMode()
+        releaseSelectionFocusIfSafe()
+    }
+
     fun updateSelectionInteractionEnabled(
         enabled: Boolean,
         selectableLayoutEnabled: Boolean = enabled,
@@ -890,24 +952,35 @@ internal class NovelPageReaderTextView constructor(
         if (isTextSelectable != selectableLayoutEnabled) {
             setTextIsSelectable(selectableLayoutEnabled)
         }
-        // setTextIsSelectable() re-enables focusability, so this interop view can become the
-        // focused Android view. Compose detaches interop views while composition changes are
-        // still being applied, and ViewGroup.removeViewInLayout() then makes the framework search
-        // the hierarchy for a new focus target. That search re-enters Compose layout and crashes
-        // with "Cannot start a writer when another writer is pending". Selection here is driven by
-        // Selection.setSelection(), so Android focus is not needed.
-        // Focus matters for selection: the editor raises its drag handles only on a focused
-        // view, and in touch mode a view must be focusable-IN-touch-mode to take focus at all
-        // (programmatic requestFocus included). Detach-time focus searches stay neutralized by
-        // the clearFocus/focusSearch guards above (the original "writer pending" crash).
-        isFocusable = selectionInteractionEnabled
-        isFocusableInTouchMode = selectionInteractionEnabled
+        // Keep the interop view unfocusable during normal reading, taps, and paging so
+        // HorizontalPager / LazyColumn eviction (Operation$RemoveNode -> removeViewInLayout)
+        // never sees a focused View and never triggers rootViewRequestFocus() -> Compose
+        // subcompose re-entry inside applyChanges. Focusability is enabled only while an active
+        // text selection needs Editor drag handles.
+        isClickable = false
         isLongClickable = selectionInteractionEnabled
-        if (!selectionInteractionEnabled) {
+        val keepActiveSelectionFocus = selectionInteractionEnabled && hasActiveSelection()
+        if (!keepActiveSelectionFocus) {
             clearSelectionPromotion()
             selectionPromotedByLongPress = false
             clearSelection()
             finishSelectionActionMode()
+            // Never strip focusability synchronously during AndroidView.update if this view
+            // currently holds focus: setFocusable(false) calls clearFocus() ->
+            // rootViewRequestFocus() inside Compose commit/layout passes.
+            if (!hasFocus()) {
+                focusReleaseScheduled = false
+                removeCallbacks(focusReleaseRunnable)
+                isFocusable = false
+                isFocusableInTouchMode = false
+            } else {
+                scheduleFocusReleaseAfterApply()
+            }
+        } else {
+            focusReleaseScheduled = false
+            removeCallbacks(focusReleaseRunnable)
+            isFocusable = true
+            isFocusableInTouchMode = true
         }
     }
 
@@ -922,28 +995,36 @@ internal class NovelPageReaderTextView constructor(
         if (!touchHandlingEnabled) {
             return false
         }
+        var downOnLiveSelection = false
+        var shouldSchedulePromotion = false
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            logNovelPageReaderTextViewState(this, "touchDown")
+            gestureStartUptimeMillis = event.eventTime
+            gestureStartX = event.x
+            gestureStartY = event.y
+            latestX = event.x
+            latestY = event.y
+            // A down on the live selection (drag handles included) must fall through to the
+            // TextView editor so the handles can extend the selection; wiping it here made
+            // every long-press word selection impossible to grow into a phrase.
+            downOnLiveSelection = selectionInteractionEnabled &&
+                hasActiveSelection() &&
+                isTouchNearSelectionBounds(event.x, event.y)
+            if (downOnLiveSelection) {
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            selectionPromotedByLongPress = false
+            if (selectionInteractionEnabled && !downOnLiveSelection) {
+                clearSelection()
+                finishSelectionActionMode()
+                releaseSelectionFocusIfSafe()
+                shouldSchedulePromotion = true
+            }
+        }
         val handledBySuper = super.onTouchEvent(event)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                logNovelPageReaderTextViewState(this, "touchDown")
-                gestureStartUptimeMillis = event.eventTime
-                gestureStartX = event.x
-                gestureStartY = event.y
-                latestX = event.x
-                latestY = event.y
-                // A down on the live selection (drag handles included) must fall through to the
-                // TextView editor so the handles can extend the selection; wiping it here made
-                // every long-press word selection impossible to grow into a phrase.
-                val downOnLiveSelection = selectionInteractionEnabled &&
-                    hasActiveSelection() &&
-                    isTouchNearSelectionBounds(event.x, event.y)
-                if (downOnLiveSelection) {
-                    parent?.requestDisallowInterceptTouchEvent(true)
-                }
-                selectionPromotedByLongPress = false
-                if (selectionInteractionEnabled && !downOnLiveSelection) {
-                    clearSelection()
-                    finishSelectionActionMode()
+                if (shouldSchedulePromotion) {
                     scheduleSelectionPromotion()
                 }
             }
@@ -967,6 +1048,9 @@ internal class NovelPageReaderTextView constructor(
                     longPressTimeoutMillis = longPressTimeoutMillis,
                 )
                 val hasActiveSelection = hasActiveSelection()
+                if (!hasActiveSelection) {
+                    releaseSelectionFocusIfSafe()
+                }
                 if (plainTapEligible && !hasActiveSelection) {
                     val clickableSpan = resolveClickableSpanAt(event)
                     if (clickableSpan != null) {
@@ -989,6 +1073,7 @@ internal class NovelPageReaderTextView constructor(
                 if (selectionInteractionEnabled) {
                     clearSelection()
                     clearSelectionPromotion()
+                    releaseSelectionFocusIfSafe()
                 }
                 selectionPromotedByLongPress = false
                 return handledBySuper
@@ -1006,9 +1091,7 @@ internal class NovelPageReaderTextView constructor(
         Selection.setSelection(spannable, selectionStart, selectionEnd)
         publishSelection(selectionStart, selectionEnd)
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        if (!isFocused) {
-            requestFocus()
-        }
+        acquireSelectionFocus()
         return true
     }
 
@@ -1241,9 +1324,7 @@ internal class NovelPageReaderTextView constructor(
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         // The editor attaches its drag handles only once the view holds focus. Its own action
         // mode surfaces from the registered custom callback - starting ours here would kill it.
-        if (!isFocused) {
-            requestFocus()
-        }
+        acquireSelectionFocus()
         return true
     }
 
@@ -1298,6 +1379,11 @@ internal class NovelPageReaderTextView constructor(
         val offset = currentLayout.getOffsetForHorizontal(line, x).coerceIn(0, spannable.length - 1)
         return spannable.getSpans(offset, offset + 1, ClickableSpan::class.java).lastOrNull()
     }
+}
+
+internal fun clearFocusedNovelReaderTextView(hostView: View?) {
+    val focused = hostView?.findFocus() as? NovelPageReaderTextView ?: return
+    focused.clearActiveSelectionAndFocus()
 }
 
 @Composable

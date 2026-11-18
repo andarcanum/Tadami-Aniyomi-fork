@@ -8,7 +8,9 @@ import android.text.DynamicLayout
 import android.text.Layout
 import android.text.TextPaint
 import android.text.style.ClickableSpan
+import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
@@ -18,11 +20,14 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowLooper
 import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -100,6 +105,77 @@ class NovelPageReaderSpannableTextTest {
         textView.scrollBy(20, 30)
         assertEquals(0, textView.scrollX)
         assertEquals(0, textView.scrollY)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `reader text view stays unfocusable on plain taps and drops focus cleanly after selection`() {
+        val activity = Robolectric.buildActivity(androidx.activity.ComponentActivity::class.java).setup().get()
+        val container = FrameLayout(activity).also { activity.setContentView(it) }
+        var plainTaps = 0
+        val textView = NovelPageReaderTextView(
+            context = activity,
+            selectionRenderer = NovelSelectedTextRenderer.PAGE_READER,
+            selectionSessionIdProvider = { 1L },
+            onSelectedTextSelectionChanged = {},
+            onPlainTap = { _, _, _, _ -> plainTaps++ },
+            touchHandlingEnabled = true,
+            selectionInteractionEnabled = true,
+        )
+        container.addView(textView)
+        textView.updateSelectionInteractionEnabled(enabled = true, selectableLayoutEnabled = true)
+        textView.text = buildNovelPageReaderSpannableText(AnnotatedString("alpha beta gamma delta"))
+        textView.measure(
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        textView.layout(0, 0, textView.measuredWidth, textView.measuredHeight)
+        val layout = requireNotNull(textView.layout)
+        val tapX = textView.totalPaddingLeft + (layout.getPrimaryHorizontal(2)).coerceAtLeast(4f)
+        val tapY = textView.totalPaddingTop + ((layout.getLineTop(0) + layout.getLineBottom(0)) * 0.5f)
+
+        // Idle & after a plain tap: View stays unfocusable so HorizontalPager eviction
+        // never removes a focused AndroidView and re-enters Compose applyChanges.
+        assertFalse(textView.isFocusable)
+        assertFalse(textView.isFocusableInTouchMode)
+        assertFalse(textView.isFocused)
+
+        val down = MotionEvent.obtain(0L, 10L, MotionEvent.ACTION_DOWN, tapX, tapY, 0)
+        val up = MotionEvent.obtain(0L, 50L, MotionEvent.ACTION_UP, tapX, tapY, 0)
+        textView.onTouchEvent(down)
+        textView.onTouchEvent(up)
+        down.recycle()
+        up.recycle()
+        assertEquals(1, plainTaps)
+        assertFalse(textView.isFocusable)
+        assertFalse(textView.isFocusableInTouchMode)
+        assertFalse(textView.isFocused)
+
+        // Active word selection temporarily enables focus so Editor drag handles attach.
+        assertTrue(textView.selectWordAt(tapX, tapY))
+        assertTrue(textView.isFocusable)
+        assertTrue(textView.isFocusableInTouchMode)
+        assertTrue(textView.isFocused)
+
+        // Disabling touch handling while still focused (e.g. BOOK_FLIP AndroidView.update) must
+        // NOT strip focusability synchronously during update; it defers to the main-loop post.
+        textView.updateTouchHandlingEnabled(false)
+        assertTrue(textView.isFocusable)
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
+        assertFalse(textView.isFocusable)
+        assertFalse(textView.isFocusableInTouchMode)
+        assertFalse(textView.isFocused)
+
+        // Explicit clear helper strips focus immediately when invoked outside applyChanges.
+        textView.updateTouchHandlingEnabled(true)
+        textView.updateSelectionInteractionEnabled(enabled = true, selectableLayoutEnabled = true)
+        assertTrue(textView.selectWordAt(tapX, tapY))
+        assertTrue(textView.isFocused)
+        clearFocusedNovelReaderTextView(container)
+        assertFalse(textView.isFocusable)
+        assertFalse(textView.isFocusableInTouchMode)
+        assertFalse(textView.isFocused)
     }
 
     @Test

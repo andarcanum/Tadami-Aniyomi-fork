@@ -2302,14 +2302,18 @@ internal fun NovelReaderContentHost(
     fun requestPageTurnChapterNavigation(direction: PageTurnChapterNavigationDirection) =
         chapterNavigator.requestPageTurnChapterNavigation(direction)
 
-    fun openPreviousChapterFromReader() =
+    fun openPreviousChapterFromReader() {
+        clearFocusedNovelReaderTextView(view)
         chapterNavigator.openPreviousChapterFromReader()
+    }
 
     fun isAtEndOfBook(): Boolean =
         chapterNavigator.isAtEndOfBook()
 
-    fun openNextChapterFromReader() =
+    fun openNextChapterFromReader() {
+        clearFocusedNovelReaderTextView(view)
         chapterNavigator.openNextChapterFromReader()
+    }
 
     fun handleAutoScrollChapterEnd() =
         chapterNavigator.handleAutoScrollChapterEnd()
@@ -2318,6 +2322,7 @@ internal fun NovelReaderContentHost(
         chapterNavigator.handleAutoScrollStableChapterEndAfterDwell()
 
     suspend fun moveBackwardByReaderActionWithAnimation(pageAnimationDurationMillis: Int?) {
+        clearFocusedNovelReaderTextView(view)
         if (isBookMode) {
             // The book is one continuous document, so stepping backwards never leaves it and chapter
             // navigation must not kick in. The mounted book surface knows whether a step is a page
@@ -2388,6 +2393,7 @@ internal fun NovelReaderContentHost(
     }
 
     suspend fun moveForwardByReaderActionWithAnimation(pageAnimationDurationMillis: Int?) {
+        clearFocusedNovelReaderTextView(view)
         if (isBookMode) {
             val surface = bookContentHandle.surface ?: return
             if (surface.isPaginated()) {
@@ -2510,6 +2516,22 @@ internal fun NovelReaderContentHost(
             VolumeKeyAction.CONSUME -> true
             VolumeKeyAction.NONE -> false
         }
+    }
+
+    LaunchedEffect(view, showReaderUi) {
+        if (showReaderUi) {
+            clearFocusedNovelReaderTextView(view)
+        }
+    }
+
+    LaunchedEffect(view, textListState) {
+        snapshotFlow { textListState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { isScrolling ->
+                if (isScrolling) {
+                    clearFocusedNovelReaderTextView(view)
+                }
+            }
     }
 
     DisposableEffect(

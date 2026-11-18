@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -336,6 +337,7 @@ internal fun ComposePagerPageRenderer(
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
 ) {
     val density = LocalDensity.current
+    val hostView = LocalView.current
     // Chapter neighbour availability drives two different things: the extra boundary placeholder
     // page (pager geometry) and whether an edge swipe may switch chapters (navigation). When the
     // placeholder pages are disabled the extra slots have to disappear, otherwise the edge page
@@ -408,6 +410,16 @@ internal fun ComposePagerPageRenderer(
                 }
             }
         }
+    }
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { isScrolling ->
+                if (isScrolling) {
+                    clearFocusedNovelReaderTextView(hostView)
+                }
+            }
     }
 
     if (useBoundaryPreview) {
