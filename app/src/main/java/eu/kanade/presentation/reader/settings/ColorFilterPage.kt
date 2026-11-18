@@ -51,6 +51,9 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
     val sharpening by screenModel.preferences.sharpening().collectAsState()
     val denoise by screenModel.preferences.denoise().collectAsState()
     val binarization by screenModel.preferences.binarization().collectAsState()
+    val paperWhitePoint by screenModel.preferences.paperWhitePoint().collectAsState()
+    val paperGammaContrast by screenModel.preferences.paperGammaContrast().collectAsState()
+    val paperBlackPoint by screenModel.preferences.paperBlackPoint().collectAsState()
 
     // Live sample manga panel — reacts to every filter on this page.
     AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_preview_title)) {
@@ -67,6 +70,9 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
                 sharpening = sharpening,
                 denoise = denoise,
                 binarization = binarization,
+                whitePoint = paperWhitePoint,
+                gammaContrast = paperGammaContrast,
+                blackPoint = paperBlackPoint,
             )
             val colorFilterCompose = ColorFilter.colorMatrix(matrix)
 
@@ -183,6 +189,30 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
         )
     }
 
+    AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_levels_title)) {
+        AuroraSliderRow(
+            label = stringResource(AYMR.strings.pref_paper_white_point),
+            value = paperWhitePoint,
+            valueRange = 0..100,
+            valueText = "$paperWhitePoint%",
+            onChange = { screenModel.preferences.paperWhitePoint().set(it) },
+        )
+        AuroraSliderRow(
+            label = stringResource(AYMR.strings.pref_paper_gamma_contrast),
+            value = paperGammaContrast,
+            valueRange = -50..50,
+            valueText = if (paperGammaContrast > 0) "+$paperGammaContrast" else paperGammaContrast.toString(),
+            onChange = { screenModel.preferences.paperGammaContrast().set(it) },
+        )
+        AuroraSliderRow(
+            label = stringResource(AYMR.strings.pref_paper_black_point),
+            value = paperBlackPoint,
+            valueRange = 0..100,
+            valueText = "$paperBlackPoint%",
+            onChange = { screenModel.preferences.paperBlackPoint().set(it) },
+        )
+    }
+
     AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_processing)) {
         AuroraSliderRow(
             label = stringResource(MR.strings.pref_sharpening),
@@ -217,8 +247,28 @@ private fun buildPreviewColorMatrix(
     sharpening: Int,
     denoise: Int,
     binarization: Int,
+    whitePoint: Int = 0,
+    gammaContrast: Int = 0,
+    blackPoint: Int = 0,
 ): ColorMatrix {
     val matrix = ColorMatrix()
+
+    if (whitePoint > 0 || blackPoint > 0 || gammaContrast != 0) {
+        val bp = (blackPoint / 100f) * 0.35f
+        val wp = (1f - (whitePoint / 100f) * 0.45f).coerceAtLeast(bp + 0.10f)
+        val scale = (1f / (wp - bp)) * (1f + (gammaContrast / 50f) * 0.45f)
+        val offset = -bp * 255f * scale
+        matrix.timesAssign(
+            ColorMatrix(
+                floatArrayOf(
+                    scale, 0f, 0f, 0f, offset,
+                    0f, scale, 0f, 0f, offset,
+                    0f, 0f, scale, 0f, offset,
+                    0f, 0f, 0f, 1f, 0f,
+                ),
+            ),
+        )
+    }
 
     if (grayscale) {
         matrix.timesAssign(

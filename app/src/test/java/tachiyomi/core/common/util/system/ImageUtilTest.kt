@@ -84,6 +84,57 @@ class ImageUtilTest {
     }
 
     @Test
+    fun `sniffImageMetadata reads dimensions and animation in a single bounded pass`() {
+        val pngHeader =
+            byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 17, 0, 0, -100, 65)
+        val trailingPayload = ByteArray(128 * 1024)
+        var bytesRead = 0
+        val countingStream = object : java.io.ByteArrayInputStream(pngHeader + trailingPayload) {
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                return super.read(b, off, len).also { if (it > 0) bytesRead += it }
+            }
+        }
+        val meta = ImageUtil.sniffImageMetadata(countingStream)
+        assertFalse(meta.isAnimated)
+        assertEquals(ImageUtil.ImageDimensions(17, 40001), meta.dimensions)
+        assertTrue(bytesRead <= 65_536, "Expected bounded header read, read $bytesRead bytes")
+
+        val animGif = "GIF89a\u0010\u0000\u0010\u0000".toByteArray()
+        val gifMeta = ImageUtil.sniffImageMetadata(animGif.inputStream())
+        assertTrue(gifMeta.isAnimated)
+        assertEquals(null, gifMeta.dimensions)
+    }
+
+    @Test
+    fun `findSmartSplitX locates off-center uniform gutter column`() {
+        val decoder = mockk<NativeImageDecoder>()
+        every { decoder.width } returns 1000
+        every { decoder.height } returns 800
+        // Central band is 450..550 (width 100). Put a uniform white gutter at col 30 (x = 480)
+        // while all other columns alternate black/white vertically (simulating speech bubble/art).
+        every { decoder.decode(any(), any()) } answers {
+            val rect = firstArg<android.graphics.Rect>()
+            val bmp = Bitmap.createBitmap(rect.width(), 64, Bitmap.Config.ARGB_8888)
+            for (x in 0 until bmp.width) {
+                for (y in 0 until bmp.height) {
+                    val color = if (x == 30) {
+                        Color.WHITE
+                    } else if (y % 2 == 0) {
+                        Color.BLACK
+                    } else {
+                        Color.WHITE
+                    }
+                    bmp.setPixel(x, y, color)
+                }
+            }
+            bmp
+        }
+
+        val splitX = ImageUtil.findSmartSplitX(decoder)
+        assertEquals(480, splitX)
+    }
+
+    @Test
     fun `chooseBackground handles unreadable or small streams safely`() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val emptyBg = ImageUtil.chooseBackground(app, ByteArray(0).inputStream())

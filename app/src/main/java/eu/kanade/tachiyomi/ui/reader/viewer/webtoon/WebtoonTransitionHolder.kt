@@ -71,6 +71,11 @@ class WebtoonTransitionHolder(
         pagesContainer.removeAllViews()
         pagesContainer.isVisible = false
 
+        val compact = viewer.config.compactChapterTransition
+        val paddingVertical = if (compact) 20.dpToPx else 128.dpToPx
+        val paddingHorizontal = if (compact) 20.dpToPx else 32.dpToPx
+        layout.setPadding(paddingHorizontal, paddingVertical, paddingHorizontal, paddingVertical)
+
         // A-LOW (transition gap): display the VISIBLE gap (the same metric the adapter used to
         // decide whether to show this card), not the raw number.
         val allChapters = viewer.activity.viewModel.state.value.viewerChapters?.allChapters.orEmpty()

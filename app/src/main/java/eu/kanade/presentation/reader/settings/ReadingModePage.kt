@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import java.text.NumberFormat
@@ -134,7 +135,7 @@ internal fun ColumnScope.ReadingModePage(screenModel: ReaderSettingsScreenModel)
 
     val viewer by screenModel.viewerFlow.collectAsStateWithLifecycle()
     if (viewer is WebtoonViewer) {
-        WebtoonViewerSettings(screenModel)
+        WebtoonViewerSettings(screenModel, hasPageGaps = (viewer as WebtoonViewer).hasPageGaps)
     } else {
         PagerViewerSettings(screenModel)
     }
@@ -233,6 +234,8 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
     // Section: pager toggles.
     val dualPageSplitPaged by screenModel.preferences.dualPageSplitPaged().collectAsStateWithLifecycle()
     val dualPageRotateToFit by screenModel.preferences.dualPageRotateToFit().collectAsStateWithLifecycle()
+    val zoomLockEnabled by screenModel.preferences.zoomLockEnabled().collectAsStateWithLifecycle()
+    val dualPageSmartGutter by screenModel.preferences.dualPageSmartGutter().collectAsStateWithLifecycle()
     AuroraGlassSection(title = stringResource(MR.strings.pager_viewer)) {
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_crop_borders),
@@ -241,6 +244,12 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_zoom_dual_taps),
             pref = screenModel.preferences.enablePinchToZoom(),
+        )
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_zoom_lock),
+            subtitle = stringResource(AYMR.strings.pref_zoom_lock_summary),
+            checked = zoomLockEnabled,
+            onClick = { screenModel.preferences.zoomLockEnabled().set(!zoomLockEnabled) },
         )
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_landscape_zoom),
@@ -270,6 +279,12 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
                 label = stringResource(MR.strings.pref_dual_page_invert),
                 pref = screenModel.preferences.dualPageInvertPaged(),
             )
+            AuroraToggleRow(
+                label = stringResource(AYMR.strings.pref_dual_page_smart_gutter),
+                subtitle = stringResource(AYMR.strings.pref_dual_page_smart_gutter_summary),
+                checked = dualPageSmartGutter,
+                onClick = { screenModel.preferences.dualPageSmartGutter().set(!dualPageSmartGutter) },
+            )
         }
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_page_rotate),
@@ -290,7 +305,10 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
 }
 
 @Composable
-private fun ColumnScope.WebtoonViewerSettings(screenModel: ReaderSettingsScreenModel) {
+private fun ColumnScope.WebtoonViewerSettings(
+    screenModel: ReaderSettingsScreenModel,
+    hasPageGaps: Boolean,
+) {
     val numberFormat = remember { NumberFormat.getPercentInstance() }
 
     val navigationModeWebtoon by screenModel.preferences.navigationModeWebtoon().collectAsStateWithLifecycle()
@@ -307,7 +325,17 @@ private fun ColumnScope.WebtoonViewerSettings(screenModel: ReaderSettingsScreenM
 
     // Section: webtoon layout and toggles.
     val webtoonSidePadding by screenModel.preferences.webtoonSidePadding().collectAsStateWithLifecycle()
+    val storedPageGapDp by screenModel.preferences.webtoonPageGapDp().collectAsStateWithLifecycle()
+    val webtoonPageGapDp = if (storedPageGapDp >= 0) {
+        storedPageGapDp
+    } else if (hasPageGaps) {
+        15
+    } else {
+        0
+    }
+    val compactTransition by screenModel.preferences.webtoonCompactChapterTransition().collectAsStateWithLifecycle()
     val dualPageSplitWebtoon by screenModel.preferences.dualPageSplitWebtoon().collectAsStateWithLifecycle()
+    val dualPageSmartGutterWebtoon by screenModel.preferences.dualPageSmartGutter().collectAsStateWithLifecycle()
     val dualPageRotateToFitWebtoon by screenModel.preferences.dualPageRotateToFitWebtoon().collectAsStateWithLifecycle()
     AuroraGlassSection(title = stringResource(MR.strings.webtoon_viewer)) {
         AuroraSliderRow(
@@ -318,6 +346,25 @@ private fun ColumnScope.WebtoonViewerSettings(screenModel: ReaderSettingsScreenM
             onChange = {
                 screenModel.preferences.webtoonSidePadding().set(it)
             },
+        )
+        AuroraSliderRow(
+            label = stringResource(AYMR.strings.pref_webtoon_page_gap),
+            value = webtoonPageGapDp,
+            valueRange = 0..48,
+            valueText = if (webtoonPageGapDp == 0) {
+                stringResource(AYMR.strings.pref_webtoon_page_gap_zero)
+            } else {
+                "$webtoonPageGapDp dp"
+            },
+            onChange = {
+                screenModel.preferences.webtoonPageGapDp().set(it)
+            },
+        )
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_webtoon_compact_transition),
+            subtitle = stringResource(AYMR.strings.pref_webtoon_compact_transition_summary),
+            checked = compactTransition,
+            onClick = { screenModel.preferences.webtoonCompactChapterTransition().set(!compactTransition) },
         )
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_crop_borders),
@@ -339,6 +386,12 @@ private fun ColumnScope.WebtoonViewerSettings(screenModel: ReaderSettingsScreenM
             AuroraToggleRow(
                 label = stringResource(MR.strings.pref_dual_page_invert),
                 pref = screenModel.preferences.dualPageInvertWebtoon(),
+            )
+            AuroraToggleRow(
+                label = stringResource(AYMR.strings.pref_dual_page_smart_gutter),
+                subtitle = stringResource(AYMR.strings.pref_dual_page_smart_gutter_summary),
+                checked = dualPageSmartGutterWebtoon,
+                onClick = { screenModel.preferences.dualPageSmartGutter().set(!dualPageSmartGutterWebtoon) },
             )
         }
         AuroraToggleRow(

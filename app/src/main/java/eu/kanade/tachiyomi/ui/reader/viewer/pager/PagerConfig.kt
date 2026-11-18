@@ -55,6 +55,15 @@ class PagerConfig(
     var shiftDoublePages = false
         private set
 
+    var zoomLockEnabled = false
+        private set
+
+    var dualPageSmartGutter = true
+        private set
+
+    var hardwareTilesEnabled = true
+        private set
+
     init {
         readerPreferences.readerTheme()
             .register(
@@ -137,6 +146,21 @@ class PagerConfig(
                 { shiftDoublePages = it },
                 { spreadPropertyChangedListener?.invoke() },
             )
+
+        readerPreferences.zoomLockEnabled()
+            .register(
+                {
+                    zoomLockEnabled = it
+                    if (!it) viewer.lockedZoomRatio = null
+                },
+                { imagePropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.dualPageSmartGutter()
+            .register({ dualPageSmartGutter = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.hardwareTilesEnabled()
+            .register({ hardwareTilesEnabled = it }, { imagePropertyChangedListener?.invoke() })
     }
 
     private fun zoomTypeFromPreference(value: Int) {

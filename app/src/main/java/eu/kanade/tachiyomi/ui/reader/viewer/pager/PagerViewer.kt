@@ -81,6 +81,11 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     private var pendingCleanupPageSplit = false
 
     /**
+     * Normalized zoom factor (`scale / minScale`) preserved across page turns when Zoom Lock is enabled.
+     */
+    internal var lockedZoomRatio: Float? = null
+
+    /**
      * Whether the view pager is currently in idle mode. It sets the awaiting chapters if setting
      * this field to true.
      */
@@ -180,11 +185,16 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 NavigationRegion.NONE -> Unit
             }
         }
-        pager.longTapListener = f@{
+        pager.longTapListener = f@{ ev ->
             if (activity.viewModel.state.value.menuVisible || config.longTapEnabled) {
                 val item = adapter.items.getOrNull(pager.currentItem)
-                if (item is ReaderPage) {
-                    activity.onPageLongTap(item)
+                val targetPage = when (item) {
+                    is JoinedReaderPage -> if (ev.x < pager.width / 2f) item.firstPage else item.secondPage
+                    is ReaderPage -> item
+                    else -> null
+                }
+                if (targetPage != null) {
+                    activity.onPageLongTap(targetPage)
                     return@f true
                 }
             }
@@ -393,7 +403,14 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         activity.onPageSelected(page)
 
         // Notify holder of page change
-        getPageHolder(page)?.onPageSelected(forward)
+        if (page is JoinedReaderPage) {
+            pager.children
+                .filterIsInstance<JoinedPagerPageHolder>()
+                .firstOrNull { it.item === page }
+                ?.onPageSelected(forward)
+        } else {
+            getPageHolder(page)?.onPageSelected(forward)
+        }
 
         // Skip preload on inserts it causes unwanted page jumping
         if (page is InsertPage) {

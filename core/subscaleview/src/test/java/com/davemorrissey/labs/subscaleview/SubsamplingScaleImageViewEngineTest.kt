@@ -755,6 +755,54 @@ class SubsamplingScaleImageViewEngineTest {
             controller.pause().stop().destroy()
         }
     }
+
+    @Test
+    fun imageSourceDecoderFactoryOverridesDefaultDecoderWithoutStickingToRecycledView() {
+        val controller = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup()
+        val activity = controller.get()
+        val root = android.widget.FrameLayout(activity)
+        val view = SubsamplingScaleImageView(activity)
+        root.addView(view, android.widget.FrameLayout.LayoutParams(400, 400))
+        activity.setContentView(root)
+        val customInitCalls = java.util.concurrent.atomic.AtomicInteger(0)
+
+        try {
+            val customDecoder = object : com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder {
+                override fun init(
+                    context: android.content.Context,
+                    provider: com.davemorrissey.labs.subscaleview.provider.InputProvider,
+                ): android.graphics.Point {
+                    customInitCalls.incrementAndGet()
+                    return android.graphics.Point(100, 200)
+                }
+
+                override fun decodeRegion(sRect: Rect, sampleSize: Int): Bitmap =
+                    Bitmap.createBitmap(
+                        sRect.width().coerceAtLeast(1),
+                        sRect.height().coerceAtLeast(1),
+                        Bitmap.Config.ARGB_8888,
+                    )
+
+                override fun isReady(): Boolean = true
+                override fun recycle() = Unit
+            }
+
+            val sourceWithFactory = ImageSource.provider(
+                com.davemorrissey.labs.subscaleview.provider.StreamInputProvider { byteArrayOf(1).inputStream() },
+            ).decoderFactory { customDecoder }
+
+            assertEquals(true, sourceWithFactory.regionDecoderFactory != null)
+            view.setImage(sourceWithFactory)
+            ShadowLooper.idleMainLooper()
+            val plainSource = ImageSource.provider(
+                com.davemorrissey.labs.subscaleview.provider.StreamInputProvider { byteArrayOf(1).inputStream() },
+            )
+            assertEquals(null, plainSource.regionDecoderFactory)
+        } finally {
+            view.recycle()
+            controller.pause().stop().destroy()
+        }
+    }
 }
 
 private fun View.dispatchDetachedFromWindowForTest() {

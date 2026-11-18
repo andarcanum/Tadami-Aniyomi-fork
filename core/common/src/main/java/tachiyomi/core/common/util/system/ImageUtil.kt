@@ -26,6 +26,8 @@ import eu.kanade.tachiyomi.util.system.GLUtil
 import logcat.LogPriority
 import okio.Buffer
 import okio.BufferedSource
+import okio.buffer
+import okio.source
 import tachiyomi.core.common.util.image.ImageHeader
 import tachiyomi.core.common.util.image.NativeImageDecoder
 import java.io.InputStream
@@ -67,6 +69,54 @@ object ImageUtil {
     fun getExtensionFromMimeType(mime: String?, openStream: () -> InputStream): String {
         val type = mime?.let { ImageType.entries.find { it.mime == mime } } ?: findImageType(openStream)
         return type?.extension ?: "jpg"
+    }
+
+    data class ImageMetadata(
+        val isAnimated: Boolean,
+        val dimensions: ImageDimensions?,
+    )
+
+    /**
+     * Reads animation status and intrinsic pixel dimensions from [stream] in a single bounded
+     * header pass when possible, avoiding buffering the entire image into memory.
+     */
+    fun sniffImageMetadata(stream: InputStream): ImageMetadata {
+        val peeked = ImageHeader.peek(stream)
+        val info = peeked.info
+        val isAnimated = when (info?.format) {
+            ImageHeader.Format.GIF -> true
+            ImageHeader.Format.WEBP, ImageHeader.Format.HEIF, ImageHeader.Format.AVIF -> info.animated
+            ImageHeader.Format.JXL -> {
+                try {
+                    peeked.stream.use { s ->
+                        ImageDecoder.open(s).use { it.isAnimated }
+                    }
+                } catch (_: LinkageError) {
+                    false
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            else -> false
+        }
+        if (isAnimated) {
+            return ImageMetadata(isAnimated = true, dimensions = null)
+        }
+        if (info?.width != null && info.height != null) {
+            return ImageMetadata(
+                isAnimated = false,
+                dimensions = ImageDimensions(width = info.width, height = info.height),
+            )
+        }
+        val dimensions = peeked.stream.source().buffer().use { buffered ->
+            val options = extractImageOptions(buffered)
+            if (options.outWidth > 0 && options.outHeight > 0) {
+                ImageDimensions(width = options.outWidth, height = options.outHeight)
+            } else {
+                null
+            }
+        }
+        return ImageMetadata(isAnimated = false, dimensions = dimensions)
     }
 
     fun isAnimatedAndSupported(source: BufferedSource): Boolean {
@@ -224,7 +274,68 @@ object ImageUtil {
      * the [BufferedSource] variants perform; holders hand the bitmap straight to the image view.
      * Return null when decoding fails so callers can fall back to the stream variant.
      */
-    fun splitInHalfBitmap(imageSource: BufferedSource, side: Side): Bitmap? {
+    fun findSmartSplitX(decoder: NativeImageDecoder): Int {
+        val width = decoder.width
+        val height = decoder.height
+        val center = (width / 2).coerceAtLeast(1)
+        if (width < 100 || height < 100) return center
+
+        val minX = (width * 45) / 100
+        val maxX = (width * 55) / 100
+        val bandWidth = maxX - minX
+        if (bandWidth <= 4) return center
+
+        val topY = (height * 10) / 100
+        val bottomY = (height * 90) / 100
+        val stripHeight = bottomY - topY
+        if (stripHeight <= 16) return center
+
+        val sampleSize = maxOf(1, stripHeight / 128)
+        return try {
+            val strip = decoder.decode(Rect(minX, topY, maxX, bottomY), sampleSize)
+            try {
+                val sw = strip.width
+                val sh = strip.height
+                if (sw <= 2 || sh <= 4) return center
+
+                var bestCol = sw / 2
+                var bestScore = Float.MAX_VALUE
+                val centerCol = sw / 2f
+                val halfSpan = (sw / 2f).coerceAtLeast(1f)
+
+                for (col in 0 until sw) {
+                    var sum = 0f
+                    var sumSq = 0f
+                    for (row in 0 until sh) {
+                        val px = strip.getPixel(col, row)
+                        val luma = (0.299f * Color.red(px) + 0.587f * Color.green(px) + 0.114f * Color.blue(px))
+                        sum += luma
+                        sumSq += luma * luma
+                    }
+                    val mean = sum / sh
+                    val variance = (sumSq / sh) - (mean * mean)
+                    val distPenalty = (abs(col - centerCol) / halfSpan) * 4f
+                    val score = variance + distPenalty
+                    if (score < bestScore) {
+                        bestScore = score
+                        bestCol = col
+                    }
+                }
+                val mappedX = minX + ((bestCol.toLong() * bandWidth) / sw.coerceAtLeast(1)).toInt()
+                mappedX.coerceIn(minX, maxX)
+            } finally {
+                strip.recycle()
+            }
+        } catch (_: Throwable) {
+            center
+        }
+    }
+
+    fun splitInHalfBitmap(
+        imageSource: BufferedSource,
+        side: Side,
+        smartGutter: Boolean = false,
+    ): Bitmap? {
         return try {
             // Region-decode only the kept half: halves both decode cost and peak memory
             // (no full-size bitmap is ever materialized).
@@ -233,11 +344,11 @@ object ImageUtil {
                 val width = decoder.width
                 val height = decoder.height
                 if (width <= 0 || height <= 0) return null
-                val halfWidth = width / 2
-                if (halfWidth == 0) return null
+                val splitX = if (smartGutter) findSmartSplitX(decoder) else width / 2
+                if (splitX <= 0 || splitX >= width) return null
                 val part = when (side) {
-                    Side.RIGHT -> Rect(width - halfWidth, 0, width, height)
-                    Side.LEFT -> Rect(0, 0, halfWidth, height)
+                    Side.RIGHT -> Rect(splitX, 0, width, height)
+                    Side.LEFT -> Rect(0, 0, splitX, height)
                 }
                 decoder.decode(part)
             } finally {

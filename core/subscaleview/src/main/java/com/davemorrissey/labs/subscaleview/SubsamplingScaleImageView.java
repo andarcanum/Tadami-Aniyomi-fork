@@ -154,9 +154,9 @@ public class SubsamplingScaleImageView extends View {
     private static final long TILE_FADE_DURATION_MS = 100L;
     private static final Object TILE_RETRY_TOKEN = new Object();
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
-    private static final ExecutorService DEFAULT_EXECUTOR = createDefaultExecutor();
+    private static final ThreadPoolExecutor DEFAULT_EXECUTOR = createDefaultExecutor();
 
-    private static ExecutorService createDefaultExecutor() {
+    private static ThreadPoolExecutor createDefaultExecutor() {
         int cpus = Math.max(2, Runtime.getRuntime().availableProcessors());
         int corePoolSize = Math.min(4, cpus);
         int maxPoolSize = Math.max(corePoolSize, Math.min(8, cpus));
@@ -176,6 +176,29 @@ public class SubsamplingScaleImageView extends View {
         );
         pool.allowCoreThreadTimeOut(true);
         return pool;
+    }
+
+    /**
+     * Dynamically adjusts the shared tile-decoder thread pool size. Pass 0 for automatic sizing.
+     */
+    public static synchronized void setDefaultExecutorMaxThreads(int requestedThreads) {
+        int cpus = Math.max(2, Runtime.getRuntime().availableProcessors());
+        int core;
+        int max;
+        if (requestedThreads <= 0) {
+            core = Math.min(4, cpus);
+            max = Math.max(core, Math.min(8, cpus));
+        } else {
+            core = Math.max(1, Math.min(requestedThreads, 8));
+            max = core;
+        }
+        if (max >= DEFAULT_EXECUTOR.getCorePoolSize()) {
+            DEFAULT_EXECUTOR.setMaximumPoolSize(max);
+            DEFAULT_EXECUTOR.setCorePoolSize(core);
+        } else {
+            DEFAULT_EXECUTOR.setCorePoolSize(core);
+            DEFAULT_EXECUTOR.setMaximumPoolSize(max);
+        }
     }
 
     // A global preference for bitmap format, available to decoder classes that respect it
@@ -509,7 +532,7 @@ public class SubsamplingScaleImageView extends View {
             // Load the bitmap using tile decoding.
             this.provider = imageSource.getProvider();
             sRegion = imageSource.getSRegion();
-            TilesInitTask task = new TilesInitTask(this, getContext(), provider);
+            TilesInitTask task = new TilesInitTask(this, getContext(), provider, imageSource.getRegionDecoderFactory());
             executeTask(task);
         }
     }
@@ -3229,12 +3252,17 @@ public class SubsamplingScaleImageView extends View {
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
         private volatile Future<?> future;
 
-        TilesInitTask(SubsamplingScaleImageView view, Context context, InputProvider provider) {
+        TilesInitTask(
+                SubsamplingScaleImageView view,
+                Context context,
+                InputProvider provider,
+                kotlin.jvm.functions.Function0<? extends ImageRegionDecoder> decoderFactory
+        ) {
             viewRef = new WeakReference<>(view);
             contextRef = new WeakReference<>(context);
             this.provider = provider;
             generation = view.imageGeneration;
-            decoder = view.createRegionDecoder();
+            decoder = decoderFactory != null ? decoderFactory.invoke() : view.createRegionDecoder();
             region = view.sRegion == null ? null : new Rect(view.sRegion);
         }
 

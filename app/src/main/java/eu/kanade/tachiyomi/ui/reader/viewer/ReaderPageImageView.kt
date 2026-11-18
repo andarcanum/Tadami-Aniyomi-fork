@@ -31,6 +31,8 @@ import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_IN_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE
+import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder
+import com.davemorrissey.labs.subscaleview.provider.StreamInputProvider
 import com.github.chrisbanes.photoview.PhotoView
 import eu.kanade.tachiyomi.data.coil.AnimatedNativeDrawable
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerSubsamplingImageView
@@ -49,6 +51,7 @@ import kotlinx.coroutines.withContext
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
 import java.io.Closeable
+import java.io.InputStream
 
 /**
  * A wrapper view for showing page image.
@@ -91,7 +94,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-        (pageView as? SubsamplingScaleImageView)?.setHardwareTilesEnabled(isHardwareAccelerated)
+        (pageView as? SubsamplingScaleImageView)?.setHardwareTilesEnabled(
+            isHardwareAccelerated && (config?.hardwareTilesEnabled ?: true),
+        )
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            applyPageRenderEffect(ReaderRenderEffects.currentEffect as? android.graphics.RenderEffect)
+        }
         val pending = pendingSmartFit
         if (pending != null && smartFitJob == null) {
             setNonAnimatedImage(pending.data, pending.config)
@@ -124,6 +132,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     var onImageLoaded: (() -> Unit)? = null
     var onImageLoadError: (() -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
+    var onCenterChanged: ((newCenter: PointF?) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
     var onHdrChanged: ((Boolean) -> Unit)? = null
 
@@ -153,6 +162,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
     @CallSuper
     open fun onScaleChanged(newScale: Float) {
         onScaleChanged?.invoke(newScale)
+    }
+
+    @CallSuper
+    open fun onCenterChanged(newCenter: PointF?) {
+        onCenterChanged?.invoke(newCenter)
     }
 
     @CallSuper
@@ -251,6 +265,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     fun setImage(source: BufferedSource, isAnimated: Boolean, config: Config) {
+        setImageInternal(source, isAnimated, config)
+    }
+
+    fun setImage(streamFn: () -> InputStream, isAnimated: Boolean, config: Config) {
+        setImageInternal(StreamSource(streamFn), isAnimated, config)
+    }
+
+    private fun setImageInternal(data: Any, isAnimated: Boolean, config: Config) {
         this.config = config
         pendingSmartFit = null
         pendingAnimatedImage = null
@@ -259,10 +281,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
         cancelCoilRequest()
         if (isAnimated) {
             prepareAnimatedImageView()
-            setAnimatedImage(source, config)
+            setAnimatedImage(data, config)
         } else {
             prepareNonAnimatedImageView()
-            setNonAnimatedImage(source, config)
+            setNonAnimatedImage(data, config)
         }
     }
 
@@ -275,11 +297,20 @@ open class ReaderPageImageView @JvmOverloads constructor(
         cancelCoilRequest()
         onHdrChanged?.invoke(false)
         pageView?.let {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                it.setRenderEffect(null)
+            }
             when (it) {
                 is SubsamplingScaleImageView -> it.recycle()
                 is AppCompatImageView -> releaseAnimatedDrawable(it)
             }
             it.isVisible = false
+        }
+    }
+
+    internal fun applyPageRenderEffect(effect: android.graphics.RenderEffect?) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            pageView?.setRenderEffect(effect)
         }
     }
 
@@ -371,13 +402,16 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     }
 
                     override fun onCenterChanged(newCenter: PointF?, origin: Int) {
-                        // Not used
+                        this@ReaderPageImageView.onCenterChanged(newCenter)
                     }
                 },
             )
             setOnClickListener { this@ReaderPageImageView.onViewClicked() }
         }
         addView(pageView, MATCH_PARENT, MATCH_PARENT)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            applyPageRenderEffect(ReaderRenderEffects.currentEffect as? android.graphics.RenderEffect)
+        }
     }
 
     private fun SubsamplingScaleImageView.setupZoom(config: Config?) {
@@ -386,11 +420,18 @@ open class ReaderPageImageView @JvmOverloads constructor(
         maxScale = baseScale * MAX_ZOOM_SCALE
         setDoubleTapZoomScale(baseScale * 2)
 
+        val lockedRatio = config?.lockedZoomRatio
+        val initialScale = if (lockedRatio != null && lockedRatio > 1.01f) {
+            (baseScale * lockedRatio).coerceAtMost(maxScale)
+        } else {
+            baseScale
+        }
+
         when (config?.zoomStartPosition) {
-            ZoomStartPosition.LEFT -> setScaleAndCenter(baseScale, PointF(0F, 0F))
-            ZoomStartPosition.RIGHT -> setScaleAndCenter(baseScale, PointF(sWidth.toFloat(), 0F))
+            ZoomStartPosition.LEFT -> setScaleAndCenter(initialScale, PointF(0F, 0F))
+            ZoomStartPosition.RIGHT -> setScaleAndCenter(initialScale, PointF(sWidth.toFloat(), 0F))
             ZoomStartPosition.CENTER -> setScaleAndCenter(
-                baseScale,
+                initialScale,
                 center ?: PointF(sWidth / 2F, sHeight / 2F),
             )
             null -> {}
@@ -406,7 +447,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
         setZoomEnabled(config.enablePinchToZoom)
         setDoubleTapZoomDuration(config.zoomDuration.getSystemScaledDuration())
-        setHardwareTilesEnabled(this@ReaderPageImageView.isHardwareAccelerated)
+        setHardwareTilesEnabled(this@ReaderPageImageView.isHardwareAccelerated && config.hardwareTilesEnabled)
         if (isSmartFit) {
             val initialType = if (width > 0 && height > 0 && isReady) {
                 ReaderScaleUtil.resolveSmartScaleType(width, height, sWidth, sHeight)
@@ -461,6 +502,42 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     }
                 } else {
                     setImage(ImageSource.bitmap(bitmap))
+                    isVisible = true
+                }
+            }
+            is StreamSource -> {
+                val precomputed = config.precomputedSmartFitBounds
+                val makeImage = {
+                    ImageSource.provider(StreamInputProvider { data.open() })
+                        .decoderFactory(config.regionDecoderFactory)
+                }
+                if (precomputed != null) {
+                    val image = makeImage()
+                    if (!precomputed.isEmpty) image.region(precomputed)
+                    setImage(image)
+                    isVisible = true
+                } else if (config.webtoonSmartFit) {
+                    pendingSmartFit = PendingSmartFit(data, config)
+                    scope?.let { activeScope ->
+                        smartFitJob = activeScope.launch {
+                            val bounds = withContext(Dispatchers.IO) {
+                                data.open().use { stream ->
+                                    WebtoonBorderDetector.detectContentBounds(
+                                        stream,
+                                        config.cropBorders,
+                                    )
+                                }
+                            }
+                            pendingSmartFit = null
+                            smartFitJob = null
+                            val image = makeImage()
+                            if (!bounds.isEmpty) image.region(bounds)
+                            setImage(image)
+                            isVisible = true
+                        }
+                    }
+                } else {
+                    setImage(makeImage())
                     isVisible = true
                 }
             }
@@ -540,6 +617,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
             }
         }
         addView(pageView, MATCH_PARENT, MATCH_PARENT)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            applyPageRenderEffect(ReaderRenderEffects.currentEffect as? android.graphics.RenderEffect)
+        }
     }
 
     private fun setAnimatedImage(
@@ -607,7 +687,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val landscapeZoom: Boolean = false,
         val enablePinchToZoom: Boolean = true,
         val precomputedSmartFitBounds: Rect? = null,
+        val regionDecoderFactory: (() -> ImageRegionDecoder)? = null,
+        val lockedZoomRatio: Float? = null,
+        val hardwareTilesEnabled: Boolean = true,
     )
+
+    private class StreamSource(val open: () -> InputStream)
 
     private data class PendingSmartFit(
         val data: Any,
@@ -632,6 +717,11 @@ private const val MAX_ZOOM_SCALE = 5F
  * (or re-encoded fallback) byte stream.
  */
 internal sealed interface ProcessedPageImage {
+    data class Streamed(
+        val streamFn: () -> InputStream,
+        val regionDecoderFactory: (() -> ImageRegionDecoder)? = null,
+    ) : ProcessedPageImage
+
     data class Encoded(val source: BufferedSource) : ProcessedPageImage
     data class Decoded(val bitmap: android.graphics.Bitmap) : ProcessedPageImage
 }

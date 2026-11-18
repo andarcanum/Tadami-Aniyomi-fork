@@ -67,7 +67,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
     /**
      * Distance to scroll when the user taps on one side of the recycler view.
      */
-    private val scrollDistance = activity.resources.displayMetrics.heightPixels * 3 / 4
+    private var scrollDistance = activity.resources.displayMetrics.heightPixels * 3 / 4
 
     /**
      * Layout manager of the recycler view.
@@ -163,6 +163,15 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         recycler.itemAnimator = null
         recycler.layoutManager = layoutManager
         recycler.adapter = adapter
+        recycler.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            val newHeight = bottom - top
+            val oldHeight = oldBottom - oldTop
+            if (newHeight > 0 && newHeight != oldHeight) {
+                val updatedDistance = newHeight * 3 / 4
+                scrollDistance = updatedDistance
+                layoutManager.extraLayoutSpace = updatedDistance
+            }
+        }
         recycler.onBeforeDrawChildren = { applyPendingHeightCompensation() }
         recycler.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
@@ -219,6 +228,10 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                 }
 
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.setFlingPaused(
+                        paused = config.pauseShadersOnFling && newState == RecyclerView.SCROLL_STATE_SETTLING,
+                        root = recyclerView,
+                    )
                     when (newState) {
                         RecyclerView.SCROLL_STATE_DRAGGING -> {
                             // The user took over: a programmatic switch is no longer settling.

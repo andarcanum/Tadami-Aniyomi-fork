@@ -1804,7 +1804,7 @@ class ReaderViewModel @JvmOverloads constructor(
 
         viewModelScope.launchNonCancellable {
             val result = try {
-                manga.editCover(Injekt.get(), stream())
+                stream().use { manga.editCover(Injekt.get(), it) }
                 if (manga.isLocal() || manga.favorite) {
                     SetAsCoverResult.Success
                 } else {

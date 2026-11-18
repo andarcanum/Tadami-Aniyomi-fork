@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Point
 import android.graphics.Rect
+import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.davemorrissey.labs.subscaleview.provider.InputProvider
 import tachiyomi.core.common.util.image.NativeImageDecoder
 import tachiyomi.core.common.util.system.ImageUtil
@@ -63,24 +64,41 @@ class Decoder(
     }
 
     private fun maybeConvertToHardwareBitmap(bitmap: Bitmap): Bitmap {
+        var current = bitmap
+        if (
+            !hdr &&
+            SubsamplingScaleImageView.getPreferredBitmapConfig() == Bitmap.Config.RGB_565 &&
+            current.config != Bitmap.Config.RGB_565 &&
+            current.config != Bitmap.Config.HARDWARE
+        ) {
+            val rgb565 = try {
+                current.copy(Bitmap.Config.RGB_565, false)
+            } catch (_: Throwable) {
+                null
+            }
+            if (rgb565 != null) {
+                current.recycle()
+                current = rgb565
+            }
+        }
         if (
             !hardwareTilesEnabled ||
             hdr ||
-            bitmap.config == Bitmap.Config.HARDWARE ||
-            !ImageUtil.canUseHardwareBitmap(bitmap)
+            current.config == Bitmap.Config.HARDWARE ||
+            !ImageUtil.canUseHardwareBitmap(current)
         ) {
-            return bitmap
+            return current
         }
         val hardware = try {
-            bitmap.copy(Bitmap.Config.HARDWARE, false)
+            current.copy(Bitmap.Config.HARDWARE, false)
         } catch (_: Throwable) {
             null
         }
         return if (hardware != null) {
-            bitmap.recycle()
+            current.recycle()
             hardware
         } else {
-            bitmap
+            current
         }
     }
 }

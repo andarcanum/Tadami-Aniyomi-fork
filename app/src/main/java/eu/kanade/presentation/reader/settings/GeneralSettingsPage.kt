@@ -238,6 +238,47 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         }
     }
 
+    // Section: decoder & tile memory (Phase 5.3).
+    val hardwareTiles by screenModel.preferences.hardwareTilesEnabled().collectAsState()
+    val rgb565Tiles by screenModel.preferences.rgb565ForGrayscale().collectAsState()
+    val pauseShadersOnFling by screenModel.preferences.pauseShadersOnFling().collectAsState()
+    val decoderThreads by screenModel.preferences.decoderThreadCount().collectAsState()
+    AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_decoder_section)) {
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_reader_hardware_tiles),
+            subtitle = stringResource(AYMR.strings.pref_reader_hardware_tiles_summary),
+            checked = hardwareTiles,
+            onClick = { screenModel.preferences.hardwareTilesEnabled().set(!hardwareTiles) },
+        )
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_reader_rgb565_tiles),
+            subtitle = stringResource(AYMR.strings.pref_reader_rgb565_tiles_summary),
+            checked = rgb565Tiles,
+            onClick = { screenModel.preferences.rgb565ForGrayscale().set(!rgb565Tiles) },
+        )
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_reader_pause_shaders_on_fling),
+            subtitle = stringResource(AYMR.strings.pref_reader_pause_shaders_on_fling_summary),
+            checked = pauseShadersOnFling,
+            onClick = { screenModel.preferences.pauseShadersOnFling().set(!pauseShadersOnFling) },
+        )
+        AuroraFieldLabel(stringResource(AYMR.strings.pref_reader_decoder_threads))
+        AuroraChipFlow {
+            listOf(0, 2, 4, 6).forEach { count ->
+                val chipLabel = if (count == 0) {
+                    stringResource(AYMR.strings.pref_reader_decoder_threads_auto)
+                } else {
+                    stringResource(AYMR.strings.pref_reader_decoder_threads_count, count)
+                }
+                AuroraChip(
+                    selected = decoderThreads == count,
+                    onClick = { screenModel.preferences.decoderThreadCount().set(count) },
+                    label = chipLabel,
+                )
+            }
+        }
+    }
+
     // Section: E-Ink.
     AuroraGlassSection(title = stringResource(MR.strings.pref_category_eink)) {
         AuroraToggleRow(

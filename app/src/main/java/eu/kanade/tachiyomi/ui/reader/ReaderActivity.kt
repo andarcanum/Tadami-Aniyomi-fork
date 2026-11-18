@@ -20,6 +20,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.LAYER_TYPE_HARDWARE
+import android.view.View.LAYER_TYPE_NONE
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -388,6 +389,7 @@ class ReaderActivity : BaseActivity() {
         // Allow achievement notifications when exiting reader
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(false)
         super.onDestroy()
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.clear()
         viewModel.state.value.viewer?.destroy()
         setWindowHdrEnabled(false)
         config = null
@@ -1344,12 +1346,34 @@ class ReaderActivity : BaseActivity() {
      */
     private inner class ReaderConfig {
 
-        private fun getCombinedPaint(grayscale: Boolean, invertedColors: Boolean): Paint {
+        private fun getCombinedPaint(
+            grayscale: Boolean,
+            invertedColors: Boolean,
+            whitePoint: Int,
+            gammaContrast: Int,
+            blackPoint: Int,
+        ): Paint {
             return Paint().apply {
                 colorFilter = ColorMatrixColorFilter(
                     ColorMatrix().apply {
+                        if (whitePoint > 0 || blackPoint > 0 || gammaContrast != 0) {
+                            val bp = (blackPoint / 100f) * 0.35f
+                            val wp = (1f - (whitePoint / 100f) * 0.45f).coerceAtLeast(bp + 0.10f)
+                            val scale = (1f / (wp - bp)) * (1f + (gammaContrast / 50f) * 0.45f)
+                            val offset = -bp * 255f * scale
+                            postConcat(
+                                ColorMatrix(
+                                    floatArrayOf(
+                                        scale, 0f, 0f, 0f, offset,
+                                        0f, scale, 0f, 0f, offset,
+                                        0f, 0f, scale, 0f, offset,
+                                        0f, 0f, 0f, 1f, 0f,
+                                    ),
+                                ),
+                            )
+                        }
                         if (grayscale) {
-                            setSaturation(0f)
+                            postConcat(ColorMatrix().apply { setSaturation(0f) })
                         }
                         if (invertedColors) {
                             postConcat(
@@ -1388,6 +1412,9 @@ class ReaderActivity : BaseActivity() {
             merge(
                 readerPreferences.grayscale().changes(),
                 readerPreferences.invertedColors().changes(),
+                readerPreferences.paperWhitePoint().changes(),
+                readerPreferences.paperGammaContrast().changes(),
+                readerPreferences.paperBlackPoint().changes(),
                 uiPreferences.eInkProfile().changes(),
             )
                 .onEach {
@@ -1402,9 +1429,26 @@ class ReaderActivity : BaseActivity() {
                 readerPreferences.sharpening().changes(),
                 readerPreferences.denoise().changes(),
                 readerPreferences.binarization().changes(),
+                readerPreferences.paperWhitePoint().changes(),
+                readerPreferences.paperGammaContrast().changes(),
+                readerPreferences.paperBlackPoint().changes(),
             )
                 .onEach {
                     applyRenderEffects()
+                }
+                .launchIn(lifecycleScope)
+
+            readerPreferences.rgb565ForGrayscale().changes()
+                .onEach { enabled ->
+                    com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.setPreferredBitmapConfig(
+                        if (enabled) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888,
+                    )
+                }
+                .launchIn(lifecycleScope)
+
+            readerPreferences.decoderThreadCount().changes()
+                .onEach { count ->
+                    com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.setDefaultExecutorMaxThreads(count)
                 }
                 .launchIn(lifecycleScope)
 
@@ -1515,8 +1559,20 @@ class ReaderActivity : BaseActivity() {
             viewModel.setBrightnessOverlayValue(value)
         }
         private fun setLayerPaint(grayscale: Boolean, invertedColors: Boolean) {
-            val paint = if (grayscale || invertedColors) getCombinedPaint(grayscale, invertedColors) else null
-            binding.viewerContainer.setLayerType(LAYER_TYPE_HARDWARE, paint)
+            val useLegacyLevels = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+            val whitePoint = if (useLegacyLevels) readerPreferences.paperWhitePoint().get() else 0
+            val gammaContrast = if (useLegacyLevels) readerPreferences.paperGammaContrast().get() else 0
+            val blackPoint = if (useLegacyLevels) readerPreferences.paperBlackPoint().get() else 0
+            val hasLevels = whitePoint > 0 || blackPoint > 0 || gammaContrast != 0
+            val paint = if (grayscale || invertedColors || hasLevels) {
+                getCombinedPaint(grayscale, invertedColors, whitePoint, gammaContrast, blackPoint)
+            } else {
+                null
+            }
+            val layerType = if (paint != null) LAYER_TYPE_HARDWARE else LAYER_TYPE_NONE
+            if (binding.viewerContainer.layerType != layerType || paint != null) {
+                binding.viewerContainer.setLayerType(layerType, paint)
+            }
         }
 
         private fun applyRenderEffects() {
@@ -1524,13 +1580,20 @@ class ReaderActivity : BaseActivity() {
                 val sharpeningVal = readerPreferences.sharpening().get() / 100f
                 val denoiseVal = readerPreferences.denoise().get() / 100f
                 val binarizationVal = readerPreferences.binarization().get() / 100f
+                val whitePointVal = readerPreferences.paperWhitePoint().get() / 100f
+                val gammaContrastVal = readerPreferences.paperGammaContrast().get() / 50f
+                val blackPointVal = readerPreferences.paperBlackPoint().get() / 100f
 
-                ReaderRenderEffectsApi33.apply(
-                    container = binding.viewerContainer,
+                eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.update(
                     sharpeningVal = sharpeningVal,
                     denoiseVal = denoiseVal,
                     binarizationVal = binarizationVal,
+                    whitePointVal = whitePointVal,
+                    gammaContrastVal = gammaContrastVal,
+                    blackPointVal = blackPointVal,
                 )
+                binding.viewerContainer.setRenderEffect(null)
+                eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.applyToHierarchy(binding.viewerContainer)
             }
         }
     }
@@ -1879,142 +1942,4 @@ internal fun resolveReaderLightStatusBars(
         return false
     }
     return defaultLightStatusBars
-}
-
-private const val SHARPEN_SHADER = """
-    uniform shader inputShader;
-    uniform float sharpness;
-
-    half4 main(float2 coords) {
-        half4 center = inputShader.eval(coords);
-        half4 left = inputShader.eval(coords + float2(-1.0, 0.0));
-        half4 right = inputShader.eval(coords + float2(1.0, 0.0));
-        half4 top = inputShader.eval(coords + float2(0.0, -1.0));
-        half4 bottom = inputShader.eval(coords + float2(0.0, 1.0));
-
-        half4 sharp = center * 5.0 - (left + right + top + bottom);
-        return center + (sharp - center) * sharpness;
-    }
-"""
-
-private const val DENOISE_SHADER = """
-    uniform shader inputShader;
-    uniform float denoise;
-
-    half4 main(float2 coords) {
-        half4 color = inputShader.eval(coords);
-        half4 sum = color;
-        float count = 1.0;
-
-        for (int x = -1; x <= 1; x++) {
-            for (int y = -1; y <= 1; y++) {
-                if (x == 0 && y == 0) continue;
-                half4 neighbor = inputShader.eval(coords + float2(x, y));
-                if (distance(neighbor.rgb, color.rgb) < 0.15) {
-                    sum += neighbor;
-                    count += 1.0;
-                }
-            }
-        }
-        half4 smoothColor = sum / count;
-        return color + (smoothColor - color) * denoise;
-    }
-"""
-
-private const val BINARIZATION_SHADER = """
-    uniform shader inputShader;
-    uniform float binarization;
-
-    half4 main(float2 coords) {
-        half4 center = inputShader.eval(coords);
-        float centerLuma = (center.r + center.g + center.b) * 0.3333;
-
-        float sum = centerLuma;
-        float minVal = centerLuma;
-        float maxVal = centerLuma;
-
-        // Разреженная сетка 3x3 с шагом 2.0 (всего 8 дополнительных выборок вместо 24)
-        float2 offsets[8];
-        offsets[0] = float2(-2.0, -2.0);
-        offsets[1] = float2( 0.0, -2.0);
-        offsets[2] = float2( 2.0, -2.0);
-        offsets[3] = float2(-2.0,  0.0);
-        offsets[4] = float2( 2.0,  0.0);
-        offsets[5] = float2(-2.0,  2.0);
-        offsets[6] = float2( 0.0,  2.0);
-        offsets[7] = float2( 2.0,  2.0);
-
-        for (int i = 0; i < 8; i++) {
-            half4 col = inputShader.eval(coords + offsets[i]);
-            float luma = (col.r + col.g + col.b) * 0.3333;
-            sum += luma;
-            minVal = min(minVal, luma);
-            maxVal = max(maxVal, luma);
-        }
-
-        float mean = sum * 0.1111; // 1.0 / 9.0
-        float contrast = maxVal - minVal;
-
-        // Локальная бинаризация
-        float binaryLuma = step(mean, centerLuma);
-
-        // Бинаризация для областей с очень низким контрастом (сплошной фон)
-        float lowContrastLuma = step(0.5, centerLuma);
-
-        // Безветвленный выбор (branch-free) на основе уровня контраста
-        float isLowContrast = step(contrast, 0.15);
-        float finalLuma = mix(binaryLuma, lowContrastLuma, isLowContrast);
-
-        // Смешивание с оригиналом на основе ползунка интенсивности
-        float mixedLuma = mix(centerLuma, finalLuma, binarization);
-        return half4(mixedLuma, mixedLuma, mixedLuma, center.a);
-    }
-"""
-
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-private object ReaderRenderEffectsApi33 {
-    fun apply(
-        container: View,
-        sharpeningVal: Float,
-        denoiseVal: Float,
-        binarizationVal: Float,
-    ) {
-        var effect: android.graphics.RenderEffect? = null
-
-        if (sharpeningVal > 0f) {
-            val sharpShader = android.graphics.RuntimeShader(SHARPEN_SHADER)
-            sharpShader.setFloatUniform("sharpness", sharpeningVal)
-            effect = android.graphics.RenderEffect.createRuntimeShaderEffect(sharpShader, "inputShader")
-        }
-
-        if (denoiseVal > 0f) {
-            val denoiseShader = android.graphics.RuntimeShader(DENOISE_SHADER)
-            denoiseShader.setFloatUniform("denoise", denoiseVal)
-            val denoiseEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
-                denoiseShader,
-                "inputShader",
-            )
-            effect = if (effect != null) {
-                android.graphics.RenderEffect.createChainEffect(denoiseEffect, effect)
-            } else {
-                denoiseEffect
-            }
-        }
-
-        if (binarizationVal > 0f) {
-            val binarizationShader = android.graphics.RuntimeShader(BINARIZATION_SHADER)
-            binarizationShader.setFloatUniform("binarization", binarizationVal)
-            val binarizationEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
-                binarizationShader,
-                "inputShader",
-            )
-            effect = if (effect != null) {
-                android.graphics.RenderEffect.createChainEffect(binarizationEffect, effect)
-            } else {
-                binarizationEffect
-            }
-        }
-
-        container.setRenderEffect(effect)
-    }
 }

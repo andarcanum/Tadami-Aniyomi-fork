@@ -18,7 +18,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
-import okio.Buffer
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.ImageUtil
@@ -99,15 +98,15 @@ internal class HttpPageLoader(
         val domainChapter = chapter.chapter.toDomainChapter()!!
         val cachedPages = chapterCache.getPageListFromCache(domainChapter)
         // SY -->
-        val pages = if (cachedPages.isNotEmpty()) {
-            if (cachedPages.any { it.imageUrl?.contains("?t=") == true }) {
-                // Signed URLs may have stale HMAC tokens; re-fetch from server
-                source.getPageList(chapter.chapter)
-            } else {
-                cachedPages
-            }
+        val pages = if (cachedPages.isNotEmpty() && cachedPages.none { hasSignedQueryToken(it.imageUrl) }) {
+            cachedPages
         } else {
-            source.getPageList(chapter.chapter)
+            source.getPageList(chapter.chapter).also { fetched ->
+                runCatching {
+                    val pagesToSave = fetched.map { Page(it.index, it.url, it.imageUrl) }
+                    chapterCache.putPageListToCache(domainChapter, pagesToSave)
+                }
+            }
         }
         // SY <--
         return pages.mapIndexed { index, page ->
@@ -280,20 +279,39 @@ internal class HttpPageLoader(
             // pages then bind with a correct placeholder height and do not relayout on decode.
             // Animated pages are skipped: their height comes from the decoded drawable, and a
             // pre-set size would route them into the non-animated image path.
+            var isAnimated = false
             if (page.imageDimensions == null) {
                 page.imageDimensions = runCatching {
-                    chapterCache.getImageFile(imageUrl).inputStream().use { stream ->
-                        val source = Buffer().readFrom(stream)
-                        if (ImageUtil.isAnimatedAndSupported(source)) {
+                    chapterCache.openImageStream(imageUrl).use { stream ->
+                        val metadata = ImageUtil.sniffImageMetadata(stream)
+                        isAnimated = metadata.isAnimated
+                        if (isAnimated) {
+                            page.isAnimatedImage = true
                             null
                         } else {
-                            ImageUtil.getImageDimensions(source)
+                            metadata.dimensions
                         }
                     }
                 }.getOrNull()
             }
 
-            page.stream = { chapterCache.getImageFile(imageUrl).inputStream() }
+            if (!isAnimated && !page.isAnimatedImage && page.smartFitBounds == null &&
+                readerPreferences.webtoonSmartFit().get()
+            ) {
+                val cropBorders = readerPreferences.cropBordersWebtoon().get()
+                runCatching {
+                    chapterCache.openImageStream(imageUrl).use { stream ->
+                        eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector.detectContentBounds(
+                            stream,
+                            cropBorders,
+                        )
+                    }
+                }.getOrNull()?.takeIf { !it.isEmpty }?.let { bounds ->
+                    page.smartFitBounds = cropBorders to bounds
+                }
+            }
+
+            page.stream = { chapterCache.openImageStream(imageUrl) }
             page.status = Page.State.READY
         } catch (e: Throwable) {
             page.status = Page.State.ERROR
@@ -321,6 +339,15 @@ private class PriorityPage(
         val p = other.priority.compareTo(priority)
         return if (p != 0) p else identifier.compareTo(other.identifier)
     }
+}
+
+private val SIGNED_URL_PARAM_REGEX =
+    Regex("(^|&)(t|exp|expires|token|sig|signature|hdnea|x-amz-[a-z0-9-]+)=", RegexOption.IGNORE_CASE)
+
+internal fun hasSignedQueryToken(url: String?): Boolean {
+    val query = url?.substringAfter('?', "") ?: return false
+    if (query.isEmpty()) return false
+    return SIGNED_URL_PARAM_REGEX.containsMatchIn(query)
 }
 
 /**

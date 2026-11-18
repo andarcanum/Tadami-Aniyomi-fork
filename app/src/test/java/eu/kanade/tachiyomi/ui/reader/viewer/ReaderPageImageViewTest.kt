@@ -248,6 +248,227 @@ class ReaderPageImageViewTest {
     }
 
     @Test
+    fun streamBackedNonAnimatedImageLoadsViaReusableStreamProvider() {
+        mockkObject(NativeImageDecoder.Companion)
+        val native = mockk<NativeImageDecoder>(relaxed = true)
+        every { native.width } returns 800
+        every { native.height } returns 1200
+        every { native.isHdr } returns false
+        every { native.decode(any(), any()) } answers {
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+        }
+        every { NativeImageDecoder.open(any(), any()) } returns native
+
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val root = FrameLayout(activity)
+        val pageView = ReaderPageImageView(activity, isWebtoon = true)
+        root.addView(pageView, FrameLayout.LayoutParams(400, 800))
+        activity.setContentView(root)
+        val canvasBitmap = Bitmap.createBitmap(400, 800, Bitmap.Config.ARGB_8888)
+
+        var openCount = 0
+        var loaded = false
+        pageView.onImageLoaded = { loaded = true }
+
+        try {
+            layoutAndDraw(root, 400, 800, canvasBitmap)
+            pageView.setImage(
+                streamFn = {
+                    openCount++
+                    byteArrayOf(1).inputStream()
+                },
+                isAnimated = false,
+                config = ReaderPageImageView.Config(
+                    zoomDuration = 100,
+                    minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
+                ),
+            )
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (!loaded && System.nanoTime() < deadline) {
+                layoutAndDraw(root, 400, 800, canvasBitmap)
+                ShadowLooper.idleMainLooper()
+                Thread.sleep(10)
+            }
+            assertTrue(loaded, "Expected stream-backed image to load")
+            assertTrue(openCount >= 1, "Expected StreamInputProvider to open stream")
+        } finally {
+            pageView.recycle()
+            canvasBitmap.recycle()
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun splitMergeRegionDecoderMapsHalvesAndSeamCrossingTiles() {
+        mockkObject(NativeImageDecoder.Companion)
+        val native = mockk<NativeImageDecoder>(relaxed = true)
+        every { native.width } returns 200
+        every { native.height } returns 100
+        every { native.isHdr } returns false
+        val decodedRects = mutableListOf<android.graphics.Rect>()
+        every { native.decode(any(), any()) } answers {
+            val rect = firstArg<android.graphics.Rect>()
+            decodedRects += android.graphics.Rect(rect)
+            Bitmap.createBitmap(rect.width().coerceAtLeast(1), rect.height().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        }
+        every { NativeImageDecoder.open(any(), any()) } returns native
+
+        val decoder = com.davemorrissey.labs.subscaleview.decoder.SplitMergeRegionDecoder(
+            upperSide = tachiyomi.core.common.util.system.ImageUtil.Side.RIGHT,
+            hardwareTilesEnabled = false,
+        )
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+        val size = decoder.init(
+            app,
+            com.davemorrissey.labs.subscaleview.provider.StreamInputProvider { byteArrayOf(1).inputStream() },
+        )
+        assertEquals(100, size.x)
+        assertEquals(200, size.y)
+
+        decoder.decodeRegion(android.graphics.Rect(10, 10, 50, 40), 1).recycle()
+        assertEquals(android.graphics.Rect(110, 10, 150, 40), decodedRects.last())
+
+        decoder.decodeRegion(android.graphics.Rect(10, 110, 50, 140), 1).recycle()
+        assertEquals(android.graphics.Rect(10, 10, 50, 40), decodedRects.last())
+
+        val beforeSeam = decodedRects.size
+        val seamBitmap = decoder.decodeRegion(android.graphics.Rect(0, 80, 100, 120), 1)
+        try {
+            assertEquals(100, seamBitmap.width)
+            assertEquals(40, seamBitmap.height)
+            assertEquals(beforeSeam + 2, decodedRects.size)
+            assertEquals(android.graphics.Rect(100, 80, 200, 100), decodedRects[beforeSeam])
+            assertEquals(android.graphics.Rect(0, 0, 100, 20), decodedRects[beforeSeam + 1])
+        } finally {
+            seamBitmap.recycle()
+            decoder.recycle()
+        }
+    }
+
+    @Test
+    fun splitMergeRegionDecoderPreservesWiderHalfWhenSmartGutterShiftsCenter() {
+        mockkObject(NativeImageDecoder.Companion)
+        val native = mockk<NativeImageDecoder>(relaxed = true)
+        every { native.width } returns 1000
+        every { native.height } returns 400
+        every { native.isHdr } returns false
+        val decodedRects = mutableListOf<android.graphics.Rect>()
+        every { native.decode(any(), any()) } answers {
+            val rect = firstArg<android.graphics.Rect>()
+            decodedRects += android.graphics.Rect(rect)
+            // When findSmartSplitX probes 450..550, put a uniform white gutter at col 30 (x = 480)
+            val bmp = Bitmap.createBitmap(
+                rect.width().coerceAtLeast(1),
+                rect.height().coerceAtLeast(1),
+                Bitmap.Config.ARGB_8888,
+            )
+            if (rect.left == 450 && rect.right == 550) {
+                for (x in 0 until bmp.width) {
+                    for (y in 0 until bmp.height) {
+                        bmp.setPixel(
+                            x,
+                            y,
+                            if (x ==
+                                30
+                            ) {
+                                android.graphics.Color.WHITE
+                            } else if (y % 2 ==
+                                0
+                            ) {
+                                android.graphics.Color.BLACK
+                            } else {
+                                android.graphics.Color.WHITE
+                            },
+                        )
+                    }
+                }
+            }
+            bmp
+        }
+        every { NativeImageDecoder.open(any(), any()) } returns native
+
+        val decoder = com.davemorrissey.labs.subscaleview.decoder.SplitMergeRegionDecoder(
+            upperSide = tachiyomi.core.common.util.system.ImageUtil.Side.RIGHT,
+            hardwareTilesEnabled = false,
+            smartGutter = true,
+        )
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+        val size = decoder.init(
+            app,
+            com.davemorrissey.labs.subscaleview.provider.StreamInputProvider { byteArrayOf(1).inputStream() },
+        )
+        // Right half is 480..1000 (width 520), left half is 0..480 (width 480) -> max halfWidth = 520
+        assertEquals(520, size.x)
+        assertEquals(800, size.y)
+
+        // Decoding rightmost tile of the narrower lower (left) half [440..520] must clamp to [440..480] without OOB
+        val narrowEdge = decoder.decodeRegion(android.graphics.Rect(440, 410, 520, 450), 1)
+        try {
+            assertEquals(80, narrowEdge.width)
+            assertEquals(40, narrowEdge.height)
+            assertEquals(android.graphics.Rect(440, 10, 480, 50), decodedRects.last())
+        } finally {
+            narrowEdge.recycle()
+            decoder.recycle()
+        }
+    }
+
+    @Test
+    fun lockedZoomRatioPreservesScaleOnInitialSetup() {
+        mockkObject(NativeImageDecoder.Companion)
+        val native = mockk<NativeImageDecoder>(relaxed = true)
+        every { native.width } returns 1000
+        every { native.height } returns 1500
+        every { native.isHdr } returns false
+        every { native.decode(any(), any()) } answers {
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+        }
+        every { NativeImageDecoder.open(any(), any()) } returns native
+
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val root = FrameLayout(activity)
+        val pageView = ReaderPageImageView(activity, isWebtoon = false)
+        root.addView(pageView, FrameLayout.LayoutParams(400, 800))
+        activity.setContentView(root)
+        val canvasBitmap = Bitmap.createBitmap(400, 800, Bitmap.Config.ARGB_8888)
+
+        var loaded = false
+        pageView.onImageLoaded = { loaded = true }
+
+        try {
+            layoutAndDraw(root, 400, 800, canvasBitmap)
+            pageView.setImage(
+                streamFn = { byteArrayOf(1).inputStream() },
+                isAnimated = false,
+                config = ReaderPageImageView.Config(
+                    zoomDuration = 100,
+                    minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE,
+                    zoomStartPosition = ReaderPageImageView.ZoomStartPosition.CENTER,
+                    lockedZoomRatio = 2.0f,
+                ),
+            )
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (!loaded && System.nanoTime() < deadline) {
+                layoutAndDraw(root, 400, 800, canvasBitmap)
+                ShadowLooper.idleMainLooper()
+                Thread.sleep(10)
+            }
+            assertTrue(loaded, "Expected image with lockedZoomRatio to load")
+            val ssiv = assertIs<PagerSubsamplingImageView>(pageView.getImageView())
+            assertTrue(
+                abs(ssiv.scale - ssiv.minScale * 2.0f) < 0.01f,
+                "Expected locked scale=${ssiv.scale} to be 2x minScale=${ssiv.minScale}",
+            )
+        } finally {
+            pageView.recycle()
+            canvasBitmap.recycle()
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
     fun animatedDrawableStoppedClosedAndClearedOnRecycleSwapAndRebind() {
         class CloseableAnimatableDrawable : Drawable(), Animatable, Closeable {
             var running = false

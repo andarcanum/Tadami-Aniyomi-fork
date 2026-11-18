@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.net.Uri
+import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder
 import com.davemorrissey.labs.subscaleview.provider.AssetInputProvider
 import com.davemorrissey.labs.subscaleview.provider.InputProvider
 import com.davemorrissey.labs.subscaleview.provider.OpenStreamProvider
@@ -33,6 +34,8 @@ class ImageSource {
         private set
     var isCached = false
         private set
+    var regionDecoderFactory: (() -> ImageRegionDecoder)? = null
+        private set
 
     private constructor(bitmap: Bitmap, cached: Boolean) {
         this.bitmap = bitmap
@@ -57,6 +60,15 @@ class ImageSource {
     fun region(sRegion: Rect?): ImageSource {
         this.sRegion = sRegion
         setInvariants()
+        return this
+    }
+
+    /**
+     * Override the [ImageRegionDecoder] factory for this specific image source without mutating
+     * the recycled view's default decoder configuration.
+     */
+    fun decoderFactory(factory: (() -> ImageRegionDecoder)?): ImageSource {
+        this.regionDecoderFactory = factory
         return this
     }
 
