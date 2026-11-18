@@ -98,6 +98,7 @@ internal class HomeHubScreenModel(
     private val getEnabledAnimeSources: GetEnabledAnimeSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: AnimeSourceManager by injectLazy()
+    private val animeExtensionManager: AnimeExtensionManager by injectLazy()
     private val userProfileManager: tachiyomi.data.achievement.UserProfileManager by injectLazy()
     private val streakChecker: tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker by injectLazy()
     private val activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository by injectLazy()
@@ -423,8 +424,6 @@ internal class HomeHubScreenModel(
             ),
         )
     }
-
-    private val animeExtensionManager: AnimeExtensionManager by injectLazy()
 
     fun getLastUsedAnimeSourceId(): Long = sourcePreferences.lastUsedAnimeSource().get()
 
