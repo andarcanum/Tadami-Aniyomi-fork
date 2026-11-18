@@ -2317,6 +2317,7 @@
     <string name="pref_discovery_group_trend">Season and trends row</string>
     <string name="pref_discovery_row_trend">Enable row</string>
     <string name="pref_discovery_trend_season">Anime season</string>
+    <string name="pref_discovery_trend_season_summary">%1$s (Anime only)</string>
     <string name="pref_discovery_trend_season_current">Current</string>
     <string name="pref_discovery_trend_season_next">Next</string>
     <string name="pref_discovery_trend_season_both">Both</string>
@@ -2354,6 +2355,7 @@
     <string name="pref_discovery_genre_filters">Genre filters</string>
     <string name="pref_discovery_genre_filters_summary">Ignored · priority · required</string>
     <string name="pref_discovery_genre_filters_summary_per_media">Configured separately for Anime, Manga, and Novel</string>
+    <string name="pref_discovery_genre_filters_summary_counts">Active — Anime: %1$d · Manga: %2$d · Novel: %3$d</string>
     <string name="pref_discovery_genre_media_label">Section</string>
     <string name="pref_discovery_genre_mode_label">How to use genre</string>
     <string name="pref_discovery_genre_mode_ignored">Ignored</string>

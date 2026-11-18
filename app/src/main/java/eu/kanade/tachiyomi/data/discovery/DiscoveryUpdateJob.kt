@@ -331,6 +331,35 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
 
         fun manualWorkTag(mediaType: DiscoveryMediaType): String = manualWorkName(mediaType)
 
+        private const val TAG_BOOTSTRAP = "DiscoveryUpdateBootstrap"
+
+        fun bootstrapWorkName(mediaType: DiscoveryMediaType): String = "$TAG_BOOTSTRAP:${mediaType.key}"
+
+        /**
+         * Лёгкий фоновый bootstrap первого показа: без TAG_MANUAL, без foreground-уведомления
+         * и без 20-страничного обхода; KEEP не перезапускает уже идущую генерацию.
+         */
+        fun bootstrap(context: Context, mediaType: DiscoveryMediaType): UUID? {
+            val preferences = Injekt.get<DiscoveryPreferences>()
+            if (!preferences.discoveryEnabled().get()) return null
+            val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
+                .addTag(TAG_BOOTSTRAP)
+                .addTag(bootstrapWorkName(mediaType))
+                .setInputData(Data.Builder().putString(KEY_TARGET_MEDIA_TYPE, mediaType.key).build())
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(networkType(preferences))
+                        .build(),
+                )
+                .build()
+            context.workManager.enqueueUniqueWork(
+                bootstrapWorkName(mediaType),
+                ExistingWorkPolicy.KEEP,
+                request,
+            )
+            return request.id
+        }
+
         fun refreshNow(context: Context, mediaType: DiscoveryMediaType? = null): Map<DiscoveryMediaType, UUID> {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return emptyMap()

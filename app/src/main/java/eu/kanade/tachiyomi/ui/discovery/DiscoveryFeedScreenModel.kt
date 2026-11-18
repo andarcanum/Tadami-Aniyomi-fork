@@ -42,11 +42,11 @@ import kotlinx.coroutines.withContext
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
-import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
 import tachiyomi.domain.discovery.model.identityKeys
 import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
@@ -194,26 +194,79 @@ internal fun groupFeedRows(items: List<DiscoverySuggestion>): Map<DiscoveryRowTy
     items.groupBy { it.rowType }
         .toSortedMap(compareBy { it.ordinal })
 
-internal fun DiscoverySuggestion.toSuggestionItem(): SuggestionItem = SuggestionItem(
+internal fun feedTabPool(
+    state: DiscoveryFeedUiState,
+    tab: FeedSignalTab,
+    provider: String?,
+    policy: DiscoverySourcePolicy? = null,
+): List<DiscoverySuggestion> {
+    val tabItems = itemsForTab(state, tab)
+    val allowed = if (policy != null) tabItems.filter(policy::allows) else tabItems
+    return filterByProvider(allowed, provider)
+}
+
+internal fun sliceFeedForGenre(
+    state: DiscoveryFeedUiState,
+    tab: FeedSignalTab,
+    provider: String?,
+    selectedGenre: String?,
+    policy: DiscoverySourcePolicy? = null,
+): List<DiscoverySuggestion> {
+    if (selectedGenre != null) {
+        val fullPool = feedTabPool(state, tab, provider, policy)
+        return sliceFeedWindow(filterDiscoveryFeed(fullPool, selectedGenre), offset = 0, windowSize = FEED_WINDOW_SIZE)
+    }
+    val window = state.activeWindows[tab] ?: run {
+        val pool = itemsForTab(state, tab)
+        val offset = state.tabOffsets[tab] ?: 0
+        sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
+    }
+    val allowed = if (policy != null) window.filter(policy::allows) else window
+    return filterByProvider(allowed, provider)
+}
+
+internal fun mapDiscoveryProviderToReason(provider: String): SuggestionReason = when (provider.lowercase()) {
+    "anilist", "anilist_trend" -> SuggestionReason.EXTERNAL_ANILIST
+    "myanimelist", "mal", "jikan", "jikan_trend" -> SuggestionReason.EXTERNAL_MAL
+    "mangaupdates" -> SuggestionReason.EXTERNAL_MU
+    "novelupdates" -> SuggestionReason.EXTERNAL_NU
+    "shikimori", "shikimori_trend" -> SuggestionReason.EXTERNAL_SHIKIMORI
+    else -> SuggestionReason.SEARCH_TITLE
+}
+
+internal fun buildDiscoverySuggestionItem(
+    title: String,
+    trustedAliases: Set<String>,
+    coverUrl: String?,
+    provider: String,
+    mediaType: DiscoveryMediaType,
+): SuggestionItem {
+    val queries = (listOf(title) + trustedAliases)
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+    return SuggestionItem(
+        title = title,
+        searchQueries = queries.ifEmpty { listOf(title) },
+        thumbnailUrl = coverUrl,
+        providerName = provider,
+        providerUrl = "",
+        providerId = null,
+        mediaType = when (mediaType) {
+            DiscoveryMediaType.ANIME -> SuggestionMediaType.ANIME
+            DiscoveryMediaType.MANGA -> SuggestionMediaType.MANGA
+            DiscoveryMediaType.NOVEL -> SuggestionMediaType.NOVEL
+        },
+        reason = mapDiscoveryProviderToReason(provider),
+    )
+}
+
+internal fun DiscoverySuggestion.toSuggestionItem(): SuggestionItem = buildDiscoverySuggestionItem(
     title = title,
-    searchQueries = listOf(title),
-    thumbnailUrl = coverUrl,
-    providerName = provider,
-    providerUrl = "",
-    providerId = null,
-    mediaType = when (mediaType) {
-        DiscoveryMediaType.ANIME -> SuggestionMediaType.ANIME
-        DiscoveryMediaType.MANGA -> SuggestionMediaType.MANGA
-        DiscoveryMediaType.NOVEL -> SuggestionMediaType.NOVEL
-    },
-    reason = when (provider.lowercase()) {
-        "anilist" -> SuggestionReason.EXTERNAL_ANILIST
-        "myanimelist", "mal" -> SuggestionReason.EXTERNAL_MAL
-        "mangaupdates" -> SuggestionReason.EXTERNAL_MU
-        "novelupdates" -> SuggestionReason.EXTERNAL_NU
-        "shikimori" -> SuggestionReason.EXTERNAL_SHIKIMORI
-        else -> SuggestionReason.SEARCH_TITLE
-    },
+    trustedAliases = trustedAliases,
+    coverUrl = coverUrl,
+    provider = provider,
+    mediaType = mediaType,
 )
 
 /** SWR-прогрев globalMetaCache: шторка карточки открывается без спиннера. */
@@ -333,14 +386,9 @@ internal class DiscoveryFeedScreenModel(
         observeJob?.cancel()
         observeJob = screenModelScope.launchIO {
             combine(
-                repository.subscribe(mediaType),
+                repository.observePublication(mediaType),
                 refreshingFlow(),
-                // «Просмотрено/прочитано»: мгновенно уходит из ленты (в т.ч. инкогнито).
-                combine(
-                    repository.subscribeHidden(mediaType),
-                    repository.subscribeConsumed(mediaType),
-                    repository.observeTitleMemory(mediaType),
-                ) { hidden, consumed, memory -> Triple(hidden, consumed, memory) },
+                repository.subscribeHidden(mediaType),
                 preferences.lastFailedRows(mediaType).changes(),
                 combine(
                     repository.subscribeBlacklist(mediaType),
@@ -352,19 +400,17 @@ internal class DiscoveryFeedScreenModel(
                         blacklistedTags = blacklist,
                     ) to sourcePolicy
                 },
-            ) { all, refreshing, exclusions, failedCsv, policyPair ->
+            ) { snapshot, refreshing, hidden, failedCsv, policyPair ->
                 FeedSources(
-                    all = all,
+                    snapshot = snapshot,
                     refreshing = refreshing,
-                    hidden = exclusions.first,
+                    hidden = hidden,
                     failedCsv = failedCsv,
                     policy = policyPair.first,
                     sourcePolicy = policyPair.second,
-                    consumed = exclusions.second,
-                    memory = exclusions.third,
                 )
             }
-                .collectLatest { (all, refreshing, hidden, failedCsv, policy, sources, consumed, memory) ->
+                .collectLatest { (snapshot, refreshing, hidden, failedCsv, policy, sources) ->
                     val priorityChanged = lastObservedPriorityGenres != null &&
                         lastObservedPriorityGenres != policy.priorityGenres
                     lastObservedPriorityGenres = policy.priorityGenres
@@ -372,15 +418,7 @@ internal class DiscoveryFeedScreenModel(
                         lastObservedInventoryComplete == false && sources.inventoryComplete
                     lastObservedInventoryComplete = sources.inventoryComplete
                     val resetWindows = priorityChanged || inventoryJustCompleted
-                    // Кросс-рядовой дедуп: упавший ряд живёт старым кэшем и может
-                    // содержать тайтлы свежих рядов — приоритет у rowType.ordinal.
-                    val eligible = filterFeedVisibleByExclusions(
-                        items = all,
-                        mediaType = mediaType,
-                        hidden = hidden,
-                        consumed = consumed,
-                        memory = memory,
-                    )
+                    val eligible = snapshot.eligibleSuggestions
                     val visible = projectCandidates(eligible, policy, sources)
                     val rows = groupFeedRows(visible)
                     // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
@@ -434,7 +472,8 @@ internal class DiscoveryFeedScreenModel(
                             rows = liveRows,
                             mix = liveMix,
                             hidden = hidden,
-                            lastUpdatedAt = all.maxOfOrNull { s -> s.createdAt },
+                            lastUpdatedAt = snapshot.suggestions.maxOfOrNull { s -> s.createdAt }
+                                ?: snapshot.committedAt.takeIf { it > 0L },
                             isRefreshing = refreshing,
                             isLoading = liveMix.isEmpty() && !sources.inventoryComplete,
                             failedRows = parseFailedRows(failedCsv),
@@ -481,14 +520,12 @@ internal class DiscoveryFeedScreenModel(
     }
 
     private data class FeedSources(
-        val all: List<DiscoverySuggestion>,
+        val snapshot: DiscoveryPublicationSnapshot,
         val refreshing: Boolean,
         val hidden: Set<String>,
         val failedCsv: String,
         val policy: DiscoveryCandidatePolicy,
         val sourcePolicy: DiscoverySourcePolicy,
-        val consumed: Set<String>,
-        val memory: List<DiscoveryTitleMemory>,
     )
 
     private fun DiscoverySuggestion.toRowItem() = DiscoveryRowItem(
@@ -509,19 +546,32 @@ internal class DiscoveryFeedScreenModel(
 
     fun refreshNow(): Long {
         if (state.value.isRefreshing) return 0L
+        val media = state.value.mediaType
+        val now = System.currentTimeMillis()
+        val remaining = remainingCooldownSeconds(preferences.manualRefreshAt(media).get(), now)
+        if (remaining > 0L) return remaining
+        if (!preferences.tryStartManualRefresh(media, now)) {
+            return remainingCooldownSeconds(preferences.manualRefreshAt(media).get(), now).coerceAtLeast(1L)
+        }
         mutableState.update { it.copy(isRefreshing = true) }
-        DiscoveryUpdateJob.refreshNow(context, state.value.mediaType)
+        DiscoveryUpdateJob.refreshNow(context, media)
         return 0L
     }
 
-    fun displayedItems(tab: FeedSignalTab, provider: String?): List<DiscoverySuggestion> {
-        val window = state.value.activeWindows[tab] ?: run {
-            val pool = itemsForTab(state.value, tab)
-            val offset = state.value.tabOffsets[tab] ?: 0
-            sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
-        }
-        return filterByProvider(window.filter(sourcePolicies.current(state.value.mediaType)::allows), provider)
-    }
+    fun availableGenres(tab: FeedSignalTab, provider: String?): List<String> =
+        extractAvailableGenres(feedTabPool(state.value, tab, provider, sourcePolicies.current(state.value.mediaType)))
+
+    fun displayedItems(
+        tab: FeedSignalTab,
+        provider: String?,
+        selectedGenre: String? = null,
+    ): List<DiscoverySuggestion> = sliceFeedForGenre(
+        state = state.value,
+        tab = tab,
+        provider = provider,
+        selectedGenre = selectedGenre,
+        policy = sourcePolicies.current(state.value.mediaType),
+    )
 
     fun onTabSelected(tab: FeedSignalTab) {
         val currentState = state.value
@@ -536,10 +586,12 @@ internal class DiscoveryFeedScreenModel(
     fun rotateOrRefreshFeed(currentTab: FeedSignalTab): Long {
         val currentState = state.value
         if (currentState.isRefreshing) return 0L
+        val cooldown = refreshNow()
+        if (cooldown > 0L) return cooldown
         // Full screen: every accepted tap requests a fresh source pool; local
         // window rotation is not a substitute for refresh.
         mutableState.update { it.copy(tabOffsets = emptyMap(), activeWindows = emptyMap()) }
-        return refreshNow()
+        return 0L
     }
 
     private suspend fun backfillRemovedItem(removed: DiscoverySuggestion, tab: FeedSignalTab) {
@@ -592,7 +644,6 @@ internal class DiscoveryFeedScreenModel(
             backfillRemovedItem(item, activeTab)
             // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
             TasteSignalRecorder.record(repository, item, DiscoverySignalType.HIDE)
-            repository.hide(item.mediaType, item.cleanTitle)
         }
         // Register Hide before exposing its Undo action.
         mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
@@ -752,42 +803,4 @@ internal class DiscoveryFeedScreenModel(
         networkToLocalNovel = networkToLocalNovel,
         sourcePolicyProvider = sourcePolicies,
     )
-}
-
-private fun filterFeedVisibleByExclusions(
-    items: List<DiscoverySuggestion>,
-    mediaType: DiscoveryMediaType,
-    hidden: Set<String>,
-    consumed: Set<String>,
-    memory: List<DiscoveryTitleMemory>,
-    now: Long = System.currentTimeMillis(),
-): List<DiscoverySuggestion> {
-    if (items.isEmpty()) return emptyList()
-    val excludedIdentityKeys = HashSet<String>(hidden.size + consumed.size + memory.size * 2)
-    val excludedLookupKeys = HashSet<String>(hidden.size + consumed.size + memory.size)
-    hidden.forEach { title ->
-        excludedIdentityKeys += title
-        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
-    }
-    consumed.forEach { title ->
-        excludedIdentityKeys += title
-        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
-    }
-    memory.forEach { record ->
-        val excluded = record.opened.active ||
-            record.started.active ||
-            record.consumed.active ||
-            record.blockedUntil > now
-        if (excluded) {
-            excludedIdentityKeys += record.identity.identityKey
-            excludedIdentityKeys += record.identity.trustedAliases
-            excludedLookupKeys += legacyDiscoveryKey(record.identity.mediaType, record.identity.primaryCleanTitle)
-        }
-    }
-    if (excludedIdentityKeys.isEmpty() && excludedLookupKeys.isEmpty()) return items
-    return items.filterNot { item ->
-        item.cleanTitle in excludedIdentityKeys ||
-            legacyDiscoveryKey(mediaType, item.cleanTitle) in excludedLookupKeys ||
-            item.identityKeys().any { it in excludedIdentityKeys }
-    }
 }

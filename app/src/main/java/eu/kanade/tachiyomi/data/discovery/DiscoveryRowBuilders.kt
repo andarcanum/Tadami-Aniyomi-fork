@@ -103,6 +103,22 @@ internal fun selectNativeLikeQueryGenres(
 }
 
 /** Кандидаты LIKE-сида: resolver дополняет сырой тайтл оригиналом из описания и нормализованными вариантами. */
+internal fun parseDiscoveryReleaseStatus(
+    raw: String?,
+): tachiyomi.domain.discovery.model.DiscoveryReleaseStatus? {
+    val norm = raw?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+    return when {
+        norm in setOf("releasing", "ongoing") -> tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.ONGOING
+        norm in setOf("finished", "released", "completed") ->
+            tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.FINISHED
+        norm in setOf("not_yet_released", "anons", "announced") ->
+            tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.ANONS
+        norm in setOf("hiatus", "on_hiatus", "paused") ->
+            tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.PAUSED
+        else -> tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.fromKey(norm)
+    }
+}
+
 internal fun likeSeedCandidateTitles(seed: DiscoverySeedInput): List<String> =
     (SuggestionTitleResolver.resolveCandidates(seed.title, seed.description) + seed.altTitles)
         .filter { it.isNotBlank() }
@@ -173,15 +189,24 @@ class DiscoveryLikeRowBuilder(
                             seedTitle = feedbackSeed.title,
                             seedGenres = feedbackSeed.genres,
                             items = result.items.map { item ->
+                                val cleanTitle = normalizeDiscoveryTitle(item.title)
+                                val altCleanTitles = item.searchQueries
+                                    .asSequence()
+                                    .map(::normalizeDiscoveryTitle)
+                                    .filter { it.isNotBlank() && it != cleanTitle }
+                                    .distinct()
+                                    .toList()
                                 DiscoveryRowItem(
                                     title = item.title,
-                                    cleanTitle = normalizeDiscoveryTitle(item.title),
+                                    cleanTitle = cleanTitle,
                                     coverUrl = item.thumbnailUrl,
                                     reason = null,
                                     seedTitle = feedbackSeed.title,
                                     provider = item.providerName,
                                     score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
                                     genres = item.genres,
+                                    altCleanTitles = altCleanTitles,
+                                    releaseStatus = parseDiscoveryReleaseStatus(item.releaseStatus),
                                 )
                             },
                         ),
@@ -219,9 +244,16 @@ class DiscoveryLikeRowBuilder(
                             seedTitle = seed.title,
                             seedGenres = seed.genres,
                             items = result.items.map { item ->
+                                val cleanTitle = normalizeDiscoveryTitle(item.title)
+                                val altCleanTitles = item.searchQueries
+                                    .asSequence()
+                                    .map(::normalizeDiscoveryTitle)
+                                    .filter { it.isNotBlank() && it != cleanTitle }
+                                    .distinct()
+                                    .toList()
                                 DiscoveryRowItem(
                                     title = item.title,
-                                    cleanTitle = normalizeDiscoveryTitle(item.title),
+                                    cleanTitle = cleanTitle,
                                     coverUrl = item.thumbnailUrl,
                                     // Локализованный текст «Похоже на „X“» композится на рендере из seedTitle.
                                     reason = null,
@@ -229,6 +261,8 @@ class DiscoveryLikeRowBuilder(
                                     provider = item.providerName,
                                     score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
                                     genres = item.genres,
+                                    altCleanTitles = altCleanTitles,
+                                    releaseStatus = parseDiscoveryReleaseStatus(item.releaseStatus),
                                 )
                             },
                         ),
@@ -523,8 +557,11 @@ class DiscoveryTrendRowBuilder(
 ) : DiscoveryRowBuilder {
 
     override val rowType = DiscoveryRowType.TREND
+    override var isDegraded: Boolean = false
+        private set
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+        isDegraded = false
         val effectiveSort = when (context.mediaType) {
             DiscoveryMediaType.ANIME -> sortProvider()
             // Для манги и новелл запрашиваем реальные тренды (TRENDING_DESC),
@@ -555,7 +592,7 @@ class DiscoveryTrendRowBuilder(
             emptyList()
         }
 
-        val fromTrending = runCatchingUnlessCancelled {
+        val trendingResult = runCatchingUnlessCancelled {
             trending.fetch(
                 mediaType = context.mediaType,
                 season = seasonProvider(),
@@ -563,7 +600,8 @@ class DiscoveryTrendRowBuilder(
                 page = context.pageOffset,
                 releaseStatuses = context.releaseStatuses,
             )
-        }.getOrNull().orEmpty()
+        }
+        val fromTrending = trendingResult.getOrNull().orEmpty()
             .map { item ->
                 DiscoveryRowItem(
                     title = item.title,
@@ -580,6 +618,7 @@ class DiscoveryTrendRowBuilder(
                     provider = item.provider,
                     score = 0.0,
                     genres = item.genres,
+                    releaseStatus = parseDiscoveryReleaseStatus(item.releaseStatus),
                 )
             }.let { items -> context.admittedCandidates(rowType, items) }
 
@@ -596,6 +635,7 @@ class DiscoveryTrendRowBuilder(
             val combinedNovels = (fromSource + fromTrending).distinctBy { it.cleanTitle }
             val filteredNovels = context.admittedCandidates(rowType, combinedNovels)
             if (filteredNovels.isNotEmpty()) {
+                if (trendingResult.isFailure) isDegraded = true
                 return filteredNovels
             }
         } else {
@@ -622,11 +662,13 @@ class DiscoveryTrendRowBuilder(
                     hydrateLatestIfPermitted(items, context.mediaType, preferredSourceId, context.verificationBudget)
                 }.let { items -> context.admittedCandidates(rowType, items) }
                 if (fallbackSource.isNotEmpty()) {
+                    if (trendingResult.isFailure) isDegraded = true
                     return fallbackSource
                 }
             }
         }
 
+        trendingResult.exceptionOrNull()?.let { throw it }
         return emptyList()
     }
 

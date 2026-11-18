@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.data.suggestions.sources
 
+import eu.kanade.tachiyomi.data.discovery.CompositeTrendingSource
+import eu.kanade.tachiyomi.data.discovery.DiscoveryMeta
+import eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCache
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
@@ -12,12 +15,19 @@ import eu.kanade.tachiyomi.network.parseAs
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
+import org.jsoup.Jsoup
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+private val defaultNuMetaSource: CompositeTrendingSource by lazy { CompositeTrendingSource() }
 
 /**
  * Source backed by NovelUpdates.com series metadata.
@@ -36,6 +46,9 @@ import uy.kohesive.injekt.api.get
  */
 class NovelUpdatesSimilarSource(
     override val mediaType: SuggestionMediaType,
+    private val metaResolver: suspend (String) -> DiscoveryMeta? = { title ->
+        runCatchingUnlessCancelled { defaultNuMetaSource.fetchMeta(title, DiscoveryMediaType.NOVEL) }.getOrNull()
+    },
 ) : RecommendationPagingSource() {
 
     override val name: String = "NovelUpdates"
@@ -102,18 +115,31 @@ class NovelUpdatesSimilarSource(
             val recommendations = fetchRecommendations(bestMatch.id)
                 .take(8)
 
+            val metaPermits = Semaphore(3)
             recommendations.map { rec ->
-                SuggestionItem(
-                    title = rec.title,
-                    searchQueries = listOf(rec.title),
-                    thumbnailUrl = null,
-                    providerName = name,
-                    providerUrl = "https://www.novelupdates.com/series/${bestMatch.id}/",
-                    providerId = "${bestMatch.id}:${rec.id}",
-                    mediaType = mediaType,
-                    reason = SuggestionReason.EXTERNAL_NU,
-                )
-            }
+                async {
+                    val meta = metaPermits.withPermit {
+                        withTimeoutOrNull(3_500L) {
+                            runCatchingUnlessCancelled { metaResolver(rec.title) }.getOrNull()
+                        }
+                    }
+                    val queries = listOfNotNull(rec.title, meta?.altTitle)
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .distinct()
+                    SuggestionItem(
+                        title = rec.title,
+                        searchQueries = queries.ifEmpty { listOf(rec.title) },
+                        thumbnailUrl = meta?.coverUrl,
+                        providerName = name,
+                        providerUrl = "https://www.novelupdates.com/series/${rec.id}/",
+                        providerId = "${bestMatch.id}:${rec.id}",
+                        mediaType = mediaType,
+                        reason = SuggestionReason.EXTERNAL_NU,
+                        genres = meta?.genres.orEmpty(),
+                    )
+                }
+            }.awaitAll()
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -187,20 +213,47 @@ class NovelUpdatesSimilarSource(
             .build()
         val request = GET(url, headers = headers)
         val body = client.newCall(request).awaitSuccess().body.string()
-        // NovelUpdates renders related series as <a ...>title</a> entries
-        // inside the "Series Recommendations" section. We extract anything
-        // that looks like /series/<slug>/ links after the heading.
-        val start = body.indexOf("Recommendations").takeIf { it >= 0 } ?: 0
-        val recRegex = Regex(
-            """<a[^>]+href="https?://www\.novelupdates\.com/series/([^/"]+)/?"[^>]*>([^<]+)</a>""",
-        )
-        return recRegex.findAll(body, start)
-            .map { match ->
-                NuRecommendation(id = match.groupValues[1], title = match.groupValues[2].trim())
+        return parseRecommendationsHtml(body, seriesSlug)
+    }
+
+    internal fun parseRecommendationsHtml(body: String, seriesSlug: String): List<NuRecommendation> {
+        if (body.isBlank()) return emptyList()
+        val doc = Jsoup.parse(body)
+        val recHeading = doc.select("h1, h2, h3, h4, h5, h6")
+            .firstOrNull { el ->
+                val text = el.text().trim()
+                text.equals("Recommendations", ignoreCase = true) ||
+                    text.equals("Series Recommendations", ignoreCase = true)
             }
-            .filter { it.id.isNotEmpty() && it.title.isNotEmpty() && it.id != seriesSlug }
-            .distinctBy { it.id }
-            .toList()
+        val links = if (recHeading != null) {
+            buildList {
+                var sibling = recHeading.nextElementSibling()
+                while (sibling != null) {
+                    val tag = sibling.tagName().lowercase()
+                    if (tag in HEADING_TAGS) break
+                    if (tag == "a") {
+                        add(sibling)
+                    } else {
+                        addAll(sibling.select("a[href]"))
+                    }
+                    sibling = sibling.nextElementSibling()
+                }
+            }
+        } else {
+            emptyList()
+        }
+        val slugRegex = Regex("""https?://(?:www\.)?novelupdates\.com/series/([^/?#"]+)/?""")
+        val extracted = links.mapNotNull { link ->
+            val href = link.attr("href")
+            val slug = slugRegex.find(href)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+            val title = link.text().trim()
+            if (slug.isEmpty() || title.isEmpty() || slug == seriesSlug) {
+                null
+            } else {
+                NuRecommendation(id = slug, title = title)
+            }
+        }
+        return extracted.distinctBy { it.id }
     }
 
     @Serializable
@@ -214,5 +267,9 @@ class NovelUpdatesSimilarSource(
 
     private data class NuSeriesStub(val id: String, val title: String)
 
-    private data class NuRecommendation(val id: String, val title: String)
+    internal data class NuRecommendation(val id: String, val title: String)
+
+    private companion object {
+        val HEADING_TAGS = setOf("h1", "h2", "h3", "h4", "h5", "h6")
+    }
 }

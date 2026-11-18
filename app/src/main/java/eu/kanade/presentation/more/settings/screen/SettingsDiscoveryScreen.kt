@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -87,6 +88,13 @@ import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -100,6 +108,35 @@ import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
+
+private fun countGenreCsvEntries(csv: String): Int {
+    val (canonical, raw) = parseGenreFilterCsv(csv)
+    return canonical.size + raw.mapNotNullTo(HashSet()) { it.trim().takeIf(String::isNotEmpty) }.size
+}
+
+@Composable
+private fun rememberActiveGenreFilterCounts(
+    discoveryPreferences: DiscoveryPreferences,
+): Map<DiscoveryMediaType, Int> {
+    val flow = remember(discoveryPreferences) {
+        val perMediaFlows = DiscoveryMediaType.entries.map { media ->
+            combine(
+                discoveryPreferences.priorityGenres(media).changes(),
+                discoveryPreferences.requiredGenres(media).changes(),
+                discoveryPreferences.ignoredGenres(media).changes(),
+            ) { priority, required, ignored ->
+                media to (
+                    countGenreCsvEntries(priority) +
+                        countGenreCsvEntries(required) +
+                        countGenreCsvEntries(ignored)
+                    )
+            }
+        }
+        combine(perMediaFlows) { pairs -> pairs.toMap() }
+            .flowOn(Dispatchers.Default)
+    }
+    return flow.collectAsStateWithLifecycle(initialValue = emptyMap()).value
+}
 
 internal fun changeDiscoveryProviderSetting(
     context: android.content.Context,
@@ -155,11 +192,20 @@ object SettingsDiscoveryScreen : SearchableSettings {
         var tasteSignalCount by remember { mutableStateOf(0) }
         var tasteTopGenres by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
         val reloadTaste: suspend () -> Unit = {
-            val allSignals = DiscoveryMediaType.entries.flatMap { repository.getSignals(it) }
-            tasteSignalCount = allSignals.size
-            tasteTopGenres = eu.kanade.tachiyomi.data.discovery.foldLearnedTasteProfile(allSignals)
-                .genres.filter { it.second > 0.0 }
-                .take(5)
+            val (count, topGenres) = withContext(Dispatchers.IO) {
+                val allSignals = coroutineScope {
+                    DiscoveryMediaType.entries.map { media ->
+                        async { repository.getSignals(media) }
+                    }.awaitAll().flatten()
+                }
+                val count = allSignals.count { it.signalType.weight != 0.0 }
+                val topGenres = eu.kanade.tachiyomi.data.discovery.foldLearnedTasteProfile(allSignals)
+                    .genres.filter { it.second > 0.0 }
+                    .take(5)
+                count to topGenres
+            }
+            tasteSignalCount = count
+            tasteTopGenres = topGenres
         }
         LaunchedEffect(Unit) { reloadTaste() }
 
@@ -187,6 +233,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
         val seedActive14 by discoveryPreferences.seedActive14().collectAsStateWithLifecycle()
         val homeHeroMode by discoveryPreferences.homeHeroMode().collectAsStateWithLifecycle()
         val externalProviders by discoveryPreferences.externalProvidersEnabled().collectAsStateWithLifecycle()
+        val releaseStatusCsv by discoveryPreferences.releaseStatusFilter().collectAsStateWithLifecycle()
+        val genreCountsByMedia = rememberActiveGenreFilterCounts(discoveryPreferences)
         val isCollageMode = homeHeroMode == "collage"
         // Auto резолвится в Stage при включённом «Для тебя» — stage-поднастройки видны и в авто-режиме.
         val isStageMode = homeHeroMode == "stage" || (homeHeroMode == "auto" && enabled)
@@ -239,9 +287,9 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         onClick = {
                             showResetTasteDialog = false
                             scope.launchIO {
-                                // Сброс только выученного вкуса: кэш ленты, hidden и
-                                // блэклист не трогаются — «вкусы» и «лента» независимы.
-                                repository.clearAllSignals()
+                                // Сброс только выученного вкуса: consumed-исключения, кэш ленты,
+                                // hidden и блэклист не трогаются — «вкусы» и «лента» независимы.
+                                repository.clearTaste(null)
                                 reloadTaste()
                             }
                         },
@@ -332,7 +380,9 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         label = stringResource(AYMR.strings.pref_discovery_consumed_reset),
                         onClick = {
                             scope.launchIO {
-                                consumedSignals.forEach { repository.removeSignal(it.mediaType, it.cleanTitle) }
+                                consumedSignals.forEach {
+                                    repository.clearConsumedSignal(it.mediaType, it.cleanTitle, it.identityKey)
+                                }
                                 reloadConsumed()
                                 reloadTaste()
                             }
@@ -358,7 +408,11 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                     .clickable {
                                         scope.launchIO {
                                             // Undo consumed: тайтл снова может попасть в ленту.
-                                            repository.removeSignal(signal.mediaType, signal.cleanTitle)
+                                            repository.clearConsumedSignal(
+                                                signal.mediaType,
+                                                signal.cleanTitle,
+                                                signal.identityKey,
+                                            )
                                             reloadConsumed()
                                             reloadTaste()
                                         }
@@ -679,7 +733,11 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             "both" to stringResource(AYMR.strings.pref_discovery_trend_season_both),
                         ),
                         title = stringResource(AYMR.strings.pref_discovery_trend_season),
-                        subtitleProvider = { value, entries -> entries[value] },
+                        subtitleProvider = { value, entries ->
+                            entries[value]?.let {
+                                context.contextStringResource(AYMR.strings.pref_discovery_trend_season_summary, it)
+                            }
+                        },
                         enabled = enabled && rowTrend && externalProviders,
                     ),
                     Preference.PreferenceItem.ListPreference(
@@ -731,9 +789,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             val anonsLabel = stringResource(AYMR.strings.pref_discovery_release_status_anons)
                             val pausedLabel = stringResource(AYMR.strings.pref_discovery_release_status_paused)
                             val allLabel = stringResource(AYMR.strings.pref_discovery_release_status_summary_all)
-                            val statuses = DiscoveryReleaseStatus.parseCsv(
-                                discoveryPreferences.releaseStatusFilter().get(),
-                            )
+                            val statuses = DiscoveryReleaseStatus.parseCsv(releaseStatusCsv)
                             if (statuses.isEmpty()) {
                                 allLabel
                             } else {
@@ -762,7 +818,16 @@ object SettingsDiscoveryScreen : SearchableSettings {
                     // V3: жанры подборки — приоритетные/обязательные.
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.pref_discovery_genre_filters),
-                        subtitle = stringResource(AYMR.strings.pref_discovery_genre_filters_summary_per_media),
+                        subtitle = if (genreCountsByMedia.values.sum() == 0) {
+                            stringResource(AYMR.strings.pref_discovery_genre_filters_summary_per_media)
+                        } else {
+                            stringResource(
+                                AYMR.strings.pref_discovery_genre_filters_summary_counts,
+                                genreCountsByMedia[DiscoveryMediaType.ANIME] ?: 0,
+                                genreCountsByMedia[DiscoveryMediaType.MANGA] ?: 0,
+                                genreCountsByMedia[DiscoveryMediaType.NOVEL] ?: 0,
+                            )
+                        },
                         onClick = { showGenreDialog = true },
                         enabled = enabled,
                     ),

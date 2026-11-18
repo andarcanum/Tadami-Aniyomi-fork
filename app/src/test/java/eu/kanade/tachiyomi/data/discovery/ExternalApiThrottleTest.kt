@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import io.kotest.matchers.shouldBe
-import org.junit.Test
+import org.junit.jupiter.api.Test
 
 class ExternalApiThrottleTest {
 
@@ -21,4 +21,14 @@ class ExternalApiThrottleTest {
         // MangaUpdates: лимиты не опубликованы — консервативно
         (ExternalApiThrottle.Api.MANGAUPDATES.minIntervalMs >= 250L) shouldBe true
     }
+
+    @Test
+    fun `acquire spaces consecutive calls by single minIntervalMs rather than doubling`(): Unit =
+        kotlinx.coroutines.runBlocking {
+            val start = System.currentTimeMillis()
+            ExternalApiThrottle.acquire(ExternalApiThrottle.Api.MANGAUPDATES)
+            ExternalApiThrottle.acquire(ExternalApiThrottle.Api.MANGAUPDATES)
+            val elapsed = System.currentTimeMillis() - start
+            (elapsed < ExternalApiThrottle.Api.MANGAUPDATES.minIntervalMs * 2 - 50L) shouldBe true
+        }
 }

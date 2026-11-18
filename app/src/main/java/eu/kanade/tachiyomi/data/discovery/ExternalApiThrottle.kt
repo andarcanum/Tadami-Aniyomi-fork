@@ -34,7 +34,7 @@ object ExternalApiThrottle {
             val now = System.currentTimeMillis()
             val last = lastCallAt.getValue(api)
             val wait = nextWaitMs(last, now, api.minIntervalMs)
-            lastCallAt[api] = maxOf(now, last) + api.minIntervalMs
+            lastCallAt[api] = now + wait
             wait
         }
         if (waitMs > 0L) delay(waitMs)

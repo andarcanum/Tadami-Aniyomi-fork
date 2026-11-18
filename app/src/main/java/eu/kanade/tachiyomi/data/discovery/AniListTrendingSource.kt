@@ -15,6 +15,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
@@ -56,6 +57,31 @@ enum class TrendSort(val anilist: String) {
     TRENDING("TRENDING_DESC"),
 }
 
+internal val ANILIST_OFFICIAL_GENRES: Set<String> = setOf(
+    "Action",
+    "Adventure",
+    "Comedy",
+    "Drama",
+    "Ecchi",
+    "Fantasy",
+    "Hentai",
+    "Horror",
+    "Mahou Shoujo",
+    "Mecha",
+    "Music",
+    "Mystery",
+    "Psychological",
+    "Romance",
+    "Sci-Fi",
+    "Slice of Life",
+    "Sports",
+    "Supernatural",
+    "Thriller",
+)
+
+private val ANILIST_OFFICIAL_GENRE_BY_LOWER: Map<String, String> =
+    ANILIST_OFFICIAL_GENRES.associateBy { it.lowercase() }
+
 /**
  * AniList genre_in матчится со своей фиксированной англ. таксономией: жанры профиля
  * (часто русские) нужно переводить. Резолв через GenreOntology (любой язык → canonical
@@ -79,6 +105,19 @@ internal fun anilistGenreVariables(genres: List<String>): List<String> {
         }
     }
     return out.toList().take(12)
+}
+
+internal fun resolveAnilistOfficialGenres(genres: List<String>): List<String> {
+    val out = LinkedHashSet<String>()
+    genres.forEach { raw ->
+        ANILIST_OFFICIAL_GENRE_BY_LOWER[raw.trim().lowercase()]?.let { out += it }
+        GenreMatcher.resolve(raw).forEach { canonical ->
+            GenreOntology.displayNames[canonical]?.first?.let { display ->
+                ANILIST_OFFICIAL_GENRE_BY_LOWER[display.trim().lowercase()]?.let { out += it }
+            }
+        }
+    }
+    return out.toList()
 }
 
 internal fun resolveSeasonWindow(nowMonth: Int, nowYear: Int, next: Boolean): Pair<String, Int> {
@@ -116,7 +155,7 @@ internal fun buildSeasonQuery(hasStatuses: Boolean): String {
         '$'
     }isAdult$statusArg) {
 
-              id title { romaji english native } coverImage { large } genres
+              id title { romaji english native } coverImage { large } genres tags { name rank }
             }
           }
         }
@@ -143,7 +182,7 @@ internal fun buildPopularQuery(format: String?, hasStatuses: Boolean): String {
 
           Page(page: ${'$'}page, perPage: 50) {
             media(type: ${'$'}type, sort: ${'$'}sort, isAdult: ${'$'}isAdult$formatArg$statusArg) {
-              id title { romaji english native } coverImage { large } genres
+              id title { romaji english native } coverImage { large } genres tags { name rank }
             }
           }
         }
@@ -166,13 +205,21 @@ internal fun parseTrendingPage(page: JsonObject, seasonLabel: String? = null): L
             } else {
                 romaji ?: english
             }
+            val directGenres = (media["genres"] as? JsonArray)
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                .orEmpty()
+            val highRankTags = (media["tags"] as? JsonArray)
+                ?.mapNotNull { it as? JsonObject }
+                ?.filter { tag -> (tag["rank"]?.jsonPrimitive?.intOrNull ?: 60) >= 60 }
+                ?.mapNotNull { tag -> tag["name"]?.jsonPrimitive?.contentOrNull }
+                .orEmpty()
             DiscoveryTrendingItem(
                 title = title,
                 cleanTitle = normalizeDiscoveryTitle(title),
                 coverUrl = (media["coverImage"] as? JsonObject)?.get("large")?.jsonPrimitive?.contentOrNull,
                 anilistId = media["id"]?.jsonPrimitive?.longOrNull ?: 0L,
                 seasonLabel = seasonLabel,
-                genres = (media["genres"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty(),
+                genres = (directGenres + highRankTags).distinct(),
                 provider = "anilist_trend",
                 altTitle = altTitle,
             )
@@ -351,15 +398,41 @@ open class AniListTrendingSource(
                 DiscoveryMediaType.MANGA -> "MANGA" to null
                 DiscoveryMediaType.NOVEL -> "MANGA" to "NOVEL"
             }
-            queryByGenres(
-                type = type,
-                format = format,
-                genres = genres,
-                sort = sort,
-                page = page,
-                releaseStatuses = releaseStatuses,
-                matchMode = matchMode,
-            )
+            if (matchMode == RequiredMatchMode.ALL && genres.size > 1) {
+                val collected = ArrayList<DiscoveryTrendingItem>()
+                val seen = HashSet<String>()
+                var scanOffset = 0
+                while (scanOffset < MAX_ALL_SCAN_PAGES) {
+                    val raw = queryByGenres(
+                        type = type,
+                        format = format,
+                        genres = genres,
+                        sort = sort,
+                        page = page + scanOffset,
+                        releaseStatuses = releaseStatuses,
+                        matchMode = matchMode,
+                    )
+                    val matched = raw.filter { item ->
+                        genres.all { req -> item.genres.any { g -> GenreMatcher.matches(req, g) } }
+                    }
+                    matched.forEach { item ->
+                        if (seen.add(item.cleanTitle)) collected += item
+                    }
+                    if (collected.isNotEmpty() || raw.size < ANILIST_PAGE_SIZE) break
+                    scanOffset++
+                }
+                collected
+            } else {
+                queryByGenres(
+                    type = type,
+                    format = format,
+                    genres = genres,
+                    sort = sort,
+                    page = page,
+                    releaseStatuses = releaseStatuses,
+                    matchMode = matchMode,
+                )
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -377,12 +450,17 @@ open class AniListTrendingSource(
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
         matchMode: RequiredMatchMode = RequiredMatchMode.ANY,
     ): List<DiscoveryTrendingItem> {
-        val effectiveQueryGenres = if (matchMode == RequiredMatchMode.ALL && genres.size > 1) {
-            val primary = genres.firstOrNull { GenreMatcher.resolve(it).isNotEmpty() } ?: genres.first()
-            listOf(primary)
-        } else {
-            genres
+        val officialGenres = resolveAnilistOfficialGenres(genres)
+        val useAndIntersection = matchMode == RequiredMatchMode.ALL && officialGenres.size >= 2
+        val singleRequiredGenre = if (useAndIntersection) officialGenres.last() else null
+        val genreInList = when {
+            useAndIntersection -> officialGenres.dropLast(1)
+            matchMode == RequiredMatchMode.ALL && officialGenres.size == 1 -> officialGenres
+            matchMode == RequiredMatchMode.ALL && officialGenres.isEmpty() -> emptyList()
+            else -> anilistGenreVariables(genres)
         }
+        val genreArg = if (singleRequiredGenre != null) ", genre: ${'$'}requiredGenre" else ""
+        val genreInArg = if (genreInList.isNotEmpty()) ", genre_in: ${'$'}genres" else ""
         val formatArg = if (format != null) ", format: ${'$'}format" else ""
         val statusArg = if (releaseStatuses.isNotEmpty()) ", status_in: ${'$'}statuses" else ""
         val query = """
@@ -390,13 +468,15 @@ open class AniListTrendingSource(
             '$'
         }type: MediaType, ${
             '$'
-        }genres: [String], ${
-            '$'
         }sort: [MediaSort], ${
             '$'
         }page: Int, ${
             '$'
         }isAdult: Boolean${
+            if (singleRequiredGenre != null) ", ${'$'}requiredGenre: String" else ""
+        }${
+            if (genreInList.isNotEmpty()) ", ${'$'}genres: [String]" else ""
+        }${
             if (format != null) ", ${'$'}format: MediaFormat" else ""
         }${
             if (releaseStatuses.isNotEmpty()) ", ${'$'}statuses: [MediaStatus]" else ""
@@ -405,15 +485,13 @@ open class AniListTrendingSource(
               Page(page: ${'$'}page, perPage: 50) {
                 media(type: ${
             '$'
-        }type, genre_in: ${
-            '$'
-        }genres, sort: ${
+        }type, sort: ${
             '$'
         }sort, isAdult: ${
             '$'
-        }isAdult$formatArg$statusArg) {
+        }isAdult$genreArg$genreInArg$formatArg$statusArg) {
 
-                  id title { romaji english native } coverImage { large } genres
+                  id title { romaji english native } coverImage { large } genres tags { name rank }
                 }
               }
             }
@@ -424,12 +502,17 @@ open class AniListTrendingSource(
                 "variables",
                 buildJsonObject {
                     put("type", type)
-                    put(
-                        "genres",
-                        buildJsonArray {
-                            anilistGenreVariables(effectiveQueryGenres).forEach { add(JsonPrimitive(it)) }
-                        },
-                    )
+                    if (singleRequiredGenre != null) {
+                        put("requiredGenre", singleRequiredGenre)
+                    }
+                    if (genreInList.isNotEmpty()) {
+                        put(
+                            "genres",
+                            buildJsonArray {
+                                genreInList.forEach { add(JsonPrimitive(it)) }
+                            },
+                        )
+                    }
                     put("page", page)
                     put("isAdult", adultVariableValue())
                     put(
@@ -543,5 +626,10 @@ open class AniListTrendingSource(
             if (e.message?.contains("403") == true) AniListRequestGuard.reportForbidden()
             throw e
         }
+    }
+
+    private companion object {
+        const val ANILIST_PAGE_SIZE = 50
+        const val MAX_ALL_SCAN_PAGES = 3
     }
 }

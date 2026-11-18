@@ -49,15 +49,36 @@ class CompositeTrendingSource(
                 "anilist" to suspend { anilist.fetch(mediaType, season, sort, page, releaseStatuses) },
             )
             DiscoveryMediaType.NOVEL -> listOf(
+                "shikimori" to suspend { shikimori.fetch(mediaType, season, sort, page, releaseStatuses) },
                 "anilist" to suspend { anilist.fetch(mediaType, season, sort, page, releaseStatuses) },
             )
         }
-        val merged = fetchMerged(providers.take(2), mediaType)
+        val primary = providers.take(2)
+        val fallback = providers.drop(2)
+        var primaryError: Exception? = null
+        val merged = try {
+            fetchMerged(primary, mediaType)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            primaryError = e
+            emptyList()
+        }
         if (merged.isNotEmpty()) return merged
-        return fetchWithFallback(providers.drop(2), mediaType)
+        if (fallback.isEmpty()) {
+            primaryError?.let { throw it }
+            return emptyList()
+        }
+        return try {
+            fetchWithFallback(fallback, mediaType)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw primaryError ?: e
+        }
     }
 
-    /** Мерж топ-2 провайдеров: primary-first, дедуп по cleanTitle, кап 50; ошибки — пустой вклад. */
+    /** Мерж топ-2 провайдеров: primary-first, дедуп по cleanTitle, кап 50; при падении всех — проброс ошибки. */
     private suspend fun fetchMerged(
         providers: List<Pair<String, suspend () -> List<DiscoveryTrendingItem>>>,
         mediaType: DiscoveryMediaType,
@@ -65,7 +86,7 @@ class CompositeTrendingSource(
         val jobs = providers.map { (name, action) ->
             async {
                 try {
-                    action()
+                    Result.success(action())
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -73,22 +94,31 @@ class CompositeTrendingSource(
                         "[CompositeTrending] failed: provider=" + name + " media=" + mediaType + " error=" +
                             e.message
                     }
-                    emptyList()
+                    Result.failure(e)
                 }
             }
         }
-        val results = jobs.awaitAll()
+        val outcomes = jobs.awaitAll()
+        if (outcomes.isNotEmpty() && outcomes.all { it.isFailure }) {
+            throw outcomes.firstNotNullOfOrNull { it.exceptionOrNull() }
+                ?: IllegalStateException("All trending providers failed")
+        }
         val seen = mutableSetOf<String>()
-        results.flatten().filter { it.cleanTitle.isNotBlank() && seen.add(it.cleanTitle) }.take(50)
+        outcomes.flatMap { it.getOrDefault(emptyList()) }
+            .filter { it.cleanTitle.isNotBlank() && seen.add(it.cleanTitle) }
+            .take(50)
     }
 
     private suspend fun fetchWithFallback(
         providers: List<Pair<String, suspend () -> List<DiscoveryTrendingItem>>>,
         mediaType: DiscoveryMediaType,
     ): List<DiscoveryTrendingItem> {
+        var anySuccess = false
+        var lastError: Exception? = null
         for ((name, action) in providers) {
             try {
                 val results = action()
+                anySuccess = true
                 if (results.isNotEmpty()) {
                     logcat { "[CompositeTrending] $mediaType: provider '$name' returned ${results.size} items" }
                     return results
@@ -96,9 +126,11 @@ class CompositeTrendingSource(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                lastError = e
                 logcat { "[CompositeTrending] $mediaType: provider '$name' failed: ${e.message}" }
             }
         }
+        if (!anySuccess && lastError != null) throw lastError
         return emptyList()
     }
 
@@ -145,6 +177,9 @@ class CompositeTrendingSource(
                 },
             )
             DiscoveryMediaType.NOVEL -> listOf(
+                "shikimori" to suspend {
+                    shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
                 "anilist" to suspend {
                     anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
                 },
@@ -178,10 +213,17 @@ class CompositeTrendingSource(
                     "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
                 )
             }
-            // Shikimori для NOVEL всегда null (нет ranobe в meta-поиске) — не тратим вызов.
-            DiscoveryMediaType.NOVEL -> listOf(
-                "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
-            )
+            DiscoveryMediaType.NOVEL -> if (isRu) {
+                listOf(
+                    "shikimori" to suspend { shikimori.fetchMeta(title, mediaType) },
+                    "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
+                )
+            } else {
+                listOf(
+                    "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
+                    "shikimori" to suspend { shikimori.fetchMeta(title, mediaType) },
+                )
+            }
         }
         for ((name, action) in providers) {
             try {

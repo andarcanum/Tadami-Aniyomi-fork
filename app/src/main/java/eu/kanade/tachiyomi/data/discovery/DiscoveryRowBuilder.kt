@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.discovery
 import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
+import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 
@@ -18,6 +19,7 @@ data class DiscoveryRowItem(
     val sourceUrl: String? = null,
     val genres: List<String> = emptyList(),
     val altCleanTitles: List<String> = emptyList(),
+    val releaseStatus: DiscoveryReleaseStatus? = null,
 )
 
 data class DiscoveryFeedbackSeed(

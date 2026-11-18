@@ -225,6 +225,49 @@ interface DiscoveryRepository {
         metadata: DiscoveryTasteMetadata,
     ): DiscoveryPositiveReceipt?
 
+    suspend fun recordNegativeTaste(
+        identity: DiscoveryTitleIdentity,
+        metadata: DiscoveryTasteMetadata,
+    ): Long? {
+        val cleanTitle = identity.primaryCleanTitle
+        hide(identity.mediaType, cleanTitle)
+        return recordSignalWithReceipt(
+            mediaType = identity.mediaType,
+            cleanTitle = cleanTitle,
+            title = metadata.title.ifBlank { identity.title },
+            signalType = DiscoverySignalType.HIDE,
+            genres = metadata.genres,
+            provider = metadata.provider,
+            sourceKey = metadata.sourceKey,
+            timestamp = metadata.changedAt,
+        )
+    }
+
+    suspend fun recordConsumedTaste(
+        identity: DiscoveryTitleIdentity,
+        metadata: DiscoveryTasteMetadata,
+    ): Long? = recordSignalWithReceipt(
+        mediaType = identity.mediaType,
+        cleanTitle = identity.primaryCleanTitle,
+        title = metadata.title.ifBlank { identity.title },
+        signalType = DiscoverySignalType.CONSUMED,
+        genres = metadata.genres,
+        provider = metadata.provider,
+        sourceKey = metadata.sourceKey,
+        timestamp = metadata.changedAt,
+    )
+
+    suspend fun clearConsumedSignal(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        identityKey: String? = null,
+    ) {
+        removeSignal(mediaType, cleanTitle)
+        if (!identityKey.isNullOrBlank()) {
+            clearFact(mediaType, identityKey, DiscoveryFactKind.EXPLICIT_CONSUMED)
+        }
+    }
+
     suspend fun enrichTasteMetadata(
         media: DiscoveryMediaType,
         identityKey: String,
@@ -237,6 +280,8 @@ interface DiscoveryRepository {
     suspend fun clearFact(media: DiscoveryMediaType, key: String, kind: DiscoveryFactKind)
     suspend fun clearTaste(media: DiscoveryMediaType?)
     suspend fun clearRetirementBlocks(): Int
+    suspend fun getTitleMemory(media: DiscoveryMediaType): List<DiscoveryTitleMemory> = emptyList()
+    suspend fun getTasteResetEpochs(): Map<DiscoveryMediaType, Long> = emptyMap()
     suspend fun restoreTitleMemory(records: List<DiscoveryTitleMemory>)
     suspend fun restoreTasteRecords(records: List<DiscoveryTasteRecord>)
     suspend fun restoreTasteResetEpochs(epochs: Map<DiscoveryMediaType, Long>)

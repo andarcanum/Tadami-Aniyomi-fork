@@ -118,6 +118,17 @@ class ShikimoriTrendingSourceTest {
                          "description":"Manga-only synopsis",
                          "genres":[{"id":2,"name":"Romance","russian":"Романтика"}],"url":"/mangas/202"}
                     """.trimIndent()
+                    "/api/ranobe" -> """
+                        [{"id":303,"name":"Same Shikimori Cache Title","russian":"Ranobe alias",
+                          "image":null,"score":8.5,"status":"released","kind":"light_novel",
+                          "description":null,"genres":null,"url":"/ranobe/303"}]
+                    """.trimIndent()
+                    "/api/ranobe/303" -> """
+                        {"id":303,"name":"Same Shikimori Cache Title","russian":"Ranobe alias",
+                         "image":null,"score":8.5,"status":"released","kind":"light_novel",
+                         "description":"Ranobe-only synopsis",
+                         "genres":[{"id":3,"name":"Fantasy","russian":"Фэнтези"}],"url":"/ranobe/303"}
+                    """.trimIndent()
                     else -> "[]"
                 }
                 Response.Builder()
@@ -139,16 +150,28 @@ class ShikimoriTrendingSourceTest {
             withTimeout(10_000L) {
                 val anime = DiscoveryMeta("Anime-only synopsis", listOf("Action"), "Anime alias")
                 val manga = DiscoveryMeta("Manga-only synopsis", listOf("Romance"), "Manga alias")
+                val novel = DiscoveryMeta("Ranobe-only synopsis", listOf("Fantasy"), "Ranobe alias")
                 source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.ANIME) shouldBe anime
                 source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.MANGA) shouldBe manga
                 source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.ANIME) shouldBe anime
                 source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.MANGA) shouldBe manga
-                source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.NOVEL) shouldBe null
+                source.fetchMeta("Same Shikimori Cache Title", DiscoveryMediaType.NOVEL) shouldBe novel
+                val ranobeTrends = source.fetch(
+                    DiscoveryMediaType.NOVEL,
+                    TrendSeason.CURRENT,
+                    TrendSort.TRENDING,
+                    1,
+                    emptySet(),
+                )
+                ranobeTrends.single().title shouldBe "Same Shikimori Cache Title"
                 requestedPaths.toList() shouldBe listOf(
                     "/api/animes",
                     "/api/animes/101",
                     "/api/mangas",
                     "/api/mangas/202",
+                    "/api/ranobe",
+                    "/api/ranobe/303",
+                    "/api/ranobe",
                 )
             }
         } finally {

@@ -25,6 +25,8 @@ import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySignal
+import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
@@ -823,6 +825,166 @@ class DiscoveryPublicationTest {
 
         val memoryList = repository.observeTitleMemory(media).first()
         memoryList.none { it.blockedUntil > 0L } shouldBe true
+    }
+
+    @Test
+    fun `reconcileHomeBatch does not bump homeBatchVersion when batch is unchanged`() = runTest {
+        val published = publish("req-1", DiscoveryPreparedPool.Fresh((1..25).map(::suggestion), partial = false))
+        val snap = (published as DiscoveryPublishReceipt.Published).snapshot
+        val ranked = (1..25).map(::keyOf)
+        val batch1 = (repository.nextHomeBatch(media, snap.generation, ranked) as DiscoveryBatchReceipt.Available)
+            .snapshot
+        val batch2 = (repository.reconcileHomeBatch(media, snap.generation, ranked) as DiscoveryBatchReceipt.Available)
+            .snapshot
+
+        batch2.homeBatchKeys shouldBe batch1.homeBatchKeys
+        batch2.homeBatchVersion shouldBe batch1.homeBatchVersion
+    }
+
+    @Test
+    fun `recordNegativeTaste and recordTaste share @D2 key and undoHide restores LIKE`() = runTest {
+        val identity = DiscoveryTitleIdentity(
+            mediaType = media,
+            identityKey = "key:99",
+            title = "Title 99",
+            primaryCleanTitle = "title 99",
+            sourceId = 1L,
+            sourceUrl = "/title-99",
+        )
+        val meta = tachiyomi.domain.discovery.model.DiscoveryTasteMetadata(
+            title = "Title 99",
+            primaryCleanTitle = "title 99",
+            genres = listOf("Fantasy"),
+            provider = "anilist",
+        )
+        repository.recordTaste(
+            identity,
+            tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
+            meta,
+        )
+        repository.recordNegativeTaste(identity, meta.copy(changedAt = 5_000L))
+
+        val signalsAfterHide = repository.getSignals(media)
+        signalsAfterHide.size shouldBe 1
+        signalsAfterHide.single().signalType shouldBe tachiyomi.domain.discovery.model.DiscoverySignalType.HIDE
+        signalsAfterHide.single().identityKey shouldBe "key:99"
+        repository.getTasteRecords(media).single().let { rec ->
+            rec.positive?.kind shouldBe tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE
+            (rec.negative != null) shouldBe true
+        }
+        repository.recordTaste(
+            identity,
+            tachiyomi.domain.discovery.model.DiscoverySignalType.ADD,
+            meta,
+        )
+        repository.getSignals(media).single().signalType shouldBe
+            tachiyomi.domain.discovery.model.DiscoverySignalType.HIDE
+
+        repository.undoHide(media, "title 99")
+        val afterUndo = repository.getSignals(media).single()
+        afterUndo.signalType shouldBe tachiyomi.domain.discovery.model.DiscoverySignalType.ADD
+        afterUndo.identityKey shouldBe "key:99"
+    }
+
+    @Test
+    fun `clearTaste preserves consumed exclusions and bumps projection`() = runTest {
+        val identity = DiscoveryTitleIdentity(
+            mediaType = media,
+            identityKey = "key:101",
+            title = "Title 101",
+            primaryCleanTitle = "title 101",
+        )
+        val meta = tachiyomi.domain.discovery.model.DiscoveryTasteMetadata(
+            title = "Title 101",
+            primaryCleanTitle = "title 101",
+            genres = listOf("Action"),
+        )
+        repository.recordTaste(identity, tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE, meta)
+        repository.recordConsumedTaste(identity, meta.copy(changedAt = 2_000L))
+        repository.recordTaste(
+            identity.copy(identityKey = "key:102", title = "Title 102", primaryCleanTitle = "title 102"),
+            tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
+            meta.copy(title = "Title 102", primaryCleanTitle = "title 102"),
+        )
+        val beforeProjection = repository.publication(media).projectionVersion
+
+        repository.clearTaste(null)
+
+        repository.publication(media).projectionVersion shouldBe (beforeProjection + 1L)
+        repository.getTasteRecords(media).shouldBeEmpty()
+        val remaining = repository.getSignals(media)
+        remaining.size shouldBe 1
+        remaining.single().signalType shouldBe tachiyomi.domain.discovery.model.DiscoverySignalType.CONSUMED
+        remaining.single().cleanTitle shouldBe "title 101"
+        (identity.identityKey in repository.eligibility(media).excludedIdentityKeys) shouldBe true
+
+        repository.clearConsumedSignal(media, "title 101", identity.identityKey)
+        repository.getSignals(media).shouldBeEmpty()
+        (identity.identityKey in repository.eligibility(media).excludedIdentityKeys) shouldBe false
+    }
+
+    @Test
+    fun `observePublication reacts to knownTitlesProvider changes`() = runTest {
+        publish("req-1", DiscoveryPreparedPool.Fresh((1..3).map(::suggestion), partial = false))
+        val before = repository.observePublication(media).first()
+        before.eligibleSuggestions.size shouldBe 3
+
+        knownProvider.titles[media] = setOf(
+            DiscoveryTitleIdentity(
+                mediaType = media,
+                identityKey = keyOf(1),
+                title = "Title 1",
+                primaryCleanTitle = "title 1",
+                sourceId = 1L,
+                sourceUrl = "/title-1",
+            ),
+        )
+        knownProvider.notifyChanged()
+
+        val after = repository.observePublication(media).first()
+        after.eligibleSuggestions.map { it.identityKey } shouldBe listOf(keyOf(2), keyOf(3))
+    }
+
+    @Test
+    fun `restoreSignals with null identityKey does not match unrelated row with empty primary_clean_title`() = runTest {
+        database.discovery_signalsQueries.upsert(
+            media_type = media.key,
+            clean_title = "existing empty primary",
+            title = "Existing Empty Primary",
+            signal = DiscoverySignalType.LIKE.key,
+            weight = DiscoverySignalType.LIKE.weight,
+            genres = null,
+            provider = "anilist",
+            source_key = null,
+            created_at = 1_000L,
+            primary_clean_title = "",
+            identity_key = "",
+            source_id = null,
+            source_url = null,
+            trusted_aliases = "",
+            metadata_changed_at = 1_000L,
+            positive_signal = DiscoverySignalType.LIKE.key,
+            positive_created_at = 1_000L,
+        )
+
+        repository.restoreSignals(
+            listOf(
+                DiscoverySignal(
+                    mediaType = media,
+                    cleanTitle = "legacy restored title",
+                    title = "Legacy Restored Title",
+                    signalType = DiscoverySignalType.HIDE,
+                    genres = emptyList(),
+                    provider = "shikimori",
+                    sourceKey = null,
+                    createdAt = 2_000L,
+                    identityKey = null,
+                ),
+            ),
+        )
+
+        val signals = repository.getSignals(media)
+        signals.map { it.title }.toSet() shouldBe setOf("Existing Empty Primary", "Legacy Restored Title")
     }
 
     private fun keyOf(number: Int): String = "key:$number"

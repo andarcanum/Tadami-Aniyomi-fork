@@ -21,6 +21,9 @@ CREATE TABLE discovery_publication (
 selectByMedia:
 SELECT * FROM discovery_publication WHERE media_type = ?;
 
+selectAllTasteResetEpochs:
+SELECT media_type, taste_reset_at FROM discovery_publication WHERE taste_reset_at > 0;
+
 ensureRow:
 INSERT OR IGNORE INTO discovery_publication(media_type) VALUES (?);
 

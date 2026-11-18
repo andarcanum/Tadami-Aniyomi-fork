@@ -1160,6 +1160,8 @@ private fun toSuggestion(
     sourceId = item.sourceId,
     sourceUrl = item.sourceUrl,
     genres = item.genres,
+    trustedAliases = item.altCleanTitles.map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
+    releaseStatus = item.releaseStatus,
 )
 
 private fun interleaveRowsForTopUp(

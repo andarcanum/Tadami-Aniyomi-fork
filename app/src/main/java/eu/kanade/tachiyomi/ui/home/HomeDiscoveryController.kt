@@ -134,14 +134,9 @@ internal class HomeDiscoveryController(
 
         scope.launchIO {
             combine(
-                repository.subscribe(mediaType),
+                repository.observePublication(mediaType),
                 preferences.discoveryEnabled().changes(),
                 preferences.teaserCount().changes(),
-                combine(
-                    repository.subscribeHidden(mediaType),
-                    repository.subscribeConsumed(mediaType),
-                    repository.observeTitleMemory(mediaType),
-                ) { hidden, consumed, memory -> Triple(hidden, consumed, memory) },
                 combine(
                     repository.subscribeBlacklist(mediaType),
                     preferences.observeGenreFilterSpec(mediaType),
@@ -160,16 +155,10 @@ internal class HomeDiscoveryController(
                         blacklistedTags = blacklist,
                     ).let { policy -> Triple(policy, status, sourcePolicy) }
                 },
-            ) { items, enabled, count, exclusions, (policy, status, sourcePolicy) ->
-                val (hidden, consumed, memory) = exclusions
-                val visible = filterVisibleByExclusions(
-                    items = items.filter(sourcePolicy::allows),
-                    mediaType = mediaType,
-                    hidden = hidden,
-                    consumed = consumed,
-                    memory = memory,
-                )
+            ) { snapshot, enabled, count, (policy, status, sourcePolicy) ->
+                val visible = snapshot.eligibleSuggestions.filter(sourcePolicy::allows)
                 DiscoveryObservationState(
+                    snapshot = snapshot,
                     visible = visible,
                     enabled = enabled,
                     count = count,
@@ -203,7 +192,38 @@ internal class HomeDiscoveryController(
                         }
                         return@collectLatest
                     }
-                    cachedDiscoveryPool = projectPool(obs.visible, obs.policy)
+                    val projected = projectPool(obs.visible, obs.policy)
+                    val snapshot = obs.snapshot
+                    val batchKeys = snapshot.homeBatchKeys
+                    if (snapshot.generation > 0L &&
+                        snapshot.traversal == tachiyomi.domain.discovery.model.DiscoveryTraversalState.VALID &&
+                        batchKeys.isNotEmpty()
+                    ) {
+                        val byKey = HashMap<String, DiscoverySuggestion>()
+                        projected.forEach { item ->
+                            item.identityKeys().forEach { k -> byKey.putIfAbsent(k, item) }
+                        }
+                        val survivingBatch = batchKeys.mapNotNull { byKey[it] }.distinctBy { it.cleanTitle }
+                        if (survivingBatch.size < batchKeys.size && projected.size > survivingBatch.size) {
+                            val rankedKeys = projected.flatMap { it.identityKeys().toList() }
+                            runCatchingUnlessCancelled {
+                                repository.reconcileHomeBatch(mediaType, snapshot.generation, rankedKeys)
+                            }
+                        }
+                    }
+                    cachedDiscoveryPool = if (batchKeys.isNotEmpty()) {
+                        val batchOrder = HashMap<String, Int>()
+                        batchKeys.forEachIndexed { idx, key -> batchOrder.putIfAbsent(key, idx) }
+                        val (inBatch, rest) = projected.partition { item ->
+                            item.identityKeys().any { it in batchOrder }
+                        }
+                        val orderedBatch = inBatch.sortedBy { item ->
+                            item.identityKeys().mapNotNull { batchOrder[it] }.minOrNull() ?: Int.MAX_VALUE
+                        }
+                        orderedBatch + rest
+                    } else {
+                        projected
+                    }
                     val shownAtByTitle = eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
                         repository.getRecentExclusionsWithTimestamp(mediaType)
                     }.getOrDefault(emptyMap())
@@ -215,6 +235,7 @@ internal class HomeDiscoveryController(
                         )
                     }
                     val lastUpdated = obs.visible.maxOfOrNull { it.createdAt }
+                        ?: snapshot.committedAt.takeIf { it > 0L }
                         ?: eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
                             repository.lastUpdatedAt(mediaType)
                         }.getOrNull()
@@ -550,6 +571,7 @@ private data class DiscoveryStatusSnapshot(
 )
 
 private data class DiscoveryObservationState(
+    val snapshot: DiscoveryPublicationSnapshot,
     val visible: List<DiscoverySuggestion>,
     val enabled: Boolean,
     val count: Int,
@@ -560,41 +582,3 @@ private data class DiscoveryObservationState(
     val sourceFailureCount: Int,
     val inventoryComplete: Boolean = true,
 )
-
-private fun filterVisibleByExclusions(
-    items: List<DiscoverySuggestion>,
-    mediaType: DiscoveryMediaType,
-    hidden: Set<String>,
-    consumed: Set<String>,
-    memory: List<DiscoveryTitleMemory>,
-    now: Long = System.currentTimeMillis(),
-): List<DiscoverySuggestion> {
-    if (items.isEmpty()) return emptyList()
-    val excludedIdentityKeys = HashSet<String>(hidden.size + consumed.size + memory.size * 2)
-    val excludedLookupKeys = HashSet<String>(hidden.size + consumed.size + memory.size)
-    hidden.forEach { title ->
-        excludedIdentityKeys += title
-        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
-    }
-    consumed.forEach { title ->
-        excludedIdentityKeys += title
-        excludedLookupKeys += legacyDiscoveryKey(mediaType, title)
-    }
-    memory.forEach { record ->
-        val excluded = record.opened.active ||
-            record.started.active ||
-            record.consumed.active ||
-            record.blockedUntil > now
-        if (excluded) {
-            excludedIdentityKeys += record.identity.identityKey
-            excludedIdentityKeys += record.identity.trustedAliases
-            excludedLookupKeys += legacyDiscoveryKey(record.identity.mediaType, record.identity.primaryCleanTitle)
-        }
-    }
-    if (excludedIdentityKeys.isEmpty() && excludedLookupKeys.isEmpty()) return items
-    return items.filterNot { item ->
-        item.cleanTitle in excludedIdentityKeys ||
-            legacyDiscoveryKey(mediaType, item.cleanTitle) in excludedLookupKeys ||
-            item.identityKeys().any { it in excludedIdentityKeys }
-    }
-}

@@ -369,13 +369,17 @@ class BackupRestorer(
                 (
                     backup.backupDiscoveryHidden.isNotEmpty() ||
                         backup.backupDiscoveryBlacklistTags.isNotEmpty() ||
-                        backup.backupDiscoverySignals.isNotEmpty()
+                        backup.backupDiscoverySignals.isNotEmpty() ||
+                        backup.backupDiscoveryTitleMemory.isNotEmpty() ||
+                        backup.backupDiscoveryTasteResetEpochs.isNotEmpty()
                     )
             ) {
                 discoveryRestorer.restoreDiscovery(
-                    backup.backupDiscoveryHidden,
-                    backup.backupDiscoveryBlacklistTags,
-                    backup.backupDiscoverySignals,
+                    hidden = backup.backupDiscoveryHidden,
+                    tags = backup.backupDiscoveryBlacklistTags,
+                    signals = backup.backupDiscoverySignals,
+                    titleMemory = backup.backupDiscoveryTitleMemory,
+                    tasteResetEpochs = backup.backupDiscoveryTasteResetEpochs,
                 )
             }
 
@@ -439,6 +443,12 @@ class BackupRestorer(
                     DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
                 }
                 backup.backupDiscoverySignals.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoveryTitleMemory.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoveryTasteResetEpochs.forEach { entry ->
                     DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
                 }
             }

@@ -16,22 +16,22 @@ class MangaUpdatesSimilarSourceTest {
     }
 
     @Test
-    fun `allowedTypes includes Novel so light novels are kept`() {
-        // Guard the new "Novel" entry that enables MangaUpdates for the NOVEL
-        // media type. If this ever changes, the NOVEL branch will silently
-        // filter out every recommendation.
-        val source = MangaUpdatesSimilarSource(SuggestionMediaType.NOVEL)
-        // The field is private, but its effect is observable through the
-        // matching of a recommendation. Use a tiny reflective check to make
-        // the regression visible.
+    fun `allowedTypes strictly isolates Novel from Manga`() {
+        val novelSource = MangaUpdatesSimilarSource(SuggestionMediaType.NOVEL)
+        val mangaSource = MangaUpdatesSimilarSource(SuggestionMediaType.MANGA)
         val allowedField = MangaUpdatesSimilarSource::class.java
             .getDeclaredField("allowedTypes")
             .apply { isAccessible = true }
 
         @Suppress("UNCHECKED_CAST")
-        val allowed = allowedField.get(source) as Set<String>
-        assert(allowed.contains("Novel")) { "allowedTypes should contain Novel, got $allowed" }
-        assert(allowed.contains("Manga"))
+        val novelAllowed = allowedField.get(novelSource) as Set<String>
+
+        @Suppress("UNCHECKED_CAST")
+        val mangaAllowed = allowedField.get(mangaSource) as Set<String>
+
+        assertEquals(setOf("Novel"), novelAllowed)
+        assert(!mangaAllowed.contains("Novel")) { "mangaAllowed should not contain Novel, got $mangaAllowed" }
+        assertTrue(mangaAllowed.contains("Manga"))
     }
 
     @Test

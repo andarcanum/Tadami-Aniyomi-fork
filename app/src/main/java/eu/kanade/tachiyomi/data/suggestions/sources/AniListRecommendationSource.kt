@@ -56,11 +56,12 @@ class AniListRecommendationSource(
         return when (mediaType) {
             SuggestionMediaType.ANIME -> upperType == "ANIME"
             SuggestionMediaType.MANGA -> upperType == "MANGA" && upperFormat != "NOVEL"
-            SuggestionMediaType.NOVEL -> upperType == "MANGA"
+            SuggestionMediaType.NOVEL -> upperType == "MANGA" && upperFormat == "NOVEL"
         }
     }
 
     override suspend fun fetchSuggestions(seed: SuggestionSeed): List<SuggestionItem> = coroutineScope {
+        val nsfwFilter = nsfwFilterProvider()
         val cacheKey = SuggestionCache.makeKey(
             name,
             seed.primaryTitle,
@@ -68,6 +69,7 @@ class AniListRecommendationSource(
             seed.candidateTitles,
             seed.description,
             seed.author,
+            extraKeys = listOf("nsfw=$nsfwFilter"),
         )
         SuggestionCache.get(cacheKey)?.let {
             logcat {
@@ -277,11 +279,18 @@ class AniListRecommendationSource(
                 }
 
                 val siteUrl = rec["siteUrl"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                val recTitle = rec["title"]?.jsonObject?.let { t ->
-                    t["english"]?.jsonPrimitive?.contentOrNull
-                        ?: t["romaji"]?.jsonPrimitive?.contentOrNull
-                        ?: t["native"]?.jsonPrimitive?.contentOrNull
-                } ?: return@mapNotNull null
+                val titleObj = rec["title"]?.jsonObject
+                val recEnglish = titleObj?.get("english")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf {
+                    it.isNotEmpty()
+                }
+                val recRomaji = titleObj?.get("romaji")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf {
+                    it.isNotEmpty()
+                }
+                val recNative = titleObj?.get("native")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf {
+                    it.isNotEmpty()
+                }
+                val recTitle = recEnglish ?: recRomaji ?: recNative ?: return@mapNotNull null
+                val searchQueries = listOfNotNull(recTitle, recEnglish, recRomaji, recNative).distinct()
 
                 val thumbnailUrl = rec["coverImage"]?.jsonObject?.get("large")?.jsonPrimitive?.contentOrNull
 
@@ -291,7 +300,7 @@ class AniListRecommendationSource(
 
                 SuggestionItem(
                     title = recTitle,
-                    searchQueries = listOf(recTitle),
+                    searchQueries = searchQueries,
                     thumbnailUrl = thumbnailUrl,
                     providerName = name,
                     providerUrl = siteUrl,

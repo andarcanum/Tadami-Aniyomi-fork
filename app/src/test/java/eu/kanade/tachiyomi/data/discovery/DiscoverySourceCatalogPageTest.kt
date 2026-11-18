@@ -304,32 +304,8 @@ class DiscoverySourceCatalogPageTest {
     }
 
     @Test
-    fun `filterless source searches by genre query and falls back to popular when search is empty`(): Unit = runTest {
+    fun `filterless source skips text genre query and browses popular directly`(): Unit = runTest {
         val source = source()
-        coEvery { source.getSearchManga(1, "fantasy", any()) } returns MangasPage(
-            listOf(manga("Searched One", "/searched", genre = "Fantasy")),
-            hasNextPage = true,
-        )
-
-        val hit = catalog(source).popularWithGenresAllocated(
-            media,
-            sourceId,
-            genres = listOf("fantasy"),
-            budget = budget(maxDetails = 0),
-            maxDetails = 0,
-        )
-
-        hit.genreFilterApplied shouldBe false
-        hit.items.map { it.sourceUrl } shouldBe listOf("/searched")
-        hit.hasNextPage shouldBe true
-        coVerify(exactly = 1) { source.getSearchManga(1, "fantasy", any()) }
-        coVerify(exactly = 0) { source.getPopularManga(any()) }
-    }
-
-    @Test
-    fun `filterless source falls back to browsing popular manga when genre search is empty`(): Unit = runTest {
-        val source = source()
-        coEvery { source.getSearchManga(1, "fantasy", any()) } returns MangasPage(emptyList(), hasNextPage = false)
         coEvery { source.getPopularManga(1) } returns MangasPage(
             listOf(manga("Popular One", "/popular", genre = "Fantasy")),
             hasNextPage = true,
@@ -346,7 +322,7 @@ class DiscoverySourceCatalogPageTest {
         result.genreFilterApplied shouldBe false
         result.items.map { it.sourceUrl } shouldBe listOf("/popular")
         result.hasNextPage shouldBe true
-        coVerify(exactly = 1) { source.getSearchManga(1, "fantasy", any()) }
+        coVerify(exactly = 0) { source.getSearchManga(any(), any(), any()) }
         coVerify(exactly = 1) { source.getPopularManga(1) }
     }
 
@@ -495,14 +471,12 @@ class DiscoverySourceCatalogPageTest {
     }
 
     @Test
-    fun `genre search fallback passes source filter list instead of empty filter list`(): Unit = runTest {
+    fun `source without genre filter skips text genre query and browses popular`(): Unit = runTest {
         val source = source()
         val sortFilter = object : Filter.Select<String>("Sort", arrayOf("Popular", "Latest")) {}
         every { source.getFilterList() } returns FilterList(sortFilter)
-        coEvery {
-            source.getSearchManga(1, "fantasy", match { it.filterIsInstance<Filter.Select<*>>().isNotEmpty() })
-        } returns MangasPage(
-            listOf(manga("Searched With Default Filters", "/searched-default", genre = "Fantasy")),
+        coEvery { source.getPopularManga(1) } returns MangasPage(
+            listOf(manga("Popular With Default Filters", "/popular-default", genre = "Fantasy")),
             hasNextPage = false,
         )
 
@@ -514,7 +488,10 @@ class DiscoverySourceCatalogPageTest {
             maxDetails = 0,
         )
 
-        result.items.map { it.sourceUrl } shouldBe listOf("/searched-default")
+        result.genreFilterApplied shouldBe false
+        result.items.map { it.sourceUrl } shouldBe listOf("/popular-default")
+        coVerify(exactly = 0) { source.getSearchManga(any(), any(), any()) }
+        coVerify(exactly = 1) { source.getPopularManga(1) }
     }
 
     @Test

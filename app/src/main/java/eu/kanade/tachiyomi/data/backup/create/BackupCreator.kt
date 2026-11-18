@@ -233,11 +233,7 @@ class BackupCreator(
                 if (options.discoveryData && !options.sisterAppCompatible) {
                     discoveryBackupCreator()
                 } else {
-                    Triple(
-                        emptyList<eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryHidden>(),
-                        emptyList<eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTag>(),
-                        emptyList<eu.kanade.tachiyomi.data.backup.models.BackupDiscoverySignal>(),
-                    )
+                    eu.kanade.tachiyomi.data.backup.create.creators.DiscoveryBackupPayload()
                 }
             }
 
@@ -313,10 +309,20 @@ class BackupCreator(
                     backupReelsFavorites
                 },
                 backupReelsFollows = if (options.sisterAppCompatible) emptyList() else backupReelsFollows,
-                backupDiscoveryHidden = if (options.sisterAppCompatible) emptyList() else backupDiscovery.first,
-                backupDiscoveryBlacklistTags = if (options.sisterAppCompatible) emptyList() else backupDiscovery.second,
-                backupDiscoverySignals = if (options.sisterAppCompatible) emptyList() else backupDiscovery.third,
+                backupDiscoveryHidden = if (options.sisterAppCompatible) emptyList() else backupDiscovery.hidden,
+                backupDiscoveryBlacklistTags = if (options.sisterAppCompatible) emptyList() else backupDiscovery.tags,
+                backupDiscoverySignals = if (options.sisterAppCompatible) emptyList() else backupDiscovery.signals,
                 backupTranslationConfiguration = translationConfigurationBackupCreator(options),
+                backupDiscoveryTitleMemory = if (options.sisterAppCompatible) {
+                    emptyList()
+                } else {
+                    backupDiscovery.titleMemory
+                },
+                backupDiscoveryTasteResetEpochs = if (options.sisterAppCompatible) {
+                    emptyList()
+                } else {
+                    backupDiscovery.tasteResetEpochs
+                },
             )
 
             // The object above already mirrors the wire: sister mode flattens novels into the

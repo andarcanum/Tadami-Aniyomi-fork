@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.discovery
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import tachiyomi.domain.discovery.model.DiscoveryBatchReceipt
 import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryFactKind
@@ -20,6 +21,8 @@ import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
 import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
 import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 import tachiyomi.domain.discovery.model.DiscoveryTraversalState
+import tachiyomi.domain.discovery.model.identityKeys
+import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 
 /**
@@ -48,7 +51,47 @@ abstract class FakeDiscoveryRepositoryBase : DiscoveryRepository {
         )
 
     override fun observePublication(media: DiscoveryMediaType): Flow<DiscoveryPublicationSnapshot> =
-        MutableStateFlow(emptyPublication(media))
+        combine(
+            subscribe(media),
+            subscribeHidden(media),
+            subscribeConsumed(media),
+            observeTitleMemory(media),
+            subscribeBlacklist(media),
+        ) { items, hidden, consumed, memory, blacklist ->
+            val now = System.currentTimeMillis()
+            val excludedIdentityKeys = HashSet<String>(hidden.size + consumed.size + memory.size * 2)
+            val excludedLookupKeys = HashSet<String>(hidden.size + consumed.size + memory.size)
+            hidden.forEach { title ->
+                excludedIdentityKeys += title
+                excludedLookupKeys += legacyDiscoveryKey(media, title)
+            }
+            consumed.forEach { title ->
+                excludedIdentityKeys += title
+                excludedLookupKeys += legacyDiscoveryKey(media, title)
+            }
+            memory.forEach { record ->
+                val excluded = record.opened.active ||
+                    record.started.active ||
+                    record.consumed.active ||
+                    record.blockedUntil > now
+                if (excluded) {
+                    excludedIdentityKeys += record.identity.identityKey
+                    excludedIdentityKeys += record.identity.trustedAliases
+                    excludedLookupKeys +=
+                        legacyDiscoveryKey(record.identity.mediaType, record.identity.primaryCleanTitle)
+                }
+            }
+            val eligible = items.filterNot { item ->
+                item.cleanTitle in excludedIdentityKeys ||
+                    legacyDiscoveryKey(media, item.cleanTitle) in excludedLookupKeys ||
+                    item.identityKeys().any { it in excludedIdentityKeys } ||
+                    item.genres.any { g -> blacklist.any { it.equals(g, ignoreCase = true) } }
+            }
+            emptyPublication(media).copy(
+                suggestions = items,
+                eligibleSuggestions = eligible,
+            )
+        }
 
     override fun observeTitleMemory(media: DiscoveryMediaType): Flow<List<DiscoveryTitleMemory>> =
         MutableStateFlow(emptyList())

@@ -121,6 +121,8 @@ data class Backup(
     @ProtoNumber(627) var backupDiscoverySignals: List<BackupDiscoverySignal> = emptyList(),
     @ProtoNumber(628) var backupAnimeSeries: List<BackupAnimeSeries> = emptyList(),
     @ProtoNumber(629) var backupTranslationConfiguration: BackupTranslationConfiguration? = null,
+    @ProtoNumber(630) var backupDiscoveryTitleMemory: List<BackupDiscoveryTitleMemory> = emptyList(),
+    @ProtoNumber(631) var backupDiscoveryTasteResetEpochs: List<BackupDiscoveryTasteResetEpoch> = emptyList(),
 )
 
 /**

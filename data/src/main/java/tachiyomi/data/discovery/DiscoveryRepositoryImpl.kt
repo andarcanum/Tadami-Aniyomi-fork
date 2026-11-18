@@ -6,6 +6,8 @@ import data.Discovery_suggestions
 import data.Discovery_suggestionsQueries
 import data.Discovery_title_memory
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
@@ -193,7 +195,10 @@ class DiscoveryRepositoryImpl(
     }
 
     override suspend fun clearHidden(mediaType: DiscoveryMediaType) {
-        handler.await { db -> db.discovery_hiddenQueries.deleteAllByMedia(mediaType.key) }
+        handler.await(inTransaction = true) { db ->
+            db.discovery_hiddenQueries.deleteAllByMedia(mediaType.key)
+            bumpProjection(db, mediaType)
+        }
     }
 
     override fun subscribeBlacklist(mediaType: DiscoveryMediaType): Flow<Set<String>> =
@@ -207,17 +212,24 @@ class DiscoveryRepositoryImpl(
         }.toSet()
 
     override suspend fun blacklistTag(mediaType: DiscoveryMediaType, tag: String) {
-        handler.await { db ->
+        handler.await(inTransaction = true) { db ->
             db.discovery_blacklist_tagsQueries.insertOrIgnore(mediaType.key, tag, now())
+            bumpProjection(db, mediaType)
         }
     }
 
     override suspend fun unblacklistTag(mediaType: DiscoveryMediaType, tag: String) {
-        handler.await { db -> db.discovery_blacklist_tagsQueries.delete(mediaType.key, tag) }
+        handler.await(inTransaction = true) { db ->
+            db.discovery_blacklist_tagsQueries.delete(mediaType.key, tag)
+            bumpProjection(db, mediaType)
+        }
     }
 
     override suspend fun clearBlacklist(mediaType: DiscoveryMediaType) {
-        handler.await { db -> db.discovery_blacklist_tagsQueries.deleteAllByMedia(mediaType.key) }
+        handler.await(inTransaction = true) { db ->
+            db.discovery_blacklist_tagsQueries.deleteAllByMedia(mediaType.key)
+            bumpProjection(db, mediaType)
+        }
     }
 
     override suspend fun hasUnboundSourceRows(): Boolean =
@@ -241,6 +253,7 @@ class DiscoveryRepositoryImpl(
         mediaType: DiscoveryMediaType,
         entries: List<DiscoveryHiddenEntry>,
     ) {
+        if (entries.isEmpty()) return
         handler.await(inTransaction = true) { db ->
             entries.forEach {
                 db.discovery_hiddenQueries.insertOrIgnore(
@@ -251,6 +264,7 @@ class DiscoveryRepositoryImpl(
                     it.cleanTitle,
                 )
             }
+            bumpProjection(db, mediaType)
         }
     }
 
@@ -258,10 +272,12 @@ class DiscoveryRepositoryImpl(
         mediaType: DiscoveryMediaType,
         entries: List<DiscoveryBlacklistEntry>,
     ) {
+        if (entries.isEmpty()) return
         handler.await(inTransaction = true) { db ->
             entries.forEach {
                 db.discovery_blacklist_tagsQueries.insertOrIgnore(mediaType.key, it.tag, it.addedAt)
             }
+            bumpProjection(db, mediaType)
         }
     }
 
@@ -430,7 +446,7 @@ class DiscoveryRepositoryImpl(
         provider = provider,
         sourceKey = sourceKey,
         createdAt = createdAt,
-        identityKey = identityKey ?: cleanTitle.takeIf { it.startsWith(STORAGE_PREFIX) }
+        identityKey = identityKey?.takeIf { it.isNotBlank() } ?: cleanTitle.takeIf { it.startsWith(STORAGE_PREFIX) }
             ?.removePrefix(STORAGE_PREFIX),
         trustedAliases = DiscoveryMapper.splitAliases(trustedAliases),
         sourceId = sourceId,
@@ -438,6 +454,26 @@ class DiscoveryRepositoryImpl(
         metadataChangedAt = metadataChangedAt,
         positiveKind = DiscoverySignalType.fromKey(positiveSignal),
         positiveCreatedAt = positiveCreatedAt,
+    )
+
+    private fun data.Discovery_signals.toDomainSignal(): DiscoverySignal = signalMapper(
+        mediaType = media_type,
+        cleanTitle = clean_title,
+        title = title,
+        signal = signal,
+        weight = weight,
+        genres = genres,
+        provider = provider,
+        sourceKey = source_key,
+        createdAt = created_at,
+        primaryCleanTitle = primary_clean_title,
+        identityKey = identity_key,
+        sourceId = source_id,
+        sourceUrl = source_url,
+        trustedAliases = trusted_aliases,
+        metadataChangedAt = metadata_changed_at,
+        positiveSignal = positive_signal,
+        positiveCreatedAt = positive_created_at,
     )
 
     override suspend fun getSignals(mediaType: DiscoveryMediaType): List<DiscoverySignal> =
@@ -571,40 +607,98 @@ class DiscoveryRepositoryImpl(
     }
 
     override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) {
-        handler.await { db -> db.discovery_signalsQueries.delete(mediaType.key, cleanTitle) }
+        handler.await(inTransaction = true) { db ->
+            db.discovery_signalsQueries.deleteByAnyKey(mediaType.key, cleanTitle, cleanTitle, cleanTitle)
+            db.discovery_signalsQueries.delete(mediaType.key, canonicalStorageKey(cleanTitle))
+            db.discovery_title_memoryQueries.clearConsumedByAnyKey(now(), mediaType.key, cleanTitle, cleanTitle)
+            db.discovery_suppressionsQueries.deleteByTitle(mediaType.key, cleanTitle)
+            bumpProjection(db, mediaType)
+        }
+    }
+
+    override suspend fun clearConsumedSignal(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        identityKey: String?,
+    ) {
+        val timestamp = now()
+        handler.await(inTransaction = true) { db ->
+            val lookupIdentity = identityKey?.takeIf { it.isNotBlank() } ?: cleanTitle
+            val candidates = db.discovery_signalsQueries
+                .selectByAnyKey(mediaType.key, cleanTitle, lookupIdentity, cleanTitle)
+                .executeAsList() +
+                listOfNotNull(
+                    db.discovery_signalsQueries
+                        .selectByTitle(mediaType.key, canonicalStorageKey(lookupIdentity))
+                        .executeAsOneOrNull(),
+                )
+            candidates.distinctBy { it.clean_title }.forEach { row ->
+                val signalType = DiscoverySignalType.fromKey(row.signal)
+                if (signalType == null || !signalType.excludesFromFeed) return@forEach
+                val positive = DiscoverySignalType.fromKey(row.positive_signal)
+                if (positive != null &&
+                    (
+                        signalType == DiscoverySignalType.CONSUMED_LIKED ||
+                            signalType == DiscoverySignalType.CONSUMED_ADDED
+                        )
+                ) {
+                    db.discovery_signalsQueries.downgradeConsumedToPositive(
+                        signal = positive.key,
+                        weight = positive.weight,
+                        media_type = mediaType.key,
+                        clean_title = row.clean_title,
+                    )
+                } else {
+                    db.discovery_signalsQueries.delete(mediaType.key, row.clean_title)
+                }
+            }
+            db.discovery_title_memoryQueries.clearConsumedByAnyKey(timestamp, mediaType.key, lookupIdentity, cleanTitle)
+            db.discovery_suppressionsQueries.deleteByTitle(mediaType.key, cleanTitle)
+            bumpProjection(db, mediaType)
+        }
     }
 
     override suspend fun undoHide(mediaType: DiscoveryMediaType, cleanTitle: String) {
         val timestamp = now()
         handler.await(inTransaction = true) { db ->
             db.discovery_hiddenQueries.upsertTombstone(mediaType.key, cleanTitle, timestamp, timestamp, cleanTitle)
-            val existing = db.discovery_signalsQueries
-                .selectByTitle(mediaType.key, cleanTitle, ::signalMapper)
-                .executeAsOneOrNull()
-            if (existing?.signalType == DiscoverySignalType.HIDE) {
-                val positive = existing.positiveKind
-                if (positive == null) {
-                    db.discovery_signalsQueries.delete(mediaType.key, cleanTitle)
-                } else {
-                    db.discovery_signalsQueries.upsert(
-                        media_type = mediaType.key,
-                        clean_title = cleanTitle,
-                        title = existing.title,
-                        signal = positive.key,
-                        weight = positive.weight,
-                        genres = DiscoveryMapper.encodeGenres(existing.genres),
-                        provider = existing.provider,
-                        source_key = existing.sourceKey,
-                        created_at = existing.createdAt,
-                        primary_clean_title = existing.cleanTitle,
-                        identity_key = existing.identityKey,
-                        source_id = existing.sourceId,
-                        source_url = existing.sourceUrl,
-                        trusted_aliases = existing.trustedAliases.joinToString("\n"),
-                        metadata_changed_at = existing.metadataChangedAt,
-                        positive_signal = positive.key,
-                        positive_created_at = existing.positiveCreatedAt,
+            val rows = db.discovery_signalsQueries
+                .selectByAnyKey(mediaType.key, cleanTitle, cleanTitle, cleanTitle)
+                .executeAsList()
+                .ifEmpty {
+                    listOfNotNull(
+                        db.discovery_signalsQueries
+                            .selectByTitle(mediaType.key, canonicalStorageKey(cleanTitle))
+                            .executeAsOneOrNull(),
                     )
+                }
+            rows.forEach { row ->
+                val existing = row.toDomainSignal()
+                if (existing.signalType == DiscoverySignalType.HIDE) {
+                    val positive = existing.positiveKind
+                    if (positive == null) {
+                        db.discovery_signalsQueries.delete(mediaType.key, row.clean_title)
+                    } else {
+                        db.discovery_signalsQueries.upsert(
+                            media_type = mediaType.key,
+                            clean_title = row.clean_title,
+                            title = existing.title,
+                            signal = positive.key,
+                            weight = positive.weight,
+                            genres = DiscoveryMapper.encodeGenres(existing.genres),
+                            provider = existing.provider,
+                            source_key = existing.sourceKey,
+                            created_at = existing.createdAt,
+                            primary_clean_title = existing.cleanTitle,
+                            identity_key = existing.identityKey,
+                            source_id = existing.sourceId,
+                            source_url = existing.sourceUrl,
+                            trusted_aliases = existing.trustedAliases.joinToString("\n"),
+                            metadata_changed_at = existing.metadataChangedAt,
+                            positive_signal = positive.key,
+                            positive_created_at = existing.positiveCreatedAt,
+                        )
+                    }
                 }
             }
             bumpProjection(db, mediaType)
@@ -619,16 +713,38 @@ class DiscoveryRepositoryImpl(
     }
 
     override suspend fun clearAllSignals() {
-        handler.await { db -> db.discovery_signalsQueries.deleteAll() }
+        handler.await(inTransaction = true) { db ->
+            db.discovery_signalsQueries.deleteAll()
+            DiscoveryMediaType.entries.forEach { bumpProjection(db, it) }
+        }
     }
 
     override suspend fun restoreSignals(signals: List<DiscoverySignal>) {
         if (signals.isEmpty()) return
         handler.await(inTransaction = true) { db ->
+            val touchedMedia = HashSet<DiscoveryMediaType>()
             signals.forEach { signal ->
-                val existing = db.discovery_signalsQueries
-                    .selectByTitle(signal.mediaType.key, signal.cleanTitle, ::signalMapper)
+                touchedMedia += signal.mediaType
+                val storageKey = signal.identityKey?.takeIf { it.isNotBlank() }?.let(::canonicalStorageKey)
+                    ?: signal.cleanTitle
+                val direct = db.discovery_signalsQueries
+                    .selectByTitle(signal.mediaType.key, storageKey)
                     .executeAsOneOrNull()
+                val legacy = if (direct == null) {
+                    db.discovery_signalsQueries
+                        .selectByAnyKey(
+                            signal.mediaType.key,
+                            signal.cleanTitle,
+                            signal.identityKey.orEmpty(),
+                            signal.cleanTitle,
+                        )
+                        .executeAsList()
+                        .firstOrNull()
+                } else {
+                    null
+                }
+                val existingRow = direct ?: legacy
+                val existing = existingRow?.toDomainSignal()
                 val effectiveNext = DiscoverySignalType.resolveEffectiveSignal(existing?.signalType, signal.signalType)
                 if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
                     return@forEach
@@ -640,9 +756,19 @@ class DiscoveryRepositoryImpl(
                     incomingProvider = signal.provider,
                     incomingSourceKey = signal.sourceKey,
                 )
+                val resolvedIdentityKey = signal.identityKey?.takeIf { it.isNotBlank() } ?: existing?.identityKey
+                val finalStorageKey = resolvedIdentityKey?.let(::canonicalStorageKey) ?: storageKey
+                if (existingRow != null && existingRow.clean_title != finalStorageKey) {
+                    db.discovery_signalsQueries.delete(signal.mediaType.key, existingRow.clean_title)
+                }
+                val positivePair = listOfNotNull(
+                    existing?.positiveKind?.let { it to existing.positiveCreatedAt },
+                    signal.positiveKind?.let { it to signal.positiveCreatedAt },
+                    signal.signalType.takeIf { it in POSITIVE_KINDS }?.let { it to signal.createdAt },
+                ).maxByOrNull { it.second }
                 db.discovery_signalsQueries.upsert(
                     media_type = signal.mediaType.key,
-                    clean_title = signal.cleanTitle,
+                    clean_title = finalStorageKey,
                     title = mergedMeta.title,
                     signal = effectiveNext.key,
                     weight = effectiveNext.weight,
@@ -651,17 +777,18 @@ class DiscoveryRepositoryImpl(
                     source_key = mergedMeta.sourceKey,
                     created_at = signal.createdAt,
                     primary_clean_title = signal.cleanTitle,
-                    identity_key = signal.identityKey,
-                    source_id = signal.sourceId,
-                    source_url = signal.sourceUrl,
-                    trusted_aliases = signal.trustedAliases.joinToString("\n"),
-                    metadata_changed_at = signal.metadataChangedAt,
-                    positive_signal = signal.positiveKind?.key,
-                    positive_created_at = signal.positiveCreatedAt,
+                    identity_key = resolvedIdentityKey,
+                    source_id = signal.sourceId ?: existing?.sourceId,
+                    source_url = signal.sourceUrl ?: existing?.sourceUrl,
+                    trusted_aliases = (signal.trustedAliases + existing?.trustedAliases.orEmpty()).joinToString("\n"),
+                    metadata_changed_at = maxOf(signal.metadataChangedAt, existing?.metadataChangedAt ?: 0L),
+                    positive_signal = positivePair?.first?.key,
+                    positive_created_at = positivePair?.second ?: 0L,
                 )
             }
-            DiscoveryMediaType.entries.forEach { mediaType ->
+            touchedMedia.forEach { mediaType ->
                 enforceSignalCaps(db.discovery_signalsQueries, mediaType)
+                bumpProjection(db, mediaType)
             }
         }
     }
@@ -669,7 +796,10 @@ class DiscoveryRepositoryImpl(
     // ==================== Publication / memory (v2) ====================
 
     override fun observePublication(media: DiscoveryMediaType): Flow<DiscoveryPublicationSnapshot> =
-        handler.subscribeToList { db -> db.discovery_publicationQueries.selectByMedia(media.key) }
+        combine(
+            handler.subscribeToList { db -> db.discovery_publicationQueries.selectByMedia(media.key) },
+            knownTitlesProvider.observe(media).distinctUntilChanged(),
+        ) { publicationRows, _ -> publicationRows }
             .map { publicationRows ->
                 DiscoveryMutationFence.withMutation(media) {
                     val known = knownTitlesProvider.snapshot(media)
@@ -1050,9 +1180,9 @@ class DiscoveryRepositoryImpl(
             val blacklist = readBlacklist(db, media)
             val eligible = eligibleSuggestions(media, rows, known, memory, hidden, blacklist)
             val ordered = orderByRankedKeys(eligible, rankedKeys)
-            val currentKeys = decodeKeys(publication.active_keys)
+            val currentKeysList = decodeKeyList(publication.active_keys)
             val byKey = ordered.associateBy { it.identityKey ?: legacyDiscoveryKey(media, it.cleanTitle) }
-            val kept = currentKeys.mapNotNull { byKey[it] }
+            val kept = currentKeysList.mapNotNull { byKey[it] }
             val keptKeys = kept.mapTo(HashSet()) { it.identityKey ?: legacyDiscoveryKey(media, it.cleanTitle) }
             val issued = decodeKeys(publication.issued_keys)
             val fill = selectNextDiscoveryBatch(
@@ -1064,7 +1194,7 @@ class DiscoveryRepositoryImpl(
             )
             val updatedActive = kept + fill
             val updatedKeys = updatedActive.map { it.identityKey ?: legacyDiscoveryKey(media, it.cleanTitle) }
-            if (updatedKeys != currentKeys) {
+            if (updatedKeys != currentKeysList) {
                 db.discovery_publicationQueries.updateHomeBatch(
                     active_keys = updatedKeys.joinToString("\n"),
                     issued_keys = (issued + updatedKeys).joinToString("\n"),
@@ -1215,9 +1345,27 @@ class DiscoveryRepositoryImpl(
         return handler.await(inTransaction = true) { db ->
             val resolved = resolveIdentity(identity)
             val storageKey = canonicalStorageKey(resolved.identityKey)
-            val existing = db.discovery_signalsQueries
-                .selectByTitle(resolved.mediaType.key, storageKey, ::signalMapper)
+            val directRow = db.discovery_signalsQueries
+                .selectByTitle(resolved.mediaType.key, storageKey)
                 .executeAsOneOrNull()
+            val legacyRow = if (directRow == null) {
+                db.discovery_signalsQueries
+                    .selectByAnyKey(
+                        resolved.mediaType.key,
+                        resolved.primaryCleanTitle,
+                        resolved.identityKey,
+                        resolved.primaryCleanTitle,
+                    )
+                    .executeAsList()
+                    .firstOrNull()
+            } else {
+                null
+            }
+            val existingRow = directRow ?: legacyRow
+            val existing = existingRow?.toDomainSignal()
+            if (existingRow != null && existingRow.clean_title != storageKey) {
+                db.discovery_signalsQueries.delete(resolved.mediaType.key, existingRow.clean_title)
+            }
             val voteAt = now()
             val previousPositive = existing?.positiveKind
             val effectiveKind = when {
@@ -1230,22 +1378,35 @@ class DiscoveryRepositoryImpl(
             val refreshVote = previousPositive == null || kind != DiscoverySignalType.CLICK
             val positiveCreatedAt = if (refreshVote) voteAt else existing?.positiveCreatedAt ?: voteAt
             val hideActive = existing?.signalType == DiscoverySignalType.HIDE
+            val resolvedSignalType = when {
+                hideActive -> DiscoverySignalType.HIDE
+                existing?.signalType?.excludesFromFeed == true ->
+                    DiscoverySignalType.resolveEffectiveSignal(existing.signalType, effectiveKind)
+                else -> effectiveKind
+            }
+            val mergedMeta = mergeSignalMetadata(
+                existing = existing,
+                incomingTitle = metadata.title.ifBlank { resolved.title },
+                incomingGenres = metadata.genres,
+                incomingProvider = metadata.provider,
+                incomingSourceKey = metadata.sourceKey,
+            )
             db.discovery_signalsQueries.upsert(
                 media_type = resolved.mediaType.key,
                 clean_title = storageKey,
-                title = metadata.title.ifBlank { resolved.title },
-                signal = if (hideActive) DiscoverySignalType.HIDE.key else effectiveKind.key,
-                weight = if (hideActive) DiscoverySignalType.HIDE.weight else effectiveKind.weight,
-                genres = DiscoveryMapper.encodeGenres(metadata.genres),
-                provider = metadata.provider,
-                source_key = metadata.sourceKey,
+                title = mergedMeta.title,
+                signal = resolvedSignalType.key,
+                weight = resolvedSignalType.weight,
+                genres = DiscoveryMapper.encodeGenres(mergedMeta.genres),
+                provider = mergedMeta.provider,
+                source_key = mergedMeta.sourceKey,
                 created_at = if (hideActive) existing?.createdAt ?: voteAt else positiveCreatedAt,
                 primary_clean_title = metadata.primaryCleanTitle.ifBlank { resolved.primaryCleanTitle },
                 identity_key = resolved.identityKey,
-                source_id = metadata.sourceId ?: resolved.sourceId,
-                source_url = metadata.sourceUrl ?: resolved.sourceUrl,
-                trusted_aliases = metadata.trustedAliases.joinToString("\n"),
-                metadata_changed_at = metadata.changedAt,
+                source_id = metadata.sourceId ?: resolved.sourceId ?: existing?.sourceId,
+                source_url = metadata.sourceUrl ?: resolved.sourceUrl ?: existing?.sourceUrl,
+                trusted_aliases = (metadata.trustedAliases + existing?.trustedAliases.orEmpty()).joinToString("\n"),
+                metadata_changed_at = maxOf(metadata.changedAt, existing?.metadataChangedAt ?: 0L),
                 positive_signal = effectiveKind.key,
                 positive_created_at = positiveCreatedAt,
             )
@@ -1257,6 +1418,163 @@ class DiscoveryRepositoryImpl(
                 positiveCreatedAt = positiveCreatedAt,
             )
         }
+    }
+
+    override suspend fun recordNegativeTaste(
+        identity: DiscoveryTitleIdentity,
+        metadata: DiscoveryTasteMetadata,
+    ): Long? = handler.await(inTransaction = true) { db ->
+        val resolved = resolveIdentity(identity)
+        val storageKey = canonicalStorageKey(resolved.identityKey)
+        val eventTimestamp = nextMonotonicTimestamp(metadata.changedAt)
+        db.discovery_hiddenQueries.upsertActive(
+            resolved.mediaType.key,
+            resolved.primaryCleanTitle,
+            eventTimestamp,
+            eventTimestamp,
+            resolved.primaryCleanTitle,
+        )
+        val directRow = db.discovery_signalsQueries
+            .selectByTitle(resolved.mediaType.key, storageKey)
+            .executeAsOneOrNull()
+        val legacyRow = if (directRow == null) {
+            db.discovery_signalsQueries
+                .selectByAnyKey(
+                    resolved.mediaType.key,
+                    resolved.primaryCleanTitle,
+                    resolved.identityKey,
+                    resolved.primaryCleanTitle,
+                )
+                .executeAsList()
+                .firstOrNull()
+        } else {
+            null
+        }
+        val existingRow = directRow ?: legacyRow
+        val existing = existingRow?.toDomainSignal()
+        if (existingRow != null && existingRow.clean_title != storageKey) {
+            db.discovery_signalsQueries.delete(resolved.mediaType.key, existingRow.clean_title)
+        }
+        val mergedMeta = mergeSignalMetadata(
+            existing = existing,
+            incomingTitle = metadata.title.ifBlank { resolved.title },
+            incomingGenres = metadata.genres,
+            incomingProvider = metadata.provider,
+            incomingSourceKey = metadata.sourceKey,
+        )
+        val positiveKind = existing?.positiveKind ?: existing?.signalType?.takeIf { it in POSITIVE_KINDS }
+        val positiveCreatedAt = if (positiveKind != null) {
+            existing?.positiveCreatedAt?.takeIf { it > 0L } ?: existing?.createdAt ?: 0L
+        } else {
+            0L
+        }
+        db.discovery_signalsQueries.upsert(
+            media_type = resolved.mediaType.key,
+            clean_title = storageKey,
+            title = mergedMeta.title,
+            signal = DiscoverySignalType.HIDE.key,
+            weight = DiscoverySignalType.HIDE.weight,
+            genres = DiscoveryMapper.encodeGenres(mergedMeta.genres),
+            provider = mergedMeta.provider,
+            source_key = mergedMeta.sourceKey,
+            created_at = eventTimestamp,
+            primary_clean_title = metadata.primaryCleanTitle.ifBlank { resolved.primaryCleanTitle },
+            identity_key = resolved.identityKey,
+            source_id = metadata.sourceId ?: resolved.sourceId ?: existing?.sourceId,
+            source_url = metadata.sourceUrl ?: resolved.sourceUrl ?: existing?.sourceUrl,
+            trusted_aliases = (metadata.trustedAliases + existing?.trustedAliases.orEmpty()).joinToString("\n"),
+            metadata_changed_at = maxOf(metadata.changedAt, existing?.metadataChangedAt ?: 0L),
+            positive_signal = positiveKind?.key,
+            positive_created_at = positiveCreatedAt,
+        )
+        enforceSignalCaps(db.discovery_signalsQueries, resolved.mediaType)
+        bumpProjection(db, resolved.mediaType)
+        eventTimestamp
+    }
+
+    override suspend fun recordConsumedTaste(
+        identity: DiscoveryTitleIdentity,
+        metadata: DiscoveryTasteMetadata,
+    ): Long? = handler.await(inTransaction = true) { db ->
+        val resolved = resolveIdentity(identity)
+        val storageKey = canonicalStorageKey(resolved.identityKey)
+        val eventTimestamp = nextMonotonicTimestamp(metadata.changedAt)
+        db.discovery_title_memoryQueries.ensureRow(
+            media_type = resolved.mediaType.key,
+            identity_key = resolved.identityKey,
+            title = metadata.title.ifBlank { resolved.title },
+            primary_clean_title = metadata.primaryCleanTitle.ifBlank { resolved.primaryCleanTitle },
+            source_id = metadata.sourceId ?: resolved.sourceId,
+            source_url = metadata.sourceUrl ?: resolved.sourceUrl,
+            trusted_aliases = (metadata.trustedAliases + resolved.trustedAliases).joinToString("\n"),
+            metadata_changed_at = maxOf(metadata.changedAt, resolved.metadataChangedAt),
+        )
+        setFact(db, resolved, DiscoveryFactKind.EXPLICIT_CONSUMED, active = true, changedAt = eventTimestamp)
+
+        val directRow = db.discovery_signalsQueries
+            .selectByTitle(resolved.mediaType.key, storageKey)
+            .executeAsOneOrNull()
+        val legacyRow = if (directRow == null) {
+            db.discovery_signalsQueries
+                .selectByAnyKey(
+                    resolved.mediaType.key,
+                    resolved.primaryCleanTitle,
+                    resolved.identityKey,
+                    resolved.primaryCleanTitle,
+                )
+                .executeAsList()
+                .firstOrNull()
+        } else {
+            null
+        }
+        val existingRow = directRow ?: legacyRow
+        val existing = existingRow?.toDomainSignal()
+        val effectiveNext = DiscoverySignalType.resolveEffectiveSignal(
+            existing?.signalType,
+            DiscoverySignalType.CONSUMED,
+        )
+        if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
+            bumpProjection(db, resolved.mediaType)
+            return@await null
+        }
+        if (existingRow != null && existingRow.clean_title != storageKey) {
+            db.discovery_signalsQueries.delete(resolved.mediaType.key, existingRow.clean_title)
+        }
+        val mergedMeta = mergeSignalMetadata(
+            existing = existing,
+            incomingTitle = metadata.title.ifBlank { resolved.title },
+            incomingGenres = metadata.genres,
+            incomingProvider = metadata.provider,
+            incomingSourceKey = metadata.sourceKey,
+        )
+        val positiveKind = existing?.positiveKind ?: existing?.signalType?.takeIf { it in POSITIVE_KINDS }
+        val positiveCreatedAt = if (positiveKind != null) {
+            existing?.positiveCreatedAt?.takeIf { it > 0L } ?: existing?.createdAt ?: 0L
+        } else {
+            0L
+        }
+        db.discovery_signalsQueries.upsert(
+            media_type = resolved.mediaType.key,
+            clean_title = storageKey,
+            title = mergedMeta.title,
+            signal = effectiveNext.key,
+            weight = effectiveNext.weight,
+            genres = DiscoveryMapper.encodeGenres(mergedMeta.genres),
+            provider = mergedMeta.provider,
+            source_key = mergedMeta.sourceKey,
+            created_at = eventTimestamp,
+            primary_clean_title = metadata.primaryCleanTitle.ifBlank { resolved.primaryCleanTitle },
+            identity_key = resolved.identityKey,
+            source_id = metadata.sourceId ?: resolved.sourceId ?: existing?.sourceId,
+            source_url = metadata.sourceUrl ?: resolved.sourceUrl ?: existing?.sourceUrl,
+            trusted_aliases = (metadata.trustedAliases + existing?.trustedAliases.orEmpty()).joinToString("\n"),
+            metadata_changed_at = maxOf(metadata.changedAt, existing?.metadataChangedAt ?: 0L),
+            positive_signal = positiveKind?.key,
+            positive_created_at = positiveCreatedAt,
+        )
+        enforceSignalCaps(db.discovery_signalsQueries, resolved.mediaType)
+        bumpProjection(db, resolved.mediaType)
+        eventTimestamp
     }
 
     override suspend fun enrichTasteMetadata(
@@ -1340,20 +1658,28 @@ class DiscoveryRepositoryImpl(
     override suspend fun clearTaste(media: DiscoveryMediaType?) {
         val timestamp = now()
         handler.await(inTransaction = true) { db ->
-            if (media == null) {
-                db.discovery_signalsQueries.deleteAll()
-                DiscoveryMediaType.entries.forEach { type ->
-                    db.discovery_publicationQueries.ensureRow(type.key)
-                    db.discovery_publicationQueries.setTasteResetAt(timestamp, type.key)
-                }
-            } else {
-                db.discovery_signalsQueries.deleteAllByMedia(media.key)
-                db.discovery_publicationQueries.ensureRow(media.key)
-                db.discovery_publicationQueries.setTasteResetAt(timestamp, media.key)
-                bumpProjection(db, media)
+            val targets = media?.let { listOf(it) } ?: DiscoveryMediaType.entries
+            targets.forEach { type ->
+                db.discovery_signalsQueries.deleteTasteVotesByMedia(type.key)
+                db.discovery_signalsQueries.downgradeConsumedTasteByMedia(type.key)
+                db.discovery_publicationQueries.ensureRow(type.key)
+                db.discovery_publicationQueries.setTasteResetAt(timestamp, type.key)
+                bumpProjection(db, type)
             }
         }
     }
+
+    override suspend fun getTitleMemory(media: DiscoveryMediaType): List<DiscoveryTitleMemory> =
+        handler.awaitList { db -> db.discovery_title_memoryQueries.selectAllByMedia(media.key, ::memoryMapper) }
+
+    override suspend fun getTasteResetEpochs(): Map<DiscoveryMediaType, Long> =
+        handler.awaitList { db ->
+            db.discovery_publicationQueries.selectAllTasteResetEpochs { media_type, taste_reset_at ->
+                media_type to taste_reset_at
+            }
+        }.mapNotNull { (mediaType, epoch) ->
+            DiscoveryMediaType.fromKey(mediaType)?.to(epoch)
+        }.toMap()
 
     override suspend fun clearRetirementBlocks(): Int = handler.await(inTransaction = true) { db ->
         val currentTime = now()
@@ -1462,6 +1788,7 @@ class DiscoveryRepositoryImpl(
                 val current = db.discovery_publicationQueries.selectByMedia(media.key).executeAsOne().taste_reset_at
                 if (epoch > current) {
                     db.discovery_publicationQueries.setTasteResetAt(epoch, media.key)
+                    bumpProjection(db, media)
                 }
             }
         }
@@ -1734,15 +2061,18 @@ class DiscoveryRepositoryImpl(
 
     private fun toTasteRecord(signal: DiscoverySignal): DiscoveryTasteRecord? {
         val identityKey = signal.identityKey ?: return null
+        val positive = signal.positiveKind?.let { DiscoveryPositiveVote(it, signal.positiveCreatedAt) }
+        val negative = if (signal.signalType == DiscoverySignalType.HIDE) {
+            DiscoveryNegativeVote(signal.createdAt)
+        } else {
+            null
+        }
+        if (positive == null && negative == null) return null
         return DiscoveryTasteRecord(
             mediaType = signal.mediaType,
             identityKey = identityKey,
-            positive = signal.positiveKind?.let { DiscoveryPositiveVote(it, signal.positiveCreatedAt) },
-            negative = if (signal.signalType == DiscoverySignalType.HIDE) {
-                DiscoveryNegativeVote(signal.createdAt)
-            } else {
-                null
-            },
+            positive = positive,
+            negative = negative,
             metadata = DiscoveryTasteMetadata(
                 title = signal.title,
                 primaryCleanTitle = signal.cleanTitle,
@@ -1767,6 +2097,9 @@ class DiscoveryRepositoryImpl(
 
     private fun decodeKeys(raw: String?): Set<String> =
         raw.orEmpty().splitToSequence("\n").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
+
+    private fun decodeKeyList(raw: String?): List<String> =
+        raw.orEmpty().splitToSequence("\n").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toList()
 
     private fun enforceSignalCaps(
         queries: Discovery_signalsQueries,

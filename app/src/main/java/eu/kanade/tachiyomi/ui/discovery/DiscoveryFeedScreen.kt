@@ -233,13 +233,23 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
             // Выбранный таб могли скрыть в настройках после открытия экрана — контент
             // и табы показывают effectiveTab (fallback MIX), чтобы не было пустого разрыва.
             val effectiveTab = if (tab in state.visibleTabs) tab else FeedSignalTab.MIX
-            val feedItems = remember(state, effectiveTab, provider) {
-                screenModel.displayedItems(effectiveTab, provider)
+            var selectedGenre by rememberSaveable { mutableStateOf<String?>(null) }
+            LaunchedEffect(effectiveTab, provider) {
+                selectedGenre = null
+            }
+            val availableGenres = remember(state, effectiveTab, provider) {
+                screenModel.availableGenres(effectiveTab, provider)
+            }
+            val feedItems = remember(state, effectiveTab, provider, selectedGenre) {
+                screenModel.displayedItems(effectiveTab, provider, selectedGenre)
             }
             FeedBody(
                 state = state,
                 hazeState = hazeState,
                 items = feedItems,
+                availableGenres = availableGenres,
+                selectedGenre = selectedGenre,
+                onGenreSelect = { selectedGenre = it },
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -791,6 +801,9 @@ private fun FeedBody(
     state: DiscoveryFeedUiState,
     hazeState: HazeState,
     items: List<DiscoverySuggestion>,
+    availableGenres: List<String>,
+    selectedGenre: String?,
+    onGenreSelect: (String?) -> Unit,
     contentPadding: PaddingValues,
     exposureTracker: HomeDiscoveryExposureTracker,
     isResumed: Boolean,
@@ -815,7 +828,7 @@ private fun FeedBody(
             modifier = modifier,
         )
 
-        items.isEmpty() -> Column(
+        items.isEmpty() && selectedGenre == null -> Column(
             modifier
                 .padding(contentPadding)
                 .fillMaxSize()
@@ -863,10 +876,6 @@ private fun FeedBody(
         }
 
         else -> {
-            var selectedGenre by rememberSaveable { mutableStateOf<String?>(null) }
-            val availableGenres = remember(items) { extractAvailableGenres(items) }
-            val displayedItems = remember(items, selectedGenre) { filterDiscoveryFeed(items, selectedGenre) }
-
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(130.dp),
                 modifier = modifier
@@ -880,12 +889,12 @@ private fun FeedBody(
                         DiscoveryGenreChipBar(
                             genres = availableGenres,
                             selectedGenre = selectedGenre,
-                            onGenreSelect = { selectedGenre = it },
+                            onGenreSelect = onGenreSelect,
                         )
                     }
                 }
 
-                if (displayedItems.isEmpty()) {
+                if (items.isEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }, key = "empty_genre") {
                         Column(
                             modifier = Modifier
@@ -903,7 +912,7 @@ private fun FeedBody(
                             Button(
                                 onClick = {
                                     appHaptics.tap()
-                                    selectedGenre = null
+                                    onGenreSelect(null)
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
                                 shape = RoundedCornerShape(12.dp),
@@ -917,7 +926,7 @@ private fun FeedBody(
                         }
                     }
                 } else {
-                    items(items = displayedItems, key = { it.rowType.key + ":" + it.cleanTitle }) { item ->
+                    items(items = items, key = { it.rowType.key + ":" + it.cleanTitle }) { item ->
                         val homeItem = remember(item) { item.toHomeHubDiscoveryItem() }
                         val reason = if (showReasons) {
                             discoveryReasonText(homeItem, similarTemplate, trendTemplate, nextTemplate, tasteTemplate)

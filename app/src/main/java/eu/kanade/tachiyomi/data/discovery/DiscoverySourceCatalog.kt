@@ -14,6 +14,9 @@ import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -1010,32 +1013,6 @@ class AppDiscoverySourceCatalog(
         releaseStatuses: Set<DiscoveryReleaseStatus>,
     ): List<DiscoveryRowItem> = fetchPage(mediaType, sourceId, genres, page, releaseStatuses).items
 
-    /**
-     * Sources may expose genres only as free-text tags or not at all. When no
-     * checkbox filter matched, search the genre name instead of browsing.
-     */
-    private suspend fun <F, P> searchByGenreQuery(
-        sourceId: Long,
-        genres: List<String>?,
-        lang: String,
-        page: Int,
-        filters: F,
-        search: suspend (String, F) -> P?,
-        hasItems: (P) -> Boolean,
-    ): P? {
-        if (genres == null) return null
-        val query = discoveryGenreSearchQuery(genres, lang)
-        if (query.isBlank()) return null
-        val result = runCatchingUnlessCancelled { search(query, filters) }
-        val err = result.exceptionOrNull()?.let { " err=${it.javaClass.simpleName}:${it.message}" }.orEmpty()
-        val outcome = result.getOrNull()?.let { page -> if (hasItems(page)) "hit" else "empty" } ?: "failed"
-        logcat {
-            "[DiscoverySourceCatalog] genreSearchFallback source=$sourceId query=$query " +
-                "page=$page result=$outcome$err"
-        }
-        return result.getOrNull()?.takeIf(hasItems)
-    }
-
     private suspend fun fetchPage(
         mediaType: DiscoveryMediaType,
         sourceId: Long,
@@ -1083,31 +1060,7 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
-                val genreSearch = if (!genreFilterApplied) {
-                    searchByGenreQuery(
-                        sourceId = sourceId,
-                        genres = genres,
-                        lang = source.lang,
-                        page = page,
-                        filters = filters ?: runCatchingUnlessCancelled {
-                            guardedSourceCall(mediaType, sourceId, source) {
-                                source.getFilterList()
-                            }
-                        }.getOrElse {
-                            FilterList()
-                        },
-                        search = { query, searchFilters ->
-                            guardedSourceCall(mediaType, sourceId, source) {
-                                source.getSearchManga(page, query, searchFilters)
-                            }
-                        },
-                        hasItems = { it.mangas.isNotEmpty() },
-                    )
-                } else {
-                    null
-                }
                 val rawPage = when {
-                    genreSearch != null -> genreSearch
                     filters != null -> runCatchingUnlessCancelled {
                         guardedSourceCall(mediaType, sourceId, source) {
                             source.getSearchManga(page, "", filters)
@@ -1174,7 +1127,7 @@ class AppDiscoverySourceCatalog(
                     hasNextPage = pageData.hasNextPage,
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
-                    genreSearchApplied = genreSearch != null,
+                    genreSearchApplied = false,
                 )
             }
             DiscoveryMediaType.ANIME -> {
@@ -1207,31 +1160,7 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
-                val genreSearch = if (!genreFilterApplied) {
-                    searchByGenreQuery(
-                        sourceId = sourceId,
-                        genres = genres,
-                        lang = source.lang,
-                        page = page,
-                        filters = filters ?: runCatchingUnlessCancelled {
-                            guardedSourceCall(mediaType, sourceId, source) {
-                                source.getFilterList()
-                            }
-                        }.getOrElse {
-                            AnimeFilterList()
-                        },
-                        search = { query, searchFilters ->
-                            guardedSourceCall(mediaType, sourceId, source) {
-                                source.getSearchAnime(page, query, searchFilters)
-                            }
-                        },
-                        hasItems = { it.animes.isNotEmpty() },
-                    )
-                } else {
-                    null
-                }
                 val rawPage = when {
-                    genreSearch != null -> genreSearch
                     filters != null -> runCatchingUnlessCancelled {
                         guardedSourceCall(mediaType, sourceId, source) {
                             source.getSearchAnime(page, "", filters)
@@ -1296,7 +1225,7 @@ class AppDiscoverySourceCatalog(
                     hasNextPage = pageData.hasNextPage,
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
-                    genreSearchApplied = genreSearch != null,
+                    genreSearchApplied = false,
                 )
             }
             DiscoveryMediaType.NOVEL -> {
@@ -1329,31 +1258,7 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
-                val genreSearch = if (!genreFilterApplied) {
-                    searchByGenreQuery(
-                        sourceId = sourceId,
-                        genres = genres,
-                        lang = source.lang,
-                        page = page,
-                        filters = filters ?: runCatchingUnlessCancelled {
-                            guardedSourceCall(mediaType, sourceId, source) {
-                                source.getFilterList()
-                            }
-                        }.getOrElse {
-                            NovelFilterList()
-                        },
-                        search = { query, searchFilters ->
-                            guardedSourceCall(mediaType, sourceId, source) {
-                                source.getSearchNovels(page, query, searchFilters)
-                            }
-                        },
-                        hasItems = { it.novels.isNotEmpty() },
-                    )
-                } else {
-                    null
-                }
                 val rawPage = when {
-                    genreSearch != null -> genreSearch
                     filters != null -> runCatchingUnlessCancelled {
                         guardedSourceCall(mediaType, sourceId, source) {
                             source.getSearchNovels(page, "", filters)
@@ -1418,7 +1323,7 @@ class AppDiscoverySourceCatalog(
                     hasNextPage = pageData.hasNextPage,
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
-                    genreSearchApplied = genreSearch != null,
+                    genreSearchApplied = false,
                 )
             }
         }
@@ -1804,33 +1709,36 @@ class AppDiscoverySourceCatalog(
         maxDetails: Int,
         status: (T) -> Int,
         fetchDetails: suspend (T) -> T,
-    ): StatusEnrichment<T> {
-        if (releaseStatuses.isEmpty()) return StatusEnrichment(items)
+    ): StatusEnrichment<T> = coroutineScope {
+        if (releaseStatuses.isEmpty()) return@coroutineScope StatusEnrichment(items)
         val (unknown, known) = items.partition { SourceStatusFilterMatcher.fromEntryStatus(status(it)) == null }
-        if (unknown.isEmpty()) return StatusEnrichment(items)
+        if (unknown.isEmpty()) return@coroutineScope StatusEnrichment(items)
         // Все без статуса — иначе известные уже отфильтрованы корректно, детали не нужны.
         val limit = minOf(DETAILS_ENRICH_CAP, maxDetails.coerceAtLeast(0))
-        var charged = 0
+        val charged = java.util.concurrent.atomic.AtomicInteger(0)
         val enriched = unknown.take(limit).map { item ->
-            runCatchingUnlessCancelled {
-                if (budget == null) {
-                    fetchDetails(item)
-                } else {
-                    budget.detailPermits.withPermit {
-                        val remaining = budget.remainingMs()
-                        if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
-                        charged++
-                        withTimeoutOrNull(remaining) { fetchDetails(item) }
+            async {
+                runCatchingUnlessCancelled {
+                    if (budget == null) {
+                        withTimeoutOrNull(STATUS_DETAIL_TIMEOUT_MS) { fetchDetails(item) }
+                    } else {
+                        budget.detailPermits.withPermit {
+                            val remaining = budget.remainingMs()
+                            if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
+                            charged.incrementAndGet()
+                            withTimeoutOrNull(minOf(remaining, STATUS_DETAIL_TIMEOUT_MS)) { fetchDetails(item) }
+                        }
                     }
-                }
-            }.getOrNull() ?: item
-        }
-        return StatusEnrichment(known + enriched + unknown.drop(limit), detailsUsed = charged)
+                }.getOrNull() ?: item
+            }
+        }.awaitAll()
+        StatusEnrichment(known + enriched + unknown.drop(limit), detailsUsed = charged.get())
     }
 
     private companion object {
         const val DETAILS_ENRICH_CAP = 24
         const val SOURCE_READY_WAIT_MS = 2_000L
+        const val STATUS_DETAIL_TIMEOUT_MS = 6_000L
     }
 }
 

@@ -140,20 +140,13 @@ object TasteSignalRecorder {
                 repository.recordTaste(identity, signalType, metadata)?.positiveCreatedAt
             }.getOrNull() ?: return false
         } else if (signalType == DiscoverySignalType.HIDE) {
-            runCatchingUnlessCancelled { repository.hide(item.mediaType, item.cleanTitle) }
             runCatchingUnlessCancelled {
-                repository.recordSignalWithReceipt(
-                    mediaType = item.mediaType,
-                    cleanTitle = item.cleanTitle,
-                    title = item.title,
-                    signalType = signalType,
-                    genres = genres,
-                    provider = item.provider,
-                    sourceKey = sourceKey,
-                    timestamp = eventTimestamp,
-                )
-            }
-            eventTimestamp
+                repository.recordNegativeTaste(identity, metadata)
+            }.getOrNull() ?: return false
+        } else if (signalType == DiscoverySignalType.CONSUMED) {
+            runCatchingUnlessCancelled {
+                repository.recordConsumedTaste(identity, metadata)
+            }.getOrNull() ?: return false
         } else {
             runCatchingUnlessCancelled {
                 repository.recordSignalWithReceipt(
@@ -274,27 +267,29 @@ object TasteSignalRecorder {
         val sourceKey = resolveSourceKey(mediaType, sourceId)
         val identityKey = canonicalDiscoveryKey(mediaType, sourceId, null, cleanTitle)
         val eventTimestamp = nextMonotonicTimestamp()
+        val identity = DiscoveryTitleIdentity(
+            mediaType = mediaType,
+            identityKey = identityKey,
+            title = title,
+            primaryCleanTitle = cleanTitle,
+            sourceId = sourceId,
+            metadataChangedAt = eventTimestamp,
+        )
+        val metadata = DiscoveryTasteMetadata(
+            title = title,
+            primaryCleanTitle = cleanTitle,
+            genres = emptyList(),
+            provider = null,
+            sourceKey = sourceKey,
+            sourceId = sourceId,
+            changedAt = eventTimestamp,
+        )
         runCatchingUnlessCancelled {
-            repository.recordSignal(
-                mediaType = mediaType,
-                cleanTitle = cleanTitle,
-                title = title,
-                signalType = DiscoverySignalType.CONSUMED,
-                genres = emptyList(),
-                provider = null,
-                sourceKey = sourceKey,
-                timestamp = eventTimestamp,
-            )
+            repository.recordConsumedTaste(identity, metadata)
         }
         runCatchingUnlessCancelled {
             repository.recordFact(
-                DiscoveryTitleIdentity(
-                    mediaType = mediaType,
-                    identityKey = identityKey,
-                    title = title,
-                    primaryCleanTitle = cleanTitle,
-                    sourceId = sourceId,
-                ),
+                identity,
                 DiscoveryFactKind.STARTED,
             )
         }
@@ -339,17 +334,26 @@ object TasteSignalRecorder {
         if (!externalAllowed) return
         val meta = runCatchingUnlessCancelled { altMetaResolver(primaryTitle, mediaType) }.getOrNull() ?: return
         val altKey = consumedAltKey(primaryTitle, meta) ?: return
+        val altTitle = meta.altTitle ?: return
+        val altIdentityKey = canonicalDiscoveryKey(mediaType, null, null, altKey)
         val eventTimestamp = nextMonotonicTimestamp()
         runCatchingUnlessCancelled {
-            repository.recordSignal(
-                mediaType = mediaType,
-                cleanTitle = altKey,
-                title = meta.altTitle!!,
-                signalType = DiscoverySignalType.CONSUMED,
-                genres = emptyList(),
-                provider = null,
-                sourceKey = sourceKey,
-                timestamp = eventTimestamp,
+            repository.recordConsumedTaste(
+                identity = DiscoveryTitleIdentity(
+                    mediaType = mediaType,
+                    identityKey = altIdentityKey,
+                    title = altTitle,
+                    primaryCleanTitle = altKey,
+                    metadataChangedAt = eventTimestamp,
+                ),
+                metadata = DiscoveryTasteMetadata(
+                    title = altTitle,
+                    primaryCleanTitle = altKey,
+                    genres = emptyList(),
+                    provider = null,
+                    sourceKey = sourceKey,
+                    changedAt = eventTimestamp,
+                ),
             )
         }
     }

@@ -91,6 +91,7 @@ class SuggestionItemTest {
             "EXTERNAL_MAL",
             "EXTERNAL_MU",
             "EXTERNAL_NU",
+            "EXTERNAL_SHIKIMORI",
             "SEARCH_TITLE",
             "SEARCH_AUTHOR",
             "SEARCH_GENRE",

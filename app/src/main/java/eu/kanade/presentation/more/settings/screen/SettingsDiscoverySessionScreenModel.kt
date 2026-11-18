@@ -5,7 +5,6 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
-import eu.kanade.tachiyomi.data.discovery.computeDiscoveryConfigurationKey
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -15,7 +14,35 @@ internal fun computeDiscoverySessionFingerprint(
     sourcePreferences: SourcePreferences,
     mediaType: DiscoveryMediaType,
 ): String {
-    val configKey = computeDiscoveryConfigurationKey(preferences, mediaType, sourcePreferences)
+    // Без GenreMatcher / GenreOntology / SHA-256: при открытии экрана настроек
+    // достаточно точной сигнатуры сырых префов на главном потоке.
+    val configParts = buildString {
+        append(mediaType.key).append('|')
+        append(preferences.rowLikeEnabled().get()).append('|')
+        append(preferences.rowTasteEnabled().get()).append('|')
+        append(preferences.rowTrendEnabled().get()).append('|')
+        append(preferences.rowSourceEnabled().get()).append('|')
+        append(preferences.seedCount().get()).append('|')
+        append(preferences.seedCompleted().get()).append('|')
+        append(preferences.seedActive14().get()).append('|')
+        append(preferences.seedAdded().get()).append('|')
+        append(preferences.seedRated().get()).append('|')
+        append(preferences.seedCompletedDays().get()).append('|')
+        append(preferences.seedActiveDays().get()).append('|')
+        append(preferences.trendSeason().get()).append('|')
+        append(preferences.trendSort().get()).append('|')
+        append(preferences.releaseStatusFilter().get()).append('|')
+        append(preferences.ignoredGenres(mediaType).get()).append('|')
+        append(preferences.requiredGenres(mediaType).get()).append('|')
+        append(preferences.priorityGenres(mediaType).get()).append('|')
+        append(preferences.requiredMatchMode().get()).append('|')
+        append(preferences.requiredEnforcement().get()).append('|')
+        append(preferences.externalProvidersEnabled().get()).append('|')
+        append(preferences.discoverySourceMode(mediaType).get()).append('|')
+        append(preferences.discoverySourceExcluded(mediaType).get()).append('|')
+        append(preferences.discoverySourceKnown(mediaType).get()).append('|')
+        append(preferences.filterNsfw().get())
+    }
     val shikimori = sourcePreferences.suggestionsUseShikimori().get()
     val providers = when (mediaType) {
         DiscoveryMediaType.MANGA -> {
@@ -23,12 +50,13 @@ internal fun computeDiscoverySessionFingerprint(
             "$shikimori|$mu"
         }
         DiscoveryMediaType.NOVEL -> {
+            val mu = sourcePreferences.suggestionsUseMangaUpdatesNovel().get()
             val nu = sourcePreferences.suggestionsUseNovelUpdates().get()
-            "$shikimori|$nu"
+            "$shikimori|$mu|$nu"
         }
         DiscoveryMediaType.ANIME -> "$shikimori"
     }
-    return "$configKey|$providers"
+    return "$configParts||$providers"
 }
 
 class SettingsDiscoverySessionScreenModel(

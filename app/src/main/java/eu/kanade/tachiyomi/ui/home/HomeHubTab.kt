@@ -754,6 +754,7 @@ internal data class HomeHubDiscoveryItem(
     val shownAt: Long? = null,
     val genres: List<String> = emptyList(),
     val hasPriorityBoost: Boolean = false,
+    val trustedAliases: Set<String> = emptySet(),
 )
 
 /** Бейдж «откроется напрямую»: только полная привязка (id + непустой url). */
@@ -1008,13 +1009,14 @@ object HomeHubTab : Tab {
                 HomeHubSection.Novel -> tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL
             }
             if (
+                discoveryPreferences.discoveryEnabled().get() &&
                 eu.kanade.tachiyomi.data.discovery.shouldBootstrapDiscoveryFeed(
                     lastUpdatedAt = discoveryRepository.lastUpdatedAt(mediaType),
                     lastBootstrapAttemptAt = discoveryPreferences.bootstrapAttemptAt(mediaType).get(),
                 )
             ) {
                 discoveryPreferences.bootstrapAttemptAt(mediaType).set(System.currentTimeMillis())
-                eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.refreshNow(context, mediaType)
+                eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.bootstrap(context, mediaType)
             }
         }
         var hiddenSnackItem by remember { mutableStateOf<HomeHubDiscoveryItem?>(null) }
@@ -1034,8 +1036,7 @@ object HomeHubTab : Tab {
             discoveryHideScope.launch {
                 // mediaType берём из айтема, а не из текущей вкладки: snackbar переживает
                 // свайп между вкладками, и undo обязан целиться в исходный медиатип.
-                discoveryRepository.hide(item.mediaType, item.cleanTitle)
-                // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
+                // Taste Engine: единый вызов записывает и скрытие, и негативный сигнал вкуса.
                 eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
                     discoveryRepository,
                     item.toDiscoverySuggestion(),

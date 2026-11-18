@@ -1942,6 +1942,7 @@
     <string name="pref_discovery_group_trend">Ряд «Сезон и тренды»</string>
     <string name="pref_discovery_row_trend">Ряд включён</string>
     <string name="pref_discovery_trend_season">Сезон аниме</string>
+    <string name="pref_discovery_trend_season_summary">%1$s (только аниме)</string>
     <string name="pref_discovery_trend_season_current">Текущий</string>
     <string name="pref_discovery_trend_season_next">Следующий</string>
     <string name="pref_discovery_trend_season_both">Оба</string>
@@ -1979,6 +1980,7 @@
     <string name="pref_discovery_genre_filters">Жанровые подборки</string>
     <string name="pref_discovery_genre_filters_summary">Игнор · приоритет · обязательные</string>
     <string name="pref_discovery_genre_filters_summary_per_media">Отдельно для аниме, манги и ранобэ</string>
+    <string name="pref_discovery_genre_filters_summary_counts">Активно — Аниме: %1$d · Манга: %2$d · Ранобэ: %3$d</string>
     <string name="pref_discovery_genre_media_label">Раздел</string>
     <string name="pref_discovery_genre_mode_label">Как учитывать жанр</string>
     <string name="pref_discovery_genre_mode_ignored">Игнор</string>

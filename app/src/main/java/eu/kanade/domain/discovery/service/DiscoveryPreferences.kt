@@ -181,17 +181,25 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
         return preferenceStore.getString("${legacyKey}_${mediaType.key}", "")
     }
 
-    private fun migrateGenrePreferencesIfNeeded() = synchronized(genreFilterMigrationLock) {
-        val migrated = preferenceStore.getBoolean(
-            Preference.appStateKey(GENRE_FILTER_MIGRATION_MARKER),
-            false,
-        )
-        if (migrated.get()) return@synchronized
+    @Volatile
+    private var genrePreferencesMigrated = false
 
-        migrateGenrePreference(PRIORITY_GENRES_KEY)
-        migrateGenrePreference(REQUIRED_GENRES_KEY)
-        migrateGenrePreference(IGNORED_GENRES_KEY)
-        migrated.set(true)
+    private fun migrateGenrePreferencesIfNeeded() {
+        if (genrePreferencesMigrated) return
+        synchronized(genreFilterMigrationLock) {
+            if (genrePreferencesMigrated) return
+            val migrated = preferenceStore.getBoolean(
+                Preference.appStateKey(GENRE_FILTER_MIGRATION_MARKER),
+                false,
+            )
+            if (!migrated.get()) {
+                migrateGenrePreference(PRIORITY_GENRES_KEY)
+                migrateGenrePreference(REQUIRED_GENRES_KEY)
+                migrateGenrePreference(IGNORED_GENRES_KEY)
+                migrated.set(true)
+            }
+            genrePreferencesMigrated = true
+        }
     }
 
     private fun migrateGenrePreference(legacyKey: String) {

@@ -36,7 +36,11 @@ class MangaUpdatesSimilarSource(
     private val client by lazy { Injekt.get<NetworkHelper>().client }
     private val json by lazy { Injekt.get<Json>() }
 
-    private val allowedTypes = setOf("Manga", "Manhwa", "Manhua", "Comic", "Webtoon", "Novel")
+    private val allowedTypes = when (mediaType) {
+        SuggestionMediaType.NOVEL -> setOf("Novel")
+        SuggestionMediaType.MANGA, SuggestionMediaType.ANIME ->
+            setOf("Manga", "Manhwa", "Manhua", "Comic", "Webtoon")
+    }
 
     override suspend fun fetchSuggestions(seed: SuggestionSeed): List<SuggestionItem> = coroutineScope {
         // Enabled for both MANGA and NOVEL: MangaUpdates has a large light-novel
@@ -45,6 +49,7 @@ class MangaUpdatesSimilarSource(
             return@coroutineScope emptyList()
         }
 
+        val nsfwFilter = nsfwFilterProvider()
         val cacheKey = SuggestionCache.makeKey(
             name,
             seed.primaryTitle,
@@ -52,6 +57,7 @@ class MangaUpdatesSimilarSource(
             seed.candidateTitles,
             seed.description,
             seed.author,
+            extraKeys = listOf("nsfw=$nsfwFilter"),
         )
         SuggestionCache.get(cacheKey)?.let {
             logcat { "[MangaUpdates] CACHE HIT for '${seed.primaryTitle}' (${seed.candidateTitles.size} candidates)" }

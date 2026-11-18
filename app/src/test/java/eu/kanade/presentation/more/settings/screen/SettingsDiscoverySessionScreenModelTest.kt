@@ -100,6 +100,19 @@ class SettingsDiscoverySessionScreenModelTest {
     }
 
     @Test
+    fun `mangaupdates novel toggle refreshes both manga and novel on dispose`() {
+        val model = SettingsDiscoverySessionScreenModel(context, preferences, sourcePreferences)
+        val initial = sourcePreferences.suggestionsUseMangaUpdatesNovel().get()
+        sourcePreferences.suggestionsUseMangaUpdatesNovel().set(!initial)
+        model.onDispose()
+
+        scheduledWorks.map { it.first }.toSet() shouldBe setOf(
+            DiscoveryUpdateJob.configurationWorkName(DiscoveryMediaType.MANGA),
+            DiscoveryUpdateJob.configurationWorkName(DiscoveryMediaType.NOVEL),
+        )
+    }
+
+    @Test
     fun `global external provider toggle refreshes all media types on dispose`() {
         val model = SettingsDiscoverySessionScreenModel(context, preferences, sourcePreferences)
         preferences.externalProvidersEnabled().set(false)

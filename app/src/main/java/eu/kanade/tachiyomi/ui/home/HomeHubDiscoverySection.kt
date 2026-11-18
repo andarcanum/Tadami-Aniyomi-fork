@@ -135,8 +135,7 @@ import eu.kanade.tachiyomi.data.discovery.filterFranchiseClusteringGeneric
 import eu.kanade.tachiyomi.data.discovery.interleaveMix
 import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
-import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
-import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
+import eu.kanade.tachiyomi.ui.discovery.buildDiscoverySuggestionItem
 import eu.kanade.tachiyomi.ui.discovery.discoveryCoverData
 import eu.kanade.tachiyomi.ui.discovery.rememberDiscoveryCoverData
 import kotlinx.coroutines.CoroutineStart
@@ -697,28 +696,15 @@ internal fun DiscoverySuggestion.toHomeHubDiscoveryItem(
     shownAt = shownAt,
     genres = genres,
     hasPriorityBoost = hasPriorityBoost,
+    trustedAliases = trustedAliases,
 )
 
-internal fun HomeHubDiscoveryItem.toSuggestionItem(): SuggestionItem = SuggestionItem(
+internal fun HomeHubDiscoveryItem.toSuggestionItem(): SuggestionItem = buildDiscoverySuggestionItem(
     title = title,
-    searchQueries = listOf(title),
-    thumbnailUrl = coverUrl,
-    providerName = provider,
-    providerUrl = "",
-    providerId = null,
-    mediaType = when (mediaType) {
-        DiscoveryMediaType.ANIME -> SuggestionMediaType.ANIME
-        DiscoveryMediaType.MANGA -> SuggestionMediaType.MANGA
-        DiscoveryMediaType.NOVEL -> SuggestionMediaType.NOVEL
-    },
-    reason = when (provider.lowercase()) {
-        "anilist" -> SuggestionReason.EXTERNAL_ANILIST
-        "myanimelist", "mal" -> SuggestionReason.EXTERNAL_MAL
-        "mangaupdates" -> SuggestionReason.EXTERNAL_MU
-        "novelupdates" -> SuggestionReason.EXTERNAL_NU
-        "shikimori" -> SuggestionReason.EXTERNAL_SHIKIMORI
-        else -> SuggestionReason.SEARCH_TITLE
-    },
+    trustedAliases = trustedAliases,
+    coverUrl = coverUrl,
+    provider = provider,
+    mediaType = mediaType,
 )
 
 internal fun HomeHubDiscoveryItem.toDiscoverySuggestion(): DiscoverySuggestion = DiscoverySuggestion(
@@ -737,6 +723,7 @@ internal fun HomeHubDiscoveryItem.toDiscoverySuggestion(): DiscoverySuggestion =
     sourceId = sourceId,
     sourceUrl = sourceUrl,
     genres = genres,
+    trustedAliases = trustedAliases,
 )
 
 // ============================ UI ============================

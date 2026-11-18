@@ -12,6 +12,8 @@ import eu.kanade.tachiyomi.data.backup.models.BackupDayActivity
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryHidden
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoverySignal
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTag
+import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTasteResetEpoch
+import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTitleMemory
 import eu.kanade.tachiyomi.data.backup.models.BackupExtension
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepos
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionStore
@@ -98,6 +100,13 @@ internal object BackupPayloadEmitter {
             backup.backupTranslationConfiguration?.let {
                 messageField(629, proto.encodeToByteArray(BackupTranslationConfiguration.serializer(), it))
             }
+            messageList(630, backup.backupDiscoveryTitleMemory, BackupDiscoveryTitleMemory.serializer(), proto)
+            messageList(
+                631,
+                backup.backupDiscoveryTasteResetEpochs,
+                BackupDiscoveryTasteResetEpoch.serializer(),
+                proto,
+            )
         }
     }
 

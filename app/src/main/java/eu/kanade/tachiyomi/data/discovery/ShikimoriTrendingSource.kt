@@ -58,12 +58,19 @@ internal fun mapGenresToIds(
     profileGenres: List<String>,
     catalog: List<ShikimoriGenreDto>,
     mediaKind: String,
-): List<Long> = catalog.asSequence()
-    .filter { it.kind == null || it.kind == mediaKind }
-    .filter { g -> profileGenres.any { genre -> matchesCatalogGenre(genre, g) } }
-    .map { it.id }
-    .distinct()
-    .toList()
+): List<Long> {
+    val effectiveKind = if (mediaKind == "ranobe" && catalog.none { it.kind == "ranobe" }) {
+        "manga"
+    } else {
+        mediaKind
+    }
+    return catalog.asSequence()
+        .filter { it.kind == null || it.kind == effectiveKind }
+        .filter { g -> profileGenres.any { genre -> matchesCatalogGenre(genre, g) } }
+        .map { it.id }
+        .distinct()
+        .toList()
+}
 
 private fun matchesCatalogGenre(profileGenre: String, entry: ShikimoriGenreDto): Boolean {
     if (entry.name.isNotBlank() && GenreMatcher.matches(profileGenre, entry.name)) return true
@@ -176,13 +183,11 @@ open class ShikimoriTrendingSource(
         page: Int,
         releaseStatuses: Set<DiscoveryReleaseStatus>,
     ): List<DiscoveryTrendingItem> {
-        if (mediaType == DiscoveryMediaType.NOVEL) return emptyList()
-
         return try {
             when (mediaType) {
                 DiscoveryMediaType.ANIME -> fetchAnime(season, sort, page, releaseStatuses)
-                DiscoveryMediaType.MANGA -> fetchManga(sort, page, releaseStatuses)
-                DiscoveryMediaType.NOVEL -> emptyList()
+                DiscoveryMediaType.MANGA -> fetchListEndpoint("mangas", sort, page, releaseStatuses)
+                DiscoveryMediaType.NOVEL -> fetchListEndpoint("ranobe", sort, page, releaseStatuses)
             }
         } catch (e: CancellationException) {
             throw e
@@ -228,7 +233,8 @@ open class ShikimoriTrendingSource(
             .let { filterByShikimoriStatus(it, clientFilter) }
     }
 
-    private suspend fun fetchManga(
+    private suspend fun fetchListEndpoint(
+        endpoint: String,
         sort: TrendSort,
         page: Int,
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
@@ -236,7 +242,7 @@ open class ShikimoriTrendingSource(
         val order = if (sort == TrendSort.SCORE) "ranked" else "popularity"
         val (serverStatus, clientFilter) = resolveShikimoriStatusFilter(null, releaseStatuses)
         val url = shikimoriListUrl(
-            endpoint = "mangas",
+            endpoint = endpoint,
             page = page,
             order = order,
             status = serverStatus,
@@ -257,10 +263,13 @@ open class ShikimoriTrendingSource(
         page: Int,
         releaseStatuses: Set<DiscoveryReleaseStatus>,
     ): List<DiscoveryTrendingItem> {
-        if (mediaType == DiscoveryMediaType.NOVEL || genres.isEmpty()) return emptyList()
+        if (genres.isEmpty()) return emptyList()
         return try {
-            val endpoint = if (mediaType == DiscoveryMediaType.ANIME) "animes" else "mangas"
-            val kind = if (mediaType == DiscoveryMediaType.ANIME) "anime" else "manga"
+            val (endpoint, kind) = when (mediaType) {
+                DiscoveryMediaType.ANIME -> "animes" to "anime"
+                DiscoveryMediaType.MANGA -> "mangas" to "manga"
+                DiscoveryMediaType.NOVEL -> "ranobe" to "ranobe"
+            }
             val genreIds = mapGenresToIds(genres, genresCatalog(), kind)
             // Нет ids — честный пустой результат (Composite фолбэчится на AniList genre_in),
             // а не popularity-выдача без фильтра под видом «твоего вкуса».
@@ -309,13 +318,16 @@ open class ShikimoriTrendingSource(
     }
 
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
-        if (mediaType == DiscoveryMediaType.NOVEL) return null
         val filterNsfw = nsfwFilterProvider()
         val cacheKey = DiscoveryMetadataCacheKey(mediaType, title, filterNsfw)
         metaCache.get(cacheKey)?.let { return it.takeIf { nsfwFilterProvider() == filterNsfw } }
 
         return try {
-            val endpoint = if (mediaType == DiscoveryMediaType.ANIME) "animes" else "mangas"
+            val endpoint = when (mediaType) {
+                DiscoveryMediaType.ANIME -> "animes"
+                DiscoveryMediaType.MANGA -> "mangas"
+                DiscoveryMediaType.NOVEL -> "ranobe"
+            }
             val searchUrl = "https://shikimori.one/api/$endpoint?search=${URLEncoder.encode(title, "UTF-8")}&limit=5"
             ExternalApiThrottle.acquire(ExternalApiThrottle.Api.SHIKIMORI)
             val searchResults = clientProvider().newCall(GET(searchUrl, headers = headers))
@@ -338,11 +350,13 @@ open class ShikimoriTrendingSource(
                 if (isRussianLocaleProvider() && !it.russian.isNullOrBlank()) it.russian else it.name
             }.orEmpty()
             val altTitle = if (title == detail.russian) detail.name else detail.russian
+            val coverUrl = (detail.image?.original ?: detail.image?.preview)?.let { "https://shikimori.one$it" }
 
             val meta = DiscoveryMeta(
                 description = desc,
                 genres = genreNames,
                 altTitle = altTitle,
+                coverUrl = coverUrl,
             )
             if (nsfwFilterProvider() != filterNsfw) return null
             metaCache.put(cacheKey, meta)
