@@ -872,13 +872,24 @@ internal class NovelPageReaderTextView constructor(
     fun updateTouchHandlingEnabled(enabled: Boolean) {
         touchHandlingEnabled = enabled
         if (!enabled) {
-            updateSelectionInteractionEnabled(false)
+            updateSelectionInteractionEnabled(
+                enabled = false,
+                selectableLayoutEnabled = isTextSelectable,
+            )
         }
     }
 
-    fun updateSelectionInteractionEnabled(enabled: Boolean) {
+    fun updateSelectionInteractionEnabled(
+        enabled: Boolean,
+        selectableLayoutEnabled: Boolean = enabled,
+    ) {
         selectionInteractionEnabled = enabled && touchHandlingEnabled
-        setTextIsSelectable(selectionInteractionEnabled)
+        // Never tear down TextView's selectable DynamicLayout mid-gesture when only
+        // touchHandlingEnabled changes (swipe/curl); otherwise DynamicLayout <-> StaticLayout
+        // switches shift line 2+ by a few pixels on touch and snap back on release.
+        if (isTextSelectable != selectableLayoutEnabled) {
+            setTextIsSelectable(selectableLayoutEnabled)
+        }
         // setTextIsSelectable() re-enables focusability, so this interop view can become the
         // focused Android view. Compose detaches interop views while composition changes are
         // still being applied, and ViewGroup.removeViewInLayout() then makes the framework search
@@ -1852,7 +1863,13 @@ internal fun NovelPageReaderTextBlock(
             textView.predictedContentHeightPx = predictedContentHeightPx
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateTouchHandlingEnabled(touchHandlingEnabled)
-            textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
+            val selectionConfigured = readerSettings.textSelectionEnabled ||
+                readerSettings.selectedTextTranslationEnabled ||
+                readerSettings.novelDictionaryEnabled
+            textView.updateSelectionInteractionEnabled(
+                enabled = selectionInteractionEnabled,
+                selectableLayoutEnabled = selectionConfigured,
+            )
             val glyphPadBottom = resolvePageReaderGlyphOverflowPaddingPx(blockTextSizePx)
             textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
             applyNovelPageReaderTextViewMetrics(textView = textView, metrics = blockTextViewMetrics)
@@ -1893,7 +1910,7 @@ internal fun NovelPageReaderTextBlock(
                         firstLineIndentPx = null,
                         density = density.density,
                         measurementPaint = textView.paint,
-                        preferDynamicLayout = selectionInteractionEnabled,
+                        preferDynamicLayout = selectionConfigured,
                         hyphenationEnabled = hyphenationEnabled,
                         textLocale = blockTextLocale,
                         isPageMode = isPageMode,
@@ -1906,7 +1923,7 @@ internal fun NovelPageReaderTextBlock(
                             candidateText = initialHyphenated.prepared.text,
                             widthPx = resolvedAvailableWidthPx,
                             metrics = blockTextViewMetrics,
-                            selectionEnabled = selectionInteractionEnabled,
+                            selectionEnabled = selectionConfigured,
                             bottomPadPx = glyphPadBottom,
                         )
                         val needsTextViewReconcile = probeLayout != null && (
@@ -1919,7 +1936,7 @@ internal fun NovelPageReaderTextBlock(
                                     candidateText = candidate,
                                     widthPx = resolvedAvailableWidthPx,
                                     metrics = blockTextViewMetrics,
-                                    selectionEnabled = selectionInteractionEnabled,
+                                    selectionEnabled = selectionConfigured,
                                     bottomPadPx = glyphPadBottom,
                                 )
                             }
@@ -2486,13 +2503,10 @@ private fun NovelPageReaderMergedTextBlock(
         hyphenationEnabled = hyphenationEnabled,
         textLocale = bodyLocale,
     )
-    val selectionInteractionEnabled =
-        touchHandlingEnabled &&
-            (
-                readerSettings.textSelectionEnabled ||
-                    readerSettings.selectedTextTranslationEnabled ||
-                    readerSettings.novelDictionaryEnabled
-                )
+    val selectionConfigured = readerSettings.textSelectionEnabled ||
+        readerSettings.selectedTextTranslationEnabled ||
+        readerSettings.novelDictionaryEnabled
+    val selectionInteractionEnabled = touchHandlingEnabled && selectionConfigured
 
     if (renderAsStaticCanvas && availableWidthPx > 0) {
         val safeWidthPx = availableWidthPx.coerceAtLeast(1)
@@ -2506,6 +2520,7 @@ private fun NovelPageReaderMergedTextBlock(
             bodyTextShadow,
             quoteStripeColor,
             hyphenationEnabled,
+            selectionConfigured,
             density.density,
         ) {
             val paint = resolveReaderMeasurementTextPaint(
@@ -2541,7 +2556,25 @@ private fun NovelPageReaderMergedTextBlock(
                 onUrlClick = null,
                 measurementPaint = paint,
             )
-            buildReaderStaticLayout(
+            (
+                if (selectionConfigured) {
+                    buildReaderDynamicLayout(
+                        text = mergedContent.spannable,
+                        widthPx = safeWidthPx,
+                        textSizePx = bodyTextSizePx,
+                        lineHeightMultiplier = bodyLineSpacingMultiplier,
+                        typeface = textTypeface,
+                        textAlign = ReaderTextAlign.LEFT,
+                        firstLineIndentPx = null,
+                        density = density.density,
+                        measurementPaint = paint,
+                        hyphenationEnabled = false,
+                        textLocale = bodyLocale,
+                    )
+                } else {
+                    null
+                }
+                ) ?: buildReaderStaticLayout(
                 text = mergedContent.spannable,
                 widthPx = safeWidthPx,
                 textSizePx = bodyTextSizePx,
@@ -2620,7 +2653,10 @@ private fun NovelPageReaderMergedTextBlock(
             textView.selectionAnchorTextStartInBlock = preparedInputs.first().sourceTextStartInBlock
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateTouchHandlingEnabled(touchHandlingEnabled)
-            textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
+            textView.updateSelectionInteractionEnabled(
+                enabled = selectionInteractionEnabled,
+                selectableLayoutEnabled = selectionConfigured,
+            )
             textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
             applyNovelPageReaderTextViewMetrics(textView = textView, metrics = bodyMetrics)
             if (textView.renderedTextSignature != mergedSignature) {
@@ -2645,7 +2681,7 @@ private fun NovelPageReaderMergedTextBlock(
                                 candidateText = candidate,
                                 widthPx = resolvedWidth,
                                 metrics = bodyMetrics,
-                                selectionEnabled = selectionInteractionEnabled,
+                                selectionEnabled = selectionConfigured,
                                 bottomPadPx = glyphPadBottom,
                             )
                         },
