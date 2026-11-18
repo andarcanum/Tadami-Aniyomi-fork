@@ -2335,6 +2335,8 @@
     <string name="pref_discovery_refresh_after_library">Refresh after library update</string>
     <string name="pref_discovery_refresh_after_library_summary">Delayed run 30 minutes after an update starts</string>
     <string name="pref_discovery_wifi_only">Wi-Fi only</string>
+    <string name="pref_discovery_eager_refill">Keep feed full (60)</string>
+    <string name="pref_discovery_eager_refill_summary">Refill after every read title instead of waiting until fewer than 48 remain</string>
     <string name="pref_discovery_group_display">Display</string>
     <string name="pref_discovery_teaser_count">Cards in Home teaser</string>
     <string name="pref_discovery_show_reasons">Show reasons</string>

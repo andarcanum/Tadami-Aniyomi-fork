@@ -236,9 +236,9 @@ class DiscoveryCandidatePolicy(
      * Фильтрует список кандидатов ряда с учётом best-effort / strict семантики для requiredGenres:
      * - Запрещённые (блэклист и глобальный игнор) исключаются ВСЕГДА.
      * - Если заданы requiredGenres:
-     *     - Выбираются только кандидаты, матчащие requiredGenres (или с неполными метаданными при !isStrictRequired).
-     *     - Если таких нет и !isStrictRequired: ослабляется требование requiredGenres,
-     *       возвращаются все допущенные кандидаты (без блэклиста и игнора).
+     *     - Выбираются точные совпадения, а в best-effort при нехватке до [fillTarget] —
+     *       частичные совпадения, затем кандидаты с неизвестными жанрами и остальные допустимые.
+     *     - При [fillTarget] == null сохраняется строгая тиерная выборка без добора нижних тиеров.
      *     - Если isStrictRequired: возвращается пустой список (никогда не ослабляется).
      */
     fun <T> filterRowCandidates(
@@ -246,6 +246,7 @@ class DiscoveryCandidatePolicy(
         genresSelector: (T) -> List<String>,
         fallbackTagsSelector: (T) -> List<String> = { emptyList() },
         scoreSelector: ((T) -> Double)? = null,
+        fillTarget: Int? = null,
     ): List<T> {
         if (items.isEmpty()) return emptyList()
 
@@ -269,63 +270,124 @@ class DiscoveryCandidatePolicy(
 
         if (withoutForbidden.isEmpty()) return emptyList()
 
-        // 2. Проверяем required
-        var usingPartialFallback = false
-        val admittedCandidates = if (requiredGenres.isEmpty()) {
-            withoutForbidden
-        } else {
-            val exactRequired = withoutForbidden.filter { (_, verdict) ->
-                verdict is CandidateVerdict.Admitted && verdict.matchesRequired
-            }
-            val partialRequired = if (exactRequired.isEmpty() && !isStrictRequired) {
-                withoutForbidden.mapNotNull { entry ->
-                    val effectiveGenres = genresSelector(entry.first).ifEmpty { fallbackTagsSelector(entry.first) }
-                    val matchCount = countRequiredMatches(effectiveGenres)
-                    if (matchCount > 0) entry to matchCount else null
-                }
-            } else {
-                emptyList()
-            }
-            val incompleteRequired = if (exactRequired.isEmpty() && partialRequired.isEmpty() && !isStrictRequired) {
-                withoutForbidden.filter { (_, verdict) ->
-                    verdict is CandidateVerdict.Admitted && !verdict.matchesRequired && verdict.hasIncompleteMetadata
-                }
-            } else {
-                emptyList()
-            }
-            when {
-                exactRequired.isNotEmpty() -> exactRequired
-                partialRequired.isNotEmpty() -> {
-                    usingPartialFallback = true
-                    partialRequired.sortedByDescending { it.second }.map { it.first }
-                }
-                incompleteRequired.isNotEmpty() -> incompleteRequired
-                !isStrictRequired -> {
-                    // Best-effort ослабление: подходящих по requiredGenres тайтлов нет,
-                    // возвращаем допущенные без блэклиста/игнора, чтобы лента не была пустой.
-                    withoutForbidden
-                }
-                else -> emptyList()
+        // 2. Без requiredGenres — ранжируем весь допустимый список единым образом
+        if (requiredGenres.isEmpty()) {
+            return rankCandidateTier(
+                candidates = withoutForbidden,
+                genresSelector = genresSelector,
+                fallbackTagsSelector = fallbackTagsSelector,
+                scoreSelector = scoreSelector,
+                orderByPartialRequired = false,
+            )
+        }
+
+        val exactRequired = withoutForbidden.filter { (_, verdict) ->
+            verdict is CandidateVerdict.Admitted && verdict.matchesRequired
+        }
+        if (isStrictRequired) {
+            return rankCandidateTier(
+                candidates = exactRequired,
+                genresSelector = genresSelector,
+                fallbackTagsSelector = fallbackTagsSelector,
+                scoreSelector = scoreSelector,
+                orderByPartialRequired = false,
+            )
+        }
+
+        val exactSet = exactRequired.mapTo(HashSet()) { it.first }
+        val nonExact = withoutForbidden.filterNot { it.first in exactSet }
+        val partialEntries = nonExact.mapNotNull { entry ->
+            val effectiveGenres = genresSelector(entry.first).ifEmpty { fallbackTagsSelector(entry.first) }
+            val matchCount = countRequiredMatches(effectiveGenres)
+            if (matchCount > 0) entry to matchCount else null
+        }
+        val partialSet = partialEntries.mapTo(HashSet()) { it.first.first }
+        val incompleteEntries = nonExact.filter { (item, verdict) ->
+            item !in partialSet &&
+                verdict is CandidateVerdict.Admitted &&
+                !verdict.matchesRequired &&
+                verdict.hasIncompleteMetadata
+        }
+        val incompleteSet = incompleteEntries.mapTo(HashSet()) { it.first }
+        val otherEntries = nonExact.filter { (item, _) -> item !in partialSet && item !in incompleteSet }
+
+        if (fillTarget == null) {
+            return when {
+                exactRequired.isNotEmpty() -> rankCandidateTier(
+                    exactRequired,
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = false,
+                )
+                partialEntries.isNotEmpty() -> rankCandidateTier(
+                    partialEntries.sortedByDescending { it.second }.map { it.first },
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = true,
+                )
+                incompleteEntries.isNotEmpty() -> rankCandidateTier(
+                    incompleteEntries,
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = false,
+                )
+                else -> rankCandidateTier(
+                    withoutForbidden,
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = false,
+                )
             }
         }
 
-        if (admittedCandidates.isEmpty()) return emptyList()
+        // Best-effort добор до fillTarget с сохранением строгого приоритета тиеров:
+        // exact > partial (по числу совпавших required) > incomplete > прочие допустимые.
+        val target = fillTarget.coerceAtLeast(0)
+        val combined = ArrayList<T>(minOf(target, withoutForbidden.size))
+        fun appendTier(entries: List<Pair<T, CandidateVerdict>>, orderByPartial: Boolean) {
+            if (combined.size >= target || entries.isEmpty()) return
+            val ranked = rankCandidateTier(
+                entries,
+                genresSelector,
+                fallbackTagsSelector,
+                scoreSelector,
+                orderByPartialRequired = orderByPartial,
+            )
+            val need = target - combined.size
+            combined.addAll(if (ranked.size > need) ranked.take(need) else ranked)
+        }
+        appendTier(exactRequired, orderByPartial = false)
+        appendTier(partialEntries.sortedByDescending { it.second }.map { it.first }, orderByPartial = true)
+        appendTier(incompleteEntries, orderByPartial = false)
+        appendTier(otherEntries, orderByPartial = false)
+        return combined
+    }
 
-        // 3. Если нет priorityGenres и явный scoreSelector не передан, сохраняем порядок (уже отсортирован для partialRequired)
+    private fun <T> rankCandidateTier(
+        candidates: List<Pair<T, CandidateVerdict>>,
+        genresSelector: (T) -> List<String>,
+        fallbackTagsSelector: (T) -> List<String>,
+        scoreSelector: ((T) -> Double)?,
+        orderByPartialRequired: Boolean,
+    ): List<T> {
+        if (candidates.isEmpty()) return emptyList()
         if (priorityGenres.isEmpty() && scoreSelector == null) {
-            return admittedCandidates.map { it.first }
+            return candidates.map { it.first }
         }
 
-        // 4. Единый стабильный within-row ranker с независимым вкладом количества совпавших priorityGenres
         val extractScore: (T) -> Double = scoreSelector
             ?: { item -> (item as? DiscoveryRowItem)?.score ?: (item as? DiscoverySuggestion)?.score ?: 0.0 }
 
-        val scores = admittedCandidates.map { extractScore(it.first) }
+        val scores = candidates.map { extractScore(it.first) }
         val minScore = scores.minOrNull() ?: 0.0
         val maxScore = scores.maxOrNull() ?: 0.0
         val hasSpread = maxScore > minScore
 
-        return admittedCandidates
+        return candidates
             .map { (item, verdict) ->
                 val effectiveGenres = genresSelector(item).ifEmpty { fallbackTagsSelector(item) }
                 val priorityMatches = if (verdict is CandidateVerdict.Admitted && verdict.hasPriorityBoost) {
@@ -333,16 +395,14 @@ class DiscoveryCandidatePolicy(
                 } else {
                     0
                 }
-                val partialMatches = if (usingPartialFallback) countRequiredMatches(effectiveGenres) else 0
+                val partialMatches = if (orderByPartialRequired) countRequiredMatches(effectiveGenres) else 0
                 val rawScore = extractScore(item)
                 val normalizedScore = if (hasSpread) (rawScore - minScore) / (maxScore - minScore) else 0.0
-                // Каждый совпавший priority-жанр поднимает уровень (+1.0 на жанр > макс. вклада score 0.5).
-                // Внутри одного числа совпадений сохраняется ранжирование по normalizedScore / исходному порядку.
                 val effectiveRank = priorityMatches.toDouble() + (normalizedScore * 0.5)
                 Triple(item, partialMatches, effectiveRank)
             }
             .sortedWith(
-                if (usingPartialFallback) {
+                if (orderByPartialRequired) {
                     compareByDescending<Triple<T, Int, Double>> { it.second }
                         .thenByDescending { it.third }
                 } else {

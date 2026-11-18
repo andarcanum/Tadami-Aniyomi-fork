@@ -8,7 +8,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
@@ -24,6 +23,7 @@ internal const val GENRE_SOURCE_TIMEOUT_MS = 30_000L
 internal const val RICH_SOURCE_TARGET = 30
 
 private const val MIN_GENRE_SOURCE_TIMEOUT_MS = 5_000L
+internal const val WAVE_SOURCE_TIMEOUT_CAP_MS = 12_000L
 
 /** A required genre may legitimately span many catalogue pages. */
 private const val MAX_REQUIRED_SOURCE_PAGES = 20
@@ -240,21 +240,21 @@ internal suspend fun queryDiscoveryGenreSources(
         val before = active.sumOf { it.pagesFetched + it.verified + it.detailsUsed + it.totalAdmittedCount() } to
             active.sumOf { it.pendingItems.size }
         // One page or one hydration batch per source and round: late selected
-        // sources get their probe before an early source can own the deadline.
-        val batches = active.chunked(maxConcurrency)
-        for ((batchIndex, batch) in batches.withIndex()) {
-            val remainingMs = if (hydrate) budget?.remainingMs() else null
-            if (remainingMs == 0L) {
-                batches.drop(batchIndex).flatten().forEach { it.budgetExpired = true }
-                break
-            }
-            val batchTimeout = remainingMs?.let { minOf(timeoutMs, it) } ?: timeoutMs
-            batch.map { state ->
+        // sources get their probe before an early source can own the deadline,
+        // while Semaphore(maxConcurrency) prevents a slow source from stalling free slots.
+        supervisorScope {
+            active.map { state ->
                 async {
                     permits.withPermit {
+                        val remainingMs = if (hydrate) budget?.remainingMs() else null
+                        if (remainingMs == 0L) {
+                            state.budgetExpired = true
+                            return@withPermit
+                        }
+                        val callTimeout = remainingMs?.let { minOf(timeoutMs, it) } ?: timeoutMs
                         runWaveSafely(
                             state, catalog, media, state.queryGenres, releaseStatuses,
-                            policy, batchTimeout, hydrate, budget,
+                            policy, callTimeout, hydrate, budget,
                             allowance[state.allocationId] ?: 0, isProbe = state.allocationId in probeAlloc, wave,
                         )
                     }
@@ -529,7 +529,7 @@ private suspend fun advanceSource(
             }
             if (allowanceLeft > 0) {
                 val remaining = if (hydrate) budget.remainingMs() else timeoutMs
-                val refilled = withTimeoutOrNull(minOf(timeoutMs, remaining.coerceAtLeast(1L))) {
+                val refilled = withHardTimeoutOrNull(minOf(timeoutMs, remaining.coerceAtLeast(1L))) {
                     catalog.hydrateGenres(media, state.sourceId, pending, budget, allowanceLeft)
                 }
                 if (refilled == null) {
@@ -582,7 +582,7 @@ private suspend fun advanceSource(
         return
     }
     val page = state.nextPage
-    val pageResult = withTimeoutOrNull(minOf(timeoutMs, remaining)) {
+    val pageResult = withHardTimeoutOrNull(minOf(timeoutMs, remaining)) {
         catalog.popularWithGenresAllocated(
             mediaType = media,
             sourceId = state.sourceId,

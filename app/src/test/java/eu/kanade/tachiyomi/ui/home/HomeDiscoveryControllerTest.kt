@@ -974,6 +974,67 @@ class HomeDiscoveryControllerTest {
         }
     }
 
+    @Test
+    fun `cached pool and incomplete inventory never report FAILED even when lastGenerationStatus is FAILED`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo().apply {
+                poolFlow.value = listOf(
+                    testSuggestion("Existing Pick").copy(sourceId = 42L, provider = "Plugin"),
+                )
+            }
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
+                discoveryEnabled().set(true)
+                lastGenerationStatus(DiscoveryMediaType.ANIME).set("FAILED")
+                lastSourceFailureCount(DiscoveryMediaType.ANIME).set(2)
+            }
+            val incompletePolicy = DiscoverySourcePolicy(
+                mediaType = DiscoveryMediaType.ANIME,
+                revision = "cold",
+                inventoryComplete = false,
+                allowedPluginKeys = emptySet(),
+                pluginMembers = emptyMap(),
+            )
+            val completePolicy = discoveryQueryPolicyFixture(
+                DiscoveryMediaType.ANIME,
+                listOf(42L),
+            )
+            val policyFlow = MutableStateFlow(incompletePolicy)
+            val dynamicPolicies = object : DiscoverySourcePolicyProvider {
+                override fun current(mediaType: DiscoveryMediaType) = policyFlow.value
+                override fun observe(mediaType: DiscoveryMediaType) = policyFlow
+                override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = completePolicy
+            }
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+            )
+            val controller = HomeDiscoveryController(
+                sourcePolicyProvider = dynamicPolicies,
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = mockk(relaxed = true),
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            controller.startObserving()
+            waitUntil { currentState.isDiscoveryLoading }
+            currentState.isDiscoveryFailed shouldBe false
+
+            policyFlow.value = completePolicy
+            waitUntil { currentState.discovery.isNotEmpty() && !currentState.isDiscoveryLoading }
+            currentState.isDiscoveryFailed shouldBe false
+            currentState.discovery.map { it.title } shouldBe listOf("Existing Pick")
+        }
+    }
+
     private suspend fun waitUntil(timeoutMs: Long = 5000, condition: () -> Boolean) {
         val start = System.currentTimeMillis()
         while (!condition()) {

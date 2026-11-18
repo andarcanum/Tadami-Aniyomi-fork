@@ -804,6 +804,8 @@
     <string name="pref_discovery_refresh_after_library">Actualizar después de actualizar la biblioteca</string>
     <string name="pref_discovery_refresh_after_library_summary">Ejecutar 30 minutos después de que comience una actualización de la biblioteca</string>
     <string name="pref_discovery_wifi_only">Solo con Wi-Fi</string>
+    <string name="pref_discovery_eager_refill">Mantener feed completo (60)</string>
+    <string name="pref_discovery_eager_refill_summary">Rellenar tras cada título leído en lugar de esperar a que queden menos de 48</string>
     <string name="pref_discovery_group_display">Visualización</string>
     <string name="pref_discovery_teaser_count">Tarjetas en la vista previa de Inicio</string>
     <string name="pref_discovery_show_reasons">Mostrar motivos</string>

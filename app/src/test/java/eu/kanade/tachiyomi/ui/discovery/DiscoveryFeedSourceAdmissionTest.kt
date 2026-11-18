@@ -144,22 +144,25 @@ class DiscoveryFeedSourceAdmissionTest {
         fixture.model.undoHide()
         withTimeout(5_000L) {
             fixture.repository.undoEntered.await()
+            // Under BEST_EFFORT with fewer than 60 exact matches, Drama tops up behind Fantasy.
             fixture.model.state.first {
                 it.hidden.isEmpty() && it.mix.map { candidate ->
                     candidate.cleanTitle
-                } == listOf("fantasy")
+                } == listOf("fantasy", "drama")
             }
         }
         fixture.repository.undoGate!!.complete(Unit)
-        withTimeoutOrNull(500L) {
+        fixture.model.state.value.mix.map { it.cleanTitle } shouldBe listOf("fantasy", "drama")
+
+        // When 60 exact matches already fill the row, Drama fallback stays excluded.
+        val fullExact = (1..60).map { i -> card("Fantasy$i", "Fantasy").copy(id = (i + 10).toLong()) }
+        fixture.repository.pool.value = listOf(drama) + fullExact
+        withTimeout(5_000L) {
             fixture.model.state.first {
-                it.activeWindows[FeedSignalTab.MIX].orEmpty().any { candidate ->
-                    candidate.cleanTitle == "drama"
-                }
+                it.mix.size == 60 && it.mix.none { candidate -> candidate.cleanTitle == "drama" }
             }
         }
-        fixture.model.state.value.mix.map { it.cleanTitle } shouldBe listOf("fantasy")
-        fixture.model.displayedItems(FeedSignalTab.MIX, null).map { it.cleanTitle } shouldBe listOf("fantasy")
+        fixture.model.displayedItems(FeedSignalTab.MIX, null).none { it.cleanTitle == "drama" } shouldBe true
     }
 
     private fun fixture(items: List<DiscoverySuggestion>, bestEffort: Boolean = false): Fixture {
@@ -279,6 +282,28 @@ class DiscoveryFeedSourceAdmissionTest {
                 it.activeWindows[FeedSignalTab.TASTE]?.map { c -> c.cleanTitle } == listOf(sole.cleanTitle)
             }
         }
+    }
+
+    @Test
+    fun `displayedItems exposes all 60 mix items and full tab items beyond 20-card window`(): Unit = runBlocking {
+        val likeCards = (1..35).map { idx ->
+            card("Like $idx", "Action").copy(rowType = DiscoveryRowType.LIKE, score = 100.0 - idx)
+        }
+        val tasteCards = (1..25).map { idx ->
+            card("Taste $idx", "Fantasy").copy(rowType = DiscoveryRowType.TASTE, score = 80.0 - idx)
+        }
+        val fixture = fixture(likeCards + tasteCards)
+        fixture.model.start()
+        withTimeout(5_000L) {
+            fixture.model.state.first { it.mix.size == 60 }
+        }
+        fixture.model.displayedItems(FeedSignalTab.MIX, null).size shouldBe 60
+
+        fixture.model.onTabSelected(FeedSignalTab.SIMILAR)
+        fixture.model.displayedItems(FeedSignalTab.SIMILAR, null).size shouldBe 35
+
+        fixture.model.onTabSelected(FeedSignalTab.TASTE)
+        fixture.model.displayedItems(FeedSignalTab.TASTE, null).size shouldBe 25
     }
 
     private fun card(title: String, genre: String) = DiscoverySuggestion(

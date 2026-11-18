@@ -2023,6 +2023,55 @@ class DiscoveryRunnerTest {
         signals.all { it.signalType.excludesFromFeed } shouldBe true
     }
 
+    @Test
+    fun `collect deadline publishes settled rows when a slow builder hangs`() = runTest {
+        val repo = FakeRepository()
+        val fastTrend = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.TREND
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = listOf(
+                DiscoveryRowItem(
+                    title = "Fast Survivor",
+                    cleanTitle = "fast survivor",
+                    coverUrl = null,
+                    reason = null,
+                    seedTitle = null,
+                    provider = "AniList",
+                    score = 1.0,
+                ),
+            )
+        }
+        val hungLike = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.LIKE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                kotlinx.coroutines.awaitCancellation()
+            }
+        }
+        val prefs = discoveryPrefs(
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", true, true),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", true, true),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_source", false, false),
+        )
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(hungLike, fastTrend)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        val outcome = runner.run(
+            mediaTypes = listOf(DiscoveryMediaType.MANGA),
+            totalBudgetMs = 25_000L,
+        ).getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.PARTIAL
+        outcome.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
+        outcome.persistedRows shouldBe setOf(DiscoveryRowType.TREND)
+        repo.publishedPools.size shouldBe 1
+        repo.publishedPools.single().map { it.title } shouldBe listOf("Fast Survivor")
+    }
+
     private fun testSignal(
         cleanTitle: String,
         signalType: DiscoverySignalType,

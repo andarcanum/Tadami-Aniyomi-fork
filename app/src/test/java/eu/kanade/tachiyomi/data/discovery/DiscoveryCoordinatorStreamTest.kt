@@ -216,4 +216,25 @@ class DiscoveryCoordinatorStreamTest {
         feed.failedRows shouldBe setOf(DiscoveryRowType.SOURCE)
         feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("Surviving Trend")
     }
+
+    @Test
+    fun `streamFeed with collectTimeoutMs returns settled rows when a builder hangs`() = runTest {
+        val fastTrend = delayedBuilder(
+            DiscoveryRowType.TREND,
+            listOf(item("Settled Trend")),
+            delayMs = 10,
+        )
+        val hungSource = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                kotlinx.coroutines.awaitCancellation()
+            }
+        }
+
+        val feed = DiscoveryCoordinator(listOf(hungSource, fastTrend))
+            .streamFeed(baseContext, collectTimeoutMs = 100L) { _, _ -> }
+
+        feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("Settled Trend")
+        feed.failedRows shouldBe setOf(DiscoveryRowType.SOURCE)
+    }
 }

@@ -1720,13 +1720,13 @@ class AppDiscoverySourceCatalog(
             async {
                 runCatchingUnlessCancelled {
                     if (budget == null) {
-                        withTimeoutOrNull(STATUS_DETAIL_TIMEOUT_MS) { fetchDetails(item) }
+                        withHardTimeoutOrNull(STATUS_DETAIL_TIMEOUT_MS) { fetchDetails(item) }
                     } else {
                         budget.detailPermits.withPermit {
                             val remaining = budget.remainingMs()
                             if (remaining <= 0L || !budget.tryAcquireDetail()) return@withPermit null
                             charged.incrementAndGet()
-                            withTimeoutOrNull(minOf(remaining, STATUS_DETAIL_TIMEOUT_MS)) { fetchDetails(item) }
+                            withHardTimeoutOrNull(minOf(remaining, STATUS_DETAIL_TIMEOUT_MS)) { fetchDetails(item) }
                         }
                     }
                 }.getOrNull() ?: item

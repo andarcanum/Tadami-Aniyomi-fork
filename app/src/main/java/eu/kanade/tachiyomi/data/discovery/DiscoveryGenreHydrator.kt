@@ -8,7 +8,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -112,7 +111,7 @@ internal class DiscoveryGenreHydrator(
                             val timeout = minOf(detailTimeoutMs, remaining)
                             try {
                                 val observed =
-                                    withTimeoutOrNull(timeout) {
+                                    withHardTimeoutOrNull(timeout) {
                                         validate()
                                         fetchDetails(url).also { validate() }
                                     }

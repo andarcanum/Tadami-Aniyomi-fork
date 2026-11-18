@@ -1,8 +1,21 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.identityKeys
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
+import kotlin.coroutines.ContinuationInterceptor
 
 data class DiscoveryMixQuotas(
     val similar: Int = 20,
@@ -22,6 +35,54 @@ internal inline fun <T> runCatchingUnlessCancelled(block: () -> T): Result<T> = 
     throw e
 } catch (e: Throwable) {
     Result.failure(e)
+}
+
+private class TimeoutValueBox<out T>(val value: T)
+
+/**
+ * Bounds wall-time even when [block] performs blocking I/O that ignores coroutine
+ * cancellation (e.g. legacy plugin HTTP calls). Cancels the detached child job on
+ * timeout or parent cancellation and returns `null` immediately without waiting for
+ * non-cooperative blocking frames to unwind, while yielding once under [NonCancellable]
+ * so cooperative `finally` blocks run cleanly on the same scheduler tick.
+ */
+internal suspend fun <T> withHardTimeoutOrNull(
+    timeoutMs: Long,
+    block: suspend CoroutineScope.() -> T,
+): T? {
+    if (timeoutMs <= 0L) return null
+    val callerContext = currentCoroutineContext()
+    callerContext.ensureActive()
+    val parentJob = callerContext[Job]
+    val dispatcher = callerContext[ContinuationInterceptor] ?: Dispatchers.IO
+    val detachedJob = SupervisorJob()
+    val parentHandle = parentJob?.invokeOnCompletion { cause ->
+        if (cause != null) {
+            detachedJob.cancel(
+                cause as? CancellationException ?: CancellationException("Parent cancelled", cause),
+            )
+        }
+    }
+    val scope = CoroutineScope(detachedJob + dispatcher)
+    val deferred = scope.async { TimeoutValueBox(block()) }
+    return try {
+        val boxed = withTimeoutOrNull(timeoutMs) {
+            deferred.await()
+        }
+        if (boxed == null) {
+            detachedJob.cancel(CancellationException("Hard timeout after ${timeoutMs}ms"))
+            withContext(NonCancellable) { yield() }
+            null
+        } else {
+            boxed.value
+        }
+    } catch (e: CancellationException) {
+        detachedJob.cancel(e)
+        withContext(NonCancellable) { yield() }
+        throw e
+    } finally {
+        parentHandle?.dispose()
+    }
 }
 
 /** Извлекает нормализованный первичный жанр для анти-кластеризации и диверсификации. */

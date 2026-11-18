@@ -14,6 +14,7 @@ import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
 import tachiyomi.domain.discovery.model.DiscoveryPublicationOutcome
+import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
 import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
@@ -95,6 +96,19 @@ private const val MIN_MEDIA_BUDGET_MS = 20_000L
 private const val SOURCE_INVENTORY_WAIT_MS = 5_000L
 
 /**
+ * Time held back from the genre pass for row finalization + reserve/publish. Without it a slow
+ * catalogue pass spends the whole media budget and the worker deadline cancels the run before
+ * publishGeneration, discarding every collected title (the feed then silently never updates).
+ */
+private const val FINALIZE_RESERVE_MS = 20_000L
+
+/** Floor keeping the genre pass useful even when the media budget is already short. */
+private const val MIN_GENRE_PASS_MS = 5_000L
+
+/** Hard wall-time reserve for coordinator collection so hung builders still allow finalization + publication. */
+private const val COLLECT_PUBLISH_RESERVE_MS = 10_000L
+
+/**
  * Оркестратор фонового обновления ленты «Для тебя»:
  * сиды → строители рядов → [DiscoveryCoordinator] → персист успешных рядов.
  * Провалившийся ряд НЕ затирает свой кэш (в [DiscoveryFeed.rows] его нет).
@@ -105,7 +119,7 @@ class DiscoveryRunner(
     private val seedSources: DiscoverySeedSources,
     private val coordinatorFactory: (
         List<DiscoveryRowBuilder>,
-    ) -> DiscoveryCoordinator = { DiscoveryCoordinator(it, rowLimit = 50) },
+    ) -> DiscoveryCoordinator = { DiscoveryCoordinator(it, rowLimit = DISCOVERY_POOL_TARGET) },
     private val seedSelector: DiscoverySeedSelector = DiscoverySeedSelector(),
     private val trendingFactory: () -> DiscoveryTrendingSource = { CompositeTrendingSource() },
     private val sourcePreferencesProvider: () -> SourcePreferences = { Injekt.get() },
@@ -254,8 +268,29 @@ class DiscoveryRunner(
     ): DiscoveryRunOutcome =
         mediaRunLocks.getOrPut(mediaType) { Mutex() }
             .withLock {
+                val trace = DiscoveryPhaseTrace(
+                    startedAtMs = System.nanoTime() / 1_000_000L,
+                    totalBudgetMs = mediaBudgetMs ?: DiscoveryVerificationBudget.DEFAULT_MEDIA_BUDGET_MS,
+                )
                 try {
-                    runForLocked(mediaType, isManualRefresh, mediaBudgetMs, isConfigurationRefresh, topUp)
+                    runForLocked(
+                        mediaType = mediaType,
+                        isManualRefresh = isManualRefresh,
+                        mediaBudgetMs = mediaBudgetMs,
+                        isConfigurationRefresh = isConfigurationRefresh,
+                        topUp = topUp,
+                        trace = trace,
+                    )
+                } catch (e: CancellationException) {
+                    logcat {
+                        "[DiscoveryRun] media=$mediaType " +
+                            "mode=${runModeLabel(isManualRefresh, isConfigurationRefresh, topUp)} " +
+                            "status=ABORTED phase=${trace.phase} elapsed=${trace.elapsedMs()}ms " +
+                            "setup=${trace.setupMs}ms collect=${trace.collectMs}ms " +
+                            "finalize=${trace.finalizeMs}ms publish=${trace.publishMs}ms " +
+                            "margin=${trace.remainingMs()}ms"
+                    }
+                    throw e
                 } finally {
                     DiscoveryProgressTracker.reset(mediaType)
                 }
@@ -268,11 +303,74 @@ class DiscoveryRunner(
         isConfigurationRefresh: Boolean = false,
         topUp: Boolean = false,
         allowColdInventoryRetry: Boolean = true,
+        trace: DiscoveryPhaseTrace = DiscoveryPhaseTrace(
+            startedAtMs = System.nanoTime() / 1_000_000L,
+            totalBudgetMs = mediaBudgetMs ?: DiscoveryVerificationBudget.DEFAULT_MEDIA_BUDGET_MS,
+        ),
     ): DiscoveryRunOutcome {
+        val request = DiscoveryRunRequest(
+            mediaType = mediaType,
+            isManualRefresh = isManualRefresh,
+            mediaBudgetMs = mediaBudgetMs,
+            isConfigurationRefresh = isConfigurationRefresh,
+            topUp = topUp,
+            allowColdInventoryRetry = allowColdInventoryRetry,
+        )
         val mediaStartedAt = System.nanoTime() / 1_000_000L
         val totalMediaBudgetMs = mediaBudgetMs ?: DiscoveryVerificationBudget.DEFAULT_MEDIA_BUDGET_MS
         fun remainingMediaMs(): Long =
             (totalMediaBudgetMs - (System.nanoTime() / 1_000_000L - mediaStartedAt)).coerceAtLeast(0L)
+        trace.phase = "setup"
+
+        val stage = when (val setupResult = prepareStage(request, ::remainingMediaMs, trace)) {
+            is SetupStageResult.Exit -> return setupResult.outcome
+            is SetupStageResult.Ready -> setupResult.stage
+        }
+
+        val builders = buildRowBuilders(stage.useExternal)
+        if (builders.isEmpty()) {
+            failedRowsSink(mediaType, emptySet())
+            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+            return DiscoveryRunOutcome(
+                mediaType = mediaType,
+                status = DiscoveryRunStatus.SKIPPED,
+                attemptedRows = emptySet(),
+            )
+        }
+
+        val attemptedRows = builders.map { it.rowType }.toSet()
+        val collectStartMs = System.nanoTime() / 1_000_000L
+        trace.setupMs += collectStartMs - mediaStartedAt
+        trace.phase = "collect"
+        val collectBudgetMs = (remainingMediaMs() - COLLECT_PUBLISH_RESERVE_MS).coerceAtLeast(MIN_GENRE_PASS_MS)
+        val coordinator = coordinatorFactory(builders)
+        val feed = coordinator.streamFeed(stage.context, collectTimeoutMs = collectBudgetMs) { _, _ ->
+            // The whole pool is published once, after every row has settled (or at collect deadline).
+        }
+        val collectEndMs = System.nanoTime() / 1_000_000L
+        trace.collectMs += collectEndMs - collectStartMs
+        trace.phase = "finalize"
+
+        val finalized = finalizeStage(stage, feed, attemptedRows, isManualRefresh = request.isManualRefresh)
+        return publishStage(
+            request = request,
+            stage = stage,
+            finalized = finalized,
+            attemptedRows = attemptedRows,
+            buildersCount = builders.size,
+            collectEndMs = collectEndMs,
+            remainingMediaMs = ::remainingMediaMs,
+            trace = trace,
+        )
+    }
+
+    private suspend fun prepareStage(
+        request: DiscoveryRunRequest,
+        remainingMediaMs: () -> Long,
+        trace: DiscoveryPhaseTrace,
+    ): SetupStageResult {
+        val mediaType = request.mediaType
         DiscoveryProgressTracker.update(
             isRunning = true,
             mediaType = mediaType,
@@ -281,17 +379,17 @@ class DiscoveryRunner(
             total = 4,
         )
         val candidates = seedSources.candidates(mediaType)
-        val candidateRefreshCount = if (isManualRefresh) {
+        val candidateRefreshCount = if (request.isManualRefresh) {
             preferences.manualRefreshCount(mediaType).get() + 1
         } else {
             preferences.manualRefreshCount(mediaType).get()
         }
-        val candidateBackgroundCycle = if (isManualRefresh || isConfigurationRefresh) {
+        val candidateBackgroundCycle = if (request.isManualRefresh || request.isConfigurationRefresh) {
             preferences.backgroundCycleCount(mediaType).get()
         } else {
             preferences.backgroundCycleCount(mediaType).get() + 1
         }
-        val seedOffset = if (isManualRefresh) manualSeedOffset(candidateRefreshCount) else 0
+        val seedOffset = if (request.isManualRefresh) manualSeedOffset(candidateRefreshCount) else 0
         val totalSeedBudget = preferences.seedCount().get().coerceIn(1, 5)
         // Taste Learning Engine: один запрос сигнал-лога на генерацию — и на
         // feedback-сиды, и на source-аффинити участия плагинов, и на fold/merge вкуса,
@@ -300,23 +398,30 @@ class DiscoveryRunner(
         val previousPool = runCatching { repository.publication(mediaType) }.getOrNull()
         val previousPoolTitles = previousPool?.suggestions.orEmpty().mapTo(HashSet()) { it.cleanTitle }
         val expectedGeneration = previousPool?.generation ?: 0L
-        val need = if (topUp) topUpNeed(previousPool?.eligibleSuggestions.orEmpty().size) else 0
-        if (topUp) {
+        val lowWater = effectiveTopUpLowWater(preferences.eagerRefill().get())
+        val need = if (request.topUp) {
+            topUpNeed(previousPool?.eligibleSuggestions.orEmpty().size, lowWater = lowWater)
+        } else {
+            0
+        }
+        if (request.topUp) {
             val now = System.currentTimeMillis()
             val lastTopUp = preferences.lastTopUpAt(mediaType).get()
             val lastAdded = preferences.lastTopUpAdded(mediaType).get()
             if (need == 0 || !shouldAttemptTopUp(now, lastTopUp, lastAdded)) {
                 logcat { "[DiscoveryTopUp] skipped need=$need lastTopUp=$lastTopUp lastAdded=$lastAdded" }
                 preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
-                return DiscoveryRunOutcome(
-                    mediaType = mediaType,
-                    status = DiscoveryRunStatus.SKIPPED,
-                    attemptedRows = emptySet(),
+                return SetupStageResult.Exit(
+                    DiscoveryRunOutcome(
+                        mediaType = mediaType,
+                        status = DiscoveryRunStatus.SKIPPED,
+                        attemptedRows = emptySet(),
+                    ),
                 )
             }
         }
         val eligibilitySnapshot = repository.eligibility(mediaType)
-        val harvestPages = if (isManualRefresh) MAX_MANUAL_HARVEST_PAGES else 1
+        val harvestPages = if (request.isManualRefresh) MAX_MANUAL_HARVEST_PAGES else 1
         val feedbackSeeds = selectFeedbackSeeds(allSignals, mediaType, limit = minOf(2, totalSeedBudget))
         val librarySeedBudget = (totalSeedBudget - feedbackSeeds.size).coerceAtLeast(0)
         val feedbackCleanTitles = feedbackSeeds.mapTo(HashSet()) { it.cleanTitle }
@@ -398,30 +503,12 @@ class DiscoveryRunner(
         }
 
         val useExternal = preferences.externalProvidersEnabled().get()
-        val disabledLikeProviders = buildSet {
-            if (!useExternal) {
-                addAll(listOf("AniList", "Shikimori", "MyAnimeList", "MangaUpdates", "NovelUpdates"))
-            } else {
-                if (!sourcePreferences.suggestionsUseShikimori().get()) add("Shikimori")
-                if (!sourcePreferences.suggestionsUseMangaUpdatesNovel().get()) add("MangaUpdates")
-                if (!sourcePreferences.suggestionsUseNovelUpdates().get()) add("NovelUpdates")
-            }
-        }
-        // Full generation replaces the published pool atomically. Cache-first
-        // merging, per-row writes and stale backfill are no longer part of the
-        // refresh path.
         val currentSuggestions = previousPool?.suggestions.orEmpty()
-        val existingRowItems = emptyMap<DiscoveryRowType, List<DiscoveryRowItem>>()
         val shownCutoffMap = runCatching {
             repository.getRecentExclusionsWithTimestamp(mediaType)
         }.getOrDefault(emptyMap())
-        val shownTitles = shownCutoffMap.keys
-        val recentCleanTitles = shownTitles
 
         // Taste Learning Engine: fold сигнал-лога и слияние с библиотечным профилем.
-        // Плавный старт (blend) — при пустом логе merge возвращает библиотечный профиль как есть.
-        // Неявный негатив: тайтл показан ≥3 раз за 48ч без явного сигнала → жанры
-        // получают мягкий минус. Синтез на лету (не пишется в БД), явные сигналы важнее.
         val libraryTasteProfile = buildTasteProfile(candidates)
         val libraryProfileGenres = libraryTasteProfile.map { it.first }
         val blacklistedTags = repository.getBlacklistedTags(mediaType)
@@ -444,8 +531,6 @@ class DiscoveryRunner(
             libraryProfile = filteredLibraryProfile,
             learned = learnedProfile,
         ).filterNot { it.first.lowercase() in blacklistedVetoSet }
-        // «Просмотрено/прочитано»: нейтральное исключение — consumed-тайтлы не
-        // попадают в новые генерации ленты (вкусовой профиль они не трогают).
         val consumedCleanTitles = allSignals
             .filter { it.signalType.excludesFromFeed }
             .mapTo(HashSet()) { it.cleanTitle }
@@ -457,7 +542,7 @@ class DiscoveryRunner(
         val resumeCursor = previousPool?.cursors.orEmpty()
             .firstOrNull { it.queryKey == configurationKey && !it.exhausted }
         val pageOffset = when {
-            isConfigurationRefresh || isManualRefresh -> 1
+            request.isConfigurationRefresh || request.isManualRefresh -> 1
             resumeCursor != null -> resumeCursor.nextPage.coerceAtLeast(1)
             else -> backgroundPageOffset(candidateBackgroundCycle)
         }
@@ -476,19 +561,26 @@ class DiscoveryRunner(
         var remainingBudgetMs = remainingMediaMs()
         if (remainingBudgetMs <= 0L) {
             preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
-            return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED)
+            return SetupStageResult.Exit(DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED))
         }
         repository.installConfigurationKey(mediaType, configurationKey)
-        if (!configurationIsCurrent()) return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED)
+        if (!configurationIsCurrent()) {
+            return SetupStageResult.Exit(DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED))
+        }
         remainingBudgetMs = remainingMediaMs()
-        if (remainingBudgetMs <= 0L) return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED)
-        if (topUp && previousPool?.configurationKey != configurationKey) {
-            return runForLocked(
-                mediaType,
-                isManualRefresh = false,
-                mediaBudgetMs = remainingMediaMs(),
-                isConfigurationRefresh = true,
-                topUp = false,
+        if (remainingBudgetMs <= 0L) {
+            return SetupStageResult.Exit(DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED))
+        }
+        if (request.topUp && previousPool?.configurationKey != configurationKey) {
+            return SetupStageResult.Exit(
+                runForLocked(
+                    mediaType,
+                    isManualRefresh = false,
+                    mediaBudgetMs = remainingMediaMs(),
+                    isConfigurationRefresh = true,
+                    topUp = false,
+                    trace = trace,
+                ),
             )
         }
         val primary = sourcePolicy.primarySourceId(preferredSourceId)
@@ -498,17 +590,18 @@ class DiscoveryRunner(
             val fallback = if (sourcePolicyProvider == null) fallbackSourceIdProvider(mediaType) else -1L
             fallback.takeIf { sourcePolicy.allowsNative(it) } ?: -1L
         }
-        // One budget for the whole media run: every row shares the deadline and
-        // the details allowance, so rows cannot multiply the worker cost.
-        // Genre-selected mode verifies deep pages of a few rich sources, so it
-        // gets a larger allowance; the deadline remains the real guard.
         val verificationBudget = DiscoveryVerificationBudget(
-            budgetMs = remainingBudgetMs,
+            budgetMs = (remainingBudgetMs - FINALIZE_RESERVE_MS).coerceAtLeast(MIN_GENRE_PASS_MS),
             maxDetails = if (genreFilterSpec.requiredGenres.isNotEmpty()) {
                 DiscoveryVerificationBudget.DEFAULT_REQUIRED_MAX_DETAILS
             } else {
                 DiscoveryVerificationBudget.DEFAULT_MAX_DETAILS
             },
+        )
+        val prioritizedSourceIds = prioritizeHealthySources(
+            sourceIds = sourcePolicy.representativeSourceIds,
+            history = sourceFailureHistory,
+            nowMs = runnerNow,
         )
         val baseContext = DiscoveryBuildContext(
             mediaType = mediaType,
@@ -520,43 +613,37 @@ class DiscoveryRunner(
             tasteProfile = mergedTasteProfile,
             blacklistedTags = blacklistedTags,
             ignoredGenres = genreFilterSpec.ignoredGenres,
-            // V1: статус-фильтр трендов — CSV из настроек, пусто = без фильтра.
             releaseStatuses = DiscoveryReleaseStatus.parseCsv(preferences.releaseStatusFilter().get()),
-            // V3: жанровые фильтры — полная спецификация с режимами строгости и сопоставления.
             priorityGenres = genreFilterSpec.priorityGenres,
             requiredGenres = genreFilterSpec.requiredGenres,
             genreFilterSpec = genreFilterSpec,
             sourceId = primarySourceId,
-            sourceIds = sourcePolicy.representativeSourceIds,
+            sourceIds = prioritizedSourceIds,
             sourceWeights = sourcePolicy.sourceWeights,
             sourcePolicy = sourcePolicy,
-            recentCleanTitles = recentCleanTitles,
+            recentCleanTitles = shownCutoffMap.keys,
             shownCutoffMap = shownCutoffMap,
-            // Ручной рефреш: тайтлы текущей ленты не возвращаются stale-добором —
-            // наполнение ряда реально сменяется, а не «новые + всё старое».
             currentFeedCleanTitles = previousPoolTitles,
-            existingRowItems = existingRowItems,
+            existingRowItems = emptyMap(),
             pageOffset = pageOffset,
             harvestPages = harvestPages,
             verificationBudget = verificationBudget,
             eligibilitySnapshot = eligibilitySnapshot,
         )
-        // TASTE and SOURCE otherwise run the same required-genre catalogue pass
-        // twice and then the coordinator dedupes one of them away. Share the
-        // pass and give the rows disjoint slices instead.
         val requiredGenres = genreFilterSpec.requiredGenres
         val sharedGenreQuery = if (
             requiredGenres.isNotEmpty() &&
             preferences.rowTasteEnabled().get() &&
             preferences.rowSourceEnabled().get()
         ) {
-            val ids = sourcePolicy.representativeSourceIds.filter { sourcePolicy.allowsNative(it) }
+            val ids = prioritizedSourceIds.filter { sourcePolicy.allowsNative(it) }
                 .ifEmpty { listOf(primarySourceId).filter { sourcePolicy.allowsNative(it) } }
             if (ids.isEmpty()) {
                 null
             } else {
                 val rotation = (pageOffset - 1).coerceAtLeast(0) % ids.size
-                val ordered = ids.drop(rotation) + ids.take(rotation)
+                val rotated = ids.drop(rotation) + ids.take(rotation)
+                val ordered = prioritizeHealthySources(rotated, sourceFailureHistory, runnerNow)
                 SharedRequiredGenreQuery {
                     queryDiscoveryGenreSources(
                         catalog = sourceCatalog,
@@ -567,14 +654,17 @@ class DiscoveryRunner(
                         pages = harvestPages,
                         releaseStatuses = baseContext.releaseStatuses,
                         policy = baseContext.candidatePolicy,
-                        maxConcurrency = 4,
-                        timeoutMs = genreSourceTimeoutMs(
-                            verificationBudget,
-                            ordered.size,
-                            maxConcurrency = 4,
+                        maxConcurrency = 6,
+                        timeoutMs = minOf(
+                            genreSourceTimeoutMs(
+                                verificationBudget,
+                                ordered.size,
+                                maxConcurrency = 6,
+                            ),
+                            WAVE_SOURCE_TIMEOUT_CAP_MS,
                         ),
                         hydrate = true,
-                        targetItems = if (topUp) need * 3 / 2 else RICH_SOURCE_TARGET * 2,
+                        targetItems = if (request.topUp) need * 3 / 2 else RICH_SOURCE_TARGET * 2,
                         budget = verificationBudget,
                         excludedKeys = baseContext.exclusionKeys,
                     )
@@ -589,80 +679,92 @@ class DiscoveryRunner(
             baseContext
         }
         logcat {
-            "[Discovery] refresh media=$mediaType manual=$isManualRefresh " +
-                "configuration=$isConfigurationRefresh page=$pageOffset " +
+            "[Discovery] refresh media=$mediaType manual=${request.isManualRefresh} " +
+                "configuration=${request.isConfigurationRefresh} page=$pageOffset " +
                 "statuses=${context.releaseStatuses} sources=${context.sourceIds} primary=${context.sourceId} " +
                 "required=${genreFilterSpec.requiredGenres} enforcement=${genreFilterSpec.requiredEnforcement} " +
                 "match=${genreFilterSpec.requiredMatchMode}"
         }
-        val builders = buildList {
-            if (preferences.rowLikeEnabled().get()) {
-                add(
-                    DiscoveryLikeRowBuilder(
-                        suggestionCoordinator = suggestionCoordinatorFactory(),
-                        catalog = sourceCatalog,
-                        includeExternal = useExternal,
-                    ),
-                )
-            }
-            if (preferences.rowTasteEnabled().get()) {
-                add(
-                    DiscoveryTasteRowBuilder(
-                        trending = trendingFactory(),
-                        catalog = sourceCatalog,
-                        // «Только плагины»: жанровые рекомендации строятся из каталогов,
-                        // внешние жанровые провайдеры не опрашиваются.
-                        includeExternal = useExternal,
-                        sortProvider = {
-                            if (preferences.trendSort().get() == "score") TrendSort.SCORE else TrendSort.POPULARITY
-                        },
-                    ),
-                )
-            }
-            if (preferences.rowTrendEnabled().get() && useExternal) {
-                add(
-                    DiscoveryTrendRowBuilder(
-                        trending = trendingFactory(),
-                        catalog = sourceCatalog,
-                        seasonProvider = {
-                            when (preferences.trendSeason().get()) {
-                                "next" -> TrendSeason.NEXT
-                                "both" -> TrendSeason.BOTH
-                                else -> TrendSeason.CURRENT
-                            }
-                        },
-                        sortProvider = {
-                            if (preferences.trendSort().get() == "score") TrendSort.SCORE else TrendSort.POPULARITY
-                        },
-                    ),
-                )
-            }
-            if (preferences.rowSourceEnabled().get()) {
-                add(DiscoverySourceRowBuilder(sourceCatalog, rowCap = DISCOVERY_POOL_TARGET))
-            }
-        }
-        if (builders.isEmpty()) {
-            failedRowsSink(mediaType, emptySet())
-            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
-            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
-            return DiscoveryRunOutcome(
+        return SetupStageResult.Ready(
+            PreparedDiscoveryStage(
                 mediaType = mediaType,
-                status = DiscoveryRunStatus.SKIPPED,
-                attemptedRows = emptySet(),
+                candidateRefreshCount = candidateRefreshCount,
+                candidateBackgroundCycle = candidateBackgroundCycle,
+                previousPool = previousPool,
+                expectedGeneration = expectedGeneration,
+                need = need,
+                sourceFailureHistory = sourceFailureHistory,
+                initialInventoryComplete = initialInventoryComplete,
+                configurationKey = configurationKey,
+                pageOffset = pageOffset,
+                useExternal = useExternal,
+                verificationBudget = verificationBudget,
+                context = context,
+                currentSourcePolicy = ::currentSourcePolicy,
+                configurationIsCurrent = ::configurationIsCurrent,
+                isConfigurationSuperseded = { configurationSuperseded },
+            ),
+        )
+    }
+
+    private fun buildRowBuilders(useExternal: Boolean): List<DiscoveryRowBuilder> = buildList {
+        if (preferences.rowLikeEnabled().get()) {
+            add(
+                DiscoveryLikeRowBuilder(
+                    suggestionCoordinator = suggestionCoordinatorFactory(),
+                    catalog = sourceCatalog,
+                    includeExternal = useExternal,
+                ),
             )
         }
-
-        val attemptedRows = builders.map { it.rowType }.toSet()
-        val coordinator = coordinatorFactory(builders)
-        val feed = coordinator.streamFeed(context) { _, _ ->
-            // The whole pool is published once, after every row has settled.
+        if (preferences.rowTasteEnabled().get()) {
+            add(
+                DiscoveryTasteRowBuilder(
+                    trending = trendingFactory(),
+                    catalog = sourceCatalog,
+                    includeExternal = useExternal,
+                    sortProvider = {
+                        if (preferences.trendSort().get() == "score") TrendSort.SCORE else TrendSort.POPULARITY
+                    },
+                ),
+            )
         }
+        if (preferences.rowTrendEnabled().get() && useExternal) {
+            add(
+                DiscoveryTrendRowBuilder(
+                    trending = trendingFactory(),
+                    catalog = sourceCatalog,
+                    seasonProvider = {
+                        when (preferences.trendSeason().get()) {
+                            "next" -> TrendSeason.NEXT
+                            "both" -> TrendSeason.BOTH
+                            else -> TrendSeason.CURRENT
+                        }
+                    },
+                    sortProvider = {
+                        if (preferences.trendSort().get() == "score") TrendSort.SCORE else TrendSort.POPULARITY
+                    },
+                ),
+            )
+        }
+        if (preferences.rowSourceEnabled().get()) {
+            add(DiscoverySourceRowBuilder(sourceCatalog, rowCap = DISCOVERY_POOL_TARGET))
+        }
+    }
+
+    private fun finalizeStage(
+        stage: PreparedDiscoveryStage,
+        feed: DiscoveryFeed,
+        attemptedRows: Set<DiscoveryRowType>,
+        isManualRefresh: Boolean,
+    ): FinalizedDiscoveryStage {
+        val mediaType = stage.mediaType
         val sourceFailures = feed.failedSourceIds.size
         val sourceDegraded = feed.degradedSourceIds.size
         preferences.lastSourceFailureCount(mediaType).set(sourceFailures)
         val successfulSourceIds = feed.successfulSourceIds - feed.failedSourceIds
         val updatedFailureHistory = updateSourceFailures(
-            currentHistory = sourceFailureHistory,
+            currentHistory = stage.sourceFailureHistory,
             failedIds = feed.failedSourceIds,
             successfulIds = successfulSourceIds,
             nowMs = System.currentTimeMillis(),
@@ -672,9 +774,9 @@ class DiscoveryRunner(
             mediaType = mediaType,
             rawCandidates = feed.rawCandidates,
             finalRows = feed.rows,
-            context = context,
-            detailsUsed = verificationBudget.detailsUsed,
-            detailsAllowance = verificationBudget.detailsAllowance,
+            context = stage.context,
+            detailsUsed = stage.verificationBudget.detailsUsed,
+            detailsAllowance = stage.verificationBudget.detailsAllowance,
             sourceFailures = sourceFailures,
             sourceDegraded = sourceDegraded,
         )
@@ -702,13 +804,13 @@ class DiscoveryRunner(
             }
         val nextCursorPage = when {
             isManualRefresh -> 1
-            pageOffset + 1 > MAX_HARVEST_PAGE -> 1
-            else -> pageOffset + 1
+            stage.pageOffset + 1 > MAX_HARVEST_PAGE -> 1
+            else -> stage.pageOffset + 1
         }
         val nextCursors = listOf(
             DiscoverySourceCursor(
                 sourceId = 0L,
-                queryKey = configurationKey,
+                queryKey = stage.configurationKey,
                 nextPage = nextCursorPage,
                 exhausted = false,
             ),
@@ -727,33 +829,64 @@ class DiscoveryRunner(
             )
             else -> null
         }
+        return FinalizedDiscoveryStage(
+            feed = feed,
+            sourceFailures = sourceFailures,
+            sourceDegraded = sourceDegraded,
+            actualExecutedRows = actualExecutedRows,
+            allExecutedFailed = allExecutedFailed,
+            hasPartialFailures = hasPartialFailures,
+            pooledItems = pooledItems,
+            topUpAdditions = topUpAdditions,
+            nextCursors = nextCursors,
+            prepared = prepared,
+        )
+    }
 
-        if (!configurationIsCurrent()) {
-            if (allowColdInventoryRetry && !initialInventoryComplete &&
-                currentSourcePolicy().inventoryComplete && remainingMediaMs() >= MIN_MEDIA_BUDGET_MS
+    private suspend fun publishStage(
+        request: DiscoveryRunRequest,
+        stage: PreparedDiscoveryStage,
+        finalized: FinalizedDiscoveryStage,
+        attemptedRows: Set<DiscoveryRowType>,
+        buildersCount: Int,
+        collectEndMs: Long,
+        remainingMediaMs: () -> Long,
+        trace: DiscoveryPhaseTrace,
+    ): DiscoveryRunOutcome {
+        val mediaType = stage.mediaType
+        val feed = finalized.feed
+        if (!stage.configurationIsCurrent()) {
+            if (request.allowColdInventoryRetry && !stage.initialInventoryComplete &&
+                stage.currentSourcePolicy().inventoryComplete && remainingMediaMs() >= MIN_MEDIA_BUDGET_MS
             ) {
+                trace.finalizeMs += System.nanoTime() / 1_000_000L - collectEndMs
                 return runForLocked(
                     mediaType = mediaType,
-                    isManualRefresh = isManualRefresh,
+                    isManualRefresh = request.isManualRefresh,
                     mediaBudgetMs = remainingMediaMs(),
-                    isConfigurationRefresh = isConfigurationRefresh,
-                    topUp = topUp,
+                    isConfigurationRefresh = request.isConfigurationRefresh,
+                    topUp = request.topUp,
                     allowColdInventoryRetry = false,
+                    trace = trace,
                 )
             }
-            if (previousPool == null && !initialInventoryComplete) {
+            if (stage.previousPool == null && !stage.initialInventoryComplete) {
                 preferences.bootstrapAttemptAt(mediaType).set(0L)
             }
             return DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED, attemptedRows = attemptedRows)
         }
-        if (topUp) {
+        if (request.topUp) {
+            val publishStartMs = System.nanoTime() / 1_000_000L
+            trace.finalizeMs += publishStartMs - collectEndMs
+            trace.phase = "publish"
             val topUpReceipt = repository.topUpPool(
                 media = mediaType,
-                expectedGeneration = expectedGeneration,
-                additions = topUpAdditions,
-                cursors = nextCursors,
+                expectedGeneration = stage.expectedGeneration,
+                additions = finalized.topUpAdditions,
+                cursors = finalized.nextCursors,
                 maxPoolSize = DISCOVERY_POOL_TARGET,
             )
+            trace.publishMs += System.nanoTime() / 1_000_000L - publishStartMs
             val now = System.currentTimeMillis()
             when (topUpReceipt) {
                 is DiscoveryTopUpReceipt.ToppedUp -> {
@@ -761,11 +894,25 @@ class DiscoveryRunner(
                     preferences.lastTopUpAt(mediaType).set(now)
                     preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SUCCESS.name)
                     preferences.lastGenerationAt(mediaType).set(now)
-                    val eligibleBefore = previousPool?.eligibleSuggestions.orEmpty().size
+                    val eligibleBefore = stage.previousPool?.eligibleSuggestions.orEmpty().size
                     logcat {
                         "[DiscoveryTopUp] media=$mediaType eligibleBefore=$eligibleBefore " +
-                            "need=$need added=${topUpReceipt.added} eligibleAfter=${topUpReceipt.eligibleAfter}"
+                            "need=${stage.need} added=${topUpReceipt.added} eligibleAfter=${topUpReceipt.eligibleAfter}"
                     }
+                    trace.phase = "done"
+                    logDiscoveryRun(
+                        mediaType = mediaType,
+                        mode = runModeLabel(request.isManualRefresh, request.isConfigurationRefresh, topUp = true),
+                        status = DiscoveryRunStatus.SUCCESS,
+                        trace = trace,
+                        marginMs = remainingMediaMs(),
+                        publishLabel = formatTopUpOutcome(topUpReceipt),
+                        pooledCount = finalized.pooledItems.size,
+                        rows = feed.rows,
+                        budget = stage.verificationBudget,
+                        sourceFailures = finalized.sourceFailures,
+                        sourceDegraded = finalized.sourceDegraded,
+                    )
                     return DiscoveryRunOutcome(
                         mediaType = mediaType,
                         status = DiscoveryRunStatus.SUCCESS,
@@ -778,7 +925,7 @@ class DiscoveryRunner(
                 is DiscoveryTopUpReceipt.NothingToAdd -> {
                     preferences.lastTopUpAdded(mediaType).set(0)
                     preferences.lastTopUpAt(mediaType).set(now)
-                    if (previousPool?.eligibleSuggestions.isNullOrEmpty()) {
+                    if (stage.previousPool?.eligibleSuggestions.isNullOrEmpty()) {
                         logcat {
                             "[DiscoveryTopUp] pool empty and top-up had nothing to add, falling back to full generation"
                         }
@@ -786,12 +933,27 @@ class DiscoveryRunner(
                             mediaType = mediaType,
                             isManualRefresh = false,
                             mediaBudgetMs = remainingMediaMs(),
-                            isConfigurationRefresh = isConfigurationRefresh,
+                            isConfigurationRefresh = request.isConfigurationRefresh,
                             topUp = false,
+                            trace = trace,
                         )
                     }
                     preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SUCCESS.name)
                     preferences.lastGenerationAt(mediaType).set(now)
+                    trace.phase = "done"
+                    logDiscoveryRun(
+                        mediaType = mediaType,
+                        mode = runModeLabel(request.isManualRefresh, request.isConfigurationRefresh, topUp = true),
+                        status = DiscoveryRunStatus.SUCCESS,
+                        trace = trace,
+                        marginMs = remainingMediaMs(),
+                        publishLabel = formatTopUpOutcome(topUpReceipt),
+                        pooledCount = finalized.pooledItems.size,
+                        rows = feed.rows,
+                        budget = stage.verificationBudget,
+                        sourceFailures = finalized.sourceFailures,
+                        sourceDegraded = finalized.sourceDegraded,
+                    )
                     return DiscoveryRunOutcome(
                         mediaType = mediaType,
                         status = DiscoveryRunStatus.SUCCESS,
@@ -805,6 +967,20 @@ class DiscoveryRunner(
                 is DiscoveryTopUpReceipt.Busy,
                 -> {
                     preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+                    trace.phase = "done"
+                    logDiscoveryRun(
+                        mediaType = mediaType,
+                        mode = runModeLabel(request.isManualRefresh, request.isConfigurationRefresh, topUp = true),
+                        status = DiscoveryRunStatus.SKIPPED,
+                        trace = trace,
+                        marginMs = remainingMediaMs(),
+                        publishLabel = formatTopUpOutcome(topUpReceipt),
+                        pooledCount = finalized.pooledItems.size,
+                        rows = feed.rows,
+                        budget = stage.verificationBudget,
+                        sourceFailures = finalized.sourceFailures,
+                        sourceDegraded = finalized.sourceDegraded,
+                    )
                     return DiscoveryRunOutcome(
                         mediaType = mediaType,
                         status = DiscoveryRunStatus.SKIPPED,
@@ -814,16 +990,20 @@ class DiscoveryRunner(
             }
         }
 
+        val publishStartMs = System.nanoTime() / 1_000_000L
+        trace.finalizeMs += publishStartMs - collectEndMs
+        trace.phase = "publish"
         val requestId = java.util.UUID.randomUUID().toString()
+        val prepared = finalized.prepared
         val token = if (prepared != null) {
-            repository.reserveGeneration(mediaType, requestId, expectedGeneration, configurationKey)
+            repository.reserveGeneration(mediaType, requestId, stage.expectedGeneration, stage.configurationKey)
         } else {
             null
         }
-        val publishReceipt = if (prepared != null && token != null && configurationIsCurrent()) {
+        val publishReceipt = if (prepared != null && token != null && stage.configurationIsCurrent()) {
             val retirement = when {
-                isConfigurationRefresh -> DiscoveryRetirementPolicy.NONE
-                isManualRefresh -> DiscoveryRetirementPolicy.RETIRE_ALL
+                request.isConfigurationRefresh -> DiscoveryRetirementPolicy.NONE
+                request.isManualRefresh -> DiscoveryRetirementPolicy.RETIRE_ALL
                 else -> DiscoveryRetirementPolicy.SEEN_ONLY
             }
             repository.publishGeneration(token, prepared, retirement)
@@ -834,8 +1014,8 @@ class DiscoveryRunner(
         val published = publishReceipt as? DiscoveryPublishReceipt.Published
 
         var keptTopUpReceipt: DiscoveryTopUpReceipt? = null
-        if (publishReceipt is DiscoveryPublishReceipt.KeptExisting && configurationIsCurrent()) {
-            val additions = if (prepared is DiscoveryPreparedPool.Fresh) topUpAdditions else emptyList()
+        if (publishReceipt is DiscoveryPublishReceipt.KeptExisting && stage.configurationIsCurrent()) {
+            val additions = if (prepared is DiscoveryPreparedPool.Fresh) finalized.topUpAdditions else emptyList()
             val cursors = when (prepared) {
                 is DiscoveryPreparedPool.Fresh -> prepared.cursors
                 is DiscoveryPreparedPool.VerifiedEmpty -> prepared.cursors
@@ -843,7 +1023,7 @@ class DiscoveryRunner(
             }
             val receipt = repository.topUpPool(
                 media = mediaType,
-                expectedGeneration = expectedGeneration,
+                expectedGeneration = stage.expectedGeneration,
                 additions = additions,
                 cursors = cursors,
                 maxPoolSize = DISCOVERY_POOL_TARGET,
@@ -871,6 +1051,7 @@ class DiscoveryRunner(
         val topUpSkipped = keptTopUpReceipt is DiscoveryTopUpReceipt.Superseded ||
             keptTopUpReceipt is DiscoveryTopUpReceipt.Busy
         val topUpAdded = keptTopUpReceipt is DiscoveryTopUpReceipt.ToppedUp
+        trace.publishMs += System.nanoTime() / 1_000_000L - publishStartMs
 
         val persistedRows = if (published != null || topUpAdded) {
             feed.rows.filterValues { it.isNotEmpty() }.keys
@@ -878,33 +1059,35 @@ class DiscoveryRunner(
             emptySet()
         }
 
+        val configurationSuperseded = stage.isConfigurationSuperseded()
         val status = when {
             configurationSuperseded -> DiscoveryRunStatus.SKIPPED
             publishReceipt is DiscoveryPublishReceipt.Superseded -> DiscoveryRunStatus.SKIPPED
-            allExecutedFailed -> DiscoveryRunStatus.FAILED
+            finalized.allExecutedFailed -> DiscoveryRunStatus.FAILED
             publishReceipt is DiscoveryPublishReceipt.KeptExisting ->
                 if (topUpSkipped) {
                     DiscoveryRunStatus.SKIPPED
-                } else if (hasPartialFailures) {
+                } else if (finalized.hasPartialFailures) {
                     DiscoveryRunStatus.PARTIAL
                 } else {
                     DiscoveryRunStatus.SUCCESS
                 }
             publishReceipt is DiscoveryPublishReceipt.NoAdmissibleItems -> DiscoveryRunStatus.FAILED
-            prepared == null -> if (hasPartialFailures) DiscoveryRunStatus.PARTIAL else DiscoveryRunStatus.FAILED
+            prepared == null ->
+                if (finalized.hasPartialFailures) DiscoveryRunStatus.PARTIAL else DiscoveryRunStatus.FAILED
             token == null -> DiscoveryRunStatus.SKIPPED
             published?.snapshot?.outcome == DiscoveryPublicationOutcome.PARTIAL -> DiscoveryRunStatus.PARTIAL
-            hasPartialFailures -> DiscoveryRunStatus.PARTIAL
+            finalized.hasPartialFailures -> DiscoveryRunStatus.PARTIAL
             else -> DiscoveryRunStatus.SUCCESS
         }
 
         val poolAdvanced = !configurationSuperseded &&
             (published != null || topUpAdded || publishReceipt is DiscoveryPublishReceipt.KeptExisting)
-        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed && poolAdvanced) {
-            if (isManualRefresh) {
-                preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
-            } else if (!isConfigurationRefresh) {
-                preferences.backgroundCycleCount(mediaType).set(candidateBackgroundCycle)
+        if (finalized.actualExecutedRows.isNotEmpty() && !finalized.allExecutedFailed && poolAdvanced) {
+            if (request.isManualRefresh) {
+                preferences.manualRefreshCount(mediaType).set(stage.candidateRefreshCount)
+            } else if (!request.isConfigurationRefresh) {
+                preferences.backgroundCycleCount(mediaType).set(stage.candidateBackgroundCycle)
             }
         }
         failedRowsSink(mediaType, feed.failedRows)
@@ -912,17 +1095,32 @@ class DiscoveryRunner(
             isRunning = true,
             mediaType = mediaType,
             stageText = "Готово",
-            current = builders.size,
-            total = builders.size,
+            current = buildersCount,
+            total = buildersCount,
         )
 
         preferences.lastGenerationStatus(mediaType).set(status.name)
         preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
-        if (previousPool == null && !initialInventoryComplete &&
+        if (stage.previousPool == null && !stage.initialInventoryComplete &&
             (status == DiscoveryRunStatus.SKIPPED || status == DiscoveryRunStatus.FAILED)
         ) {
             preferences.bootstrapAttemptAt(mediaType).set(0L)
         }
+
+        trace.phase = "done"
+        logDiscoveryRun(
+            mediaType = mediaType,
+            mode = runModeLabel(request.isManualRefresh, request.isConfigurationRefresh, topUp = false),
+            status = status,
+            trace = trace,
+            marginMs = remainingMediaMs(),
+            publishLabel = formatPublishOutcome(publishReceipt, keptTopUpReceipt),
+            pooledCount = finalized.pooledItems.size,
+            rows = feed.rows,
+            budget = stage.verificationBudget,
+            sourceFailures = finalized.sourceFailures,
+            sourceDegraded = finalized.sourceDegraded,
+        )
 
         return DiscoveryRunOutcome(
             mediaType = mediaType,
@@ -933,6 +1131,52 @@ class DiscoveryRunner(
             persistedRows = persistedRows,
         )
     }
+
+    private data class DiscoveryRunRequest(
+        val mediaType: DiscoveryMediaType,
+        val isManualRefresh: Boolean,
+        val mediaBudgetMs: Long?,
+        val isConfigurationRefresh: Boolean,
+        val topUp: Boolean,
+        val allowColdInventoryRetry: Boolean,
+    )
+
+    private class PreparedDiscoveryStage(
+        val mediaType: DiscoveryMediaType,
+        val candidateRefreshCount: Int,
+        val candidateBackgroundCycle: Int,
+        val previousPool: DiscoveryPublicationSnapshot?,
+        val expectedGeneration: Long,
+        val need: Int,
+        val sourceFailureHistory: Map<Long, SourceFailureRecord>,
+        val initialInventoryComplete: Boolean,
+        val configurationKey: String,
+        val pageOffset: Int,
+        val useExternal: Boolean,
+        val verificationBudget: DiscoveryVerificationBudget,
+        val context: DiscoveryBuildContext,
+        val currentSourcePolicy: () -> DiscoverySourcePolicy,
+        val configurationIsCurrent: suspend () -> Boolean,
+        val isConfigurationSuperseded: () -> Boolean,
+    )
+
+    private sealed interface SetupStageResult {
+        data class Ready(val stage: PreparedDiscoveryStage) : SetupStageResult
+        data class Exit(val outcome: DiscoveryRunOutcome) : SetupStageResult
+    }
+
+    private class FinalizedDiscoveryStage(
+        val feed: DiscoveryFeed,
+        val sourceFailures: Int,
+        val sourceDegraded: Int,
+        val actualExecutedRows: Set<DiscoveryRowType>,
+        val allExecutedFailed: Boolean,
+        val hasPartialFailures: Boolean,
+        val pooledItems: List<DiscoverySuggestion>,
+        val topUpAdditions: List<DiscoverySuggestion>,
+        val nextCursors: List<DiscoverySourceCursor>,
+        val prepared: DiscoveryPreparedPool?,
+    )
     private fun legacySourcePolicy(
         mediaType: DiscoveryMediaType,
         installed: List<DiscoveryInstalledPlugin>,
@@ -1183,4 +1427,77 @@ private fun interleaveRowsForTopUp(
         }
     }
     return result
+}
+
+private class DiscoveryPhaseTrace(
+    val startedAtMs: Long,
+    val totalBudgetMs: Long,
+) {
+    var phase: String = "setup"
+    var setupMs: Long = 0L
+    var collectMs: Long = 0L
+    var finalizeMs: Long = 0L
+    var publishMs: Long = 0L
+
+    fun elapsedMs(): Long = (System.nanoTime() / 1_000_000L - startedAtMs).coerceAtLeast(0L)
+
+    fun remainingMs(): Long = (totalBudgetMs - elapsedMs()).coerceAtLeast(0L)
+}
+
+private fun runModeLabel(
+    isManualRefresh: Boolean,
+    isConfigurationRefresh: Boolean,
+    topUp: Boolean,
+): String = when {
+    topUp -> "topUp"
+    isConfigurationRefresh -> "config"
+    isManualRefresh -> "manual"
+    else -> "auto"
+}
+
+private fun formatTopUpOutcome(receipt: DiscoveryTopUpReceipt): String = when (receipt) {
+    is DiscoveryTopUpReceipt.ToppedUp -> "ToppedUp(added=${receipt.added},after=${receipt.eligibleAfter})"
+    is DiscoveryTopUpReceipt.Superseded -> "Superseded(gen=${receipt.generation})"
+    is DiscoveryTopUpReceipt.Busy -> "Busy"
+    is DiscoveryTopUpReceipt.NothingToAdd -> "NothingToAdd"
+}
+
+private fun formatPublishOutcome(
+    receipt: DiscoveryPublishReceipt?,
+    keptTopUpReceipt: DiscoveryTopUpReceipt? = null,
+): String = when (receipt) {
+    is DiscoveryPublishReceipt.Published ->
+        "Published(raw=${receipt.snapshot.suggestions.size},eligible=${receipt.snapshot.eligibleSuggestions.size})"
+    is DiscoveryPublishReceipt.KeptExisting -> {
+        val topUpPart = keptTopUpReceipt?.let { ",topUp=${formatTopUpOutcome(it)}" }.orEmpty()
+        "KeptExisting(accepted=${receipt.accepted},old=${receipt.oldEligible}$topUpPart)"
+    }
+    is DiscoveryPublishReceipt.Superseded -> "Superseded(gen=${receipt.generation})"
+    is DiscoveryPublishReceipt.NoAdmissibleItems -> "NoAdmissibleItems"
+    null -> "none"
+}
+
+private fun DiscoveryRunner.logDiscoveryRun(
+    mediaType: DiscoveryMediaType,
+    mode: String,
+    status: DiscoveryRunStatus,
+    trace: DiscoveryPhaseTrace,
+    marginMs: Long,
+    publishLabel: String,
+    pooledCount: Int,
+    rows: Map<DiscoveryRowType, List<DiscoveryRowItem>>,
+    budget: DiscoveryVerificationBudget,
+    sourceFailures: Int,
+    sourceDegraded: Int,
+) {
+    logcat {
+        "[DiscoveryRun] media=$mediaType mode=$mode status=$status " +
+            "elapsed=${trace.elapsedMs()}ms setup=${trace.setupMs}ms " +
+            "collect=${trace.collectMs}ms finalize=${trace.finalizeMs}ms " +
+            "publishMs=${trace.publishMs}ms margin=${marginMs}ms " +
+            "receipt=$publishLabel pooled=$pooledCount " +
+            "rows=${rows.mapValues { it.value.size }} " +
+            "details=${budget.detailsUsed}/${budget.detailsAllowance} " +
+            "failedSources=$sourceFailures degradedSources=$sourceDegraded"
+    }
 }

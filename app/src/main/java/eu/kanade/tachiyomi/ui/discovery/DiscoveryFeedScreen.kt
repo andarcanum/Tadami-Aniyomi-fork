@@ -350,7 +350,33 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                             }
                         },
                     )
-                    if (state.failedRows.isNotEmpty()) {
+                    val poolStatusLabel = if (
+                        state.poolSize in 1 until eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET
+                    ) {
+                        stringResource(
+                            AYMR.strings.for_you_pool_status,
+                            state.poolSize,
+                            eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET,
+                        )
+                    } else {
+                        null
+                    }
+                    val sourcesUnavailableLabel = if (state.failedSourceCount > 0) {
+                        stringResource(AYMR.strings.for_you_sources_unavailable, state.failedSourceCount)
+                    } else {
+                        null
+                    }
+                    val rowsFailedLabel = if (state.failedRows.isNotEmpty()) {
+                        stringResource(AYMR.strings.for_you_failed_banner)
+                    } else {
+                        null
+                    }
+                    val statusBannerText = listOfNotNull(
+                        poolStatusLabel,
+                        sourcesUnavailableLabel,
+                        rowsFailedLabel,
+                    ).joinToString(" · ")
+                    if (statusBannerText.isNotEmpty()) {
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -365,7 +391,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                stringResource(AYMR.strings.for_you_failed_banner),
+                                statusBannerText,
                                 color = colors.textSecondary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -851,7 +877,15 @@ private fun FeedBody(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                stringResource(AYMR.strings.for_you_empty_subtitle),
+                stringResource(
+                    if (state.lastGenerationStatus == "FAILED" ||
+                        (state.lastGenerationStatus == "PARTIAL" && state.failedSourceCount > 0)
+                    ) {
+                        AYMR.strings.for_you_refresh_failed
+                    } else {
+                        AYMR.strings.for_you_empty_subtitle
+                    },
+                ),
                 color = colors.textSecondary,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center,

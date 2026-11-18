@@ -1960,6 +1960,8 @@
     <string name="pref_discovery_refresh_after_library">Обновлять после обновления библиотеки</string>
     <string name="pref_discovery_refresh_after_library_summary">Отложенный запуск через 30 минут после старта обновления</string>
     <string name="pref_discovery_wifi_only">Только по Wi-Fi</string>
+    <string name="pref_discovery_eager_refill">Держать ленту полной (60)</string>
+    <string name="pref_discovery_eager_refill_summary">Дозагружать после каждого прочитанного тайтла, не дожидаясь порога в 48</string>
     <string name="pref_discovery_group_display">Отображение</string>
     <string name="pref_discovery_teaser_count">Карточек в тизере Home</string>
     <string name="pref_discovery_show_reasons">Показывать обоснования</string>

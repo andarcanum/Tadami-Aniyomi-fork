@@ -411,7 +411,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         fun refillWorkName(mediaType: DiscoveryMediaType): String = "$TAG_AFTER_CONSUMED:${mediaType.key}"
 
         /**
-         * Дебаунс-дозаполнение ленты после явного сигнала («просмотрено», LIKE): 10 минут
+         * Дебаунс-дозаполнение ленты после явного сигнала («просмотрено», LIKE): 60 секунд
          * REPLACE-очередью — каждое новое действие сдвигает окно, шторма обновлений нет
          * (не более одного прогона на очередь). Прогон фоновый: consumed-тайтл исключён,
          * liked-тайтл входит в сиды похожих рекомендаций, ряды добираются свежим.
@@ -420,7 +420,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
-                .setInitialDelay(10, TimeUnit.MINUTES)
+                .setInitialDelay(60, TimeUnit.SECONDS)
                 .addTag(TAG_AFTER_CONSUMED)
                 .setInputData(
                     Data.Builder()

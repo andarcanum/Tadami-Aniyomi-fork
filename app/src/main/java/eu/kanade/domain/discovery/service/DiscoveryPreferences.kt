@@ -64,6 +64,12 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun refreshAfterLibrary(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_after_library", true)
     fun refreshWifiOnly(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_wifi_only", false)
 
+    /**
+     * When true, any consumed title triggers background top-up back to [DISCOVERY_POOL_TARGET] (60),
+     * keeping the feed continuously full instead of waiting for low-water (48).
+     */
+    fun eagerRefill(): Preference<Boolean> = preferenceStore.getBoolean("discovery_eager_refill", true)
+
     /** Legacy migration input; new refreshes use [manualRefreshAt]. */
     fun feedManualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> =
         preferenceStore.getLong("discovery_feed_manual_refresh_at_" + mediaType.key, 0L)

@@ -210,11 +210,22 @@ class HomeDiscoverySourceAdmissionTest {
                 repository.undoEntered.await()
                 updates.first { it > beforeUndo }
             }
-            // The normal collector has already handled Undo; the imperative path must use that full-row admission.
             repository.undoGate!!.complete(Unit)
-            withTimeoutOrNull(500L) { uiState.first { state -> state.discoveryPool.any { it.cleanTitle == "drama" } } }
-            uiState.value.discoveryPool.map { it.cleanTitle } shouldBe listOf("fantasy")
-            uiState.value.discovery.map { it.cleanTitle } shouldBe listOf("fantasy")
+            // Under BEST_EFFORT with fewer than 60 exact matches, Drama tops up behind Fantasy.
+            withTimeout(5_000L) {
+                uiState.first { state -> state.discoveryPool.map { it.cleanTitle } == listOf("fantasy", "drama") }
+            }
+            uiState.value.discoveryPool.map { it.cleanTitle } shouldBe listOf("fantasy", "drama")
+
+            // When 60 exact matches already fill the row, Drama fallback stays excluded.
+            val fullExact = (1..60).map { i -> card("Fantasy$i", "Fantasy").copy(id = (i + 10).toLong()) }
+            repository.updatePool(listOf(drama) + fullExact)
+            withTimeout(5_000L) {
+                uiState.first { state ->
+                    state.discoveryPool.size == 60 && state.discoveryPool.none { it.cleanTitle == "drama" }
+                }
+            }
+            uiState.value.discoveryPool.none { it.cleanTitle == "drama" } shouldBe true
         } finally {
             scope.cancel()
         }

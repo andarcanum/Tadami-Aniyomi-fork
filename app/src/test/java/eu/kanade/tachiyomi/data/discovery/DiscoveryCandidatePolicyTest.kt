@@ -414,4 +414,37 @@ class DiscoveryCandidatePolicyTest {
         val onlyUnknown = listOf(testRowItem("Unknown Genres", genres = emptyList(), score = 0.5))
         policy.filterRowCandidates(onlyUnknown, { it.genres }).map { it.title } shouldBe listOf("Unknown Genres")
     }
+
+    @Test
+    fun `best-effort with fillTarget tops up exact matches with partial, incomplete and fallback tiers`() {
+        val policy = DiscoveryCandidatePolicy(
+            blacklistedTags = setOf("Hentai"),
+            ignoredGenres = setOf("Horror"),
+            requiredGenres = setOf("Fantasy", "Action"),
+            requiredMatchMode = RequiredMatchMode.ALL,
+            strictRequired = false,
+        )
+
+        val items = listOf(
+            testRowItem("Fallback Drama", genres = listOf("Drama"), score = 0.9),
+            testRowItem("Blocked Hentai", genres = listOf("Fantasy", "Action", "Hentai"), score = 1.0),
+            testRowItem("Unknown Genres", genres = emptyList(), score = 0.5),
+            testRowItem("Partial Action", genres = listOf("Action"), score = 0.4),
+            testRowItem("Exact Both", genres = listOf("Fantasy", "Action"), score = 0.2),
+            testRowItem("Ignored Horror", genres = listOf("Horror"), score = 0.8),
+        )
+
+        val filled = policy.filterRowCandidates(
+            items = items,
+            genresSelector = { it.genres },
+            scoreSelector = { it.score },
+            fillTarget = 60,
+        )
+        filled.map { it.title } shouldBe listOf(
+            "Exact Both",
+            "Partial Action",
+            "Unknown Genres",
+            "Fallback Drama",
+        )
+    }
 }

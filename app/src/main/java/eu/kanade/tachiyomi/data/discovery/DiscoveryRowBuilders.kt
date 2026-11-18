@@ -170,11 +170,13 @@ class DiscoveryLikeRowBuilder(
                         author = null,
                         genres = feedbackSeed.genres.ifEmpty { null },
                     )
-                    val result = suggestionCoordinator.fetchSuggestions(
-                        suggestionSeed,
-                        limit = 25,
-                        releaseStatuses = context.releaseStatuses,
-                    )
+                    val result = withBudgetTimeoutOrNull(context.verificationBudget) {
+                        suggestionCoordinator.fetchSuggestions(
+                            suggestionSeed,
+                            limit = 25,
+                            releaseStatuses = context.releaseStatuses,
+                        )
+                    } ?: break
                     if (result.items.isNotEmpty()) hasRawResults = true
                     if (result.failedSources > 0) {
                         hasFailedSources = true
@@ -225,11 +227,13 @@ class DiscoveryLikeRowBuilder(
                         author = seed.author,
                         genres = seed.genres.ifEmpty { null },
                     )
-                    val result = suggestionCoordinator.fetchSuggestions(
-                        suggestionSeed,
-                        limit = 25,
-                        releaseStatuses = context.releaseStatuses,
-                    )
+                    val result = withBudgetTimeoutOrNull(context.verificationBudget) {
+                        suggestionCoordinator.fetchSuggestions(
+                            suggestionSeed,
+                            limit = 25,
+                            releaseStatuses = context.releaseStatuses,
+                        )
+                    } ?: break
                     if (result.items.isNotEmpty()) hasRawResults = true
                     if (result.failedSources > 0) {
                         hasFailedSources = true
@@ -381,7 +385,7 @@ class DiscoveryLikeRowBuilder(
         if (remainingMs <= 0L) return emptyList()
         val timeoutMs = minOf(SOURCE_FETCH_TIMEOUT_MS, remainingMs)
         return runCatchingUnlessCancelled {
-            withTimeoutOrNull(timeoutMs) {
+            withHardTimeoutOrNull(timeoutMs) {
                 if (budget == null) {
                     catalog.popularWithGenres(
                         context.mediaType,
@@ -481,7 +485,7 @@ class DiscoveryLikeRowBuilder(
                 wave.mapIndexed { index, genre ->
                     async {
                         val items = runCatchingUnlessCancelled {
-                            withTimeoutOrNull(waveTimeoutMs) {
+                            withHardTimeoutOrNull(waveTimeoutMs) {
                                 permits.withPermit {
                                     coroutineContext.ensureActive()
                                     if (budget?.isExpired() == true) return@withPermit emptyList()
@@ -574,12 +578,14 @@ class DiscoveryTrendRowBuilder(
 
         val fromSource = if (context.mediaType == DiscoveryMediaType.NOVEL && preferredSourceId > 0) {
             runCatchingUnlessCancelled {
-                catalog.latest(
-                    context.mediaType,
-                    preferredSourceId,
-                    page = context.pageOffset,
-                    releaseStatuses = context.releaseStatuses,
-                )
+                withBudgetTimeoutOrNull(context.verificationBudget) {
+                    catalog.latest(
+                        context.mediaType,
+                        preferredSourceId,
+                        page = context.pageOffset,
+                        releaseStatuses = context.releaseStatuses,
+                    )
+                }.orEmpty()
             }.getOrNull().orEmpty().map { item ->
                 item.copy(
                     reason = "source",
@@ -593,13 +599,15 @@ class DiscoveryTrendRowBuilder(
         }
 
         val trendingResult = runCatchingUnlessCancelled {
-            trending.fetch(
-                mediaType = context.mediaType,
-                season = seasonProvider(),
-                sort = effectiveSort,
-                page = context.pageOffset,
-                releaseStatuses = context.releaseStatuses,
-            )
+            withBudgetTimeoutOrNull(context.verificationBudget) {
+                trending.fetch(
+                    mediaType = context.mediaType,
+                    season = seasonProvider(),
+                    sort = effectiveSort,
+                    page = context.pageOffset,
+                    releaseStatuses = context.releaseStatuses,
+                )
+            } ?: throw IOException("trend provider exceeded shared budget")
         }
         val fromTrending = trendingResult.getOrNull().orEmpty()
             .map { item ->
@@ -647,12 +655,14 @@ class DiscoveryTrendRowBuilder(
             // Запрашиваем «Свежее» (latest updates) из активного/установленного источника пользователя!
             if (preferredSourceId > 0) {
                 val fallbackSource = runCatchingUnlessCancelled {
-                    catalog.latest(
-                        context.mediaType,
-                        preferredSourceId,
-                        page = context.pageOffset,
-                        releaseStatuses = context.releaseStatuses,
-                    )
+                    withBudgetTimeoutOrNull(context.verificationBudget) {
+                        catalog.latest(
+                            context.mediaType,
+                            preferredSourceId,
+                            page = context.pageOffset,
+                            releaseStatuses = context.releaseStatuses,
+                        )
+                    }.orEmpty()
                 }.getOrNull().orEmpty().map { item ->
                     item.copy(
                         reason = "source",
@@ -745,16 +755,23 @@ class DiscoveryTasteRowBuilder(
         val externalMatchMode = if (required) policy.requiredMatchMode else RequiredMatchMode.ANY
         val nativeMatchMode = if (required) policy.requiredMatchMode else RequiredMatchMode.ALL
         val splitExternalAny = externalMatchMode == RequiredMatchMode.ANY && genreNames.size > 1
+        val externalBudget = if (required) {
+            context.verificationBudget
+        } else {
+            context.verificationBudget?.takeUnless { it.isExpired() }
+        }
         val trendingResult = if (includeExternal && !splitExternalAny) {
             runCatchingUnlessCancelled {
-                trending.fetchByGenres(
-                    context.mediaType,
-                    genreNames,
-                    sortProvider(),
-                    page = context.pageOffset,
-                    releaseStatuses = context.releaseStatuses,
-                    matchMode = externalMatchMode,
-                )
+                withBudgetTimeoutOrNull(externalBudget) {
+                    trending.fetchByGenres(
+                        context.mediaType,
+                        genreNames,
+                        sortProvider(),
+                        page = context.pageOffset,
+                        releaseStatuses = context.releaseStatuses,
+                        matchMode = externalMatchMode,
+                    )
+                } ?: throw IOException("external genre query exceeded shared budget")
             }
         } else {
             null
@@ -824,14 +841,16 @@ class DiscoveryTasteRowBuilder(
                     recordSplit(fetchSplitExternalGenres(context, genreNames, nextPage, externalMatchMode))
                 } else {
                     val fetched = runCatchingUnlessCancelled {
-                        trending.fetchByGenres(
-                            context.mediaType,
-                            genreNames,
-                            sortProvider(),
-                            page = nextPage,
-                            releaseStatuses = context.releaseStatuses,
-                            matchMode = externalMatchMode,
-                        )
+                        withBudgetTimeoutOrNull(context.verificationBudget) {
+                            trending.fetchByGenres(
+                                context.mediaType,
+                                genreNames,
+                                sortProvider(),
+                                page = nextPage,
+                                releaseStatuses = context.releaseStatuses,
+                                matchMode = externalMatchMode,
+                            )
+                        }.orEmpty()
                     }.getOrNull().orEmpty()
                     if (genreNames.size == 1) {
                         val onlyGenre = genreNames.single()
@@ -1055,7 +1074,8 @@ class DiscoveryTasteRowBuilder(
                             fetch()
                         } else {
                             // A scheduled coroutine may start after the wave's original budget snapshot.
-                            withTimeoutOrNull(minOf(waveTimeoutMs, budget?.remainingMs() ?: waveTimeoutMs)) {
+                            val remaining = budget?.remainingMs() ?: waveTimeoutMs
+                            withHardTimeoutOrNull(minOf(waveTimeoutMs, remaining)) {
                                 fetch()
                             } ?: throw IOException("external genre query exceeded its shared budget")
                         }
@@ -1079,7 +1099,7 @@ class DiscoverySourceRowBuilder(
     private val catalog: DiscoverySourceCatalog,
     private val rowCap: Int = 20,
     private val sourceTimeoutMs: Long = SOURCE_FETCH_TIMEOUT_MS,
-    private val maxConcurrency: Int = 4,
+    private val maxConcurrency: Int = 6,
 ) : DiscoveryRowBuilder {
 
     override val rowType = DiscoveryRowType.SOURCE
@@ -1129,7 +1149,10 @@ class DiscoverySourceRowBuilder(
                     releaseStatuses = context.releaseStatuses,
                     policy = policy,
                     maxConcurrency = maxConcurrency,
-                    timeoutMs = genreSourceTimeoutMs(context.verificationBudget, ordered.size, maxConcurrency),
+                    timeoutMs = minOf(
+                        genreSourceTimeoutMs(context.verificationBudget, ordered.size, maxConcurrency),
+                        WAVE_SOURCE_TIMEOUT_CAP_MS,
+                    ),
                     hydrate = true,
                     targetItems = rowCap,
                     budget = context.verificationBudget,
@@ -1207,7 +1230,7 @@ class DiscoverySourceRowBuilder(
                                     null
                                 } else {
                                     runCatchingUnlessCancelled {
-                                        withTimeoutOrNull(timeout) {
+                                        withHardTimeoutOrNull(timeout) {
                                             catalog.latestPage(
                                                 context.mediaType,
                                                 state.id,
@@ -1226,7 +1249,7 @@ class DiscoverySourceRowBuilder(
                                     null
                                 } else {
                                     runCatchingUnlessCancelled {
-                                        withTimeoutOrNull(timeout) {
+                                        withHardTimeoutOrNull(timeout) {
                                             catalog.popularPage(
                                                 context.mediaType,
                                                 state.id,
@@ -1421,4 +1444,14 @@ internal fun interleaveSourceParts(
         }
     }
     return out
+}
+
+private suspend fun <T> withBudgetTimeoutOrNull(
+    budget: DiscoveryVerificationBudget?,
+    block: suspend () -> T,
+): T? {
+    if (budget == null) return block()
+    val remaining = budget.remainingMs()
+    if (remaining <= 0L) return null
+    return withHardTimeoutOrNull(remaining) { block() }
 }

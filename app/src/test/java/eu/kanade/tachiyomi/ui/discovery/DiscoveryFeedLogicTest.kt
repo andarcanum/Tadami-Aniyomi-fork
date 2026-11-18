@@ -212,4 +212,17 @@ class DiscoveryFeedLogicTest {
             .map { it.title } shouldBe listOf("Fantasy 1", "Fantasy 2", "Fantasy 3")
         sliceFeedForGenre(state, FeedSignalTab.MIX, provider = null, selectedGenre = null).size shouldBe 24
     }
+
+    @Test
+    fun `sliceFeedForGenre returns full pool and full genre match beyond 20-card cap`() {
+        val pool = (1..60).map { index ->
+            suggestion(DiscoveryRowType.LIKE, "Mix $index").copy(
+                genres = if (index <= 35) listOf("Action") else listOf("Drama"),
+            )
+        }
+        val state = DiscoveryFeedUiState(mix = pool)
+
+        sliceFeedForGenre(state, FeedSignalTab.MIX, provider = null, selectedGenre = null).size shouldBe 60
+        sliceFeedForGenre(state, FeedSignalTab.MIX, provider = null, selectedGenre = "Action").size shouldBe 35
+    }
 }

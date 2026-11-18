@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.discovery
 
 internal const val SOURCE_COOLOFF_MS: Long = 2 * 3600_000L // 2 hours
 internal const val SOURCE_EVICTION_MS: Long = 6 * 3600_000L // 6 hours
+internal const val CIRCUIT_OPEN_FAIL_THRESHOLD: Int = 2
 
 internal data class SourceFailureRecord(
     val sourceId: Long,
@@ -96,4 +97,32 @@ internal fun updateSourceFailures(
     }
 
     return mutable
+}
+
+internal fun isSourceCircuitOpen(
+    sourceId: Long,
+    history: Map<Long, SourceFailureRecord>,
+    nowMs: Long = System.currentTimeMillis(),
+    failThreshold: Int = CIRCUIT_OPEN_FAIL_THRESHOLD,
+    cooloffMs: Long = SOURCE_COOLOFF_MS,
+): Boolean {
+    val record = history[sourceId] ?: return false
+    if (record.failCount < failThreshold) return false
+    val elapsed = nowMs - record.lastFailedAt
+    return elapsed in 0 until cooloffMs
+}
+
+/**
+ * Productive-first / circuit-breaker ordering: healthy sources run first so they claim
+ * wave-1 concurrency permits and detail budget ahead of repeatedly failing sources,
+ * while demoted sources remain at the tail so they can still recover when healthy.
+ */
+internal fun prioritizeHealthySources(
+    sourceIds: List<Long>,
+    history: Map<Long, SourceFailureRecord>,
+    nowMs: Long = System.currentTimeMillis(),
+): List<Long> {
+    if (sourceIds.size <= 1 || history.isEmpty()) return sourceIds
+    val (demoted, healthy) = sourceIds.partition { isSourceCircuitOpen(it, history, nowMs) }
+    return if (healthy.isEmpty() || demoted.isEmpty()) sourceIds else healthy + demoted
 }

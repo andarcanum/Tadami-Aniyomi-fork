@@ -209,7 +209,13 @@ class DiscoveryRunnerTopUpTest {
             cursors = emptyList(),
         )
         val repo = TopUpTestRepository(initialSnapshot)
-        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val preferences = DiscoveryPreferences(
+            InMemoryPreferenceStore(
+                sequenceOf(
+                    InMemoryPreferenceStore.InMemoryPreference("discovery_eager_refill", false, false),
+                ),
+            ),
+        )
 
         var builderInvoked = false
         val builder = object : DiscoveryRowBuilder {

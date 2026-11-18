@@ -891,6 +891,12 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             true
                         },
                     ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = discoveryPreferences.eagerRefill(),
+                        title = stringResource(AYMR.strings.pref_discovery_eager_refill),
+                        subtitle = stringResource(AYMR.strings.pref_discovery_eager_refill_summary),
+                        enabled = enabled,
+                    ),
                 ),
             ),
             Preference.PreferenceGroup(

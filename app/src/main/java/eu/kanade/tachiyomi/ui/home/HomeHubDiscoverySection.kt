@@ -1328,6 +1328,33 @@ internal fun ForYouSection(
             onRefreshClick = onRefreshClick,
             onMoreClick = onMoreClick,
         )
+        val poolStatusText = if (poolSize in 1 until eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET) {
+            stringResource(
+                AYMR.strings.for_you_pool_status,
+                poolSize,
+                eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET,
+            )
+        } else {
+            null
+        }
+        val sourcesFailedText = if (failedSourceCount > 0) {
+            stringResource(AYMR.strings.for_you_sources_unavailable, failedSourceCount)
+        } else {
+            null
+        }
+        val statusSummary = listOfNotNull(poolStatusText, sourcesFailedText).joinToString(" · ")
+        if (statusSummary.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = statusSummary,
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                    .padding(horizontal = sectionHorizontalPadding),
+            )
+        }
         Spacer(Modifier.height(16.dp))
         LazyRow(
             modifier = Modifier
