@@ -22,10 +22,14 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
+import android.text.style.AlignmentSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.LeadingMarginSpan
+import android.text.style.LineHeightSpan
+import android.text.style.MetricAffectingSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
@@ -620,6 +624,7 @@ internal class NovelPageReaderTextView constructor(
     }
 
     private var localSelection: NovelSelectedTextSelection? = null
+    internal fun currentSelectionForTesting(): NovelSelectedTextSelection? = localSelection
     private var selectionActionMode: ActionMode? = null
     private val selectionBoundsInView = RectF()
     private var isExecutingAction = false
@@ -636,6 +641,7 @@ internal class NovelPageReaderTextView constructor(
     var selectionAnchorTextStartInBlock: Int = 0
     var displayToSourceOffsets: IntArray? = null
     var syntheticHyphenDisplayOffsets: BooleanArray? = null
+    var mergedSegments: List<MergedTextBlockSegment> = emptyList()
     private var isDetaching = false
     private var layoutProbeTextView: TextView? = null
 
@@ -1107,15 +1113,44 @@ internal class NovelPageReaderTextView constructor(
 
         val locationOnScreen = IntArray(2)
         getLocationOnScreen(locationOnScreen)
-        val mappedStart = mapDisplayOffsetToSourceOffset(start, displayToSourceOffsets, currentText.length)
-        val mappedEnd = mapDisplayOffsetToSourceOffset(end, displayToSourceOffsets, currentText.length)
-        val selectionAnchor = selectionAnchorChapterId?.let { chapterId ->
-            NovelSelectionAnchor(
-                chapterId = chapterId,
-                blockIndex = selectionAnchorBlockIndex,
-                charStart = selectionAnchorTextStartInBlock + mappedStart,
-                charEndExclusive = selectionAnchorTextStartInBlock + mappedEnd.coerceAtLeast(mappedStart),
+        val chapterId = selectionAnchorChapterId
+        val overlappingAnchors = if (chapterId != null && mergedSegments.isNotEmpty()) {
+            mergedSegments.mapNotNull { seg ->
+                val segStart = maxOf(start, seg.displayStart)
+                val segEnd = minOf(end, seg.displayEndExclusive)
+                if (segStart >= segEnd) return@mapNotNull null
+                val localStart = segStart - seg.displayStart
+                val localEnd = segEnd - seg.displayStart
+                val segLen = (seg.displayEndExclusive - seg.displayStart).coerceAtLeast(0)
+                val mappedStart = mapDisplayOffsetToSourceOffset(localStart, seg.displayToSourceOffsets, segLen)
+                val mappedEnd = mapDisplayOffsetToSourceOffset(localEnd, seg.displayToSourceOffsets, segLen)
+                val snippet = extractReaderSourceTextForDisplayRange(
+                    displayText = currentText,
+                    start = segStart,
+                    endExclusive = segEnd,
+                    syntheticHyphenDisplayOffsets = syntheticHyphenDisplayOffsets,
+                )
+                NovelSelectionAnchor(
+                    chapterId = chapterId,
+                    blockIndex = seg.sourceBlockIndex,
+                    charStart = seg.sourceTextStartInBlock + mappedStart,
+                    charEndExclusive = seg.sourceTextStartInBlock + mappedEnd.coerceAtLeast(mappedStart),
+                    selectedText = snippet.takeIf { it.isNotBlank() },
+                )
+            }
+        } else if (chapterId != null) {
+            val mappedStart = mapDisplayOffsetToSourceOffset(start, displayToSourceOffsets, currentText.length)
+            val mappedEnd = mapDisplayOffsetToSourceOffset(end, displayToSourceOffsets, currentText.length)
+            listOf(
+                NovelSelectionAnchor(
+                    chapterId = chapterId,
+                    blockIndex = selectionAnchorBlockIndex,
+                    charStart = selectionAnchorTextStartInBlock + mappedStart,
+                    charEndExclusive = selectionAnchorTextStartInBlock + mappedEnd.coerceAtLeast(mappedStart),
+                ),
             )
+        } else {
+            emptyList()
         }
         localSelection = NovelSelectedTextSelection(
             sessionId = selectionSessionIdProvider(),
@@ -1127,7 +1162,8 @@ internal class NovelPageReaderTextView constructor(
                 rightPx = (locationOnScreen[0] + bounds.right).roundToInt(),
                 bottomPx = (locationOnScreen[1] + bounds.bottom).roundToInt(),
             ),
-            selectionAnchor = selectionAnchor,
+            selectionAnchor = overlappingAnchors.firstOrNull(),
+            selectionAnchors = overlappingAnchors,
         )
         isExecutingAction = false
     }
@@ -1363,67 +1399,45 @@ internal fun NovelPageReaderPageContent(
                     .padding(bottom = bookBottomInset),
             ) {
                 val pageColumnWidthPx = constraints.maxWidth.coerceAtLeast(1)
+                val renderItems = remember(contentPage.blocks) {
+                    buildNovelPageRenderItems(contentPage.blocks)
+                }
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    contentPage.blocks.forEachIndexed { index, block ->
-                        key(index, block) {
-                            if (block.spacingBeforePx > 0) {
-                                Spacer(
-                                    modifier = Modifier.height(
-                                        with(density) { block.spacingBeforePx.toDp() },
-                                    ),
-                                )
-                            }
-                            when (block) {
-                                is NovelPageContentBlock.Plain -> {
-                                    val baseText = if (readerSettings.bionicReading) {
-                                        toBionicText(block.text)
-                                    } else {
-                                        AnnotatedString(block.text)
+                    renderItems.forEachIndexed { index, item ->
+                        key(index, item) {
+                            when (item) {
+                                is NovelPageRenderItem.TextRun -> {
+                                    val leadingSpacingPx = item.blocks.first().spacingBeforePx
+                                    if (leadingSpacingPx > 0) {
+                                        Spacer(
+                                            modifier = Modifier.height(
+                                                with(density) { leadingSpacingPx.toDp() },
+                                            ),
+                                        )
                                     }
-                                    NovelPageReaderTextBlock(
-                                        text = applyNovelReaderTtsHighlight(
-                                            text = baseText,
-                                            blockText = block.text,
-                                            sourceBlockIndex = block.sourceBlockIndex,
-                                            pageIndex = contentPage.pageIndex,
-                                            pageBlockTextStart = block.sourceTextStart,
-                                            pageBlockTextEndExclusive = block.sourceTextEndExclusive,
-                                            highlightState = ttsHighlightState,
-                                            highlightColor = ttsHighlightColor,
-                                        ),
-                                        isChapterTitle = block.isChapterTitle,
-                                        firstLineIndentEm = block.firstLineIndentEm,
+                                    NovelPageReaderMergedTextBlock(
+                                        blocks = item.blocks,
+                                        pageIndex = contentPage.pageIndex,
                                         readerSettings = readerSettings,
+                                        preserveSourceAlign = preserveSourceAlign,
                                         textColor = textColor,
                                         textBackground = textBackground,
-                                        textAlign = resolveNativeReaderTextAlign(
-                                            globalTextAlign = readerSettings.textAlign,
-                                            preserveSourceTextAlignInNative = preserveSourceAlign,
-                                            sourceTextAlign = null,
-                                        ),
                                         textTypeface = textTypeface,
                                         chapterTitleTypeface = chapterTitleTypeface,
                                         chapterTitleTextColor = chapterTitleTextColor,
-                                        textShadowEnabled = readerSettings.textShadow,
-                                        textShadowColor = readerSettings.textShadowColor,
-                                        textShadowBlur = readerSettings.textShadowBlur,
-                                        textShadowX = readerSettings.textShadowX,
-                                        textShadowY = readerSettings.textShadowY,
-                                        baseTypefaceStyle = if (block.isChapterTitle) {
-                                            Typeface.BOLD
-                                        } else {
-                                            Typeface.NORMAL
-                                        },
-                                        predictedContentHeightPx = block.measuredHeightPx,
+                                        textShadowEnabled = textShadowEnabled,
+                                        textShadowColor = textShadowColor,
+                                        textShadowBlur = textShadowBlur,
+                                        textShadowX = textShadowX,
+                                        textShadowY = textShadowY,
                                         availableWidthPx = pageColumnWidthPx,
-                                        layoutMode = NovelPageReaderLayoutMode.PAGE,
+                                        ttsHighlightState = ttsHighlightState,
+                                        ttsHighlightColor = ttsHighlightColor,
                                         selectionRenderer = selectionRenderer,
                                         selectionSessionIdProvider = selectionSessionIdProvider,
                                         selectionAnchorChapterId = selectionAnchorChapterId,
-                                        selectionAnchorBlockIndex = block.sourceBlockIndex,
-                                        selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
                                         onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                         onPlainTap = onPlainTap,
                                         onUrlClick = onUrlClick,
@@ -1432,122 +1446,41 @@ internal fun NovelPageReaderPageContent(
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
-                                is NovelPageContentBlock.Rich -> {
-                                    if (block.isHorizontalRule) {
-                                        val ruleContainerHeight = block.measuredHeightPx
-                                            .takeIf { it > 0 }
-                                            ?.let { px -> with(density) { px.toDp() } }
-                                            ?: 20.dp
+                                is NovelPageRenderItem.HorizontalRule -> {
+                                    if (item.spacingBeforePx > 0) {
+                                        Spacer(
+                                            modifier = Modifier.height(
+                                                with(density) { item.spacingBeforePx.toDp() },
+                                            ),
+                                        )
+                                    }
+                                    val ruleContainerHeight = item.measuredHeightPx
+                                        .takeIf { it > 0 }
+                                        ?.let { px -> with(density) { px.toDp() } }
+                                        ?: 20.dp
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(ruleContainerHeight),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
                                         Box(
                                             modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(ruleContainerHeight),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth(0.42f)
-                                                    .height(1.dp)
-                                                    .background(textColor.copy(alpha = 0.25f)),
-                                            )
-                                        }
-                                    } else {
-                                        val hasQuoteStartIndent = block.isBlockQuote &&
-                                            !block.isChapterTitle &&
-                                            block.startIndentDp > 0
-                                        val blockModifier = if (hasQuoteStartIndent) {
-                                            val quoteBarColor = textColor.copy(alpha = 0.28f)
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .drawBehind {
-                                                    val barX = 3.dp.toPx()
-                                                    val strokeWidth = 2.dp.toPx()
-                                                    val topY = 2.dp.toPx()
-                                                    val bottomY = (size.height - 2.dp.toPx()).coerceAtLeast(topY)
-                                                    drawLine(
-                                                        color = quoteBarColor,
-                                                        start = Offset(barX, topY),
-                                                        end = Offset(barX, bottomY),
-                                                        strokeWidth = strokeWidth,
-                                                    )
-                                                }
-                                                .padding(start = block.startIndentDp.dp)
-                                        } else {
-                                            Modifier.fillMaxWidth()
-                                        }
-                                        val richAvailableWidthPx = if (hasQuoteStartIndent) {
-                                            (pageColumnWidthPx - with(density) { block.startIndentDp.dp.roundToPx() })
-                                                .coerceAtLeast(1)
-                                        } else {
-                                            pageColumnWidthPx
-                                        }
-                                        NovelPageReaderTextBlock(
-                                            text = applyNovelReaderTtsHighlight(
-                                                text = block.text,
-                                                blockText = block.text.text,
-                                                sourceBlockIndex = block.sourceBlockIndex,
-                                                pageIndex = contentPage.pageIndex,
-                                                pageBlockTextStart = block.sourceTextStart,
-                                                pageBlockTextEndExclusive = block.sourceTextEndExclusive,
-                                                highlightState = ttsHighlightState,
-                                                highlightColor = ttsHighlightColor,
-                                            ),
-                                            isChapterTitle = block.isChapterTitle,
-                                            firstLineIndentEm = block.firstLineIndentEm,
-                                            readerSettings = readerSettings,
-                                            textColor = textColor,
-                                            textBackground = textBackground,
-                                            textAlign = resolveNativeReaderTextAlign(
-                                                globalTextAlign = readerSettings.textAlign,
-                                                preserveSourceTextAlignInNative = preserveSourceAlign,
-                                                sourceTextAlign = block.sourceTextAlign,
-                                            ),
-                                            textTypeface = textTypeface,
-                                            chapterTitleTypeface = chapterTitleTypeface,
-                                            chapterTitleTextColor = chapterTitleTextColor,
-                                            textShadowEnabled = readerSettings.textShadow,
-                                            textShadowColor = readerSettings.textShadowColor,
-                                            textShadowBlur = readerSettings.textShadowBlur,
-                                            textShadowX = readerSettings.textShadowX,
-                                            textShadowY = readerSettings.textShadowY,
-                                            fontSizeMultiplier = if (block.isChapterTitle) {
-                                                PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
-                                            } else {
-                                                block.fontSizeMultiplier
-                                            },
-                                            lineHeightMultiplier = if (block.isChapterTitle) {
-                                                PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
-                                            } else {
-                                                block.lineHeightMultiplier
-                                            },
-                                            textColorOverride = if (block.isBlockQuote && !block.isChapterTitle) {
-                                                textColor.copy(alpha = 0.90f)
-                                            } else {
-                                                null
-                                            },
-                                            baseTypefaceStyle = if (block.isChapterTitle) {
-                                                Typeface.BOLD
-                                            } else {
-                                                block.baseTypefaceStyle
-                                            },
-                                            predictedContentHeightPx = block.measuredHeightPx,
-                                            availableWidthPx = richAvailableWidthPx,
-                                            layoutMode = NovelPageReaderLayoutMode.PAGE,
-                                            selectionRenderer = selectionRenderer,
-                                            selectionSessionIdProvider = selectionSessionIdProvider,
-                                            selectionAnchorChapterId = selectionAnchorChapterId,
-                                            selectionAnchorBlockIndex = block.sourceBlockIndex,
-                                            selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
-                                            onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                            onPlainTap = onPlainTap,
-                                            onUrlClick = onUrlClick,
-                                            touchHandlingEnabled = touchHandlingEnabled,
-                                            renderAsStaticCanvas = renderAsStaticCanvas,
-                                            modifier = blockModifier,
+                                                .fillMaxWidth(0.42f)
+                                                .height(1.dp)
+                                                .background(textColor.copy(alpha = 0.25f)),
                                         )
                                     }
                                 }
-                                is NovelPageContentBlock.Image -> {
+                                is NovelPageRenderItem.Image -> {
+                                    val block = item.block
+                                    if (block.spacingBeforePx > 0) {
+                                        Spacer(
+                                            modifier = Modifier.height(
+                                                with(density) { block.spacingBeforePx.toDp() },
+                                            ),
+                                        )
+                                    }
                                     NovelPageReaderImageBlock(
                                         imageUrl = block.imageUrl,
                                         contentDescription = block.contentDescription,
@@ -2015,6 +1948,720 @@ internal fun NovelPageReaderTextBlock(
         // Dropping a focused interop view makes the framework search the hierarchy for a new focus
         // target, which can re-enter Compose layout while changes are still being applied. Giving
         // up focus first keeps that removal side-effect free.
+        onRelease = { textView ->
+            textView.clearFocus()
+        },
+    )
+}
+
+internal data class MergedTextBlockSegment(
+    val displayStart: Int,
+    val displayEndExclusive: Int,
+    val sourceBlockIndex: Int,
+    val sourceTextStartInBlock: Int,
+    val displayToSourceOffsets: IntArray?,
+)
+
+internal sealed interface NovelPageRenderItem {
+    data class TextRun(
+        val blocks: List<NovelPageContentBlock>,
+    ) : NovelPageRenderItem
+
+    data class HorizontalRule(
+        val spacingBeforePx: Int,
+        val measuredHeightPx: Int,
+    ) : NovelPageRenderItem
+
+    data class Image(
+        val block: NovelPageContentBlock.Image,
+    ) : NovelPageRenderItem
+}
+
+internal fun buildNovelPageRenderItems(blocks: List<NovelPageContentBlock>): List<NovelPageRenderItem> {
+    if (blocks.isEmpty()) return emptyList()
+    val items = mutableListOf<NovelPageRenderItem>()
+    val pendingTextBlocks = mutableListOf<NovelPageContentBlock>()
+
+    fun flushTextRun() {
+        if (pendingTextBlocks.isNotEmpty()) {
+            items += NovelPageRenderItem.TextRun(pendingTextBlocks.toList())
+            pendingTextBlocks.clear()
+        }
+    }
+
+    for (block in blocks) {
+        when (block) {
+            is NovelPageContentBlock.Plain -> pendingTextBlocks += block
+            is NovelPageContentBlock.Rich -> {
+                if (block.isHorizontalRule) {
+                    flushTextRun()
+                    items += NovelPageRenderItem.HorizontalRule(
+                        spacingBeforePx = block.spacingBeforePx,
+                        measuredHeightPx = block.measuredHeightPx,
+                    )
+                } else {
+                    pendingTextBlocks += block
+                }
+            }
+            is NovelPageContentBlock.Image -> {
+                flushTextRun()
+                items += NovelPageRenderItem.Image(block)
+            }
+        }
+    }
+    flushTextRun()
+    return items
+}
+
+private class ParagraphSpacerLineHeightSpan(
+    private val targetHeightPx: Int,
+) : LineHeightSpan {
+    override fun chooseHeight(
+        text: CharSequence?,
+        start: Int,
+        end: Int,
+        spanstartv: Int,
+        v: Int,
+        fm: Paint.FontMetricsInt?,
+    ) {
+        if (fm == null) return
+        fm.top = -targetHeightPx
+        fm.ascent = -targetHeightPx
+        fm.descent = 0
+        fm.bottom = 0
+    }
+}
+
+private class NovelBlockQuoteSpan(
+    private val stripeWidthPx: Float,
+    private val stripeOffsetPx: Float,
+    private val stripeColor: Int,
+    private val leadMarginPx: Int,
+) : LeadingMarginSpan {
+    override fun getLeadingMargin(first: Boolean): Int = leadMarginPx
+
+    override fun drawLeadingMargin(
+        c: Canvas,
+        p: Paint,
+        x: Int,
+        dir: Int,
+        top: Int,
+        baseline: Int,
+        bottom: Int,
+        text: CharSequence?,
+        start: Int,
+        end: Int,
+        first: Boolean,
+        layout: Layout?,
+    ) {
+        val oldStyle = p.style
+        val oldColor = p.color
+        p.style = Paint.Style.FILL
+        p.color = stripeColor
+        val left = (x + dir * stripeOffsetPx).coerceAtLeast(0f)
+        c.drawRect(left, top.toFloat(), left + stripeWidthPx, bottom.toFloat(), p)
+        p.style = oldStyle
+        p.color = oldColor
+    }
+}
+
+private class NovelTypefaceSpan(
+    private val customTypeface: Typeface,
+) : MetricAffectingSpan() {
+    override fun updateDrawState(ds: TextPaint) {
+        ds.typeface = customTypeface
+    }
+
+    override fun updateMeasureState(paint: TextPaint) {
+        paint.typeface = customTypeface
+    }
+}
+
+internal data class PreparedMergedBlockInput(
+    val sourceBlockIndex: Int,
+    val sourceTextStartInBlock: Int,
+    val highlightedText: AnnotatedString,
+    val spacingBeforePx: Int,
+    val firstLineIndentPx: Int?,
+    val forcedTypefaceStyle: Int,
+    val textAlign: ReaderTextAlign,
+    val fontSizeMultiplier: Float,
+    val lineHeightMultiplier: Float,
+    val typeface: Typeface?,
+    val textColor: Color,
+    val isBlockQuote: Boolean,
+    val startIndentPx: Int,
+    val textLocale: Locale?,
+)
+
+internal class MergedPageTextContent(
+    val spannable: SpannableStringBuilder,
+    val segments: List<MergedTextBlockSegment>,
+    val syntheticHyphenDisplayOffsets: BooleanArray?,
+    val predictedTotalHeightPx: Int,
+)
+
+internal fun buildMergedPageTextContent(
+    inputs: List<PreparedMergedBlockInput>,
+    pageColumnWidthPx: Int,
+    bodyTextSizePx: Float,
+    bodyLineSpacingMultiplier: Float,
+    bodyTypeface: Typeface?,
+    quoteStripeWidthPx: Float,
+    quoteStripeOffsetPx: Float,
+    quoteStripeColor: Int,
+    density: Float,
+    hyphenationEnabled: Boolean,
+    onUrlClick: ((String) -> Unit)?,
+    measurementPaint: TextPaint?,
+    probeBuilder: ((CharSequence, PreparedMergedBlockInput) -> Layout?)? = null,
+): MergedPageTextContent {
+    val mergedBuilder = SpannableStringBuilder()
+    val segments = mutableListOf<MergedTextBlockSegment>()
+    val blockSyntheticFlags = arrayOfNulls<BooleanArray>(inputs.size)
+    var predictedTotalHeightPx = 0
+
+    for (index in inputs.indices) {
+        val input = inputs[index]
+        if (index > 0) {
+            val prev = inputs[index - 1]
+            val prevBlockSizePx = bodyTextSizePx * prev.fontSizeMultiplier
+            val prevBlockLineMult = bodyLineSpacingMultiplier * prev.lineHeightMultiplier
+            val prevGlyphPadPx = resolvePageReaderGlyphOverflowPaddingPx(prevBlockSizePx)
+            val prevLeadingGapPx = (prevBlockSizePx * (prevBlockLineMult - 1f)).roundToInt().coerceAtLeast(0)
+            val desiredTotalGapPx = prevGlyphPadPx + input.spacingBeforePx
+            val extraSpacerPx = (desiredTotalGapPx - prevLeadingGapPx).coerceAtLeast(0)
+            mergedBuilder.append('\n')
+            if (extraSpacerPx > 0) {
+                val spacerStart = mergedBuilder.length
+                mergedBuilder.append('\n')
+                val adjustedHeightPx = (extraSpacerPx / bodyLineSpacingMultiplier.coerceAtLeast(1f))
+                    .roundToInt()
+                    .coerceAtLeast(1)
+                mergedBuilder.setSpan(
+                    ParagraphSpacerLineHeightSpan(adjustedHeightPx),
+                    spacerStart,
+                    spacerStart + 1,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+            predictedTotalHeightPx += desiredTotalGapPx
+        }
+
+        val chunkBase = buildNovelPageReaderSpannableText(
+            text = input.highlightedText,
+            firstLineIndentPx = if (input.isBlockQuote) null else input.firstLineIndentPx,
+            forcedTypefaceStyle = input.forcedTypefaceStyle,
+            onUrlClick = onUrlClick,
+        )
+        val chunkSpannable = SpannableStringBuilder(chunkBase)
+        val rawLen = chunkSpannable.length
+        if (rawLen > 0) {
+            if (input.isBlockQuote && input.startIndentPx > 0) {
+                chunkSpannable.setSpan(
+                    NovelBlockQuoteSpan(
+                        stripeWidthPx = quoteStripeWidthPx,
+                        stripeOffsetPx = quoteStripeOffsetPx,
+                        stripeColor = quoteStripeColor,
+                        leadMarginPx = input.startIndentPx,
+                    ),
+                    0,
+                    rawLen,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+            if (input.fontSizeMultiplier != 1f) {
+                chunkSpannable.setSpan(
+                    RelativeSizeSpan(input.fontSizeMultiplier),
+                    0,
+                    rawLen,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+            if (input.typeface != null && input.typeface != bodyTypeface) {
+                chunkSpannable.setSpan(
+                    NovelTypefaceSpan(input.typeface),
+                    0,
+                    rawLen,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+            chunkSpannable.setSpan(
+                ForegroundColorSpan(input.textColor.toArgb()),
+                0,
+                rawLen,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            if (input.textAlign != ReaderTextAlign.LEFT && input.textAlign != ReaderTextAlign.JUSTIFY) {
+                chunkSpannable.setSpan(
+                    AlignmentSpan.Standard(input.textAlign.toLayoutAlignment()),
+                    0,
+                    rawLen,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        }
+
+        val blockSizePx = bodyTextSizePx * input.fontSizeMultiplier
+        val blockLineMult = bodyLineSpacingMultiplier * input.lineHeightMultiplier
+        val resolvedWidthPx = pageColumnWidthPx.coerceAtLeast(1)
+        var segmentDisplayToSource: IntArray? = null
+        val displayChunk: CharSequence = if (
+            (hyphenationEnabled || input.textAlign == ReaderTextAlign.JUSTIFY) &&
+            rawLen > 0
+        ) {
+            fun solveChunk(layoutOverride: ((CharSequence) -> Layout?)? = null) =
+                resolveWidthHyphenatedReaderTextAndLayout(
+                    source = chunkSpannable,
+                    widthPx = resolvedWidthPx,
+                    textSizePx = bodyTextSizePx,
+                    lineHeightMultiplier = bodyLineSpacingMultiplier,
+                    typeface = bodyTypeface,
+                    textAlign = input.textAlign,
+                    firstLineIndentPx = null,
+                    density = density,
+                    measurementPaint = measurementPaint,
+                    preferDynamicLayout = probeBuilder != null,
+                    hyphenationEnabled = hyphenationEnabled,
+                    textLocale = input.textLocale,
+                    isPageMode = true,
+                    applyJustifySpacing = input.textAlign == ReaderTextAlign.JUSTIFY,
+                    layoutBuilderOverride = layoutOverride,
+                )
+
+            val initialHyphenated = solveChunk()
+            val finalHyphenated = if (probeBuilder != null) {
+                val probeLayout = probeBuilder(initialHyphenated.prepared.text, input)
+                val needsReconcile = probeLayout != null && (
+                    !doLayoutsMatchLineStarts(initialHyphenated.layout, probeLayout) ||
+                        hasMidLineSyntheticHyphen(probeLayout, initialHyphenated.prepared)
+                    )
+                if (needsReconcile) {
+                    solveChunk { candidate -> probeBuilder(candidate, input) }
+                } else {
+                    initialHyphenated
+                }
+            } else {
+                initialHyphenated
+            }
+            segmentDisplayToSource = finalHyphenated.prepared.displayToSourceOffsets
+            blockSyntheticFlags[index] = finalHyphenated.prepared.syntheticHyphenDisplayOffsets
+            finalHyphenated.prepared.text
+        } else if (hyphenationEnabled) {
+            normalizeCurlyApostrophesForDisplay(chunkSpannable)
+        } else {
+            chunkSpannable
+        }
+
+        val displayStart = mergedBuilder.length
+        mergedBuilder.append(displayChunk)
+        val displayEnd = mergedBuilder.length
+        segments += MergedTextBlockSegment(
+            displayStart = displayStart,
+            displayEndExclusive = displayEnd,
+            sourceBlockIndex = input.sourceBlockIndex,
+            sourceTextStartInBlock = input.sourceTextStartInBlock,
+            displayToSourceOffsets = segmentDisplayToSource,
+        )
+        predictedTotalHeightPx += (blockSizePx * blockLineMult).roundToInt()
+    }
+
+    val totalLength = mergedBuilder.length
+    var mergedSynthetic: BooleanArray? = null
+    for (index in segments.indices) {
+        val segFlags = blockSyntheticFlags[index] ?: continue
+        val seg = segments[index]
+        val arr = mergedSynthetic ?: BooleanArray(totalLength).also { mergedSynthetic = it }
+        val copyLen = minOf(segFlags.size, seg.displayEndExclusive - seg.displayStart)
+        for (i in 0 until copyLen) {
+            if (segFlags[i]) {
+                arr[seg.displayStart + i] = true
+            }
+        }
+    }
+
+    return MergedPageTextContent(
+        spannable = mergedBuilder,
+        segments = segments,
+        syntheticHyphenDisplayOffsets = mergedSynthetic,
+        predictedTotalHeightPx = predictedTotalHeightPx,
+    )
+}
+
+@Composable
+private fun NovelPageReaderMergedTextBlock(
+    blocks: List<NovelPageContentBlock>,
+    pageIndex: Int,
+    readerSettings: NovelReaderSettings,
+    preserveSourceAlign: Boolean,
+    textColor: Color,
+    textBackground: Color,
+    textTypeface: Typeface?,
+    chapterTitleTypeface: Typeface?,
+    chapterTitleTextColor: Color,
+    textShadowEnabled: Boolean,
+    textShadowColor: String,
+    textShadowBlur: Float,
+    textShadowX: Float,
+    textShadowY: Float,
+    availableWidthPx: Int,
+    ttsHighlightState: NovelReaderTtsHighlightState?,
+    ttsHighlightColor: Color,
+    selectionRenderer: NovelSelectedTextRenderer,
+    selectionSessionIdProvider: () -> Long,
+    selectionAnchorChapterId: Long?,
+    onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
+    onPlainTap: ((Float, Float, Float, Float) -> Unit)?,
+    onUrlClick: ((String) -> Unit)?,
+    touchHandlingEnabled: Boolean,
+    renderAsStaticCanvas: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val bodyTextSizePx = with(density) { readerSettings.fontSize.sp.toPx() }
+    val bodyLineSpacingMultiplier = readerSettings.lineHeight
+    val hyphenationEnabled = readerSettings.hyphenationEnabled
+    val forcedSettingsStyle = resolveForcedReaderTypefaceStyle(
+        forceBoldText = readerSettings.forceBoldText,
+        forceItalicText = readerSettings.forceItalicText,
+    )
+    val baseBodyTextAlign = resolveNativeReaderTextAlign(
+        globalTextAlign = readerSettings.textAlign,
+        preserveSourceTextAlignInNative = preserveSourceAlign,
+        sourceTextAlign = null,
+    )
+    val quoteStripeWidthPx = with(density) { 2.dp.toPx() }
+    val quoteStripeOffsetPx = with(density) { 3.dp.toPx() }
+    val quoteStripeColor = textColor.copy(alpha = 0.28f).toArgb()
+    val preparedInputs = blocks.mapNotNull { block ->
+        when (block) {
+            is NovelPageContentBlock.Plain -> {
+                val baseText = if (readerSettings.bionicReading) {
+                    toBionicText(
+                        block.text,
+                    )
+                } else {
+                    AnnotatedString(block.text)
+                }
+                val ttsText = applyNovelReaderTtsHighlight(
+                    text = baseText,
+                    blockText = block.text,
+                    sourceBlockIndex = block.sourceBlockIndex,
+                    pageIndex = pageIndex,
+                    pageBlockTextStart = block.sourceTextStart,
+                    pageBlockTextEndExclusive = block.sourceTextEndExclusive,
+                    highlightState = ttsHighlightState,
+                    highlightColor = ttsHighlightColor,
+                )
+                val sliceStart = block.sourceTextStart ?: 0
+                val highlightedText = paintNovelSliceHighlights(
+                    text = ttsText,
+                    chapterId = selectionAnchorChapterId,
+                    blockIndex = block.sourceBlockIndex,
+                    sliceStart = sliceStart,
+                    sliceEndExclusive = sliceStart + ttsText.length,
+                )
+                val fontSizeMultiplier = if (block.isChapterTitle) {
+                    PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
+                } else {
+                    1f
+                }
+                val lineHeightMultiplier = if (block.isChapterTitle) {
+                    PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
+                } else {
+                    1f
+                }
+                val blockSizePx = bodyTextSizePx * fontSizeMultiplier
+                val blockTypeface = if (block.isChapterTitle) chapterTitleTypeface ?: textTypeface else textTypeface
+                PreparedMergedBlockInput(
+                    sourceBlockIndex = block.sourceBlockIndex,
+                    sourceTextStartInBlock = sliceStart,
+                    highlightedText = highlightedText,
+                    spacingBeforePx = block.spacingBeforePx,
+                    firstLineIndentPx = resolveNovelPageReaderFirstLineIndentPx(block.firstLineIndentEm, blockSizePx),
+                    forcedTypefaceStyle = combineTypefaceStyles(
+                        first = if (block.isChapterTitle) Typeface.BOLD else Typeface.NORMAL,
+                        second = forcedSettingsStyle,
+                    ),
+                    textAlign = baseBodyTextAlign,
+                    fontSizeMultiplier = fontSizeMultiplier,
+                    lineHeightMultiplier = lineHeightMultiplier,
+                    typeface = blockTypeface,
+                    textColor = if (block.isChapterTitle) chapterTitleTextColor else textColor,
+                    isBlockQuote = false,
+                    startIndentPx = 0,
+                    textLocale = if (hyphenationEnabled) resolveNovelReaderTextLocale(highlightedText.text) else null,
+                )
+            }
+            is NovelPageContentBlock.Rich -> {
+                val ttsText = applyNovelReaderTtsHighlight(
+                    text = block.text,
+                    blockText = block.text.text,
+                    sourceBlockIndex = block.sourceBlockIndex,
+                    pageIndex = pageIndex,
+                    pageBlockTextStart = block.sourceTextStart,
+                    pageBlockTextEndExclusive = block.sourceTextEndExclusive,
+                    highlightState = ttsHighlightState,
+                    highlightColor = ttsHighlightColor,
+                )
+                val sliceStart = block.sourceTextStart ?: 0
+                val highlightedText = paintNovelSliceHighlights(
+                    text = ttsText,
+                    chapterId = selectionAnchorChapterId,
+                    blockIndex = block.sourceBlockIndex,
+                    sliceStart = sliceStart,
+                    sliceEndExclusive = sliceStart + ttsText.length,
+                )
+                val fontSizeMultiplier = if (block.isChapterTitle) {
+                    PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
+                } else {
+                    block.fontSizeMultiplier
+                }
+                val lineHeightMultiplier = if (block.isChapterTitle) {
+                    PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
+                } else {
+                    block.lineHeightMultiplier
+                }
+                val blockSizePx = bodyTextSizePx * fontSizeMultiplier
+                val blockTypeface = if (block.isChapterTitle) chapterTitleTypeface ?: textTypeface else textTypeface
+                val isQuote = block.isBlockQuote && !block.isChapterTitle
+                val startIndentPx = if (isQuote && block.startIndentDp > 0) {
+                    with(density) { block.startIndentDp.dp.roundToPx() }
+                } else {
+                    0
+                }
+                val blockColor = when {
+                    isQuote -> textColor.copy(alpha = 0.90f)
+                    block.isChapterTitle -> chapterTitleTextColor
+                    else -> textColor
+                }
+                PreparedMergedBlockInput(
+                    sourceBlockIndex = block.sourceBlockIndex,
+                    sourceTextStartInBlock = sliceStart,
+                    highlightedText = highlightedText,
+                    spacingBeforePx = block.spacingBeforePx,
+                    firstLineIndentPx = resolveNovelPageReaderFirstLineIndentPx(block.firstLineIndentEm, blockSizePx),
+                    forcedTypefaceStyle = combineTypefaceStyles(
+                        first = if (block.isChapterTitle) Typeface.BOLD else block.baseTypefaceStyle,
+                        second = forcedSettingsStyle,
+                    ),
+                    textAlign = resolveNativeReaderTextAlign(
+                        globalTextAlign = readerSettings.textAlign,
+                        preserveSourceTextAlignInNative = preserveSourceAlign,
+                        sourceTextAlign = block.sourceTextAlign,
+                    ),
+                    fontSizeMultiplier = fontSizeMultiplier,
+                    lineHeightMultiplier = lineHeightMultiplier,
+                    typeface = blockTypeface,
+                    textColor = blockColor,
+                    isBlockQuote = isQuote,
+                    startIndentPx = startIndentPx,
+                    textLocale = if (hyphenationEnabled) resolveNovelReaderTextLocale(highlightedText.text) else null,
+                )
+            }
+            is NovelPageContentBlock.Image -> null
+        }
+    }
+    if (preparedInputs.isEmpty()) return
+
+    val lastInput = preparedInputs.last()
+    val glyphPadBottom = resolvePageReaderGlyphOverflowPaddingPx(bodyTextSizePx * lastInput.fontSizeMultiplier)
+    val bodyTextShadow = resolveReaderTextShadow(
+        textShadowEnabled = textShadowEnabled,
+        textShadowColor = textShadowColor,
+        textShadowBlur = textShadowBlur,
+        textShadowX = textShadowX,
+        textShadowY = textShadowY,
+        textColor = textColor,
+        backgroundColor = textBackground,
+    )
+    val bodyLocale = preparedInputs.firstNotNullOfOrNull { it.textLocale }
+    val bodyMetrics = resolveNovelPageReaderTextViewMetrics(
+        textSizePx = bodyTextSizePx,
+        lineSpacingMultiplier = bodyLineSpacingMultiplier,
+        typeface = textTypeface,
+        textAlign = ReaderTextAlign.LEFT,
+        shadow = bodyTextShadow,
+        isPageMode = true,
+        hyphenationEnabled = hyphenationEnabled,
+        textLocale = bodyLocale,
+    )
+    val selectionInteractionEnabled =
+        touchHandlingEnabled &&
+            (
+                readerSettings.textSelectionEnabled ||
+                    readerSettings.selectedTextTranslationEnabled ||
+                    readerSettings.novelDictionaryEnabled
+                )
+
+    if (renderAsStaticCanvas && availableWidthPx > 0) {
+        val safeWidthPx = availableWidthPx.coerceAtLeast(1)
+        val staticLayout = remember(
+            preparedInputs,
+            safeWidthPx,
+            bodyTextSizePx,
+            bodyLineSpacingMultiplier,
+            textTypeface,
+            textColor,
+            bodyTextShadow,
+            quoteStripeColor,
+            hyphenationEnabled,
+            density.density,
+        ) {
+            val paint = resolveReaderMeasurementTextPaint(
+                textSizePx = bodyTextSizePx,
+                typeface = textTypeface,
+                density = density.density,
+                basePaint = null,
+                textLocale = bodyLocale,
+            ).apply {
+                color = textColor.toArgb()
+                if (bodyTextShadow != null) {
+                    setShadowLayer(
+                        bodyTextShadow.blurRadius,
+                        bodyTextShadow.offset.x,
+                        bodyTextShadow.offset.y,
+                        bodyTextShadow.color.toArgb(),
+                    )
+                } else {
+                    clearShadowLayer()
+                }
+            }
+            val mergedContent = buildMergedPageTextContent(
+                inputs = preparedInputs,
+                pageColumnWidthPx = safeWidthPx,
+                bodyTextSizePx = bodyTextSizePx,
+                bodyLineSpacingMultiplier = bodyLineSpacingMultiplier,
+                bodyTypeface = textTypeface,
+                quoteStripeWidthPx = quoteStripeWidthPx,
+                quoteStripeOffsetPx = quoteStripeOffsetPx,
+                quoteStripeColor = quoteStripeColor,
+                density = density.density,
+                hyphenationEnabled = hyphenationEnabled,
+                onUrlClick = null,
+                measurementPaint = paint,
+            )
+            buildReaderStaticLayout(
+                text = mergedContent.spannable,
+                widthPx = safeWidthPx,
+                textSizePx = bodyTextSizePx,
+                lineHeightMultiplier = bodyLineSpacingMultiplier,
+                typeface = textTypeface,
+                textAlign = ReaderTextAlign.LEFT,
+                firstLineIndentPx = null,
+                density = density.density,
+                measurementPaint = paint,
+                hyphenationEnabled = false,
+                textLocale = bodyLocale,
+            )
+        }
+        val canvasHeightDp = with(density) { (staticLayout.height + glyphPadBottom).coerceAtLeast(1).toDp() }
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(canvasHeightDp)
+                .drawBehind {
+                    drawIntoCanvas { canvas ->
+                        staticLayout.draw(canvas.nativeCanvas)
+                    }
+                },
+        )
+        return
+    }
+
+    val signatureSeed = run {
+        var seed = availableWidthPx
+        seed = 31 * seed + bodyTextSizePx.toBits()
+        seed = 31 * seed + bodyLineSpacingMultiplier.toBits()
+        seed = 31 * seed + (textTypeface?.hashCode() ?: 0)
+        seed = 31 * seed + quoteStripeColor
+        seed = 31 * seed + if (hyphenationEnabled) 1 else 0
+        31 * seed + if (onUrlClick != null) 1 else 0
+    }
+    val mergedSignature = preparedInputs.fold(signatureSeed) { acc, input ->
+        var h = 31 * acc + input.sourceBlockIndex
+        h = 31 * h + input.sourceTextStartInBlock
+        h = 31 * h + input.highlightedText.hashCode()
+        h = 31 * h + input.spacingBeforePx
+        h = 31 * h + (input.firstLineIndentPx ?: 0)
+        h = 31 * h + input.forcedTypefaceStyle
+        h = 31 * h + input.textAlign.ordinal
+        h = 31 * h + input.fontSizeMultiplier.toBits()
+        h = 31 * h + input.lineHeightMultiplier.toBits()
+        h = 31 * h + (input.typeface?.hashCode() ?: 0)
+        h = 31 * h + input.textColor.toArgb()
+        h = 31 * h + input.startIndentPx
+        31 * h + (input.textLocale?.toLanguageTag()?.hashCode() ?: 0)
+    }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            NovelPageReaderTextView(
+                context = context,
+                selectionRenderer = selectionRenderer,
+                selectionSessionIdProvider = selectionSessionIdProvider,
+                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                onPlainTap = onPlainTap,
+                touchHandlingEnabled = touchHandlingEnabled,
+                selectionInteractionEnabled = selectionInteractionEnabled,
+            ).apply {
+                setPadding(0, 0, 0, glyphPadBottom)
+                includeFontPadding = true
+                setTextColor(textColor.toArgb())
+                applyNovelPageReaderTextViewMetrics(textView = this, metrics = bodyMetrics)
+            }
+        },
+        update = { textView ->
+            textView.isDictionaryEnabled = readerSettings.novelDictionaryEnabled
+            textView.isTranslationEnabled = readerSettings.selectedTextTranslationEnabled
+            textView.selectionAnchorChapterId = selectionAnchorChapterId
+            textView.selectionAnchorBlockIndex = preparedInputs.first().sourceBlockIndex
+            textView.selectionAnchorTextStartInBlock = preparedInputs.first().sourceTextStartInBlock
+            textView.updatePlainTapHandler(onPlainTap)
+            textView.updateTouchHandlingEnabled(touchHandlingEnabled)
+            textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
+            textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
+            applyNovelPageReaderTextViewMetrics(textView = textView, metrics = bodyMetrics)
+            if (textView.renderedTextSignature != mergedSignature) {
+                val resolvedWidth = (availableWidthPx - textView.compoundPaddingLeft - textView.compoundPaddingRight)
+                    .coerceAtLeast(1)
+                val mergedContent = try {
+                    buildMergedPageTextContent(
+                        inputs = preparedInputs,
+                        pageColumnWidthPx = resolvedWidth,
+                        bodyTextSizePx = bodyTextSizePx,
+                        bodyLineSpacingMultiplier = bodyLineSpacingMultiplier,
+                        bodyTypeface = textTypeface,
+                        quoteStripeWidthPx = quoteStripeWidthPx,
+                        quoteStripeOffsetPx = quoteStripeOffsetPx,
+                        quoteStripeColor = quoteStripeColor,
+                        density = density.density,
+                        hyphenationEnabled = hyphenationEnabled,
+                        onUrlClick = onUrlClick,
+                        measurementPaint = textView.paint,
+                        probeBuilder = { candidate, _ ->
+                            textView.measureLayoutWithProbe(
+                                candidateText = candidate,
+                                widthPx = resolvedWidth,
+                                metrics = bodyMetrics,
+                                selectionEnabled = selectionInteractionEnabled,
+                                bottomPadPx = glyphPadBottom,
+                            )
+                        },
+                    )
+                } finally {
+                    textView.clearLayoutProbe()
+                }
+                textView.predictedContentHeightPx = mergedContent.predictedTotalHeightPx
+                textView.mergedSegments = mergedContent.segments
+                textView.displayToSourceOffsets = null
+                textView.syntheticHyphenDisplayOffsets = mergedContent.syntheticHyphenDisplayOffsets
+                textView.text = mergedContent.spannable
+                textView.renderedTextSignature = mergedSignature
+            }
+            textView.setTextColor(textColor.toArgb())
+        },
         onRelease = { textView ->
             textView.clearFocus()
         },

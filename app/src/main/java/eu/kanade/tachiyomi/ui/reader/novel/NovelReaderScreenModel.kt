@@ -875,34 +875,43 @@ class NovelReaderScreenModel(
     }
 
     override fun saveHighlight(selection: NovelSelectedTextSelection) {
-        val anchor = selection.selectionAnchor ?: return
+        val anchors = selection.selectionAnchors.ifEmpty { listOfNotNull(selection.selectionAnchor) }
+        if (anchors.isEmpty()) return
         val novel = currentNovel ?: return
         val now = System.currentTimeMillis()
         val colorArgb = novelReaderPreferences.novelHighlightLastColor().get()
         // Страница фиксируется на момент создания; в режимах без страниц остаётся 0/0.
         val pageProgress = (mutableState.value as? State.Success)?.lastSavedPageReaderProgress
         screenModelScope.launch {
-            addNovelHighlight.await(
-                NovelHighlight(
-                    id = 0L,
-                    novelId = novel.id,
-                    chapterId = anchor.chapterId,
-                    blockIndex = anchor.blockIndex,
-                    charStart = anchor.charStart,
-                    charEndExclusive = anchor.charEndExclusive,
-                    normalizedText = normalizeNovelSelectedText(selection.text),
-                    colorArgb = colorArgb,
-                    note = "",
-                    createdAt = now,
-                    updatedAt = now,
-                    pageIndex = pageProgress?.let { it.index + 1 } ?: 0,
-                    pageCount = pageProgress?.totalItems ?: 0,
-                ),
-            )
-            // «Чернильница»: пересчёт прогресса по факту БД (QuoteRule слушает это событие).
-            eventBus?.tryEmit(
-                AchievementEvent.FeatureUsed(AchievementEvent.Feature.QUOTE_SAVED),
-            )
+            var savedAny = false
+            for (anchor in anchors) {
+                val normalized = normalizeNovelSelectedText(anchor.selectedText ?: selection.text)
+                if (normalized.isBlank()) continue
+                addNovelHighlight.await(
+                    NovelHighlight(
+                        id = 0L,
+                        novelId = novel.id,
+                        chapterId = anchor.chapterId,
+                        blockIndex = anchor.blockIndex,
+                        charStart = anchor.charStart,
+                        charEndExclusive = anchor.charEndExclusive,
+                        normalizedText = normalized,
+                        colorArgb = colorArgb,
+                        note = "",
+                        createdAt = now,
+                        updatedAt = now,
+                        pageIndex = pageProgress?.let { it.index + 1 } ?: 0,
+                        pageCount = pageProgress?.totalItems ?: 0,
+                    ),
+                )
+                savedAny = true
+            }
+            if (savedAny) {
+                // «Чернильница»: пересчёт прогресса по факту БД (QuoteRule слушает это событие).
+                eventBus?.tryEmit(
+                    AchievementEvent.FeatureUsed(AchievementEvent.Feature.QUOTE_SAVED),
+                )
+            }
         }
     }
 

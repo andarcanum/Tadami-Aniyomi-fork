@@ -2,14 +2,20 @@ package eu.kanade.presentation.reader.novel
 
 import android.app.Application
 import android.graphics.Typeface
+import android.os.Looper
+import android.text.Selection
+import android.text.Spannable
 import android.view.View
 import android.widget.TextView
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.math.roundToInt
 import kotlin.test.assertEquals
@@ -406,5 +412,110 @@ class NovelPageReaderPaginationFitTest {
             block1SlicesPage0.first().range.endExclusive,
         )
         assertEquals("Alpha line\nBeta line\nGamma line", page0SliceText)
+    }
+
+    @Test
+    fun `merged text block enables cross paragraph selection with multi block anchors`() {
+        val spacing = resolvePageReaderInterBlockSpacingPx(
+            paragraphSpacingPx = paragraphSpacingPx,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+        )
+        val inputs = listOf(
+            PreparedMergedBlockInput(
+                sourceBlockIndex = 0,
+                sourceTextStartInBlock = 0,
+                highlightedText = AnnotatedString("First paragraph end."),
+                spacingBeforePx = 0,
+                firstLineIndentPx = firstLineIndentPx,
+                forcedTypefaceStyle = Typeface.NORMAL,
+                textAlign = TextAlign.LEFT,
+                fontSizeMultiplier = 1f,
+                lineHeightMultiplier = 1f,
+                typeface = null,
+                textColor = Color.Black,
+                isBlockQuote = false,
+                startIndentPx = 0,
+                textLocale = null,
+            ),
+            PreparedMergedBlockInput(
+                sourceBlockIndex = 1,
+                sourceTextStartInBlock = 4,
+                highlightedText = AnnotatedString("Second paragraph start."),
+                spacingBeforePx = spacing,
+                firstLineIndentPx = null,
+                forcedTypefaceStyle = Typeface.NORMAL,
+                textAlign = TextAlign.LEFT,
+                fontSizeMultiplier = 1f,
+                lineHeightMultiplier = 1f,
+                typeface = null,
+                textColor = Color.Black,
+                isBlockQuote = false,
+                startIndentPx = 0,
+                textLocale = null,
+            ),
+        )
+        val mergedContent = buildMergedPageTextContent(
+            inputs = inputs,
+            pageColumnWidthPx = widthPx,
+            bodyTextSizePx = textSizePx,
+            bodyLineSpacingMultiplier = lineHeightMultiplier,
+            bodyTypeface = null,
+            quoteStripeWidthPx = 4f,
+            quoteStripeOffsetPx = 6f,
+            quoteStripeColor = android.graphics.Color.GRAY,
+            density = 1f,
+            hyphenationEnabled = false,
+            onUrlClick = null,
+            measurementPaint = null,
+        )
+        assertEquals(2, mergedContent.segments.size)
+
+        val textView = NovelPageReaderTextView(
+            context = ApplicationProvider.getApplicationContext(),
+            selectionRenderer = NovelSelectedTextRenderer.PAGE_READER,
+            selectionSessionIdProvider = { 1L },
+            onSelectedTextSelectionChanged = {},
+            onPlainTap = null,
+            touchHandlingEnabled = true,
+            selectionInteractionEnabled = true,
+        ).apply {
+            selectionAnchorChapterId = 42L
+            includeFontPadding = true
+            setPadding(0, 0, 0, glyphPadPx)
+            applyNovelPageReaderTextViewMetrics(
+                textView = this,
+                metrics = resolveNovelPageReaderTextViewMetrics(
+                    textSizePx = textSizePx,
+                    lineSpacingMultiplier = lineHeightMultiplier,
+                    typeface = null,
+                    textAlign = TextAlign.LEFT,
+                    shadow = null,
+                    isPageMode = true,
+                ),
+            )
+            mergedSegments = mergedContent.segments
+            syntheticHyphenDisplayOffsets = mergedContent.syntheticHyphenDisplayOffsets
+            text = mergedContent.spannable
+            measure(
+                View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            )
+            layout(0, 0, measuredWidth, measuredHeight)
+        }
+
+        val fullText = textView.text.toString()
+        val selectStart = fullText.indexOf("end.")
+        val selectEnd = fullText.indexOf("Second") + "Second".length
+        Selection.setSelection(textView.text as Spannable, selectStart, selectEnd)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val selection = requireNotNull(textView.currentSelectionForTesting())
+        assertTrue(selection.text.contains("end."))
+        assertTrue(selection.text.contains("Second"))
+        assertEquals(2, selection.selectionAnchors.size)
+        assertEquals(0, selection.selectionAnchors[0].blockIndex)
+        assertEquals(1, selection.selectionAnchors[1].blockIndex)
+        assertEquals(4, selection.selectionAnchors[1].charStart)
     }
 }

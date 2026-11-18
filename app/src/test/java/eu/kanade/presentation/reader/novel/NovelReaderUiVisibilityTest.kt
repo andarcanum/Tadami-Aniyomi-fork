@@ -2502,7 +2502,7 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `book flip edge taps map speed presets to animation durations`() {
         assertEquals(
-            500,
+            320,
             resolveBookFlipEdgeTapAnimationDurationMillis(
                 transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
                 animationSpeed = NovelBookFlipAnimationSpeed.FAST,
@@ -2510,7 +2510,7 @@ class NovelReaderUiVisibilityTest {
             ),
         )
         assertEquals(
-            1000,
+            520,
             resolveBookFlipEdgeTapAnimationDurationMillis(
                 transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
                 animationSpeed = NovelBookFlipAnimationSpeed.NORMAL,
@@ -2518,7 +2518,7 @@ class NovelReaderUiVisibilityTest {
             ),
         )
         assertEquals(
-            1500,
+            780,
             resolveBookFlipEdgeTapAnimationDurationMillis(
                 transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
                 animationSpeed = NovelBookFlipAnimationSpeed.SLOW,
@@ -2607,21 +2607,21 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `book flip page advances map speed presets to animation durations`() {
         assertEquals(
-            500,
+            320,
             resolveBookFlipPageAnimationDurationMillis(
                 transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
                 animationSpeed = NovelBookFlipAnimationSpeed.FAST,
             ),
         )
         assertEquals(
-            1000,
+            520,
             resolveBookFlipPageAnimationDurationMillis(
                 transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
                 animationSpeed = NovelBookFlipAnimationSpeed.NORMAL,
             ),
         )
         assertEquals(
-            1500,
+            780,
             resolveBookFlipPageAnimationDurationMillis(
                 transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
                 animationSpeed = NovelBookFlipAnimationSpeed.SLOW,

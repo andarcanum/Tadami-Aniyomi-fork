@@ -64,6 +64,77 @@ class NovelReaderInteractionTest {
     }
 
     @Test
+    fun `resolveComposePagerTransitionSpec centers BOOK_FLIP rotation within 90 degrees`() {
+        val outgoing = resolveComposePagerTransitionSpec(
+            style = NovelPageTransitionStyle.BOOK_FLIP,
+            pageOffset = 0.25f,
+        )
+        outgoing.rotationY shouldBe -45f
+        outgoing.pivotXFraction shouldBe 0.5f
+        outgoing.alpha shouldBe 1f
+        outgoing.shadowAlpha shouldBe 0.15f
+
+        val midpoint = resolveComposePagerTransitionSpec(
+            style = NovelPageTransitionStyle.BOOK_FLIP,
+            pageOffset = 0.5f,
+        )
+        midpoint.alpha shouldBe 0f
+
+        val incoming = resolveComposePagerTransitionSpec(
+            style = NovelPageTransitionStyle.BOOK_FLIP,
+            pageOffset = -0.25f,
+        )
+        incoming.rotationY shouldBe 45f
+        incoming.pivotXFraction shouldBe 0.5f
+        incoming.alpha shouldBe 1f
+
+        val waiting = resolveComposePagerTransitionSpec(
+            style = NovelPageTransitionStyle.BOOK_FLIP,
+            pageOffset = -0.75f,
+        )
+        waiting.alpha shouldBe 0f
+    }
+
+    @Test
+    fun `resolveBookFlipSplitSpec coordinates static halves and rotating spine flaps across transition`() {
+        val settled = resolveBookFlipSplitSpec(0f)
+        settled.active shouldBe false
+        settled.visible shouldBe true
+
+        // First half of forward turn: outgoing page lifts RIGHT flap while holding LEFT half flat.
+        val outgoingFirstHalf = resolveBookFlipSplitSpec(0.25f)
+        outgoingFirstHalf.active shouldBe true
+        outgoingFirstHalf.staticHalf shouldBe BookFlipHalf.LEFT
+        outgoingFirstHalf.flapVisible shouldBe true
+        outgoingFirstHalf.flapHalf shouldBe BookFlipHalf.RIGHT
+        outgoingFirstHalf.flapRotationY shouldBe -45f
+        outgoingFirstHalf.zIndex shouldBe 2f
+
+        // Simultaneously incoming page holds RIGHT half underneath with no flap yet.
+        val incomingFirstHalf = resolveBookFlipSplitSpec(-0.75f)
+        incomingFirstHalf.active shouldBe true
+        incomingFirstHalf.staticHalf shouldBe BookFlipHalf.RIGHT
+        incomingFirstHalf.flapVisible shouldBe false
+        incomingFirstHalf.zIndex shouldBe 0f
+
+        // Second half of forward turn: incoming page unfolds LEFT flap while holding RIGHT half flat.
+        val incomingSecondHalf = resolveBookFlipSplitSpec(-0.25f)
+        incomingSecondHalf.active shouldBe true
+        incomingSecondHalf.staticHalf shouldBe BookFlipHalf.RIGHT
+        incomingSecondHalf.flapVisible shouldBe true
+        incomingSecondHalf.flapHalf shouldBe BookFlipHalf.LEFT
+        incomingSecondHalf.flapRotationY shouldBe 45f
+        incomingSecondHalf.zIndex shouldBe 2f
+
+        // Simultaneously outgoing page stays underneath on LEFT half.
+        val outgoingSecondHalf = resolveBookFlipSplitSpec(0.75f)
+        outgoingSecondHalf.active shouldBe true
+        outgoingSecondHalf.staticHalf shouldBe BookFlipHalf.LEFT
+        outgoingSecondHalf.flapVisible shouldBe false
+        outgoingSecondHalf.zIndex shouldBe 0f
+    }
+
+    @Test
     fun `resolveReaderProgressToPersist allows page 0 when initial position is restored`() {
         val page2Progress = eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress(index = 2, totalItems = 10)
         val page0Progress = eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress(index = 0, totalItems = 10)
@@ -572,7 +643,7 @@ class NovelReaderInteractionTest {
             transitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
             bookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.FAST,
             pageTurnSpeed = NovelPageTurnSpeed.NORMAL,
-        ) shouldBe 500
+        ) shouldBe 320
         resolveComposePagerPageTurnAnimationDurationMillis(
             transitionStyle = NovelPageTransitionStyle.SLIDE,
             bookFlipAnimationSpeed = NovelBookFlipAnimationSpeed.SLOW,
