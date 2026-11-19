@@ -111,6 +111,7 @@ import uy.kohesive.injekt.api.get
 import java.text.DateFormat
 import java.time.Instant
 import java.util.Date
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Presenter used by the activity to perform background operations.
@@ -255,6 +256,7 @@ class ReaderViewModel @JvmOverloads constructor(
      * lock-acquisition order (launch dispatch order is not strictly guaranteed).
      */
     private val progressWriteMutex = Mutex()
+    private val latestPageProgressWriteSeq = AtomicLong(0L)
 
     private var downloadAheadTriggeredForChapterId: Long? = null
 
@@ -801,11 +803,46 @@ class ReaderViewModel @JvmOverloads constructor(
         val selectedChapter = page.chapter
         val pages = selectedChapter.pages ?: return
 
+        // Update UI page state and in-memory chapter seed synchronously so the navigator
+        // slider and page counter never crawl behind queued SQLite progress transactions.
+        val pageIndex = page.index
+        val averageSpeed = speedTracker.getAverageSpeedSeconds()
+        val estimatedMinutes = if (averageSpeed != null) {
+            val remainingPages = pages.size - (pageIndex + 1)
+            if (remainingPages > 0) {
+                (remainingPages * averageSpeed / 60.0).toInt()
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+        mutableState.update {
+            it.copy(
+                currentPage = pageIndex + 1,
+                estimatedMinutesLeft = estimatedMinutes,
+            )
+        }
+        // Reset the intra-page offset only on an actual page turn. On a viewer recreation
+        // (rotation) onPageSelected fires for the page being restored; keeping the seed update
+        // synchronous prevents an IO coroutine from racing the main-thread restore settle.
+        if (selectedChapter.requestedPage != pageIndex) {
+            selectedChapter.requestedPageOffset = 0
+            selectedChapter.requestedPageOffsetRatioPpm = null
+        }
+        selectedChapter.requestedPage = pageIndex
+        chapterPageIndex = pageIndex
+
         // Save last page read and mark as read if needed. Serialized with every other
-        // last_page_read writer through progressWriteMutex: detached per-page-turn coroutines
-        // used to finish out of order on fast flings, regressing progress (last-write-wins).
+        // last_page_read writer through progressWriteMutex and coalesced so rapid slider scrubs
+        // do not queue dozens of stale SQLite writes behind the mutex.
+        val writeSeq = latestPageProgressWriteSeq.incrementAndGet()
+        val isChapterCompletion = pages.lastIndex == pageIndex
         viewModelScope.launchNonCancellable {
             progressWriteMutex.withLock {
+                if (!isChapterCompletion && latestPageProgressWriteSeq.get() != writeSeq) {
+                    return@withLock
+                }
                 updateChapterProgress(selectedChapter, page)
             }
         }
@@ -923,35 +960,6 @@ class ReaderViewModel @JvmOverloads constructor(
     private suspend fun updateChapterProgress(readerChapter: ReaderChapter, page: Page) {
         val pageIndex = page.index
         val totalPages = readerChapter.pages?.size ?: 0
-
-        val averageSpeed = speedTracker.getAverageSpeedSeconds()
-        val estimatedMinutes = if (averageSpeed != null) {
-            val remainingPages = totalPages - (pageIndex + 1)
-            if (remainingPages > 0) {
-                (remainingPages * averageSpeed / 60.0).toInt()
-            } else {
-                null
-            }
-        } else {
-            null
-        }
-
-        mutableState.update {
-            it.copy(
-                currentPage = pageIndex + 1,
-                estimatedMinutesLeft = estimatedMinutes,
-            )
-        }
-        // Reset the intra-page offset only on an actual page turn. On a viewer recreation
-        // (rotation) onPageSelected fires for the page being restored, and this runs on IO via
-        // launchNonCancellable - zeroing raced the main-thread restore settle and could wipe the
-        // seed after the settle wrote it back, landing the next restore at the page top.
-        if (readerChapter.requestedPage != pageIndex) {
-            readerChapter.requestedPageOffset = 0
-            readerChapter.requestedPageOffsetRatioPpm = null
-        }
-        readerChapter.requestedPage = pageIndex
-        chapterPageIndex = pageIndex
 
         if (!shouldPauseHistory() && page.status != Page.State.ERROR) {
             readerChapter.chapter.last_page_read = if (shouldHandleLongPageProgress() || totalPages <= 0) {

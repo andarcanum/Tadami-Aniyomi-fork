@@ -118,6 +118,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
      * user scroll (no menu hiding, no progress report - the visible position did not change).
      */
     private var compensatingLayoutChange = false
+    private var pendingSeekTargetPosition: Int? = null
     private var pendingRelativeRestore: PendingRelativeRestore? = null
     private val pendingRelativeRestoreRunnable = object : Runnable {
         override fun run() {
@@ -194,6 +195,9 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                     // A position-preserving compensation is not a user scroll: the visible content
                     // did not move, so the bookkeeping (and menu hiding) is skipped for it.
                     if (compensatingLayoutChange) return
+                    if (dy != 0) {
+                        pendingSeekTargetPosition = null
+                    }
                     onScrolled()
                     applyPendingRelativeRestore(clearWhenApplied = false)
                     val now = SystemClock.uptimeMillis()
@@ -238,7 +242,8 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                     )
                     when (newState) {
                         RecyclerView.SCROLL_STATE_DRAGGING -> {
-                            // The user took over: a programmatic switch is no longer settling.
+                            // The user took over: a programmatic switch or seek is no longer settling.
+                            pendingSeekTargetPosition = null
                             switchSettleUntilMs = 0L
                             // User took over the scroll: stop re-anchoring every frame against
                             // the drag ("rubber band") and let the pending restore go.
@@ -578,6 +583,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
             switchSettleUntilMs = SystemClock.uptimeMillis() + PROGRAMMATIC_SWITCH_SETTLE_CAP_MS
             switchSettleReanchorMs = 0L
         }
+        pendingSeekTargetPosition = null
         adapter.setChapters(chapters, forceTransition)
 
         if (recycler.isGone) {
@@ -631,6 +637,12 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                 0
             }
 
+            // Stop any lingering fling or smooth-scroll animation and drop stale height
+            // compensation so the jump snaps crisply onto the target page without drifting.
+            recycler.stopScroll()
+            pendingHeightCompensationPx = 0
+            pendingSeekTargetPosition = position
+
             layoutManager.scrollToPositionWithOffset(position, -restoreOffset)
             if (ratioPpm != null) {
                 pendingRelativeRestore = PendingRelativeRestore(
@@ -646,8 +658,13 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                 page.chapter.requestedPageOffset = 0
                 page.chapter.requestedPageOffsetRatioPpm = null
             }
-            if (layoutManager.findLastEndVisibleItemPosition() == -1) {
-                onScrolled(pos = position)
+            // Report the jumped-to page immediately instead of waiting for the next layout pass
+            // so the bottom progress slider and page counter lock straight onto the destination.
+            onScrolled(pos = position)
+            if (activity.isScrollingThroughPages) {
+                recycler.doOnLayout {
+                    activity.consumeScrollingThroughPages()
+                }
             }
         } else {
             logcat { "Page $page not found in adapter" }
@@ -850,7 +867,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
 
     fun onScrolled(pos: Int? = null) {
         updateWindowHdrState()
-        val position = pos ?: layoutManager.findLastEndVisibleItemPosition()
+        val position = pos ?: resolveScrolledPosition()
         val item = adapter.items.getOrNull(position)
         val allowPreload = checkAllowPreload(item as? ReaderPage)
         if (item is ReaderPage && isSwitchSettling() && item.chapter != adapter.currentChapter) {
@@ -882,6 +899,17 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         }
     }
 
+    private fun resolveScrolledPosition(): Int {
+        val seekTarget = pendingSeekTargetPosition
+        if (seekTarget != null) {
+            if (seekTarget in adapter.items.indices && layoutManager.findViewByPosition(seekTarget) != null) {
+                return seekTarget
+            }
+            pendingSeekTargetPosition = null
+        }
+        return layoutManager.findLastEndVisibleItemPosition()
+    }
+
     private fun isSwitchSettling(): Boolean =
         switchSettleUntilMs != 0L && SystemClock.uptimeMillis() < switchSettleUntilMs
 
@@ -896,6 +924,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
      * Scrolls up by [scrollDistance].
      */
     private fun scrollUp() {
+        pendingSeekTargetPosition = null
         if (config.usePageTransitions) {
             recycler.smoothScrollBy(0, -scrollDistance)
         } else {
@@ -907,6 +936,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
      * Scrolls down by [scrollDistance].
      */
     private fun scrollDown() {
+        pendingSeekTargetPosition = null
         if (config.usePageTransitions) {
             recycler.smoothScrollBy(0, scrollDistance)
         } else {

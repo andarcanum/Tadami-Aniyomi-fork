@@ -43,12 +43,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +73,9 @@ import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.presentation.util.isTabletUi
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressHudLogic
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Slider
 import tachiyomi.presentation.core.i18n.stringResource
@@ -114,11 +120,14 @@ fun VerticalSlider(
     onValueChange: (Int) -> Unit,
     valueRange: ClosedRange<Float>,
     modifier: Modifier = Modifier,
+    onValueChangeFinished: (() -> Unit)? = null,
     activeColor: Color = MaterialTheme.colorScheme.primary,
     inactiveColor: Color = activeColor.copy(alpha = 0.3f),
     onDragStateChange: (Boolean) -> Unit = {},
 ) {
     val haptic = LocalHapticFeedback.current
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
     // РЕШ-11 revival: `haptic` was declared and never used. Mirror the horizontal slider's tick
     // feedback (TextHandleMove on value change); the initial composition is skipped because
     // lastHapticValue starts equal to value.
@@ -136,18 +145,25 @@ fun VerticalSlider(
             .pointerInput(valueRange) {
                 detectTapGestures { offset ->
                     val newValue = verticalSliderValueFromPosition(offset.y, size.height.toFloat(), valueRange)
-                    onValueChange(newValue.roundToInt())
+                    currentOnValueChange(newValue.roundToInt())
+                    currentOnValueChangeFinished?.invoke()
                 }
             }
             .pointerInput(valueRange) {
                 detectVerticalDragGestures(
                     onDragStart = { onDragStateChange(true) },
-                    onDragEnd = { onDragStateChange(false) },
-                    onDragCancel = { onDragStateChange(false) },
+                    onDragEnd = {
+                        onDragStateChange(false)
+                        currentOnValueChangeFinished?.invoke()
+                    },
+                    onDragCancel = {
+                        onDragStateChange(false)
+                        currentOnValueChangeFinished?.invoke()
+                    },
                 ) { change, _ ->
                     change.consume()
                     val newValue = verticalSliderValueFromPosition(change.position.y, size.height.toFloat(), valueRange)
-                    onValueChange(newValue.roundToInt())
+                    currentOnValueChange(newValue.roundToInt())
                 }
             },
     ) {
@@ -252,6 +268,55 @@ fun ChapterNavigator(
 
     var isVerticalDragging by remember { mutableStateOf(false) }
 
+    val scope = rememberCoroutineScope()
+    var scrubPage by remember(totalPages) { mutableStateOf<Int?>(null) }
+    var lastDispatchedPage by remember(totalPages) { mutableIntStateOf(currentPage) }
+    var pendingJumpJob by remember(totalPages) { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(currentPage, scrubPage) {
+        if (scrubPage == null) {
+            lastDispatchedPage = currentPage
+        }
+    }
+    DisposableEffect(totalPages) {
+        onDispose {
+            pendingJumpJob?.cancel()
+            pendingJumpJob = null
+        }
+    }
+
+    val displayedPage = if (totalPages > 0) {
+        (scrubPage ?: currentPage).coerceIn(1, totalPages)
+    } else {
+        currentPage
+    }
+
+    fun onSliderScrub(newPage: Int) {
+        if (totalPages <= 0) return
+        val clamped = newPage.coerceIn(1, totalPages)
+        if (clamped == displayedPage) return
+        scrubPage = clamped
+        pendingJumpJob?.cancel()
+        pendingJumpJob = scope.launch {
+            delay(SCRUB_JUMP_COALESCE_MS)
+            if (lastDispatchedPage != clamped) {
+                lastDispatchedPage = clamped
+                onPageIndexChange(clamped - 1)
+            }
+        }
+    }
+
+    fun onSliderScrubFinished() {
+        pendingJumpJob?.cancel()
+        pendingJumpJob = null
+        val target = scrubPage
+        scrubPage = null
+        if (target != null && target != lastDispatchedPage) {
+            lastDispatchedPage = target
+            onPageIndexChange(target - 1)
+        }
+    }
+
     // We explicitly handle direction based on the reader viewer rather than the system direction
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         if (isVertical) {
@@ -263,7 +328,7 @@ fun ChapterNavigator(
                 if (!isLeftAligned) {
                     ScrubPreviewOverlay(
                         visible = previewVisible,
-                        currentPage = currentPage,
+                        currentPage = displayedPage,
                         totalPages = totalPages,
                         loadScrubPreview = loadScrubPreview,
                     )
@@ -309,7 +374,7 @@ fun ChapterNavigator(
                         ) {
                             if (showPageNumbers) {
                                 Text(
-                                    text = currentPage.toString(),
+                                    text = displayedPage.toString(),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                                 Spacer(Modifier.height(8.dp))
@@ -319,12 +384,10 @@ fun ChapterNavigator(
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(vertical = 8.dp),
-                                value = currentPage,
+                                value = displayedPage,
                                 valueRange = 1f..totalPages.toFloat(),
-                                onValueChange = f@{
-                                    if (it == currentPage) return@f
-                                    onPageIndexChange(it - 1)
-                                },
+                                onValueChange = ::onSliderScrub,
+                                onValueChangeFinished = ::onSliderScrubFinished,
                                 activeColor = activeSliderColor,
                                 inactiveColor = activeSliderColor.copy(alpha = 0.3f),
                                 onDragStateChange = { isVerticalDragging = it },
@@ -368,7 +431,7 @@ fun ChapterNavigator(
                 if (isLeftAligned) {
                     ScrubPreviewOverlay(
                         visible = previewVisible,
-                        currentPage = currentPage,
+                        currentPage = displayedPage,
                         totalPages = totalPages,
                         loadScrubPreview = loadScrubPreview,
                     )
@@ -400,7 +463,7 @@ fun ChapterNavigator(
                         val cardWidth = 96.dp
                         val maxShift = (maxWidth - cardWidth).coerceAtLeast(0.dp)
                         val offsetFraction = ReaderProgressHudLogic.computeScrubPreviewOffsetFraction(
-                            currentPage = currentPage,
+                            currentPage = displayedPage,
                             totalPages = totalPages,
                             isRtl = isRtl,
                         )
@@ -409,7 +472,7 @@ fun ChapterNavigator(
                         ) {
                             ScrubPreviewOverlay(
                                 visible = previewVisible,
-                                currentPage = currentPage,
+                                currentPage = displayedPage,
                                 totalPages = totalPages,
                                 loadScrubPreview = loadScrubPreview,
                                 bottomPadding = 8.dp,
@@ -458,14 +521,14 @@ fun ChapterNavigator(
                             ) {
                                 if (showPageNumbers) {
                                     Box(contentAlignment = Alignment.CenterEnd) {
-                                        Text(text = currentPage.toString())
+                                        Text(text = displayedPage.toString())
                                         // Taking up full length so the slider doesn't shift when 'currentPage' length changes
                                         Text(text = totalPages.toString(), color = Color.Transparent)
                                     }
                                 }
 
-                                LaunchedEffect(currentPage) {
-                                    if (sliderDragged) {
+                                LaunchedEffect(displayedPage) {
+                                    if (sliderDragged || scrubPage != null) {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     }
                                 }
@@ -474,12 +537,10 @@ fun ChapterNavigator(
                                     modifier = Modifier
                                         .weight(1f)
                                         .padding(horizontal = 8.dp),
-                                    value = currentPage,
+                                    value = displayedPage,
                                     valueRange = 1..totalPages,
-                                    onValueChange = f@{
-                                        if (it == currentPage) return@f
-                                        onPageIndexChange(it - 1)
-                                    },
+                                    onValueChange = ::onSliderScrub,
+                                    onValueChangeFinished = ::onSliderScrubFinished,
                                     interactionSource = interactionSource,
                                     colors = sliderColors,
                                     steps = if (showTickMarks) totalPages - 2 else 0,
@@ -632,3 +693,5 @@ private fun ChapterNavigatorPreview() {
         )
     }
 }
+
+private const val SCRUB_JUMP_COALESCE_MS = 60L

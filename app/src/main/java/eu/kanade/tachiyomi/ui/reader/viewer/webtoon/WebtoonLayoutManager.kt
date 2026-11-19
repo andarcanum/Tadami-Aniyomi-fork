@@ -42,15 +42,24 @@ class WebtoonLayoutManager(context: Context, var extraLayoutSpace: Int) : Linear
         }.mCallback
         val start = callback.parentStart
         val end = callback.parentEnd
+        var fallbackVisible = NO_POSITION
         for (i in childCount - 1 downTo 0) {
             val child = getChildAt(i)!!
             val childStart = callback.getChildStart(child)
             val childEnd = callback.getChildEnd(child)
-            if (childEnd <= end || childStart < start) {
-                return getPosition(child)
+            // Ignore children laid out strictly outside the viewport in extraLayoutSpace,
+            // and include a tall page whose top sits exactly at `start` (e.g. after a slider
+            // jump via scrollToPositionWithOffset(pos, 0)) so it does not misreport `pos - 1`.
+            if (childEnd > start && childStart < end) {
+                if (childEnd <= end || childStart <= start) {
+                    return getPosition(child)
+                }
+                if (fallbackVisible == NO_POSITION) {
+                    fallbackVisible = getPosition(child)
+                }
             }
         }
 
-        return NO_POSITION
+        return fallbackVisible
     }
 }
