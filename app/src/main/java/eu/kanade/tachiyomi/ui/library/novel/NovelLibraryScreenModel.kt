@@ -77,7 +77,9 @@ import mihon.core.archive.epubReader
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.getAndSet
-import tachiyomi.core.common.util.lang.compareToWithCollator
+import java.text.CollationKey
+import tachiyomi.core.common.util.lang.compareCollationKeys
+import tachiyomi.core.common.util.lang.toCollationKey
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.domain.category.model.Category
@@ -345,18 +347,18 @@ class NovelLibraryScreenModel(
                             } else {
                                 searchedMap.filterValues { it.isNotEmpty() }.toPersistentMap()
                             }
-                            // F2: deduped entry count computed here (background dispatcher), once
-                            // per emission - the per-State lazy recomputed flatten+distinctBy
-                            // over the WHOLE library on MAIN for every selection/keystroke copy.
-                            val libraryCount = filteredMap.values
-                                .flatten()
-                                .distinctBy {
-                                    when (it) {
-                                        is NovelLibraryItem.Single -> it.libraryNovel.novel.id
-                                        is NovelLibraryItem.Series -> it.librarySeries.id
+                            // F2: deduped entry count computed here (background dispatcher) in a single
+                            // pass without allocating intermediate flattened/deduped lists.
+                            val seenEntryIds = HashSet<Long>()
+                            filteredMap.values.forEach { items ->
+                                items.forEach { item ->
+                                    when (item) {
+                                        is NovelLibraryItem.Single -> seenEntryIds.add(item.libraryNovel.novel.id)
+                                        is NovelLibraryItem.Series -> seenEntryIds.add(-item.librarySeries.id)
                                     }
                                 }
-                                .size
+                            }
+                            val libraryCount = seenEntryIds.size
                             Triple(filteredMap, baseLibrary.libraryLanguages, libraryCount)
                         }
                     }
@@ -960,6 +962,17 @@ class NovelLibraryScreenModel(
         filterIntervalCustom: TriState,
         languages: Set<String>,
     ): NovelLibraryMap {
+        if (
+            effectiveDownloadedFilter == TriState.DISABLED &&
+            unreadFilter == TriState.DISABLED &&
+            startedFilter == TriState.DISABLED &&
+            bookmarkedFilter == TriState.DISABLED &&
+            completedFilter == TriState.DISABLED &&
+            filterIntervalCustom == TriState.DISABLED &&
+            languages.isEmpty()
+        ) {
+            return this
+        }
         val filterFnDownloaded: (NovelLibraryItem) -> Boolean = { item ->
             applyFilter(effectiveDownloadedFilter) {
                 when (item) {
@@ -1311,15 +1324,23 @@ class NovelLibraryScreenModel(
             }
         }
         val isSeries: (NovelLibraryItem) -> Boolean = { it is NovelLibraryItem.Series }
-        val alphabeticSortKeys = HashMap<Long, String>()
-        fun NovelLibraryItem.alphabeticSortKey(): String {
-            return alphabeticSortKeys.getOrPut(id) { title.lowercase() }
+        val alphabeticSortKeys = HashMap<Long, Pair<String, CollationKey?>>()
+        fun NovelLibraryItem.alphabeticSortKey(): Pair<String, CollationKey?> {
+            return alphabeticSortKeys.getOrPut(id) {
+                val lowered = title.lowercase()
+                lowered to lowered.toCollationKey()
+            }
+        }
+        val sortAlphabetically: (NovelLibraryItem, NovelLibraryItem) -> Int = { left, right ->
+            val leftKey = left.alphabeticSortKey()
+            val rightKey = right.alphabeticSortKey()
+            compareCollationKeys(leftKey.second, leftKey.first, rightKey.second, rightKey.first)
         }
 
         val comparator = Comparator<NovelLibraryItem> { left, right ->
             when (sort.type) {
                 NovelLibrarySort.Type.Alphabetical -> {
-                    left.alphabeticSortKey().compareToWithCollator(right.alphabeticSortKey())
+                    sortAlphabetically(left, right)
                 }
                 NovelLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
                 NovelLibrarySort.Type.LastUpdate -> {
@@ -1346,9 +1367,7 @@ class NovelLibraryScreenModel(
             }
         }
             .let { if (sort.isAscending) it else it.reversed() }
-            .thenComparator { left, right ->
-                left.alphabeticSortKey().compareToWithCollator(right.alphabeticSortKey())
-            }
+            .thenComparator(sortAlphabetically)
 
         return items.sortPinnedSeriesFirst(
             isPinned = isPinned,

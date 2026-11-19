@@ -59,7 +59,7 @@ class ReelsRoundRobinMigrationTest {
 
     @Test
     fun `migration 158 to 159 preserves payloads history and session and creates empty rr tables`() = runBlocking {
-        AnimeDatabase.Schema.version shouldBe 159L
+        (AnimeDatabase.Schema.version >= 159L) shouldBe true
         val (driver, handler) = migratedFixture("rr-migration.db")
 
         // Telegram payload: every durable column is still there.

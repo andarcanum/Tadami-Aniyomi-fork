@@ -8,7 +8,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
-import eu.kanade.core.util.insertSeparators
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import eu.kanade.domain.items.episode.interactor.SetSeenStatus
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.updates.anime.AnimeUpdatesUiModel
@@ -16,7 +16,6 @@ import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
-import eu.kanade.tachiyomi.util.lang.toLocalDate
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentListOf
@@ -26,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -83,15 +83,17 @@ class AnimeUpdatesScreenModel(
                 downloadCache.changes,
                 downloadManager.queueState,
             ) { updates, _, _ -> updates }
+                .conflate()
                 .catch {
                     logcat(LogPriority.ERROR, it)
                     _events.send(Event.InternalError)
                 }
                 .collectLatest { updates ->
+                    val items = updates.toUpdateItems()
                     mutableState.update {
                         it.copy(
                             isLoading = false,
-                            items = updates.toUpdateItems(),
+                            items = items,
                         )
                     }
                 }
@@ -105,10 +107,11 @@ class AnimeUpdatesScreenModel(
     }
 
     private fun List<AnimeUpdatesWithRelations>.toUpdateItems(): PersistentList<AnimeUpdatesItem> {
+        val queuedByEpisodeId = downloadManager.queueState.value.associateBy { it.episode.id }
         return this
             .filter { !it.seen }
             .map { update ->
-                val activeDownload = downloadManager.getQueuedDownloadOrNull(update.episodeId)
+                val activeDownload = queuedByEpisodeId[update.episodeId]
                 val downloaded = downloadManager.isEpisodeDownloaded(
                     update.episodeName,
                     update.scanlator,
@@ -146,10 +149,9 @@ class AnimeUpdatesScreenModel(
      */
     private fun updateDownloadState(download: AnimeDownload) {
         mutableState.update { state ->
+            val modifiedIndex = state.items.indexOfFirst { it.update.episodeId == download.episode.id }
+            if (modifiedIndex < 0) return@update state
             val newItems = state.items.mutate { list ->
-                val modifiedIndex = list.indexOfFirst { it.update.episodeId == download.episode.id }
-                if (modifiedIndex < 0) return@mutate
-
                 val item = list[modifiedIndex]
                 list[modifiedIndex] = item.copy(
                     downloadStateProvider = { download.status },
@@ -404,19 +406,16 @@ class AnimeUpdatesScreenModel(
         val selected = items.filter { it.selected }
         val selectionMode = selected.isNotEmpty()
 
-        fun getUiModel(): List<AnimeUpdatesUiModel> {
-            return items
-                .map { AnimeUpdatesUiModel.Item(it) }
-                .insertSeparators { before, after ->
-                    val beforeDate = before?.item?.update?.dateFetch?.toLocalDate()
-                    val afterDate = after?.item?.update?.dateFetch?.toLocalDate()
-                    when {
-                        beforeDate != afterDate && afterDate != null -> AnimeUpdatesUiModel.Header(afterDate)
-                        // Return null to avoid adding a separator between two items.
-                        else -> null
-                    }
-                }
+        private val cachedUiModel: List<AnimeUpdatesUiModel> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            buildDateGroupedUiModels(
+                items = items,
+                timestampMillis = { it.update.dateFetch },
+                header = AnimeUpdatesUiModel::Header,
+                item = AnimeUpdatesUiModel::Item,
+            )
         }
+
+        fun getUiModel(): List<AnimeUpdatesUiModel> = cachedUiModel
     }
 
     sealed interface Dialog {

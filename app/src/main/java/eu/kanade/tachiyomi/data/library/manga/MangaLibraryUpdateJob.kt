@@ -20,6 +20,7 @@ import eu.kanade.domain.track.manga.MapMangaTrackStatusToLibrary
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateConcurrency
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
@@ -285,24 +286,29 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                         .filterNot { it.category == 0L }
                         .distinctBy { it.manga.id }
                 GroupLibraryMode.GLOBAL -> {
-                    val categoriesToUpdate = libraryPreferences.mangaUpdateCategories().get().map { it.toLong() }
+                    val categoriesToUpdate = libraryPreferences.mangaUpdateCategories().get()
+                        .mapTo(HashSet()) { it.toLong() }
                     val includedManga = if (categoriesToUpdate.isNotEmpty()) {
                         libraryManga.filter { it.category in categoriesToUpdate }
                     } else {
                         libraryManga
                     }
 
-                    val categoriesToExclude =
-                        libraryPreferences.mangaUpdateCategoriesExclude().get().map { it.toLong() }
+                    val categoriesToExclude = libraryPreferences.mangaUpdateCategoriesExclude().get()
+                        .mapTo(HashSet()) { it.toLong() }
                     val excludedMangaIds = if (categoriesToExclude.isNotEmpty()) {
-                        libraryManga.filter { it.category in categoriesToExclude }.map { it.manga.id }
+                        libraryManga.asSequence()
+                            .filter { it.category in categoriesToExclude }
+                            .mapTo(HashSet()) { it.manga.id }
                     } else {
-                        emptyList()
+                        emptySet()
                     }
 
-                    includedManga
-                        .filterNot { it.manga.id in excludedMangaIds }
-                        .distinctBy { it.manga.id }
+                    (if (excludedMangaIds.isEmpty()) {
+                        includedManga
+                    } else {
+                        includedManga.filterNot { it.manga.id in excludedMangaIds }
+                    }).distinctBy { it.manga.id }
                 }
             }
         }
@@ -389,7 +395,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      * @return an observable delivering the progress of each update.
      */
     private suspend fun updateChapterList(isManualRun: Boolean) {
-        val semaphore = Semaphore(5)
+        val semaphore = Semaphore(LibraryUpdateConcurrency.maxConcurrentSources(context))
         val progressCount = AtomicInteger(0)
         val currentlyUpdatingManga = CopyOnWriteArrayList<Manga>()
         val newUpdates = CopyOnWriteArrayList<Pair<Manga, Array<Chapter>>>()

@@ -8,6 +8,9 @@ CREATE TABLE novels_categories(
     ON DELETE CASCADE
 );
 
+CREATE INDEX novels_categories_novel_id_index ON novels_categories(novel_id);
+CREATE INDEX novels_categories_category_id_index ON novels_categories(category_id);
+
 CREATE TRIGGER insert_novel_category_update_version AFTER INSERT ON novels_categories
 BEGIN
     UPDATE novels

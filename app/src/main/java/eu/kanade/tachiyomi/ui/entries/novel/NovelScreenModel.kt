@@ -3733,6 +3733,7 @@ class NovelScreenModel(
 
     companion object {
         private const val FAST_CACHE_MAX_ITEMS = 24
+        private const val CACHE_WRITE_THROTTLE_MS = 2_000L
         private val stateCache = object : LinkedHashMap<Long, State.Success>(
             FAST_CACHE_MAX_ITEMS + 1,
             1f,
@@ -3742,6 +3743,7 @@ class NovelScreenModel(
                 return size > FAST_CACHE_MAX_ITEMS
             }
         }
+        private val lastCacheWriteMs = HashMap<Long, Long>()
 
         @Synchronized
         private fun restoreStateFromCache(novelId: Long): State.Success? {
@@ -3751,6 +3753,10 @@ class NovelScreenModel(
         @Synchronized
         private fun cacheState(state: State.Success?) {
             if (state == null) return
+            if (state.chapterSourcePreview != null) return
+            val now = System.currentTimeMillis()
+            if (now - (lastCacheWriteMs[state.novel.id] ?: 0L) < CACHE_WRITE_THROTTLE_MS) return
+            lastCacheWriteMs[state.novel.id] = now
             stateCache[state.novel.id] = state.copy(
                 isRefreshingData = false,
                 dialog = null,
@@ -3760,6 +3766,13 @@ class NovelScreenModel(
                 scrollIndex = 0,
                 scrollOffset = 0,
             )
+        }
+
+        @Synchronized
+        fun clearMemoryCaches() {
+            stateCache.clear()
+            lastCacheWriteMs.clear()
+            NovelSuggestionsSessionCache.clear()
         }
 
         internal fun selectChaptersForDownload(
@@ -4307,6 +4320,7 @@ internal fun shouldApplyDefaultChapterFlags(novel: Novel): Boolean {
  */
 private object NovelSuggestionsSessionCache {
     private const val TTL_MS = 12 * 60 * 60 * 1000L
+    private const val MAX_ENTRIES = 48
 
     private data class Entry(
         val seed: SuggestionSeed,
@@ -4314,8 +4328,13 @@ private object NovelSuggestionsSessionCache {
         val cachedAt: Long,
     )
 
-    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+    private val entries = object : java.util.LinkedHashMap<Long, Entry>(MAX_ENTRIES + 1, 1f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Entry>?): Boolean {
+            return size > MAX_ENTRIES
+        }
+    }
 
+    @Synchronized
     fun get(novelId: Long, seed: SuggestionSeed? = null): SuggestionState.Success? {
         val entry = entries[novelId] ?: return null
         if (System.currentTimeMillis() - entry.cachedAt > TTL_MS) {
@@ -4326,7 +4345,13 @@ private object NovelSuggestionsSessionCache {
         return entry.state
     }
 
+    @Synchronized
     fun put(novelId: Long, seed: SuggestionSeed, state: SuggestionState.Success) {
         entries[novelId] = Entry(seed, state, System.currentTimeMillis())
+    }
+
+    @Synchronized
+    fun clear() {
+        entries.clear()
     }
 }

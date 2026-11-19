@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
@@ -129,6 +130,9 @@ internal class HomeHubScreenModel(
     @Volatile
     private var liveUpdatesStarted = false
 
+    @Volatile
+    private var fastCacheInitialized = false
+
     private var heroEpisode: Episode? = null
     private var originalHeroEpisodeId: Long? = null
 
@@ -156,6 +160,7 @@ internal class HomeHubScreenModel(
 
     init {
         val cached = fastCache.load()
+        fastCacheInitialized = cached.isInitialized
         val hadCache = !cached.isEmpty || cached.isInitialized
 
         if (hadCache) {
@@ -212,22 +217,19 @@ internal class HomeHubScreenModel(
         // Feed (Reels) sources are excluded: they are not catalogue sources and cannot be
         // browsed/searched from the Home picker; they are opened via the dedicated Reels screen.
         screenModelScope.launchIO {
-            getEnabledAnimeSources.subscribe().collectLatest { sources ->
-                mutableState.update {
-                    it.copy(
-                        availableSources = sources.filterNot { s -> s.isFeedSource }.distinctBy { it.id }.map { s ->
-                            HomeSourceItem(
-                                id = s.id,
-                                name = s.name,
-                                lang = s.lang,
-                                isLocal = s.id == tachiyomi.source.local.entries.anime.LocalAnimeSource.ID,
-                                iconBitmap = animeExtensionManager.getAppIconForSource(
-                                    s.id,
-                                )?.toBitmap()?.asImageBitmap(),
-                            )
-                        },
+            getEnabledAnimeSources.subscribe().conflate().collectLatest { sources ->
+                val mappedSources = sources.filterNot { s -> s.isFeedSource }.distinctBy { it.id }.map { s ->
+                    HomeSourceItem(
+                        id = s.id,
+                        name = s.name,
+                        lang = s.lang,
+                        isLocal = s.id == tachiyomi.source.local.entries.anime.LocalAnimeSource.ID,
+                        iconBitmap = animeExtensionManager.getAppIconForSource(
+                            s.id,
+                        )?.toBitmap()?.asImageBitmap(),
                     )
                 }
+                mutableState.update { it.copy(availableSources = mappedSources) }
             }
         }
 
@@ -251,17 +253,21 @@ internal class HomeHubScreenModel(
                 getLibraryAnime.subscribe(),
             ) { name, avatar, categories, historyList, animeList ->
                 LiveData(name, avatar, categories, historyList, animeList)
-            }.collectLatest { data ->
+            }.conflate().collectLatest { data ->
                 val hiddenCategoryIds = hiddenHomeHubCategoryIds(
                     categories = data.categories,
                     isHiddenFromHomeHub = { it.hiddenFromHomeHub },
                     idSelector = { it.id },
                 )
-                val animeCategoryIdsByAnimeId = homeHubCategoryIdsByEntryId(
-                    items = data.animeList,
-                    entryIdSelector = { it.anime.id },
-                    categoryIdSelector = { it.category },
-                )
+                val animeCategoryIdsByAnimeId = if (hiddenCategoryIds.isEmpty()) {
+                    emptyMap()
+                } else {
+                    homeHubCategoryIdsByEntryId(
+                        items = data.animeList,
+                        entryIdSelector = { it.anime.id },
+                        categoryIdSelector = { it.category },
+                    )
+                }
 
                 val filteredHistory = filterHomeHubEntriesBy(
                     items = data.historyList,
@@ -292,9 +298,11 @@ internal class HomeHubScreenModel(
                             (state.value.showWelcome.not() && state.value.isLoading.not())
                         )
 
-                val animeRecommendations = filteredAnime
-                    .sortedByDescending { it.anime.dateAdded }
-                    .take(10)
+                val animeRecommendations = takeTopKDescendingByLong(
+                    items = filteredAnime,
+                    limit = 10,
+                    keySelector = { it.anime.dateAdded },
+                )
 
                 val previousHero = state.value.hero
                 val previousHeroEpisodeId = originalHeroEpisodeId
@@ -348,7 +356,8 @@ internal class HomeHubScreenModel(
                     )
                 }
 
-                if (hasData && !fastCache.load().isInitialized) {
+                if (hasData && !fastCacheInitialized) {
+                    fastCacheInitialized = true
                     fastCache.markInitialized()
                 }
 
@@ -378,14 +387,7 @@ internal class HomeHubScreenModel(
 
     fun saveCache() {
         val currentState = state.value
-        prefetchHomeHubCovers(
-            buildList {
-                add(currentState.hero?.coverData)
-                currentState.history.forEach { add(it.coverData) }
-                currentState.recommendations.forEach { add(it.coverData) }
-            },
-        )
-        fastCache.save(
+        val changed = fastCache.save(
             CachedHomeState(
                 hero = currentState.hero?.let { hero ->
                     CachedHeroItem(
@@ -429,6 +431,15 @@ internal class HomeHubScreenModel(
                 currentState.showFilteredEmpty || (currentState.showWelcome.not() && currentState.isLoading.not()),
             ),
         )
+        if (changed) {
+            prefetchHomeHubCovers(
+                buildList {
+                    add(currentState.hero?.coverData)
+                    currentState.history.forEach { add(it.coverData) }
+                    currentState.recommendations.forEach { add(it.coverData) }
+                },
+            )
+        }
     }
 
     fun getLastUsedAnimeSourceId(): Long = sourcePreferences.lastUsedAnimeSource().get()

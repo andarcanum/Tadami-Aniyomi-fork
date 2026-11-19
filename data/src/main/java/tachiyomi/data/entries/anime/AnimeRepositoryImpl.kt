@@ -172,45 +172,49 @@ class AnimeRepositoryImpl(
                     } else {
                         local.thumbnailUrl
                     }
-                    val updated = local.copy(
-                        title = anime.title,
-                        thumbnailUrl = thumbnailUrl,
-                    )
-                    db.animesQueries.update(
-                        source = updated.source,
-                        url = updated.url,
-                        artist = updated.artist,
-                        author = updated.author,
-                        description = updated.description,
-                        notes = updated.notes,
-                        genre = updated.genre,
-                        title = updated.title,
-                        status = updated.status,
-                        thumbnailUrl = updated.thumbnailUrl,
-                        backgroundUrl = updated.backgroundUrl,
-                        favorite = updated.favorite,
-                        pinned = updated.pinned,
-                        lastUpdate = updated.lastUpdate,
-                        nextUpdate = updated.nextUpdate,
-                        calculateInterval = updated.fetchInterval.toLong(),
-                        initialized = updated.initialized,
-                        viewer = updated.viewerFlags,
-                        episodeFlags = updated.episodeFlags,
-                        coverLastModified = updated.coverLastModified,
-                        backgroundLastModified = updated.backgroundLastModified,
-                        dateAdded = updated.dateAdded,
-                        animeId = updated.id,
-                        updateStrategy = updated.updateStrategy,
-                        version = updated.version,
-                        isSyncing = 0,
-                        fetchType = updated.fetchType,
-                        parentId = updated.parentId,
-                        seasonFlags = updated.seasonFlags,
-                        seasonNumber = updated.seasonNumber,
-                        seasonSourceOrder = updated.seasonSourceOrder,
-                        completedAt = updated.completedAt,
-                    )
-                    updated
+                    if (local.title == anime.title && local.thumbnailUrl == thumbnailUrl) {
+                        local
+                    } else {
+                        val updated = local.copy(
+                            title = anime.title,
+                            thumbnailUrl = thumbnailUrl,
+                        )
+                        db.animesQueries.update(
+                            source = updated.source,
+                            url = updated.url,
+                            artist = updated.artist,
+                            author = updated.author,
+                            description = updated.description,
+                            notes = updated.notes,
+                            genre = updated.genre,
+                            title = updated.title,
+                            status = updated.status,
+                            thumbnailUrl = updated.thumbnailUrl,
+                            backgroundUrl = updated.backgroundUrl,
+                            favorite = updated.favorite,
+                            pinned = updated.pinned,
+                            lastUpdate = updated.lastUpdate,
+                            nextUpdate = updated.nextUpdate,
+                            calculateInterval = updated.fetchInterval.toLong(),
+                            initialized = updated.initialized,
+                            viewer = updated.viewerFlags,
+                            episodeFlags = updated.episodeFlags,
+                            coverLastModified = updated.coverLastModified,
+                            backgroundLastModified = updated.backgroundLastModified,
+                            dateAdded = updated.dateAdded,
+                            animeId = updated.id,
+                            updateStrategy = updated.updateStrategy,
+                            version = updated.version,
+                            isSyncing = 0,
+                            fetchType = updated.fetchType,
+                            parentId = updated.parentId,
+                            seasonFlags = updated.seasonFlags,
+                            seasonNumber = updated.seasonNumber,
+                            seasonSourceOrder = updated.seasonSourceOrder,
+                            completedAt = updated.completedAt,
+                        )
+                        updated
+                    }
                 } else if (autoFavorite && !local.favorite) {
                     val updated = local.copy(favorite = true, dateAdded = System.currentTimeMillis())
                     db.animesQueries.update(

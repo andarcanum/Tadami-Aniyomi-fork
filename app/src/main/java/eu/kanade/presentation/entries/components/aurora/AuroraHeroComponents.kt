@@ -48,6 +48,7 @@ import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.rememberLiveBackdropBlurEnabled
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.MR
@@ -110,17 +111,21 @@ fun AuroraHeroScaffold(
                             .border(1.dp, resolveAuroraHeroPanelBorderColor(colors), panelShape)
                             .padding(horizontal = 12.dp, vertical = 14.dp)
                     } else {
-                        val hazeModifier = if (hazeState != null) {
+                        val liveBlurEnabled = rememberLiveBackdropBlurEnabled(isEInkMode = colors.isEInk)
+                        val hazeModifier = if (hazeState != null && liveBlurEnabled) {
+                            val heroHazeStyle = remember {
+                                HazeBlurStyle {
+                                    backgroundColor(Color.Transparent)
+                                    colorEffects(listOf(HazeColorEffect.tint(Color.White.copy(alpha = 0.18f))))
+                                    blurRadius(20.dp)
+                                    noiseFactor(0f)
+                                }
+                            }
                             Modifier
                                 .clip(panelShape)
                                 .hazeBlur(
                                     input = HazeInput.Sources(hazeState),
-                                    style = HazeBlurStyle {
-                                        backgroundColor(Color.Transparent)
-                                        colorEffects(listOf(HazeColorEffect.tint(Color.White.copy(alpha = 0.18f))))
-                                        blurRadius(20.dp)
-                                        noiseFactor(0f)
-                                    },
+                                    style = heroHazeStyle,
                                 )
                         } else {
                             Modifier

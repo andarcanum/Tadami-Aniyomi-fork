@@ -101,6 +101,7 @@ import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationCoo
 import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationDiskCache
 import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationProviderId
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.util.system.DeviceUtil
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -172,7 +173,7 @@ class AppModule(val app: Application) : InjektModule {
         if (!dbFile.exists()) return
 
         val shouldDelete = runCatching {
-            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
             val cursor = db.rawQuery(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
                 arrayOf(requiredTable),
@@ -370,116 +371,106 @@ class AppModule(val app: Application) : InjektModule {
         return NovelPluginRuntimeOverrides.fromJson(json, payload)
     }
 
+    private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
+        val cursor = db.query("PRAGMA $pragma")
+        try {
+            cursor.moveToFirst()
+        } finally {
+            cursor.close()
+        }
+    }
+
+    private fun configureSqlitePerformancePragmas(db: SupportSQLiteDatabase, isLowRam: Boolean) {
+        setPragma(db, "foreign_keys = ON")
+        setPragma(db, "journal_mode = WAL")
+        setPragma(db, "synchronous = NORMAL")
+        setPragma(db, "busy_timeout = 5000")
+        setPragma(db, "temp_store = MEMORY")
+        setPragma(db, "cache_size = ${if (isLowRam) -8000 else -16000}")
+        setPragma(db, "mmap_size = ${if (isLowRam) 0 else 33554432}")
+    }
+
     override fun InjektRegistrar.registerInjectables() {
         addSingleton(app)
 
-        ensureMangaDatabaseIsUsable(app)
-        ensureAnimeDatabaseIsUsable(app)
-        ensureNovelDatabaseIsUsable(app)
-        ensureAchievementsDatabaseIsUsable(app)
-
-        val sqlDriverManga = AndroidSqliteDriver(
-            schema = Database.Schema,
-            context = app,
-            name = "tachiyomi.db",
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val isLowRam by lazy { DeviceUtil.isLowRamDevice(app) }
+        val sqliteFactory = {
+            if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 // Support database inspector in Android Studio
                 FrameworkSQLiteOpenHelperFactory()
             } else {
                 RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(Database.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                    migrateMangaNotesSchema(db)
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+            }
+        }
 
-        val sqlDriverAnime = AndroidSqliteDriver(
-            schema = AnimeDatabase.Schema,
-            context = app,
-            name = "tachiyomi.animedb",
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Support database inspector in Android Studio
-                FrameworkSQLiteOpenHelperFactory()
-            } else {
-                RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(AnimeDatabase.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                    migrateAnimeNotesSchema(db)
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+        // Defer ensure*DatabaseIsUsable() out of attachBaseContext() on the main thread:
+        // each DB file is validated lazily (OPEN_READONLY) only when its driver is first requested.
+        val sqlDriverManga by lazy {
+            ensureMangaDatabaseIsUsable(app)
+            AndroidSqliteDriver(
+                schema = Database.Schema,
+                context = app,
+                name = "tachiyomi.db",
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(Database.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                        migrateMangaNotesSchema(db)
+                    }
+                },
+            )
+        }
 
-        val sqlDriverAchievements = AndroidSqliteDriver(
-            schema = tachiyomi.db.achievement.AchievementsDatabase.Schema,
-            context = app,
-            name = AchievementsDatabase.NAME,
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Support database inspector in Android Studio
-                FrameworkSQLiteOpenHelperFactory()
-            } else {
-                RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(tachiyomi.db.achievement.AchievementsDatabase.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+        val sqlDriverAnime by lazy {
+            ensureAnimeDatabaseIsUsable(app)
+            AndroidSqliteDriver(
+                schema = AnimeDatabase.Schema,
+                context = app,
+                name = "tachiyomi.animedb",
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(AnimeDatabase.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                        migrateAnimeNotesSchema(db)
+                    }
+                },
+            )
+        }
 
-        val sqlDriverNovel = AndroidSqliteDriver(
-            schema = NovelDatabase.Schema,
-            context = app,
-            name = "tachiyomi.noveldb",
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Support database inspector in Android Studio
-                FrameworkSQLiteOpenHelperFactory()
-            } else {
-                RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(NovelDatabase.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                    migrateNovelNotesSchema(db)
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+        val sqlDriverAchievements by lazy {
+            ensureAchievementsDatabaseIsUsable(app)
+            AndroidSqliteDriver(
+                schema = tachiyomi.db.achievement.AchievementsDatabase.Schema,
+                context = app,
+                name = AchievementsDatabase.NAME,
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(tachiyomi.db.achievement.AchievementsDatabase.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                    }
+                },
+            )
+        }
+
+        val sqlDriverNovel by lazy {
+            ensureNovelDatabaseIsUsable(app)
+            AndroidSqliteDriver(
+                schema = NovelDatabase.Schema,
+                context = app,
+                name = "tachiyomi.noveldb",
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(NovelDatabase.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                        migrateNovelNotesSchema(db)
+                    }
+                },
+            )
+        }
 
         addSingletonFactory {
             Database(

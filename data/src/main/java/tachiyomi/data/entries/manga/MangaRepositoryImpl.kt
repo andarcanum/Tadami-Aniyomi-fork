@@ -153,41 +153,45 @@ class MangaRepositoryImpl(
                     } else {
                         local.thumbnailUrl
                     }
-                    val updated = local.copy(
-                        title = manga.title,
-                        thumbnailUrl = thumbnailUrl,
-                    )
-                    db.mangasQueries.update(
-                        source = updated.source,
-                        url = updated.url,
-                        artist = updated.artist,
-                        author = updated.author,
-                        description = updated.description,
-                        notes = updated.notes,
-                        genre = updated.genre,
-                        title = updated.title,
-                        status = updated.status,
-                        rating = updated.rating.toDouble(),
-                        thumbnailUrl = updated.thumbnailUrl,
-                        favorite = updated.favorite,
-                        pinned = updated.pinned,
-                        lastUpdate = updated.lastUpdate,
-                        nextUpdate = updated.nextUpdate,
-                        calculateInterval = updated.fetchInterval.toLong(),
-                        initialized = updated.initialized,
-                        viewer = updated.viewerFlags,
-                        chapterFlags = updated.chapterFlags,
-                        coverLastModified = updated.coverLastModified,
-                        dateAdded = updated.dateAdded,
-                        mangaId = updated.id,
-                        updateStrategy = updated.updateStrategy,
-                        version = updated.version,
-                        isSyncing = 0,
-                        completedAt = updated.completedAt,
-                    )
-                    // Separate statement: coalesce() drops the column adapter type.
-                    db.mangasQueries.updateMemo(memo = updated.memo, mangaId = updated.id)
-                    updated
+                    if (local.title == manga.title && local.thumbnailUrl == thumbnailUrl) {
+                        local
+                    } else {
+                        val updated = local.copy(
+                            title = manga.title,
+                            thumbnailUrl = thumbnailUrl,
+                        )
+                        db.mangasQueries.update(
+                            source = updated.source,
+                            url = updated.url,
+                            artist = updated.artist,
+                            author = updated.author,
+                            description = updated.description,
+                            notes = updated.notes,
+                            genre = updated.genre,
+                            title = updated.title,
+                            status = updated.status,
+                            rating = updated.rating.toDouble(),
+                            thumbnailUrl = updated.thumbnailUrl,
+                            favorite = updated.favorite,
+                            pinned = updated.pinned,
+                            lastUpdate = updated.lastUpdate,
+                            nextUpdate = updated.nextUpdate,
+                            calculateInterval = updated.fetchInterval.toLong(),
+                            initialized = updated.initialized,
+                            viewer = updated.viewerFlags,
+                            chapterFlags = updated.chapterFlags,
+                            coverLastModified = updated.coverLastModified,
+                            dateAdded = updated.dateAdded,
+                            mangaId = updated.id,
+                            updateStrategy = updated.updateStrategy,
+                            version = updated.version,
+                            isSyncing = 0,
+                            completedAt = updated.completedAt,
+                        )
+                        // Separate statement: coalesce() drops the column adapter type.
+                        db.mangasQueries.updateMemo(memo = updated.memo, mangaId = updated.id)
+                        updated
+                    }
                 } else if (autoFavorite && !local.favorite) {
                     val updated = local.copy(favorite = true, dateAdded = System.currentTimeMillis())
                     db.mangasQueries.update(

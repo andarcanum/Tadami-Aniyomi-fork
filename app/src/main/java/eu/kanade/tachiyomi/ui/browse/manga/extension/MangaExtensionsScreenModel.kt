@@ -29,8 +29,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import eu.kanade.tachiyomi.ui.browse.ExtensionSearchFilter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
@@ -76,40 +78,46 @@ class MangaExtensionsScreenModel(
             }
         }
         val queryFilter: (String) -> ((MangaExtension) -> Boolean) = { query ->
-            filter@{ extension ->
-                if (query.isEmpty()) return@filter true
-                query.split(",").any { _input ->
-                    val input = _input.trim()
-                    if (input.isEmpty()) return@any false
-                    when (extension) {
-                        is MangaExtension.Available -> {
-                            extension.sources.any {
-                                it.name.contains(input, ignoreCase = true) ||
-                                    it.baseUrl.contains(input, ignoreCase = true) ||
-                                    it.id == input.toLongOrNull()
-                            } ||
-                                extension.name.contains(input, ignoreCase = true)
+            if (query.isEmpty()) {
+                { true }
+            } else {
+                val terms = ExtensionSearchFilter.parseTerms(query)
+                if (terms.isEmpty()) {
+                    { false }
+                } else {
+                    { extension ->
+                        terms.any { (input, sourceId) ->
+                            when (extension) {
+                                is MangaExtension.Available -> {
+                                    extension.name.contains(input, ignoreCase = true) ||
+                                        extension.sources.any {
+                                            it.name.contains(input, ignoreCase = true) ||
+                                                it.baseUrl.contains(input, ignoreCase = true) ||
+                                                (sourceId != null && it.id == sourceId)
+                                        }
+                                }
+                                is MangaExtension.Installed -> {
+                                    extension.name.contains(input, ignoreCase = true) ||
+                                        extension.sources.any {
+                                            it.name.contains(input, ignoreCase = true) ||
+                                                (sourceId != null && it.id == sourceId) ||
+                                                if (it is HttpSource) {
+                                                    it.baseUrl.contains(
+                                                        input,
+                                                        ignoreCase = true,
+                                                    ) ||
+                                                        it.getHomeUrl().contains(input, ignoreCase = true)
+                                                } else {
+                                                    false
+                                                }
+                                        }
+                                }
+                                is MangaExtension.Untrusted -> extension.name.contains(
+                                    input,
+                                    ignoreCase = true,
+                                )
+                            }
                         }
-                        is MangaExtension.Installed -> {
-                            extension.sources.any {
-                                it.name.contains(input, ignoreCase = true) ||
-                                    it.id == input.toLongOrNull() ||
-                                    if (it is HttpSource) {
-                                        it.baseUrl.contains(
-                                            input,
-                                            ignoreCase = true,
-                                        ) ||
-                                            it.getHomeUrl().contains(input, ignoreCase = true)
-                                    } else {
-                                        false
-                                    }
-                            } ||
-                                extension.name.contains(input, ignoreCase = true)
-                        }
-                        is MangaExtension.Untrusted -> extension.name.contains(
-                            input,
-                            ignoreCase = true,
-                        )
                     }
                 }
             }
@@ -124,40 +132,49 @@ class MangaExtensionsScreenModel(
                 collapsedLanguages,
             ) { query, downloads, (_updates, _installed, _available, _untrusted), rawAvailable, _collapsedLanguages ->
                 val searchQuery = query ?: ""
+                val filterPredicate = queryFilter(searchQuery)
 
                 val itemsGroups: ItemGroups = mutableMapOf()
-                availableExtensionVariants.value = _available.groupBy { it.pkgName }
+                val availableByPkg = _available.groupBy { it.pkgName }
+                availableExtensionVariants.value = availableByPkg
                 // Installed names are normalized (suffix stripped at install time): the update
                 // variants map must use the same key or lookups by extension.pkgName miss.
-                updateExtensionVariants.value = rawAvailable.groupBy {
+                val updateVariantsByPkg = rawAvailable.groupBy {
                     it.pkgName.toInstalledMangaExtensionPkgName()
                 }
-                val availableRepoCounts = _available
-                    .groupBy { it.pkgName }
-                    .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }
+                updateExtensionVariants.value = updateVariantsByPkg
+                val availableRepoCounts = availableByPkg.mapValues { (_, variants) ->
+                    ExtensionSearchFilter.distinctRepoCount(variants) { it.repoUrl }
+                }
                 val updateRepoCounts = rawAvailable
                     .groupBy { it.pkgName }
-                    .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }
+                    .mapValues { (_, variants) ->
+                        ExtensionSearchFilter.distinctRepoCount(variants) { it.repoUrl }
+                    }
                 val repoCounts = availableRepoCounts + updateRepoCounts
-                val displayAvailable = _available
-                    .filter(queryFilter(searchQuery))
-                    .groupBy { it.pkgName }
-                    .mapNotNull { (_, variants) -> variants.newestByVersion() }
-                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+                val displayAvailable = if (searchQuery.isEmpty()) {
+                    availableByPkg.values
+                        .mapNotNull { variants -> variants.newestByVersion() }
+                        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+                } else {
+                    _available
+                        .filter(filterPredicate)
+                        .groupBy { it.pkgName }
+                        .mapNotNull { (_, variants) -> variants.newestByVersion() }
+                        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+                }
 
-                val updates = _updates.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads, repoCounts, updateExtensionVariants.value),
-                )
+                val updateMapper = extensionMapper(downloads, repoCounts, updateVariantsByPkg)
+                val updates = (if (searchQuery.isEmpty()) _updates else _updates.filter(filterPredicate))
+                    .map(updateMapper)
                 if (updates.isNotEmpty()) {
                     itemsGroups[MangaExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending)] = updates
                 }
 
-                val installed = _installed.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads, repoCounts, updateExtensionVariants.value),
-                )
-                val untrusted = _untrusted.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads, repoCounts, emptyMap()),
-                )
+                val installed = (if (searchQuery.isEmpty()) _installed else _installed.filter(filterPredicate))
+                    .map(updateMapper)
+                val untrusted = (if (searchQuery.isEmpty()) _untrusted else _untrusted.filter(filterPredicate))
+                    .map(extensionMapper(downloads, repoCounts, emptyMap()))
                 if (installed.isNotEmpty() || untrusted.isNotEmpty()) {
                     itemsGroups[MangaExtensionUiModel.Header.Resource(MR.strings.ext_installed)] = installed + untrusted
                 }
@@ -184,6 +201,7 @@ class MangaExtensionsScreenModel(
 
                 itemsGroups
             }
+                .conflate()
                 .collectLatest {
                     mutableState.update { state ->
                         state.copy(

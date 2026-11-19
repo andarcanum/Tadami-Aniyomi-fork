@@ -25,6 +25,9 @@ CREATE TABLE chapters(
 CREATE INDEX chapters_manga_id_index ON chapters(manga_id);
 CREATE INDEX chapters_unread_by_manga_index ON chapters(manga_id, read) WHERE read = 0;
 CREATE INDEX chapters_url_index ON chapters(url);
+CREATE INDEX chapters_date_fetch_index ON chapters(date_fetch DESC);
+CREATE INDEX chapters_manga_id_date_fetch_index ON chapters(manga_id, date_fetch DESC);
+CREATE INDEX chapters_date_upload_index ON chapters(date_upload DESC);
 
 CREATE TRIGGER update_last_modified_at_chapters
 AFTER UPDATE ON chapters

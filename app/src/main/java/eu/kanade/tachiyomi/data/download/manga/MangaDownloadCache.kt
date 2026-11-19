@@ -342,16 +342,17 @@ class MangaDownloadCache(
      * @param manga the manga of the chapter.
      */
     suspend fun removeChapters(chapters: List<Chapter>, manga: Manga) {
+        if (chapters.isEmpty()) return
         restoreFinished.await()
+        val namesToRemove = HashSet<String>(chapters.size * 2)
+        for (chapter in chapters) {
+            namesToRemove.addAll(provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.id))
+        }
         rootDownloadsDirMutex.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             mangaDirsFor(sourceDir, manga.title, manga.id).forEach { mangaDir ->
-                chapters.forEach { chapter ->
-                    provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.id).forEach {
-                        if (it in mangaDir.chapterDirs) {
-                            mangaDir.chapterDirs = (mangaDir.chapterDirs - it).toMutableSet()
-                        }
-                    }
+                if (mangaDir.chapterDirs.any { it in namesToRemove }) {
+                    mangaDir.chapterDirs = (mangaDir.chapterDirs - namesToRemove).toMutableSet()
                 }
             }
         }

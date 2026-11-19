@@ -77,6 +77,7 @@ import eu.kanade.tachiyomi.extension.installer.PendingApkInstallStore
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.novel.NovelPluginSourceFactory
 import eu.kanade.tachiyomi.extension.novel.kotlin.sweepOrphanedNovelPluginDownloads
+import eu.kanade.tachiyomi.data.cache.EntryMemoryCacheTrimCallbacks
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelRuntimeCacheTrimCallbacks
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
@@ -297,12 +298,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                     }
                 }
 
-                // Register memory-pressure callback that trims novel plugin runtime caches
+                // Register memory-pressure callbacks that trim novel plugin & entry screen caches
                 registerComponentCallbacks(
                     NovelRuntimeCacheTrimCallbacks(
                         sourceFactory = Injekt.get<NovelPluginSourceFactory>(),
                     ),
                 )
+                registerComponentCallbacks(EntryMemoryCacheTrimCallbacks())
             }
         }
 
@@ -573,10 +575,11 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             // A 256 MB heap cap leaves little headroom next to a quarter-heap bitmap cache and
             // 24 parallel cover decodes (OOM forensics 2026-09-13).
             val isSmallHeap = Runtime.getRuntime().maxMemory() <= SMALL_HEAP_MAX_BYTES
-            allowRgb565(isLowRam)
+            val constrainedMemory = isLowRam || isSmallHeap
+            allowRgb565(constrainedMemory)
             memoryCache {
                 MemoryCache.Builder()
-                    .maxSizePercent(this@App, if (isSmallHeap) 0.15 else 0.25)
+                    .maxSizePercent(this@App, if (constrainedMemory) 0.15 else 0.25)
                     .build()
             }
             diskCache {

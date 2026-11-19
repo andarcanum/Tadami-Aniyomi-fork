@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateConcurrency
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
@@ -273,25 +274,29 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                         .filterNot { it.category == 0L }
                         .distinctBy { it.anime.id }
                 GroupLibraryMode.GLOBAL -> {
-                    val categoriesToUpdate = libraryPreferences.animeUpdateCategories().get().map { it.toLong() }
+                    val categoriesToUpdate = libraryPreferences.animeUpdateCategories().get()
+                        .mapTo(HashSet()) { it.toLong() }
                     val includedAnime = if (categoriesToUpdate.isNotEmpty()) {
                         libraryAnime.filter { it.category in categoriesToUpdate }
                     } else {
                         libraryAnime
                     }
 
-                    val categoriesToExclude = libraryPreferences.animeUpdateCategoriesExclude().get().map {
-                        it.toLong()
-                    }
+                    val categoriesToExclude = libraryPreferences.animeUpdateCategoriesExclude().get()
+                        .mapTo(HashSet()) { it.toLong() }
                     val excludedAnimeIds = if (categoriesToExclude.isNotEmpty()) {
-                        libraryAnime.filter { it.category in categoriesToExclude }.map { it.anime.id }
+                        libraryAnime.asSequence()
+                            .filter { it.category in categoriesToExclude }
+                            .mapTo(HashSet()) { it.anime.id }
                     } else {
-                        emptyList()
+                        emptySet()
                     }
 
-                    includedAnime
-                        .filterNot { it.anime.id in excludedAnimeIds }
-                        .distinctBy { it.anime.id }
+                    (if (excludedAnimeIds.isEmpty()) {
+                        includedAnime
+                    } else {
+                        includedAnime.filterNot { it.anime.id in excludedAnimeIds }
+                    }).distinctBy { it.anime.id }
                 }
             }
         }
@@ -397,7 +402,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      * @return an observable delivering the progress of each update.
      */
     private suspend fun updateEpisodeList(isManualRun: Boolean) {
-        val semaphore = Semaphore(5)
+        val semaphore = Semaphore(LibraryUpdateConcurrency.maxConcurrentSources(context))
         val progressCount = AtomicInteger(0)
         val currentlyUpdatingAnime = CopyOnWriteArrayList<Anime>()
         val newUpdates = CopyOnWriteArrayList<Pair<Anime, Array<Episode>>>()

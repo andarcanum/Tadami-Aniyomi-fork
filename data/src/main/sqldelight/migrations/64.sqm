@@ -1,0 +1,71 @@
+CREATE INDEX IF NOT EXISTS mangas_categories_manga_id_index ON mangas_categories(manga_id);
+CREATE INDEX IF NOT EXISTS mangas_categories_category_id_index ON mangas_categories(category_id);
+CREATE INDEX IF NOT EXISTS chapters_date_fetch_index ON chapters(date_fetch DESC);
+CREATE INDEX IF NOT EXISTS chapters_manga_id_date_fetch_index ON chapters(manga_id, date_fetch DESC);
+CREATE INDEX IF NOT EXISTS chapters_date_upload_index ON chapters(date_upload DESC);
+
+DROP VIEW IF EXISTS libraryView;
+CREATE VIEW libraryView AS
+SELECT
+    M.*,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.latestUpload, 0) AS latestUpload,
+    coalesce(C.fetchedAt, 0) AS chapterFetchedAt,
+    coalesce(C.lastRead, 0) AS lastRead,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    coalesce(MC.category_id, 0) AS category
+FROM mangas M
+LEFT JOIN(
+    SELECT
+        chapters.manga_id,
+        count(*) AS total,
+        sum(read) AS readCount,
+        coalesce(max(chapters.date_upload), 0) AS latestUpload,
+        coalesce(max(history.last_read), 0) AS lastRead,
+        coalesce(max(chapters.date_fetch), 0) AS fetchedAt,
+        sum(chapters.bookmark) AS bookmarkCount
+    FROM chapters
+    LEFT JOIN excluded_scanlators
+    ON chapters.manga_id = excluded_scanlators.manga_id
+    AND chapters.scanlator = excluded_scanlators.scanlator
+    LEFT JOIN history
+    ON chapters._id = history.chapter_id
+    WHERE excluded_scanlators.scanlator IS NULL
+    AND chapters.manga_id IN (SELECT _id FROM mangas WHERE favorite = 1)
+    GROUP BY chapters.manga_id
+) AS C
+ON M._id = C.manga_id
+LEFT JOIN mangas_categories AS MC
+ON MC.manga_id = M._id
+WHERE M.favorite = 1;
+
+DROP VIEW IF EXISTS historyView;
+CREATE VIEW historyView AS
+SELECT
+    history._id AS id,
+    mangas._id AS mangaId,
+    chapters._id AS chapterId,
+    mangas.title,
+    mangas.thumbnail_url AS thumbnailUrl,
+    mangas.source,
+    mangas.favorite,
+    mangas.cover_last_modified,
+    chapters.chapter_number AS chapterNumber,
+    history.last_read AS readAt,
+    history.time_read AS readDuration,
+    max_last_read.last_read AS maxReadAt,
+    max_last_read.chapter_id AS maxReadAtChapterId
+FROM mangas
+JOIN chapters
+ON mangas._id = chapters.manga_id
+JOIN history
+ON chapters._id = history.chapter_id
+JOIN (
+    SELECT chapters.manga_id, chapters._id AS chapter_id, MAX(history.last_read) AS last_read
+    FROM chapters JOIN history
+    ON chapters._id = history.chapter_id
+    WHERE history.last_read > 0
+    GROUP BY chapters.manga_id
+) AS max_last_read
+ON chapters.manga_id = max_last_read.manga_id;

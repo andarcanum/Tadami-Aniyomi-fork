@@ -116,6 +116,9 @@ import eu.kanade.presentation.components.rememberLatticeCircuitNavbarUnlocked
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
+import eu.kanade.presentation.theme.LocalLiveBackdropBlurEnabled
+import eu.kanade.presentation.theme.shouldUseLiveBackdropBlur
+import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.presentation.tutorial.coachAnchorForTab
 import eu.kanade.presentation.util.BottomNavVisibilityController
 import eu.kanade.presentation.util.LocalBottomNavVisibilityController
@@ -224,6 +227,13 @@ object HomeScreen : Screen() {
 
         val navigator = LocalNavigator.currentOrThrow
         val bottomNavVisibilityController = remember { BottomNavVisibilityController() }
+        val isLowRamDevice = remember(context) { DeviceUtil.isLowRamDevice(context.applicationContext ?: context) }
+        val liveBlurEnabled = shouldUseLiveBackdropBlur(
+            sdkInt = android.os.Build.VERSION.SDK_INT,
+            isEInkMode = isEInkMode,
+            isLowRamDevice = isLowRamDevice,
+            isPowerSaveMode = context.powerManager.isPowerSaveMode,
+        )
         val hazeState = remember { HazeState() }
         val homeOverlayContent = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
         eu.kanade.presentation.tutorial.TutorialHost {
@@ -272,7 +282,8 @@ object HomeScreen : Screen() {
                 CompositionLocalProvider(
                     LocalNavigator provides navigator,
                     LocalBottomNavVisibilityController provides bottomNavVisibilityController,
-                    LocalHomeHazeState provides hazeState,
+                    LocalLiveBackdropBlurEnabled provides liveBlurEnabled,
+                    LocalHomeHazeState provides hazeState.takeIf { liveBlurEnabled },
                     LocalHomeOverlayHost provides homeOverlayContent,
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -283,7 +294,7 @@ object HomeScreen : Screen() {
                                     if (isAuroraTheme && useAuroraBottomNav && !isEInkMode) {
                                         AuroraNavigationRail(
                                             tabs = navStyle.tabs,
-                                            hazeState = hazeState,
+                                            hazeState = hazeState.takeIf { liveBlurEnabled },
                                             circuitDecoration = circuitRail,
                                         )
                                     } else {
@@ -335,7 +346,11 @@ object HomeScreen : Screen() {
                                         Modifier
                                             .windowInsetsPadding(NavigationBarDefaults.windowInsets)
                                             .padding(horizontal = 12.dp, vertical = 6.dp)
-                                            .auroraGlassNav(auroraColors!!, navBarShape, hazeState)
+                                            .auroraGlassNav(
+                                                colors = auroraColors!!,
+                                                shape = navBarShape,
+                                                hazeState = hazeState.takeIf { liveBlurEnabled },
+                                            )
                                     } else {
                                         Modifier
                                     }
@@ -473,7 +488,7 @@ object HomeScreen : Screen() {
                                         end = contentPadding.calculateEndPadding(layoutDirection),
                                     )
                                     .consumeWindowInsets(contentPadding)
-                                    .hazeSource(hazeState),
+                                    .then(if (liveBlurEnabled) Modifier.hazeSource(hazeState) else Modifier),
                             ) {
                                 CompositionLocalProvider(
                                     LocalHostScaffoldContentPadding provides PaddingValues(
@@ -875,13 +890,22 @@ object HomeScreen : Screen() {
     private fun Modifier.auroraGlassNav(
         colors: AuroraColors,
         shape: Shape,
-        hazeState: HazeState,
+        hazeState: HazeState?,
     ): Modifier {
-        val hazeStyle = HazeBlurStyle {
-            backgroundColor(colors.background)
-            colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.65f))))
-            blurRadius(24.dp)
-            noiseFactor(0.12f)
+        val hazeModifier = if (hazeState != null) {
+            val hazeStyle = HazeBlurStyle {
+                backgroundColor(colors.background)
+                colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.65f))))
+                blurRadius(24.dp)
+                noiseFactor(0.12f)
+            }
+            Modifier.hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
+        } else {
+            // Adaptive non-blur glass fallback for API < 31 / low-RAM / Battery Saver.
+            Modifier.background(
+                colors.surface.copy(alpha = if (colors.isDark) 0.88f else 0.92f),
+                shape,
+            )
         }
         return if (colors.isDark) {
             this
@@ -902,7 +926,7 @@ object HomeScreen : Screen() {
                 // (e.g. popping back to home) the haze layer has not captured
                 // content yet, so without this the bar flashes transparent.
                 .background(colors.background, shape)
-                .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
+                .then(hazeModifier)
                 .border(
                     BorderStroke(width = 1.dp, brush = auroraMenuRimLightBrush(colors)),
                     shape = shape,
@@ -913,7 +937,7 @@ object HomeScreen : Screen() {
                 .clip(shape)
                 // Opaque base under the frost (see dark branch comment).
                 .background(colors.background, shape)
-                .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
+                .then(hazeModifier)
                 .border(
                     BorderStroke(
                         width = 1.dp,
@@ -932,7 +956,7 @@ object HomeScreen : Screen() {
     @Composable
     private fun AuroraNavigationRail(
         tabs: List<eu.kanade.presentation.util.Tab>,
-        hazeState: HazeState,
+        hazeState: HazeState?,
         circuitDecoration: Boolean,
     ) {
         val auroraColors = AuroraTheme.colorsForCurrentTheme()

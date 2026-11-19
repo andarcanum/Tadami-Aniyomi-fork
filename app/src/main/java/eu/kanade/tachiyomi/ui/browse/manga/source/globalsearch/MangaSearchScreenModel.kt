@@ -17,8 +17,10 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.collectLatest
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.domain.achievement.model.AchievementEvent
@@ -55,6 +58,7 @@ abstract class MangaSearchScreenModel(
         // screen visit (never closed; inherited by all Global*/Migrate* subclasses) - shared
         // limited IO view instead (see the anime SM comment).
         private val searchDispatcher = Dispatchers.IO.limitedParallelism(5)
+        private const val SOURCE_SEARCH_TIMEOUT_MS = 30_000L
     }
 
     private val enabledLanguages = sourcePreferences.enabledLanguages().get()
@@ -66,11 +70,15 @@ abstract class MangaSearchScreenModel(
 
     protected var extensionFilter: String? = null
 
-    private val sortComparator = { map: Map<CatalogueSource, MangaSearchItemResult> ->
-        compareBy<CatalogueSource>(
+    @Volatile
+    private var sourceOrder: Map<Long, Int> = emptyMap()
+
+    private fun sortComparator(map: Map<CatalogueSource, MangaSearchItemResult>): Comparator<CatalogueSource> {
+        val order = sourceOrder
+        return compareBy<CatalogueSource>(
             { (map[it] as? MangaSearchItemResult.Success)?.isEmpty ?: true },
-            { "${it.id}" !in pinnedSources },
-            { "${it.name.lowercase()} (${it.lang})" },
+            { order[it.id] ?: Int.MAX_VALUE },
+            { it.id },
         )
     }
 
@@ -94,7 +102,7 @@ abstract class MangaSearchScreenModel(
 
     @Composable
     fun getManga(initialManga: Manga): androidx.compose.runtime.State<Manga> {
-        return produceState(initialValue = initialManga) {
+        return produceState(initialValue = initialManga, key1 = initialManga.id) {
             getManga.subscribe(initialManga.url, initialManga.source)
                 .filterNotNull()
                 .collectLatest { manga ->
@@ -170,6 +178,9 @@ abstract class MangaSearchScreenModel(
 
         searchJob?.cancel()
         val sources = getSelectedSources()
+        sourceOrder = HashMap<Long, Int>(sources.size).apply {
+            sources.forEachIndexed { index, source -> put(source.id, index) }
+        }
 
         // Reuse previous results if possible
         if (sameQuery) {
@@ -194,16 +205,24 @@ abstract class MangaSearchScreenModel(
                     }
                     try {
                         val page = withContext(searchDispatcher) {
-                            source.getSearchManga(1, query, source.getFilterList())
+                            withTimeout(SOURCE_SEARCH_TIMEOUT_MS) {
+                                source.getSearchManga(1, query, source.getFilterList())
+                            }
                         }
 
-                        val titles = page.mangas.map {
-                            networkToLocalManga.await(it.toDomainManga(source.id))
-                        }
+                        val titles = networkToLocalManga.await(
+                            page.mangas.map { it.toDomainManga(source.id) },
+                        )
 
                         if (isActive) {
                             updateItem(source, MangaSearchItemResult.Success(titles))
                         }
+                    } catch (e: TimeoutCancellationException) {
+                        if (isActive) {
+                            updateItem(source, MangaSearchItemResult.Error(e))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         if (isActive) {
                             updateItem(source, MangaSearchItemResult.Error(e))

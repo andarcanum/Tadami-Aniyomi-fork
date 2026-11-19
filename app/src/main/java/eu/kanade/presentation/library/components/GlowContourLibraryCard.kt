@@ -162,14 +162,7 @@ private object GlowContourCardShape : Shape {
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        return Outline.Generic(
-            createScaledGlowContourPath(
-                pathData = DEFAULT_GLOW_CONTOUR_ZONE_LAYER_SPEC.shellPathData,
-                size = size,
-                svgWidth = DEFAULT_GLOW_CONTOUR_ZONE_LAYER_SPEC.svgWidth,
-                svgHeight = DEFAULT_GLOW_CONTOUR_ZONE_LAYER_SPEC.svgHeight,
-            ),
-        )
+        return Outline.Generic(cachedGlowContourZonedPaths(size).shellPath)
     }
 }
 

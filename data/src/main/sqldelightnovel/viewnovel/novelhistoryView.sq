@@ -22,6 +22,7 @@ JOIN (
     SELECT novel_chapters.novel_id, novel_chapters._id AS chapter_id, MAX(novel_history.last_read) AS last_read
     FROM novel_chapters JOIN novel_history
     ON novel_chapters._id = novel_history.chapter_id
+    WHERE novel_history.last_read > 0
     GROUP BY novel_chapters.novel_id
 ) AS max_last_read
 ON novel_chapters.novel_id = max_last_read.novel_id;
@@ -47,18 +48,22 @@ ORDER BY readAt DESC;
 
 getLatestHistory:
 SELECT
-id,
-novelId,
-chapterId,
-title,
-thumbnailUrl,
-source,
-favorite,
-cover_last_modified,
-chapterNumber,
-readAt,
-readDuration
-FROM novelhistoryView
-WHERE novelhistoryView.readAt > 0
-ORDER BY readAt DESC
+novel_history._id AS id,
+novels._id AS novelId,
+novel_chapters._id AS chapterId,
+novels.title,
+novels.thumbnail_url AS thumbnailUrl,
+novels.source,
+novels.favorite,
+novels.cover_last_modified,
+novel_chapters.chapter_number AS chapterNumber,
+novel_history.last_read AS readAt,
+novel_history.time_read AS readDuration
+FROM novel_history
+JOIN novel_chapters
+ON novel_chapters._id = novel_history.chapter_id
+JOIN novels
+ON novels._id = novel_chapters.novel_id
+WHERE novel_history.last_read > 0
+ORDER BY novel_history.last_read DESC
 LIMIT 1;

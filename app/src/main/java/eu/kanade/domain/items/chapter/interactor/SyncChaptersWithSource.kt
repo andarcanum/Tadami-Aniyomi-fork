@@ -24,7 +24,6 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.source.local.entries.manga.isLocal
 import java.lang.Long.max
 import java.time.ZonedDateTime
-import java.util.TreeSet
 
 class SyncChaptersWithSource(
     private val downloadManager: MangaDownloadManager,
@@ -65,8 +64,11 @@ class SyncChaptersWithSource(
             .mapIndexed { i, sChapter ->
                 Chapter.create()
                     .copyFromSChapter(sChapter)
-                    .copy(name = with(ChapterSanitizer) { sChapter.name.sanitize(manga.title) })
-                    .copy(mangaId = manga.id, sourceOrder = i.toLong())
+                    .copy(
+                        name = with(ChapterSanitizer) { sChapter.name.sanitize(manga.title) },
+                        mangaId = manga.id,
+                        sourceOrder = i.toLong(),
+                    )
             }
 
         val dbChapters = getChaptersByMangaId.await(manga.id)
@@ -80,14 +82,15 @@ class SyncChaptersWithSource(
         // Used to not set upload date of older chapters
         // to a higher value than newer chapters
         var maxSeenUploadDate = 0L
+        val sManga = if (source is HttpSource) manga.toSManga() else null
 
         for (sourceChapter in sourceChapters) {
             var chapter = sourceChapter
 
             // Update metadata from source if necessary.
-            if (source is HttpSource) {
+            if (source is HttpSource && sManga != null) {
                 val sChapter = chapter.toSChapter()
-                source.prepareNewChapter(sChapter, manga.toSManga())
+                source.prepareNewChapter(sChapter, sManga)
                 chapter = chapter.copyFromSChapter(sChapter)
             }
 
@@ -161,15 +164,15 @@ class SyncChaptersWithSource(
 
         val changedOrDuplicateReadUrls = mutableSetOf<String>()
 
-        val deletedChapterNumbers = TreeSet<Double>()
-        val deletedReadChapterNumbers = TreeSet<Double>()
-        val deletedBookmarkedChapterNumbers = TreeSet<Double>()
+        val deletedChapterNumbers = HashSet<Double>(removedChapters.size)
+        val deletedReadChapterNumbers = HashSet<Double>()
+        val deletedBookmarkedChapterNumbers = HashSet<Double>()
 
         val readChapterNumbers = dbChapters
             .asSequence()
             .filter { it.read && it.isRecognizedNumber }
             .map { it.chapterNumber }
-            .toSet()
+            .toHashSet()
 
         removedChapters.forEach { chapter ->
             if (chapter.read) deletedReadChapterNumbers.add(chapter.chapterNumber)
@@ -177,8 +180,12 @@ class SyncChaptersWithSource(
             deletedChapterNumbers.add(chapter.chapterNumber)
         }
 
-        val deletedChapterNumberDateFetchMap = removedChapters.sortedByDescending { it.dateFetch }
-            .associate { it.chapterNumber to it.dateFetch }
+        val deletedChapterNumberDateFetchMap = if (removedChapters.isEmpty()) {
+            emptyMap()
+        } else {
+            removedChapters.sortedByDescending { it.dateFetch }
+                .associate { it.chapterNumber to it.dateFetch }
+        }
 
         val markDuplicateAsRead = libraryPreferences.markDuplicateReadChapterAsRead().get()
             .contains(LibraryPreferences.MARK_DUPLICATE_CHAPTER_READ_NEW)

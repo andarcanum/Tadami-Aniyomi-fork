@@ -164,37 +164,41 @@ class NovelRepositoryImpl(
                     } else {
                         local.thumbnailUrl
                     }
-                    val updated = local.copy(
-                        title = novel.title,
-                        thumbnailUrl = thumbnailUrl,
-                    )
-                    db.novelsQueries.update(
-                        source = updated.source,
-                        url = updated.url,
-                        author = updated.author,
-                        description = updated.description,
-                        notes = updated.notes,
-                        genre = updated.genre,
-                        title = updated.title,
-                        status = updated.status,
-                        thumbnailUrl = updated.thumbnailUrl,
-                        favorite = updated.favorite,
-                        pinned = updated.pinned,
-                        lastUpdate = updated.lastUpdate,
-                        nextUpdate = updated.nextUpdate,
-                        calculateInterval = updated.fetchInterval.toLong(),
-                        initialized = updated.initialized,
-                        viewer = updated.viewerFlags,
-                        chapterFlags = updated.chapterFlags,
-                        coverLastModified = updated.coverLastModified,
-                        dateAdded = updated.dateAdded,
-                        novelId = updated.id,
-                        updateStrategy = updated.updateStrategy,
-                        version = updated.version,
-                        isSyncing = 0,
-                        completedAt = updated.completedAt,
-                    )
-                    updated
+                    if (local.title == novel.title && local.thumbnailUrl == thumbnailUrl) {
+                        local
+                    } else {
+                        val updated = local.copy(
+                            title = novel.title,
+                            thumbnailUrl = thumbnailUrl,
+                        )
+                        db.novelsQueries.update(
+                            source = updated.source,
+                            url = updated.url,
+                            author = updated.author,
+                            description = updated.description,
+                            notes = updated.notes,
+                            genre = updated.genre,
+                            title = updated.title,
+                            status = updated.status,
+                            thumbnailUrl = updated.thumbnailUrl,
+                            favorite = updated.favorite,
+                            pinned = updated.pinned,
+                            lastUpdate = updated.lastUpdate,
+                            nextUpdate = updated.nextUpdate,
+                            calculateInterval = updated.fetchInterval.toLong(),
+                            initialized = updated.initialized,
+                            viewer = updated.viewerFlags,
+                            chapterFlags = updated.chapterFlags,
+                            coverLastModified = updated.coverLastModified,
+                            dateAdded = updated.dateAdded,
+                            novelId = updated.id,
+                            updateStrategy = updated.updateStrategy,
+                            version = updated.version,
+                            isSyncing = 0,
+                            completedAt = updated.completedAt,
+                        )
+                        updated
+                    }
                 } else if (autoFavorite && !local.favorite) {
                     val updated = local.copy(favorite = true, dateAdded = System.currentTimeMillis())
                     db.novelsQueries.update(

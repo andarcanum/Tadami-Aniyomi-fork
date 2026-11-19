@@ -20,6 +20,7 @@ import eu.kanade.domain.track.novel.MapNovelTrackStatusToLibrary
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateConcurrency
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
@@ -299,15 +300,18 @@ class NovelLibraryUpdateJob(
                         }
 
                         val excludedNovelIds = if (categoriesToExclude.isNotEmpty()) {
-                            libraryNovels
+                            libraryNovels.asSequence()
                                 .filter { isLibraryNovelInAnyCategory(it, categoriesToExclude, membership) }
-                                .map { it.novel.id }
+                                .mapTo(HashSet()) { it.novel.id }
                         } else {
-                            emptyList()
+                            emptySet()
                         }
 
-                        includedNovels
-                            .filterNot { it.novel.id in excludedNovelIds }
+                        if (excludedNovelIds.isEmpty()) {
+                            includedNovels
+                        } else {
+                            includedNovels.filterNot { it.novel.id in excludedNovelIds }
+                        }
                     }
                 }
             }
@@ -385,7 +389,7 @@ class NovelLibraryUpdateJob(
     }
 
     private suspend fun updateChapterList(isManualRun: Boolean) {
-        val semaphore = Semaphore(5)
+        val semaphore = Semaphore(LibraryUpdateConcurrency.maxConcurrentSources(context))
         val progressCount = AtomicInteger(0)
         val updatedCount = AtomicInteger(0)
         val failedCount = AtomicInteger(0)

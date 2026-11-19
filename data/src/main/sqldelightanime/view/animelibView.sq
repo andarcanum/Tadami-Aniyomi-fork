@@ -31,10 +31,77 @@ SELECT
     END AS fillermarkCount,
     coalesce(MC.category_id, 0) AS category
 FROM animes M
-LEFT JOIN episodestatsView AS ES ON M._id = ES.anime_id
-LEFT JOIN animehistorystatsView AS AHS ON M._id = AHS.anime_id
+LEFT JOIN (
+    SELECT
+        episodes.anime_id,
+        count(*) AS total,
+        sum(seen) AS seenCount,
+        coalesce(max(episodes.date_upload), 0) AS latestUpload,
+        coalesce(max(episodes.date_fetch), 0) AS fetchedAt,
+        sum(episodes.bookmark) AS bookmarkCount,
+        sum(episodes.fillermark) AS fillermarkCount
+    FROM episodes
+    WHERE episodes.anime_id IN (SELECT _id FROM animes WHERE favorite = 1 AND fetch_type = 1)
+    GROUP BY episodes.anime_id
+) AS ES ON M._id = ES.anime_id
+LEFT JOIN (
+    SELECT
+        episodes.anime_id,
+        max(ah.last_seen) AS lastSeen
+    FROM episodes
+    INNER JOIN animehistory AS ah ON episodes._id = ah.episode_id
+    WHERE ah.last_seen > 0
+    AND episodes.anime_id IN (SELECT _id FROM animes WHERE favorite = 1 AND fetch_type = 1)
+    GROUP BY episodes.anime_id
+) AS AHS ON M._id = AHS.anime_id
 LEFT JOIN animes_categories AS MC ON MC.anime_id = M._id
-LEFT JOIN animeseasonstatsView AS ASS ON M._id = ASS.parent_id
+LEFT JOIN (
+    SELECT
+        season.parent_id,
+        count(*) AS child_count,
+        sum(CASE WHEN season.fetch_type = 1 AND
+                     coalesce(SES.total, 0) = coalesce(SES.seenCount, 0)
+                THEN 1 ELSE 0 END) AS fully_seen_seasons,
+        max(coalesce(SES.latestUpload, 0)) AS max_latest_upload,
+        max(coalesce(SES.fetchedAt, 0)) AS max_fetched_at,
+        max(coalesce(SAHS.lastSeen, 0)) AS max_last_seen,
+        sum(coalesce(SES.bookmarkCount, 0)) AS total_bookmarks,
+        sum(coalesce(SES.fillermarkCount, 0)) AS total_fillermarks
+    FROM animes season
+    LEFT JOIN (
+        SELECT
+            episodes.anime_id,
+            count(*) AS total,
+            sum(seen) AS seenCount,
+            coalesce(max(episodes.date_upload), 0) AS latestUpload,
+            coalesce(max(episodes.date_fetch), 0) AS fetchedAt,
+            sum(episodes.bookmark) AS bookmarkCount,
+            sum(episodes.fillermark) AS fillermarkCount
+        FROM episodes
+        WHERE episodes.anime_id IN (
+            SELECT child._id
+            FROM animes child
+            WHERE child.parent_id IN (SELECT _id FROM animes WHERE favorite = 1 AND fetch_type = 0)
+        )
+        GROUP BY episodes.anime_id
+    ) AS SES ON season._id = SES.anime_id
+    LEFT JOIN (
+        SELECT
+            episodes.anime_id,
+            max(ah.last_seen) AS lastSeen
+        FROM episodes
+        INNER JOIN animehistory AS ah ON episodes._id = ah.episode_id
+        WHERE ah.last_seen > 0
+        AND episodes.anime_id IN (
+            SELECT child._id
+            FROM animes child
+            WHERE child.parent_id IN (SELECT _id FROM animes WHERE favorite = 1 AND fetch_type = 0)
+        )
+        GROUP BY episodes.anime_id
+    ) AS SAHS ON season._id = SAHS.anime_id
+    WHERE season.parent_id IN (SELECT _id FROM animes WHERE favorite = 1 AND fetch_type = 0)
+    GROUP BY season.parent_id
+) AS ASS ON M._id = ASS.parent_id
 WHERE M.favorite = 1;
 
 animelib:

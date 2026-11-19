@@ -71,7 +71,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
-import tachiyomi.core.common.util.lang.compareToWithCollator
+import java.text.CollationKey
+import tachiyomi.core.common.util.lang.compareCollationKeys
+import tachiyomi.core.common.util.lang.toCollationKey
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
@@ -290,18 +292,18 @@ class AnimeLibraryScreenModel(
                             } else {
                                 searchedMap.filterValues { it.isNotEmpty() }.toPersistentMap()
                             }
-                            // F2: deduped entry count computed here (background dispatcher), once per
-                            // emission - the per-State lazy recomputed flatten+distinctBy over the WHOLE
-                            // library on MAIN for every selection/keystroke state copy.
-                            val libraryCount = filteredMap.values
-                                .flatten()
-                                .fastDistinctBy {
-                                    when (it) {
-                                        is AnimeLibraryItem.Single -> it.libraryAnime.anime.id
-                                        is AnimeLibraryItem.Series -> it.librarySeries.id
+                            // F2: deduped entry count computed here (background dispatcher) in a single
+                            // pass without allocating intermediate flattened/deduped lists.
+                            val seenEntryIds = HashSet<Long>()
+                            filteredMap.values.forEach { items ->
+                                items.forEach { item ->
+                                    when (item) {
+                                        is AnimeLibraryItem.Single -> seenEntryIds.add(item.libraryAnime.anime.id)
+                                        is AnimeLibraryItem.Series -> seenEntryIds.add(-item.librarySeries.id)
                                     }
                                 }
-                                .size
+                            }
+                            val libraryCount = seenEntryIds.size
                             Triple(filteredMap, baseLibrary.libraryLanguages, libraryCount)
                         }
                     }
@@ -409,6 +411,9 @@ class AnimeLibraryScreenModel(
         trackMap: Map<Long, List<AnimeTrack>>,
         trackingFilter: Map<Long, TriState>,
     ): AnimeLibraryMap {
+        if (!prefs.globalFilterDownloaded && !prefs.hasActiveFilters(trackingFilter)) {
+            return this
+        }
         val downloadedOnly = prefs.globalFilterDownloaded
         val skipOutsideReleasePeriod = prefs.skipOutsideReleasePeriod
         val filterDownloaded = if (downloadedOnly) TriState.ENABLED_IS else prefs.filterDownloaded
@@ -542,14 +547,17 @@ class AnimeLibraryScreenModel(
         trackMap: Map<Long, List<AnimeTrack>>,
         loggedInTrackerIds: Set<Long>,
     ): AnimeLibraryMap {
-        val alphabeticSortKeys = HashMap<Long, String>()
-        fun AnimeLibraryItem.alphabeticSortKey(): String {
+        val alphabeticSortKeys = HashMap<Long, Pair<String, CollationKey?>>()
+        fun AnimeLibraryItem.alphabeticSortKey(): Pair<String, CollationKey?> {
             return alphabeticSortKeys.getOrPut(id) {
-                title.lowercase()
+                val lowered = title.lowercase()
+                lowered to lowered.toCollationKey()
             }
         }
         val sortAlphabetically: (AnimeLibraryItem, AnimeLibraryItem) -> Int = { i1, i2 ->
-            i1.alphabeticSortKey().compareToWithCollator(i2.alphabeticSortKey())
+            val left = i1.alphabeticSortKey()
+            val right = i2.alphabeticSortKey()
+            compareCollationKeys(left.second, left.first, right.second, right.first)
         }
         val isPinned: (AnimeLibraryItem) -> Boolean = {
             when (it) {
@@ -890,14 +898,30 @@ class AnimeLibraryScreenModel(
      * Get the categories and all its anime from the database.
      */
     private fun getLibraryFlow(): Flow<AnimeLibraryMap> {
+        // Slice to badge-only preferences so toggling filter chips does not rebuild every
+        // AnimeLibraryItem and re-query downloadManager.getDownloadCount() across the library.
+        val badgePreferencesFlow = sharedItemPreferencesFlow
+            .map {
+                BadgePreferences(
+                    downloadBadge = it.downloadBadge,
+                    unseenBadge = it.unseenBadge,
+                    localBadge = it.localBadge,
+                    languageBadge = it.languageBadge,
+                )
+            }
+            .distinctUntilChanged()
         val animelibAnimesFlow = combine(
             getLibraryAnime.subscribe(),
             getLibraryAnimeSeries.subscribe(),
-            sharedItemPreferencesFlow,
+            badgePreferencesFlow,
             getDownloadBadgeInvalidationFlow(),
         ) { animelibAnimeList, librarySeriesList, prefs, _ ->
             val idsInSeries = librarySeriesList.flatMapTo(HashSet()) { librarySeries ->
                 librarySeries.entries.map { it.anime.id }
+            }
+            val languageCache = if (prefs.languageBadge) HashMap<Long, String>() else null
+            fun resolveLang(sourceId: Long): String {
+                return languageCache?.getOrPut(sourceId) { sourceManager.getOrStub(sourceId).lang }.orEmpty()
             }
             val singleItems = animelibAnimeList
                 .filterNot { it.anime.id in idsInSeries }
@@ -911,11 +935,7 @@ class AnimeLibraryScreenModel(
                         },
                         unseenCount = if (prefs.unseenBadge) animelibAnime.unseenCount else 0,
                         isLocal = if (prefs.localBadge) animelibAnime.anime.isLocal() else false,
-                        sourceLanguage = if (prefs.languageBadge) {
-                            sourceManager.getOrStub(animelibAnime.anime.source).lang
-                        } else {
-                            ""
-                        },
+                        sourceLanguage = resolveLang(animelibAnime.anime.source),
                     )
                 }
             val seriesItems = librarySeriesList
@@ -933,41 +953,33 @@ class AnimeLibraryScreenModel(
                         } else {
                             false
                         },
-                        sourceLanguage = if (prefs.languageBadge) {
-                            librarySeries.entries.firstOrNull()?.anime?.source?.let { source ->
-                                sourceManager.getOrStub(source).lang
-                            } ?: ""
-                        } else {
-                            ""
-                        },
+                        sourceLanguage = librarySeries.entries.firstOrNull()?.anime?.source?.let(::resolveLang).orEmpty(),
                     )
                 }
-            (singleItems + seriesItems).groupBy { it.category }
+            (singleItems + seriesItems)
         }
 
-        return combine(getCategories.subscribe(), animelibAnimesFlow) { categories, animelibAnime ->
-            val displayCategories = if (animelibAnime.isNotEmpty() && !animelibAnime.containsKey(0)) {
+        return combine(getCategories.subscribe(), animelibAnimesFlow) { categories, libraryItems ->
+            val displayCategories = if (libraryItems.isNotEmpty() && libraryItems.none { it.category == 0L }) {
                 categories.fastFilterNot { it.isSystemCategory }
             } else {
                 categories
             }
 
-            val visibleIds = displayCategories.map { it.id }.toHashSet()
-            val regrouped = animelibAnime.entries
-                .flatMap { (categoryId, items) -> items.map { categoryId to it } }
-                .groupBy({ (categoryId, item) ->
-                    if (item is AnimeLibraryItem.Series && categoryId !in visibleIds) {
-                        item.librarySeries.entries
-                            .map { it.category }
-                            .firstOrNull { it in visibleIds }
-                            ?: categoryId
-                    } else {
-                        categoryId
-                    }
-                }) { it.second }
+            val visibleIds = displayCategories.fastMap { it.id }.toHashSet()
+            val grouped = libraryItems.groupBy { item ->
+                if (item is AnimeLibraryItem.Series && item.category !in visibleIds) {
+                    item.librarySeries.entries
+                        .map { it.category }
+                        .firstOrNull { it in visibleIds }
+                        ?: item.category
+                } else {
+                    item.category
+                }
+            }
 
             displayCategories
-                .associateWith { regrouped[it.id].orEmpty().toPersistentList() }
+                .associateWith { grouped[it.id].orEmpty().toPersistentList() }
                 .toPersistentMap()
         }
     }
@@ -1443,6 +1455,14 @@ class AnimeLibraryScreenModel(
         val hasActiveFilters: Boolean,
         val libraryLanguages: List<String>,
         val library: AnimeLibraryMap,
+    )
+
+    @Immutable
+    private data class BadgePreferences(
+        val downloadBadge: Boolean,
+        val unseenBadge: Boolean,
+        val localBadge: Boolean,
+        val languageBadge: Boolean,
     )
 
     @Immutable

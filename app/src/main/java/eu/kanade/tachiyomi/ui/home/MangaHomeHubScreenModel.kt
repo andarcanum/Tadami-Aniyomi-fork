@@ -14,6 +14,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
@@ -130,6 +131,9 @@ internal class MangaHomeHubScreenModel(
     @Volatile
     private var liveUpdatesStarted = false
 
+    @Volatile
+    private var fastCacheInitialized = false
+
     private var heroChapter: Chapter? = null
     private var originalHeroChapterId: Long? = null
 
@@ -147,8 +151,9 @@ internal class MangaHomeHubScreenModel(
         // PERF: Defer expensive DB work until after first frame
         initializeGreetingDeferred()
 
-        // Load hero episode if we had one in initial (re-load cache for this, cheap)
-        fastCache.load().hero?.let { hero ->
+        val cached = fastCache.load()
+        fastCacheInitialized = cached.isInitialized
+        cached.hero?.let { hero ->
             screenModelScope.launchIO {
                 loadHeroChapter(hero.entryId, hero.subId)
             }
@@ -156,22 +161,19 @@ internal class MangaHomeHubScreenModel(
 
         // Enabled (installed) manga sources for the Home source picker — mirrors Browse's logic
         screenModelScope.launchIO {
-            getEnabledMangaSources.subscribe().collectLatest { sources ->
-                mutableState.update {
-                    it.copy(
-                        availableSources = sources.distinctBy { it.id }.map { s ->
-                            HomeSourceItem(
-                                id = s.id,
-                                name = s.name,
-                                lang = s.lang,
-                                isLocal = s.id == tachiyomi.source.local.entries.manga.LocalMangaSource.ID,
-                                iconBitmap = mangaExtensionManager.getAppIconForSource(
-                                    s.id,
-                                )?.toBitmap()?.asImageBitmap(),
-                            )
-                        },
+            getEnabledMangaSources.subscribe().conflate().collectLatest { sources ->
+                val mappedSources = sources.distinctBy { it.id }.map { s ->
+                    HomeSourceItem(
+                        id = s.id,
+                        name = s.name,
+                        lang = s.lang,
+                        isLocal = s.id == tachiyomi.source.local.entries.manga.LocalMangaSource.ID,
+                        iconBitmap = mangaExtensionManager.getAppIconForSource(
+                            s.id,
+                        )?.toBitmap()?.asImageBitmap(),
                     )
                 }
+                mutableState.update { it.copy(availableSources = mappedSources) }
             }
         }
 
@@ -195,17 +197,21 @@ internal class MangaHomeHubScreenModel(
                 getLibraryManga.subscribe(),
             ) { name, avatar, categories, historyList, mangaList ->
                 LiveData(name, avatar, categories, historyList, mangaList)
-            }.collectLatest { data ->
+            }.conflate().collectLatest { data ->
                 val hiddenCategoryIds = hiddenHomeHubCategoryIds(
                     categories = data.categories,
                     isHiddenFromHomeHub = { it.hiddenFromHomeHub },
                     idSelector = { it.id },
                 )
-                val mangaCategoryIdsByMangaId = homeHubCategoryIdsByEntryId(
-                    items = data.mangaList,
-                    entryIdSelector = { it.manga.id },
-                    categoryIdSelector = { it.category },
-                )
+                val mangaCategoryIdsByMangaId = if (hiddenCategoryIds.isEmpty()) {
+                    emptyMap()
+                } else {
+                    homeHubCategoryIdsByEntryId(
+                        items = data.mangaList,
+                        entryIdSelector = { it.manga.id },
+                        categoryIdSelector = { it.category },
+                    )
+                }
 
                 val filteredHistory = filterHomeHubEntriesBy(
                     items = data.historyList,
@@ -236,9 +242,11 @@ internal class MangaHomeHubScreenModel(
                             (state.value.showWelcome.not() && state.value.isLoading.not())
                         )
 
-                val mangaRecommendations = filteredManga
-                    .sortedByDescending { it.manga.dateAdded }
-                    .take(10)
+                val mangaRecommendations = takeTopKDescendingByLong(
+                    items = filteredManga,
+                    limit = 10,
+                    keySelector = { it.manga.dateAdded },
+                )
 
                 val previousHero = state.value.hero
                 val previousHeroChapterId = originalHeroChapterId
@@ -292,7 +300,8 @@ internal class MangaHomeHubScreenModel(
                     )
                 }
 
-                if (hasData && !fastCache.load().isInitialized) {
+                if (hasData && !fastCacheInitialized) {
+                    fastCacheInitialized = true
                     fastCache.markInitialized()
                 }
 
@@ -332,14 +341,7 @@ internal class MangaHomeHubScreenModel(
 
     fun saveCache() {
         val currentState = state.value
-        prefetchHomeHubCovers(
-            buildList {
-                add(currentState.hero?.coverData)
-                currentState.history.forEach { add(it.coverData) }
-                currentState.recommendations.forEach { add(it.coverData) }
-            },
-        )
-        fastCache.save(
+        val changed = fastCache.save(
             CachedHomeState(
                 hero = currentState.hero?.let { hero ->
                     CachedHeroItem(
@@ -383,6 +385,15 @@ internal class MangaHomeHubScreenModel(
                 currentState.showFilteredEmpty || (currentState.showWelcome.not() && currentState.isLoading.not()),
             ),
         )
+        if (changed) {
+            prefetchHomeHubCovers(
+                buildList {
+                    add(currentState.hero?.coverData)
+                    currentState.history.forEach { add(it.coverData) }
+                    currentState.recommendations.forEach { add(it.coverData) }
+                },
+            )
+        }
     }
 
     fun getLastUsedMangaSourceId(): Long = sourcePreferences.lastUsedMangaSource().get()

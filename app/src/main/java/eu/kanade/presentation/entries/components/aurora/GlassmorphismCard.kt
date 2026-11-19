@@ -25,6 +25,7 @@ import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.rememberLiveBackdropBlurEnabled
 
 @Composable
 fun GlassmorphismCard(
@@ -38,16 +39,16 @@ fun GlassmorphismCard(
     content: @Composable () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val shape = RoundedCornerShape(cornerRadius)
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
+    val liveBlurEnabled = rememberLiveBackdropBlurEnabled(isEInkMode = colors.isEInk)
     // Live backdrop blur must sit INSIDE the clip and UNDER the frost gradient: applied via the
     // incoming modifier it would cover the card's outer padding and leak as a hard-edged rect.
     // Frost recipe mirrors the title-screen hero panel (AuroraHeroComponents): transparent base,
     // faint white tint, 20dp blur, no noise; dark keeps a weaker tint to avoid milky washout.
-    val haze = hazeState?.takeIf { !colors.isEInk }
-    val hazeModifier = if (haze != null) {
-        Modifier.hazeBlur(
-            input = HazeInput.Sources(haze),
-            style = HazeBlurStyle {
+    val haze = hazeState?.takeIf { liveBlurEnabled }
+    val hazeStyle = if (haze != null) {
+        remember(colors.isDark) {
+            HazeBlurStyle {
                 backgroundColor(Color.Transparent)
                 colorEffects(
                     listOf(
@@ -58,7 +59,15 @@ fun GlassmorphismCard(
                 )
                 blurRadius(20.dp)
                 noiseFactor(0f)
-            },
+            }
+        }
+    } else {
+        null
+    }
+    val hazeModifier = if (haze != null && hazeStyle != null) {
+        Modifier.hazeBlur(
+            input = HazeInput.Sources(haze),
+            style = hazeStyle,
         )
     } else {
         Modifier

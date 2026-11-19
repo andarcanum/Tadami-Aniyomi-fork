@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -28,6 +29,7 @@ import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.rememberLiveBackdropBlurEnabled
 
 @Composable
 fun AuroraCompactEntryRowCard(
@@ -43,19 +45,20 @@ fun AuroraCompactEntryRowCard(
     onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(cornerRadius)
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     val overlayColor = when {
         selected -> colors.accent.copy(alpha = 0.14f)
         highlighted -> colors.accent.copy(alpha = 0.055f)
         else -> Color.Transparent
     }
 
-    // Frost family of the title-screen hero panel: live blur under a translucent surface.
-    val haze = hazeState?.takeIf { !colors.isEInk }
-    val hazeModifier = if (haze != null) {
-        Modifier.hazeBlur(
-            input = HazeInput.Sources(haze),
-            style = HazeBlurStyle {
+    // Frost family of the title-screen hero panel: live blur under a translucent surface
+    // on capable devices; lightweight gradient fallback on API < 31 / low-RAM / battery saver.
+    val liveBlurEnabled = rememberLiveBackdropBlurEnabled(isEInkMode = colors.isEInk)
+    val haze = hazeState?.takeIf { liveBlurEnabled }
+    val hazeStyle = if (haze != null) {
+        remember(colors.isDark) {
+            HazeBlurStyle {
                 backgroundColor(Color.Transparent)
                 colorEffects(
                     listOf(
@@ -66,7 +69,15 @@ fun AuroraCompactEntryRowCard(
                 )
                 blurRadius(20.dp)
                 noiseFactor(0f)
-            },
+            }
+        }
+    } else {
+        null
+    }
+    val hazeModifier = if (haze != null && hazeStyle != null) {
+        Modifier.hazeBlur(
+            input = HazeInput.Sources(haze),
+            style = hazeStyle,
         )
     } else {
         Modifier
@@ -89,24 +100,44 @@ fun AuroraCompactEntryRowCard(
                         cornerRadius = cornerRadius,
                     )
             } else {
+                val darkFrostBrush = remember {
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.12f),
+                            Color.White.copy(alpha = 0.08f),
+                        ),
+                    )
+                }
+                val darkRimBrush = remember(colors) { auroraMenuRimLightBrush(colors) }
                 Modifier
                     .clip(shape)
                     .then(hazeModifier)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.12f),
-                                Color.White.copy(alpha = 0.08f),
-                            ),
-                        ),
-                    )
+                    .background(brush = darkFrostBrush)
                     .border(
                         width = 1.dp,
-                        brush = auroraMenuRimLightBrush(colors),
+                        brush = darkRimBrush,
                         shape = shape,
                     )
             }
         } else if (!colors.isDark && !colors.isEInk) {
+            val lightBackgroundBrush = remember {
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.78f),
+                        Color.White.copy(alpha = 0.68f),
+                        Color.White.copy(alpha = 0.60f),
+                    ),
+                )
+            }
+            val lightBorderBrush = remember {
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.75f),
+                        Color.White.copy(alpha = 0.28f),
+                        Color.White.copy(alpha = 0.12f),
+                    ),
+                )
+            }
             Modifier
                 .drawBehind {
                     val radius = cornerRadius.toPx()
@@ -136,37 +167,28 @@ fun AuroraCompactEntryRowCard(
                 }
                 .clip(shape)
                 .background(
-                    brush = Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.78f),
-                            Color.White.copy(alpha = 0.68f),
-                            Color.White.copy(alpha = 0.60f),
-                        ),
-                    ),
+                    brush = lightBackgroundBrush,
                     shape = shape,
                 )
                 .border(
                     width = 1.dp,
-                    brush = Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.75f),
-                            Color.White.copy(alpha = 0.28f),
-                            Color.White.copy(alpha = 0.12f),
-                        ),
-                    ),
+                    brush = lightBorderBrush,
                     shape = shape,
                 )
         } else {
-            val bgColors = resolveAuroraDetailCardBackgroundColors(colors)
-            val borderColors = resolveAuroraDetailCardBorderColors(colors)
-            val borderBrush = if (colors.isDark) {
-                auroraMenuRimLightBrush(colors)
-            } else {
-                Brush.linearGradient(colors = borderColors)
+            val bgBrush = remember(colors) {
+                Brush.linearGradient(colors = resolveAuroraDetailCardBackgroundColors(colors))
+            }
+            val borderBrush = remember(colors) {
+                if (colors.isDark) {
+                    auroraMenuRimLightBrush(colors)
+                } else {
+                    Brush.linearGradient(colors = resolveAuroraDetailCardBorderColors(colors))
+                }
             }
             Modifier
                 .clip(shape)
-                .background(brush = Brush.linearGradient(colors = bgColors))
+                .background(brush = bgBrush)
                 .border(
                     width = 1.dp,
                     brush = borderBrush,

@@ -4,11 +4,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.core.util.insertSeparators
+import eu.kanade.tachiyomi.ui.library.leadingDebounce
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.track.anime.interactor.AddAnimeTracks
 import eu.kanade.presentation.history.anime.AnimeHistoryUiModel
-import eu.kanade.tachiyomi.util.lang.toLocalDate
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -75,16 +75,18 @@ class AnimeHistoryScreenModel(
     private val dialogState = MutableStateFlow<Dialog?>(null)
 
     val state: StateFlow<State> = combine(
-        _query.flatMapLatest { query ->
-            getHistory.subscribe(query ?: "")
-                .distinctUntilChanged()
-                .catch { error ->
-                    logcat(LogPriority.ERROR, error)
-                    _events.send(Event.InternalError)
-                }
-                .map { it.toAnimeHistoryUiModels() }
-                .flowOn(Dispatchers.IO)
-        },
+        _query
+            .leadingDebounce(SEARCH_DEBOUNCE_MILLIS)
+            .flatMapLatest { query ->
+                getHistory.subscribe(query ?: "")
+                    .distinctUntilChanged()
+                    .catch { error ->
+                        logcat(LogPriority.ERROR, error)
+                        _events.send(Event.InternalError)
+                    }
+                    .map { it.toAnimeHistoryUiModels() }
+                    .flowOn(Dispatchers.IO)
+            },
         dialogState,
         searchQueryState,
     ) { list, dialog, searchQuery ->
@@ -102,16 +104,12 @@ class AnimeHistoryScreenModel(
     }
 
     private fun List<AnimeHistoryWithRelations>.toAnimeHistoryUiModels(): List<AnimeHistoryUiModel> {
-        return map { AnimeHistoryUiModel.Item(it) }
-            .insertSeparators { before, after ->
-                val beforeDate = before?.item?.seenAt?.time?.toLocalDate()
-                val afterDate = after?.item?.seenAt?.time?.toLocalDate()
-                when {
-                    beforeDate != afterDate && afterDate != null -> AnimeHistoryUiModel.Header(afterDate)
-                    // Return null to avoid adding a separator between two items.
-                    else -> null
-                }
-            }
+        return buildDateGroupedUiModels(
+            items = this,
+            timestampMillis = { it.seenAt?.time },
+            header = AnimeHistoryUiModel::Header,
+            item = AnimeHistoryUiModel::Item,
+        )
     }
 
     suspend fun getNextEpisode(): Episode? {
@@ -273,3 +271,5 @@ class AnimeHistoryScreenModel(
         data object HistoryCleared : Event
     }
 }
+
+private const val SEARCH_DEBOUNCE_MILLIS = 200L

@@ -70,9 +70,8 @@ class AnimeSourcesScreenModel(
                 }
         }
         sourcePreferences.verticalPinnedLayout().changes()
-            .onEach {
-                mutableState.update { state -> state.copy(verticalPinnedLayout = it) }
-                updateState()
+            .onEach { vertical ->
+                updateState { state -> state.copy(verticalPinnedLayout = vertical) }
             }
             .launchIn(screenModelScope)
         uiPreferences.showReelsVideoFeed().changes()
@@ -82,31 +81,33 @@ class AnimeSourcesScreenModel(
             .launchIn(screenModelScope)
     }
 
-    private fun updateState() {
+    private fun updateState(transform: (State) -> State = { it }) {
         // BRA-9/BRM-10: compute INSIDE mutableState.update from one rawSources snapshot (the
         // cross-thread read/compute/write was last-writer-wins on stale inputs - manga etalon).
         val sources = rawSources
-        mutableState.update { current ->
+        val showReels = uiPreferences.showReelsVideoFeed().get()
+        mutableState.update { previous ->
+            val current = transform(previous)
             val query = current.searchQuery
+            val isQueryBlank = query.isBlank()
             val collapsed = current.collapsedLanguages
             val verticalLayout = current.verticalPinnedLayout
-            val showReels = uiPreferences.showReelsVideoFeed().get()
 
             // 1. Separate Pinned (only if no search query AND not vertical layout)
             val (pinned, others) = when {
-                query.isBlank() && !verticalLayout -> {
-                    val pinnedList = sources.filter { !it.isFeedSource && Pin.Actual in it.pin }
-                    val othersList = sources.filter { it.isFeedSource || Pin.Actual !in it.pin }
-                    Pair(pinnedList, othersList)
-                }
+                isQueryBlank && !verticalLayout -> sources.partition { !it.isFeedSource && Pin.Actual in it.pin }
                 else -> Pair(emptyList(), sources)
             }
 
             // 2. Filter by query and reels preference
-            val filtered = others.filter { source ->
-                if (source.isFeedSource && !showReels) return@filter false
-                query.isBlank() || source.name.contains(query, ignoreCase = true) ||
-                    source.lang.contains(query, ignoreCase = true)
+            val filtered = if (isQueryBlank && showReels) {
+                others
+            } else {
+                others.filter { source ->
+                    if (source.isFeedSource && !showReels) return@filter false
+                    isQueryBlank || source.name.contains(query, ignoreCase = true) ||
+                        source.lang.contains(query, ignoreCase = true)
+                }
             }
 
             // 3. Group by Lang
@@ -126,19 +127,22 @@ class AnimeSourcesScreenModel(
             val byLang = filtered.groupByTo(map) {
                 when {
                     it.isFeedSource -> REELS_KEY
-                    verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
+                    verticalLayout && isQueryBlank && Pin.Actual in it.pin -> PINNED_KEY
                     it.isUsedLast -> LAST_USED_KEY
                     else -> it.lang
                 }
             }
 
             // 4. Flatten to UI Models, respecting collapsed state
-            val uiItems = byLang.flatMap { (lang, langSources) ->
-                if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
-                    listOf(AnimeSourceUiModel.Header(lang, isCollapsed = true))
-                } else {
-                    listOf(AnimeSourceUiModel.Header(lang, isCollapsed = false)) +
-                        langSources.map { AnimeSourceUiModel.Item(it) }
+            val uiItems = buildList(filtered.size + byLang.size) {
+                for ((lang, langSources) in byLang) {
+                    val isCollapsed = lang in collapsed && isQueryBlank && lang != PINNED_KEY
+                    add(AnimeSourceUiModel.Header(lang, isCollapsed = isCollapsed))
+                    if (!isCollapsed) {
+                        for (source in langSources) {
+                            add(AnimeSourceUiModel.Item(source))
+                        }
+                    }
                 }
             }
 
@@ -151,12 +155,11 @@ class AnimeSourcesScreenModel(
     }
 
     fun search(query: String) {
-        mutableState.update { it.copy(searchQuery = query) }
-        updateState()
+        updateState { it.copy(searchQuery = query) }
     }
 
     fun toggleLanguage(language: String) {
-        mutableState.update { state ->
+        updateState { state ->
             val newCollapsed = if (language in state.collapsedLanguages) {
                 state.collapsedLanguages - language
             } else {
@@ -164,7 +167,6 @@ class AnimeSourcesScreenModel(
             }
             state.copy(collapsedLanguages = newCollapsed.toImmutableSet())
         }
-        updateState()
     }
 
     fun toggleSource(source: AnimeSource) {

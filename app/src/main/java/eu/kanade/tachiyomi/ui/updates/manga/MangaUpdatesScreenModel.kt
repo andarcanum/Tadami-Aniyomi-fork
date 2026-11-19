@@ -8,7 +8,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
-import eu.kanade.core.util.insertSeparators
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.updates.manga.MangaUpdatesUiModel
@@ -16,7 +16,6 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
-import eu.kanade.tachiyomi.util.lang.toLocalDate
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentListOf
@@ -26,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -79,15 +79,17 @@ class MangaUpdatesScreenModel(
                 downloadCache.changes,
                 downloadManager.queueState,
             ) { updates, _, _ -> updates }
+                .conflate()
                 .catch {
                     logcat(LogPriority.ERROR, it)
                     _events.send(Event.InternalError)
                 }
                 .collectLatest { updates ->
+                    val items = updates.toUpdateItems()
                     mutableState.update {
                         it.copy(
                             isLoading = false,
-                            items = updates.toUpdateItems(),
+                            items = items,
                         )
                     }
                 }
@@ -101,10 +103,11 @@ class MangaUpdatesScreenModel(
     }
 
     private fun List<MangaUpdatesWithRelations>.toUpdateItems(): PersistentList<MangaUpdatesItem> {
+        val queuedByChapterId = downloadManager.queueState.value.associateBy { it.chapter.id }
         return this
             .filter { !it.read }
             .map { update ->
-                val activeDownload = downloadManager.getQueuedDownloadOrNull(update.chapterId)
+                val activeDownload = queuedByChapterId[update.chapterId]
                 val downloaded = downloadManager.isChapterDownloaded(
                     update.chapterName,
                     update.scanlator,
@@ -144,10 +147,9 @@ class MangaUpdatesScreenModel(
      */
     private fun updateDownloadState(download: MangaDownload) {
         mutableState.update { state ->
+            val modifiedIndex = state.items.indexOfFirst { it.update.chapterId == download.chapter.id }
+            if (modifiedIndex < 0) return@update state
             val newItems = state.items.mutate { list ->
-                val modifiedIndex = list.indexOfFirst { it.update.chapterId == download.chapter.id }
-                if (modifiedIndex < 0) return@mutate
-
                 val item = list[modifiedIndex]
                 list[modifiedIndex] = item.copy(
                     downloadStateProvider = { download.status },
@@ -373,19 +375,16 @@ class MangaUpdatesScreenModel(
         val selected = items.filter { it.selected }
         val selectionMode = selected.isNotEmpty()
 
-        fun getUiModel(): List<MangaUpdatesUiModel> {
-            return items
-                .map { MangaUpdatesUiModel.Item(it) }
-                .insertSeparators { before, after ->
-                    val beforeDate = before?.item?.update?.dateFetch?.toLocalDate()
-                    val afterDate = after?.item?.update?.dateFetch?.toLocalDate()
-                    when {
-                        beforeDate != afterDate && afterDate != null -> MangaUpdatesUiModel.Header(afterDate)
-                        // Return null to avoid adding a separator between two items.
-                        else -> null
-                    }
-                }
+        private val cachedUiModel: List<MangaUpdatesUiModel> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            buildDateGroupedUiModels(
+                items = items,
+                timestampMillis = { it.update.dateFetch },
+                header = MangaUpdatesUiModel::Header,
+                item = MangaUpdatesUiModel::Item,
+            )
         }
+
+        fun getUiModel(): List<MangaUpdatesUiModel> = cachedUiModel
     }
 
     sealed interface Dialog {

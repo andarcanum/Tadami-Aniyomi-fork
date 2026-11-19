@@ -17,8 +17,10 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.collectLatest
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.domain.achievement.model.AchievementEvent
@@ -59,6 +62,7 @@ abstract class AnimeSearchScreenModel(
         // "at most 5 parallel searches" semantics without owning threads (codebase precedent:
         // App.kt, NovelChapterImagePrefetcher, DiscordPresenceManager).
         private val searchDispatcher = Dispatchers.IO.limitedParallelism(5)
+        private const val SOURCE_SEARCH_TIMEOUT_MS = 30_000L
     }
 
     private val enabledLanguages = sourcePreferences.enabledLanguages().get()
@@ -70,11 +74,15 @@ abstract class AnimeSearchScreenModel(
 
     protected var extensionFilter: String? = null
 
-    private val sortComparator = { map: Map<AnimeCatalogueSource, AnimeSearchItemResult> ->
-        compareBy<AnimeCatalogueSource>(
+    @Volatile
+    private var sourceOrder: Map<Long, Int> = emptyMap()
+
+    private fun sortComparator(map: Map<AnimeCatalogueSource, AnimeSearchItemResult>): Comparator<AnimeCatalogueSource> {
+        val order = sourceOrder
+        return compareBy<AnimeCatalogueSource>(
             { (map[it] as? AnimeSearchItemResult.Success)?.isEmpty ?: true },
-            { "${it.id}" !in pinnedSources },
-            { "${it.name.lowercase()} (${it.lang})" },
+            { order[it.id] ?: Int.MAX_VALUE },
+            { it.id },
         )
     }
 
@@ -98,7 +106,7 @@ abstract class AnimeSearchScreenModel(
 
     @Composable
     fun getAnime(initialAnime: Anime): androidx.compose.runtime.State<Anime> {
-        return produceState(initialValue = initialAnime) {
+        return produceState(initialValue = initialAnime, key1 = initialAnime.id) {
             getAnime.subscribe(initialAnime.url, initialAnime.source)
                 .filterNotNull()
                 .collectLatest { anime ->
@@ -173,6 +181,9 @@ abstract class AnimeSearchScreenModel(
         achievementHandler.trackFeatureUsed(AchievementEvent.Feature.SEARCH)
 
         val sources = getSelectedSources()
+        sourceOrder = HashMap<Long, Int>(sources.size).apply {
+            sources.forEachIndexed { index, source -> put(source.id, index) }
+        }
 
         // Reuse previous results if possible
         if (sameQuery) {
@@ -202,16 +213,24 @@ abstract class AnimeSearchScreenModel(
                     }
                     try {
                         val page = withContext(searchDispatcher) {
-                            source.getSearchAnime(1, query, source.getFilterList())
+                            withTimeout(SOURCE_SEARCH_TIMEOUT_MS) {
+                                source.getSearchAnime(1, query, source.getFilterList())
+                            }
                         }
 
-                        val titles = page.animes.map {
-                            networkToLocalAnime.await(it.toDomainAnime(source.id))
-                        }
+                        val titles = networkToLocalAnime.await(
+                            page.animes.map { it.toDomainAnime(source.id) },
+                        )
 
                         if (isActive) {
                             updateItem(source, AnimeSearchItemResult.Success(titles))
                         }
+                    } catch (e: TimeoutCancellationException) {
+                        if (isActive) {
+                            updateItem(source, AnimeSearchItemResult.Error(e))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         if (isActive) {
                             updateItem(source, AnimeSearchItemResult.Error(e))

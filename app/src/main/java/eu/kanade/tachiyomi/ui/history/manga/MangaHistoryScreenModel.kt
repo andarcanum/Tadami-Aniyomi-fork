@@ -4,11 +4,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.core.util.insertSeparators
+import eu.kanade.tachiyomi.ui.library.leadingDebounce
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.track.manga.interactor.AddMangaTracks
 import eu.kanade.presentation.history.manga.MangaHistoryUiModel
-import eu.kanade.tachiyomi.util.lang.toLocalDate
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -75,16 +75,18 @@ class MangaHistoryScreenModel(
     private val dialogState = MutableStateFlow<Dialog?>(null)
 
     val state: StateFlow<State> = combine(
-        _query.flatMapLatest { query ->
-            getHistory.subscribe(query ?: "")
-                .distinctUntilChanged()
-                .catch { error ->
-                    logcat(LogPriority.ERROR, error)
-                    _events.send(Event.InternalError)
-                }
-                .map { it.toHistoryUiModels() }
-                .flowOn(Dispatchers.IO)
-        },
+        _query
+            .leadingDebounce(SEARCH_DEBOUNCE_MILLIS)
+            .flatMapLatest { query ->
+                getHistory.subscribe(query ?: "")
+                    .distinctUntilChanged()
+                    .catch { error ->
+                        logcat(LogPriority.ERROR, error)
+                        _events.send(Event.InternalError)
+                    }
+                    .map { it.toHistoryUiModels() }
+                    .flowOn(Dispatchers.IO)
+            },
         dialogState,
         searchQueryState,
     ) { list, dialog, searchQuery ->
@@ -102,16 +104,12 @@ class MangaHistoryScreenModel(
     }
 
     private fun List<MangaHistoryWithRelations>.toHistoryUiModels(): List<MangaHistoryUiModel> {
-        return map { MangaHistoryUiModel.Item(it) }
-            .insertSeparators { before, after ->
-                val beforeDate = before?.item?.readAt?.time?.toLocalDate()
-                val afterDate = after?.item?.readAt?.time?.toLocalDate()
-                when {
-                    beforeDate != afterDate && afterDate != null -> MangaHistoryUiModel.Header(afterDate)
-                    // Return null to avoid adding a separator between two items.
-                    else -> null
-                }
-            }
+        return buildDateGroupedUiModels(
+            items = this,
+            timestampMillis = { it.readAt?.time },
+            header = MangaHistoryUiModel::Header,
+            item = MangaHistoryUiModel::Item,
+        )
     }
 
     suspend fun getNextChapter(): Chapter? {
@@ -278,3 +276,5 @@ class MangaHistoryScreenModel(
         data object HistoryCleared : Event
     }
 }
+
+private const val SEARCH_DEBOUNCE_MILLIS = 200L

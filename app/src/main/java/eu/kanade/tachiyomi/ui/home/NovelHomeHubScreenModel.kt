@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
@@ -143,6 +144,9 @@ internal class NovelHomeHubScreenModel(
     @Volatile
     private var liveUpdatesStarted = false
 
+    @Volatile
+    private var fastCacheInitialized = false
+
     private var lastResolvedHeroChapterId: Long? = null
     private var originalHeroChapterId: Long? = null
 
@@ -162,6 +166,7 @@ internal class NovelHomeHubScreenModel(
         discoveryController.startObserving()
 
         val cached = fastCache.load()
+        fastCacheInitialized = cached.isInitialized
         val hadCache = !cached.isEmpty || cached.isInitialized
 
         if (hadCache) {
@@ -245,20 +250,17 @@ internal class NovelHomeHubScreenModel(
 
         // Enabled (installed) novel sources for the Home source picker — mirrors Browse's logic
         screenModelScope.launchIO {
-            getEnabledNovelSources.subscribe().collectLatest { sources ->
-                mutableState.update {
-                    it.copy(
-                        availableSources = sources.distinctBy { it.id }.map { s ->
-                            HomeSourceItem(
-                                id = s.id,
-                                name = s.name,
-                                lang = s.lang,
-                                isLocal = s.id == tachiyomi.source.local.entries.novel.LocalNovelSource.ID,
-                                iconUrl = novelExtensionManager.getPluginIconUrlForSource(s.id),
-                            )
-                        },
+            getEnabledNovelSources.subscribe().conflate().collectLatest { sources ->
+                val mappedSources = sources.distinctBy { it.id }.map { s ->
+                    HomeSourceItem(
+                        id = s.id,
+                        name = s.name,
+                        lang = s.lang,
+                        isLocal = s.id == tachiyomi.source.local.entries.novel.LocalNovelSource.ID,
+                        iconUrl = novelExtensionManager.getPluginIconUrlForSource(s.id),
                     )
                 }
+                mutableState.update { it.copy(availableSources = mappedSources) }
             }
         }
     }
@@ -290,18 +292,22 @@ internal class NovelHomeHubScreenModel(
                 getLibraryNovel.subscribe(),
             ) { name, avatar, categories, historyList, novelList ->
                 LiveData(name, avatar, categories, historyList, novelList)
-            }.collectLatest { data ->
+            }.conflate().collectLatest { data ->
                 try {
                     val hiddenCategoryIds = hiddenHomeHubCategoryIds(
                         categories = data.categories,
                         isHiddenFromHomeHub = { it.hiddenFromHomeHub },
                         idSelector = { it.id },
                     )
-                    val novelCategoryIdsByNovelId = homeHubCategoryIdsByEntryId(
-                        items = data.novelList,
-                        entryIdSelector = { it.novel.id },
-                        categoryIdSelector = { it.category },
-                    )
+                    val novelCategoryIdsByNovelId = if (hiddenCategoryIds.isEmpty()) {
+                        emptyMap()
+                    } else {
+                        homeHubCategoryIdsByEntryId(
+                            items = data.novelList,
+                            entryIdSelector = { it.novel.id },
+                            categoryIdSelector = { it.category },
+                        )
+                    }
 
                     val categoryFilteredHistory = filterHomeHubEntriesBy(
                         items = data.historyList,
@@ -341,9 +347,11 @@ internal class NovelHomeHubScreenModel(
                                 (state.value.showWelcome.not() && state.value.isLoading.not())
                             )
 
-                    val novelRecommendations = filteredNovel
-                        .sortedByDescending { it.novel.dateAdded }
-                        .take(10)
+                    val novelRecommendations = takeTopKDescendingByLong(
+                        items = filteredNovel,
+                        limit = 10,
+                        keySelector = { it.novel.dateAdded },
+                    )
 
                     val previousHero = state.value.hero
                     val previousHeroChapterId = originalHeroChapterId
@@ -397,7 +405,8 @@ internal class NovelHomeHubScreenModel(
                         )
                     }
 
-                    if (hasData && !fastCache.load().isInitialized) {
+                    if (hasData && !fastCacheInitialized) {
+                        fastCacheInitialized = true
                         fastCache.markInitialized()
                     }
 
@@ -437,14 +446,7 @@ internal class NovelHomeHubScreenModel(
 
     fun saveCache() {
         val currentState = state.value
-        prefetchHomeHubCovers(
-            buildList {
-                add(currentState.hero?.coverData)
-                currentState.history.forEach { add(it.coverData) }
-                currentState.recommendations.forEach { add(it.coverData) }
-            },
-        )
-        fastCache.save(
+        val changed = fastCache.save(
             CachedHomeState(
                 hero = currentState.hero?.let { hero ->
                     CachedHeroItem(
@@ -488,6 +490,15 @@ internal class NovelHomeHubScreenModel(
                 currentState.showFilteredEmpty || (currentState.showWelcome.not() && currentState.isLoading.not()),
             ),
         )
+        if (changed) {
+            prefetchHomeHubCovers(
+                buildList {
+                    add(currentState.hero?.coverData)
+                    currentState.history.forEach { add(it.coverData) }
+                    currentState.recommendations.forEach { add(it.coverData) }
+                },
+            )
+        }
     }
 
     fun getLastUsedNovelSourceId(): Long = sourcePreferences.lastUsedNovelSource().get()

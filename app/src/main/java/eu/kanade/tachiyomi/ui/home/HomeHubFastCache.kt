@@ -55,8 +55,8 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
         return state
     }
 
-    fun save(state: CachedHomeState) {
-        if (memoryCache == state) return
+    fun save(state: CachedHomeState): Boolean {
+        if (memoryCache == state) return false
 
         memoryCache = state
 
@@ -70,6 +70,7 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
             putBoolean(KEY_INITIALIZED, state.isInitialized)
             apply()
         }
+        return true
     }
 
     fun markInitialized() {

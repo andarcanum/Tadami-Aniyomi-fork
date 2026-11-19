@@ -85,34 +85,39 @@ class MangaSourcesScreenModel(
             .launchIn(screenModelScope)
         // SY <--
         sourcePreferences.verticalPinnedLayout().changes()
-            .onEach {
-                mutableState.update { state -> state.copy(verticalPinnedLayout = it) }
-                updateState()
+            .onEach { vertical ->
+                updateState { state -> state.copy(verticalPinnedLayout = vertical) }
             }
             .launchIn(screenModelScope)
     }
 
-    private fun updateState() {
+    private fun updateState(transform: (State) -> State = { it }) {
         // BRA-9/BRM-10: compute INSIDE mutableState.update from one rawSources snapshot. The
         // old read-state/compute/write-state sequence raced across threads (IO collectLatest vs
         // main search/toggle/prefs triggers): last-writer-wins on stale inputs could freeze the
         // rendered list until the next event.
         val sources = rawSources
-        mutableState.update { current ->
+        mutableState.update { previous ->
+            val current = transform(previous)
             val query = current.searchQuery
+            val isQueryBlank = query.isBlank()
             val collapsed = current.collapsedLanguages
             val verticalLayout = current.verticalPinnedLayout
 
             // 1. Separate Pinned (only if no search query AND not vertical layout)
             val (pinned, others) = when {
-                query.isBlank() && !verticalLayout -> sources.partition { Pin.Actual in it.pin }
+                isQueryBlank && !verticalLayout -> sources.partition { Pin.Actual in it.pin }
                 else -> Pair(emptyList(), sources)
             }
 
             // 2. Filter by query
-            val filtered = others.filter {
-                query.isBlank() || it.name.contains(query, ignoreCase = true) ||
-                    it.lang.contains(query, ignoreCase = true)
+            val filtered = if (isQueryBlank) {
+                others
+            } else {
+                others.filter {
+                    it.name.contains(query, ignoreCase = true) ||
+                        it.lang.contains(query, ignoreCase = true)
+                }
             }
 
             // 3. Group by Lang
@@ -129,19 +134,22 @@ class MangaSourcesScreenModel(
             }
             val byLang = filtered.groupByTo(map) {
                 when {
-                    verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
+                    verticalLayout && isQueryBlank && Pin.Actual in it.pin -> PINNED_KEY
                     it.isUsedLast -> LAST_USED_KEY
                     else -> it.lang
                 }
             }
 
             // 4. Flatten to UI Models, respecting collapsed state
-            val uiItems = byLang.flatMap { (lang, langSources) ->
-                if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
-                    listOf(MangaSourceUiModel.Header(lang, isCollapsed = true))
-                } else {
-                    listOf(MangaSourceUiModel.Header(lang, isCollapsed = false)) +
-                        langSources.map { MangaSourceUiModel.Item(it) }
+            val uiItems = buildList(filtered.size + byLang.size) {
+                for ((lang, langSources) in byLang) {
+                    val isCollapsed = lang in collapsed && isQueryBlank && lang != PINNED_KEY
+                    add(MangaSourceUiModel.Header(lang, isCollapsed = isCollapsed))
+                    if (!isCollapsed) {
+                        for (source in langSources) {
+                            add(MangaSourceUiModel.Item(source))
+                        }
+                    }
                 }
             }
 
@@ -154,12 +162,11 @@ class MangaSourcesScreenModel(
     }
 
     fun search(query: String) {
-        mutableState.update { it.copy(searchQuery = query) }
-        updateState()
+        updateState { it.copy(searchQuery = query) }
     }
 
     fun toggleLanguage(language: String) {
-        mutableState.update { state ->
+        updateState { state ->
             val newCollapsed = if (language in state.collapsedLanguages) {
                 state.collapsedLanguages - language
             } else {
@@ -167,7 +174,6 @@ class MangaSourcesScreenModel(
             }
             state.copy(collapsedLanguages = newCollapsed.toImmutableSet())
         }
-        updateState()
     }
 
     fun toggleSource(source: Source) {

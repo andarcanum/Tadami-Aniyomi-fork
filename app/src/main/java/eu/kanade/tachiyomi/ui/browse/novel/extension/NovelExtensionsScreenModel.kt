@@ -26,8 +26,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import eu.kanade.tachiyomi.ui.browse.ExtensionSearchFilter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
@@ -119,7 +121,7 @@ class NovelExtensionsScreenModel(
                 val variantsMap = input.available.groupBy { it.id }
                 allPluginVariants.value = variantsMap
                 val repoCounts = variantsMap.mapValues { (_, plugins) ->
-                    plugins.map { it.repoUrl }.distinct().size
+                    ExtensionSearchFilter.distinctRepoCount(plugins) { it.repoUrl }
                 }
                 val available = variantsMap.mapNotNull { (_, plugins) ->
                     plugins.maxWithOrNull(NOVEL_AVAILABLE_COMPARATOR)
@@ -144,7 +146,10 @@ class NovelExtensionsScreenModel(
                 val updateIds = updateStatesById
                     .filterValues { it.hasAnyUpdate }
                     .keys
-                val installedIds = (input.installed.map { it.id } + input.untrusted.map { it.id }).toSet()
+                val installedIds = HashSet<String>(input.installed.size + input.untrusted.size).apply {
+                    input.installed.forEach { add(it.id) }
+                    input.untrusted.forEach { add(it.id) }
+                }
                 val matches: (NovelPlugin) -> Boolean = { plugin ->
                     if (searchQuery.isEmpty()) {
                         true
@@ -229,6 +234,7 @@ class NovelExtensionsScreenModel(
 
                 Triple(items, updateIds.size, availableSorted.keys.toList())
             }
+                .conflate()
                 .collectLatest { (items, updatesCount, availableLanguages) ->
                     sourcePreferences.novelExtensionUpdatesCount().set(updatesCount)
                     mutableState.update { state ->

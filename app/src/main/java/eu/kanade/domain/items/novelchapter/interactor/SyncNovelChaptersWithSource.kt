@@ -56,8 +56,11 @@ class SyncNovelChaptersWithSource(
             .mapIndexed { i, sChapter ->
                 NovelChapter.create()
                     .copyFromSNovelChapter(sChapter)
-                    .copy(name = with(ChapterSanitizer) { sChapter.name.sanitize(novel.title) })
-                    .copy(novelId = novel.id, sourceOrder = sourceOrderOffset + i.toLong())
+                    .copy(
+                        name = with(ChapterSanitizer) { sChapter.name.sanitize(novel.title) },
+                        novelId = novel.id,
+                        sourceOrder = sourceOrderOffset + i.toLong(),
+                    )
             }
 
         val dbChapters = novelChapterRepository.getChapterByNovelId(novel.id)
@@ -133,11 +136,19 @@ class SyncNovelChaptersWithSource(
             deletedChapterNumbers.add(chapter.chapterNumber)
         }
 
-        val removedChaptersSortedDesc = removedChapters.sortedByDescending { it.dateFetch }
-        val deletedChapterNumberDateFetchMap = removedChaptersSortedDesc.associate { it.chapterNumber to it.dateFetch }
-        val deletedChapterNumberLastPageReadMap = removedChaptersSortedDesc.associate {
-            it.chapterNumber to
-                it.lastPageRead
+        val deletedChapterNumberDateFetchMap: Map<Double, Long>
+        val deletedChapterNumberLastPageReadMap: Map<Double, Long>
+        if (removedChapters.isEmpty()) {
+            deletedChapterNumberDateFetchMap = emptyMap()
+            deletedChapterNumberLastPageReadMap = emptyMap()
+        } else {
+            val removedChaptersSortedDesc = removedChapters.sortedByDescending { it.dateFetch }
+            deletedChapterNumberDateFetchMap = removedChaptersSortedDesc.associate {
+                it.chapterNumber to it.dateFetch
+            }
+            deletedChapterNumberLastPageReadMap = removedChaptersSortedDesc.associate {
+                it.chapterNumber to it.lastPageRead
+            }
         }
 
         val markDuplicateAsRead = libraryPreferences.markDuplicateReadChapterAsRead().get()

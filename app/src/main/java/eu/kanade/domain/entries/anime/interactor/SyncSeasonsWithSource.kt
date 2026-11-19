@@ -34,22 +34,21 @@ class SyncSeasonsWithSource(
 
         val now = ZonedDateTime.now()
 
-        val sourceSeasons = rawSourceSeasons
+        val uniqueDomainSeasons = rawSourceSeasons
             .distinctBy { it.url }
-            .mapIndexed { i, sAnime ->
-                networkToLocalAnime.await(sAnime.toDomainAnime(source.id))
-                    .copy(parentId = anime.id, seasonSourceOrder = i.toLong())
+            .map { it.toDomainAnime(source.id) }
+        val sourceSeasons = networkToLocalAnime.await(uniqueDomainSeasons)
+            .mapIndexed { i, localSeason ->
+                localSeason.copy(parentId = anime.id, seasonSourceOrder = i.toLong())
             }
 
         val dbSeasons = getAnimeSeasonsByParentId.await(anime.id)
 
         val newSeasons = mutableListOf<Anime>()
         val updatedSeasons = mutableListOf<Anime>()
-        val removedSeasons = dbSeasons.filterNot { dbSeasons ->
-            sourceSeasons.any { sourceSeason ->
-                dbSeasons.anime.url == sourceSeason.url
-            }
-        }
+        val sourceUrls = sourceSeasons.mapTo(HashSet(sourceSeasons.size)) { it.url }
+        val removedSeasons = dbSeasons.filterNot { it.anime.url in sourceUrls }
+        val dbSeasonsByUrl = dbSeasons.associateBy { it.anime.url }
 
         for (sourceSeason in sourceSeasons) {
             var season = sourceSeason
@@ -62,7 +61,7 @@ class SyncSeasonsWithSource(
             )
             season = season.copy(seasonNumber = seasonNumber)
 
-            val dbSeason = dbSeasons.find { it.anime.url == season.url }?.anime
+            val dbSeason = dbSeasonsByUrl[season.url]?.anime
             if (dbSeason == null) {
                 newSeasons.add(season)
             } else {
