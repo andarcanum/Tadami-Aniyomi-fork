@@ -235,6 +235,7 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
     val dualPageSplitPaged by screenModel.preferences.dualPageSplitPaged().collectAsStateWithLifecycle()
     val dualPageRotateToFit by screenModel.preferences.dualPageRotateToFit().collectAsStateWithLifecycle()
     val zoomLockEnabled by screenModel.preferences.zoomLockEnabled().collectAsStateWithLifecycle()
+    val guidedPanelMode by screenModel.preferences.guidedPanelMode().collectAsStateWithLifecycle()
     val dualPageSmartGutter by screenModel.preferences.dualPageSmartGutter().collectAsStateWithLifecycle()
     AuroraGlassSection(title = stringResource(MR.strings.pager_viewer)) {
         AuroraToggleRow(
@@ -245,11 +246,28 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
             label = stringResource(MR.strings.pref_zoom_dual_taps),
             pref = screenModel.preferences.enablePinchToZoom(),
         )
+        val doubleTapZoomPercent by screenModel.preferences.doubleTapZoomScalePercent().collectAsStateWithLifecycle()
+        AuroraFieldLabel(stringResource(AYMR.strings.pref_double_tap_zoom_scale))
+        AuroraChipFlow {
+            listOf(150, 200, 250, 300).forEach { percent ->
+                AuroraChip(
+                    selected = doubleTapZoomPercent == percent,
+                    onClick = { screenModel.preferences.doubleTapZoomScalePercent().set(percent) },
+                    label = "${percent / 100}.${(percent % 100) / 10}x",
+                )
+            }
+        }
         AuroraToggleRow(
             label = stringResource(AYMR.strings.pref_zoom_lock),
             subtitle = stringResource(AYMR.strings.pref_zoom_lock_summary),
             checked = zoomLockEnabled,
             onClick = { screenModel.preferences.zoomLockEnabled().set(!zoomLockEnabled) },
+        )
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_guided_panel_mode),
+            subtitle = stringResource(AYMR.strings.pref_guided_panel_mode_summary),
+            checked = guidedPanelMode,
+            onClick = { screenModel.preferences.guidedPanelMode().set(!guidedPanelMode) },
         )
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_landscape_zoom),

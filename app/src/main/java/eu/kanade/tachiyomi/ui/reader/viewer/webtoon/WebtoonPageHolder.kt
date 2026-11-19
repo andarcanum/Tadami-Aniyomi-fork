@@ -17,9 +17,11 @@ import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder
 import com.davemorrissey.labs.subscaleview.decoder.SplitMergeRegionDecoder
 import com.tadami.aurora.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ProcessedPageImage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScaleUtil
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -464,6 +466,15 @@ class WebtoonPageHolder(
                                 precomputedSmartFitBounds = prepared.smartFitBounds,
                                 regionDecoderFactory = prepared.regionDecoderFactory,
                                 hardwareTilesEnabled = viewer.config.hardwareTilesEnabled,
+                                previewKey = if (prepared.regionDecoderFactory == null && currentPage !is InsertPage) {
+                                    ReaderPreviewCache.key(
+                                        chapterId = currentPage.chapter.chapter.id,
+                                        pageIndex = currentPage.index,
+                                        cropBorders = viewer.config.imageCropBorders,
+                                    )
+                                } else {
+                                    null
+                                },
                             ),
                         )
                     }

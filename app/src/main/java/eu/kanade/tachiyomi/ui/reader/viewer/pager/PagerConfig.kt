@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerConfig
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
+import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.AutoScrollControlLogic
 import eu.kanade.tachiyomi.ui.reader.viewer.navigation.DisabledNavigation
 import eu.kanade.tachiyomi.ui.reader.viewer.navigation.EdgeNavigation
 import eu.kanade.tachiyomi.ui.reader.viewer.navigation.GridNavigation
@@ -62,6 +63,10 @@ class PagerConfig(
         private set
 
     var hardwareTilesEnabled = true
+        private set
+    var doubleTapZoomScale = 2f
+        private set
+    var guidedPanelMode = false
         private set
 
     init {
@@ -161,6 +166,18 @@ class PagerConfig(
 
         readerPreferences.hardwareTilesEnabled()
             .register({ hardwareTilesEnabled = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.doubleTapZoomScalePercent()
+            .register(
+                { doubleTapZoomScale = AutoScrollControlLogic.doubleTapZoomMultiplier(it) },
+                { imagePropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.guidedPanelMode()
+            .register(
+                { guidedPanelMode = it },
+                { imagePropertyChangedListener?.invoke() },
+            )
     }
 
     private fun zoomTypeFromPreference(value: Int) {

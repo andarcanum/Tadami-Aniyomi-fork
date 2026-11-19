@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.appbars
 
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -135,6 +136,8 @@ fun ReaderAppBars(
     navigatorHeight: ReaderPreferences.NavigatorHeight = ReaderPreferences.NavigatorHeight.NORMAL,
     navigatorCornerRadius: Int = 24,
     navigatorShowTickMarks: Boolean = false,
+    navigatorShowScrubPreview: Boolean = true,
+    loadScrubPreview: (suspend (pageIndex: Int) -> Bitmap?)? = null,
 
     // Auto-scroll options
     autoScrollEnabled: Boolean = false,
@@ -371,6 +374,8 @@ fun ReaderAppBars(
                             cornerRadius = navigatorCornerRadius,
                             showTickMarks = navigatorShowTickMarks,
                             isVertical = false,
+                            showScrubPreview = navigatorShowScrubPreview,
+                            loadScrubPreview = loadScrubPreview,
                         )
                     }
                     BottomReaderBar(
@@ -427,6 +432,9 @@ fun ReaderAppBars(
                         cornerRadius = navigatorCornerRadius,
                         showTickMarks = navigatorShowTickMarks,
                         isVertical = true,
+                        showScrubPreview = navigatorShowScrubPreview,
+                        isLeftAligned = isLeft,
+                        loadScrubPreview = loadScrubPreview,
                     )
                 }
             }

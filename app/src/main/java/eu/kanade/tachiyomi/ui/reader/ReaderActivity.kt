@@ -16,6 +16,7 @@ import android.graphics.Paint
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -87,6 +88,7 @@ import eu.kanade.presentation.reader.ReadingModeSelectDialog
 import eu.kanade.presentation.reader.appbars.BottomBarButtonFlags
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.components.AutoScrollActionFab
+import eu.kanade.presentation.reader.components.ReaderProgressHairline
 import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialOverlay
 import eu.kanade.presentation.reader.manga.ReaderFinaleOverlay
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
@@ -109,6 +111,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScrubPreviewLoader
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
@@ -143,6 +146,7 @@ import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.util.AppHapticsProvider
+import tachiyomi.presentation.core.util.HapticFeedbackMode
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -390,6 +394,7 @@ class ReaderActivity : BaseActivity() {
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(false)
         super.onDestroy()
         eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.clear()
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache.clear()
         viewModel.state.value.viewer?.destroy()
         setWindowHdrEnabled(false)
         config = null
@@ -400,6 +405,7 @@ class ReaderActivity : BaseActivity() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         viewModel.state.value.viewer?.trimMemory(level)
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache.trimMemory(level)
     }
 
     internal fun setWindowHdrEnabled(enabled: Boolean) {
@@ -652,6 +658,21 @@ class ReaderActivity : BaseActivity() {
                     val navigatorShowTickMarks by readerPreferences
                         .navigatorShowTickMarks()
                         .collectAsStateWithLifecycle()
+                    val navigatorScrubPreview by readerPreferences
+                        .navigatorScrubPreview()
+                        .collectAsStateWithLifecycle()
+                    val showThinProgressBar by readerPreferences
+                        .showThinProgressBar()
+                        .collectAsStateWithLifecycle()
+                    val loadScrubPreview: suspend (Int) -> Bitmap? = remember(state.currentChapter, cropEnabled) {
+                        val pages = state.currentChapter?.pages
+                        { pageIndex ->
+                            ReaderScrubPreviewLoader.loadPreview(
+                                page = pages?.getOrNull(pageIndex),
+                                cropBorders = cropEnabled,
+                            )
+                        }
+                    }
 
                     // Bottom bar button visibility preferences
                     val showBottomBarReadingMode by readerPreferences
@@ -690,20 +711,31 @@ class ReaderActivity : BaseActivity() {
                     val pageActionLabelColor by pageActionLabelColorPref.collectAsStateWithLifecycle()
                     val bottomBarPosition by readerPreferences.bottomBarPosition().collectAsStateWithLifecycle()
 
-                    // Auto-scroll effect - start/stop based on state
-                    LaunchedEffect(state.autoScrollEnabled, state.autoScrollSpeed, state.viewer) {
-                        val viewer = state.viewer
-                        if (viewer != null && state.autoScrollEnabled) {
+                    // Auto-scroll effect - start/stop based on enabled state or viewer change
+                    LaunchedEffect(state.autoScrollEnabled, state.viewer) {
+                        val viewer = state.viewer ?: return@LaunchedEffect
+                        if (state.autoScrollEnabled) {
                             // Hide menu when auto-scroll starts
                             setMenuVisibility(false)
                             when (viewer) {
                                 is PagerViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
                                 is WebtoonViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
                             }
-                        } else if (viewer != null) {
+                        } else {
                             when (viewer) {
                                 is PagerViewer -> viewer.stopAutoScroll()
                                 is WebtoonViewer -> viewer.stopAutoScroll()
+                            }
+                        }
+                    }
+
+                    // Apply auto-scroll speed updates live without closing the menu or restarting
+                    LaunchedEffect(state.autoScrollSpeed, state.viewer) {
+                        val viewer = state.viewer ?: return@LaunchedEffect
+                        if (state.autoScrollEnabled) {
+                            when (viewer) {
+                                is PagerViewer -> viewer.setAutoScrollSpeed(state.autoScrollSpeed)
+                                is WebtoonViewer -> viewer.setAutoScrollSpeed(state.autoScrollSpeed)
                             }
                         }
                     }
@@ -796,6 +828,8 @@ class ReaderActivity : BaseActivity() {
                         navigatorHeight = navigatorHeight,
                         navigatorCornerRadius = navigatorCornerRadius,
                         navigatorShowTickMarks = navigatorShowTickMarks,
+                        navigatorShowScrubPreview = navigatorScrubPreview,
+                        loadScrubPreview = loadScrubPreview,
                     )
 
                     if (flashOnPageChange && eInkProfile.isEnabled) {
@@ -983,10 +1017,23 @@ class ReaderActivity : BaseActivity() {
                             setMenuVisibility(true)
                             viewModel.toggleAutoScrollExpand()
                         },
+                        speed = state.autoScrollSpeed,
+                        onSpeedChange = viewModel::setAutoScrollSpeed,
+                        isPagerMode = state.viewer is PagerViewer,
+                        dimWhenActive = true,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(16.dp),
                     )
+                    if (!state.menuVisible && showThinProgressBar) {
+                        ReaderProgressHairline(
+                            currentPage = state.currentPage,
+                            totalPages = state.totalPages,
+                            isRtl = state.viewer is R2LPagerViewer,
+                            sliderColor = navigatorSliderColor,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
                 }
             }
         }
@@ -1051,16 +1098,6 @@ class ReaderActivity : BaseActivity() {
             readerPreferences.cutoutShort().get(),
         )
 
-        // Touch cooldown: pause auto-scroll briefly on any touch in the active viewer.
-        newViewer.getView().setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                when (newViewer) {
-                    is PagerViewer -> newViewer.setAutoScrollCooldown(2000L)
-                    is WebtoonViewer -> newViewer.setAutoScrollCooldown(2000L)
-                }
-            }
-            false
-        }
         binding.viewerContainer.addView(newViewer.getView())
 
         if (readerPreferences.showReadingMode().get()) {
@@ -1174,12 +1211,25 @@ class ReaderActivity : BaseActivity() {
      * Tells the presenter to load the next chapter and mark it as active. The progress dialog
      * should be automatically shown.
      */
+    private fun performChapterBoundaryHaptic() {
+        if (isEInkMode()) return
+        if (!readerPreferences.chapterChangeHaptics().get()) return
+        if (uiPreferences.hapticFeedbackMode().get() != HapticFeedbackMode.FULL) return
+        val constant = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            HapticFeedbackConstants.CONFIRM
+        } else {
+            HapticFeedbackConstants.CLOCK_TICK
+        }
+        binding.root.performHapticFeedback(constant)
+    }
+
     private fun loadNextChapter() {
         lifecycleScope.launch {
             // WEBTOON-ARROWS (H2): re-anchor ONLY when the switch actually happened - the
             // unconditional moveToPageIndex(0) used to scroll the CURRENT chapter to its start
             // whenever the load silently no-op'd (no next chapter / swallowed error).
             if (viewModel.loadNextChapter()) {
+                performChapterBoundaryHaptic()
                 moveToPageIndex(0)
             }
         }
@@ -1193,6 +1243,7 @@ class ReaderActivity : BaseActivity() {
         lifecycleScope.launch {
             // WEBTOON-ARROWS (H2): see loadNextChapter.
             if (viewModel.loadPreviousChapter()) {
+                performChapterBoundaryHaptic()
                 moveToPageIndex(0)
             }
         }
@@ -1349,6 +1400,7 @@ class ReaderActivity : BaseActivity() {
         private fun getCombinedPaint(
             grayscale: Boolean,
             invertedColors: Boolean,
+            smartInvertColors: Boolean,
             whitePoint: Int,
             gammaContrast: Int,
             blackPoint: Int,
@@ -1378,11 +1430,8 @@ class ReaderActivity : BaseActivity() {
                         if (invertedColors) {
                             postConcat(
                                 ColorMatrix(
-                                    floatArrayOf(
-                                        -1f, 0f, 0f, 0f, 255f,
-                                        0f, -1f, 0f, 0f, 255f,
-                                        0f, 0f, -1f, 0f, 255f,
-                                        0f, 0f, 0f, 1f, 0f,
+                                    eu.kanade.tachiyomi.ui.reader.setting.ReaderVisualPreset.invertColorMatrixValues(
+                                        smartInvert = smartInvertColors && !grayscale,
                                     ),
                                 ),
                             )
@@ -1412,6 +1461,7 @@ class ReaderActivity : BaseActivity() {
             merge(
                 readerPreferences.grayscale().changes(),
                 readerPreferences.invertedColors().changes(),
+                readerPreferences.smartInvertColors().changes(),
                 readerPreferences.paperWhitePoint().changes(),
                 readerPreferences.paperGammaContrast().changes(),
                 readerPreferences.paperBlackPoint().changes(),
@@ -1564,8 +1614,9 @@ class ReaderActivity : BaseActivity() {
             val gammaContrast = if (useLegacyLevels) readerPreferences.paperGammaContrast().get() else 0
             val blackPoint = if (useLegacyLevels) readerPreferences.paperBlackPoint().get() else 0
             val hasLevels = whitePoint > 0 || blackPoint > 0 || gammaContrast != 0
+            val smartInvert = readerPreferences.smartInvertColors().get()
             val paint = if (grayscale || invertedColors || hasLevels) {
-                getCombinedPaint(grayscale, invertedColors, whitePoint, gammaContrast, blackPoint)
+                getCombinedPaint(grayscale, invertedColors, smartInvert, whitePoint, gammaContrast, blackPoint)
             } else {
                 null
             }

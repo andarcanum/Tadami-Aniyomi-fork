@@ -18,6 +18,9 @@ class L2RPagerViewer(activity: ReaderActivity) : PagerViewer(activity) {
  * Implementation of a right to left PagerViewer.
  */
 class R2LPagerViewer(activity: ReaderActivity) : PagerViewer(activity) {
+
+    override val isRtlReading: Boolean = true
+
     /**
      * Creates a new right to left pager.
      */

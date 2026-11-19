@@ -108,6 +108,13 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
             label = stringResource(MR.strings.pref_show_reading_time_left),
             pref = screenModel.preferences.showReadingTimeLeft(),
         )
+        val showThinProgressBar by screenModel.preferences.showThinProgressBar().collectAsState()
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_reader_thin_progress_bar),
+            subtitle = stringResource(AYMR.strings.pref_reader_thin_progress_bar_summary),
+            checked = showThinProgressBar,
+            onClick = { screenModel.preferences.showThinProgressBar().set(!showThinProgressBar) },
+        )
     }
 
     // Section: reading behavior.
@@ -121,6 +128,40 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
             label = stringResource(MR.strings.pref_read_with_long_tap),
             pref = screenModel.preferences.readWithLongTap(),
         )
+        val volumeKeysAdjustAutoScroll by screenModel.preferences.volumeKeysAdjustAutoScroll().collectAsState()
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_volume_keys_adjust_auto_scroll),
+            subtitle = stringResource(AYMR.strings.pref_volume_keys_adjust_auto_scroll_summary),
+            checked = volumeKeysAdjustAutoScroll,
+            onClick = {
+                screenModel.preferences.volumeKeysAdjustAutoScroll().set(!volumeKeysAdjustAutoScroll)
+            },
+        )
+        val chapterChangeHaptics by screenModel.preferences.chapterChangeHaptics().collectAsState()
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_chapter_change_haptics),
+            subtitle = stringResource(AYMR.strings.pref_chapter_change_haptics_summary),
+            checked = chapterChangeHaptics,
+            onClick = {
+                screenModel.preferences.chapterChangeHaptics().set(!chapterChangeHaptics)
+            },
+        )
+        val edgeTapGuardDp by screenModel.preferences.edgeTapGuardDp().collectAsState()
+        AuroraFieldLabel(stringResource(AYMR.strings.pref_edge_tap_guard))
+        AuroraChipFlow {
+            listOf(0, 12, 20, 28).forEach { dp ->
+                val chipLabel = if (dp == 0) {
+                    stringResource(AYMR.strings.pref_edge_tap_guard_off)
+                } else {
+                    "$dp dp"
+                }
+                AuroraChip(
+                    selected = edgeTapGuardDp == dp,
+                    onClick = { screenModel.preferences.edgeTapGuardDp().set(dp) },
+                    label = chipLabel,
+                )
+            }
+        }
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_always_show_chapter_transition),
             pref = screenModel.preferences.alwaysShowChapterTransition(),
@@ -158,10 +199,17 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
     }
 
     // Section: page slider / scrollbar — separate from toolbar (own studio panel).
+    val navigatorScrubPreview by screenModel.preferences.navigatorScrubPreview().collectAsState()
     AuroraGlassSection(title = stringResource(MR.strings.pref_navigator_settings)) {
         AuroraNavRow(
             label = stringResource(MR.strings.action_settings),
             onClick = { showNavigatorSettings = true },
+        )
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.pref_navigator_scrub_preview),
+            subtitle = stringResource(AYMR.strings.pref_navigator_scrub_preview_summary),
+            checked = navigatorScrubPreview,
+            onClick = { screenModel.preferences.navigatorScrubPreview().set(!navigatorScrubPreview) },
         )
     }
 

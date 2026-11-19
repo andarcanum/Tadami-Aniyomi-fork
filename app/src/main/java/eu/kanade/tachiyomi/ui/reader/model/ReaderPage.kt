@@ -21,12 +21,14 @@ open class ReaderPage(
      * the page's final rendered height from it before the image is decoded, so the item does not
      * resize under the reader's finger.
      */
+    @Volatile
     var imageDimensions: ImageUtil.ImageDimensions? = null
 
     /**
      * Whether the image is an animated format. Animated pages change height between frames, so
      * their holders keep the viewport-sized placeholder.
      */
+    @Volatile
     var isAnimatedImage: Boolean = false
 
     /**

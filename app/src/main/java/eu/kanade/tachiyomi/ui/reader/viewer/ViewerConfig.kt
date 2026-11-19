@@ -38,6 +38,8 @@ abstract class ViewerConfig(
     var doubleTapAnimDuration = 500
     var volumeKeysEnabled = false
     var volumeKeysInverted = false
+    var volumeKeysAdjustAutoScroll = true
+    var edgeTapGuardDp = 0
     var alwaysShowChapterTransition = true
     var preloadNextChapter = true
     var navigationMode = 0
@@ -93,6 +95,10 @@ abstract class ViewerConfig(
 
         readerPreferences.readWithVolumeKeysInverted()
             .register({ volumeKeysInverted = it })
+        readerPreferences.volumeKeysAdjustAutoScroll()
+            .register({ volumeKeysAdjustAutoScroll = it })
+        readerPreferences.edgeTapGuardDp()
+            .register({ edgeTapGuardDp = it })
 
         readerPreferences.alwaysShowChapterTransition()
             .register({ alwaysShowChapterTransition = it }, { transitionPropertyChangedListener?.invoke() })

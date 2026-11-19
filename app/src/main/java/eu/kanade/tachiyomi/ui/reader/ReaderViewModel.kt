@@ -49,6 +49,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import eu.kanade.tachiyomi.ui.reader.setting.isLikelyWebtoonFromPageDimensions
 import eu.kanade.tachiyomi.ui.reader.setting.recommendReadingModeForMangaFormat
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPagePrewarmer
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import eu.kanade.tachiyomi.util.chapter.filterDownloadedChapters
@@ -187,6 +188,14 @@ class ReaderViewModel @JvmOverloads constructor(
     fun noteSessionPageRatio(ratio: Float) {
         sessionPageRatios.note(ratio)
     }
+
+    private val pagePrewarmer = ReaderPagePrewarmer(
+        scope = viewModelScope,
+        onDimensionsSniffed = { page, ratio ->
+            page.chapter.notePageRatio(ratio)
+            noteSessionPageRatio(ratio)
+        },
+    )
     private var foregroundIncognitoJob: Job? = null
 
     /**
@@ -404,6 +413,7 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     override fun onCleared() {
+        pagePrewarmer.cancel()
         foregroundIncognitoJob?.cancel()
         ForegroundIncognitoState.set(this, false)
         webtoonProgressSaveJob?.cancel()
@@ -760,6 +770,7 @@ class ReaderViewModel @JvmOverloads constructor(
             return
         }
         reloadSentForChapterId = chapter.chapter.id
+        pagePrewarmer.prewarmChapterLead(chapter.pages, isCropBordersEnabled())
         eventChannel.trySend(Event.ReloadViewerChapters)
     }
 
@@ -812,7 +823,23 @@ class ReaderViewModel @JvmOverloads constructor(
             downloadNextChapters(selectedChapter.chapter.id)
         }
 
+        val nextChapterPages = state.value.viewerChapters?.nextChapter?.pages
+        pagePrewarmer.prewarmAround(
+            currentPage = page,
+            currentPages = pages,
+            nextChapterPages = nextChapterPages,
+            cropBorders = isCropBordersEnabled(),
+        )
+
         eventChannel.trySend(Event.PageChanged)
+    }
+
+    private fun isCropBordersEnabled(): Boolean {
+        return if (ReadingMode.isPagerType(getMangaReadingMode())) {
+            readerPreferences.cropBorders().get()
+        } else {
+            readerPreferences.cropBordersWebtoon().get()
+        }
     }
 
     private fun downloadNextChapters(triggerChapterId: Long?) {

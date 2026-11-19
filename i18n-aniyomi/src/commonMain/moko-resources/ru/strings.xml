@@ -3197,6 +3197,14 @@
     <string name="aurora_reader_preview_title">Превью фильтров</string>
     <string name="aurora_reader_preview_hint">Пример панели — фильтры сразу видны здесь</string>
     <string name="aurora_reader_processing">Обработка изображения</string>
+    <string name="aurora_reader_visual_presets">Быстрые визуальные пресеты</string>
+    <string name="aurora_reader_preset_original">Оригинал</string>
+    <string name="aurora_reader_preset_crisp_scan">Чёткий скан</string>
+    <string name="aurora_reader_preset_warm_paper">Тёплая бумага</string>
+    <string name="aurora_reader_preset_oled_night">OLED ночь</string>
+    <string name="aurora_reader_preset_aged_scan">Старый скан</string>
+    <string name="pref_smart_invert_colors">Умная инверсия (сохранять оттенки)</string>
+    <string name="pref_smart_invert_colors_summary">Инвертирует Ч/Б страницы, но сохраняет естественные цвета на обложках и цветных панелях</string>
     <string name="aurora_reader_levels_title">Уровни и выбеливание бумаги</string>
     <string name="pref_paper_white_point">Выбеливание бумаги (Точка белого)</string>
     <string name="pref_paper_gamma_contrast">Контраст / Гамма полутонов</string>
@@ -3728,5 +3736,21 @@
     <string name="ai_translation_target_short">Перевод</string>
     <string name="ai_translation_open_full_settings">Все настройки AI-переводчика</string>
     <string name="ai_translation_open_full_settings_summary">Профили, подключения, ключи и общие лимиты</string>
+
+    <string name="pref_edge_tap_guard">Защита краёв от случайных касаний</string>
+    <string name="pref_edge_tap_guard_off">Выкл</string>
+    <string name="pref_volume_keys_adjust_auto_scroll">Кнопки громкости меняют скорость автоскролла</string>
+    <string name="pref_volume_keys_adjust_auto_scroll_summary">Изменять скорость вверх/вниз при активном автоскролле</string>
+    <string name="pref_chapter_change_haptics">Тактильный отклик при смене главы</string>
+    <string name="pref_chapter_change_haptics_summary">Мягкая вибрация при переходе между главами</string>
+    <string name="pref_double_tap_zoom_scale">Масштаб двойного касания</string>
+    <string name="reader_auto_scroll_slower">Замедлить автоскролл</string>
+    <string name="reader_auto_scroll_faster">Ускорить автоскролл</string>
+    <string name="pref_guided_panel_mode">Покадровый режим (Guided Panels)</string>
+    <string name="pref_guided_panel_mode_summary">Плавный фокус и переход по фреймам в порядке чтения манги</string>
+    <string name="pref_reader_thin_progress_bar">Тонкая полоса прогресса внизу</string>
+    <string name="pref_reader_thin_progress_bar_summary">Едва заметная линия прогресса главы по нижнему краю при скрытом меню</string>
+    <string name="pref_navigator_scrub_preview">Превью страниц при перемотке ползунка</string>
+    <string name="pref_navigator_scrub_preview_summary">Всплывающая миниатюра страницы при перетаскивании навигатора главы</string>
 </resources>
 

@@ -42,6 +42,11 @@ class WebtoonFrame(context: Context) : FrameLayout(context) {
     var enablePinchToZoom = true
 
     /**
+     * Invoked on every ACTION_DOWN before child views can consume the touch event.
+     */
+    var onTouchDownListener: (() -> Unit)? = null
+
+    /**
      * Recycler view added in this frame.
      */
     private val recycler: WebtoonRecyclerView?
@@ -57,6 +62,9 @@ class WebtoonFrame(context: Context) : FrameLayout(context) {
      * Dispatches a touch event to the detectors.
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            onTouchDownListener?.invoke()
+        }
         if (enablePinchToZoom) {
             scaleDetector.onTouchEvent(ev)
         }

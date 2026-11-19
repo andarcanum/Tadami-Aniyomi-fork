@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
+import android.app.ActivityManager
 import android.graphics.PointF
 import android.os.SystemClock
 import android.view.KeyEvent
@@ -8,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.core.app.ActivityCompat
+import androidx.core.content.getSystemService
 import androidx.core.view.OneShotPreDrawListener
 import androidx.core.view.doOnLayout
 import androidx.core.view.doOnPreDraw
@@ -27,9 +29,11 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.resolveWebtoonRestoreOffsetPx
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderEdgeGuard
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
+import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.AutoScrollControlLogic
 import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.WebtoonAutoScrollManager
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -156,7 +160,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
             .threshold
 
     init {
-        recycler.setItemViewCacheSize(RECYCLER_VIEW_CACHE_SIZE)
+        recycler.setItemViewCacheSize(resolveItemViewCacheSize())
         recycler.isVisible = false // Don't let the recycler layout yet
         recycler.layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
         recycler.isFocusable = false
@@ -267,9 +271,26 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                 }
             },
         )
-        recycler.tapListener = { event ->
+        recycler.tapListener = tap@{ event ->
             val viewPosition = IntArray(2)
             recycler.getLocationOnScreen(viewPosition)
+            val guardPx = ReaderEdgeGuard.computeGuardPx(
+                guardDp = config.edgeTapGuardDp,
+                density = recycler.resources.displayMetrics.density,
+            )
+            if (
+                ReaderEdgeGuard.isInDeadZone(
+                    rawX = event.rawX,
+                    rawY = event.rawY,
+                    viewLeft = viewPosition[0],
+                    viewTop = viewPosition[1],
+                    viewWidth = recycler.width,
+                    viewHeight = recycler.originalHeight,
+                    guardPx = guardPx,
+                )
+            ) {
+                return@tap
+            }
             // rawX/rawY are screen coordinates: subtracting the on-screen position already gives
             // view-relative points. The old "+ locationInWindow" term double-counted the window
             // offset whenever the recycler was not flush with the window origin.
@@ -350,6 +371,10 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         // "pause" instead of start.
         autoScrollManager.onReachedEnd = {
             activity.viewModel.pauseAutoScroll()
+        }
+
+        frame.onTouchDownListener = {
+            setAutoScrollCooldown(2000L)
         }
 
         frame.layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
@@ -896,16 +921,47 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
     override fun handleKeyEvent(event: KeyEvent): Boolean {
         val isUp = event.action == KeyEvent.ACTION_UP
 
+        val readerState = activity.viewModel.state.value
+        val canNudgeAutoScroll = config.volumeKeysAdjustAutoScroll &&
+            readerState.autoScrollEnabled &&
+            !readerState.menuVisible
+
         when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (!config.volumeKeysEnabled || activity.viewModel.state.value.menuVisible) {
+                if (canNudgeAutoScroll) {
+                    if (isUp) {
+                        val delta = if (config.volumeKeysInverted) {
+                            AutoScrollControlLogic.DEFAULT_STEP
+                        } else {
+                            -AutoScrollControlLogic.DEFAULT_STEP
+                        }
+                        activity.viewModel.setAutoScrollSpeed(
+                            AutoScrollControlLogic.stepSpeed(readerState.autoScrollSpeed, delta),
+                        )
+                    }
+                    return true
+                }
+                if (!config.volumeKeysEnabled || readerState.menuVisible) {
                     return false
                 } else if (isUp) {
                     if (!config.volumeKeysInverted) scrollDown() else scrollUp()
                 }
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                if (!config.volumeKeysEnabled || activity.viewModel.state.value.menuVisible) {
+                if (canNudgeAutoScroll) {
+                    if (isUp) {
+                        val delta = if (config.volumeKeysInverted) {
+                            -AutoScrollControlLogic.DEFAULT_STEP
+                        } else {
+                            AutoScrollControlLogic.DEFAULT_STEP
+                        }
+                        activity.viewModel.setAutoScrollSpeed(
+                            AutoScrollControlLogic.stepSpeed(readerState.autoScrollSpeed, delta),
+                        )
+                    }
+                    return true
+                }
+                if (!config.volumeKeysEnabled || readerState.menuVisible) {
                     return false
                 } else if (isUp) {
                     if (!config.volumeKeysInverted) scrollUp() else scrollDown()
@@ -948,10 +1004,24 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         val endInclusive = min(position + 3, adapter.itemCount - 1)
         adapter.notifyItemRangeChanged(start, max(0, endInclusive - start + 1))
     }
+
+    private fun resolveItemViewCacheSize(): Int {
+        val activityManager = activity.getSystemService<ActivityManager>()
+        if (activityManager?.isLowRamDevice == true) {
+            return RECYCLER_VIEW_CACHE_SIZE_LOW_RAM
+        }
+        val memoryClassMb = activityManager?.memoryClass ?: 256
+        return when {
+            memoryClassMb <= 128 -> RECYCLER_VIEW_CACHE_SIZE_LOW_RAM
+            memoryClassMb <= 256 -> RECYCLER_VIEW_CACHE_SIZE_DEFAULT
+            else -> RECYCLER_VIEW_CACHE_SIZE_HIGH_RAM
+        }
+    }
 }
 
-// Double the cache size to reduce rebinds/recycles incurred by the extra layout space on scroll direction changes
-private const val RECYCLER_VIEW_CACHE_SIZE = 4
+private const val RECYCLER_VIEW_CACHE_SIZE_LOW_RAM = 3
+private const val RECYCLER_VIEW_CACHE_SIZE_DEFAULT = 4
+private const val RECYCLER_VIEW_CACHE_SIZE_HIGH_RAM = 6
 
 private data class PendingRelativeRestore(
     var adapterPosition: Int,

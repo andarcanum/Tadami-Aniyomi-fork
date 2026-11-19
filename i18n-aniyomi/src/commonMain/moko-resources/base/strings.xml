@@ -3203,6 +3203,14 @@
     <string name="aurora_reader_preview_title">Filter preview</string>
     <string name="aurora_reader_preview_hint">Sample panel — filters update this preview instantly</string>
     <string name="aurora_reader_processing">Image processing</string>
+    <string name="aurora_reader_visual_presets">Quick visual presets</string>
+    <string name="aurora_reader_preset_original">Original</string>
+    <string name="aurora_reader_preset_crisp_scan">Crisp scan</string>
+    <string name="aurora_reader_preset_warm_paper">Warm paper</string>
+    <string name="aurora_reader_preset_oled_night">OLED night</string>
+    <string name="aurora_reader_preset_aged_scan">Aged scan</string>
+    <string name="pref_smart_invert_colors">Smart inversion (preserve hues)</string>
+    <string name="pref_smart_invert_colors_summary">Inverts B&amp;W pages cleanly while keeping natural colors on covers and color panels</string>
     <string name="aurora_reader_levels_title">Levels &amp; paper whitening</string>
     <string name="pref_paper_white_point">Paper whitening (White point)</string>
     <string name="pref_paper_gamma_contrast">Midtone contrast / Gamma</string>
@@ -3689,4 +3697,20 @@
     <string name="ai_translation_target_short">Target</string>
     <string name="ai_translation_open_full_settings">Full AI translator settings</string>
     <string name="ai_translation_open_full_settings_summary">Profiles, connections, API keys &amp; global limits</string>
+
+    <string name="pref_edge_tap_guard">Bezel edge-tap guard</string>
+    <string name="pref_edge_tap_guard_off">Off</string>
+    <string name="pref_volume_keys_adjust_auto_scroll">Volume keys adjust auto-scroll speed</string>
+    <string name="pref_volume_keys_adjust_auto_scroll_summary">Step speed up/down while auto-scroll is active</string>
+    <string name="pref_chapter_change_haptics">Chapter transition haptics</string>
+    <string name="pref_chapter_change_haptics_summary">Subtle vibration pulse when switching chapters</string>
+    <string name="pref_double_tap_zoom_scale">Double-tap zoom level</string>
+    <string name="reader_auto_scroll_slower">Slower auto-scroll</string>
+    <string name="reader_auto_scroll_faster">Faster auto-scroll</string>
+    <string name="pref_guided_panel_mode">Guided panel mode</string>
+    <string name="pref_guided_panel_mode_summary">Automatically focus and step frame-by-frame in manga reading order</string>
+    <string name="pref_reader_thin_progress_bar">Ambient reading progress bar</string>
+    <string name="pref_reader_thin_progress_bar_summary">Ultra-thin chapter progress hairline along the bottom edge while reading</string>
+    <string name="pref_navigator_scrub_preview">Live thumbnail preview on slider</string>
+    <string name="pref_navigator_scrub_preview_summary">Show a floating page thumbnail while scrubbing the chapter slider</string>
 </resources>

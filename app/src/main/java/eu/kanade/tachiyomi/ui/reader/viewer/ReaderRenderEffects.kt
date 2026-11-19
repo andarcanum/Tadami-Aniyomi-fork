@@ -71,55 +71,86 @@ internal object ReaderRenderEffects {
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private object Api33 {
+        // Contrast-Adaptive Luma Sharpening (CAS-inspired): sharpens scanned text & soft lineart
+        // while suppressing ringing halos on high-contrast panel borders and preserving chroma hues.
         private const val SHARPEN_SHADER = """
             uniform shader inputShader;
             uniform float sharpness;
 
             half4 main(float2 coords) {
                 half4 center = inputShader.eval(coords);
-                half4 left = inputShader.eval(coords + float2(-1.0, 0.0));
-                half4 right = inputShader.eval(coords + float2(1.0, 0.0));
-                half4 top = inputShader.eval(coords + float2(0.0, -1.0));
-                half4 bottom = inputShader.eval(coords + float2(0.0, 1.0));
+                half3 left = inputShader.eval(coords + float2(-1.0, 0.0)).rgb;
+                half3 right = inputShader.eval(coords + float2(1.0, 0.0)).rgb;
+                half3 top = inputShader.eval(coords + float2(0.0, -1.0)).rgb;
+                half3 bottom = inputShader.eval(coords + float2(0.0, 1.0)).rgb;
 
-                half4 sharp = center * 5.0 - (left + right + top + bottom);
-                return center + (sharp - center) * sharpness;
+                const half3 lumaW = half3(0.2126, 0.7152, 0.0722);
+                float lC = dot(center.rgb, lumaW);
+                float lL = dot(left, lumaW);
+                float lR = dot(right, lumaW);
+                float lT = dot(top, lumaW);
+                float lB = dot(bottom, lumaW);
+
+                float minL = min(lC, min(min(lL, lR), min(lT, lB)));
+                float maxL = max(lC, max(max(lL, lR), max(lT, lB)));
+                float contrast = maxL - minL;
+
+                float amp = sqrt(clamp(min(minL, 1.0 - maxL) / max(maxL, 0.001), 0.0, 1.0));
+                float edgeGate = smoothstep(0.02, 0.08, contrast);
+                float weight = -amp * edgeGate * (sharpness * 0.22);
+
+                float sharpenedL = (lC + (lL + lR + lT + lB) * weight) / (1.0 + 4.0 * weight);
+                float margin = 0.06 * sharpness;
+                float delta = clamp(sharpenedL, minL - margin, maxL + margin) - lC;
+                half3 outRgb = clamp(center.rgb + half3(delta), half3(0.0), half3(1.0));
+                return half4(outRgb, center.a);
             }
         """
 
+        // Edge-preserving Gaussian bilateral filter: removes JPEG mosquito noise and paper grain
+        // without smearing black manga ink outlines or introducing hard-threshold banding.
         private const val DENOISE_SHADER = """
             uniform shader inputShader;
             uniform float denoise;
 
             half4 main(float2 coords) {
-                half4 color = inputShader.eval(coords);
-                half4 sum = color;
-                float count = 1.0;
+                half4 center = inputShader.eval(coords);
+                float sigmaRange = mix(0.06, 0.18, denoise);
+                float invTwoSigmaR2 = 1.0 / (2.0 * sigmaRange * sigmaRange);
+                half3 sum = center.rgb;
+                float weightSum = 1.0;
 
                 for (int x = -1; x <= 1; x++) {
                     for (int y = -1; y <= 1; y++) {
                         if (x == 0 && y == 0) continue;
-                        half4 neighbor = inputShader.eval(coords + float2(x, y));
-                        if (distance(neighbor.rgb, color.rgb) < 0.15) {
-                            sum += neighbor;
-                            count += 1.0;
-                        }
+                        half3 neighbor = inputShader.eval(coords + float2(float(x), float(y))).rgb;
+                        half3 diff = neighbor - center.rgb;
+                        float dist2 = dot(diff, diff);
+                        float spatialW = (x == 0 || y == 0) ? 0.6065 : 0.3679;
+                        float rangeW = exp(-dist2 * invTwoSigmaR2);
+                        float w = spatialW * rangeW;
+                        sum += neighbor * w;
+                        weightSum += w;
                     }
                 }
-                half4 smoothColor = sum / count;
-                return color + (smoothColor - color) * denoise;
+                half3 smoothRgb = sum / weightSum;
+                return half4(mix(center.rgb, smoothRgb, denoise), center.a);
             }
         """
 
+        // Sauvola-inspired local adaptive thresholding with smoothstep anti-aliasing so diagonal
+        // ink strokes and small text stay crisp instead of breaking into 1-bit pixel staircases.
         private const val BINARIZATION_SHADER = """
             uniform shader inputShader;
             uniform float binarization;
 
             half4 main(float2 coords) {
                 half4 center = inputShader.eval(coords);
-                float centerLuma = (center.r + center.g + center.b) * 0.3333;
+                const half3 lumaW = half3(0.2126, 0.7152, 0.0722);
+                float centerLuma = dot(center.rgb, lumaW);
 
                 float sum = centerLuma;
+                float sumSq = centerLuma * centerLuma;
                 float minVal = centerLuma;
                 float maxVal = centerLuma;
 
@@ -134,20 +165,25 @@ internal object ReaderRenderEffects {
                 offsets[7] = float2( 2.0,  2.0);
 
                 for (int i = 0; i < 8; i++) {
-                    half4 col = inputShader.eval(coords + offsets[i]);
-                    float luma = (col.r + col.g + col.b) * 0.3333;
+                    half3 col = inputShader.eval(coords + offsets[i]).rgb;
+                    float luma = dot(col, lumaW);
                     sum += luma;
+                    sumSq += luma * luma;
                     minVal = min(minVal, luma);
                     maxVal = max(maxVal, luma);
                 }
 
-                float mean = sum * 0.1111;
+                float mean = sum * 0.111111;
+                float variance = max(0.0, sumSq * 0.111111 - mean * mean);
+                float stdDev = sqrt(variance);
                 float contrast = maxVal - minVal;
 
-                float binaryLuma = step(mean, centerLuma);
-                float lowContrastLuma = step(0.5, centerLuma);
-                float isLowContrast = step(contrast, 0.15);
-                float finalLuma = mix(binaryLuma, lowContrastLuma, isLowContrast);
+                float sauvolaT = mean * (1.0 + 0.18 * (stdDev / 0.5 - 1.0));
+                float aaWidth = mix(0.08, 0.03, binarization);
+                float adaptiveLuma = smoothstep(sauvolaT - aaWidth, sauvolaT + aaWidth, centerLuma);
+                float flatLuma = smoothstep(0.5 - aaWidth, 0.5 + aaWidth, centerLuma);
+                float flatWeight = 1.0 - smoothstep(0.08, 0.16, contrast);
+                float finalLuma = mix(adaptiveLuma, flatLuma, flatWeight);
 
                 float mixedLuma = mix(centerLuma, finalLuma, binarization);
                 return half4(mixedLuma, mixedLuma, mixedLuma, center.a);
@@ -179,6 +215,16 @@ internal object ReaderRenderEffects {
         ): RenderEffect? {
             var effect: RenderEffect? = null
 
+            // Pipeline order: Denoise -> Levels -> Sharpen -> Binarization.
+            // Denoising first cleans scan/JPEG grain before levels stretch contrast and before
+            // sharpening enhances line art (previously Sharpen ran before Denoise, amplifying
+            // noise and then blurring the sharpened edges).
+            if (denoiseVal > 0f) {
+                val denoiseShader = RuntimeShader(DENOISE_SHADER)
+                denoiseShader.setFloatUniform("denoise", denoiseVal)
+                effect = RenderEffect.createRuntimeShaderEffect(denoiseShader, "inputShader")
+            }
+
             if (whitePointVal > 0f || blackPointVal > 0f || gammaContrastVal != 0f) {
                 val levelsShader = RuntimeShader(LEVELS_SHADER)
                 val bp = (blackPointVal * 0.35f).coerceIn(0f, 0.40f)
@@ -188,7 +234,12 @@ internal object ReaderRenderEffects {
                 levelsShader.setFloatUniform("blackPoint", bp)
                 levelsShader.setFloatUniform("whitePoint", wp)
                 levelsShader.setFloatUniform("gammaExp", gammaExp)
-                effect = RenderEffect.createRuntimeShaderEffect(levelsShader, "inputShader")
+                val levelsEffect = RenderEffect.createRuntimeShaderEffect(levelsShader, "inputShader")
+                effect = if (effect != null) {
+                    RenderEffect.createChainEffect(levelsEffect, effect)
+                } else {
+                    levelsEffect
+                }
             }
 
             if (sharpeningVal > 0f) {
@@ -199,17 +250,6 @@ internal object ReaderRenderEffects {
                     RenderEffect.createChainEffect(sharpEffect, effect)
                 } else {
                     sharpEffect
-                }
-            }
-
-            if (denoiseVal > 0f) {
-                val denoiseShader = RuntimeShader(DENOISE_SHADER)
-                denoiseShader.setFloatUniform("denoise", denoiseVal)
-                val denoiseEffect = RenderEffect.createRuntimeShaderEffect(denoiseShader, "inputShader")
-                effect = if (effect != null) {
-                    RenderEffect.createChainEffect(denoiseEffect, effect)
-                } else {
-                    denoiseEffect
                 }
             }
 

@@ -298,29 +298,9 @@ object ImageUtil {
                 val sh = strip.height
                 if (sw <= 2 || sh <= 4) return center
 
-                var bestCol = sw / 2
-                var bestScore = Float.MAX_VALUE
-                val centerCol = sw / 2f
-                val halfSpan = (sw / 2f).coerceAtLeast(1f)
-
-                for (col in 0 until sw) {
-                    var sum = 0f
-                    var sumSq = 0f
-                    for (row in 0 until sh) {
-                        val px = strip.getPixel(col, row)
-                        val luma = (0.299f * Color.red(px) + 0.587f * Color.green(px) + 0.114f * Color.blue(px))
-                        sum += luma
-                        sumSq += luma * luma
-                    }
-                    val mean = sum / sh
-                    val variance = (sumSq / sh) - (mean * mean)
-                    val distPenalty = (abs(col - centerCol) / halfSpan) * 4f
-                    val score = variance + distPenalty
-                    if (score < bestScore) {
-                        bestScore = score
-                        bestCol = col
-                    }
-                }
+                val pixels = IntArray(sw * sh)
+                strip.getPixels(pixels, 0, sw, 0, 0, sw, sh)
+                val bestCol = findSmartSplitColumn(pixels, sw, sh) ?: return center
                 val mappedX = minX + ((bestCol.toLong() * bandWidth) / sw.coerceAtLeast(1)).toInt()
                 mappedX.coerceIn(minX, maxX)
             } finally {
@@ -329,6 +309,54 @@ object ImageUtil {
         } catch (_: Throwable) {
             center
         }
+    }
+
+    /**
+     * Finds the best gutter column within a sampled center band (`sw x sh`).
+     * Prefers low-variance white or black gutter strips over flat midtone screentone columns, and
+     * returns `null` when even the best column crosses busy full-bleed artwork (letting callers
+     * split cleanly at exact geometric center).
+     */
+    internal fun findSmartSplitColumn(pixels: IntArray, sw: Int, sh: Int): Int? {
+        if (sw <= 2 || sh <= 4 || pixels.size < sw * sh) return null
+
+        var bestCol = sw / 2
+        var bestScore = Float.MAX_VALUE
+        var bestVariance = Float.MAX_VALUE
+        val centerCol = sw / 2f
+        val halfSpan = (sw / 2f).coerceAtLeast(1f)
+
+        for (col in 0 until sw) {
+            var sum = 0f
+            var sumSq = 0f
+            var idx = col
+            for (row in 0 until sh) {
+                val px = pixels[idx]
+                idx += sw
+                val luma = 0.2126f * ((px ushr 16) and 0xFF) +
+                    0.7152f * ((px ushr 8) and 0xFF) +
+                    0.0722f * (px and 0xFF)
+                sum += luma
+                sumSq += luma * luma
+            }
+            val mean = sum / sh
+            val variance = (sumSq / sh - mean * mean).coerceAtLeast(0f)
+            val midtonePenalty = when {
+                mean >= 230f || mean <= 25f -> 0f
+                mean >= 200f || mean <= 50f -> 20f
+                else -> 120f
+            }
+            val distPenalty = (abs(col - centerCol) / halfSpan) * 4f
+            val score = variance + midtonePenalty + distPenalty
+            if (score < bestScore) {
+                bestScore = score
+                bestCol = col
+                bestVariance = variance
+            }
+        }
+        // Continuous full-bleed artwork across the center: snap cleanly to geometric 50/50 split.
+        if (bestVariance > 400f) return null
+        return bestCol
     }
 
     fun splitInHalfBitmap(

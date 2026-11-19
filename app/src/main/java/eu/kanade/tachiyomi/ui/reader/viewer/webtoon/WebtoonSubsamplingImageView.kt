@@ -12,20 +12,26 @@ open class WebtoonSubsamplingImageView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : SubsamplingScaleImageView(context, attrs) {
+    private val visibleViewport = RectF()
     private val localViewport = RectF()
     private val retainViewport = RectF()
     private var lastDisplayScale = 1f
 
     init {
         // Enable bounded previews before any image starts loading (also while not attached).
-        setExternalViewport(localViewport, retainViewport, lastDisplayScale)
+        setExternalViewport(visibleViewport, localViewport, retainViewport, lastDisplayScale)
     }
 
     fun updateViewport(prefetch: RectF, retain: RectF, displayScale: Float) {
+        updateViewport(prefetch, prefetch, retain, displayScale)
+    }
+
+    fun updateViewport(visible: RectF, prefetch: RectF, retain: RectF, displayScale: Float) {
+        visibleViewport.set(visible)
         localViewport.set(prefetch)
         retainViewport.set(retain)
         lastDisplayScale = displayScale
-        setExternalViewport(localViewport, retainViewport, displayScale)
+        setExternalViewport(visibleViewport, localViewport, retainViewport, displayScale)
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -36,10 +42,11 @@ open class WebtoonSubsamplingImageView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
-        // Clear prefetch so off-window mCachedViews holders stop requesting new loads while still
-        // preserving already-decoded detail tiles inside retainViewport across scroll reversals.
+        // Clear visible & prefetch so off-window mCachedViews holders stop requesting new loads
+        // while preserving already-decoded detail tiles inside retainViewport across scroll reversals.
+        visibleViewport.setEmpty()
         localViewport.setEmpty()
-        setExternalViewport(localViewport, retainViewport, lastDisplayScale)
+        setExternalViewport(visibleViewport, localViewport, retainViewport, lastDisplayScale)
         super.onDetachedFromWindow()
     }
 

@@ -67,6 +67,7 @@ class Decoder(
         var current = bitmap
         if (
             !hdr &&
+            !current.hasAlpha() &&
             SubsamplingScaleImageView.getPreferredBitmapConfig() == Bitmap.Config.RGB_565 &&
             current.config != Bitmap.Config.RGB_565 &&
             current.config != Bitmap.Config.HARDWARE
@@ -80,6 +81,9 @@ class Decoder(
                 current.recycle()
                 current = rgb565
             }
+        }
+        if (current.config != Bitmap.Config.HARDWARE) {
+            current.setHasMipMap(true)
         }
         if (
             !hardwareTilesEnabled ||
@@ -95,6 +99,7 @@ class Decoder(
             null
         }
         return if (hardware != null) {
+            runCatching { hardware.setHasMipMap(true) }
             current.recycle()
             hardware
         } else {

@@ -36,6 +36,8 @@ import com.davemorrissey.labs.subscaleview.provider.StreamInputProvider
 import com.github.chrisbanes.photoview.PhotoView
 import eu.kanade.tachiyomi.data.coil.AnimatedNativeDrawable
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerSubsamplingImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.MangaPanelDetector
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.PanelRect
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
@@ -322,6 +324,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
         view.dispose()
     }
 
+    private var decodePriorityBoost: Boolean = true
+
+    fun setDecodePriorityBoost(boost: Boolean) {
+        decodePriorityBoost = boost
+        (pageView as? SubsamplingScaleImageView)?.setDecodePriorityBoost(boost)
+    }
+
     fun trimMemory(level: Int) {
         (pageView as? SubsamplingScaleImageView)?.trimMemory(level)
     }
@@ -362,6 +371,50 @@ open class ReaderPageImageView @JvmOverloads constructor(
      */
     fun panRight() {
         pan { center, view -> center.also { it.x += view.width / view.scale } }
+    }
+
+    /**
+     * Smoothly animates the subsampling image viewport to frame [panel] in guided panel mode.
+     * Returns true if the animation was started.
+     */
+    fun animateToPanel(panel: PanelRect, durationMs: Int = 320): Boolean {
+        val view = pageView as? SubsamplingScaleImageView ?: return false
+        if (!view.isReady || view.width <= 0 || view.height <= 0) return false
+        val target = MangaPanelDetector.computeCameraTarget(
+            panel = panel,
+            sourceWidth = view.sWidth,
+            sourceHeight = view.sHeight,
+            viewWidth = view.width,
+            viewHeight = view.height,
+            minScale = view.minScale,
+            maxScale = view.maxScale,
+        ) ?: return false
+        val anim = view.animateScaleAndCenter(
+            target.scale,
+            PointF(target.centerX, target.centerY),
+        ) ?: return false
+        anim.withDuration(durationMs.getSystemScaledDuration().toLong())
+            .withEasing(EASE_IN_OUT_QUAD)
+            .withInterruptible(true)
+            .start()
+        return true
+    }
+
+    /**
+     * Smoothly returns the subsampling image viewport back to full-page overview.
+     */
+    fun resetToFullPage(durationMs: Int = 260): Boolean {
+        val view = pageView as? SubsamplingScaleImageView ?: return false
+        if (!view.isReady || view.sWidth <= 0 || view.sHeight <= 0) return false
+        val anim = view.animateScaleAndCenter(
+            view.minScale,
+            PointF(view.sWidth * 0.5f, view.sHeight * 0.5f),
+        ) ?: return false
+        anim.withDuration(durationMs.getSystemScaledDuration().toLong())
+            .withEasing(EASE_OUT_QUAD)
+            .withInterruptible(true)
+            .start()
+        return true
     }
 
     /**
@@ -418,7 +471,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val baseScale = if (this is PagerSubsamplingImageView && isSmartFitEnabled) minScale else scale
         // 5x zoom
         maxScale = baseScale * MAX_ZOOM_SCALE
-        setDoubleTapZoomScale(baseScale * 2)
+        val doubleTapMultiplier = config?.doubleTapZoomScale ?: 2f
+        setDoubleTapZoomScale((baseScale * doubleTapMultiplier).coerceAtMost(maxScale))
 
         val lockedRatio = config?.lockedZoomRatio
         val initialScale = if (lockedRatio != null && lockedRatio > 1.01f) {
@@ -448,6 +502,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         setZoomEnabled(config.enablePinchToZoom)
         setDoubleTapZoomDuration(config.zoomDuration.getSystemScaledDuration())
         setHardwareTilesEnabled(this@ReaderPageImageView.isHardwareAccelerated && config.hardwareTilesEnabled)
+        setDecodePriorityBoost(this@ReaderPageImageView.decodePriorityBoost)
         if (isSmartFit) {
             val initialType = if (width > 0 && height > 0 && isReady) {
                 ReaderScaleUtil.resolveSmartScaleType(width, height, sWidth, sHeight)
@@ -468,6 +523,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     if (isVisibleOnScreen()) landscapeZoom(true)
                     this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
                     this@ReaderPageImageView.onImageLoaded()
+                }
+
+                override fun onImageLoaded() {
+                    // When a cached preview triggers onReady() before TilesInitTask finishes,
+                    // propagate decoder HDR state once the base tile layer is loaded.
+                    this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
                 }
 
                 override fun onImageLoadError(e: Exception) {
@@ -507,14 +568,26 @@ open class ReaderPageImageView @JvmOverloads constructor(
             }
             is StreamSource -> {
                 val precomputed = config.precomputedSmartFitBounds
+                val cachedPreview = if (config.regionDecoderFactory == null) {
+                    config.previewKey?.let(ReaderPreviewCache::get)
+                } else {
+                    null
+                }
                 val makeImage = {
                     ImageSource.provider(StreamInputProvider { data.open() })
                         .decoderFactory(config.regionDecoderFactory)
                 }
                 if (precomputed != null) {
                     val image = makeImage()
-                    if (!precomputed.isEmpty) image.region(precomputed)
-                    setImage(image)
+                    if (!precomputed.isEmpty) {
+                        image.region(precomputed)
+                        setImage(image)
+                    } else if (cachedPreview != null) {
+                        image.dimensions(cachedPreview.sourceWidth, cachedPreview.sourceHeight)
+                        setImage(image, cachedPreview.bitmap, null)
+                    } else {
+                        setImage(image)
+                    }
                     isVisible = true
                 } else if (config.webtoonSmartFit) {
                     pendingSmartFit = PendingSmartFit(data, config)
@@ -531,13 +604,26 @@ open class ReaderPageImageView @JvmOverloads constructor(
                             pendingSmartFit = null
                             smartFitJob = null
                             val image = makeImage()
-                            if (!bounds.isEmpty) image.region(bounds)
-                            setImage(image)
+                            if (!bounds.isEmpty) {
+                                image.region(bounds)
+                                setImage(image)
+                            } else if (cachedPreview != null) {
+                                image.dimensions(cachedPreview.sourceWidth, cachedPreview.sourceHeight)
+                                setImage(image, cachedPreview.bitmap, null)
+                            } else {
+                                setImage(image)
+                            }
                             isVisible = true
                         }
                     }
                 } else {
-                    setImage(makeImage())
+                    val image = makeImage()
+                    if (cachedPreview != null) {
+                        image.dimensions(cachedPreview.sourceWidth, cachedPreview.sourceHeight)
+                        setImage(image, cachedPreview.bitmap, null)
+                    } else {
+                        setImage(image)
+                    }
                     isVisible = true
                 }
             }
@@ -690,6 +776,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val regionDecoderFactory: (() -> ImageRegionDecoder)? = null,
         val lockedZoomRatio: Float? = null,
         val hardwareTilesEnabled: Boolean = true,
+        val previewKey: String? = null,
+        val doubleTapZoomScale: Float = 2f,
     )
 
     private class StreamSource(val open: () -> InputStream)

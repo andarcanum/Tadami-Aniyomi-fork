@@ -55,6 +55,7 @@ class DecoderTest {
 
         val tile = decoder.decodeRegion(Rect(0, 0, 512, 512), 1)
         assertTrue(tile.config != Bitmap.Config.HARDWARE, "HDR tiles must stay non-HARDWARE")
+        assertTrue(tile.hasMipMap(), "Decoded tiles should enable mipmaps for crisper downscaling")
         tile.recycle()
 
         decoder.recycle()

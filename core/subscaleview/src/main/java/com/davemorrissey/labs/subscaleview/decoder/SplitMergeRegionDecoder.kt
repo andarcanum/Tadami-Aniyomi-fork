@@ -3,6 +3,7 @@ package com.davemorrissey.labs.subscaleview.decoder
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Point
 import android.graphics.Rect
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
@@ -21,6 +22,7 @@ class SplitMergeRegionDecoder(
 ) : HdrAwareRegionDecoder, HardwareTileConfigurableDecoder {
 
     private val lock = Any()
+    private val seamPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
 
     @Volatile
     private var decoder: NativeImageDecoder? = null
@@ -163,7 +165,7 @@ class SplitMergeRegionDecoder(
             val dstLeft = (((clampedLeft - sLeft).toLong() * outWidth) / (sRight - sLeft).coerceAtLeast(1))
                 .toInt()
                 .coerceIn(0, dstRight - 1)
-            Canvas(padded).drawBitmap(decoded, null, Rect(dstLeft, 0, dstRight, outHeight), null)
+            Canvas(padded).drawBitmap(decoded, null, Rect(dstLeft, 0, dstRight, outHeight), seamPaint)
         } finally {
             decoded.recycle()
         }
@@ -201,7 +203,7 @@ class SplitMergeRegionDecoder(
             sampleSize = sampleSize,
         )
         try {
-            canvas.drawBitmap(upperBitmap, null, Rect(0, 0, outWidth, upperDstHeight), null)
+            canvas.drawBitmap(upperBitmap, null, Rect(0, 0, outWidth, upperDstHeight), seamPaint)
 
             val lowerBitmap = decodeHalfSlice(
                 active = active,
@@ -214,7 +216,7 @@ class SplitMergeRegionDecoder(
                 sampleSize = sampleSize,
             )
             try {
-                canvas.drawBitmap(lowerBitmap, null, Rect(0, upperDstHeight, outWidth, outHeight), null)
+                canvas.drawBitmap(lowerBitmap, null, Rect(0, upperDstHeight, outWidth, outHeight), seamPaint)
             } finally {
                 lowerBitmap.recycle()
             }
@@ -240,6 +242,7 @@ class SplitMergeRegionDecoder(
         var current = bitmap
         if (
             !hdr &&
+            !current.hasAlpha() &&
             SubsamplingScaleImageView.getPreferredBitmapConfig() == Bitmap.Config.RGB_565 &&
             current.config != Bitmap.Config.RGB_565 &&
             current.config != Bitmap.Config.HARDWARE
@@ -253,6 +256,9 @@ class SplitMergeRegionDecoder(
                 current.recycle()
                 current = rgb565
             }
+        }
+        if (current.config != Bitmap.Config.HARDWARE) {
+            current.setHasMipMap(true)
         }
         if (
             !hardwareTilesEnabled ||
@@ -268,6 +274,7 @@ class SplitMergeRegionDecoder(
             null
         }
         return if (hardware != null) {
+            runCatching { hardware.setHasMipMap(true) }
             current.recycle()
             hardware
         } else {

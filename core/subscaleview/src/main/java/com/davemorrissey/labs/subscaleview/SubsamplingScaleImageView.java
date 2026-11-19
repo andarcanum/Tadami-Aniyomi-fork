@@ -50,12 +50,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * <p>
@@ -166,17 +167,35 @@ public class SubsamplingScaleImageView extends View {
             thread.setDaemon(true);
             return thread;
         };
+        PriorityBlockingQueue<Runnable> queue = new PriorityBlockingQueue<>(16, (a, b) -> {
+            int pa = a instanceof PrioritizedRunnable ? ((PrioritizedRunnable) a).getPriority() : PRIORITY_CLEANUP;
+            int pb = b instanceof PrioritizedRunnable ? ((PrioritizedRunnable) b).getPriority() : PRIORITY_CLEANUP;
+            int cmp = Integer.compare(pa, pb);
+            if (cmp != 0) {
+                return cmp;
+            }
+            long sa = a instanceof PrioritizedRunnable ? ((PrioritizedRunnable) a).getSequence() : Long.MAX_VALUE;
+            long sb = b instanceof PrioritizedRunnable ? ((PrioritizedRunnable) b).getSequence() : Long.MAX_VALUE;
+            return Long.compare(sa, sb);
+        });
         ThreadPoolExecutor pool = new ThreadPoolExecutor(
                 corePoolSize,
                 maxPoolSize,
                 30L,
                 TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(),
+                queue,
                 factory
         );
         pool.allowCoreThreadTimeOut(true);
         return pool;
     }
+
+    private static final int PRIORITY_BASE_VISIBLE = 0;
+    private static final int PRIORITY_DETAIL_VISIBLE = 1;
+    private static final int PRIORITY_BASE_PREFETCH = 2;
+    private static final int PRIORITY_DETAIL_PREFETCH = 3;
+    private static final int PRIORITY_CLEANUP = 4;
+    private static final AtomicLong TASK_SEQUENCE = new AtomicLong();
 
     /**
      * Dynamically adjusts the shared tile-decoder thread pool size. Pass 0 for automatic sizing.
@@ -213,10 +232,12 @@ public class SubsamplingScaleImageView extends View {
     private final float[] dstArray = new float[8];
     //The logical density of the display
     private final float density;
-    // Bitmap (preview or full image)
+    // Bitmap (full image when tiling is disabled)
     private Bitmap bitmap;
     // Specifies if a cache handler is also referencing the bitmap. Do not recycle if so.
     private boolean bitmapIsCached;
+    // Non-owned cached preview rendered immediately while the full tile pyramid initializes/decodes.
+    private Bitmap previewBitmap;
     // Provider of full size image
     private InputProvider provider;
     // Sample size used to display the whole image when fully zoomed out
@@ -236,16 +257,18 @@ public class SubsamplingScaleImageView extends View {
     // Whether to crop borders.
     private boolean cropBorders = false;
     private boolean externalViewportEnabled;
+    private final RectF externalVisibleViewport = new RectF();
     private final RectF externalViewport = new RectF();
     private final RectF externalRetainViewport = new RectF();
     private float externalScale = 1f;
+    private boolean decodePriorityBoost = true;
     private boolean hardwareTilesEnabled = false;
     private long tileFadeDurationMs = TILE_FADE_DURATION_MS;
     private final Set<CancellableTask> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /** The viewport is in this view's coordinates. It does not change layout or gesture state. */
     public final void setExternalViewport(@NonNull RectF viewport, float displayScale) {
-        setExternalViewport(viewport, viewport, displayScale);
+        setExternalViewport(viewport, viewport, viewport, displayScale);
     }
 
     /**
@@ -258,21 +281,57 @@ public class SubsamplingScaleImageView extends View {
             @NonNull RectF retainViewport,
             float displayScale
     ) {
+        setExternalViewport(prefetchViewport, prefetchViewport, retainViewport, displayScale);
+    }
+
+    /**
+     * Updates visible, prefetch, and retain viewports (in this view's coordinates). Tiles
+     * intersecting {@code visibleViewport} are scheduled ahead of lookahead tiles in
+     * {@code prefetchViewport}; already-decoded non-base tiles in {@code retainViewport} stay cached.
+     */
+    public final void setExternalViewport(
+            @NonNull RectF visibleViewport,
+            @NonNull RectF prefetchViewport,
+            @NonNull RectF retainViewport,
+            float displayScale
+    ) {
         if (!Float.isFinite(displayScale) || displayScale <= 0f) {
             throw new IllegalArgumentException("Invalid display scale");
         }
         if (externalViewportEnabled
+                && externalVisibleViewport.equals(visibleViewport)
                 && externalViewport.equals(prefetchViewport)
                 && externalRetainViewport.equals(retainViewport)
                 && externalScale == displayScale) {
             return;
         }
         externalViewportEnabled = true;
+        externalVisibleViewport.set(visibleViewport);
         externalViewport.set(prefetchViewport);
         externalRetainViewport.set(retainViewport);
         externalScale = displayScale;
+        if (!externalVisibleViewport.isEmpty()) {
+            promoteQueuedInitTaskIfNeeded();
+        }
         if (refreshRequiredTiles(true)) {
             invalidate();
+        }
+    }
+
+    /**
+     * Controls whether this view's tile decodes should take foreground priority over offscreen
+     * neighbor pages (e.g., active page vs offscreen ViewPager neighbors).
+     */
+    public final void setDecodePriorityBoost(boolean boost) {
+        if (this.decodePriorityBoost == boost) {
+            return;
+        }
+        this.decodePriorityBoost = boost;
+        if (boost) {
+            promoteQueuedInitTaskIfNeeded();
+            if (refreshRequiredTiles(true)) {
+                invalidate();
+            }
         }
     }
 
@@ -514,6 +573,19 @@ public class SubsamplingScaleImageView extends View {
      * @param state       State to be restored. Nullable.
      */
     public final void setImage(@NonNull ImageSource imageSource, ImageViewState state) {
+        setImage(imageSource, null, state);
+    }
+
+    /**
+     * Set an image source with an optional non-owned preview bitmap that renders immediately while
+     * the tiled region decoder initializes and loads the base layer. The caller/cache owns
+     * {@code previewBitmap}; this view never recycles it.
+     */
+    public final void setImage(
+            @NonNull ImageSource imageSource,
+            @Nullable Bitmap previewBitmap,
+            @Nullable ImageViewState state
+    ) {
         //noinspection ConstantConditions
         if (imageSource == null) {
             throw new NullPointerException("imageSource must not be null");
@@ -532,7 +604,25 @@ public class SubsamplingScaleImageView extends View {
             // Load the bitmap using tile decoding.
             this.provider = imageSource.getProvider();
             sRegion = imageSource.getSRegion();
-            TilesInitTask task = new TilesInitTask(this, getContext(), provider, imageSource.getRegionDecoderFactory());
+            if (previewBitmap != null
+                    && !previewBitmap.isRecycled()
+                    && previewBitmap.getWidth() > 0
+                    && previewBitmap.getHeight() > 0
+                    && imageSource.getSWidth() > 0
+                    && imageSource.getSHeight() > 0) {
+                this.previewBitmap = previewBitmap;
+                this.sWidth = imageSource.getSWidth();
+                this.sHeight = imageSource.getSHeight();
+                requestLayout();
+                invalidate();
+            }
+            TilesInitTask task = new TilesInitTask(
+                    this,
+                    getContext(),
+                    provider,
+                    imageSource.getRegionDecoderFactory(),
+                    resolveInitPriority()
+            );
             executeTask(task);
         }
     }
@@ -592,6 +682,7 @@ public class SubsamplingScaleImageView extends View {
             imageLoadErrorSent = false;
             bitmap = null;
             bitmapIsCached = false;
+            previewBitmap = null;
         }
         if (tileMap != null) {
             for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
@@ -1252,6 +1343,35 @@ public class SubsamplingScaleImageView extends View {
             }
             drawBitmapSafely(canvas, bitmap, matrix, bitmapPaint);
 
+        } else if (hasUsablePreviewBitmap()) {
+
+            float xScale = scale * ((float) sWidth / previewBitmap.getWidth());
+            float yScale = scale * ((float) sHeight / previewBitmap.getHeight());
+
+            if (matrix == null) {
+                matrix = new Matrix();
+            }
+            matrix.reset();
+            matrix.postScale(xScale, yScale);
+            matrix.postRotate(getImageRotation().getRotation());
+            matrix.postTranslate(vTranslate.x, vTranslate.y);
+
+            switch (getImageRotation()) {
+                case ROTATION_90 -> matrix.postTranslate(scale * sHeight, 0);
+                case ROTATION_180 -> matrix.postTranslate(scale * sWidth, scale * sHeight);
+                case ROTATION_270 -> matrix.postTranslate(0, scale * sWidth);
+            }
+
+            if (tileBgPaint != null) {
+                if (sRect == null) {
+                    sRect = new RectF();
+                }
+                sRect.set(0f, 0f, previewBitmap.getWidth(), previewBitmap.getHeight());
+                matrix.mapRect(sRect);
+                canvas.drawRect(sRect, tileBgPaint);
+            }
+            drawBitmapSafely(canvas, previewBitmap, matrix, bitmapPaint);
+
         }
 
         if (debug) {
@@ -1333,8 +1453,15 @@ public class SubsamplingScaleImageView extends View {
      * base layer tiles are loaded. First time, send ready event to listener. The next draw will
      * display an image.
      */
+    private boolean hasUsablePreviewBitmap() {
+        return previewBitmap != null
+                && !previewBitmap.isRecycled()
+                && previewBitmap.getWidth() > 0
+                && previewBitmap.getHeight() > 0;
+    }
+
     private boolean checkReady() {
-        boolean ready = getWidth() > 0 && getHeight() > 0 && sWidth > 0 && sHeight > 0 && (bitmap != null || isBaseLayerReady());
+        boolean ready = getWidth() > 0 && getHeight() > 0 && sWidth > 0 && sHeight > 0 && (bitmap != null || hasUsablePreviewBitmap() || isBaseLayerReady());
         if (!readySent && ready) {
             preDraw();
             readySent = true;
@@ -1448,7 +1575,7 @@ public class SubsamplingScaleImageView extends View {
         List<Tile> baseGrid = tileMap.get(fullImageSampleSize);
         if (baseGrid != null) {
             for (Tile baseTile : baseGrid) {
-                TileLoadTask task = new TileLoadTask(this, decoder, baseTile);
+                TileLoadTask task = new TileLoadTask(this, decoder, baseTile, resolveTilePriority(baseTile));
                 executeTask(task);
             }
         }
@@ -1467,11 +1594,83 @@ public class SubsamplingScaleImageView extends View {
             if (!tile.visible) {
                 tile.visible = true;
             }
-            if (!tile.loading && !tile.failed && !tile.retryPending && tile.bitmap == null) {
-                TileLoadTask task = new TileLoadTask(this, decoder, tile);
-                executeTask(task);
+            if (!tile.failed && !tile.retryPending && tile.bitmap == null) {
+                enqueueOrPromoteTile(tile);
             }
         }
+    }
+
+    private boolean enqueueOrPromoteTile(@NonNull Tile tile) {
+        int priority = resolveTilePriority(tile);
+        if (!tile.loading) {
+            TileLoadTask task = new TileLoadTask(this, decoder, tile, priority);
+            executeTask(task);
+            return true;
+        }
+        if (tile.activeTask != null
+                && tile.activeTask.priority > priority
+                && tile.activeTask.tryCancelQueued()) {
+            tile.activeTask = null;
+            tile.loading = false;
+            TileLoadTask task = new TileLoadTask(this, decoder, tile, priority);
+            executeTask(task);
+            return true;
+        }
+        return false;
+    }
+
+    private void promoteQueuedInitTaskIfNeeded() {
+        if (provider == null || decoder != null) {
+            return;
+        }
+        int targetPriority = resolveInitPriority();
+        for (CancellableTask task : activeTasks) {
+            if (task instanceof TilesInitTask initTask
+                    && initTask.generation == imageGeneration
+                    && initTask.provider == provider
+                    && initTask.priority > targetPriority
+                    && initTask.tryCancelQueued()) {
+                TilesInitTask promoted = new TilesInitTask(
+                        this,
+                        getContext(),
+                        provider,
+                        initTask.decoder,
+                        targetPriority
+                );
+                executeTask(promoted);
+                break;
+            }
+        }
+    }
+
+    private int resolveInitPriority() {
+        if (!decodePriorityBoost) {
+            return PRIORITY_BASE_PREFETCH;
+        }
+        if (externalViewportEnabled && externalVisibleViewport.isEmpty()) {
+            return PRIORITY_BASE_PREFETCH;
+        }
+        return PRIORITY_BASE_VISIBLE;
+    }
+
+    private int resolveTilePriority(@NonNull Tile tile) {
+        boolean isBase = tile.sampleSize == fullImageSampleSize;
+        if (!decodePriorityBoost) {
+            return isBase ? PRIORITY_BASE_PREFETCH : PRIORITY_DETAIL_PREFETCH;
+        }
+        if (externalViewportEnabled) {
+            boolean inVisible;
+            if (vTranslate != null && Float.isFinite(scale) && scale > 0f) {
+                inVisible = tileVisibleIn(tile, externalVisibleViewport);
+            } else {
+                inVisible = !externalVisibleViewport.isEmpty();
+            }
+            if (isBase) {
+                return inVisible ? PRIORITY_BASE_VISIBLE : PRIORITY_BASE_PREFETCH;
+            }
+            return inVisible ? PRIORITY_DETAIL_VISIBLE : PRIORITY_DETAIL_PREFETCH;
+        }
+        return isBase ? PRIORITY_BASE_VISIBLE : PRIORITY_DETAIL_VISIBLE;
     }
 
     /**
@@ -1522,10 +1721,8 @@ public class SubsamplingScaleImageView extends View {
                                 changed = true;
                             }
                         }
-                        if (!tile.loading && !tile.failed && !tile.retryPending && tile.bitmap == null && load) {
-                            TileLoadTask task = new TileLoadTask(this, decoder, tile);
-                            executeTask(task);
-                            if (debug) {
+                        if (load && !tile.failed && !tile.retryPending && tile.bitmap == null) {
+                            if (enqueueOrPromoteTile(tile) && debug) {
                                 changed = true;
                             }
                         }
@@ -1557,9 +1754,8 @@ public class SubsamplingScaleImageView extends View {
                         tile.visible = true;
                         changed = true;
                     }
-                    if (load && !tile.loading && !tile.failed && !tile.retryPending && tile.bitmap == null) {
-                        TileLoadTask task = new TileLoadTask(this, decoder, tile);
-                        executeTask(task);
+                    if (load && !tile.failed && !tile.retryPending && tile.bitmap == null) {
+                        enqueueOrPromoteTile(tile);
                     }
                 }
             }
@@ -1821,6 +2017,7 @@ public class SubsamplingScaleImageView extends View {
         // If actual dimensions don't match the declared size, reset everything.
         if (this.sWidth > 0 && this.sHeight > 0 && (this.sWidth != sWidth || this.sHeight != sHeight)) {
             reset(false);
+            previewBitmap = null;
             if (bitmap != null) {
                 if (!bitmapIsCached) {
                     bitmap.recycle();
@@ -1856,12 +2053,15 @@ public class SubsamplingScaleImageView extends View {
         } else {
             loadedTile.fadeStartTimeMs = 0L;
         }
-        if (isBaseLayerReady() && bitmap != null) {
-            if (!bitmapIsCached) {
-                bitmap.recycle();
+        if (isBaseLayerReady()) {
+            previewBitmap = null;
+            if (bitmap != null) {
+                if (!bitmapIsCached) {
+                    bitmap.recycle();
+                }
+                bitmap = null;
+                bitmapIsCached = false;
             }
-            bitmap = null;
-            bitmapIsCached = false;
         }
         invalidate();
     }
@@ -1880,7 +2080,7 @@ public class SubsamplingScaleImageView extends View {
                         && tile.bitmap == null
                         && !tile.loading
                         && !tile.failed) {
-                    TileLoadTask task = new TileLoadTask(this, decoder, tile);
+                    TileLoadTask task = new TileLoadTask(this, decoder, tile, resolveTilePriority(tile));
                     executeTask(task);
                 }
             };
@@ -1893,7 +2093,7 @@ public class SubsamplingScaleImageView extends View {
         }
         tile.failed = true;
         if (onImageEventListener != null) {
-            if (tile.sampleSize == fullImageSampleSize && !readySent) {
+            if (tile.sampleSize == fullImageSampleSize && !imageLoadedSent) {
                 if (!imageLoadErrorSent) {
                     imageLoadErrorSent = true;
                     onImageEventListener.onImageLoadError(error);
@@ -1917,6 +2117,13 @@ public class SubsamplingScaleImageView extends View {
             this.bitmap.recycle();
         }
 
+        if (bitmap != null && !bitmap.isRecycled()) {
+            try {
+                bitmap.setHasMipMap(true);
+            } catch (Throwable ignored) {
+                // Ignore if an immutable/hardware bitmap rejects mipmap hint on older APIs.
+            }
+        }
         this.bitmapIsCached = bitmapIsCached;
         this.bitmap = bitmap;
         this.sWidth = bitmap.getWidth();
@@ -1932,7 +2139,7 @@ public class SubsamplingScaleImageView extends View {
     private void executeTask(@NonNull CancellableTask task) {
         Executor submittingExecutor = executor;
         activeTasks.add(task);
-        FutureTask<Void> future = createTaskFuture(task, activeTasks, submittingExecutor);
+        PrioritizedFutureTask future = createTaskFuture(task, activeTasks, submittingExecutor);
         if (task instanceof TilesInitTask) {
             ((TilesInitTask) task).future = future;
         } else if (task instanceof TileLoadTask) {
@@ -1951,7 +2158,97 @@ public class SubsamplingScaleImageView extends View {
         }
     }
 
-    private static FutureTask<Void> createTaskFuture(
+    private interface PrioritizedRunnable extends Runnable {
+        int getPriority();
+        long getSequence();
+    }
+
+    private static final class PrioritizedFutureTask extends FutureTask<Void>
+            implements PrioritizedRunnable, Comparable<PrioritizedFutureTask> {
+        private final int priority;
+        private final long sequence;
+        private final AtomicInteger state;
+        private final int queuedState;
+        private final int terminalState;
+        private final WeakReference<CancellableTask> queuedTaskRef;
+        private final Set<CancellableTask> registry;
+        private final WeakReference<ThreadPoolExecutor> poolRef;
+
+        PrioritizedFutureTask(
+                Runnable runnable,
+                int priority,
+                long sequence,
+                AtomicInteger state,
+                int queuedState,
+                int terminalState,
+                WeakReference<CancellableTask> queuedTaskRef,
+                Set<CancellableTask> registry,
+                WeakReference<ThreadPoolExecutor> poolRef
+        ) {
+            super(runnable, null);
+            this.priority = priority;
+            this.sequence = sequence;
+            this.state = state;
+            this.queuedState = queuedState;
+            this.terminalState = terminalState;
+            this.queuedTaskRef = queuedTaskRef;
+            this.registry = registry;
+            this.poolRef = poolRef;
+        }
+
+        @Override
+        public int getPriority() {
+            return priority;
+        }
+
+        @Override
+        public long getSequence() {
+            return sequence;
+        }
+
+        @Override
+        public int compareTo(@NonNull PrioritizedFutureTask other) {
+            int cmp = Integer.compare(this.priority, other.priority);
+            if (cmp != 0) {
+                return cmp;
+            }
+            return Long.compare(this.sequence, other.sequence);
+        }
+
+        boolean tryCancelQueued() {
+            if (!state.compareAndSet(queuedState, terminalState)) {
+                return false;
+            }
+            CancellableTask queuedTask = queuedTaskRef.get();
+            if (queuedTask != null) {
+                registry.remove(queuedTask);
+            }
+            ThreadPoolExecutor pool = poolRef == null ? null : poolRef.get();
+            if (pool != null) {
+                pool.remove(this);
+            }
+            cancel(false);
+            return true;
+        }
+
+        @Override
+        protected void done() {
+            // cancel(false) also marks a running Future done: only queued work ends here.
+            if (state.compareAndSet(queuedState, terminalState)) {
+                CancellableTask queuedTask = queuedTaskRef.get();
+                if (queuedTask != null) {
+                    registry.remove(queuedTask);
+                }
+                // Use the original submitting pool, not the view's possibly replaced Executor.
+                ThreadPoolExecutor pool = poolRef == null ? null : poolRef.get();
+                if (pool != null) {
+                    pool.remove(this);
+                }
+            }
+        }
+    }
+
+    private static PrioritizedFutureTask createTaskFuture(
             CancellableTask task, Set<CancellableTask> registry, Executor submittingExecutor
     ) {
         final int queued = 0, running = 1, terminal = 2;
@@ -1959,7 +2256,7 @@ public class SubsamplingScaleImageView extends View {
         WeakReference<CancellableTask> queuedTaskRef = new WeakReference<>(task);
         WeakReference<ThreadPoolExecutor> poolRef = submittingExecutor instanceof ThreadPoolExecutor
                 ? new WeakReference<>((ThreadPoolExecutor) submittingExecutor) : null;
-        return new FutureTask<>(() -> {
+        Runnable wrapped = () -> {
             // Cancellation can win after FutureTask enters run but before this wrapper starts.
             if (!state.compareAndSet(queued, running)) {
                 return;
@@ -1970,23 +2267,18 @@ public class SubsamplingScaleImageView extends View {
                 state.set(terminal);
                 registry.remove(task);
             }
-        }, null) {
-            @Override
-            protected void done() {
-                // cancel(false) also marks a running Future done: only queued work ends here.
-                if (state.compareAndSet(queued, terminal)) {
-                    CancellableTask queuedTask = queuedTaskRef.get();
-                    if (queuedTask != null) {
-                        registry.remove(queuedTask);
-                    }
-                    // Use the original submitting pool, not the view's possibly replaced Executor.
-                    ThreadPoolExecutor pool = poolRef == null ? null : poolRef.get();
-                    if (pool != null) {
-                        pool.remove(this);
-                    }
-                }
-            }
         };
+        return new PrioritizedFutureTask(
+                wrapped,
+                task.getPriority(),
+                TASK_SEQUENCE.getAndIncrement(),
+                state,
+                queued,
+                terminal,
+                queuedTaskRef,
+                registry,
+                poolRef
+        );
     }
 
     private void cancelTileTask(@NonNull Tile tile) {
@@ -3237,6 +3529,7 @@ public class SubsamplingScaleImageView extends View {
 
     private interface CancellableTask extends Runnable {
         void cancel();
+        int getPriority();
     }
 
     /**
@@ -3249,21 +3542,54 @@ public class SubsamplingScaleImageView extends View {
         private final long generation;
         private final ImageRegionDecoder decoder;
         private final Rect region;
+        private final int priority;
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
-        private volatile Future<?> future;
+        private volatile PrioritizedFutureTask future;
 
         TilesInitTask(
                 SubsamplingScaleImageView view,
                 Context context,
                 InputProvider provider,
-                kotlin.jvm.functions.Function0<? extends ImageRegionDecoder> decoderFactory
+                kotlin.jvm.functions.Function0<? extends ImageRegionDecoder> decoderFactory,
+                int priority
+        ) {
+            this(
+                    view,
+                    context,
+                    provider,
+                    decoderFactory != null ? decoderFactory.invoke() : view.createRegionDecoder(),
+                    priority
+            );
+        }
+
+        TilesInitTask(
+                SubsamplingScaleImageView view,
+                Context context,
+                InputProvider provider,
+                ImageRegionDecoder decoder,
+                int priority
         ) {
             viewRef = new WeakReference<>(view);
             contextRef = new WeakReference<>(context);
             this.provider = provider;
             generation = view.imageGeneration;
-            decoder = decoderFactory != null ? decoderFactory.invoke() : view.createRegionDecoder();
+            this.decoder = decoder;
+            this.priority = priority;
             region = view.sRegion == null ? null : new Rect(view.sRegion);
+        }
+
+        @Override
+        public int getPriority() {
+            return priority;
+        }
+
+        boolean tryCancelQueued() {
+            PrioritizedFutureTask queued = future;
+            if (queued != null && queued.tryCancelQueued()) {
+                cancelled.set(true);
+                return true;
+            }
+            return false;
         }
 
         @Override
@@ -3340,14 +3666,16 @@ public class SubsamplingScaleImageView extends View {
         private final ImageRegionDecoder decoder;
         private final Tile tile;
         private final long generation;
+        private final int priority;
         private final Rect sourceRegion = new Rect();
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
-        private volatile Future<?> future;
+        private volatile PrioritizedFutureTask future;
 
-        TileLoadTask(SubsamplingScaleImageView view, ImageRegionDecoder decoder, Tile tile) {
+        TileLoadTask(SubsamplingScaleImageView view, ImageRegionDecoder decoder, Tile tile, int priority) {
             viewRef = new WeakReference<>(view);
             this.decoder = decoder;
             this.tile = tile;
+            this.priority = priority;
             generation = view.tileGeneration;
             // Snapshot geometry on UI: a rebind must not change an in-flight task's coordinates.
             view.fileSRect(tile.sRect, sourceRegion);
@@ -3355,6 +3683,20 @@ public class SubsamplingScaleImageView extends View {
             tile.retryPending = false;
             tile.loading = true;
             tile.activeTask = this;
+        }
+
+        @Override
+        public int getPriority() {
+            return priority;
+        }
+
+        boolean tryCancelQueued() {
+            PrioritizedFutureTask queued = future;
+            if (queued != null && queued.tryCancelQueued()) {
+                cancelled.set(true);
+                return true;
+            }
+            return false;
         }
 
         @Override

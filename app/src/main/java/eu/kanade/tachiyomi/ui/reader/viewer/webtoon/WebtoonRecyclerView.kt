@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
-import android.animation.AnimatorSet
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
@@ -12,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
+import androidx.core.animation.doOnCancel
 import androidx.core.animation.doOnEnd
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -30,6 +30,8 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 ) : RecyclerView(context, attrs, defStyle) {
 
     private var isZooming = false
+    private var activeZoomAnimator: ValueAnimator? = null
+    private var activeFlingAnimator: ValueAnimator? = null
     private var atLastPosition = false
     private var atFirstPosition = false
     private var halfWidth = 0
@@ -46,6 +48,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     private val visibleRect = RectF()
     private val prefetchRect = RectF()
     private val retainRect = RectF()
+    private val childVisibleRect = RectF()
     private val childPrefetchRect = RectF()
     private val childRetainRect = RectF()
     var zoomOutDisabled = false
@@ -82,6 +85,18 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     override fun onTouchEvent(e: MotionEvent): Boolean {
         detector.onTouchEvent(e)
         return super.onTouchEvent(e)
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelActiveAnimators()
+        super.onDetachedFromWindow()
+    }
+
+    private fun cancelActiveAnimators() {
+        activeZoomAnimator?.cancel()
+        activeZoomAnimator = null
+        activeFlingAnimator?.cancel()
+        activeFlingAnimator = null
     }
 
     override fun onScrolled(dx: Int, dy: Int) {
@@ -177,6 +192,12 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         }
         if (current !== this) return
 
+        childVisibleRect.set(visibleRect)
+        childVisibleRect.offset(-offsetX, -offsetY)
+        if (!childVisibleRect.intersect(0f, 0f, childW.toFloat(), childH.toFloat())) {
+            childVisibleRect.setEmpty()
+        }
+
         childPrefetchRect.set(prefetchRect)
         childPrefetchRect.offset(-offsetX, -offsetY)
         if (!childPrefetchRect.intersect(0f, 0f, childW.toFloat(), childH.toFloat())) {
@@ -189,7 +210,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
             childRetainRect.setEmpty()
         }
 
-        target.updateViewport(childPrefetchRect, childRetainRect, displayScale)
+        target.updateViewport(childVisibleRect, childPrefetchRect, childRetainRect, displayScale)
     }
 
     private fun computeViewportBounds(): Float {
@@ -295,70 +316,77 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         fromY: Float,
         toY: Float,
     ) {
+        cancelActiveAnimators()
         isZooming = true
-        val animatorSet = AnimatorSet()
-        val translationXAnimator = ValueAnimator.ofFloat(fromX, toX)
-        translationXAnimator.addUpdateListener { animation ->
-            x = animation.animatedValue as Float
-            updateChildViewports()
+        var cancelled = false
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = ANIMATOR_DURATION_TIME.toLong()
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val fraction = animation.animatedValue as Float
+                x = fromX + (toX - fromX) * fraction
+                y = fromY + (toY - fromY) * fraction
+                currentScale = fromRate + (toRate - fromRate) * fraction
+                setScaleRate(currentScale, pushViewports = false)
+                updateChildViewports()
+            }
+            doOnCancel {
+                cancelled = true
+            }
+            doOnEnd {
+                isZooming = false
+                if (activeZoomAnimator === this) {
+                    activeZoomAnimator = null
+                }
+                if (!cancelled) {
+                    x = toX
+                    y = toY
+                    currentScale = toRate
+                    setScaleRate(currentScale, pushViewports = false)
+                    updateChildViewports()
+                }
+            }
         }
-
-        val translationYAnimator = ValueAnimator.ofFloat(fromY, toY)
-        translationYAnimator.addUpdateListener { animation ->
-            y = animation.animatedValue as Float
-            updateChildViewports()
-        }
-
-        val scaleAnimator = ValueAnimator.ofFloat(fromRate, toRate)
-        scaleAnimator.addUpdateListener { animation ->
-            currentScale = animation.animatedValue as Float
-            setScaleRate(currentScale)
-        }
-        animatorSet.playTogether(translationXAnimator, translationYAnimator, scaleAnimator)
-        animatorSet.duration = ANIMATOR_DURATION_TIME.toLong()
-        animatorSet.interpolator = DecelerateInterpolator()
-        animatorSet.start()
-        animatorSet.doOnEnd {
-            isZooming = false
-            currentScale = toRate
-            updateChildViewports()
-        }
+        activeZoomAnimator = animator
+        animator.start()
     }
 
     fun zoomFling(velocityX: Int, velocityY: Int): Boolean {
         if (currentScale <= 1f) return false
 
+        val animateX = velocityX != 0
+        val animateY = velocityY != 0 && (atFirstPosition || atLastPosition)
+        if (!animateX && !animateY) return false
+
+        cancelActiveAnimators()
+
         val distanceTimeFactor = 0.4f
-        val animatorSet = AnimatorSet()
+        val startX = x
+        val startY = y
+        val targetX = if (animateX) getPositionX(startX + distanceTimeFactor * velocityX / 2) else startX
+        val targetY = if (animateY) getPositionY(startY + distanceTimeFactor * velocityY / 2) else startY
 
-        if (velocityX != 0) {
-            val dx = distanceTimeFactor * velocityX / 2
-            val newX = getPositionX(x + dx)
-            val translationXAnimator = ValueAnimator.ofFloat(x, newX)
-            translationXAnimator.addUpdateListener { animation ->
-                x = getPositionX(
-                    animation.animatedValue as Float,
-                )
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 400
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val fraction = animation.animatedValue as Float
+                if (animateX) {
+                    x = getPositionX(startX + (targetX - startX) * fraction)
+                }
+                if (animateY) {
+                    y = getPositionY(startY + (targetY - startY) * fraction)
+                }
                 updateChildViewports()
             }
-            animatorSet.play(translationXAnimator)
-        }
-        if (velocityY != 0 && (atFirstPosition || atLastPosition)) {
-            val dy = distanceTimeFactor * velocityY / 2
-            val newY = getPositionY(y + dy)
-            val translationYAnimator = ValueAnimator.ofFloat(y, newY)
-            translationYAnimator.addUpdateListener { animation ->
-                y = getPositionY(
-                    animation.animatedValue as Float,
-                )
-                updateChildViewports()
+            doOnEnd {
+                if (activeFlingAnimator === this) {
+                    activeFlingAnimator = null
+                }
             }
-            animatorSet.play(translationYAnimator)
         }
-
-        animatorSet.duration = 400
-        animatorSet.interpolator = DecelerateInterpolator()
-        animatorSet.start()
+        activeFlingAnimator = animator
+        animator.start()
 
         return true
     }
@@ -400,12 +428,16 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 
         setScaleRate(currentScale, pushViewports = false)
 
-        layoutParams.height = if (currentScale < 1) {
+        val newHeight = if (currentScale < 1) {
             (originalHeight / currentScale).toInt()
         } else {
             originalHeight
         }
-        halfHeight = layoutParams.height / 2
+        val heightChanged = layoutParams.height != newHeight
+        if (heightChanged) {
+            layoutParams.height = newHeight
+            halfHeight = newHeight / 2
+        }
 
         if (currentScale != DEFAULT_RATE) {
             x = getPositionX(x)
@@ -415,11 +447,14 @@ class WebtoonRecyclerView @JvmOverloads constructor(
             y = 0f
         }
 
-        requestLayout()
+        if (heightChanged) {
+            requestLayout()
+        }
         updateChildViewports()
     }
 
     fun onScaleBegin() {
+        cancelActiveAnimators()
         if (detector.isDoubleTapping) {
             detector.isQuickScaling = true
         }
@@ -447,9 +482,11 @@ class WebtoonRecyclerView @JvmOverloads constructor(
             if (!isZooming && doubleTapZoom) {
                 if (scaleX != DEFAULT_RATE) {
                     zoom(currentScale, DEFAULT_RATE, x, 0f, y, 0f)
-                    layoutParams.height = originalHeight
-                    halfHeight = layoutParams.height / 2
-                    requestLayout()
+                    if (layoutParams.height != originalHeight) {
+                        layoutParams.height = originalHeight
+                        halfHeight = layoutParams.height / 2
+                        requestLayout()
+                    }
                 } else {
                     val toScale = 2f
                     val toX = (halfWidth - ev.x) * (toScale - 1)
@@ -482,6 +519,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 
             when (action) {
                 MotionEvent.ACTION_DOWN -> {
+                    cancelActiveAnimators()
                     scrollPointerId = ev.getPointerId(0)
                     downX = (ev.x + 0.5f).toInt()
                     downY = (ev.y + 0.5f).toInt()

@@ -13,9 +13,15 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ProcessedPageImage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.GuidedPanelController
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.MangaPanelCache
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.MangaPanelDetector
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.PanelRect
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
@@ -24,6 +30,7 @@ import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import okio.Buffer
 import okio.BufferedSource
+import tachiyomi.core.common.util.image.NativeImageDecoder
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
@@ -64,6 +71,11 @@ class PagerPageHolder(
      */
     private var loadJob: Job? = null
 
+    private var panelDetectJob: Job? = null
+    private var detectedPanels: List<PanelRect> = emptyList()
+    private val guidedPanelController = GuidedPanelController()
+    private var pendingGuidedEntryFromEnd: Boolean? = null
+
     init {
         loadJob = scope.launch { loadPageAndProcessStatus() }
         onHdrChanged = { isHdr ->
@@ -75,6 +87,11 @@ class PagerPageHolder(
     override fun recycle() {
         loadJob?.cancel()
         loadJob = null
+        panelDetectJob?.cancel()
+        panelDetectJob = null
+        detectedPanels = emptyList()
+        guidedPanelController.reset()
+        pendingGuidedEntryFromEnd = null
         super.recycle()
     }
 
@@ -86,6 +103,8 @@ class PagerPageHolder(
         super.onDetachedFromWindow()
         loadJob?.cancel()
         loadJob = null
+        panelDetectJob?.cancel()
+        panelDetectJob = null
     }
 
     private fun initProgressIndicator() {
@@ -228,6 +247,18 @@ class PagerPageHolder(
                     enablePinchToZoom = viewer.config.enablePinchToZoom,
                     lockedZoomRatio = if (viewer.config.zoomLockEnabled) viewer.lockedZoomRatio else null,
                     hardwareTilesEnabled = viewer.config.hardwareTilesEnabled,
+                    doubleTapZoomScale = viewer.config.doubleTapZoomScale,
+                    previewKey = if (prepared is PageImageResult.Streamed && !prepared.isAnimated &&
+                        page !is InsertPage
+                    ) {
+                        ReaderPreviewCache.key(
+                            chapterId = page.chapter.chapter.id,
+                            pageIndex = page.index,
+                            cropBorders = viewer.config.imageCropBorders,
+                        )
+                    } else {
+                        null
+                    },
                 )
                 when (prepared) {
                     is PageImageResult.Streamed -> {
@@ -401,9 +432,136 @@ class PagerPageHolder(
         setError()
     }
 
+    override fun onPageSelected(forward: Boolean) {
+        super.onPageSelected(forward)
+        if (!viewer.config.guidedPanelMode || page is InsertPage || page.isAnimatedImage) {
+            guidedPanelController.reset()
+            pendingGuidedEntryFromEnd = null
+            return
+        }
+        val fromEnd = !forward
+        if (detectedPanels.size >= 2) {
+            pendingGuidedEntryFromEnd = null
+            guidedPanelController.enterPage(detectedPanels, fromEnd = fromEnd)?.let { focus ->
+                animateToPanel(focus.panel)
+            }
+        } else {
+            pendingGuidedEntryFromEnd = fromEnd
+            ensurePanelsDetected()
+        }
+    }
+
+    /**
+     * Steps to the next or previous detected panel on this page.
+     * Returns true if the viewport animated to another panel, or false when the pager should flip
+     * to the adjacent page.
+     */
+    internal fun stepGuidedPanel(forward: Boolean): Boolean {
+        if (!viewer.config.guidedPanelMode || detectedPanels.size < 2) return false
+        val result = if (forward) {
+            guidedPanelController.stepForward(detectedPanels)
+        } else {
+            guidedPanelController.stepBackward(detectedPanels)
+        }
+        return when (result) {
+            is GuidedPanelController.StepResult.Focus -> animateToPanel(result.panel)
+            GuidedPanelController.StepResult.NextPage,
+            GuidedPanelController.StepResult.PrevPage,
+            -> false
+        }
+    }
+
+    private fun ensurePanelsDetected() {
+        if (!viewer.config.guidedPanelMode || page is InsertPage || page.isAnimatedImage) return
+        val isRtl = viewer is R2LPagerViewer
+        val cropBorders = viewer.config.imageCropBorders
+        val cacheKey = MangaPanelCache.key(
+            chapterId = page.chapter.chapter.id,
+            pageIndex = page.index,
+            isRtl = isRtl,
+            cropBorders = cropBorders,
+        )
+        if (cacheKey != null) {
+            val cached = MangaPanelCache.get(cacheKey)
+            if (cached != null) {
+                applyDetectedPanels(cached)
+                return
+            }
+        }
+        if (panelDetectJob?.isActive == true) return
+        val previewKey = ReaderPreviewCache.key(
+            chapterId = page.chapter.chapter.id,
+            pageIndex = page.index,
+            cropBorders = cropBorders,
+        )
+        val streamFn = page.stream
+        panelDetectJob = scope.launch(Dispatchers.Default) {
+            val panels = try {
+                val cachedPreview = previewKey?.let(ReaderPreviewCache::get)?.bitmap
+                if (cachedPreview != null && !cachedPreview.isRecycled) {
+                    MangaPanelDetector.detectFromBitmap(cachedPreview, isRtl = isRtl)
+                } else if (streamFn != null) {
+                    withIOContext {
+                        decodePanelAnalysisBitmap(streamFn, cropBorders)?.let { bmp ->
+                            try {
+                                MangaPanelDetector.detectFromBitmap(bmp, isRtl = isRtl)
+                            } finally {
+                                if (!bmp.isRecycled) bmp.recycle()
+                            }
+                        } ?: emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            if (cacheKey != null) {
+                MangaPanelCache.put(cacheKey, panels)
+            }
+            withUIContext {
+                applyDetectedPanels(panels)
+            }
+        }
+    }
+
+    private fun applyDetectedPanels(panels: List<PanelRect>) {
+        detectedPanels = panels
+        val fromEnd = pendingGuidedEntryFromEnd
+        if (fromEnd != null && viewer.config.guidedPanelMode && panels.size >= 2) {
+            pendingGuidedEntryFromEnd = null
+            guidedPanelController.enterPage(panels, fromEnd = fromEnd)?.let { focus ->
+                animateToPanel(focus.panel)
+            }
+        }
+    }
+
+    private fun decodePanelAnalysisBitmap(
+        streamFn: () -> InputStream,
+        cropBorders: Boolean,
+    ): Bitmap? {
+        return try {
+            NativeImageDecoder.open(streamFn(), cropBorders).use { decoder ->
+                val w = decoder.width
+                val h = decoder.height
+                if (w <= 0 || h <= 0) return null
+                var sampleSize = 1
+                while ((w / (sampleSize * 2)) >= 280) {
+                    sampleSize *= 2
+                }
+                decoder.decode(region = null, sampleSize = sampleSize)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     override fun onImageLoaded() {
         super.onImageLoaded()
         progressIndicator?.hide()
+        if (viewer.config.guidedPanelMode) {
+            ensurePanelsDetected()
+        }
     }
 
     /**

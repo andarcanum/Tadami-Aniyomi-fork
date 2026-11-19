@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.settings
 
+import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +34,7 @@ import androidx.core.graphics.red
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences.Companion.ColorFilterMode
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderVisualPreset
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -48,12 +50,30 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
     val colorFilterMode by screenModel.preferences.colorFilterMode().collectAsState()
     val grayscale by screenModel.preferences.grayscale().collectAsState()
     val invertedColors by screenModel.preferences.invertedColors().collectAsState()
+    val smartInvertColors by screenModel.preferences.smartInvertColors().collectAsState()
     val sharpening by screenModel.preferences.sharpening().collectAsState()
     val denoise by screenModel.preferences.denoise().collectAsState()
     val binarization by screenModel.preferences.binarization().collectAsState()
     val paperWhitePoint by screenModel.preferences.paperWhitePoint().collectAsState()
     val paperGammaContrast by screenModel.preferences.paperGammaContrast().collectAsState()
     val paperBlackPoint by screenModel.preferences.paperBlackPoint().collectAsState()
+    val supportsRenderEffects = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val activePreset = ReaderVisualPreset.detectActive(
+        colorFilter = colorFilter,
+        colorFilterValue = colorFilterValue,
+        colorFilterMode = colorFilterMode,
+        customBrightness = customBrightness,
+        customBrightnessValue = customBrightnessValue,
+        grayscale = grayscale,
+        invertedColors = invertedColors,
+        smartInvertColors = smartInvertColors,
+        paperWhitePoint = paperWhitePoint,
+        paperGammaContrast = paperGammaContrast,
+        paperBlackPoint = paperBlackPoint,
+        sharpening = sharpening,
+        denoise = denoise,
+        binarization = binarization,
+    )
 
     // Live sample manga panel — reacts to every filter on this page.
     AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_preview_title)) {
@@ -67,9 +87,10 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
             val matrix = buildPreviewColorMatrix(
                 grayscale = grayscale,
                 inverted = invertedColors,
-                sharpening = sharpening,
-                denoise = denoise,
-                binarization = binarization,
+                smartInvert = smartInvertColors,
+                sharpening = if (supportsRenderEffects) sharpening else 0,
+                denoise = if (supportsRenderEffects) denoise else 0,
+                binarization = if (supportsRenderEffects) binarization else 0,
                 whitePoint = paperWhitePoint,
                 gammaContrast = paperGammaContrast,
                 blackPoint = paperBlackPoint,
@@ -105,6 +126,25 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
             color = AuroraTheme.colors.textSecondary,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
+    }
+
+    AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_visual_presets)) {
+        AuroraChipFlow {
+            ReaderVisualPreset.entries.forEach { preset ->
+                val labelRes = when (preset) {
+                    ReaderVisualPreset.ORIGINAL -> AYMR.strings.aurora_reader_preset_original
+                    ReaderVisualPreset.CRISP_SCAN -> AYMR.strings.aurora_reader_preset_crisp_scan
+                    ReaderVisualPreset.WARM_PAPER -> AYMR.strings.aurora_reader_preset_warm_paper
+                    ReaderVisualPreset.OLED_NIGHT -> AYMR.strings.aurora_reader_preset_oled_night
+                    ReaderVisualPreset.AGED_SCAN -> AYMR.strings.aurora_reader_preset_aged_scan
+                }
+                AuroraChip(
+                    selected = activePreset == preset,
+                    onClick = { preset.applyTo(screenModel.preferences) },
+                    label = stringResource(labelRes),
+                )
+            }
+        }
     }
 
     AuroraGlassSection(title = stringResource(MR.strings.custom_filter)) {
@@ -187,6 +227,14 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
             label = stringResource(MR.strings.pref_inverted_colors),
             pref = screenModel.preferences.invertedColors(),
         )
+        if (invertedColors) {
+            AuroraToggleRow(
+                label = stringResource(AYMR.strings.pref_smart_invert_colors),
+                checked = smartInvertColors,
+                onClick = { screenModel.preferences.smartInvertColors().set(!smartInvertColors) },
+                subtitle = stringResource(AYMR.strings.pref_smart_invert_colors_summary),
+            )
+        }
     }
 
     AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_levels_title)) {
@@ -213,25 +261,27 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
         )
     }
 
-    AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_processing)) {
-        AuroraSliderRow(
-            label = stringResource(MR.strings.pref_sharpening),
-            value = sharpening,
-            valueRange = 0..100,
-            onChange = { screenModel.preferences.sharpening().set(it) },
-        )
-        AuroraSliderRow(
-            label = stringResource(MR.strings.pref_denoise),
-            value = denoise,
-            valueRange = 0..100,
-            onChange = { screenModel.preferences.denoise().set(it) },
-        )
-        AuroraSliderRow(
-            label = stringResource(MR.strings.pref_binarization),
-            value = binarization,
-            valueRange = 0..100,
-            onChange = { screenModel.preferences.binarization().set(it) },
-        )
+    if (supportsRenderEffects) {
+        AuroraGlassSection(title = stringResource(AYMR.strings.aurora_reader_processing)) {
+            AuroraSliderRow(
+                label = stringResource(MR.strings.pref_sharpening),
+                value = sharpening,
+                valueRange = 0..100,
+                onChange = { screenModel.preferences.sharpening().set(it) },
+            )
+            AuroraSliderRow(
+                label = stringResource(MR.strings.pref_denoise),
+                value = denoise,
+                valueRange = 0..100,
+                onChange = { screenModel.preferences.denoise().set(it) },
+            )
+            AuroraSliderRow(
+                label = stringResource(MR.strings.pref_binarization),
+                value = binarization,
+                valueRange = 0..100,
+                onChange = { screenModel.preferences.binarization().set(it) },
+            )
+        }
     }
     Spacer(Modifier.height(8.dp))
 }
@@ -244,6 +294,7 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
 private fun buildPreviewColorMatrix(
     grayscale: Boolean,
     inverted: Boolean,
+    smartInvert: Boolean = true,
     sharpening: Int,
     denoise: Int,
     binarization: Int,
@@ -336,11 +387,8 @@ private fun buildPreviewColorMatrix(
     if (inverted) {
         matrix.timesAssign(
             ColorMatrix(
-                floatArrayOf(
-                    -1f, 0f, 0f, 0f, 255f,
-                    0f, -1f, 0f, 0f, 255f,
-                    0f, 0f, -1f, 0f, 255f,
-                    0f, 0f, 0f, 1f, 0f,
+                ReaderVisualPreset.invertColorMatrixValues(
+                    smartInvert = smartInvert && !grayscale,
                 ),
             ),
         )

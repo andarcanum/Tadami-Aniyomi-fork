@@ -14,7 +14,7 @@ object WebtoonBorderDetector {
         val height = bitmap.height
         if (width <= 20 || height <= 20) return Rect(0, 0, width, height)
 
-        val sampleY = listOf(height / 10, height / 3, height / 2, height * 2 / 3, height * 9 / 10)
+        val sampleY = computeSampleRows(width, height)
         var leftLimit = width
         var rightLimit = 0
 
@@ -27,15 +27,17 @@ object WebtoonBorderDetector {
         }
 
         try {
+            val rowBuffer = IntArray(width)
             for (y in sampleY) {
-                if (y >= height) continue
+                if (y !in 0 until height) continue
+                cleanBitmap.getPixels(rowBuffer, 0, width, 0, y, width, 1)
                 // Skip first/last 5 pixels to avoid 1-pixel borders or edge noise
-                val leftColor = cleanBitmap.getPixel(5, y)
-                val rightColor = cleanBitmap.getPixel(width - 6, y)
+                val leftColor = rowBuffer[5]
+                val rightColor = rowBuffer[width - 6]
 
                 // Scan from left
                 for (x in 5 until width - 5) {
-                    if (isSignificantDifference(cleanBitmap.getPixel(x, y), leftColor)) {
+                    if (isSignificantDifference(rowBuffer[x], leftColor)) {
                         leftLimit = minOf(leftLimit, x)
                         break
                     }
@@ -43,7 +45,7 @@ object WebtoonBorderDetector {
 
                 // Scan from right
                 for (x in width - 6 downTo 5) {
-                    if (isSignificantDifference(cleanBitmap.getPixel(x, y), rightColor)) {
+                    if (isSignificantDifference(rowBuffer[x], rightColor)) {
                         rightLimit = maxOf(rightLimit, x + 1)
                         break
                     }
@@ -75,22 +77,24 @@ object WebtoonBorderDetector {
                 if (cropBorders && !decoder.isHdr) {
                     return Rect(0, 0, width, height)
                 }
-                val sampleY = listOf(height / 10, height / 3, height / 2, height * 2 / 3, height * 9 / 10)
+                val sampleY = computeSampleRows(width, height)
+                val rowBuffer = IntArray(width)
                 var leftLimit = width
                 var rightLimit = 0
                 for (y in sampleY) {
                     val row = decoder.decode(Rect(0, y, width, y + 1))
                     try {
-                        val leftColor = row.getPixel(5, 0)
-                        val rightColor = row.getPixel(width - 6, 0)
+                        row.getPixels(rowBuffer, 0, width, 0, 0, width, 1)
+                        val leftColor = rowBuffer[5]
+                        val rightColor = rowBuffer[width - 6]
                         for (x in 5 until width - 5) {
-                            if (isSignificantDifference(row.getPixel(x, 0), leftColor)) {
+                            if (isSignificantDifference(rowBuffer[x], leftColor)) {
                                 leftLimit = minOf(leftLimit, x)
                                 break
                             }
                         }
                         for (x in width - 6 downTo 5) {
-                            if (isSignificantDifference(row.getPixel(x, 0), rightColor)) {
+                            if (isSignificantDifference(rowBuffer[x], rightColor)) {
                                 rightLimit = maxOf(rightLimit, x + 1)
                                 break
                             }
@@ -108,6 +112,23 @@ object WebtoonBorderDetector {
             }
         } catch (_: Exception) {
             Rect()
+        }
+    }
+
+    /**
+     * Scales sample row density with vertical aspect ratio (5 rows on standard pages up to 17 on
+     * tall webtoon strips) so wide panels and protruding speech bubbles between coarse bands are
+     * never clipped off.
+     */
+    internal fun computeSampleRows(width: Int, height: Int): List<Int> {
+        val aspect = (height / width.coerceAtLeast(1)).coerceAtLeast(1)
+        val count = if (aspect <= 2) 5 else (aspect + 3).coerceIn(7, 17)
+        val startY = (height * 0.05f).toInt().coerceIn(0, (height - 1).coerceAtLeast(0))
+        val endY = (height * 0.95f).toInt().coerceIn(startY, (height - 1).coerceAtLeast(0))
+        if (count <= 1 || endY <= startY) return listOf(height / 2)
+        val span = endY - startY
+        return List(count) { idx ->
+            startY + (span * idx) / (count - 1)
         }
     }
 

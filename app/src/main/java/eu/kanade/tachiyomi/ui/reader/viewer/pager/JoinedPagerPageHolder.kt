@@ -59,6 +59,11 @@ class JoinedPagerPageHolder(
         rightPageHolder.onPageSelected(forward)
     }
 
+    fun setDecodePriorityBoost(boost: Boolean) {
+        leftPageHolder.setDecodePriorityBoost(boost)
+        rightPageHolder.setDecodePriorityBoost(boost)
+    }
+
     private fun setupZoomSynchronization() {
         leftPageHolder.onScaleChanged = { syncZoom(leftPageHolder, rightPageHolder) }
         leftPageHolder.onCenterChanged = { syncZoom(leftPageHolder, rightPageHolder) }

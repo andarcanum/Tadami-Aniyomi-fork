@@ -31,6 +31,11 @@ open class Pager(
     var longTapListener: ((MotionEvent) -> Boolean)? = null
 
     /**
+     * Invoked on every ACTION_DOWN before child views can consume the touch event.
+     */
+    var onTouchDownListener: (() -> Unit)? = null
+
+    /**
      * Gesture listener that implements tap and long tap events.
      */
     private val gestureListener = object : GestureDetectorWithLongTap.Listener() {
@@ -71,6 +76,7 @@ open class Pager(
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            onTouchDownListener?.invoke()
             // ev.x/y are viewport coordinates; children are laid out in content coordinates
             // (the pager's own scroll offset positions the pages), so add scrollX/scrollY.
             downOnButtonChild = isOnButtonChild(this, ev.x + scrollX, ev.y + scrollY)

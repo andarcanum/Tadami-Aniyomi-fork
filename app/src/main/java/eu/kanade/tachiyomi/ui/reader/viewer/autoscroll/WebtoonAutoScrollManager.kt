@@ -85,6 +85,7 @@ class WebtoonAutoScrollManager(
     }
 
     override fun setCooldown(delayMs: Long) {
+        if (!_state.value.isActive || _state.value.isPaused) return
         cooldownUntilMs = SystemClock.elapsedRealtime() + delayMs
         _state.update { it.copy(cooldownUntilMs = cooldownUntilMs) }
     }
@@ -141,13 +142,8 @@ class WebtoonAutoScrollManager(
 
     override fun setSpeed(speed: Int) {
         val clampedSpeed = speed.coerceIn(1, 100)
+        if (_state.value.speed == clampedSpeed) return
         _state.update { it.copy(speed = clampedSpeed) }
-
-        // Restart animator if currently running to apply new speed
-        if (isRunning) {
-            stopAnimator()
-            startAnimator()
-        }
         logcat { "WebtoonAutoScrollManager speed set to $clampedSpeed" }
     }
 
@@ -162,8 +158,6 @@ class WebtoonAutoScrollManager(
      * scroll speed independent of the display refresh rate.
      */
     private fun startAnimator() {
-        val pxPerSecond = calculateScrollSpeedPxPerSecond(_state.value.speed)
-
         lastFrameTimeMs = 0L
         scrollRemainder = 0f
 
@@ -197,6 +191,7 @@ class WebtoonAutoScrollManager(
                 }
 
                 // Frame rate independent scroll amount with sub-pixel accumulation
+                val pxPerSecond = calculateScrollSpeedPxPerSecond(_state.value.speed)
                 val exactDelta = pxPerSecond * currentSpeedFactor * (deltaMs / 1000f) + scrollRemainder
                 val deltaY = exactDelta.toInt()
                 scrollRemainder = exactDelta - deltaY
