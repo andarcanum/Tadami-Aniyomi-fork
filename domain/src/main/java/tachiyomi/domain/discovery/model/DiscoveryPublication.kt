@@ -56,6 +56,7 @@ data class DiscoveryPublicationSnapshot(
     val issuedKeys: Set<String>,
     val traversal: DiscoveryTraversalState,
     val cursors: List<DiscoverySourceCursor>,
+    val sourcePolicyRevision: String = "",
 )
 
 data class DiscoveryQueryEvidence(

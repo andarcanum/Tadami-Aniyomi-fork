@@ -4,19 +4,25 @@ import android.content.Context
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET
 import eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
+import eu.kanade.tachiyomi.data.discovery.DiscoveryCoverRecovery
 import eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver
+import eu.kanade.tachiyomi.data.discovery.DiscoveryTrendingSource
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder
 import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.isBlacklisted
+import eu.kanade.tachiyomi.data.discovery.recoverMissingCovers
 import eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled
-import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
+import eu.kanade.tachiyomi.ui.discovery.activeDiscoveryRefreshFlow
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.lang.launchIO
@@ -27,7 +33,6 @@ import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
 import tachiyomi.domain.discovery.model.identityKeys
-import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import uy.kohesive.injekt.Injekt
@@ -48,6 +53,8 @@ internal class HomeDiscoveryController(
     private val currentState: () -> HomeHubUiState,
     private val onEmitEffect: (HomeHubEffect) -> Unit,
     sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
+    private val trendingSource: DiscoveryTrendingSource? = null,
+    private val onTeaserPersisted: (List<HomeHubDiscoveryItem>) -> Unit = {},
 ) {
     private val sourcePolicies by lazy { sourcePolicyProvider ?: Injekt.get<DiscoverySourcePolicyProvider>() }
     private val mutex = Mutex()
@@ -59,17 +66,64 @@ internal class HomeDiscoveryController(
     private var lastReentryTime: Long = 0L
     private var lastRefreshClickTime: Long = 0L
     private var dismissedSessionTitles = mutableSetOf<String>()
+    private var lastReconciledBatchSignature: Triple<Long, Long, List<String>>? = null
+    private var coverRecoveryJob: Job? = null
+    private var lastCoverRecoveryTargets: List<String> = emptyList()
+
+    private fun HomeHubDiscoveryItem.withRecoveredCover(): HomeHubDiscoveryItem {
+        if (!coverUrl.isNullOrBlank()) return this
+        val recovered = DiscoveryCoverRecovery.get(mediaType, cleanTitle) ?: return this
+        return copy(coverUrl = recovered)
+    }
+
+    private fun scheduleCoverRecovery(items: List<HomeHubDiscoveryItem>) {
+        val source = trendingSource ?: return
+        val targets = items.filter { it.coverUrl.isNullOrBlank() }
+        if (targets.isEmpty()) return
+        val targetKeys = targets.map { it.cleanTitle }
+        if (coverRecoveryJob?.isActive == true && lastCoverRecoveryTargets == targetKeys) return
+        lastCoverRecoveryTargets = targetKeys
+        coverRecoveryJob?.cancel()
+        coverRecoveryJob = scope.launchIO {
+            delay(500L)
+            recoverMissingCovers(
+                items = targets.map { it.toDiscoverySuggestion() },
+                mediaType = mediaType,
+                trendingSource = source,
+                onRecovered = {
+                    publishState { current ->
+                        current.copy(
+                            discovery = current.discovery.map { it.withRecoveredCover() },
+                            discoveryPool = current.discoveryPool.map { it.withRecoveredCover() },
+                        )
+                    }
+                    val updatedTeaser = currentState().discovery
+                    if (updatedTeaser.isNotEmpty()) {
+                        onTeaserPersisted(updatedTeaser)
+                    }
+                },
+            )
+        }
+    }
 
     private fun publishState(updater: (HomeHubUiState) -> HomeHubUiState) {
         onStateUpdate { current ->
             val updated = updater(current)
             val policy = sourcePolicies.current(mediaType)
             updated.copy(
-                discovery = updated.discovery.filter { item ->
-                    item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())
+                discovery = updated.discovery.mapNotNull { item ->
+                    if (item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())) {
+                        item.withRecoveredCover()
+                    } else {
+                        null
+                    }
                 },
-                discoveryPool = updated.discoveryPool.filter { item ->
-                    item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())
+                discoveryPool = updated.discoveryPool.mapNotNull { item ->
+                    if (item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())) {
+                        item.withRecoveredCover()
+                    } else {
+                        null
+                    }
                 },
             )
         }
@@ -113,7 +167,7 @@ internal class HomeDiscoveryController(
         scope.launchIO {
             var wasRefreshing = false
             val refreshFlow = runCatching {
-                manualRefreshFlow(
+                activeDiscoveryRefreshFlow(
                     context.workManager,
                     mediaType,
                 )
@@ -123,16 +177,47 @@ internal class HomeDiscoveryController(
                 publishState { it.copy(isDiscoveryRefreshing = refreshing) }
                 if (wasRefreshing && !refreshing) {
                     mutex.withLock {
+                        // Guard against WorkManager marking SUCCEEDED slightly before
+                        // observePublication() re-emits the freshly committed SQLite pool.
+                        val livePolicy = sourcePolicies.current(mediaType)
+                        if (cachedDiscoveryPool.isEmpty() && livePolicy.inventoryComplete) {
+                            val freshSnapshot = runCatchingUnlessCancelled {
+                                repository.publication(mediaType)
+                            }.getOrNull()
+                            if (freshSnapshot != null) {
+                                val recovered = projectPool(
+                                    freshSnapshot.eligibleSuggestions.filter(livePolicy::allows),
+                                    cachedPolicy,
+                                )
+                                if (recovered.isNotEmpty()) {
+                                    cachedDiscoveryPool = recovered
+                                }
+                            }
+                        }
                         val failedCsv = preferences.lastFailedRows(mediaType).get()
                         val lastStatus = preferences.lastGenerationStatus(mediaType).get()
                         val failedSources = preferences.lastSourceFailureCount(mediaType).get()
-                        val inventoryComplete = sourcePolicies.current(mediaType).inventoryComplete
-                        val isFailed = inventoryComplete && cachedDiscoveryPool.isEmpty() && (
-                            (lastStatus == "FAILED") ||
-                                failedCsv.isNotBlank() ||
-                                failedSources > 0
+                        val inventoryFailure = (sourcePolicies as? DiscoverySourcePolicyResolver)
+                            ?.lastInventoryFailure(mediaType)
+                        val inventoryComplete = livePolicy.inventoryComplete
+                        val isFailed = cachedDiscoveryPool.isEmpty() && (
+                            (!inventoryComplete && inventoryFailure != null) ||
+                                (
+                                    inventoryComplete && (
+                                        (lastStatus == "FAILED") ||
+                                            failedCsv.isNotBlank() ||
+                                            failedSources > 0
+                                        )
+                                    )
                             )
-                        publishState { it.copy(isDiscoveryFailed = isFailed) }
+                        publishState {
+                            it.copy(
+                                isDiscoveryFailed = isFailed,
+                                isDiscoveryLoading = cachedDiscoveryPool.isEmpty() &&
+                                    !inventoryComplete &&
+                                    inventoryFailure == null,
+                            )
+                        }
                         updateDiscoveryTeaserLocked(
                             advanceOffset = false,
                             forceUpdate = true,
@@ -145,6 +230,9 @@ internal class HomeDiscoveryController(
         }
 
         scope.launchIO {
+            val inventoryFailureFlow = (sourcePolicies as? DiscoverySourcePolicyResolver)
+                ?.observeInventoryFailure(mediaType)
+                ?: flowOf(null)
             combine(
                 repository.observePublication(mediaType),
                 preferences.discoveryEnabled().changes(),
@@ -158,8 +246,15 @@ internal class HomeDiscoveryController(
                         preferences.lastGenerationStatus(mediaType).changes(),
                         preferences.lastGenerationAt(mediaType).changes(),
                         preferences.lastSourceFailureCount(mediaType).changes(),
-                    ) { failedCsv, lastStatus, lastGenAt, sourceFailureCount ->
-                        DiscoveryStatusSnapshot(failedCsv, lastStatus, lastGenAt, sourceFailureCount)
+                        inventoryFailureFlow,
+                    ) { failedCsv, lastStatus, lastGenAt, sourceFailureCount, inventoryFailure ->
+                        DiscoveryStatusSnapshot(
+                            failedCsv = failedCsv,
+                            lastStatus = lastStatus,
+                            lastGenAt = lastGenAt,
+                            sourceFailureCount = sourceFailureCount,
+                            inventoryFailure = inventoryFailure,
+                        )
                     },
                 ) { blacklist, filterSpec, sourcePolicy, status ->
                     DiscoveryCandidatePolicy(
@@ -169,6 +264,8 @@ internal class HomeDiscoveryController(
                 },
             ) { snapshot, enabled, count, (policy, status, sourcePolicy) ->
                 val visible = snapshot.eligibleSuggestions.filter(sourcePolicy::allows)
+                val snapshotPendingSync = snapshot.sourcePolicyRevision.isNotEmpty() &&
+                    snapshot.sourcePolicyRevision != sourcePolicy.revision
                 DiscoveryObservationState(
                     snapshot = snapshot,
                     visible = visible,
@@ -180,6 +277,8 @@ internal class HomeDiscoveryController(
                     lastGenAt = status.lastGenAt,
                     sourceFailureCount = status.sourceFailureCount,
                     inventoryComplete = sourcePolicy.inventoryComplete,
+                    inventoryFailure = status.inventoryFailure,
+                    snapshotPendingSync = snapshotPendingSync,
                 )
             }.collectLatest { obs ->
                 mutex.withLock {
@@ -191,7 +290,9 @@ internal class HomeDiscoveryController(
                     cachedPolicy = obs.policy
                     hasObservedPolicy = true
                     if (!obs.enabled) {
+                        coverRecoveryJob?.cancel()
                         cachedDiscoveryPool = emptyList()
+                        lastReconciledBatchSignature = null
                         publishState {
                             it.copy(
                                 discovery = emptyList(),
@@ -202,6 +303,7 @@ internal class HomeDiscoveryController(
                                 discoveryFailedSourceCount = 0,
                             )
                         }
+                        onTeaserPersisted(emptyList())
                         return@collectLatest
                     }
                     val projected = projectPool(obs.visible, obs.policy)
@@ -215,8 +317,17 @@ internal class HomeDiscoveryController(
                         projected.forEach { item ->
                             item.identityKeys().forEach { k -> byKey.putIfAbsent(k, item) }
                         }
-                        val survivingBatch = batchKeys.mapNotNull { byKey[it] }.distinctBy { it.cleanTitle }
-                        if (survivingBatch.size < batchKeys.size && projected.size > survivingBatch.size) {
+                        val batchKeySet = batchKeys.toHashSet()
+                        val survivingBatchCount = batchKeys.count { it in byKey }
+                        val hasReplacementCandidate = projected.any { item ->
+                            item.identityKeys().none { it in batchKeySet }
+                        }
+                        val batchSignature = Triple(snapshot.generation, snapshot.homeBatchVersion, batchKeys)
+                        if (survivingBatchCount < batchKeys.size &&
+                            hasReplacementCandidate &&
+                            lastReconciledBatchSignature != batchSignature
+                        ) {
+                            lastReconciledBatchSignature = batchSignature
                             val rankedKeys = projected.flatMap { it.identityKeys().toList() }
                             runCatchingUnlessCancelled {
                                 repository.reconcileHomeBatch(mediaType, snapshot.generation, rankedKeys)
@@ -252,9 +363,13 @@ internal class HomeDiscoveryController(
                             repository.lastUpdatedAt(mediaType)
                         }.getOrNull()
                         ?: obs.lastGenAt.takeIf { it > 0L }
-                    val waitingInventory = !obs.inventoryComplete && cachedDiscoveryPool.isEmpty()
+                    val waitingInventory = cachedDiscoveryPool.isEmpty() && (
+                        (!obs.inventoryComplete && obs.inventoryFailure == null) ||
+                            obs.snapshotPendingSync
+                        )
                     val isFailed = !waitingInventory && cachedDiscoveryPool.isEmpty() && (
-                        (obs.lastStatus == "FAILED") ||
+                        (!obs.inventoryComplete && obs.inventoryFailure != null) ||
+                            (obs.lastStatus == "FAILED") ||
                             obs.failedCsv.isNotBlank() ||
                             obs.sourceFailureCount > 0
                         )
@@ -277,6 +392,7 @@ internal class HomeDiscoveryController(
                         forceUpdate = forceRebalance,
                         teaserCount = obs.count,
                         avoidCurrentTitles = !(priorityChanged || inventoryJustCompleted),
+                        preserveCachedEmpty = waitingInventory,
                     )
                 }
             }
@@ -289,15 +405,20 @@ internal class HomeDiscoveryController(
         notifyIfLimited: Boolean = false,
         teaserCount: Int? = null,
         avoidCurrentTitles: Boolean = true,
+        preserveCachedEmpty: Boolean = false,
     ) {
         if (!preferences.discoveryEnabled().get()) {
             publishState { it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList()) }
+            onTeaserPersisted(emptyList())
             return
         }
         val count = teaserCount ?: preferences.teaserCount().get().coerceIn(3, 20)
         val pool = cachedDiscoveryPool
         if (pool.isEmpty()) {
             publishState { it.copy(discovery = emptyList(), discoveryEnabled = true, discoveryPool = emptyList()) }
+            if (!preserveCachedEmpty) {
+                onTeaserPersisted(emptyList())
+            }
             return
         }
 
@@ -336,6 +457,11 @@ internal class HomeDiscoveryController(
                         discoveryPool = updatedPool,
                     )
                 }
+                val liveTeaser = currentState().discovery
+                onTeaserPersisted(liveTeaser)
+                scheduleCoverRecovery(liveTeaser)
+            } else if (state.discovery.any { it.coverUrl.isNullOrBlank() }) {
+                scheduleCoverRecovery(state.discovery)
             }
             return
         }
@@ -385,6 +511,9 @@ internal class HomeDiscoveryController(
                 discoveryPool = updatedPool,
             )
         }
+        val liveTeaser = currentState().discovery
+        onTeaserPersisted(liveTeaser)
+        scheduleCoverRecovery(liveTeaser)
     }
 
     fun refreshTeaser(
@@ -517,32 +646,18 @@ internal class HomeDiscoveryController(
             repository.undoHide(item.mediaType, item.cleanTitle)
             mutex.withLock {
                 dismissedSessionTitles -= item.cleanTitle
-                val rawPool = repository.subscribe(mediaType).first()
-                val consumed = repository.getSignals(mediaType).filter {
-                    it.signalType.excludesFromFeed
-                }.mapTo(HashSet()) {
-                    it.cleanTitle
-                }
-                val hidden = repository.getHiddenTitles(mediaType)
-                val eligibility = eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
-                    repository.eligibility(mediaType)
-                }.getOrNull()
+                if (!preferences.discoveryEnabled().get()) return@withLock
+                val snapshot = runCatchingUnlessCancelled {
+                    repository.publication(mediaType)
+                }.getOrNull()?.takeIf { it.generation > 0L || it.suggestions.isNotEmpty() }
+                    ?: repository.observePublication(mediaType).first()
                 val blacklist = repository.getBlacklistedTags(mediaType)
                 val shownMap = repository.getRecentExclusionsWithTimestamp(mediaType)
                 val policy = DiscoveryCandidatePolicy(
                     spec = preferences.genreFilterSpec(mediaType),
                     blacklistedTags = blacklist,
                 )
-                if (!preferences.discoveryEnabled().get()) return@withLock
-                val excludedIdentities = eligibility?.excludedIdentityKeys.orEmpty()
-                val excludedLookups = eligibility?.excludedLookupKeys.orEmpty()
-                val eligible = rawPool.filterNot { candidate ->
-                    candidate.cleanTitle in consumed || candidate.cleanTitle in hidden ||
-                        candidate.cleanTitle in excludedIdentities ||
-                        legacyDiscoveryKey(mediaType, candidate.cleanTitle) in excludedLookups ||
-                        candidate.identityKeys().any { it in excludedIdentities }
-                }
-                val projected = projectPool(eligible, policy)
+                val projected = projectPool(snapshot.eligibleSuggestions, policy)
                 val suggestion = projected.firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@withLock
                 val freshItem = suggestion.toHomeHubDiscoveryItem(
                     shownAt = shownMap[item.cleanTitle],
@@ -567,6 +682,9 @@ internal class HomeDiscoveryController(
                         discoveryEnabled = true,
                     )
                 }
+                val liveTeaser = currentState().discovery
+                onTeaserPersisted(liveTeaser)
+                scheduleCoverRecovery(liveTeaser)
             }
         }
     }
@@ -601,6 +719,7 @@ private data class DiscoveryStatusSnapshot(
     val lastStatus: String,
     val lastGenAt: Long,
     val sourceFailureCount: Int,
+    val inventoryFailure: Throwable? = null,
 )
 
 private data class DiscoveryObservationState(
@@ -614,4 +733,6 @@ private data class DiscoveryObservationState(
     val lastGenAt: Long,
     val sourceFailureCount: Int,
     val inventoryComplete: Boolean = true,
+    val inventoryFailure: Throwable? = null,
+    val snapshotPendingSync: Boolean = false,
 )

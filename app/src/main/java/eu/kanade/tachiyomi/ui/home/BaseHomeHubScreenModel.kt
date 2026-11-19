@@ -216,12 +216,20 @@ internal fun pruneDismissedSessionTitles(
 internal fun HomeHubUiState.withInitialDiscoveryPreferences(
     preferences: DiscoveryPreferences,
     mediaType: DiscoveryMediaType,
+    cachedDiscovery: List<CachedDiscoveryItem> = emptyList(),
 ): HomeHubUiState {
     val enabled = preferences.discoveryEnabled().get()
     val lastGenAt = preferences.lastGenerationAt(mediaType).get().takeIf { it > 0L }
+    val restoredDiscovery = if (enabled) {
+        cachedDiscovery.map { it.toHomeHubDiscoveryItem(mediaType) }
+    } else {
+        emptyList()
+    }
     return copy(
+        discovery = restoredDiscovery,
+        discoveryPool = restoredDiscovery,
         discoveryEnabled = enabled,
-        isDiscoveryLoading = enabled,
+        isDiscoveryLoading = enabled && restoredDiscovery.isEmpty(),
         discoveryLastUpdated = lastGenAt,
     )
 }

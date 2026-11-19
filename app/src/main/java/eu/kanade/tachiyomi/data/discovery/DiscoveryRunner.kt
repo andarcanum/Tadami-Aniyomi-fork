@@ -93,7 +93,8 @@ private const val WORKER_BUDGET_MARGIN_MS = 10_000L
 private const val MIN_MEDIA_BUDGET_MS = 20_000L
 
 /** Startup must not consume the whole media deadline when external rows can still be useful. */
-private const val SOURCE_INVENTORY_WAIT_MS = 5_000L
+private const val SOURCE_INVENTORY_MIN_WAIT_MS = 5_000L
+private const val SOURCE_INVENTORY_MAX_WAIT_MS = 12_000L
 
 /**
  * Time held back from the genre pass for row finalization + reserve/publish. Without it a slow
@@ -474,7 +475,10 @@ class DiscoveryRunner(
             if (beforeReadiness.inventoryComplete) {
                 reconcileDiscoverySourcePreferences(preferences, mediaType, beforeReadiness.pluginMembers.keys)
             } else {
-                val waitMs = minOf(SOURCE_INVENTORY_WAIT_MS, remainingMediaMs())
+                val remaining = remainingMediaMs()
+                val adaptiveCap = (remaining - MIN_MEDIA_BUDGET_MS)
+                    .coerceIn(SOURCE_INVENTORY_MIN_WAIT_MS, SOURCE_INVENTORY_MAX_WAIT_MS)
+                val waitMs = minOf(adaptiveCap, remaining)
                 if (waitMs > 0L) {
                     withTimeoutOrNull(waitMs) {
                         runCatchingUnlessCancelled { sourcePolicyProvider.awaitComplete(mediaType) }.getOrNull()
@@ -546,6 +550,11 @@ class DiscoveryRunner(
             resumeCursor != null -> resumeCursor.nextPage.coerceAtLeast(1)
             else -> backgroundPageOffset(candidateBackgroundCycle)
         }
+        if (previousPool != null && previousPool.configurationKey.isNotEmpty() &&
+            previousPool.configurationKey != configurationKey
+        ) {
+            preferences.clearGenerationDiagnostics(mediaType)
+        }
         var configurationSuperseded = false
         suspend fun configurationIsCurrent(): Boolean {
             val livePolicy = currentSourcePolicy()
@@ -554,8 +563,6 @@ class DiscoveryRunner(
             // Only a freshly read desired key may supersede this request; never reinstall its captured old key after IO.
             repository.installConfigurationKey(mediaType, liveKey)
             configurationSuperseded = true
-            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
-            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
             return false
         }
         var remainingBudgetMs = remainingMediaMs()
@@ -565,6 +572,8 @@ class DiscoveryRunner(
         }
         repository.installConfigurationKey(mediaType, configurationKey)
         if (!configurationIsCurrent()) {
+            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
             return SetupStageResult.Exit(DiscoveryRunOutcome(mediaType, DiscoveryRunStatus.SKIPPED))
         }
         remainingBudgetMs = remainingMediaMs()
@@ -870,6 +879,8 @@ class DiscoveryRunner(
                     trace = trace,
                 )
             }
+            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
             if (stage.previousPool == null && !stage.initialInventoryComplete) {
                 preferences.bootstrapAttemptAt(mediaType).set(0L)
             }

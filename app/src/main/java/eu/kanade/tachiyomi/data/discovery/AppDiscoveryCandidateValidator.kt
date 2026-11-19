@@ -2,6 +2,10 @@ package eu.kanade.tachiyomi.data.discovery
 
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.service.SourcePreferences
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onStart
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.repository.DiscoveryCandidateValidator
@@ -38,4 +42,12 @@ class AppDiscoveryCandidateValidator(
         )
         return policy.isAllowed(candidate)
     }
+
+    override fun observeChanges(media: DiscoveryMediaType): Flow<Unit> = merge(
+        sourcePolicyProvider.observe(media).map { Unit },
+        preferences.observeGenreFilterSpec(media).map { Unit },
+    ).onStart { emit(Unit) }
+
+    override fun sourcePolicyRevision(media: DiscoveryMediaType): String =
+        sourcePolicyProvider.current(media).revision
 }

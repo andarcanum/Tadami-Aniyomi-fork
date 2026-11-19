@@ -799,10 +799,10 @@ class DiscoveryRepositoryImpl(
         combine(
             handler.subscribeToList { db -> db.discovery_publicationQueries.selectByMedia(media.key) },
             knownTitlesProvider.observe(media).distinctUntilChanged(),
-        ) { publicationRows, _ -> publicationRows }
-            .map { publicationRows ->
+            candidateValidator.observeChanges(media),
+        ) { publicationRows, known, _ -> publicationRows to known }
+            .map { (publicationRows, known) ->
                 DiscoveryMutationFence.withMutation(media) {
-                    val known = knownTitlesProvider.snapshot(media)
                     handler.await { db ->
                         val suggestions = db.discovery_suggestionsQueries.selectAllMapped(media.key)
                         buildSnapshot(
@@ -1881,6 +1881,7 @@ class DiscoveryRepositoryImpl(
     ): DiscoveryPublicationSnapshot {
         val publication = settlePublicationRow(media, row)
         val eligibility = buildEligibility(media, known, memory, hidden)
+        val validatedSourceRevision = candidateValidator.sourcePolicyRevision(media)
         val eligible = suggestions.filter { candidate ->
             candidate.mediaType == media &&
                 !candidate.isExcludedBy(eligibility) &&
@@ -1897,7 +1898,7 @@ class DiscoveryRepositoryImpl(
             outcome = publication.outcome?.let { DiscoveryPublicationOutcome.valueOf(it) },
             suggestions = suggestions,
             eligibleSuggestions = eligible,
-            homeBatchKeys = decodeKeys(publication.active_keys).toList(),
+            homeBatchKeys = decodeKeyList(publication.active_keys),
             homeBatchVersion = publication.home_batch_version,
             issuedKeys = decodeKeys(publication.issued_keys),
             traversal = if (publication.traversal == DiscoveryTraversalState.CORRUPT.name) {
@@ -1906,6 +1907,7 @@ class DiscoveryRepositoryImpl(
                 DiscoveryTraversalState.VALID
             },
             cursors = decodeCursors(publication.cursors),
+            sourcePolicyRevision = validatedSourceRevision,
         )
     }
 

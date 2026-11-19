@@ -207,7 +207,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
     }
 
     companion object {
-        private const val TAG_AUTO = "DiscoveryUpdate"
+        internal const val TAG_AUTO = "DiscoveryUpdate"
         private const val TAG_AFTER_LIBRARY = "DiscoveryUpdateAfterLibrary"
         const val TAG_MANUAL = "DiscoveryUpdateManual"
         const val WORKER_TIMEOUT_MS = 120_000L
@@ -222,6 +222,8 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             } else {
                 wm.cancelUniqueWork(manualWorkName(mediaType))
                 wm.cancelUniqueWork(configurationWorkName(mediaType))
+                wm.cancelUniqueWork(bootstrapWorkName(mediaType))
+                wm.cancelUniqueWork(refillWorkName(mediaType))
                 Injekt.get<DiscoveryPreferences>().clearManualRefreshAt(mediaType)
                 DiscoveryNotifier(context).cancel(mediaType)
             }
@@ -297,12 +299,21 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         }
 
         /** Revalidate settings from page one without manual anti-repeat or rotation accounting. */
-        internal fun refreshConfiguration(context: Context, mediaType: DiscoveryMediaType) {
+        internal fun refreshConfiguration(
+            context: Context,
+            mediaType: DiscoveryMediaType,
+            initialDelaySeconds: Long = CONFIGURATION_DEBOUNCE_DELAY_SECONDS,
+        ) {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
+            preferences.clearGenerationDiagnostics(mediaType)
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
                 .addTag(configurationWorkName(mediaType))
-                .setInitialDelay(CONFIGURATION_DEBOUNCE_DELAY_SECONDS, TimeUnit.SECONDS)
+                .apply {
+                    if (initialDelaySeconds > 0L) {
+                        setInitialDelay(initialDelaySeconds, TimeUnit.SECONDS)
+                    }
+                }
                 .setInputData(
                     Data.Builder()
                         .putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)
@@ -385,7 +396,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             }
         }
 
-        private const val TAG_BACKFILL = "DiscoveryUpdateBackfill"
+        internal const val TAG_BACKFILL = "DiscoveryUpdateBackfill"
 
         /**
          * Разовая тихая перегенерация после апгрейда: SOURCE-строки кэша до миграции 58
@@ -461,8 +472,11 @@ internal fun shouldBootstrapDiscoveryFeed(
     lastBootstrapAttemptAt: Long,
     now: Long = System.currentTimeMillis(),
     retryMs: Long = DISCOVERY_BOOTSTRAP_RETRY_MS,
+    hasEligibleVisibleItems: Boolean = true,
+    hasStrictUserFilters: Boolean = false,
 ): Boolean {
-    if (lastUpdatedAt != null) return false
+    val needsRefresh = lastUpdatedAt == null || (!hasEligibleVisibleItems && !hasStrictUserFilters)
+    if (!needsRefresh) return false
     val sinceAttempt = now - lastBootstrapAttemptAt
     return sinceAttempt < 0L || sinceAttempt >= retryMs
 }

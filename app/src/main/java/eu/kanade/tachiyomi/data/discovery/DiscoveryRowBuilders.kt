@@ -386,12 +386,13 @@ class DiscoveryLikeRowBuilder(
         val timeoutMs = minOf(SOURCE_FETCH_TIMEOUT_MS, remainingMs)
         return runCatchingUnlessCancelled {
             withHardTimeoutOrNull(timeoutMs) {
+                val page = context.pageOffset.coerceAtLeast(1)
                 if (budget == null) {
                     catalog.popularWithGenres(
                         context.mediaType,
                         sourceId,
                         genres = genres,
-                        page = 1,
+                        page = page,
                         releaseStatuses = context.releaseStatuses,
                     )
                 } else {
@@ -399,7 +400,7 @@ class DiscoveryLikeRowBuilder(
                         context.mediaType,
                         sourceId,
                         genres = genres,
-                        page = 1,
+                        page = page,
                         releaseStatuses = context.releaseStatuses,
                         budget = budget,
                         maxDetails = minOf(NATIVE_LIKE_HYDRATE_MAX_DETAILS, budget.remainingDetails),
@@ -925,7 +926,9 @@ class DiscoveryTasteRowBuilder(
         exhaustionEvidence = if (includeExternal) null else sourceResults.map { it.toExhaustionEvidence() }
         // In the cheap path cards without genres were never going to be hydrated,
         // so an "unattempted" count there is by design and not a degraded row.
-        isDegraded = sourceResults.any {
+        val externalDegraded = (trendingResult?.isFailure == true) ||
+            splitResults.any { (_, r) -> r.isFailure }
+        isDegraded = externalDegraded || sourceResults.any {
             it.failure != null || (
                 required && (
                     it.summary.hasCoverageGap ||

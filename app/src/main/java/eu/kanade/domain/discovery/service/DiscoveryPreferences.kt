@@ -259,6 +259,18 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun lastGenerationStatus(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString(Preference.appStateKey("discovery_last_gen_status_" + mediaType.key), "")
 
+    /**
+     * Resets failure diagnostics from a previous configuration so an empty strict filter
+     * does not falsely render as a network error from an earlier run.
+     */
+    fun clearGenerationDiagnostics(mediaType: DiscoveryMediaType) {
+        lastFailedRows(mediaType).set("")
+        lastSourceFailureCount(mediaType).set(0)
+        if (lastGenerationStatus(mediaType).get() in setOf("FAILED", "PARTIAL")) {
+            lastGenerationStatus(mediaType).set("")
+        }
+    }
+
     /** Время завершения последней попытки генерации per-media. */
     fun lastGenerationAt(mediaType: DiscoveryMediaType): Preference<Long> =
         preferenceStore.getLong(Preference.appStateKey("discovery_last_gen_at_" + mediaType.key), 0L)

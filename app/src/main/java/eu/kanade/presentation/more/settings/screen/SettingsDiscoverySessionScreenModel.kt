@@ -74,8 +74,16 @@ class SettingsDiscoverySessionScreenModel(
         DiscoveryMediaType.entries.forEach { mediaType ->
             val current = computeDiscoverySessionFingerprint(preferences, sourcePreferences, mediaType)
             if (current != initialFingerprints[mediaType]) {
-                DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
+                DiscoveryUpdateJob.refreshConfiguration(
+                    context = context,
+                    mediaType = mediaType,
+                    initialDelaySeconds = SETTINGS_EXIT_REFRESH_DELAY_SECONDS,
+                )
             }
         }
+    }
+
+    companion object {
+        private const val SETTINGS_EXIT_REFRESH_DELAY_SECONDS = 2L
     }
 }

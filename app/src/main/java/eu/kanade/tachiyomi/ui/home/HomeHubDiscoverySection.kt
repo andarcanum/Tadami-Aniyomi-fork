@@ -58,7 +58,6 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -3167,19 +3166,12 @@ internal fun EmptyForYouCard(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (emptyState == ForYouEmptyState.REFRESHING) {
-            CircularProgressIndicator(
-                color = colors.accent,
-                modifier = Modifier.size(36.dp),
-            )
-        } else {
-            Icon(
-                content.icon,
-                contentDescription = null,
-                tint = if (emptyState == ForYouEmptyState.FAILED) colors.error else colors.accent,
-                modifier = Modifier.size(40.dp),
-            )
-        }
+        Icon(
+            content.icon,
+            contentDescription = null,
+            tint = if (emptyState == ForYouEmptyState.FAILED) colors.error else colors.accent,
+            modifier = Modifier.size(40.dp),
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             content.title,

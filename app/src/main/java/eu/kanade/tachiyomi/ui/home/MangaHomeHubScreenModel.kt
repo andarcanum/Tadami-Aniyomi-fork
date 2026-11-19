@@ -89,6 +89,7 @@ internal class MangaHomeHubScreenModel(
         }.withInitialDiscoveryPreferences(
             preferences = discoveryPreferences,
             mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
+            cachedDiscovery = cached.discovery,
         )
     },
     userProfilePreferences = userProfilePreferences,
@@ -115,6 +116,10 @@ internal class MangaHomeHubScreenModel(
             onStateUpdate = { update -> mutableState.update(update) },
             currentState = { state.value },
             onEmitEffect = { emitEffect(it) },
+            trendingSource = eu.kanade.tachiyomi.data.discovery.CompositeTrendingSource(),
+            onTeaserPersisted = { items ->
+                fastCache.updateDiscovery(items.map { it.toCachedDiscoveryItem() })
+            },
         )
     }
 
@@ -371,6 +376,7 @@ internal class MangaHomeHubScreenModel(
                         progressCount = r.progressNumerator,
                     )
                 },
+                discovery = currentState.discovery.map { it.toCachedDiscoveryItem() },
                 userName = currentState.userName,
                 userAvatar = currentState.userAvatar,
                 isInitialized =

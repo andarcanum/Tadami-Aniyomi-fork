@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
 import eu.kanade.tachiyomi.data.discovery.DiscoveryLibraryAdder
 import eu.kanade.tachiyomi.data.discovery.DiscoveryMixQuotas
 import eu.kanade.tachiyomi.data.discovery.DiscoveryRowItem
+import eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver
 import eu.kanade.tachiyomi.data.discovery.DiscoveryTrendingSource
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.META_PREFETCH_COUNT
@@ -48,8 +49,6 @@ import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
-import tachiyomi.domain.discovery.model.identityKeys
-import tachiyomi.domain.discovery.model.legacyDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
@@ -141,6 +140,30 @@ internal fun manualRefreshFlow(workManager: WorkManager, mediaType: DiscoveryMed
     workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.manualWorkTag(mediaType)),
     workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.configurationWorkName(mediaType)),
 ) { manual, configuration -> manual || configuration }.distinctUntilChanged()
+
+/**
+ * Observes user-visible discovery generation work for [mediaType]: manual refreshes,
+ * debounced configuration refreshes, first-launch bootstrap, and upgrade binding backfill.
+ * Extra tags degrade safely to false when unit test doubles stub only manual/configuration tags.
+ */
+internal fun activeDiscoveryRefreshFlow(
+    workManager: WorkManager,
+    mediaType: DiscoveryMediaType,
+): Flow<Boolean> {
+    val bootstrapFlow = runCatching {
+        workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.bootstrapWorkName(mediaType))
+    }.getOrElse { flowOf(false) }
+    val backfillFlow = runCatching {
+        workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.TAG_BACKFILL)
+    }.getOrElse { flowOf(false) }
+    return combine(
+        manualRefreshFlow(workManager, mediaType),
+        bootstrapFlow,
+        backfillFlow,
+    ) { manualOrConfig, bootstrap, backfill ->
+        manualOrConfig || bootstrap || backfill
+    }.distinctUntilChanged()
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun manualRefreshWorkInfoFlow(
@@ -385,9 +408,12 @@ internal class DiscoveryFeedScreenModel(
         }
         observeJob?.cancel()
         observeJob = screenModelScope.launchIO {
+            val inventoryFailureFlow = (sourcePolicies as? DiscoverySourcePolicyResolver)
+                ?.observeInventoryFailure(mediaType)
+                ?: flowOf(null)
             combine(
                 repository.observePublication(mediaType),
-                refreshingFlow(),
+                refreshingFlow(mediaType),
                 repository.subscribeHidden(mediaType),
                 preferences.lastFailedRows(mediaType).changes(),
                 combine(
@@ -397,15 +423,18 @@ internal class DiscoveryFeedScreenModel(
                     combine(
                         preferences.lastSourceFailureCount(mediaType).changes(),
                         preferences.lastGenerationStatus(mediaType).changes(),
-                    ) { failureCount, genStatus -> failureCount to genStatus },
-                ) { blacklist, filterSpec, sourcePolicy, statusPair ->
+                        inventoryFailureFlow,
+                    ) { failureCount, genStatus, inventoryFailure ->
+                        Triple(failureCount, genStatus, inventoryFailure)
+                    },
+                ) { blacklist, filterSpec, sourcePolicy, statusTriple ->
                     Triple(
                         DiscoveryCandidatePolicy(
                             spec = filterSpec,
                             blacklistedTags = blacklist,
                         ),
                         sourcePolicy,
-                        statusPair,
+                        statusTriple,
                     )
                 },
             ) { snapshot, refreshing, hidden, failedCsv, policyTriple ->
@@ -418,6 +447,7 @@ internal class DiscoveryFeedScreenModel(
                     sourcePolicy = policyTriple.second,
                     failedSourceCount = policyTriple.third.first,
                     lastGenerationStatus = policyTriple.third.second,
+                    inventoryFailure = policyTriple.third.third,
                 )
             }
                 .collectLatest { feedSources ->
@@ -430,6 +460,7 @@ internal class DiscoveryFeedScreenModel(
                         sources,
                         failedSourceCount,
                         lastGenStatus,
+                        inventoryFailure,
                     ) = feedSources
                     val priorityChanged = lastObservedPriorityGenres != null &&
                         lastObservedPriorityGenres != policy.priorityGenres
@@ -487,6 +518,19 @@ internal class DiscoveryFeedScreenModel(
                                 )
                             }
                         }
+                        val snapshotPendingSync = snapshot.sourcePolicyRevision.isNotEmpty() &&
+                            snapshot.sourcePolicyRevision != sources.revision
+                        val waitingInventory = liveMix.isEmpty() && (
+                            (!sources.inventoryComplete && inventoryFailure == null) ||
+                                snapshotPendingSync
+                            )
+                        val effectiveStatus = if (
+                            inventoryFailure != null && !sources.inventoryComplete && liveMix.isEmpty()
+                        ) {
+                            "FAILED"
+                        } else {
+                            lastGenStatus
+                        }
                         current.copy(
                             rows = liveRows,
                             mix = liveMix,
@@ -494,11 +538,11 @@ internal class DiscoveryFeedScreenModel(
                             lastUpdatedAt = snapshot.suggestions.maxOfOrNull { s -> s.createdAt }
                                 ?: snapshot.committedAt.takeIf { it > 0L },
                             isRefreshing = refreshing,
-                            isLoading = liveMix.isEmpty() && !sources.inventoryComplete,
+                            isLoading = waitingInventory,
                             failedRows = parseFailedRows(failedCsv),
                             poolSize = visible.size,
                             failedSourceCount = failedSourceCount,
-                            lastGenerationStatus = lastGenStatus,
+                            lastGenerationStatus = effectiveStatus,
                             tabOffsets = if (resetWindows) emptyMap() else current.tabOffsets,
                             activeWindows = updatedWindows,
                         )
@@ -555,6 +599,7 @@ internal class DiscoveryFeedScreenModel(
         val sourcePolicy: DiscoverySourcePolicy,
         val failedSourceCount: Int,
         val lastGenerationStatus: String,
+        val inventoryFailure: Throwable? = null,
     )
 
     private fun DiscoverySuggestion.toRowItem() = DiscoveryRowItem(
@@ -570,12 +615,15 @@ internal class DiscoveryFeedScreenModel(
         genres = genres,
     )
 
-    private fun refreshingFlow(): Flow<Boolean> =
-        manualRefreshFlow(context.workManager, state.value.mediaType)
+    private fun refreshingFlow(mediaType: DiscoveryMediaType): Flow<Boolean> =
+        activeDiscoveryRefreshFlow(context.workManager, mediaType)
 
     fun refreshNow(): Long {
         if (state.value.isRefreshing) return 0L
         val media = state.value.mediaType
+        if (!sourcePolicies.current(media).inventoryComplete) {
+            (sourcePolicies as? DiscoverySourcePolicyResolver)?.retryInventoryLoad(media)
+        }
         val now = System.currentTimeMillis()
         val remaining = remainingCooldownSeconds(preferences.manualRefreshAt(media).get(), now)
         if (remaining > 0L) return remaining
@@ -615,9 +663,10 @@ internal class DiscoveryFeedScreenModel(
         if (currentState.isRefreshing) return 0L
         val cooldown = refreshNow()
         if (cooldown > 0L) return cooldown
-        // Full screen: every accepted tap requests a fresh source pool; local
-        // window rotation is not a substitute for refresh.
-        mutableState.update { it.copy(tabOffsets = emptyMap(), activeWindows = emptyMap()) }
+        // Full screen: every accepted tap requests a fresh source pool; keep the
+        // current windows intact until the new publication arrives so cancelled or
+        // offline refreshes do not drop visible cards.
+        mutableState.update { it.copy(tabOffsets = emptyMap()) }
         return 0L
     }
 
@@ -680,32 +729,22 @@ internal class DiscoveryFeedScreenModel(
         lastHidden = null
         hideUndoOperations.enqueue {
             repository.undoHide(item.mediaType, item.cleanTitle)
-            val rawPool = repository.subscribe(item.mediaType).first()
-            val consumed = repository.getSignals(item.mediaType).filter {
-                it.signalType.excludesFromFeed
-            }.mapTo(HashSet()) {
-                it.cleanTitle
-            }
-            val hidden = repository.getHiddenTitles(item.mediaType)
-            val eligibility = eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
-                repository.eligibility(item.mediaType)
-            }.getOrNull()
+            if (!preferences.discoveryEnabled().get() || state.value.mediaType != item.mediaType) return@enqueue
+            val snapshot = eu.kanade.tachiyomi.data.discovery.runCatchingUnlessCancelled {
+                repository.publication(item.mediaType)
+            }.getOrNull()?.takeIf { it.generation > 0L || it.suggestions.isNotEmpty() }
+                ?: repository.observePublication(item.mediaType).first()
             val blacklist = repository.getBlacklistedTags(item.mediaType)
             val policy =
                 DiscoveryCandidatePolicy(
                     spec = preferences.genreFilterSpec(item.mediaType),
                     blacklistedTags = blacklist,
                 )
-            if (!preferences.discoveryEnabled().get() || state.value.mediaType != item.mediaType) return@enqueue
-            val excludedIdentities = eligibility?.excludedIdentityKeys.orEmpty()
-            val excludedLookups = eligibility?.excludedLookupKeys.orEmpty()
-            val eligible = rawPool.filterNot { candidate ->
-                candidate.cleanTitle in consumed || candidate.cleanTitle in hidden ||
-                    candidate.cleanTitle in excludedIdentities ||
-                    legacyDiscoveryKey(item.mediaType, candidate.cleanTitle) in excludedLookups ||
-                    candidate.identityKeys().any { it in excludedIdentities }
-            }
-            val projected = projectCandidates(eligible, policy)
+            val projected = projectCandidates(
+                snapshot.eligibleSuggestions,
+                policy,
+                sourcePolicies.current(item.mediaType),
+            )
             val tabPool = if (tab == FeedSignalTab.MIX) projected else projected.filter { it.rowType == tab.rowType() }
             val freshItem = tabPool.firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@enqueue
             mutableState.update { current ->

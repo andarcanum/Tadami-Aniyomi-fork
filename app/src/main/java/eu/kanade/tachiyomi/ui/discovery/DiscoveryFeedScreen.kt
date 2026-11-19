@@ -493,7 +493,7 @@ private fun FeedToolbar(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val (labelKind, labelValue) = resolveUpdatedLabel(state.lastUpdatedAt, System.currentTimeMillis())
-    val updatedLabel = if (state.isRefreshing && !state.progressText.isNullOrBlank()) {
+    val updatedLabel = if ((state.isRefreshing || state.isLoading) && !state.progressText.isNullOrBlank()) {
         state.progressText
     } else {
         when (labelKind) {
@@ -849,10 +849,11 @@ private fun FeedBody(
     val tasteTemplate = stringResource(AYMR.strings.for_you_reason_taste)
 
     when {
-        state.isLoading -> DiscoveryFeedSkeletonGrid(
-            contentPadding = contentPadding,
-            modifier = modifier,
-        )
+        state.isLoading || (items.isEmpty() && selectedGenre == null && state.isRefreshing) ->
+            DiscoveryFeedSkeletonGrid(
+                contentPadding = contentPadding,
+                modifier = modifier,
+            )
 
         items.isEmpty() && selectedGenre == null -> Column(
             modifier

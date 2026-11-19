@@ -1002,17 +1002,32 @@ object HomeHubTab : Tab {
         // one-shot сразу (фикс дыры: после успеха аниме манга/новеллы ждали бы до 24ч).
         // Анти-шторм: повторная попытка не чаще DISCOVERY_BOOTSTRAP_RETRY_MS — при стойких
         // неудачах (оффлайн, все ряды failed) свайп вкладок не перезапускает генерацию.
-        LaunchedEffect(selectedSection) {
+        LaunchedEffect(
+            selectedSection,
+            headerState.isDiscoveryLoading,
+            headerState.isDiscoveryRefreshing,
+            headerState.discoveryPool.isEmpty(),
+        ) {
             val mediaType = when (selectedSection) {
                 HomeHubSection.Anime -> tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME
                 HomeHubSection.Manga -> tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA
                 HomeHubSection.Novel -> tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL
             }
+            if (profileSection != selectedSection) return@LaunchedEffect
+            if (!discoveryPreferences.discoveryEnabled().get()) return@LaunchedEffect
+            val lastUpdatedAt = discoveryRepository.lastUpdatedAt(mediaType)
+            val inventorySettledEmpty = !headerState.isDiscoveryLoading &&
+                !headerState.isDiscoveryRefreshing &&
+                headerState.discoveryPool.isEmpty()
+            val hasStrictFilters = discoveryPreferences.requiredGenres(mediaType).get().isNotBlank() ||
+                discoveryPreferences.ignoredGenres(mediaType).get().isNotBlank() ||
+                discoveryPreferences.releaseStatusFilter().get().isNotBlank()
             if (
-                discoveryPreferences.discoveryEnabled().get() &&
                 eu.kanade.tachiyomi.data.discovery.shouldBootstrapDiscoveryFeed(
-                    lastUpdatedAt = discoveryRepository.lastUpdatedAt(mediaType),
+                    lastUpdatedAt = lastUpdatedAt,
                     lastBootstrapAttemptAt = discoveryPreferences.bootstrapAttemptAt(mediaType).get(),
+                    hasEligibleVisibleItems = !inventorySettledEmpty,
+                    hasStrictUserFilters = hasStrictFilters,
                 )
             ) {
                 discoveryPreferences.bootstrapAttemptAt(mediaType).set(System.currentTimeMillis())
