@@ -8,6 +8,7 @@ import eu.kanade.presentation.more.settings.screen.SearchableSettings
 import eu.kanade.tachiyomi.ui.player.Anime4KShaderPreset
 import eu.kanade.tachiyomi.ui.player.Debanding
 import eu.kanade.tachiyomi.ui.player.DecoderPreset
+import eu.kanade.tachiyomi.ui.player.HdrToneMappingMode
 import eu.kanade.tachiyomi.ui.player.MotionInterpolationMode
 import eu.kanade.tachiyomi.ui.player.settings.DecoderPreferences
 import kotlinx.collections.immutable.toImmutableMap
@@ -32,6 +33,8 @@ object PlayerSettingsDecoderScreen : SearchableSettings {
         val debanding = decoderPreferences.videoDebanding()
         val anime4k = decoderPreferences.anime4kShaderPreset()
         val motionInterpolation = decoderPreferences.motionInterpolationMode()
+        val hdrToneMapping = decoderPreferences.hdrToneMappingMode()
+        val matchRefreshRate = decoderPreferences.matchDisplayRefreshRate()
         val yuv420p = decoderPreferences.useYUV420P()
 
         return listOf(
@@ -75,6 +78,19 @@ object PlayerSettingsDecoderScreen : SearchableSettings {
                 }.toImmutableMap(),
                 title = stringResource(AYMR.strings.pref_motion_interpolation_title),
                 subtitle = stringResource(AYMR.strings.pref_motion_interpolation_subtitle),
+            ),
+            Preference.PreferenceItem.ListPreference(
+                preference = hdrToneMapping,
+                entries = HdrToneMappingMode.entries.associateWith {
+                    stringResource(it.titleRes)
+                }.toImmutableMap(),
+                title = stringResource(AYMR.strings.pref_hdr_tone_mapping_title),
+                subtitle = stringResource(AYMR.strings.pref_hdr_tone_mapping_subtitle),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = matchRefreshRate,
+                title = stringResource(AYMR.strings.pref_match_display_refresh_rate_title),
+                subtitle = stringResource(AYMR.strings.pref_match_display_refresh_rate_subtitle),
             ),
             Preference.PreferenceItem.SwitchPreference(
                 preference = yuv420p,

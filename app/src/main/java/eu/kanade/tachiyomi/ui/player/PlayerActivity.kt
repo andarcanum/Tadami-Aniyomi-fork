@@ -41,6 +41,7 @@ import android.util.Rational
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
@@ -124,6 +125,7 @@ class PlayerActivity : BaseActivity() {
     val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     private var mediaSession: MediaSession? = null
+    private var didOverrideDisplayMode = false
     private val gesturePreferences: GesturePreferences by lazy { viewModel.gesturePreferences }
     private val playerPreferences: PlayerPreferences by lazy { viewModel.playerPreferences }
     private val playerStartupCoordinator by lazy {
@@ -222,16 +224,19 @@ class PlayerActivity : BaseActivity() {
                 val exception = initResult.second.exceptionOrNull() ?: IllegalStateException(
                     "Unknown error",
                 )
+                viewModel.updateIsLoadingHosters(false)
                 withUIContext {
                     setInitialEpisodeError(exception)
                 }
+                return@launchNonCancellable
             }
 
             viewModel.updateIsLoadingHosters(false)
 
+            val source = viewModel.currentSource.value ?: return@launchNonCancellable
             lifecycleScope.launch {
                 viewModel.loadHosters(
-                    source = viewModel.currentSource.value!!,
+                    source = source,
                     hosterList = initResult.first.hosterList ?: emptyList(),
                     hosterIndex = initResult.first.videoIndex.first,
                     videoIndex = initResult.first.videoIndex.second,
@@ -257,14 +262,6 @@ class PlayerActivity : BaseActivity() {
         setupPlayerAudio()
         setupMediaSession()
         setupPlayerOrientation()
-
-        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
-            runOnUiThread {
-                toast(throwable.message)
-            }
-            logcat(LogPriority.ERROR, throwable)
-            finish()
-        }
 
         viewModel.eventFlow
             .onEach { event ->
@@ -341,10 +338,14 @@ class PlayerActivity : BaseActivity() {
             it.release()
         }
 
+        unregisterPipReceiver()
+
         if (noisyReceiver.initialized) {
             unregisterReceiver(noisyReceiver)
             noisyReceiver.initialized = false
         }
+
+        resetDisplayRefreshRateIfNeeded()
 
         MPVLib.removeLogObserver(playerObserver)
         MPVLib.removeObserver(playerObserver)
@@ -390,6 +391,7 @@ class PlayerActivity : BaseActivity() {
     }
 
     private fun observePresenceEpisode() {
+        presenceJob?.cancel()
         val manager = Injekt.get<DiscordPresenceManager>()
         presenceJob = combine(viewModel.currentAnime, viewModel.currentEpisode) { anime, episode ->
             anime to episode
@@ -481,9 +483,16 @@ class PlayerActivity : BaseActivity() {
         }
     }
 
-    private fun UniFile.writeText(text: String) {
+    private fun UniFile.writeTextIfChanged(text: String) {
+        val expectedBytes = text.toByteArray()
+        if (this.length() == expectedBytes.size.toLong()) {
+            val matches = runCatching {
+                this.openInputStream().use { it.readBytes().contentEquals(expectedBytes) }
+            }.getOrDefault(false)
+            if (matches) return
+        }
         this.openOutputStream().use {
-            it.write(text.toByteArray())
+            it.write(expectedBytes)
         }
     }
 
@@ -493,28 +502,26 @@ class PlayerActivity : BaseActivity() {
         val mpvDir = UniFile.fromFile(applicationContext.filesDir)!!.createDirectory(MPV_DIR)!!
 
         val mpvConfFile = mpvDir.createFile("mpv.conf")!!
-        advancedPlayerPreferences.mpvConf().get().let { mpvConfFile.writeText(it) }
+        advancedPlayerPreferences.mpvConf().get().let { mpvConfFile.writeTextIfChanged(it) }
         val mpvInputFile = mpvDir.createFile("input.conf")!!
-        advancedPlayerPreferences.mpvInput().get().let { mpvInputFile.writeText(it) }
+        advancedPlayerPreferences.mpvInput().get().let { mpvInputFile.writeTextIfChanged(it) }
 
         copyUserFiles(mpvDir)
         val anime4kPreset = decoderPreferences.anime4kShaderPreset().get()
-        if (copyAnime4kShaders(mpvDir, anime4kPreset)) {
-            anime4kPreset.mpvShaderOption()?.let {
-                MPVLib.setOptionString("glsl-shaders", it)
+        player.stagedAnime4kShaderOption = if (copyAnime4kShaders(mpvDir, anime4kPreset)) {
+            anime4kPreset.mpvShaderOption()
+        } else {
+            if (anime4kPreset != Anime4KShaderPreset.Off) {
+                logcat(LogPriority.WARN) {
+                    "Anime4K preset $anime4kPreset could not be staged and was disabled"
+                }
             }
-        } else if (anime4kPreset != Anime4KShaderPreset.Off) {
-            logcat(LogPriority.WARN) {
-                "Anime4K preset $anime4kPreset could not be staged and was disabled"
-            }
+            null
         }
         copyAssets(mpvDir)
         // Stage the user fonts synchronously so they are on disk before MPV initializes its
         // subtitle renderer; the fonts directory is registered right after initialize below.
         val fontsDirectory = PlayerFontBridge.copyFontsDirectory(storageManager, mpvDir)
-
-        MPVLib.setOptionString("sub-ass-force-margins", "yes")
-        MPVLib.setOptionString("sub-use-margins", "yes")
 
         player.initialize(
             configDir = mpvDir.filePath!!,
@@ -527,54 +534,87 @@ class PlayerActivity : BaseActivity() {
     }
 
     private fun copyUserFiles(mpvDir: UniFile) {
-        // First, delete all present scripts
-        val scriptsDir = { mpvDir.createDirectory(MPV_SCRIPTS_DIR) }
-        val scriptOptsDir = { mpvDir.createDirectory(MPV_SCRIPTS_OPTS_DIR) }
-        val shadersDir = { mpvDir.createDirectory(MPV_SHADERS_DIR) }
+        val scriptsDir = mpvDir.createDirectory(MPV_SCRIPTS_DIR)
+        val scriptOptsDir = mpvDir.createDirectory(MPV_SCRIPTS_OPTS_DIR)
+        val shadersDir = mpvDir.createDirectory(MPV_SHADERS_DIR)
 
-        scriptsDir()?.delete()
-        scriptOptsDir()?.delete()
-        shadersDir()?.delete()
+        val userFilesEnabled = advancedPlayerPreferences.mpvUserFiles().get()
+        syncUserDirectory(
+            sourceDir = if (userFilesEnabled) storageManager.getScriptsDirectory() else null,
+            targetDir = scriptsDir,
+            preserveNames = setOf("aniyomi.lua", "custombuttons.lua"),
+        )
+        syncUserDirectory(
+            sourceDir = if (userFilesEnabled) storageManager.getScriptOptsDirectory() else null,
+            targetDir = scriptOptsDir,
+        )
+        syncUserDirectory(
+            sourceDir = if (userFilesEnabled) storageManager.getShadersDirectory() else null,
+            targetDir = shadersDir,
+            preserveNames = setOf("anime4k"),
+        )
 
-        // Then, copy the user files from the Aniyomi directory
-        if (advancedPlayerPreferences.mpvUserFiles().get()) {
-            storageManager.getScriptsDirectory()?.listFiles()?.forEach { file ->
-                val outFile = scriptsDir()?.createFile(file.name)
-                outFile?.let { target ->
-                    file.openInputStream().use { input ->
-                        target.openOutputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
+        // Copy over the bridge file only when missing or size changed
+        val luaFile = scriptsDir?.createFile("aniyomi.lua") ?: return
+        runCatching {
+            assets.open("aniyomi.lua", AssetManager.ACCESS_STREAMING).use { input ->
+                val expectedSize = input.available().toLong()
+                if (expectedSize > 0L && luaFile.length() == expectedSize) {
+                    return@use
+                }
+                luaFile.openOutputStream().use { output ->
+                    input.copyTo(output)
                 }
             }
-            storageManager.getScriptOptsDirectory()?.listFiles()?.forEach { file ->
-                val outFile = scriptOptsDir()?.createFile(file.name)
-                outFile?.let { target ->
-                    file.openInputStream().use { input ->
-                        target.openOutputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                }
+        }.onFailure { e ->
+            logcat(LogPriority.ERROR, e) { "Failed to stage aniyomi.lua" }
+        }
+    }
+
+    private fun syncUserDirectory(
+        sourceDir: UniFile?,
+        targetDir: UniFile?,
+        preserveNames: Set<String> = emptySet(),
+    ) {
+        if (targetDir == null) return
+        val sourceFiles = sourceDir?.listFiles()?.filter { it.isFile && it.name != null }.orEmpty()
+        val keptNames = HashSet<String>(sourceFiles.size + preserveNames.size)
+        keptNames.addAll(preserveNames)
+
+        sourceFiles.forEach { file ->
+            val name = file.name ?: return@forEach
+            if (name in preserveNames) return@forEach
+            keptNames.add(name)
+
+            val existing = targetDir.findFile(name)
+            val sourceLength = file.length()
+            val sourceLastModified = file.lastModified()
+            if (
+                existing != null &&
+                existing.isFile &&
+                sourceLength >= 0L &&
+                existing.length() == sourceLength &&
+                (sourceLastModified <= 0L || existing.lastModified() >= sourceLastModified)
+            ) {
+                return@forEach
             }
-            storageManager.getShadersDirectory()?.listFiles()?.forEach { file ->
-                val outFile = shadersDir()?.createFile(file.name)
-                outFile?.let { target ->
-                    file.openInputStream().use { input ->
-                        target.openOutputStream().use { output ->
-                            input.copyTo(output)
-                        }
+
+            val outFile = existing ?: targetDir.createFile(name) ?: return@forEach
+            runCatching {
+                file.openInputStream().use { input ->
+                    outFile.openOutputStream().use { output ->
+                        input.copyTo(output)
                     }
                 }
+            }.onFailure { e ->
+                logcat(LogPriority.WARN, e) { "Failed to sync user MPV file: $name" }
             }
         }
 
-        // Copy over the bridge file
-        val luaFile = scriptsDir()?.createFile("aniyomi.lua")
-        luaFile?.openOutputStream()?.bufferedWriter()?.use { scriptLua ->
-            assets.open("aniyomi.lua").bufferedReader().use { bridgeReader ->
-                scriptLua.write(bridgeReader.readText())
+        targetDir.listFiles()?.forEach { existing ->
+            val name = existing.name ?: return@forEach
+            if (name !in keptNames) {
+                existing.delete()
             }
         }
     }
@@ -592,7 +632,11 @@ class PlayerActivity : BaseActivity() {
             }
 
             try {
-                assets.open("shaders/anime4k/$shaderPath").use { input ->
+                assets.open("shaders/anime4k/$shaderPath", AssetManager.ACCESS_STREAMING).use { input ->
+                    val expectedLength = input.available().toLong()
+                    if (expectedLength > 0L && targetFile.length() == expectedLength) {
+                        return@use
+                    }
                     targetFile.openOutputStream().use { output ->
                         input.copyTo(output)
                     }
@@ -663,7 +707,10 @@ class PlayerActivity : BaseActivity() {
 
     private fun setupPlayerAudio() {
         with(audioPreferences) {
-            audioChannels().get().let { MPVLib.setPropertyString(it.property, it.value) }
+            AudioFilterChainBuilder.applyProperties(
+                audioChannels = audioChannels().get(),
+                normalizeAudio = audioNormalization().get(),
+            )
 
             val request = AudioFocusRequestCompat.Builder(AudioManagerCompat.AUDIOFOCUS_GAIN).also {
                 it.setAudioAttributes(
@@ -738,6 +785,14 @@ class PlayerActivity : BaseActivity() {
 
     fun showToast(message: String) {
         runOnUiThread { toast(message) }
+    }
+
+    internal fun onPlaybackError(errorMessage: String) {
+        if (player.isExiting) return
+        val fellBack = viewModel.tryFallbackAfterPlaybackError(errorMessage)
+        if (!fellBack) {
+            toast(errorMessage, Toast.LENGTH_LONG)
+        }
     }
 
     // A bunch of observers
@@ -866,23 +921,33 @@ class PlayerActivity : BaseActivity() {
             ),
         )
         builder.setSourceRectHint(pipRect)
-        player.videoH?.let {
-            val height = it
-            val width = it * player.getVideoOutAspect()!!
-            val rational = Rational(height, width.toInt()).toFloat()
-            if (rational in 0.42..2.38) builder.setAspectRatio(Rational(width.toInt(), height))
+        val height = player.videoH
+        val aspect = player.getVideoOutAspect()
+        if (height != null && height > 0 && aspect != null && aspect > 0.0) {
+            val width = (height * aspect).toInt()
+            if (width > 0) {
+                val ratio = width.toFloat() / height.toFloat()
+                if (ratio in 0.42f..2.38f) {
+                    builder.setAspectRatio(Rational(width, height))
+                }
+            }
         }
         return builder.build()
+    }
+
+    private fun unregisterPipReceiver() {
+        pipReceiver?.let { receiver ->
+            runCatching { unregisterReceiver(receiver) }
+            pipReceiver = null
+        }
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         if (!isInPictureInPictureMode) {
-            pipReceiver?.let {
-                unregisterReceiver(pipReceiver)
-                pipReceiver = null
-            }
+            unregisterPipReceiver()
         } else {
+            unregisterPipReceiver()
             setPictureInPictureParams(createPipParams())
             viewModel.hideControls()
             viewModel.hideSeekBar()
@@ -926,7 +991,7 @@ class PlayerActivity : BaseActivity() {
             PlayerOrientation.ReversePortrait -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
             PlayerOrientation.SensorPortrait -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             PlayerOrientation.Landscape -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            PlayerOrientation.ReverseLandscape -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+            PlayerOrientation.ReverseLandscape -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
             PlayerOrientation.SensorLandscape -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
     }
@@ -1042,7 +1107,8 @@ class PlayerActivity : BaseActivity() {
                     override fun onStop() {
                         super.onStop()
                         isActive = false
-                        this@PlayerActivity.onStop()
+                        viewModel.pause()
+                        finish()
                     }
                 },
             )
@@ -1094,6 +1160,13 @@ class PlayerActivity : BaseActivity() {
             val pipEpisodeToasts = playerPreferences.pipEpisodeToasts().get()
             val switchMethod = viewModel.loadEpisode(episodeId)
 
+            viewModel.updateHasPreviousEpisode(
+                viewModel.getCurrentEpisodeIndex() != 0,
+            )
+            viewModel.updateHasNextEpisode(
+                viewModel.getCurrentEpisodeIndex() != viewModel.currentPlaylist.value.size - 1,
+            )
+
             viewModel.updateIsLoadingHosters(false)
 
             when (switchMethod) {
@@ -1132,13 +1205,6 @@ class PlayerActivity : BaseActivity() {
                 }
             }
         }
-
-        viewModel.updateHasPreviousEpisode(
-            viewModel.getCurrentEpisodeIndex() != 0,
-        )
-        viewModel.updateHasNextEpisode(
-            viewModel.getCurrentEpisodeIndex() != viewModel.currentPlaylist.value.size - 1,
-        )
     }
 
     fun setVideo(video: Video?, position: Long? = null) {
@@ -1302,6 +1368,7 @@ class PlayerActivity : BaseActivity() {
         setMpvOptions()
         setMpvMediaTitle()
         setupPlayerOrientation()
+        matchDisplayRefreshRateIfEnabled()
         setupChapters()
         viewModel.resetSubtitleSelection()
         setupTracks()
@@ -1410,6 +1477,52 @@ class PlayerActivity : BaseActivity() {
         )
 
         MPVLib.setPropertyString("force-media-title", title)
+    }
+
+    private fun matchDisplayRefreshRateIfEnabled() {
+        if (player.isExiting || !decoderPreferences.matchDisplayRefreshRate().get()) return
+        val videoFps = MPVLib.getPropertyDouble("container-fps") ?: return
+        runOnUiThread {
+            if (isFinishing || isDestroyed || player.isExiting) return@runOnUiThread
+            val activeDisplay = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    display
+                } else {
+                    @Suppress("DEPRECATION")
+                    windowManager.defaultDisplay
+                }
+            }.getOrNull() ?: return@runOnUiThread
+
+            val currentMode = activeDisplay.mode ?: return@runOnUiThread
+            val modes = activeDisplay.supportedModes.map { mode ->
+                DisplayModeInfo(
+                    modeId = mode.modeId,
+                    physicalWidth = mode.physicalWidth,
+                    physicalHeight = mode.physicalHeight,
+                    refreshRate = mode.refreshRate,
+                )
+            }
+            val targetModeId = DisplayRefreshRateMatcher.selectBestModeId(
+                videoFps = videoFps,
+                availableModes = modes,
+                currentModeId = currentMode.modeId,
+            ) ?: return@runOnUiThread
+
+            window.attributes = window.attributes.apply {
+                preferredDisplayModeId = targetModeId
+            }
+            didOverrideDisplayMode = true
+        }
+    }
+
+    private fun resetDisplayRefreshRateIfNeeded() {
+        if (!didOverrideDisplayMode) return
+        didOverrideDisplayMode = false
+        runCatching {
+            window.attributes = window.attributes.apply {
+                preferredDisplayModeId = 0
+            }
+        }
     }
 
     private fun endFile(eofReached: Boolean) {

@@ -1,7 +1,5 @@
 package eu.kanade.tachiyomi.ui.player
 
-import android.widget.Toast
-import eu.kanade.tachiyomi.util.system.toast
 import `is`.xyz.mpv.MPVLib
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -42,7 +40,7 @@ class PlayerObserver(val activity: PlayerActivity) :
         }
         logcat(LogPriority.ERROR) { errorMessage }
         activity.runOnUiThread {
-            activity.toast(errorMessage, Toast.LENGTH_LONG)
+            activity.onPlaybackError(errorMessage)
         }
     }
 

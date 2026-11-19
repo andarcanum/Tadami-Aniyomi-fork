@@ -25,6 +25,7 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.inputmethod.InputMethodManager
@@ -123,6 +124,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.PreferenceStore
@@ -286,6 +289,13 @@ class PlayerViewModel @JvmOverloads constructor(
     val hosterExpandedList = _hosterExpandedList.asStateFlow()
     private val _selectedHosterVideoIndex = MutableStateFlow(Pair(-1, -1))
     val selectedHosterVideoIndex = _selectedHosterVideoIndex.asStateFlow()
+
+    private val autoFallbackAttempted = mutableSetOf<Pair<Int, Int>>()
+    private val isAutoFallingBack = AtomicBoolean(false)
+    private val progressPersistencePolicy = PlaybackProgressPersistencePolicy()
+    private val nextEpisodePrefetcher = NextEpisodePrefetcher()
+    @Volatile
+    private var downloadAheadTriggeredForEpisodeId: Long? = null
     private val _currentVideo = MutableStateFlow<Video?>(null)
     val currentVideo = _currentVideo.asStateFlow()
 
@@ -1367,6 +1377,12 @@ class PlayerViewModel @JvmOverloads constructor(
         _hosterList.update { _ -> emptyList() }
         _hosterExpandedList.update { _ -> emptyList() }
         _selectedHosterVideoIndex.update { _ -> Pair(-1, -1) }
+        synchronized(autoFallbackAttempted) {
+            autoFallbackAttempted.clear()
+        }
+        isAutoFallingBack.set(false)
+        downloadAheadTriggeredForEpisodeId = null
+        progressPersistencePolicy.reset()
     }
 
     fun changeEpisode(previous: Boolean, autoPlay: Boolean = false) {
@@ -1434,6 +1450,7 @@ class PlayerViewModel @JvmOverloads constructor(
 
     override fun onCleared() {
         foregroundIncognitoJob?.cancel()
+        nextEpisodePrefetcher.cancelAndClear()
         ForegroundIncognitoState.set(this, false)
         if (currentEpisode.value != null) {
             saveWatchingProgress(currentEpisode.value!!)
@@ -1911,11 +1928,14 @@ class PlayerViewModel @JvmOverloads constructor(
                 }
             }
 
+            val hosterLoadSemaphore = Semaphore(HosterLoader.MAX_CONCURRENT_HOSTER_LOADS)
             try {
                 coroutineScope {
                     filteredHosterList.mapIndexed { hosterIdx, hoster ->
                         async {
-                            val hosterState = EpisodeLoader.loadHosterVideos(source, hoster)
+                            val hosterState = hosterLoadSemaphore.withPermit {
+                                EpisodeLoader.loadHosterVideos(source, hoster)
+                            }
 
                             _hosterState.updateAt(hosterIdx, hosterState)
 
@@ -2012,7 +2032,13 @@ class PlayerViewModel @JvmOverloads constructor(
         }
     }
 
-    private suspend fun loadVideo(source: AnimeSource?, video: Video, hosterIndex: Int, videoIndex: Int): Boolean {
+    private suspend fun loadVideo(
+        source: AnimeSource?,
+        video: Video,
+        hosterIndex: Int,
+        videoIndex: Int,
+        resumePositionMs: Long? = null,
+    ): Boolean {
         val selectedHosterState = (_hosterState.value[hosterIndex] as? HosterState.Ready) ?: return false
         updateIsLoadingEpisode(true)
 
@@ -2090,7 +2116,84 @@ class PlayerViewModel @JvmOverloads constructor(
 
         qualityIndex = Pair(hosterIndex, videoIndex)
 
-        activity.setVideo(resolvedVideo)
+        activity.setVideo(resolvedVideo, position = resumePositionMs)
+        return true
+    }
+
+    /**
+     * Attempts to automatically switch to the next viable video/hoster after a runtime MPV error.
+     * Returns true if a fallback attempt was scheduled (or already in progress), false if no
+     * fallback is available and the caller should surface the error directly.
+     */
+    internal fun tryFallbackAfterPlaybackError(errorMessage: String): Boolean {
+        if (isEpisodeOnline() != true) return false
+
+        val failedIndex = _selectedHosterVideoIndex.value
+        if (failedIndex.first < 0 || failedIndex.second < 0) return false
+
+        if (!isAutoFallingBack.compareAndSet(false, true)) {
+            return true
+        }
+
+        val failedHosterState = _hosterState.value.getOrNull(failedIndex.first) as? HosterState.Ready
+        val failedVideo = failedHosterState?.videoList?.getOrNull(failedIndex.second)
+        if (failedHosterState != null && failedVideo != null) {
+            _hosterState.updateAt(
+                failedIndex.first,
+                failedHosterState.getChangedAt(failedIndex.second, failedVideo, Video.State.ERROR),
+            )
+        }
+
+        val attemptedSnapshot = synchronized(autoFallbackAttempted) {
+            autoFallbackAttempted.add(failedIndex)
+            autoFallbackAttempted.toSet()
+        }
+
+        val nextIndex = PlaybackFallbackSelector.selectNext(
+            hosterStates = _hosterState.value,
+            failedIndex = failedIndex,
+            attemptedIndices = attemptedSnapshot,
+        )
+        if (nextIndex == null) {
+            isAutoFallingBack.set(false)
+            return false
+        }
+
+        val nextHoster = _hosterState.value.getOrNull(nextIndex.first) as? HosterState.Ready
+        val nextVideo = nextHoster?.videoList?.getOrNull(nextIndex.second)
+        if (nextHoster == null || nextVideo == null) {
+            isAutoFallingBack.set(false)
+            return false
+        }
+
+        val resumePositionMs = (pos.value * 1000f).toLong().takeIf { it > 0L }
+        playerUpdate.update {
+            PlayerUpdates.ShowText("${nextHoster.name}: ${nextVideo.videoTitle}")
+        }
+
+        viewModelScope.launchIO {
+            try {
+                val switched = loadVideo(
+                    source = currentSource.value,
+                    video = nextVideo,
+                    hosterIndex = nextIndex.first,
+                    videoIndex = nextIndex.second,
+                    resumePositionMs = resumePositionMs,
+                )
+                if (!switched) {
+                    updateIsLoadingEpisode(false)
+                    activity.showToast(errorMessage)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Auto-fallback failed after playback error: $errorMessage" }
+                updateIsLoadingEpisode(false)
+                activity.showToast(errorMessage)
+            } finally {
+                isAutoFallingBack.set(false)
+            }
+        }
         return true
     }
 
@@ -2180,13 +2283,15 @@ class PlayerViewModel @JvmOverloads constructor(
                 val currentEpisode =
                     currentEpisode.value
                         ?: throw ExceptionWithStringResource("No episode loaded", AYMR.strings.no_episode_loaded)
-                currentHosterList = EpisodeLoader.getHosters(
-                    currentEpisode.toDomainEpisode()!!,
-                    anime,
-                    source,
-                )
+                val targetEpisodeId = currentEpisode.id!!
+                currentHosterList = nextEpisodePrefetcher.consumeOrNull(targetEpisodeId)
+                    ?: EpisodeLoader.getHosters(
+                        currentEpisode.toDomainEpisode()!!,
+                        anime,
+                        source,
+                    )
 
-                this@PlayerViewModel.episodeId = currentEpisode.id!!
+                this@PlayerViewModel.episodeId = targetEpisodeId
             } catch (e: Throwable) {
                 // Extension code may throw linkage Errors (e.g. NoSuchMethodError on
                 // ABI drift); degrade to an empty episode load result, not a crash.
@@ -2222,17 +2327,54 @@ class PlayerViewModel @JvmOverloads constructor(
 
         val progress = playerPreferences.progressPreference().get()
         val shouldTrack = !incognitoMode || hasTrackers
-        if (seconds >= totalSeconds * progress && shouldTrack) {
+        val reachedCompletion = !currentEp.seen && seconds >= totalSeconds * progress && shouldTrack
+        if (reachedCompletion) {
             viewModelScope.launchNonCancellable {
                 updateEpisodeProgressOnComplete(currentEp)
             }
         }
 
-        saveWatchingProgress(currentEp)
+        val nowElapsedMs = SystemClock.elapsedRealtime()
+        if (
+            reachedCompletion ||
+            progressPersistencePolicy.shouldPersist(
+                episodeId = episodeId,
+                positionMs = seconds,
+                nowElapsedMs = nowElapsedMs,
+            )
+        ) {
+            progressPersistencePolicy.recordPersisted(
+                episodeId = episodeId,
+                positionMs = seconds,
+                nowElapsedMs = nowElapsedMs,
+            )
+            saveWatchingProgress(currentEp)
+        }
 
-        val inDownloadRange = seconds.toDouble() / totalSeconds > 0.35
-        if (inDownloadRange) {
+        val watchedRatio = seconds.toDouble() / totalSeconds
+        if (watchedRatio > 0.35 && downloadAheadTriggeredForEpisodeId != episodeId) {
+            downloadAheadTriggeredForEpisodeId = episodeId
             downloadNextEpisodes()
+        }
+
+        if (watchedRatio >= NextEpisodePrefetcher.PREFETCH_PROGRESS_THRESHOLD) {
+            prefetchNextEpisodeHosters()
+        }
+    }
+
+    private fun prefetchNextEpisodeHosters() {
+        val anime = currentAnime.value ?: return
+        val currentIdx = getCurrentEpisodeIndex()
+        if (currentIdx < 0 || currentIdx >= currentPlaylist.value.lastIndex) return
+        val nextEpisode = currentPlaylist.value.getOrNull(currentIdx + 1) ?: return
+        val nextEpisodeId = nextEpisode.id ?: return
+        val domainEpisode = nextEpisode.toDomainEpisode() ?: return
+        val source = sourceManager.getOrStub(anime.source)
+        nextEpisodePrefetcher.prefetchIfNeeded(
+            scope = viewModelScope,
+            episodeId = nextEpisodeId,
+        ) {
+            EpisodeLoader.getHosters(domainEpisode, anime, source)
         }
     }
 
@@ -2325,19 +2467,21 @@ class PlayerViewModel @JvmOverloads constructor(
         val anime = currentAnime.value ?: return
 
         // Only download ahead if current + next episode is already downloaded too to avoid jank
-        if (getCurrentEpisodeIndex() == currentPlaylist.value.lastIndex) return
-        val currentEpisode = currentEpisode.value ?: return
-
-        val nextEpisode = currentPlaylist.value[getCurrentEpisodeIndex() + 1]
-        val episodesAreDownloaded =
-            EpisodeLoader.isDownload(currentEpisode.toDomainEpisode()!!, anime) &&
-                EpisodeLoader.isDownload(nextEpisode.toDomainEpisode()!!, anime)
+        val currentIdx = getCurrentEpisodeIndex()
+        if (currentIdx < 0 || currentIdx >= currentPlaylist.value.lastIndex) return
+        val currentDomainEpisode = currentEpisode.value?.toDomainEpisode() ?: return
+        val nextEpisode = currentPlaylist.value.getOrNull(currentIdx + 1) ?: return
+        val nextDomainEpisode = nextEpisode.toDomainEpisode() ?: return
+        val nextEpisodeId = nextEpisode.id ?: return
 
         viewModelScope.launchIO {
+            val episodesAreDownloaded =
+                EpisodeLoader.isDownload(currentDomainEpisode, anime) &&
+                    EpisodeLoader.isDownload(nextDomainEpisode, anime)
             if (!episodesAreDownloaded) {
                 return@launchIO
             }
-            val episodesToDownload = getNextEpisodes.await(anime.id, nextEpisode.id!!)
+            val episodesToDownload = getNextEpisodes.await(anime.id, nextEpisodeId)
                 .take(downloadAheadAmount)
             downloadManager.downloadEpisodes(anime, episodesToDownload)
         }
@@ -2365,7 +2509,16 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     fun saveCurrentEpisodeWatchingProgress() {
-        currentEpisode.value?.let { saveWatchingProgress(it) }
+        currentEpisode.value?.let { ep ->
+            ep.id?.let { id ->
+                progressPersistencePolicy.recordPersisted(
+                    episodeId = id,
+                    positionMs = ep.last_second_seen,
+                    nowElapsedMs = SystemClock.elapsedRealtime(),
+                )
+            }
+            saveWatchingProgress(ep)
+        }
     }
 
     /**
@@ -2640,27 +2793,33 @@ class PlayerViewModel @JvmOverloads constructor(
      */
     suspend fun aniSkipResponse(playerDuration: Int?): List<TimeStamp>? {
         val animeId = currentAnime.value?.id ?: return null
-        val trackerManager = Injekt.get<TrackerManager>()
-        var malId: Long?
+        val duration = playerDuration ?: return null
         val episodeNumber = currentEpisode.value?.episode_number?.toInt() ?: return null
-        if (getTracks.await(animeId).isEmpty()) {
+        val tracks = getTracks.await(animeId)
+        if (tracks.isEmpty()) {
             logcat { "AniSkip: No tracks found for anime $animeId" }
             return null
         }
 
-        getTracks.await(animeId).map { track ->
-            val tracker = trackerManager.get(track.trackerId)
-            malId = when (tracker) {
-                is MyAnimeList -> track.remoteId
-                is Anilist -> AniSkipApi().getMalIdFromAL(track.remoteId)
-                else -> null
+        val trackerManager = Injekt.get<TrackerManager>()
+        val aniSkipApi = AniSkipApi(clientProvider = { networkHelper.client })
+
+        return withIOContext {
+            for (track in tracks) {
+                val tracker = trackerManager.get(track.trackerId)
+                val malId = when (tracker) {
+                    is MyAnimeList -> track.remoteId
+                    is Anilist -> aniSkipApi.getMalIdFromAL(track.remoteId)
+                    else -> null
+                }?.takeIf { it > 0L } ?: continue
+
+                val result = aniSkipApi.getResult(malId.toInt(), episodeNumber, duration.toLong())
+                if (!result.isNullOrEmpty()) {
+                    return@withIOContext result
+                }
             }
-            val duration = playerDuration ?: return null
-            return malId?.let {
-                AniSkipApi().getResult(it.toInt(), episodeNumber, duration.toLong())
-            }
+            null
         }
-        return null
     }
 
     val introSkipEnabled = playerPreferences.enableSkipIntro().get()
@@ -2684,7 +2843,12 @@ class PlayerViewModel @JvmOverloads constructor(
                 _skipIntroText.update { _ -> null }
                 waitingSkipIntro = defaultWaitingTime
             } else {
-                val nextChapterPos = chapters.value.getOrNull(chapterIndex + 1)?.start ?: pos.value
+                val nextChapterPos = PlaybackProgressPersistencePolicy.resolveChapterSkipTarget(
+                    chapters = chapters.value,
+                    chapterIndex = chapterIndex,
+                    currentPosition = pos.value,
+                    duration = duration.value,
+                )
 
                 if (netflixStyle) {
                     // show a toast with the seconds before the skip
@@ -2748,7 +2912,12 @@ class PlayerViewModel @JvmOverloads constructor(
                 return
             }
 
-            val nextChapterPos = chapters.value.getOrNull(chapterIndex + 1)?.start ?: pos.value
+            val nextChapterPos = PlaybackProgressPersistencePolicy.resolveChapterSkipTarget(
+                chapters = chapters.value,
+                chapterIndex = chapterIndex,
+                currentPosition = pos.value,
+                duration = duration.value,
+            )
 
             seekToWithText(
                 seekValue = nextChapterPos.toInt(),

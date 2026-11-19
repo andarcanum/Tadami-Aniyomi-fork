@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import eu.kanade.presentation.player.components.PlayerSheet
+import eu.kanade.tachiyomi.ui.player.AudioFilterChainBuilder
 import eu.kanade.tachiyomi.ui.player.Decoder
 import eu.kanade.tachiyomi.ui.player.DecoderPreset
 import eu.kanade.tachiyomi.ui.player.LongPressGesture
@@ -334,6 +335,7 @@ fun MoreSheet(
             }
             Text(text = stringResource(AYMR.strings.pref_audio_channels))
             val audioChannels by audioPreferences.audioChannels().collectAsState()
+            val audioNormalization by audioPreferences.audioNormalization().collectAsState()
             if (wrapFilterChips) {
                 FlowRow(
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
@@ -344,15 +346,7 @@ fun MoreSheet(
                             selected = audioChannels == it,
                             onClick = {
                                 audioPreferences.audioChannels().set(it)
-                                if (it == AudioChannels.ReverseStereo) {
-                                    MPVLib.setPropertyString(
-                                        AudioChannels.AutoSafe.property,
-                                        AudioChannels.AutoSafe.value,
-                                    )
-                                } else {
-                                    MPVLib.setPropertyString(AudioChannels.ReverseStereo.property, "")
-                                }
-                                MPVLib.setPropertyString(it.property, it.value)
+                                AudioFilterChainBuilder.applyProperties(it, audioNormalization)
                             },
                             label = { Text(text = stringResource(it.titleRes)) },
                         )
@@ -367,21 +361,22 @@ fun MoreSheet(
                             selected = audioChannels == it,
                             onClick = {
                                 audioPreferences.audioChannels().set(it)
-                                if (it == AudioChannels.ReverseStereo) {
-                                    MPVLib.setPropertyString(
-                                        AudioChannels.AutoSafe.property,
-                                        AudioChannels.AutoSafe.value,
-                                    )
-                                } else {
-                                    MPVLib.setPropertyString(AudioChannels.ReverseStereo.property, "")
-                                }
-                                MPVLib.setPropertyString(it.property, it.value)
+                                AudioFilterChainBuilder.applyProperties(it, audioNormalization)
                             },
                             label = { Text(text = stringResource(it.titleRes)) },
                         )
                     }
                 }
             }
+            FilterChip(
+                selected = audioNormalization,
+                onClick = {
+                    val enabled = !audioNormalization
+                    audioPreferences.audioNormalization().set(enabled)
+                    AudioFilterChainBuilder.applyProperties(audioChannels, enabled)
+                },
+                label = { Text(text = stringResource(AYMR.strings.pref_player_audio_normalization)) },
+            )
             Text(text = stringResource(AYMR.strings.pref_long_press_action))
             FlowRow(
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),

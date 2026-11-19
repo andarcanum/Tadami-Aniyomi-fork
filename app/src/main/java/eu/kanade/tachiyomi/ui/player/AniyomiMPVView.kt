@@ -17,12 +17,14 @@
 
 package eu.kanade.tachiyomi.ui.player
 
+import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.util.AttributeSet
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
+import android.view.WindowManager
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.player.controls.components.panels.toColorHexString
 import eu.kanade.tachiyomi.ui.player.settings.AdvancedPlayerPreferences
@@ -48,6 +50,7 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
     private val networkPreferences: NetworkPreferences by injectLazy()
 
     var isExiting = false
+    internal var stagedAnime4kShaderOption: String? = null
 
     private fun getPropertyInt(property: String): Int? {
         return MPVLib.getPropertyInt(property)
@@ -136,12 +139,25 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
         MPVLib.setOptionString("ytdl", "no")
         MPVLib.setOptionString("tls-verify", "yes")
         MPVLib.setOptionString("tls-ca-file", "${context.filesDir.path}/${PlayerActivity.MPV_DIR}/cacert.pem")
+        MPVLib.setOptionString("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5")
+        MPVLib.setOptionString("network-timeout", "20")
+        MPVLib.setOptionString("cache-pause-initial", "yes")
+        MPVLib.setOptionString("cache-pause-wait", "1")
 
-        // Limit demuxer cache since the defaults are too high for mobile devices
-        val cacheMegs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) 64 else 32
-        MPVLib.setOptionString("demuxer-max-bytes", "${cacheMegs * 1024 * 1024}")
-        MPVLib.setOptionString("demuxer-max-back-bytes", "${cacheMegs * 1024 * 1024}")
-        //
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val isLowRamDevice = activityManager?.isLowRamDevice == true
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager?.getMemoryInfo(memoryInfo)
+
+        // Adapt demuxer cache budget to available device RAM to avoid LMK kills on low-RAM devices
+        val cacheBudget = MpvCachePolicy.resolve(
+            sdkInt = Build.VERSION.SDK_INT,
+            totalMemoryBytes = memoryInfo.totalMem,
+            isLowRamDevice = isLowRamDevice,
+        )
+        MPVLib.setOptionString("demuxer-max-bytes", cacheBudget.maxForwardBytes.toString())
+        MPVLib.setOptionString("demuxer-max-back-bytes", cacheBudget.maxBackBytes.toString())
+
         val screenshotDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
         screenshotDir.mkdirs()
         MPVLib.setOptionString("screenshot-directory", screenshotDir.path)
@@ -150,12 +166,38 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
             MPVLib.setOptionString(it.mpvProperty, it.preference(decoderPreferences).get().toString())
         }
 
+        stagedAnime4kShaderOption?.let { shaderOption ->
+            MPVLib.setOptionString("glsl-shaders", shaderOption)
+        }
+
         val interpolationMode = decoderPreferences.motionInterpolationMode().get()
         val deviceSupport = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-        if (interpolationMode.shouldApply(gpuNextEnabled = gpuNext, deviceSupportsInterpolation = deviceSupport)) {
+        val displayRefreshRate = display?.refreshRate
+            ?: runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    context.display?.refreshRate
+                } else {
+                    @Suppress("DEPRECATION")
+                    (context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)?.defaultDisplay?.refreshRate
+                }
+            }.getOrNull()
+            ?: 60f
+        if (
+            interpolationMode.shouldApply(
+                gpuNextEnabled = gpuNext,
+                deviceSupportsInterpolation = deviceSupport,
+                isHighRefreshDisplay = displayRefreshRate > 60.5f,
+                isLowRamDevice = isLowRamDevice,
+            )
+        ) {
             interpolationMode.mpvOptions()?.forEach { (option, value) ->
                 MPVLib.setOptionString(option, value)
             }
+        }
+
+        val hdrToneMapping = decoderPreferences.hdrToneMappingMode().get()
+        hdrToneMapping.mpvOptions(gpuNextEnabled = gpuNext).forEach { (option, value) ->
+            MPVLib.setOptionString(option, value)
         }
 
         MPVLib.setOptionString("speed", playerPreferences.playerSpeed().get().toString())
@@ -268,9 +310,15 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
         MPVLib.setOptionString("audio-delay", (audioPreferences.audioDelay().get() / 1000.0).toString())
         MPVLib.setOptionString("audio-pitch-correction", audioPreferences.enablePitchCorrection().get().toString())
         MPVLib.setOptionString("volume-max", (audioPreferences.volumeBoostCap().get() + 100).toString())
+        AudioFilterChainBuilder.applyOptions(
+            audioChannels = audioPreferences.audioChannels().get(),
+            normalizeAudio = audioPreferences.audioNormalization().get(),
+        )
     }
 
     private fun setupSubtitlesOptions() {
+        MPVLib.setOptionString("sub-ass-force-margins", "yes")
+        MPVLib.setOptionString("sub-use-margins", "yes")
         MPVLib.setOptionString("sub-delay", (subtitlePreferences.subtitlesDelay().get() / 1000.0).toString())
         MPVLib.setOptionString("sub-speed", subtitlePreferences.subtitlesSpeed().get().toString())
         MPVLib.setOptionString(

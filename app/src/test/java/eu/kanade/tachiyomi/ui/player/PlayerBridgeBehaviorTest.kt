@@ -79,6 +79,36 @@ class PlayerBridgeBehaviorTest {
     }
 
     @Test
+    fun `copy fonts helper skips unchanged fonts and prunes removed fonts`() {
+        val sourceFonts = tempDir.resolve("source-fonts").apply { mkdirs() }
+        val keptFont = sourceFonts.resolve("KeptFont.ttf").apply {
+            writeText("font-v1")
+            setLastModified(1_700_000_000_000L)
+        }
+        val targetFonts = tempDir.resolve("mpv-fonts").resolve("fonts").apply { mkdirs() }
+        val staleFont = targetFonts.resolve("RemovedFont.ttf").apply {
+            writeText("stale")
+        }
+
+        PlayerFontBridge.copyFontFiles(
+            sourceFonts = listOfNotNull(UniFile.fromFile(keptFont)),
+            targetFontsDirectory = targetFonts,
+        )
+
+        staleFont.exists() shouldBe false
+        val stagedKept = targetFonts.resolve("KeptFont.ttf")
+        stagedKept.readText() shouldBe "font-v1"
+
+        // Second pass with identical length & timestamp should not rewrite the staged file.
+        stagedKept.setLastModified(1_800_000_000_000L)
+        PlayerFontBridge.copyFontFiles(
+            sourceFonts = listOfNotNull(UniFile.fromFile(keptFont)),
+            targetFontsDirectory = targetFonts,
+        )
+        stagedKept.lastModified() shouldBe 1_800_000_000_000L
+    }
+
+    @Test
     fun `setup custom buttons returns null when disabled`() {
         val result = PlayerCustomButtonBridge::class.java
             .getMethod(

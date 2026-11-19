@@ -11,11 +11,20 @@ enum class MotionInterpolationMode(
     Always(AYMR.strings.pref_motion_interpolation_always),
     ;
 
-    fun shouldApply(gpuNextEnabled: Boolean, deviceSupportsInterpolation: Boolean): Boolean {
+    fun shouldApply(
+        gpuNextEnabled: Boolean,
+        deviceSupportsInterpolation: Boolean,
+        isHighRefreshDisplay: Boolean = true,
+        isLowRamDevice: Boolean = false,
+    ): Boolean {
         if (this == Off) return false
         if (!gpuNextEnabled) return false
         if (!deviceSupportsInterpolation) return false
-        return true
+        return when (this) {
+            Off -> false
+            Auto -> isHighRefreshDisplay && !isLowRamDevice
+            Always -> true
+        }
     }
 
     fun mpvOptions(): Map<String, String>? {
@@ -23,6 +32,7 @@ enum class MotionInterpolationMode(
             null
         } else {
             mapOf(
+                "video-sync" to "display-resample",
                 "tscale" to "oversample",
                 "interpolation" to "yes",
             )

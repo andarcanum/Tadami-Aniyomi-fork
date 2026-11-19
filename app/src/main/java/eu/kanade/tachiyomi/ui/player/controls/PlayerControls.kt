@@ -70,6 +70,8 @@ import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.vivvvek.seeker.Segment
+import eu.kanade.presentation.more.settings.screen.player.custombutton.CustomButtonFetchState
 import eu.kanade.presentation.more.settings.screen.player.custombutton.getButtons
 import eu.kanade.presentation.theme.playerRippleConfiguration
 import eu.kanade.tachiyomi.ui.player.Dialogs
@@ -95,6 +97,8 @@ import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
 import `is`.xyz.mpv.MPVLib
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
@@ -126,8 +130,6 @@ fun PlayerControls(
     val seekBarShown by viewModel.seekBarShown.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val isLoadingEpisode by viewModel.isLoadingEpisode.collectAsStateWithLifecycle()
-    val duration by viewModel.duration.collectAsStateWithLifecycle()
-    val position by viewModel.pos.collectAsStateWithLifecycle()
     val paused by viewModel.paused.collectAsStateWithLifecycle()
     val gestureSeekAmount by viewModel.gestureSeekAmount.collectAsStateWithLifecycle()
     val doubleTapSeekAmount by viewModel.doubleTapSeekAmount.collectAsStateWithLifecycle()
@@ -152,14 +154,32 @@ fun PlayerControls(
     } else {
         PlayerLayoutOrientation.Portrait
     }
-    val bottomLeftLayoutSlots = playerLayoutConfig.slotsForRegion(
-        orientation = activeLayoutOrientation,
-        region = PlayerLayoutRegion.BottomLeft,
-    ).toSet()
-    val bottomRightLayoutSlots = playerLayoutConfig.slotsForRegion(
-        orientation = activeLayoutOrientation,
-        region = PlayerLayoutRegion.BottomRight,
-    ).toSet()
+    val bottomLeftLayoutSlots = remember(playerLayoutConfig, activeLayoutOrientation) {
+        playerLayoutConfig.slotsForRegion(
+            orientation = activeLayoutOrientation,
+            region = PlayerLayoutRegion.BottomLeft,
+        ).toSet()
+    }
+    val bottomRightLayoutSlots = remember(playerLayoutConfig, activeLayoutOrientation) {
+        playerLayoutConfig.slotsForRegion(
+            orientation = activeLayoutOrientation,
+            region = PlayerLayoutRegion.BottomRight,
+        ).toSet()
+    }
+    val chapterSegments = remember(chapters) {
+        chapters.map { it.toSegment() }.toImmutableList()
+    }
+    val currentChapterSegment = remember(currentChapter) {
+        currentChapter?.toSegment()
+    }
+    val controlsBackgroundBrush = remember {
+        Brush.verticalGradient(
+            Pair(0f, Color.Black),
+            Pair(.2f, Color.Transparent),
+            Pair(.7f, Color.Transparent),
+            Pair(1f, Color.Black),
+        )
+    }
 
     LaunchedEffect(
         controlsShown,
@@ -195,12 +215,7 @@ fun PlayerControls(
                 modifier = modifier
                     .fillMaxSize()
                     .background(
-                        Brush.verticalGradient(
-                            Pair(0f, Color.Black),
-                            Pair(.2f, Color.Transparent),
-                            Pair(.7f, Color.Transparent),
-                            Pair(1f, Color.Black),
-                        ),
+                        controlsBackgroundBrush,
                         alpha = transparentOverlay,
                     )
                     .padding(horizontal = MaterialTheme.padding.medium),
@@ -413,6 +428,8 @@ fun PlayerControls(
                         bottom.linkTo(parent.bottom, spacing.medium)
                     },
                 ) {
+                    val duration by viewModel.duration.collectAsStateWithLifecycle()
+                    val position by viewModel.pos.collectAsStateWithLifecycle()
                     val invertDuration by playerPreferences.invertDuration().collectAsStateWithLifecycle()
                     val readAhead by viewModel.readAhead.collectAsStateWithLifecycle()
                     val preciseSeeking by gesturePreferences.playerSmoothSeek().collectAsStateWithLifecycle()
@@ -429,7 +446,7 @@ fun PlayerControls(
                         timersInverted = Pair(false, invertDuration),
                         durationTimerOnCLick = { playerPreferences.invertDuration().set(!invertDuration) },
                         positionTimerOnClick = {},
-                        chapters = chapters.map { it.toSegment() }.toImmutableList(),
+                        chapters = chapterSegments,
                     )
                 }
                 val mediaTitle by viewModel.mediaTitle.collectAsStateWithLifecycle()
@@ -573,7 +590,7 @@ fun PlayerControls(
                     BottomLeftPlayerControls(
                         layoutSlots = bottomLeftLayoutSlots,
                         playbackSpeed = playbackSpeed,
-                        currentChapter = currentChapter?.toSegment(),
+                        currentChapter = currentChapterSegment,
                         onLockControls = viewModel::lockControls,
                         onCycleRotation = viewModel::cycleScreenRotations,
                         onPlaybackSpeedChange = {
@@ -601,88 +618,14 @@ fun PlayerControls(
             }
         }
 
-        val sheetShown by viewModel.sheetShown.collectAsStateWithLifecycle()
-        val dismissSheet by viewModel.dismissSheet.collectAsStateWithLifecycle()
-        val subtitles by viewModel.subtitleTracks.collectAsStateWithLifecycle()
-        val selectedSubtitles by viewModel.selectedSubtitles.collectAsStateWithLifecycle()
-        val subtitleTranslationUiState by viewModel.subtitleTranslationUiState.collectAsStateWithLifecycle()
-        val audioTracks by viewModel.audioTracks.collectAsStateWithLifecycle()
-        val selectedAudio by viewModel.selectedAudio.collectAsStateWithLifecycle()
-        val isLoadingHosters by viewModel.isLoadingHosters.collectAsStateWithLifecycle()
-        val hosterState by viewModel.hosterState.collectAsStateWithLifecycle()
-        val expandedState by viewModel.hosterExpandedList.collectAsStateWithLifecycle()
-        val selectedHosterVideoIndex by viewModel.selectedHosterVideoIndex.collectAsStateWithLifecycle()
-        val decoder by viewModel.currentDecoder.collectAsStateWithLifecycle()
-        val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
-        val sleepTimerTimeRemaining by viewModel.remainingTime.collectAsStateWithLifecycle()
-        val showSubtitles by subtitlePreferences.screenshotSubtitles().collectAsStateWithLifecycle()
-        val currentSource by viewModel.currentSource.collectAsStateWithLifecycle()
-        val showFailedHosters by playerPreferences.showFailedHosters().collectAsStateWithLifecycle()
-        val emptyHosters by playerPreferences.showEmptyHosters().collectAsStateWithLifecycle()
-
-        PlayerSheets(
-            sheetShown = sheetShown,
-            subtitles = subtitles.toImmutableList(),
-            selectedSubtitles = selectedSubtitles.toList().toImmutableList(),
-            onAddSubtitle = viewModel::addSubtitle,
-            onTranslateSubtitle = viewModel::openSubtitleTranslationSheet,
-            subtitleTranslationUiState = subtitleTranslationUiState,
-            onSelectSubtitleTranslationTrack = viewModel::selectSubtitleTranslationTrack,
-            onSelectSubtitleTranslationProvider = viewModel::selectSubtitleTranslationProvider,
-            onSubtitleTranslationSourceLanguageChange = viewModel::setSubtitleTranslationSourceLanguage,
-            onSubtitleTranslationTargetLanguageChange = viewModel::setSubtitleTranslationTargetLanguage,
-            onToggleSubtitleTranslationCache = viewModel::toggleSubtitleTranslationCache,
-            onStartSubtitleTranslation = viewModel::startSubtitleTranslation,
-            onCancelSubtitleTranslation = viewModel::cancelSubtitleTranslation,
-            onSelectSubtitle = viewModel::selectSub,
-            audioTracks = audioTracks.toImmutableList(),
-            selectedAudio = selectedAudio,
-            onAddAudio = viewModel::addAudio,
-            onSelectAudio = viewModel::selectAudio,
-
-            isLoadingHosters = isLoadingHosters,
-
-            hosterState = hosterState,
-            expandedState = expandedState,
-            selectedVideoIndex = selectedHosterVideoIndex,
-            onClickHoster = viewModel::onHosterClicked,
-            onClickVideo = viewModel::onVideoClicked,
-            displayHosters = Pair(showFailedHosters, emptyHosters),
-
-            chapter = currentChapter?.toSegment(),
-            chapters = chapters.map { it.toSegment() }.toImmutableList(),
-            onSeekToChapter = {
-                viewModel.selectChapter(it)
-                viewModel.dismissSheet()
-                viewModel.unpause()
-            },
-            decoder = decoder,
-            onUpdateDecoder = viewModel::updateDecoder,
-            speed = speed,
-            onSpeedChange = { MPVLib.setPropertyDouble("speed", it.toFixed(2).toDouble()) },
-            sleepTimerTimeRemaining = sleepTimerTimeRemaining,
-            onStartSleepTimer = viewModel::startTimer,
-            buttons = if (showCustomButtons) {
-                customButtons.getButtons().toImmutableList()
-            } else {
-                emptyList<tachiyomi.domain.custombuttons.model.CustomButton>().toImmutableList()
-            },
-
-            isLocalSource = currentSource?.id == LocalAnimeSource.ID,
-            showSubtitles = showSubtitles,
-            onToggleShowSubtitles = { subtitlePreferences.screenshotSubtitles().set(it) },
-            cachePath = viewModel.cachePath,
-            onSetAsArt = viewModel::setAsArt,
-            onShare = { viewModel.shareImage(it, viewModel.pos.value.toInt()) },
-            onSave = { viewModel.saveImage(it, viewModel.pos.value.toInt()) },
-            takeScreenshot = viewModel::takeScreenshot,
-            onDismissScreenshot = {
-                viewModel.showSheet(Sheets.None)
-                viewModel.unpause()
-            },
-            onOpenPanel = viewModel::showPanel,
-            onDismissRequest = { viewModel.showSheet(Sheets.None) },
-            dismissSheet = dismissSheet,
+        PlayerSheetsHost(
+            viewModel = viewModel,
+            playerPreferences = playerPreferences,
+            subtitlePreferences = subtitlePreferences,
+            customButtons = customButtons,
+            showCustomButtons = showCustomButtons,
+            currentChapterSegment = currentChapterSegment,
+            chapterSegments = chapterSegments,
         )
         val panel by viewModel.panelShown.collectAsStateWithLifecycle()
         PlayerPanels(
@@ -715,6 +658,104 @@ fun PlayerControls(
             brightness = currentBrightness,
         )
     }
+}
+
+@Composable
+private fun PlayerSheetsHost(
+    viewModel: PlayerViewModel,
+    playerPreferences: PlayerPreferences,
+    subtitlePreferences: SubtitlePreferences,
+    customButtons: CustomButtonFetchState,
+    showCustomButtons: Boolean,
+    currentChapterSegment: Segment?,
+    chapterSegments: ImmutableList<Segment>,
+) {
+    val sheetShown by viewModel.sheetShown.collectAsStateWithLifecycle()
+    val dismissSheet by viewModel.dismissSheet.collectAsStateWithLifecycle()
+    val subtitles by viewModel.subtitleTracks.collectAsStateWithLifecycle()
+    val selectedSubtitles by viewModel.selectedSubtitles.collectAsStateWithLifecycle()
+    val subtitleTranslationUiState by viewModel.subtitleTranslationUiState.collectAsStateWithLifecycle()
+    val audioTracks by viewModel.audioTracks.collectAsStateWithLifecycle()
+    val selectedAudio by viewModel.selectedAudio.collectAsStateWithLifecycle()
+    val isLoadingHosters by viewModel.isLoadingHosters.collectAsStateWithLifecycle()
+    val hosterState by viewModel.hosterState.collectAsStateWithLifecycle()
+    val expandedState by viewModel.hosterExpandedList.collectAsStateWithLifecycle()
+    val selectedHosterVideoIndex by viewModel.selectedHosterVideoIndex.collectAsStateWithLifecycle()
+    val decoder by viewModel.currentDecoder.collectAsStateWithLifecycle()
+    val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+    val sleepTimerTimeRemaining by viewModel.remainingTime.collectAsStateWithLifecycle()
+    val showSubtitles by subtitlePreferences.screenshotSubtitles().collectAsStateWithLifecycle()
+    val currentSource by viewModel.currentSource.collectAsStateWithLifecycle()
+    val showFailedHosters by playerPreferences.showFailedHosters().collectAsStateWithLifecycle()
+    val emptyHosters by playerPreferences.showEmptyHosters().collectAsStateWithLifecycle()
+
+    val immutableSubtitles = remember(subtitles) { subtitles.toImmutableList() }
+    val immutableSelectedSubtitles = remember(selectedSubtitles) { selectedSubtitles.toList().toImmutableList() }
+    val immutableAudioTracks = remember(audioTracks) { audioTracks.toImmutableList() }
+    val immutableButtons = remember(showCustomButtons, customButtons) {
+        if (showCustomButtons) {
+            customButtons.getButtons().toImmutableList()
+        } else {
+            persistentListOf()
+        }
+    }
+
+    PlayerSheets(
+        sheetShown = sheetShown,
+        subtitles = immutableSubtitles,
+        selectedSubtitles = immutableSelectedSubtitles,
+        onAddSubtitle = viewModel::addSubtitle,
+        onTranslateSubtitle = viewModel::openSubtitleTranslationSheet,
+        subtitleTranslationUiState = subtitleTranslationUiState,
+        onSelectSubtitleTranslationTrack = viewModel::selectSubtitleTranslationTrack,
+        onSelectSubtitleTranslationProvider = viewModel::selectSubtitleTranslationProvider,
+        onSubtitleTranslationSourceLanguageChange = viewModel::setSubtitleTranslationSourceLanguage,
+        onSubtitleTranslationTargetLanguageChange = viewModel::setSubtitleTranslationTargetLanguage,
+        onToggleSubtitleTranslationCache = viewModel::toggleSubtitleTranslationCache,
+        onStartSubtitleTranslation = viewModel::startSubtitleTranslation,
+        onCancelSubtitleTranslation = viewModel::cancelSubtitleTranslation,
+        onSelectSubtitle = viewModel::selectSub,
+        audioTracks = immutableAudioTracks,
+        selectedAudio = selectedAudio,
+        onAddAudio = viewModel::addAudio,
+        onSelectAudio = viewModel::selectAudio,
+        isLoadingHosters = isLoadingHosters,
+        hosterState = hosterState,
+        expandedState = expandedState,
+        selectedVideoIndex = selectedHosterVideoIndex,
+        onClickHoster = viewModel::onHosterClicked,
+        onClickVideo = viewModel::onVideoClicked,
+        displayHosters = Pair(showFailedHosters, emptyHosters),
+        chapter = currentChapterSegment,
+        chapters = chapterSegments,
+        onSeekToChapter = {
+            viewModel.selectChapter(it)
+            viewModel.dismissSheet()
+            viewModel.unpause()
+        },
+        decoder = decoder,
+        onUpdateDecoder = viewModel::updateDecoder,
+        speed = speed,
+        onSpeedChange = { MPVLib.setPropertyDouble("speed", it.toFixed(2).toDouble()) },
+        sleepTimerTimeRemaining = sleepTimerTimeRemaining,
+        onStartSleepTimer = viewModel::startTimer,
+        buttons = immutableButtons,
+        isLocalSource = currentSource?.id == LocalAnimeSource.ID,
+        showSubtitles = showSubtitles,
+        onToggleShowSubtitles = { subtitlePreferences.screenshotSubtitles().set(it) },
+        cachePath = viewModel.cachePath,
+        onSetAsArt = viewModel::setAsArt,
+        onShare = { viewModel.shareImage(it, viewModel.pos.value.toInt()) },
+        onSave = { viewModel.saveImage(it, viewModel.pos.value.toInt()) },
+        takeScreenshot = viewModel::takeScreenshot,
+        onDismissScreenshot = {
+            viewModel.showSheet(Sheets.None)
+            viewModel.unpause()
+        },
+        onOpenPanel = viewModel::showPanel,
+        onDismissRequest = { viewModel.showSheet(Sheets.None) },
+        dismissSheet = dismissSheet,
+    )
 }
 
 fun <T> playerControlsExitAnimationSpec(): FiniteAnimationSpec<T> = tween(

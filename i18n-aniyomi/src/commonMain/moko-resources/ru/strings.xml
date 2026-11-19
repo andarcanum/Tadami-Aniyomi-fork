@@ -191,6 +191,15 @@
     <string name="pref_motion_interpolation_always">Всегда</string>
     <string name="pref_use_yuv420p_title">Использовать формат пикселей YUV420P</string>
     <string name="pref_use_yuv420p_subtitle">Может исправить чёрный экран на некоторых кодеках видео, а также улучшить производительность за счёт качества</string>
+    <string name="pref_hdr_tone_mapping_title">Тональная компрессия HDR</string>
+    <string name="pref_hdr_tone_mapping_subtitle">Как видео HDR10/HLG преобразуется для обычных SDR-экранов</string>
+    <string name="pref_hdr_tone_mapping_auto">Авто</string>
+    <string name="pref_hdr_tone_mapping_spline">Spline (рекомендуется)</string>
+    <string name="pref_hdr_tone_mapping_bt2446a">BT.2446a (кинематографичный)</string>
+    <string name="pref_hdr_tone_mapping_reinhard">Reinhard (лёгкий)</string>
+    <string name="pref_hdr_tone_mapping_clip">Clip (откл.)</string>
+    <string name="pref_match_display_refresh_rate_title">Подстраивать частоту экрана</string>
+    <string name="pref_match_display_refresh_rate_subtitle">Переключает поддерживаемые экраны на кратную частоте видео герцовку (например, 24 к/с в 48/72/120 Гц) для устранения рывков</string>
     <string name="pref_player_subtitle">Субтитры</string>
     <string name="pref_player_subtitle_summary">Предпочитаемые языки, белый и чёрный список</string>
     <string name="pref_player_subtitle_lang">Предпочитаемые языки</string>
@@ -212,6 +221,8 @@
     <string name="pref_player_audio_channels_stereo">Стерео</string>
     <string name="pref_player_audio_channels_reverse_stereo">Обратное стерео</string>
     <string name="pref_player_audio_boost_cap">Ограничение громкости</string>
+    <string name="pref_player_audio_normalization">Динамическая нормализация звука</string>
+    <string name="pref_player_audio_normalization_summary">Выравнивает тихие диалоги и громкие сцены (ночной режим)</string>
     <string name="pref_player_custom_button">Настраиваемые кнопки</string>
     <string name="pref_player_custom_button_summary">Выполнение lua-кода с помощью настраиваемых кнопок</string>
     <string name="pref_player_custom_button_header">Изменить настраиваемые кнопки</string>

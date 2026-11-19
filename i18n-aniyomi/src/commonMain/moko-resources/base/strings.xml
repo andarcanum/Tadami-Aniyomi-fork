@@ -279,6 +279,15 @@
     <string name="pref_debanding_yuv420p">YUV420P</string>
     <string name="pref_use_yuv420p_title">Use YUV420P pixel format</string>
     <string name="pref_use_yuv420p_subtitle">May fix black screens on some video codecs, can also improve performance at the cost of quality</string>
+    <string name="pref_hdr_tone_mapping_title">HDR tone-mapping</string>
+    <string name="pref_hdr_tone_mapping_subtitle">Controls how HDR10/HLG video is mapped onto standard SDR displays</string>
+    <string name="pref_hdr_tone_mapping_auto">Auto</string>
+    <string name="pref_hdr_tone_mapping_spline">Spline (Recommended)</string>
+    <string name="pref_hdr_tone_mapping_bt2446a">BT.2446a (Filmic)</string>
+    <string name="pref_hdr_tone_mapping_reinhard">Reinhard (Lightweight)</string>
+    <string name="pref_hdr_tone_mapping_clip">Clip (Off)</string>
+    <string name="pref_match_display_refresh_rate_title">Match display refresh rate</string>
+    <string name="pref_match_display_refresh_rate_subtitle">Switches supported screens to an even multiple of video FPS (e.g. 24fps to 48/72/120Hz) to eliminate judder</string>
     <string name="pref_anime4k_title">Anime4K shader preset</string>
     <string name="pref_anime4k_subtitle">Real-time anime upscaling shaders. Device-dependent and meant for anime content only.</string>
     <string name="pref_anime4k_off">Off</string>
@@ -315,6 +324,8 @@
     <string name="pref_player_audio_channels_stereo">Stereo</string>
     <string name="pref_player_audio_channels_reverse_stereo">Reverse stereo</string>
     <string name="pref_player_audio_boost_cap">Volume boost cap</string>
+    <string name="pref_player_audio_normalization">Dynamic audio normalization</string>
+    <string name="pref_player_audio_normalization_summary">Balances quiet dialogue and loud action scenes (Night mode)</string>
     <!-- Player settings - Custom Buttons -->
     <string name="pref_player_custom_button">Custom buttons</string>
     <string name="pref_player_custom_button_summary">Execute lua code with custom buttons</string>
