@@ -12,6 +12,7 @@ import eu.kanade.domain.source.interactor.NovelReaderIncognitoState
 import eu.kanade.domain.source.novel.interactor.GetNovelIncognitoState
 import eu.kanade.presentation.reader.novel.NovelAutoScrollHandoffState
 import eu.kanade.presentation.reader.novel.NovelReaderAutoScrollHandoffPolicy
+import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.SeriesInterstitialState
@@ -1010,6 +1011,12 @@ class NovelReaderScreenModel(
     private var currentSessionChapterId: Long = chapterId
     private var seamlessChapterSwitchJob: Job? = null
     private var seamlessChapterSwitchToken: Long = 0L
+    private var seamlessAdjacentPreloadJob: Job? = null
+    private val seamlessSnapshotCache =
+        LinkedHashMap<Long, eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot>(4, 0.75f, true)
+    private var currentChapterSnapshot: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot? = null
+    private var previousChapterPreview: AdjacentChapterPreview? = null
+    private var nextChapterPreview: AdjacentChapterPreview? = null
     private var hasTriggeredNextChapterPrefetch: Boolean = false
     private var adjacentJaomixPageJob: Job? = null
     private val attemptedJaomixPages = mutableSetOf<Int>()
@@ -1122,17 +1129,33 @@ class NovelReaderScreenModel(
         seamless: Boolean = false,
     ) {
         currentSessionChapterId = targetChapterId
-        val snapshot = try {
-            ttsChapterRepository.loadChapterSnapshot(targetChapterId)
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Failed to load novel chapter snapshot" }
-            return setError(e.message)
+        val cachedSnapshot = if (seamless) {
+            synchronized(seamlessSnapshotCache) { seamlessSnapshotCache.remove(targetChapterId) }
+        } else {
+            null
+        }
+        val snapshot = if (cachedSnapshot != null) {
+            val latestChapter = fullChapterOrderList.firstOrNull { it.id == targetChapterId }
+                ?: chapterOrderList.firstOrNull { it.id == targetChapterId }
+                ?: cachedSnapshot.chapter
+            cachedSnapshot.copy(chapter = latestChapter)
+        } else {
+            try {
+                ttsChapterRepository.loadChapterSnapshot(targetChapterId)
+            } catch (e: Exception) {
+                if (seamless) {
+                    NovelReaderChapterHandoffPolicy.clear()
+                }
+                logcat(LogPriority.ERROR, e) { "Failed to load novel chapter snapshot" }
+                return setError(e.message)
+            }
         }
         val chapter = snapshot.chapter
         val novel = snapshot.novel
         val source = sourceManager.getOrStub(novel.source)
         translationBatchExecutor.onChapterBecomingActive(snapshot.chapter.id)
         clearChapterTransientState()
+        currentChapterSnapshot = snapshot
         currentNovel = novel
         observeIncognitoForNovel(novel)
         // Taste Engine: «просмотрено» — открытие читалки помечает тайтл consumed
@@ -1185,7 +1208,31 @@ class NovelReaderScreenModel(
         if (!seamless) {
             mutableState.value = State.Loading(initialSettings)
         }
-        if (contentModel == null) return setError("Chapter content is empty")
+        val preparedContentModel = contentModel ?: return setError("Chapter content is empty")
+        // Pre-warm content block & rich HTML parsing off the main thread so updateContent() does
+        // not stall the UI thread across a seamless chapter swap.
+        withContext(Dispatchers.Default) {
+            preparedContentModel.contentBlocks
+            if (preparedContentModel.parsedRichContentResult == null) {
+                val annotatedHtml = annotateNovelBlockAnchors(
+                    rawHtml = preparedContentModel.getNormalizedHtml(
+                        settings = initialSettings,
+                        customCss = customCss,
+                        customJs = customJs,
+                    ),
+                    chapterId = chapter.id,
+                )
+                val parsedRich = parseNovelRichContent(annotatedHtml)
+                preparedContentModel.parsedRichContentResult = parsedRich.copy(
+                    blocks = resolveRichContentBlocks(
+                        blocks = parsedRich.blocks,
+                        chapterWebUrl = chapterWebUrl,
+                        novelUrl = novel.url,
+                        pluginSite = pluginSite,
+                    ),
+                )
+            }
+        }
         progressPersistenceController.resetSessionReadTimer()
         bookController.startForChapter(chapter)
         observeReadingModeChanges(chapter)
@@ -1213,6 +1260,14 @@ class NovelReaderScreenModel(
                         return@collect
                     }
                     skippedInitialEmission = true
+                    if (settings.seamlessChapterTransition && !bookController.isBookRuntimeActive()) {
+                        scheduleSeamlessAdjacentPreload(novel, chapter, settings)
+                    } else {
+                        seamlessAdjacentPreloadJob?.cancel()
+                        seamlessAdjacentPreloadJob = null
+                        previousChapterPreview = null
+                        nextChapterPreview = null
+                    }
                     updateContent(settings)
                     ttsController.initializeTtsRuntimePublic()
                     maybeAutoStartGeminiTranslation(settings)
@@ -1229,7 +1284,16 @@ class NovelReaderScreenModel(
                 "Skip novel history for empty chapter content novelId=${novel.id} chapterId=${chapter.id}"
             }
         }
+        if (initialSettings.seamlessChapterTransition && !bookController.isBookRuntimeActive()) {
+            seedSeamlessPreviewsFromCache(chapter)
+        } else {
+            previousChapterPreview = null
+            nextChapterPreview = null
+        }
         updateContent(initialSettings)
+        if (initialSettings.seamlessChapterTransition && !bookController.isBookRuntimeActive()) {
+            scheduleSeamlessAdjacentPreload(novel, chapter, initialSettings)
+        }
         ttsController.initializeTtsRuntimePublic()
         ttsController.restoreTtsAfterChapterHandoff(
             chapterId = chapter.id,
@@ -1287,16 +1351,21 @@ class NovelReaderScreenModel(
      * document, the reader is not ready yet, or a switch is already running), so callers can fall
      * back to the classic screen replacement.
      */
+    fun isSeamlessChapterSwitchInProgress(): Boolean = seamlessChapterSwitchJob?.isActive == true
+
     fun openChapterInPlace(targetChapterId: Long): Boolean {
         val successState = mutableState.value as? State.Success ?: return false
-        // Opt-in feature: without it the reader keeps the classic screen replacement behaviour.
-        if (!novelReaderPreferences.seamlessChapterTransition().get()) return false
+        // Respect per-source overrides in addition to the global preference.
+        if (!successState.readerSettings.seamlessChapterTransition) return false
         if (successState.bookMode.isEnabled) return false
-        if (targetChapterId == currentChapter?.id) return false
-        if (seamlessChapterSwitchJob?.isActive == true) return false
+        // Consume duplicate triggers for the current chapter or while a seamless swap is already
+        // in flight instead of falling back to a jarring full-screen navigator.replace().
+        if (targetChapterId == currentChapter?.id) return true
+        if (seamlessChapterSwitchJob?.isActive == true) return true
         val hasTargetChapter = fullChapterOrderList.any { it.id == targetChapterId } ||
             chapterOrderList.any { it.id == targetChapterId }
         if (!hasTargetChapter) return false
+        cacheOutgoingChapterForSeamlessBacktrack(successState)
         seamlessChapterSwitchJob = screenModelScope.launch {
             // Leave the current frame before touching reader state. A chapter switch is triggered
             // from gesture/tap callbacks that can run inside a composition or layout pass, and
@@ -1308,6 +1377,158 @@ class NovelReaderScreenModel(
             loadChapter(targetChapterId = targetChapterId, seamless = true)
         }
         return true
+    }
+
+    private fun cacheOutgoingChapterForSeamlessBacktrack(outgoingState: State.Success) {
+        val outgoingChapter = currentChapter ?: outgoingState.chapter
+        val outgoingSnapshot = currentChapterSnapshot
+        if (outgoingSnapshot != null && outgoingSnapshot.chapter.id == outgoingChapter.id) {
+            putSeamlessSnapshotCache(
+                outgoingSnapshot.copy(
+                    chapter = outgoingChapter,
+                    contentBlocks = outgoingState.contentBlocks,
+                    richContentBlocks = outgoingState.richContentBlocks,
+                    richContentUnsupportedFeaturesDetected = outgoingState.richContentUnsupportedFeaturesDetected,
+                ),
+            )
+        }
+    }
+
+    private fun putSeamlessSnapshotCache(
+        snapshot: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot,
+    ) {
+        synchronized(seamlessSnapshotCache) {
+            seamlessSnapshotCache[snapshot.chapter.id] = snapshot
+            while (seamlessSnapshotCache.size > 3) {
+                val eldestKey = seamlessSnapshotCache.entries.firstOrNull()?.key ?: break
+                seamlessSnapshotCache.remove(eldestKey)
+            }
+        }
+    }
+
+    private fun toAdjacentChapterPreview(
+        snapshot: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot,
+    ): AdjacentChapterPreview {
+        return AdjacentChapterPreview(
+            chapterId = snapshot.chapter.id,
+            chapterName = snapshot.chapter.name,
+            contentBlocks = snapshot.contentBlocks,
+            richContentBlocks = snapshot.richContentBlocks,
+            richContentUnsupportedFeaturesDetected = snapshot.richContentUnsupportedFeaturesDetected,
+        )
+    }
+
+    private fun seedSeamlessPreviewsFromCache(chapter: NovelChapter) {
+        val prevId = findPreviousChapter(chapter)?.id
+        val nextId = findNextChapter(chapter)?.id
+        synchronized(seamlessSnapshotCache) {
+            previousChapterPreview = prevId?.let { seamlessSnapshotCache[it] }?.let(::toAdjacentChapterPreview)
+            nextChapterPreview = nextId?.let { seamlessSnapshotCache[it] }?.let(::toAdjacentChapterPreview)
+        }
+    }
+
+    private fun scheduleSeamlessAdjacentPreload(
+        novel: Novel,
+        chapter: NovelChapter,
+        settings: NovelReaderSettings,
+    ) {
+        val nextChapter = findNextChapter(chapter)
+        val prevChapter = findPreviousChapter(chapter)
+        if (nextChapter == null && prevChapter == null) return
+        seamlessAdjacentPreloadJob?.cancel()
+        seamlessAdjacentPreloadJob = screenModelScope.launch(Dispatchers.IO) {
+            val source = sourceManager.getOrStub(novel.source)
+            val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
+            if (nextChapter != null && nextChapterPreview?.chapterId != nextChapter.id) {
+                runCatching {
+                    val alreadyCached = synchronized(seamlessSnapshotCache) {
+                        seamlessSnapshotCache[nextChapter.id]
+                    }
+                    val nextSnapshot = alreadyCached ?: run {
+                        val hasLocalText = contentPrefetchService.hasCachedNovelChapterText(
+                            novel = novel,
+                            chapter = nextChapter,
+                            downloadManager = novelDownloadManager,
+                            cacheReadChapters = cacheReadChapters,
+                        )
+                        if (!hasLocalText) {
+                            if (!settings.prefetchNextChapter) {
+                                return@runCatching
+                            }
+                            kotlinx.coroutines.delay(800L)
+                            val prefetched = contentPrefetchService.prefetchNovelChapterText(
+                                prefetchEnabled = true,
+                                novel = novel,
+                                chapter = nextChapter,
+                                source = source,
+                                downloadManager = novelDownloadManager,
+                                cacheReadChapters = cacheReadChapters,
+                            )
+                            val nowLocal = prefetched || contentPrefetchService.hasCachedNovelChapterText(
+                                novel = novel,
+                                chapter = nextChapter,
+                                downloadManager = novelDownloadManager,
+                                cacheReadChapters = cacheReadChapters,
+                            )
+                            if (!nowLocal) return@runCatching
+                        }
+                        ttsChapterRepository.loadChapterSnapshot(nextChapter.id)
+                    }
+                    putSeamlessSnapshotCache(nextSnapshot)
+                    val preview = toAdjacentChapterPreview(nextSnapshot)
+                    withContext(Dispatchers.Main.immediate) {
+                        if (currentChapter?.id != chapter.id) return@withContext
+                        nextChapterPreview = preview
+                        val currentState = mutableState.value as? State.Success ?: return@withContext
+                        if (currentState.chapter.id == chapter.id) {
+                            mutableState.value = currentState.copy(nextChapterPreview = preview)
+                        }
+                    }
+                }.onFailure { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    logcat(LogPriority.DEBUG, error) { "Seamless next chapter preload skipped" }
+                }
+            }
+            if (prevChapter != null && previousChapterPreview?.chapterId != prevChapter.id) {
+                runCatching {
+                    val alreadyCached = synchronized(seamlessSnapshotCache) {
+                        seamlessSnapshotCache[prevChapter.id]
+                    }
+                    val prevSnapshot = alreadyCached ?: run {
+                        // Never trigger network requests for the previous chapter; only use local cache/downloads.
+                        val hasLocalText = contentPrefetchService.hasCachedNovelChapterText(
+                            novel = novel,
+                            chapter = prevChapter,
+                            downloadManager = novelDownloadManager,
+                            cacheReadChapters = cacheReadChapters,
+                        )
+                        if (!hasLocalText) return@runCatching
+                        ttsChapterRepository.loadChapterSnapshot(prevChapter.id)
+                    }
+                    putSeamlessSnapshotCache(prevSnapshot)
+                    val preview = toAdjacentChapterPreview(prevSnapshot)
+                    withContext(Dispatchers.Main.immediate) {
+                        if (currentChapter?.id != chapter.id) return@withContext
+                        previousChapterPreview = preview
+                        val currentState = mutableState.value as? State.Success ?: return@withContext
+                        if (currentState.chapter.id == chapter.id) {
+                            mutableState.value = currentState.copy(previousChapterPreview = preview)
+                        }
+                    }
+                }.onFailure { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    logcat(LogPriority.DEBUG, error) { "Seamless previous chapter preload skipped" }
+                }
+            }
+        }
+    }
+
+    private fun findPreviousChapter(currentChapter: NovelChapter): NovelChapter? {
+        val list = if (fullChapterOrderList.isNotEmpty()) fullChapterOrderList else chapterOrderList
+        return list
+            .indexOfFirst { it.id == currentChapter.id }
+            .takeIf { it > 0 }
+            ?.let { list.getOrNull(it - 1) }
     }
 
     private fun subscribeToQueueProgress(chapterId: Long) =
@@ -1330,7 +1551,7 @@ class NovelReaderScreenModel(
                 // Polite delay to prevent burst request collisions on rate-sensitive hosts (e.g. NovelUpdates /extnu/)
                 kotlinx.coroutines.delay(2000L)
                 val state = mutableState.value as? State.Success ?: return@runCatching
-                contentPrefetchService.prefetchNovelChapterText(
+                val prefetched = contentPrefetchService.prefetchNovelChapterText(
                     prefetchEnabled = state.readerSettings.prefetchNextChapter,
                     novel = novel,
                     chapter = nextChapter,
@@ -1338,6 +1559,11 @@ class NovelReaderScreenModel(
                     downloadManager = novelDownloadManager,
                     cacheReadChapters = novelReaderPreferences.cacheReadChapters().get(),
                 )
+                if (prefetched && state.readerSettings.seamlessChapterTransition &&
+                    !bookController.isBookRuntimeActive()
+                ) {
+                    scheduleSeamlessAdjacentPreload(novel, currentChapter, state.readerSettings)
+                }
             }.onFailure { error ->
                 logcat(LogPriority.WARN, error) { "Failed to prefetch next novel chapter" }
             }
@@ -1719,6 +1945,12 @@ class NovelReaderScreenModel(
             previousChapterName = chapterNavigation.previousChapterName,
             nextChapterId = chapterNavigation.nextChapterId,
             nextChapterName = chapterNavigation.nextChapterName,
+            previousChapterPreview = previousChapterPreview?.takeIf {
+                it.chapterId == chapterNavigation.previousChapterId
+            },
+            nextChapterPreview = nextChapterPreview?.takeIf {
+                it.chapterId == chapterNavigation.nextChapterId
+            },
             seriesInterstitialState = seriesInterstitialState,
             finaleState = finaleState,
             chapterWebUrl = chapterWebUrl,
@@ -2137,6 +2369,9 @@ class NovelReaderScreenModel(
         // Each job is independently cancelled; cleanup happens in clearChapterTransientState().
         settingsJob?.cancel()
         nextChapterPrefetchJob?.cancel()
+        seamlessAdjacentPreloadJob?.cancel()
+        synchronized(seamlessSnapshotCache) { seamlessSnapshotCache.clear() }
+        currentChapterSnapshot = null
         translationBatchExecutor.cancelNextChapterGeminiPrefetchJob()
         adjacentJaomixPageJob?.cancel()
         selectionTranslationController.dispose()
@@ -2189,6 +2424,10 @@ class NovelReaderScreenModel(
         adjacentJaomixPageJob = null
         nextChapterPrefetchJob?.cancel()
         nextChapterPrefetchJob = null
+        seamlessAdjacentPreloadJob?.cancel()
+        seamlessAdjacentPreloadJob = null
+        previousChapterPreview = null
+        nextChapterPreview = null
         translationBatchExecutor.clearChapterScopedPrefetchState()
         translationController.resetTransientState()
         selectionTranslationController.clearChapterScopedState()
@@ -2810,6 +3049,8 @@ class NovelReaderScreenModel(
             val previousChapterName: String? = null,
             val nextChapterId: Long?,
             val nextChapterName: String? = null,
+            val previousChapterPreview: AdjacentChapterPreview? = null,
+            val nextChapterPreview: AdjacentChapterPreview? = null,
             val seriesInterstitialState: SeriesInterstitialState? = null,
             val finaleState: ReaderFinaleState? = null,
             val chapterWebUrl: String?,
@@ -2990,6 +3231,14 @@ class NovelReaderScreenModel(
             val ollamaCloudApiTestMessage: String? = null,
         )
     }
+    data class AdjacentChapterPreview(
+        val chapterId: Long,
+        val chapterName: String,
+        val contentBlocks: List<ContentBlock>,
+        val richContentBlocks: List<NovelRichContentBlock>,
+        val richContentUnsupportedFeaturesDetected: Boolean,
+    )
+
     sealed interface ContentBlock {
         data class Text(val text: String) : ContentBlock
         data class Image(val url: String, val alt: String?) : ContentBlock

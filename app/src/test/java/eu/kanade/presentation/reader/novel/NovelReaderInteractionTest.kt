@@ -622,7 +622,7 @@ class NovelReaderInteractionTest {
     }
 
     @Test
-    fun `compose pager boundary pages stay disabled for instant style and seamless mode`() {
+    fun `compose pager boundary pages stay enabled for animated styles in seamless mode and disabled for instant`() {
         resolveComposePagerBoundaryPagesEnabled(
             seamlessChapterTransitionEnabled = false,
             activePageTransitionStyle = NovelPageTransitionStyle.SLIDE,
@@ -634,7 +634,101 @@ class NovelReaderInteractionTest {
         resolveComposePagerBoundaryPagesEnabled(
             seamlessChapterTransitionEnabled = true,
             activePageTransitionStyle = NovelPageTransitionStyle.SLIDE,
+        ) shouldBe true
+        resolveComposePagerBoundaryPagesEnabled(
+            seamlessChapterTransitionEnabled = true,
+            activePageTransitionStyle = NovelPageTransitionStyle.DEPTH,
+        ) shouldBe true
+        resolveComposePagerBoundaryPagesEnabled(
+            seamlessChapterTransitionEnabled = true,
+            activePageTransitionStyle = NovelPageTransitionStyle.BOOK_FLIP,
+        ) shouldBe true
+        resolveComposePagerBoundaryPagesEnabled(
+            seamlessChapterTransitionEnabled = true,
+            activePageTransitionStyle = NovelPageTransitionStyle.INSTANT,
         ) shouldBe false
+    }
+
+    @Test
+    fun `page turn boundary slots and tap animation stay consistent for classic, seamless, and disabled modes`() {
+        resolvePageTurnBoundarySlotsEnabled(
+            showBoundaryChapterPages = true,
+            seamlessBoundaryPages = false,
+        ) shouldBe true
+        resolvePageTurnBoundarySlotsEnabled(
+            showBoundaryChapterPages = false,
+            seamlessBoundaryPages = true,
+        ) shouldBe true
+        resolvePageTurnBoundarySlotsEnabled(
+            showBoundaryChapterPages = false,
+            seamlessBoundaryPages = false,
+        ) shouldBe false
+
+        // Classic mode preserves CURL animated / BOOK direct tap behavior
+        resolvePageTurnAnimateBoundaryTransition(
+            transitionStyle = NovelPageTransitionStyle.CURL,
+            showBoundaryChapterPages = true,
+            seamlessBoundaryPages = false,
+        ) shouldBe true
+        resolvePageTurnAnimateBoundaryTransition(
+            transitionStyle = NovelPageTransitionStyle.BOOK,
+            showBoundaryChapterPages = true,
+            seamlessBoundaryPages = false,
+        ) shouldBe false
+
+        // Seamless mode animates both CURL and BOOK through the preloaded boundary page
+        resolvePageTurnAnimateBoundaryTransition(
+            transitionStyle = NovelPageTransitionStyle.CURL,
+            showBoundaryChapterPages = false,
+            seamlessBoundaryPages = true,
+        ) shouldBe true
+        resolvePageTurnAnimateBoundaryTransition(
+            transitionStyle = NovelPageTransitionStyle.BOOK,
+            showBoundaryChapterPages = false,
+            seamlessBoundaryPages = true,
+        ) shouldBe true
+
+        // When no boundary slot exists at all, never attempt an animated turn into a missing slot
+        resolvePageTurnAnimateBoundaryTransition(
+            transitionStyle = NovelPageTransitionStyle.CURL,
+            showBoundaryChapterPages = false,
+            seamlessBoundaryPages = false,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `native and web initial positions honor chapter handoff targets`() {
+        resolveInitialNativeReaderIndex(
+            nativeLastSavedIndex = 12,
+            savedPageReaderProgress = null,
+            itemCount = 25,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.START,
+        ) shouldBe 0
+        resolveInitialNativeReaderIndex(
+            nativeLastSavedIndex = 0,
+            savedPageReaderProgress = null,
+            itemCount = 25,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.END,
+        ) shouldBe 24
+        resolveInitialNativeReaderIndex(
+            nativeLastSavedIndex = 12,
+            savedPageReaderProgress = null,
+            itemCount = 25,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+        ) shouldBe 12
+
+        resolveInitialWebViewProgressPercent(
+            savedWebProgressPercent = 85,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.START,
+        ) shouldBe 0
+        resolveInitialWebViewProgressPercent(
+            savedWebProgressPercent = 0,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.END,
+        ) shouldBe 100
+        resolveInitialWebViewProgressPercent(
+            savedWebProgressPercent = 42,
+            chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+        ) shouldBe 42
     }
 
     @Test

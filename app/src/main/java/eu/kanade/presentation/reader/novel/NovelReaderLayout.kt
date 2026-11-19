@@ -1497,6 +1497,64 @@ internal data class NovelPageContentPage(
     val pageIndex: Int = -1,
 )
 
+internal data class SeamlessAdjacentPagesSlice(
+    val pages: List<NovelPageContentPage> = emptyList(),
+    val firstPageNumber: Int? = null,
+    val totalPages: Int = 0,
+)
+
+internal fun createSeamlessFallbackBoundaryPage(chapterName: String?): NovelPageContentPage {
+    val cleanTitle = chapterName?.trim().orEmpty()
+    if (cleanTitle.isEmpty()) return NovelPageContentPage(emptyList())
+    return NovelPageContentPage(
+        blocks = listOf(
+            NovelPageContentBlock.Plain(
+                sourceBlockIndex = -1,
+                text = cleanTitle,
+                spacingBeforePx = 0,
+                firstLineIndentEm = null,
+                isChapterTitle = true,
+            ),
+        ),
+        pageIndex = 0,
+    )
+}
+
+internal fun resolveSeamlessBoundarySpreadPages(
+    boundaryTarget: HorizontalChapterSwipeAction,
+    spreadColumns: Int,
+    previousChapterName: String?,
+    nextChapterName: String?,
+    previousChapterPreview: SeamlessAdjacentPagesSlice,
+    nextChapterPreview: SeamlessAdjacentPagesSlice,
+): Pair<List<NovelPageContentPage>, SeamlessAdjacentPagesSlice> {
+    val safeColumns = spreadColumns.coerceAtLeast(1)
+    val slice = when (boundaryTarget) {
+        HorizontalChapterSwipeAction.PREVIOUS -> previousChapterPreview
+        HorizontalChapterSwipeAction.NEXT -> nextChapterPreview
+        HorizontalChapterSwipeAction.NONE -> SeamlessAdjacentPagesSlice()
+    }
+    if (slice.pages.isNotEmpty()) {
+        val pages = (0 until safeColumns).map { index ->
+            slice.pages.getOrElse(index) { NovelPageContentPage(emptyList()) }
+        }
+        return pages to slice
+    }
+    val fallbackTitle = when (boundaryTarget) {
+        HorizontalChapterSwipeAction.PREVIOUS -> previousChapterName
+        HorizontalChapterSwipeAction.NEXT -> nextChapterName
+        HorizontalChapterSwipeAction.NONE -> null
+    }
+    val fallbackPages = (0 until safeColumns).map { index ->
+        if (index == 0) {
+            createSeamlessFallbackBoundaryPage(fallbackTitle)
+        } else {
+            NovelPageContentPage(emptyList())
+        }
+    }
+    return fallbackPages to SeamlessAdjacentPagesSlice()
+}
+
 internal fun resolvePageReaderGlyphOverflowPaddingPx(textSizePx: Float): Int {
     return (textSizePx.coerceAtLeast(1f) * 0.25f)
         .roundToInt()

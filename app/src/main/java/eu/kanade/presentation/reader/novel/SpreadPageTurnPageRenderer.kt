@@ -109,6 +109,9 @@ internal fun SpreadPageTurnPageRenderer(
     nextChapterLabel: String,
     boundaryChapterHint: String,
     showBoundaryChapterPages: Boolean = true,
+    seamlessBoundaryPages: Boolean = false,
+    previousChapterPreview: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
+    nextChapterPreview: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
     suppressBoundaryChapterNavigation: Boolean = false,
     syncedContentPageIndex: Int? = null,
     onToggleUi: () -> Unit,
@@ -130,12 +133,16 @@ internal fun SpreadPageTurnPageRenderer(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val hasPreviousChapterNavigation = hasPreviousChapter
         val hasNextChapterNavigation = hasNextChapter
+        val hasBoundarySlots = resolvePageTurnBoundarySlotsEnabled(
+            showBoundaryChapterPages = showBoundaryChapterPages,
+            seamlessBoundaryPages = seamlessBoundaryPages,
+        )
 
         @Suppress("NAME_SHADOWING")
-        val hasPreviousChapter = hasPreviousChapter && showBoundaryChapterPages
+        val hasPreviousChapter = hasPreviousChapterNavigation && hasBoundarySlots
 
         @Suppress("NAME_SHADOWING")
-        val hasNextChapter = hasNextChapter && showBoundaryChapterPages
+        val hasNextChapter = hasNextChapterNavigation && hasBoundarySlots
 
         val safeContentPages = remember(contentPages) {
             contentPages.ifEmpty { listOf(NovelPageContentPage(emptyList())) }
@@ -267,6 +274,13 @@ internal fun SpreadPageTurnPageRenderer(
             val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapterNavigation)
             val latestHasNextChapter by rememberUpdatedState(hasNextChapterNavigation)
             val latestSuppressBoundaryNavigation by rememberUpdatedState(suppressBoundaryChapterNavigation)
+            val latestAnimateBoundaryTransition by rememberUpdatedState(
+                resolvePageTurnAnimateBoundaryTransition(
+                    transitionStyle = transitionStyle,
+                    showBoundaryChapterPages = showBoundaryChapterPages,
+                    seamlessBoundaryPages = seamlessBoundaryPages,
+                ),
+            )
 
             // Advances both surfaces together: the one facing the turn direction plays the real fold, the
             // other jumps straight to its new page with no visible animation of its own (snap()), the same
@@ -305,17 +319,26 @@ internal fun SpreadPageTurnPageRenderer(
 
             val leftPageCurlConfig = rememberPageCurlConfig(
                 onCustomTap = { size, offset ->
+                    val liveVirtualSlot = (virtualSlotCount - 1 - leftCurlState.current).coerceIn(
+                        0,
+                        virtualSlotCount - 1,
+                    )
+                    val liveSpreadSlot = resolvePageTurnRendererProgressPageIndex(
+                        currentPage = liveVirtualSlot,
+                        contentPageCount = spreadSlotCount,
+                        hasPreviousChapter = hasPreviousChapter,
+                    )
                     handleSpreadCustomTap(
                         size = size,
                         offset = offset,
                         isRightSide = false,
-                        currentSpreadSlot = currentSpreadSlot,
+                        currentSpreadSlot = liveSpreadSlot,
                         spreadSlotCount = spreadSlotCount,
                         latestCustomTapZonesEnabled = latestCustomTapZonesEnabled,
                         latestTapZoneActions = latestTapZoneActions,
                         latestTapToScrollEnabled = latestTapToScrollEnabled,
                         latestRendererConfig = latestRendererConfig,
-                        transitionStyle = transitionStyle,
+                        animateBoundaryTransition = latestAnimateBoundaryTransition,
                         latestToggleUi = latestToggleUi,
                         onTurnForward = ::turnForward,
                         onTurnBackward = ::turnBackward,
@@ -328,17 +351,26 @@ internal fun SpreadPageTurnPageRenderer(
             )
             val rightPageCurlConfig = rememberPageCurlConfig(
                 onCustomTap = { size, offset ->
+                    val liveVirtualSlot = (virtualSlotCount - 1 - leftCurlState.current).coerceIn(
+                        0,
+                        virtualSlotCount - 1,
+                    )
+                    val liveSpreadSlot = resolvePageTurnRendererProgressPageIndex(
+                        currentPage = liveVirtualSlot,
+                        contentPageCount = spreadSlotCount,
+                        hasPreviousChapter = hasPreviousChapter,
+                    )
                     handleSpreadCustomTap(
                         size = size,
                         offset = offset,
                         isRightSide = true,
-                        currentSpreadSlot = currentSpreadSlot,
+                        currentSpreadSlot = liveSpreadSlot,
                         spreadSlotCount = spreadSlotCount,
                         latestCustomTapZonesEnabled = latestCustomTapZonesEnabled,
                         latestTapZoneActions = latestTapZoneActions,
                         latestTapToScrollEnabled = latestTapToScrollEnabled,
                         latestRendererConfig = latestRendererConfig,
-                        transitionStyle = transitionStyle,
+                        animateBoundaryTransition = latestAnimateBoundaryTransition,
                         latestToggleUi = latestToggleUi,
                         onTurnForward = ::turnForward,
                         onTurnBackward = ::turnBackward,
@@ -477,7 +509,9 @@ internal fun SpreadPageTurnPageRenderer(
                                     latestOpenNextChapter()
                                 }
                             }
-                            HorizontalChapterSwipeAction.NONE -> {}
+                            HorizontalChapterSwipeAction.NONE -> {
+                                consumedBoundaryNavigation = null
+                            }
                         }
                     }
             }
@@ -579,9 +613,22 @@ internal fun SpreadPageTurnPageRenderer(
                     latestChapterNavigationRequestConsumed()
                     return@LaunchedEffect
                 }
+                val liveVirtualSlot = (virtualSlotCount - 1 - leftCurlState.current).coerceIn(0, virtualSlotCount - 1)
                 when (request.direction) {
-                    PageTurnChapterNavigationDirection.PREVIOUS -> turnBackward()
-                    PageTurnChapterNavigationDirection.NEXT -> turnForward()
+                    PageTurnChapterNavigationDirection.PREVIOUS -> {
+                        if (liveVirtualSlot > 0) {
+                            turnBackward()
+                        } else if (latestHasPreviousChapter) {
+                            latestOpenPreviousChapter()
+                        }
+                    }
+                    PageTurnChapterNavigationDirection.NEXT -> {
+                        if (liveVirtualSlot < virtualSlotCount - 1) {
+                            turnForward()
+                        } else if (latestHasNextChapter) {
+                            latestOpenNextChapter()
+                        }
+                    }
                 }
                 latestChapterNavigationRequestConsumed()
             }
@@ -621,6 +668,8 @@ internal fun SpreadPageTurnPageRenderer(
                         hasPreviousChapter = hasPreviousChapter,
                         hasNextChapter = hasNextChapter,
                         showBoundaryChapterPages = showBoundaryChapterPages,
+                        previousChapterPreview = previousChapterPreview,
+                        nextChapterPreview = nextChapterPreview,
                         previousChapterLabel = previousChapterLabel,
                         nextChapterLabel = nextChapterLabel,
                         previousChapterName = previousChapterName,
@@ -671,6 +720,8 @@ internal fun SpreadPageTurnPageRenderer(
                         hasPreviousChapter = hasPreviousChapter,
                         hasNextChapter = hasNextChapter,
                         showBoundaryChapterPages = showBoundaryChapterPages,
+                        previousChapterPreview = previousChapterPreview,
+                        nextChapterPreview = nextChapterPreview,
                         previousChapterLabel = previousChapterLabel,
                         nextChapterLabel = nextChapterLabel,
                         previousChapterName = previousChapterName,
@@ -729,7 +780,7 @@ private fun handleSpreadCustomTap(
     latestTapZoneActions: List<NovelReaderTapZoneAction>,
     latestTapToScrollEnabled: Boolean,
     latestRendererConfig: NovelPageTurnRendererConfig,
-    transitionStyle: NovelPageTransitionStyle,
+    animateBoundaryTransition: Boolean,
     latestToggleUi: () -> Unit,
     onTurnForward: () -> Unit,
     onTurnBackward: () -> Unit,
@@ -760,7 +811,7 @@ private fun handleSpreadCustomTap(
             pageCount = spreadSlotCount.coerceAtLeast(1),
             hasPreviousChapter = hasPreviousChapter,
             hasNextChapter = hasNextChapter,
-            animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
+            animateBoundaryTransition = animateBoundaryTransition,
         )
     } else {
         resolvePageTurnCustomTapAction(
@@ -771,7 +822,7 @@ private fun handleSpreadCustomTap(
             hasPreviousChapter = hasPreviousChapter,
             hasNextChapter = hasNextChapter,
             tapToScrollEnabled = latestTapToScrollEnabled,
-            animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
+            animateBoundaryTransition = animateBoundaryTransition,
         )
     }
     return when (customTapAction) {
@@ -820,6 +871,8 @@ private fun SpreadColumnCurl(
     hasPreviousChapter: Boolean,
     hasNextChapter: Boolean,
     showBoundaryChapterPages: Boolean,
+    previousChapterPreview: SeamlessAdjacentPagesSlice,
+    nextChapterPreview: SeamlessAdjacentPagesSlice,
     previousChapterLabel: String,
     nextChapterLabel: String,
     previousChapterName: String?,
@@ -868,17 +921,16 @@ private fun SpreadColumnCurl(
         modifier = curlModifier,
     ) { page ->
         val actualPage = if (invertPage) (virtualSlotCount - 1 - page).coerceAtLeast(0) else page
+        val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
+            currentPage = actualPage,
+            contentPageCount = spreadSlotCount,
+            hasPreviousChapter = hasPreviousChapter,
+            hasNextChapter = hasNextChapter,
+        )
         val boundaryPreview = if (!showBoundaryChapterPages) {
             null
         } else {
-            when (
-                resolvePageTurnRendererBoundaryChapterTarget(
-                    currentPage = actualPage,
-                    contentPageCount = spreadSlotCount,
-                    hasPreviousChapter = hasPreviousChapter,
-                    hasNextChapter = hasNextChapter,
-                )
-            ) {
+            when (boundaryTarget) {
                 HorizontalChapterSwipeAction.PREVIOUS,
                 HorizontalChapterSwipeAction.NEXT,
                 -> {
@@ -891,7 +943,21 @@ private fun SpreadColumnCurl(
                 HorizontalChapterSwipeAction.NONE -> null
             }
         }
-        val columnPageIndex = if (boundaryPreview == null) {
+        val isSeamlessBoundarySlot =
+            boundaryTarget != HorizontalChapterSwipeAction.NONE && !showBoundaryChapterPages
+        val (seamlessBoundaryPagesForSlot, seamlessBoundarySlice) = if (isSeamlessBoundarySlot) {
+            resolveSeamlessBoundarySpreadPages(
+                boundaryTarget = boundaryTarget,
+                spreadColumns = 2,
+                previousChapterName = previousChapterName,
+                nextChapterName = nextChapterName,
+                previousChapterPreview = previousChapterPreview,
+                nextChapterPreview = nextChapterPreview,
+            )
+        } else {
+            emptyList<NovelPageContentPage>() to SeamlessAdjacentPagesSlice()
+        }
+        val columnPageIndex = if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
             val spreadSlot = resolvePageTurnRendererProgressPageIndex(
                 currentPage = actualPage,
                 contentPageCount = spreadSlotCount,
@@ -902,10 +968,12 @@ private fun SpreadColumnCurl(
         } else {
             -1
         }
-        val contentPage = if (boundaryPreview == null) {
-            safeContentPages.getOrElse(columnPageIndex) { NovelPageContentPage(emptyList()) }
-        } else {
-            NovelPageContentPage(emptyList())
+        val contentPage = when {
+            boundaryPreview != null -> NovelPageContentPage(emptyList())
+            isSeamlessBoundarySlot -> seamlessBoundaryPagesForSlot.getOrElse(columnOffset) {
+                NovelPageContentPage(emptyList())
+            }
+            else -> safeContentPages.getOrElse(columnPageIndex) { NovelPageContentPage(emptyList()) }
         }
         val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
         val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
@@ -916,7 +984,8 @@ private fun SpreadColumnCurl(
         } else {
             Modifier.fillMaxSize()
         }
-        val isInteractiveCurrentPage = isSpreadSettled && page == pageCurlState.current && boundaryPreview == null
+        val isInteractiveCurrentPage =
+            isSpreadSettled && page == pageCurlState.current && boundaryTarget == HorizontalChapterSwipeAction.NONE
         NovelPageTurnSnapshotRenderer(
             useSnapshotLayer = !isSpreadSettled,
             modifier = contentModifier,
@@ -972,9 +1041,20 @@ private fun SpreadColumnCurl(
                     onImageLongClick = onImageLongClick,
                     onUrlClick = onUrlClick,
                     touchHandlingEnabled = isInteractiveCurrentPage,
-                    renderAsStaticCanvas = page != pageCurlState.current,
-                    pageNumber = if (columnPageIndex in safeContentPages.indices) columnPageIndex + 1 else null,
-                    totalPages = safeContentPages.size,
+                    renderAsStaticCanvas = page != pageCurlState.current || isSeamlessBoundarySlot,
+                    pageNumber = when {
+                        isSeamlessBoundarySlot -> seamlessBoundarySlice.firstPageNumber?.let { firstNum ->
+                            val candidate = firstNum + columnOffset
+                            if (candidate <= seamlessBoundarySlice.totalPages) candidate else null
+                        }
+                        columnPageIndex in safeContentPages.indices -> columnPageIndex + 1
+                        else -> null
+                    },
+                    totalPages = if (isSeamlessBoundarySlot) {
+                        seamlessBoundarySlice.totalPages
+                    } else {
+                        safeContentPages.size
+                    },
                 )
             }
         }

@@ -559,8 +559,12 @@ internal fun PageTurnPageRenderer(
     nextChapterLabel: String,
     boundaryChapterHint: String,
     // When false, the renderer never draws the intermediate "next/previous chapter" placeholder page:
-    // the edge page keeps showing real chapter content and the chapter switch happens directly.
+    // if seamlessBoundaryPages is true the edge slot renders the preloaded adjacent chapter page
+    // (or a clean paper fallback) so the curl/book animation still plays smoothly.
     showBoundaryChapterPages: Boolean = true,
+    seamlessBoundaryPages: Boolean = false,
+    previousChapterPreview: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
+    nextChapterPreview: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
     suppressBoundaryChapterNavigation: Boolean = false,
     syncedContentPageIndex: Int? = null,
     onToggleUi: () -> Unit,
@@ -588,12 +592,16 @@ internal fun PageTurnPageRenderer(
         // renders clamped content and the last page of the chapter shows up twice.
         val hasPreviousChapterNavigation = hasPreviousChapter
         val hasNextChapterNavigation = hasNextChapter
+        val hasBoundarySlots = resolvePageTurnBoundarySlotsEnabled(
+            showBoundaryChapterPages = showBoundaryChapterPages,
+            seamlessBoundaryPages = seamlessBoundaryPages,
+        )
 
         @Suppress("NAME_SHADOWING")
-        val hasPreviousChapter = hasPreviousChapter && showBoundaryChapterPages
+        val hasPreviousChapter = hasPreviousChapterNavigation && hasBoundarySlots
 
         @Suppress("NAME_SHADOWING")
-        val hasNextChapter = hasNextChapter && showBoundaryChapterPages
+        val hasNextChapter = hasNextChapterNavigation && hasBoundarySlots
         val safeContentPages = remember(contentPages) {
             contentPages.ifEmpty { listOf(NovelPageContentPage(emptyList())) }
         }
@@ -719,6 +727,13 @@ internal fun PageTurnPageRenderer(
             val latestTapZoneActions by rememberUpdatedState(
                 parseNovelReaderTapZoneActions(readerSettings.tapZoneActions),
             )
+            val latestAnimateBoundaryTransition by rememberUpdatedState(
+                resolvePageTurnAnimateBoundaryTransition(
+                    transitionStyle = transitionStyle,
+                    showBoundaryChapterPages = showBoundaryChapterPages,
+                    seamlessBoundaryPages = seamlessBoundaryPages,
+                ),
+            )
             val pageCurlConfig = rememberPageCurlConfig(
                 onCustomTap = { size, offset ->
                     val currentTapPage = resolvePageTurnRendererProgressPageIndex(
@@ -741,7 +756,7 @@ internal fun PageTurnPageRenderer(
                             pageCount = latestPageCount.coerceAtLeast(1),
                             hasPreviousChapter = latestHasPreviousChapter,
                             hasNextChapter = latestHasNextChapter,
-                            animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
+                            animateBoundaryTransition = latestAnimateBoundaryTransition,
                         )
                     } else {
                         resolvePageTurnCustomTapAction(
@@ -756,7 +771,7 @@ internal fun PageTurnPageRenderer(
                             hasPreviousChapter = latestHasPreviousChapter,
                             hasNextChapter = latestHasNextChapter,
                             tapToScrollEnabled = latestTapToScrollEnabled,
-                            animateBoundaryTransition = transitionStyle == NovelPageTransitionStyle.CURL,
+                            animateBoundaryTransition = latestAnimateBoundaryTransition,
                         )
                     }
                     when (customTapAction) {
@@ -880,7 +895,9 @@ internal fun PageTurnPageRenderer(
                                     latestOpenNextChapter()
                                 }
                             }
-                            HorizontalChapterSwipeAction.NONE -> {}
+                            HorizontalChapterSwipeAction.NONE -> {
+                                consumedBoundaryNavigation = null
+                            }
                         }
                     }
             }
@@ -950,17 +967,16 @@ internal fun PageTurnPageRenderer(
                     config = pageCurlConfig,
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
+                    val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
+                        currentPage = page,
+                        contentPageCount = actualPageCount,
+                        hasPreviousChapter = hasPreviousChapter,
+                        hasNextChapter = hasNextChapter,
+                    )
                     val boundaryPreview = if (!showBoundaryChapterPages) {
                         null
                     } else {
-                        when (
-                            resolvePageTurnRendererBoundaryChapterTarget(
-                                currentPage = page,
-                                contentPageCount = actualPageCount,
-                                hasPreviousChapter = hasPreviousChapter,
-                                hasNextChapter = hasNextChapter,
-                            )
-                        ) {
+                        when (boundaryTarget) {
                             HorizontalChapterSwipeAction.PREVIOUS,
                             HorizontalChapterSwipeAction.NEXT,
                             -> {
@@ -981,7 +997,21 @@ internal fun PageTurnPageRenderer(
                             HorizontalChapterSwipeAction.NONE -> null
                         }
                     }
-                    val spreadFirstPage = if (boundaryPreview == null) {
+                    val isSeamlessBoundarySlot =
+                        boundaryTarget != HorizontalChapterSwipeAction.NONE && !showBoundaryChapterPages
+                    val (seamlessBoundaryPagesForSlot, seamlessBoundarySlice) = if (isSeamlessBoundarySlot) {
+                        resolveSeamlessBoundarySpreadPages(
+                            boundaryTarget = boundaryTarget,
+                            spreadColumns = spreadColumns,
+                            previousChapterName = previousChapterName,
+                            nextChapterName = nextChapterName,
+                            previousChapterPreview = previousChapterPreview,
+                            nextChapterPreview = nextChapterPreview,
+                        )
+                    } else {
+                        emptyList<NovelPageContentPage>() to SeamlessAdjacentPagesSlice()
+                    }
+                    val spreadFirstPage = if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
                         val spreadSlot = resolvePageTurnRendererProgressPageIndex(
                             currentPage = page,
                             contentPageCount = actualPageCount,
@@ -991,12 +1021,12 @@ internal fun PageTurnPageRenderer(
                     } else {
                         -1
                     }
-                    val spreadPages = if (boundaryPreview == null) {
-                        (spreadFirstPage until spreadFirstPage + spreadColumns).map { index ->
+                    val spreadPages = when {
+                        boundaryPreview != null -> listOf(NovelPageContentPage(emptyList()))
+                        isSeamlessBoundarySlot -> seamlessBoundaryPagesForSlot
+                        else -> (spreadFirstPage until spreadFirstPage + spreadColumns).map { index ->
                             safeContentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
                         }
-                    } else {
-                        listOf(NovelPageContentPage(emptyList()))
                     }
                     val contentPage = spreadPages.first()
                     val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
@@ -1006,7 +1036,7 @@ internal fun PageTurnPageRenderer(
                     val isInteractiveCurrentPage =
                         isCurlSettled &&
                             page == currentPage &&
-                            boundaryPreview == null &&
+                            boundaryTarget == HorizontalChapterSwipeAction.NONE &&
                             !latestSuppressBoundaryNavigation
                     NovelPageTurnSnapshotRenderer(
                         useSnapshotLayer = !isCurlSettled,
@@ -1062,15 +1092,17 @@ internal fun PageTurnPageRenderer(
                                 onImageLongClick = if (onImageLongClick != null) guardedImageLongClick else null,
                                 onUrlClick = if (onUrlClick != null) guardedUrlClick else null,
                                 touchHandlingEnabled = isInteractiveCurrentPage,
-                                renderAsStaticCanvas = page != currentPage,
-                                pageNumber = if (spreadFirstPage in
-                                    safeContentPages.indices
-                                ) {
-                                    spreadFirstPage + 1
-                                } else {
-                                    null
+                                renderAsStaticCanvas = page != currentPage || isSeamlessBoundarySlot,
+                                pageNumber = when {
+                                    isSeamlessBoundarySlot -> seamlessBoundarySlice.firstPageNumber
+                                    spreadFirstPage in safeContentPages.indices -> spreadFirstPage + 1
+                                    else -> null
                                 },
-                                totalPages = safeContentPages.size,
+                                totalPages = if (isSeamlessBoundarySlot) {
+                                    seamlessBoundarySlice.totalPages
+                                } else {
+                                    safeContentPages.size
+                                },
                                 modifier = Modifier.absolutePadding(
                                     left = spreadCutoutLeftDp,
                                     right = spreadCutoutRightDp,
@@ -1118,9 +1150,22 @@ internal fun PageTurnPageRenderer(
                                         },
                                         onUrlClick = if (onUrlClick != null) guardedUrlClick else null,
                                         touchHandlingEnabled = isInteractiveCurrentPage,
-                                        renderAsStaticCanvas = page != currentPage,
-                                        pageNumber = if (pageIdx in safeContentPages.indices) pageIdx + 1 else null,
-                                        totalPages = safeContentPages.size,
+                                        renderAsStaticCanvas = page != currentPage || isSeamlessBoundarySlot,
+                                        pageNumber = when {
+                                            isSeamlessBoundarySlot ->
+                                                seamlessBoundarySlice.firstPageNumber?.let { firstNum ->
+                                                    (firstNum + columnOffset).takeIf {
+                                                        it <= seamlessBoundarySlice.totalPages
+                                                    }
+                                                }
+                                            pageIdx in safeContentPages.indices -> pageIdx + 1
+                                            else -> null
+                                        },
+                                        totalPages = if (isSeamlessBoundarySlot) {
+                                            seamlessBoundarySlice.totalPages
+                                        } else {
+                                            safeContentPages.size
+                                        },
                                         modifier = Modifier.weight(1f),
                                     )
                                 }
@@ -1140,25 +1185,33 @@ internal fun PageTurnPageRenderer(
 
                 when (request.direction) {
                     PageTurnChapterNavigationDirection.PREVIOUS -> {
-                        tapCoroutineScope.launch {
-                            pageCurlState.prev(
-                                createPageTurnAnimation(
-                                    animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
-                                    forward = false,
-                                    curlAmount = latestRendererConfig.preset.curlAmount,
-                                ),
-                            )
+                        if (pageCurlState.current > 0) {
+                            tapCoroutineScope.launch {
+                                pageCurlState.prev(
+                                    createPageTurnAnimation(
+                                        animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                        forward = false,
+                                        curlAmount = latestRendererConfig.preset.curlAmount,
+                                    ),
+                                )
+                            }
+                        } else if (latestHasPreviousChapter) {
+                            latestOpenPreviousChapter()
                         }
                     }
                     PageTurnChapterNavigationDirection.NEXT -> {
-                        tapCoroutineScope.launch {
-                            pageCurlState.next(
-                                createPageTurnAnimation(
-                                    animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
-                                    forward = true,
-                                    curlAmount = latestRendererConfig.preset.curlAmount,
-                                ),
-                            )
+                        if (pageCurlState.current < virtualPageCount - 1) {
+                            tapCoroutineScope.launch {
+                                pageCurlState.next(
+                                    createPageTurnAnimation(
+                                        animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
+                                        forward = true,
+                                        curlAmount = latestRendererConfig.preset.curlAmount,
+                                    ),
+                                )
+                            }
+                        } else if (latestHasNextChapter) {
+                            latestOpenNextChapter()
                         }
                     }
                 }

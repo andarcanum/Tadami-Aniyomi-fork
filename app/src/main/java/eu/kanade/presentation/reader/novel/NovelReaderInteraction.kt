@@ -492,14 +492,31 @@ internal fun resolveInitialNativeReaderIndex(
     nativeLastSavedIndex: Int,
     savedPageReaderProgress: PageReaderProgress?,
     itemCount: Int,
+    chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
 ): Int {
     val safeItemCount = itemCount.coerceAtLeast(1)
     val lastItemIndex = safeItemCount - 1
+    when (chapterHandoffTarget) {
+        NovelReaderPageReaderHandoffTarget.START -> return 0
+        NovelReaderPageReaderHandoffTarget.END -> return lastItemIndex
+        NovelReaderPageReaderHandoffTarget.SAVED -> Unit
+    }
     val savedProgress = savedPageReaderProgress ?: return nativeLastSavedIndex.coerceIn(0, lastItemIndex)
     if (safeItemCount == 1 || savedProgress.totalItems <= 1) return 0
     val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
     val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
     return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+}
+
+internal fun resolveInitialWebViewProgressPercent(
+    savedWebProgressPercent: Int,
+    chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+): Int {
+    return when (chapterHandoffTarget) {
+        NovelReaderPageReaderHandoffTarget.START -> 0
+        NovelReaderPageReaderHandoffTarget.END -> 100
+        NovelReaderPageReaderHandoffTarget.SAVED -> savedWebProgressPercent.coerceIn(0, 100)
+    }
 }
 
 internal fun shouldUseRichNativeScrollRenderer(
@@ -566,11 +583,32 @@ internal fun shouldUseComposePagerBoundaryPreview(
 }
 
 internal fun resolveComposePagerBoundaryPagesEnabled(
-    seamlessChapterTransitionEnabled: Boolean,
+    @Suppress("UNUSED_PARAMETER") seamlessChapterTransitionEnabled: Boolean,
     activePageTransitionStyle: NovelPageTransitionStyle,
 ): Boolean {
-    return !seamlessChapterTransitionEnabled &&
-        shouldUseComposePagerBoundaryPreview(activePageTransitionStyle)
+    // Keep the virtual boundary slots active for all animated pager styles (SLIDE, DEPTH,
+    // BOOK_FLIP) in seamless mode as well: they render the preloaded adjacent chapter page (or a
+    // clean paper surface) instead of the interstitial card, so the transition animates smoothly
+    // rather than stalling behind overscroll and snapping abruptly.
+    return shouldUseComposePagerBoundaryPreview(activePageTransitionStyle)
+}
+
+internal fun resolvePageTurnBoundarySlotsEnabled(
+    showBoundaryChapterPages: Boolean,
+    seamlessBoundaryPages: Boolean,
+): Boolean {
+    return showBoundaryChapterPages || seamlessBoundaryPages
+}
+
+internal fun resolvePageTurnAnimateBoundaryTransition(
+    transitionStyle: NovelPageTransitionStyle,
+    showBoundaryChapterPages: Boolean,
+    seamlessBoundaryPages: Boolean,
+): Boolean {
+    if (!resolvePageTurnBoundarySlotsEnabled(showBoundaryChapterPages, seamlessBoundaryPages)) {
+        return false
+    }
+    return transitionStyle == NovelPageTransitionStyle.CURL || seamlessBoundaryPages
 }
 
 internal fun resolveEffectivePageReaderViewportSize(

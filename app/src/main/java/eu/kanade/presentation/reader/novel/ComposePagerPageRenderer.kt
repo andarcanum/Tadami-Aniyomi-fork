@@ -15,7 +15,10 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -321,8 +324,12 @@ internal fun ComposePagerPageRenderer(
     nextChapterLabel: String,
     boundaryChapterHint: String,
     // When false, the pager never renders the intermediate "next/previous chapter" placeholder page:
-    // the edge page shows real chapter content and the chapter switch happens directly.
+    // if seamlessBoundaryPages is true the edge slot renders the preloaded adjacent chapter page
+    // (or a clean paper fallback) so the turn animation still plays smoothly.
     showBoundaryChapterPages: Boolean = true,
+    seamlessBoundaryPages: Boolean = false,
+    previousChapterPreview: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
+    nextChapterPreview: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
     suppressBoundaryChapterNavigation: Boolean = false,
     onToggleUi: () -> Unit,
     onMoveBackward: () -> Unit,
@@ -344,13 +351,17 @@ internal fun ComposePagerPageRenderer(
     // renders clamped content and the last page of the chapter shows up twice.
     val hasPreviousChapterNavigation = hasPreviousChapter
     val hasNextChapterNavigation = hasNextChapter
+    val hasBoundarySlots = resolvePageTurnBoundarySlotsEnabled(
+        showBoundaryChapterPages = showBoundaryChapterPages,
+        seamlessBoundaryPages = seamlessBoundaryPages,
+    )
+    val useBoundaryPreview = shouldUseComposePagerBoundaryPreview(transitionStyle) && hasBoundarySlots
 
     @Suppress("NAME_SHADOWING")
-    val hasPreviousChapter = hasPreviousChapter && showBoundaryChapterPages
+    val hasPreviousChapter = hasPreviousChapterNavigation && useBoundaryPreview
 
     @Suppress("NAME_SHADOWING")
-    val hasNextChapter = hasNextChapter && showBoundaryChapterPages
-    val useBoundaryPreview = shouldUseComposePagerBoundaryPreview(transitionStyle) && showBoundaryChapterPages
+    val hasNextChapter = hasNextChapterNavigation && useBoundaryPreview
     // The pager's own index space is expressed in slots (see spreadColumns above), so every
     // boundary/key computation below has to work against the slot count, not the raw page count.
     val contentPageCount = resolveSpreadSlotCount(contentPages.size, spreadColumns)
@@ -367,12 +378,13 @@ internal fun ComposePagerPageRenderer(
     val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapter)
     val latestHasNextChapter by rememberUpdatedState(hasNextChapter)
     val latestSuppressBoundaryNavigation by rememberUpdatedState(suppressBoundaryChapterNavigation)
-    val edgeSwipeThresholdPx = with(density) { 160.dp.toPx() }
+    val edgeSwipeThresholdPx = with(density) { 64.dp.toPx() }
 
     val boundarySwipeModifier = if (useBoundaryPreview) {
         Modifier
     } else {
         Modifier.pointerInput(
+            chapterId,
             pagerState,
             contentPageCount,
             edgeSwipeThresholdPx,
@@ -392,6 +404,8 @@ internal fun ComposePagerPageRenderer(
                     currentPosition = change.position
                     if (!change.pressed) break
                 }
+
+                if (latestSuppressBoundaryNavigation) return@awaitEachGesture
 
                 when (
                     resolvePageReaderBoundaryChapterSwipeAction(
@@ -422,8 +436,12 @@ internal fun ComposePagerPageRenderer(
             }
     }
 
+    var consumedBoundaryNavigation by remember(chapterId, contentPageCount, hasPreviousChapter, hasNextChapter) {
+        mutableStateOf<HorizontalChapterSwipeAction?>(null)
+    }
     if (useBoundaryPreview) {
         LaunchedEffect(
+            chapterId,
             pagerState,
             contentPageCount,
             hasPreviousChapter,
@@ -449,9 +467,21 @@ internal fun ComposePagerPageRenderer(
                             hasNextChapter = latestHasNextChapter,
                         )
                     ) {
-                        HorizontalChapterSwipeAction.PREVIOUS -> latestOpenPreviousChapter()
-                        HorizontalChapterSwipeAction.NEXT -> latestOpenNextChapter()
-                        HorizontalChapterSwipeAction.NONE -> Unit
+                        HorizontalChapterSwipeAction.PREVIOUS -> {
+                            if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.PREVIOUS) {
+                                consumedBoundaryNavigation = HorizontalChapterSwipeAction.PREVIOUS
+                                latestOpenPreviousChapter()
+                            }
+                        }
+                        HorizontalChapterSwipeAction.NEXT -> {
+                            if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.NEXT) {
+                                consumedBoundaryNavigation = HorizontalChapterSwipeAction.NEXT
+                                latestOpenNextChapter()
+                            }
+                        }
+                        HorizontalChapterSwipeAction.NONE -> {
+                            consumedBoundaryNavigation = null
+                        }
                     }
                 }
         }
@@ -499,7 +529,20 @@ internal fun ComposePagerPageRenderer(
                 HorizontalChapterSwipeAction.NONE -> null
             }
         }
-        val spreadFirstPage = if (boundaryPreview == null) {
+        val isSeamlessBoundarySlot = boundaryTarget != HorizontalChapterSwipeAction.NONE && !showBoundaryChapterPages
+        val (seamlessBoundaryPagesForSlot, seamlessBoundarySlice) = if (isSeamlessBoundarySlot) {
+            resolveSeamlessBoundarySpreadPages(
+                boundaryTarget = boundaryTarget,
+                spreadColumns = spreadColumns,
+                previousChapterName = latestPreviousChapterName,
+                nextChapterName = latestNextChapterName,
+                previousChapterPreview = previousChapterPreview,
+                nextChapterPreview = nextChapterPreview,
+            )
+        } else {
+            emptyList<NovelPageContentPage>() to SeamlessAdjacentPagesSlice()
+        }
+        val spreadFirstPage = if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
             val spreadSlot = resolveComposePagerActualPageIndex(
                 currentPage = page,
                 contentPageCount = contentPageCount,
@@ -509,12 +552,12 @@ internal fun ComposePagerPageRenderer(
         } else {
             -1
         }
-        val spreadPages = if (boundaryPreview == null) {
-            (spreadFirstPage until spreadFirstPage + spreadColumns).map { index ->
+        val spreadPages = when {
+            boundaryPreview != null -> listOf(NovelPageContentPage(emptyList()))
+            isSeamlessBoundarySlot -> seamlessBoundaryPagesForSlot
+            else -> (spreadFirstPage until spreadFirstPage + spreadColumns).map { index ->
                 contentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
             }
-        } else {
-            listOf(NovelPageContentPage(emptyList()))
         }
         val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
         val isSplitBookFlipMode = transitionStyle == NovelPageTransitionStyle.BOOK_FLIP
@@ -626,9 +669,19 @@ internal fun ComposePagerPageRenderer(
                         onImageClick = onImageClick,
                         onImageLongClick = onImageLongClick,
                         onUrlClick = onUrlClick,
-                        touchHandlingEnabled = !isSplitBookFlipMode || isPageSettledCurrent,
-                        pageNumber = if (spreadFirstPage in contentPages.indices) spreadFirstPage + 1 else null,
-                        totalPages = contentPages.size,
+                        touchHandlingEnabled = !isSeamlessBoundarySlot &&
+                            (!isSplitBookFlipMode || isPageSettledCurrent),
+                        renderAsStaticCanvas = isSeamlessBoundarySlot,
+                        pageNumber = when {
+                            isSeamlessBoundarySlot -> seamlessBoundarySlice.firstPageNumber
+                            spreadFirstPage in contentPages.indices -> spreadFirstPage + 1
+                            else -> null
+                        },
+                        totalPages = if (isSeamlessBoundarySlot) {
+                            seamlessBoundarySlice.totalPages
+                        } else {
+                            contentPages.size
+                        },
                         modifier = Modifier.absolutePadding(left = spreadCutoutLeftDp, right = spreadCutoutRightDp),
                     )
                 } else {
@@ -670,9 +723,22 @@ internal fun ComposePagerPageRenderer(
                                 onImageClick = onImageClick,
                                 onImageLongClick = onImageLongClick,
                                 onUrlClick = onUrlClick,
-                                touchHandlingEnabled = !isSplitBookFlipMode || isPageSettledCurrent,
-                                pageNumber = if (pageIdx in contentPages.indices) pageIdx + 1 else null,
-                                totalPages = contentPages.size,
+                                touchHandlingEnabled = !isSeamlessBoundarySlot &&
+                                    (!isSplitBookFlipMode || isPageSettledCurrent),
+                                renderAsStaticCanvas = isSeamlessBoundarySlot,
+                                pageNumber = when {
+                                    isSeamlessBoundarySlot -> seamlessBoundarySlice.firstPageNumber?.let { firstNum ->
+                                        val candidate = firstNum + columnOffset
+                                        if (candidate <= seamlessBoundarySlice.totalPages) candidate else null
+                                    }
+                                    pageIdx in contentPages.indices -> pageIdx + 1
+                                    else -> null
+                                },
+                                totalPages = if (isSeamlessBoundarySlot) {
+                                    seamlessBoundarySlice.totalPages
+                                } else {
+                                    contentPages.size
+                                },
                                 modifier = Modifier.weight(1f),
                             )
                         }

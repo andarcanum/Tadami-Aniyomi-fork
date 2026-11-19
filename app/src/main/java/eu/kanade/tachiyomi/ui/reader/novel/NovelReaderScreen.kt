@@ -444,6 +444,9 @@ class NovelReaderScreen(
                                 ) {
                                     return@NovelReaderScreenActions
                                 }
+                                if (screenModel.isSeamlessChapterSwitchInProgress()) {
+                                    return@NovelReaderScreenActions
+                                }
                                 // A seamless in-place switch keeps this screen and its live document
                                 // alive, so the reader never shows the chapter loading screen.
                                 NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
@@ -476,6 +479,9 @@ class NovelReaderScreen(
                                 ) {
                                     return@NovelReaderScreenActions
                                 }
+                                if (screenModel.isSeamlessChapterSwitchInProgress()) {
+                                    return@NovelReaderScreenActions
+                                }
                                 NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
                                     NovelReaderPageReaderHandoffTarget.START,
                                 )
@@ -502,6 +508,11 @@ class NovelReaderScreen(
                                 // chapter only moves the reading position instead of reloading the screen.
                                 if (successState.bookMode.isEnabled &&
                                     screenModel.onBookModeChapterSelected(chapterId)
+                                ) {
+                                    return@NovelReaderScreenActions
+                                }
+                                if (chapterId == successState.chapter.id ||
+                                    screenModel.isSeamlessChapterSwitchInProgress()
                                 ) {
                                     return@NovelReaderScreenActions
                                 }
