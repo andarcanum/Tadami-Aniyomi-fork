@@ -286,4 +286,26 @@ class ReelsProductionUpgradesTest {
         ReelsHlsDownloader.parsePlaylist("https://cdn.example/hls/enc.m3u8", encrypted) shouldBe
             ReelsHlsDownloader.ParsedPlaylist.Unsupported
     }
+
+    @Test
+    fun `ReelsZoom clamps scale snaps near 1x clamps pan offset and formats labels`() {
+        eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.normalizeScale(0.5f) shouldBe 1f
+        eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.normalizeScale(6f) shouldBe 4f
+        eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.normalizeScale(1.03f, snapToBase = true) shouldBe 1f
+        eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.normalizeScale(1.65f, snapToBase = true) shouldBe 1.65f
+
+        val (cx, cy) = eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.clampOffset(
+            offsetX = 999f,
+            offsetY = -1500f,
+            scale = 2f,
+            viewWidth = 1000f,
+            viewHeight = 2000f,
+        )
+        cx shouldBe 500f
+        cy shouldBe -1000f
+
+        eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.formatScaleLabel(1.5f) shouldBe "1.5×"
+        eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.formatScaleLabel(2f) shouldBe "2×"
+        eu.kanade.tachiyomi.ui.reels.player.ReelsZoom.formatScaleLabel(1.65f) shouldBe "1.65×"
+    }
 }

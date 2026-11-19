@@ -29,7 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -143,6 +145,9 @@ fun ReelsPlayerView(
     onCodecFallback: (() -> Boolean)? = null,
     isInPictureInPicture: Boolean = false,
     playbackSpeed: Float = 1f,
+    zoomScale: Float = 1f,
+    zoomOffsetX: Float = 0f,
+    zoomOffsetY: Float = 0f,
     headers: Map<String, String> = emptyMap(),
     // Item page URL (e.g. https://fikfap.com/post/123): origin used as the Referer fallback
     // when the feed source exposes no headers of its own.
@@ -183,6 +188,9 @@ fun ReelsPlayerView(
     val currentIsAutoAdvance by rememberUpdatedState(isAutoAdvance)
     val currentIsLastPage by rememberUpdatedState(isLastPage)
     val currentCropMode by rememberUpdatedState(isCropMode)
+    val currentZoomScale by rememberUpdatedState(zoomScale)
+    val currentZoomOffsetX by rememberUpdatedState(zoomOffsetX)
+    val currentZoomOffsetY by rememberUpdatedState(zoomOffsetY)
     val currentPlaybackSpeed by rememberUpdatedState(playbackSpeed)
     val currentInPip by rememberUpdatedState(isInPictureInPicture)
     val currentOnSeekPositionConsumed by rememberUpdatedState(onSeekPositionConsumed)
@@ -260,23 +268,33 @@ fun ReelsPlayerView(
         Box(
             modifier = modifier
                 .fillMaxSize()
+                .clipToBounds()
                 .background(Color.Black),
             contentAlignment = androidx.compose.ui.Alignment.Center,
         ) {
             val stillScale = if (isCropMode) ContentScale.Crop else ContentScale.Fit
+            val stillZoomMod = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoomScale
+                    scaleY = zoomScale
+                    translationX = zoomOffsetX
+                    translationY = zoomOffsetY
+                    clip = true
+                }
             if (posterUrl.isNotBlank()) {
                 AsyncImage(
                     model = posterUrl,
                     contentDescription = null,
                     contentScale = stillScale,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = stillZoomMod,
                 )
             }
             AsyncImage(
                 model = videoUrl,
                 contentDescription = videoDescription,
                 contentScale = stillScale,
-                modifier = Modifier.fillMaxSize(),
+                modifier = stillZoomMod,
                 onSuccess = { photoReady = true },
                 onError = { photoReady = true },
             )
@@ -337,9 +355,9 @@ fun ReelsPlayerView(
     var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
     var currentSurface by remember { mutableStateOf<Surface?>(null) }
 
-    var videoWidth by remember { mutableIntStateOf(0) }
-    var videoHeight by remember { mutableIntStateOf(0) }
-    var videoPixelRatio by remember { mutableFloatStateOf(1f) }
+    var videoWidth by remember(recoveryScopeKey) { mutableIntStateOf(0) }
+    var videoHeight by remember(recoveryScopeKey) { mutableIntStateOf(0) }
+    var videoPixelRatio by remember(recoveryScopeKey) { mutableFloatStateOf(1f) }
 
     var restorePositionMs by remember(recoveryScopeKey) { mutableLongStateOf(0L) }
     var pendingSeekFraction by remember(recoveryScopeKey) { mutableFloatStateOf(-1f) }
@@ -355,6 +373,9 @@ fun ReelsPlayerView(
         viewWOverride: Float? = null,
         viewHOverride: Float? = null,
         pixelRatio: Float = videoPixelRatio,
+        userZoom: Float = currentZoomScale,
+        panX: Float = currentZoomOffsetX,
+        panY: Float = currentZoomOffsetY,
     ) {
         if (tv == null) return
         val fallbackSize = pooledPlayer?.player?.videoSize
@@ -376,10 +397,16 @@ fun ReelsPlayerView(
             pixelRatio = resolvedPixelRatio,
         ) ?: return
 
+        val safeZoom = ReelsZoom.normalizeScale(userZoom)
         val matrix = Matrix()
-        matrix.setScale(sx, sy, viewW / 2f, viewH / 2f)
+        matrix.setScale(sx * safeZoom, sy * safeZoom, viewW / 2f, viewH / 2f)
+        if (ReelsZoom.isZoomed(safeZoom)) {
+            val (clampedX, clampedY) = ReelsZoom.clampOffset(panX, panY, safeZoom, viewW, viewH)
+            matrix.postTranslate(clampedX, clampedY)
+        }
         tv.setTransform(matrix)
         tv.invalidate()
+        (tv.parent as? android.view.View)?.invalidate()
         tv.postInvalidateOnAnimation()
     }
 
@@ -699,9 +726,27 @@ fun ReelsPlayerView(
         }
     }
 
-    // React to crop mode changes.
-    LaunchedEffect(isCropMode, videoWidth, videoHeight, videoPixelRatio, textureViewRef) {
-        updateMatrix(textureViewRef, videoWidth, videoHeight, isCropMode, pixelRatio = videoPixelRatio)
+    // React to crop mode, manual zoom/pan, and video size changes.
+    LaunchedEffect(
+        isCropMode,
+        videoWidth,
+        videoHeight,
+        videoPixelRatio,
+        textureViewRef,
+        zoomScale,
+        zoomOffsetX,
+        zoomOffsetY,
+    ) {
+        updateMatrix(
+            tv = textureViewRef,
+            vw = videoWidth,
+            vh = videoHeight,
+            crop = isCropMode,
+            pixelRatio = videoPixelRatio,
+            userZoom = zoomScale,
+            panX = zoomOffsetX,
+            panY = zoomOffsetY,
+        )
     }
 
     // React to monotonic seek requests (double-tap ±10s, live keyframe scrub, final commit).
@@ -878,7 +923,7 @@ fun ReelsPlayerView(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
         // 1. Ambient Blurred Background (Coil downsampled StackBlur cached once off-main-thread).
         // Zero per-frame GPU RenderEffect overhead on scroll, consistent look on API 26–35+.
         if (posterUrl.isNotBlank()) {
@@ -986,6 +1031,9 @@ fun ReelsPlayerView(
                         vh = videoHeight,
                         crop = isCropMode,
                         pixelRatio = videoPixelRatio,
+                        userZoom = zoomScale,
+                        panX = zoomOffsetX,
+                        panY = zoomOffsetY,
                     )
                 },
                 modifier = Modifier

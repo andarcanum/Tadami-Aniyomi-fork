@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
@@ -66,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -101,6 +103,7 @@ import eu.kanade.tachiyomi.ui.reels.ReelsQualityItemState
 import eu.kanade.tachiyomi.ui.reels.ReelsQualityPlayback
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
 import eu.kanade.tachiyomi.ui.reels.player.ReelsSeekRequest
+import eu.kanade.tachiyomi.ui.reels.player.ReelsZoom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -280,11 +283,44 @@ fun ReelsVideoPage(
     var drawerOpen by remember(item.id) { mutableStateOf(false) }
     var drawerTab by remember(item.id) { mutableIntStateOf(0) }
     var qualityDialogMode by remember(item.id) { mutableStateOf<ReelsQualityDialogMode?>(null) }
-    // Pinch-to-zoom state (1f..3f) with smooth spring snap-back on finger release.
+    // Persistent Pinch-to-Zoom state (1x..4x) + pan offset; kept across finger lifts like a
+    // pro video player and reset when switching reels or toggling Fit/Fill aspect mode.
     val zoomScale = remember(item.id) { Animatable(1f) }
     val zoomOffsetX = remember(item.id) { Animatable(0f) }
     val zoomOffsetY = remember(item.id) { Animatable(0f) }
     var isPinchZooming by remember(item.id) { mutableStateOf(false) }
+    var pageViewportWidthPx by remember(item.id) { mutableFloatStateOf(0f) }
+    var pageViewportHeightPx by remember(item.id) { mutableFloatStateOf(0f) }
+
+    fun animateZoomTo(targetScale: Float, resetPan: Boolean = false) {
+        val normalized = ReelsZoom.normalizeScale(targetScale, snapToBase = true)
+        val (nextX, nextY) = if (resetPan || !ReelsZoom.isZoomed(normalized)) {
+            0f to 0f
+        } else {
+            ReelsZoom.clampOffset(
+                offsetX = zoomOffsetX.value,
+                offsetY = zoomOffsetY.value,
+                scale = normalized,
+                viewWidth = pageViewportWidthPx,
+                viewHeight = pageViewportHeightPx,
+            )
+        }
+        coroutineScope.launch {
+            launch { zoomScale.animateTo(normalized, spring(stiffness = Spring.StiffnessMediumLow)) }
+            launch { zoomOffsetX.animateTo(nextX, spring(stiffness = Spring.StiffnessMediumLow)) }
+            launch { zoomOffsetY.animateTo(nextY, spring(stiffness = Spring.StiffnessMediumLow)) }
+        }
+    }
+
+    LaunchedEffect(isCropMode) {
+        // Switching Fit <-> Fill resets any manual pinch zoom so the chosen aspect mode takes
+        // full effect cleanly without staying stuck zoomed.
+        if (ReelsZoom.isZoomed(zoomScale.value) || zoomOffsetX.value != 0f || zoomOffsetY.value != 0f) {
+            zoomScale.snapTo(1f)
+            zoomOffsetX.snapTo(0f)
+            zoomOffsetY.snapTo(0f)
+        }
+    }
     LaunchedEffect(isActive) {
         if (!isActive) {
             drawerOpen = false
@@ -604,6 +640,11 @@ fun ReelsVideoPage(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged {
+                pageViewportWidthPx = it.width.toFloat()
+                pageViewportHeightPx = it.height.toFloat()
+            }
             .background(Color.Black)
             .semantics {
                 onClick(label = playPauseLabel) {
@@ -634,7 +675,8 @@ fun ReelsVideoPage(
                 )
             }
             .pointerInput(item.id) {
-                // Multi-touch Pinch-to-Zoom (1x..3x) with smooth spring snap-back on release.
+                // Persistent multi-touch Pinch-to-Zoom (1x..4x) + 2-finger pan: keeps the user's
+                // chosen scale when fingers lift (snapping to exact 1x only below 1.05x).
                 // Activates strictly when >=2 fingers are down so single-finger vertical pager
                 // swipes, taps, and hold-to-rate gestures are completely unaffected.
                 awaitEachGesture {
@@ -652,11 +694,14 @@ fun ReelsVideoPage(
                                     isPinchZooming = true
                                 }
                                 if (zooming) {
-                                    val nextScale = (zoomScale.value * zoomChange).coerceIn(1f, 3f)
-                                    val maxOffsetX = size.width * (nextScale - 1f) / 2f
-                                    val maxOffsetY = size.height * (nextScale - 1f) / 2f
-                                    val nextX = (zoomOffsetX.value + panChange.x).coerceIn(-maxOffsetX, maxOffsetX)
-                                    val nextY = (zoomOffsetY.value + panChange.y).coerceIn(-maxOffsetY, maxOffsetY)
+                                    val nextScale = ReelsZoom.normalizeScale(zoomScale.value * zoomChange)
+                                    val (nextX, nextY) = ReelsZoom.clampOffset(
+                                        offsetX = zoomOffsetX.value + panChange.x,
+                                        offsetY = zoomOffsetY.value + panChange.y,
+                                        scale = nextScale,
+                                        viewWidth = size.width.toFloat(),
+                                        viewHeight = size.height.toFloat(),
+                                    )
                                     coroutineScope.launch {
                                         zoomScale.snapTo(nextScale)
                                         zoomOffsetX.snapTo(nextX)
@@ -672,25 +717,10 @@ fun ReelsVideoPage(
                         if (zooming) {
                             isPinchZooming = false
                             lastHoldEndedAtMs = SystemClock.elapsedRealtime()
-                            coroutineScope.launch {
-                                launch {
-                                    zoomScale.animateTo(
-                                        1f,
-                                        spring(stiffness = Spring.StiffnessMediumLow),
-                                    )
-                                }
-                                launch {
-                                    zoomOffsetX.animateTo(
-                                        0f,
-                                        spring(stiffness = Spring.StiffnessMediumLow),
-                                    )
-                                }
-                                launch {
-                                    zoomOffsetY.animateTo(
-                                        0f,
-                                        spring(stiffness = Spring.StiffnessMediumLow),
-                                    )
-                                }
+                            val settledScale = ReelsZoom.normalizeScale(zoomScale.value, snapToBase = true)
+                            if (!ReelsZoom.isZoomed(settledScale)) {
+                                // Only snap back when pinched close to 1x; otherwise persist zoom!
+                                animateZoomTo(1f, resetPan = true)
                             }
                         }
                     }
@@ -853,17 +883,13 @@ fun ReelsVideoPage(
             },
             isInPictureInPicture = isInPictureInPicture,
             playbackSpeed = heldRate ?: effectivePlaybackSpeed,
+            zoomScale = zoomScale.value,
+            zoomOffsetX = zoomOffsetX.value,
+            zoomOffsetY = zoomOffsetY.value,
             retrySignal = retrySignal,
             headers = headers,
             webUrl = item.webUrl,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = zoomScale.value
-                    scaleY = zoomScale.value
-                    translationX = zoomOffsetX.value
-                    translationY = zoomOffsetY.value
-                },
+            modifier = Modifier.fillMaxSize(),
         )
 
         // Buffering spinner on the active page.
@@ -1009,6 +1035,96 @@ fun ReelsVideoPage(
                         contentDescription = holdLabel
                     },
                 )
+            }
+        }
+
+        // 5b. Pro-player Zoom HUD pill: live zoom badge while pinching, plus quick presets
+        // (Fit / Fill / 1.5× / 2× / 3× + one-tap reset) when zoomed and chrome is visible.
+        val isZoomed = ReelsZoom.isZoomed(zoomScale.value)
+        val showZoomHud = !isInPictureInPicture && isActive && (isPinchZooming || (isZoomed && chromeVisible))
+        AnimatedVisibility(
+            visible = showZoomHud,
+            enter = fadeIn() + scaleIn(initialScale = 0.92f),
+            exit = fadeOut() + scaleOut(targetScale = 0.92f),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = if (pillRate != 1f) 114.dp else 70.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .reelsFrostPill(
+                        rim = auroraMenuRimLightBrush(auroraColors),
+                        eInk = auroraColors.isEInk,
+                        solid = auroraColors.cardBackground,
+                        strong = true,
+                    )
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = ReelsZoom.formatScaleLabel(zoomScale.value),
+                    color = auroraColors.accent,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = "tnum",
+                    ),
+                )
+                if (!isPinchZooming && isZoomed) {
+                    val fitLabel = stringResource(MR.strings.reels_aspect_fit)
+                    val fillLabel = stringResource(MR.strings.reels_aspect_fill)
+                    ReelsZoomPresetChip(
+                        label = fitLabel,
+                        selected = false,
+                        accent = auroraColors.accent,
+                        onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (isCropMode) onToggleCropMode()
+                            animateZoomTo(1f, resetPan = true)
+                        },
+                    )
+                    ReelsZoomPresetChip(
+                        label = fillLabel,
+                        selected = false,
+                        accent = auroraColors.accent,
+                        onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (!isCropMode) onToggleCropMode()
+                            animateZoomTo(1f, resetPan = true)
+                        },
+                    )
+                    ReelsZoom.SCALE_PRESETS.forEach { preset ->
+                        val activePreset = kotlin.math.abs(zoomScale.value - preset) < 0.08f
+                        ReelsZoomPresetChip(
+                            label = ReelsZoom.formatScaleLabel(preset),
+                            selected = activePreset,
+                            accent = auroraColors.accent,
+                            onClick = {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                animateZoomTo(preset)
+                            },
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .clickable(role = Role.Button) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                animateZoomTo(1f, resetPan = true)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(MR.strings.action_reset),
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -1534,6 +1650,29 @@ fun ReelsVideoPage(
             }
         }
     }
+}
+
+@Composable
+private fun ReelsZoomPresetChip(
+    label: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        color = if (selected) Color.Black else Color.White.copy(alpha = 0.9f),
+        style = TextStyle(
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            fontFeatureSettings = "tnum",
+        ),
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(if (selected) accent else Color.White.copy(alpha = 0.12f))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 internal const val REELS_HOLD_SLOW_RATE = 0.5f
