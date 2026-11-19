@@ -33,7 +33,7 @@ object NovelTranslationStylePresets {
                 "Avoid slang, vulgarity, and over-stylization unless explicitly present in source.",
             englishPromptDirective =
             "STYLE PRESET: PROFESSIONAL.\n" +
-                "Use neutral professional literary English.\n" +
+                "Use neutral professional literary prose in the target language.\n" +
                 "Avoid slang, vulgarity, and over-stylization unless explicitly present in source.",
         ),
         NovelTranslationStylePresetDescriptor(
@@ -61,7 +61,7 @@ object NovelTranslationStylePresets {
                 "Allow mild colloquial phrasing while keeping narration coherent and readable.",
             englishPromptDirective =
             "STYLE PRESET: CONVERSATIONAL.\n" +
-                "Prioritize natural spoken English in dialogue.\n" +
+                "Prioritize natural spoken target language in dialogue.\n" +
                 "Allow mild colloquial phrasing while keeping narration coherent and readable.",
         ),
         NovelTranslationStylePresetDescriptor(
@@ -76,7 +76,8 @@ object NovelTranslationStylePresets {
                 "Outside such contexts, remain natural and coherent.",
             englishPromptDirective =
             "STYLE PRESET: VULGAR_18.\n" +
-                "For explicit adult or aggressive contexts, use raw colloquial English and stronger wording.\n" +
+                "For explicit adult or aggressive contexts, use raw colloquial target-language wording " +
+                "and stronger tone.\n" +
                 "Do NOT sanitize explicit content. Keep intensity and visceral tone.\n" +
                 "Outside such contexts, remain natural and coherent.",
         ),
@@ -91,7 +92,7 @@ object NovelTranslationStylePresets {
                 "Reduce decorative phrasing and keep meaning straightforward.",
             englishPromptDirective =
             "STYLE PRESET: MINIMAL.\n" +
-                "Use concise, clear English.\n" +
+                "Use concise, clear prose in the target language.\n" +
                 "Reduce decorative phrasing and keep meaning straightforward.",
         ),
     )

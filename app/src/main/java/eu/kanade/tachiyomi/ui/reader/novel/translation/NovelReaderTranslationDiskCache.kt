@@ -315,6 +315,11 @@ internal class NovelReaderTranslationDiskCache(
     fun chapterIds(requirements: NovelReaderTranslationCacheRequirements): Set<Long> =
         chapterIds().filter { has(it, requirements) }.toSet()
 
+    fun chapterIds(
+        chapterIds: Collection<Long>,
+        requirements: NovelReaderTranslationCacheRequirements,
+    ): Set<Long> = chapterIds.filter { has(it, requirements) }.toSet()
+
     fun clear() {
         synchronized(lock) {
             if (!directory.exists()) return
@@ -467,6 +472,11 @@ internal object NovelReaderTranslationDiskCacheStore {
     )
 
     fun chapterIds(requirements: NovelReaderTranslationCacheRequirements): Set<Long> = cache.chapterIds(requirements)
+
+    fun chapterIds(
+        chapterIds: Collection<Long>,
+        requirements: NovelReaderTranslationCacheRequirements,
+    ): Set<Long> = cache.chapterIds(chapterIds, requirements)
 
     fun remove(chapterId: Long) = cache.remove(chapterId)
 

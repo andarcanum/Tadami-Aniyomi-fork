@@ -281,6 +281,7 @@ class NovelTranslatedDownloadManagerTest {
             sourceLang = "English",
             targetLang = "Russian",
             promptMode = GeminiPromptMode.ADULT_18,
+            sourceSegmentCount = 1,
         )
     }
 

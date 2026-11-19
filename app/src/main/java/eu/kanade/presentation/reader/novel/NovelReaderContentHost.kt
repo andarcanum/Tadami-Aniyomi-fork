@@ -235,6 +235,8 @@ internal fun NovelReaderContentHost(
     val onToggleBookmark = actions.onToggleBookmark
     val onOpenDictionaryHistory = actions.onOpenDictionaryHistory
     val onStartGeminiTranslation = actions.onStartGeminiTranslation
+    val onStartGeminiTranslationForProfile = actions.onStartGeminiTranslationForProfile
+    val onClearSuppressedGeminiCompletion = actions.onClearSuppressedGeminiCompletion
     val onStopGeminiTranslation = actions.onStopGeminiTranslation
     val onToggleGeminiTranslationVisibility = actions.onToggleGeminiTranslationVisibility
     val onClearGeminiTranslation = actions.onClearGeminiTranslation
@@ -668,7 +670,10 @@ internal fun NovelReaderContentHost(
             else -> onStartGoogleTranslation()
         }
     }
-    fun requestGeminiTranslationStart() {
+    fun requestGeminiTranslationStart(
+        profileId: String? = null,
+        forceRetranslate: Boolean = false,
+    ) {
         when {
             state.isGoogleTranslating -> {
                 Toast.makeText(
@@ -681,8 +686,11 @@ internal fun NovelReaderContentHost(
                 translationSwitchRequest = TranslationSwitchRequest(
                     from = TranslationKind.Google,
                     to = TranslationKind.Gemini,
+                    profileId = profileId,
+                    forceRetranslate = forceRetranslate,
                 )
             }
+            profileId != null || forceRetranslate -> onStartGeminiTranslationForProfile(profileId, forceRetranslate)
             else -> onStartGeminiTranslation()
         }
     }
@@ -4399,7 +4407,8 @@ internal fun NovelReaderContentHost(
                 chapterUrl = state.chapter.url,
                 novelUrl = state.novel.url,
                 ttsPlacement = ttsPlacement,
-                geminiEnabled = state.readerSettings.geminiEnabled,
+                geminiEnabled =
+                state.readerSettings.geminiEnabled || state.readerSettings.aiTranslationProfileNeedsConfiguration,
                 isGeminiTranslating = state.isGeminiTranslating,
                 geminiButtonActiveLabel = stringResource(AYMR.strings.novel_reader_gemini_button_active),
                 geminiButtonLabel = stringResource(AYMR.strings.novel_reader_gemini_button),
@@ -4575,6 +4584,10 @@ internal fun NovelReaderContentHost(
                     onDismissGoogleDialog = { showGoogleDialog = false },
                     onDismissTranslationSwitchRequest = { translationSwitchRequest = null },
                     requestGeminiTranslationStart = { requestGeminiTranslationStart() },
+                    requestGeminiTranslationStartForProfile = { profileId, forceRetranslate ->
+                        requestGeminiTranslationStart(profileId, forceRetranslate)
+                    },
+                    onClearSuppressedGeminiCompletion = onClearSuppressedGeminiCompletion,
                     requestGoogleTranslationStart = { requestGoogleTranslationStart() },
                     onPrepareWholeBook = onPrepareWholeBook,
                     onStopGeminiTranslation = onStopGeminiTranslation,
@@ -4640,6 +4653,7 @@ internal fun NovelReaderContentHost(
                     onSetGoogleTranslationSourceLang = onSetGoogleTranslationSourceLang,
                     onSetGoogleTranslationTargetLang = onSetGoogleTranslationTargetLang,
                     onStartGeminiTranslation = onStartGeminiTranslation,
+                    onStartGeminiTranslationForProfile = onStartGeminiTranslationForProfile,
                     onStartGoogleTranslation = onStartGoogleTranslation,
                 ),
             )

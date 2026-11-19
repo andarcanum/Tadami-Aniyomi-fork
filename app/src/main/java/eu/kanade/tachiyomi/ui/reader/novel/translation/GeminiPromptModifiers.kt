@@ -110,11 +110,11 @@ object GeminiPromptModifiers {
                 ### COMEDY/PARODY DIRECTIVE
                 This is a comedy/parody novel. Prioritize HUMOR over literal accuracy:
                 - Exaggerate comedic timing with punctuation and line breaks
-                - Use modern English internet slang and memes where fitting
-                - Translate jokes to culturally equivalent English humor
+                - Use modern internet slang and memes natural to the target language where fitting
+                - Translate jokes to culturally equivalent humor in the target language
                 - Add comedic particles and interjections liberally
                 - Physical comedy should sound absurd and dynamic
-                - Tsukkomi/boke dynamics should feel natural in English
+                - Tsukkomi/boke dynamics should feel natural in the target language
             """.trimIndent(),
         ),
         GeminiPromptModifier(

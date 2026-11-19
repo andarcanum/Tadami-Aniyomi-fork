@@ -542,6 +542,7 @@ class NovelReaderScreenModel(
         // The overlay indicator follows the text, not the session: the queue may be working on a
         // chapter the reader has already left behind.
         translationController.onActiveChapterChanged(chapter.id)
+        translationController.syncBookModeChapterCache(chapter.id)
         lastSavedRead = chapter.read
         lastSavedProgress = chapter.lastPageRead
         initialProgressIndex = 0
@@ -1546,9 +1547,13 @@ class NovelReaderScreenModel(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Exception) {
-        // A broken profile must not prevent reading, or silently select the legacy recipient/cache.
+        // A broken profile must not prevent reading, or silently select the legacy recipient/cache,
+        // while keeping the AI QuickDialog entry reachable so the user can fix or switch profiles.
         logcat(LogPriority.WARN) { "AI translation profile needs configuration; original reading remains available" }
-        base.copy(geminiEnabled = false)
+        base.copy(
+            geminiEnabled = false,
+            aiTranslationProfileNeedsConfiguration = base.geminiEnabled,
+        )
     }
 
     private fun updateContent(settings: NovelReaderSettings) {
@@ -2450,6 +2455,14 @@ class NovelReaderScreenModel(
 
     fun startGeminiTranslation() = translationController.startGeminiTranslation()
 
+    fun startGeminiTranslationForProfile(profileId: String?, forceRetranslate: Boolean) =
+        translationController.startGeminiTranslation(
+            forceRetranslate = forceRetranslate,
+            profileId = profileId,
+        )
+
+    fun clearSuppressedGeminiCompletion() = translationController.clearSuppressedCompletionForActiveChapter()
+
     fun stopGeminiTranslation() = translationController.stopGeminiTranslation()
 
     fun toggleGeminiTranslationVisibility() = translationController.toggleGeminiTranslationVisibility()
@@ -2713,13 +2726,32 @@ class NovelReaderScreenModel(
         // in-memory maps are used for the chapter they were produced for, every other chapter falls
         // back to its own cache entry. Gating this on the active chapter made the neighbouring
         // resident chapters lose their translation as soon as the reader crossed a boundary.
-        val inMemory = when {
-            chapterId != translationHolderChapterId -> emptyMap()
-            translationState.isGeminiTranslationVisible && !translationHolder.isEmpty("gemini") ->
-                translationHolder.map("gemini")
-            translationState.isGoogleTranslationVisible && !translationHolder.isEmpty("google") ->
-                translationHolder.map("google")
-            else -> emptyMap()
+        if (chapterId == translationHolderChapterId &&
+            translationState.isGoogleTranslationVisible &&
+            !translationHolder.isEmpty("google")
+        ) {
+            return NovelContentHtmlMapper.buildTranslatedHtmlFromTemplate(
+                bodyHtml,
+                translationHolder.map("google"),
+            ) ?: bodyHtml
+        }
+        val geminiHiddenForSection = !settings.geminiEnabled ||
+            translationController.isGeminiTranslationHiddenByUser() ||
+            translationState.isGoogleTranslationVisible ||
+            (
+                chapterId == translationHolderChapterId &&
+                    !translationState.isGeminiTranslationVisible &&
+                    (!translationHolder.isEmpty("gemini") || translationState.hasGeminiTranslationCache)
+                )
+        if (geminiHiddenForSection) return bodyHtml
+        val inMemory = if (
+            chapterId == translationHolderChapterId &&
+            translationState.isGeminiTranslationVisible &&
+            !translationHolder.isEmpty("gemini")
+        ) {
+            translationHolder.map("gemini")
+        } else {
+            emptyMap()
         }
         val translatedByIndex = inMemory.ifEmpty {
             val entry = if (settings.geminiDisableCache) {

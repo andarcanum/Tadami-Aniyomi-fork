@@ -97,7 +97,7 @@ class DeepSeekTranslationService(
                 },
             )
             if (thinkingEnabled) {
-                put("reasoning_effort", effectiveReasoningEffort)
+                put("reasoning_effort", "high")
             }
             put("temperature", params.temperature)
             put("top_p", params.topP)

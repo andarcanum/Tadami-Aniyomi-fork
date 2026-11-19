@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationQueueProfileSnapshot
 import eu.kanade.tachiyomi.data.translation.profile.TranslationConfigurationMutationGate
 import eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiThinkingContract
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveGeminiModelCapabilities
 import kotlinx.coroutines.CancellationException
@@ -102,12 +103,14 @@ class AiTranslationSettingsScreenModel(
     private val sourceId: Long? = null,
     private val initialMigrationStatus: AiTranslationMigrationStatus = AiTranslationMigrationStatus.UNKNOWN,
     private val onCurrentProfileSelected: ((String) -> Unit)? = null,
+    private val onStartChapterTranslation: ((profileId: String, forceRetranslate: Boolean) -> Unit)? = null,
     private val removeCredentialMetadata: (suspend (String) -> Boolean)? = null,
     private val ownedRunAction: (suspend (TranslationRun, AiTranslationJobCommand) -> Boolean)? = null,
     private val startMigration: (suspend () -> AiTranslationMigrationStatus)? = null,
     initialAiTranslationEnabled: Boolean = true,
     private val observeAiTranslationEnabled: Flow<Boolean>? = null,
     private val setAiTranslationEnabled: (suspend (Boolean) -> Unit)? = null,
+    private val privateUnlocked: Boolean = false,
     initialCatalog: ProfileCatalog? = null,
 ) : StateScreenModel<AiTranslationUiState>(
     buildInitialUiState(
@@ -138,8 +141,8 @@ class AiTranslationSettingsScreenModel(
 
     /** Reader projection: the same NOVEL → SOURCE → GLOBAL precedence the dispatcher resolves. */
     val quickState: StateFlow<AiTranslationQuickUiState> = state
-        .map { ui -> ui.toQuickUiState(chapterId) }
-        .stateIn(workScope, SharingStarted.Eagerly, state.value.toQuickUiState(chapterId))
+        .map { ui -> ui.toQuickUiState(chapterId, privateUnlocked) }
+        .stateIn(workScope, SharingStarted.Eagerly, state.value.toQuickUiState(chapterId, privateUnlocked))
 
     init {
         observe()
@@ -268,16 +271,27 @@ class AiTranslationSettingsScreenModel(
             }
             is AiTranslationAction.SetProfileGeneration -> mutate(closeEditor = false) {
                 val profile = requireProfile(action.profileId)
+                val connection = catalog.connections.firstOrNull { it.id == profile.connectionId }
                 val updated = runCatching {
                     val safeTokens = if (profile.model.outputTokenField == OutputTokenField.OMIT) {
                         null
                     } else {
-                        action.generation.maxOutputTokens
+                        action.generation.maxOutputTokens?.also { limit ->
+                            if (connection?.protocol == TranslationProtocol.GEMINI_GENERATE) {
+                                require(limit in 1..65_536)
+                            }
+                        }
+                    }
+                    val safeTopK = if (connection?.protocol == TranslationProtocol.OPENAI_CHAT) {
+                        null
+                    } else {
+                        action.generation.topK
                     }
                     val safeReasoning = action.generation.reasoning.takeIf { choice ->
                         isReasoningCompatible(choice, profile.model.reasoningContract)
                     } ?: profile.model.generation.reasoning
                     val generation = action.generation.copy(
+                        topK = safeTopK,
                         maxOutputTokens = safeTokens,
                         reasoning = safeReasoning,
                     )
@@ -306,8 +320,9 @@ class AiTranslationSettingsScreenModel(
                 closeEditor = state.value.editor is AiTranslationEditor.Models,
             ) {
                 val profile = requireProfile(action.profileId)
+                val connection = catalog.connections.firstOrNull { it.id == profile.connectionId }
                 val merged = runCatching {
-                    mergeModelSelection(profile.model.generation, action.selection)
+                    mergeModelSelection(profile.model.generation, action.selection, connection?.protocol)
                 }.getOrElse { fail(AiTranslationSettingsMessage.VALIDATION) }
                 repository.saveProfile(profile.copy(model = merged))
             }
@@ -326,7 +341,10 @@ class AiTranslationSettingsScreenModel(
                 }
                 repository.saveConnection(connection.copy(credentialBindings = updatedBindings))
             }
-            is AiTranslationAction.TranslateCurrentChapter -> translateCurrentChapter(action.profileId)
+            is AiTranslationAction.TranslateCurrentChapter -> translateCurrentChapter(
+                action.profileId,
+                action.forceRetranslate,
+            )
             is AiTranslationAction.RefreshModels -> loadModels(action.connectionId)
             is AiTranslationAction.TestConnection -> probe(action.id)
             is AiTranslationAction.SaveRecovery -> saveRecovery(action)
@@ -430,6 +448,7 @@ class AiTranslationSettingsScreenModel(
         val title = runCatching { novels.getNovelById(run.novelId).title }.getOrNull().orEmpty()
         val chapter = runCatching { chapters.getChapterById(run.chapterId)?.name }.getOrNull().orEmpty()
         val snapshot = snapshotProfile(run.profileSnapshotJson)
+        val snapshotConn = snapshotConnection(run.profileSnapshotJson)
         val complete = run.status == TranslationRunStatus.COMPLETE &&
             !run.sourceFingerprint.isNullOrBlank() && run.sourceSegmentCount > 0
         val fragments = if (complete) {
@@ -445,6 +464,8 @@ class AiTranslationSettingsScreenModel(
             verifiedCount, totalCount,
             run.nextAttemptAt.takeIf { it > 0 },
             execution = snapshot?.execution,
+            snapshotProfile = snapshot,
+            snapshotConnection = snapshotConn,
             errorClass = when (run.actionPauseReason) {
                 TranslationActionPauseReason.NEEDS_ACTION -> TranslationFailureKind.AUTHORIZATION
                 TranslationActionPauseReason.BUDGET_LIMIT -> TranslationFailureKind.QUOTA
@@ -460,6 +481,15 @@ class AiTranslationSettingsScreenModel(
             val root = json.parseToJsonElement(raw) as? JsonObject ?: return@runCatching null
             val profile = root["translationProfile"] ?: root["profile"] ?: return@runCatching null
             json.decodeFromString<TranslationProfile>(profile.toString())
+        }.getOrNull()
+    }
+
+    private fun snapshotConnection(raw: String?): ConnectionProfile? {
+        if (raw == null) return null
+        return runCatching {
+            val root = json.parseToJsonElement(raw) as? JsonObject ?: return@runCatching null
+            val connection = root["connectionProfile"] ?: root["connection"] ?: return@runCatching null
+            json.decodeFromString<ConnectionProfile>(connection.toString())
         }.getOrNull()
     }
 
@@ -586,26 +616,28 @@ class AiTranslationSettingsScreenModel(
                 add(AiGenerationField.TOP_K)
                 if (hasOutputField) add(AiGenerationField.OUTPUT_TOKENS)
             }
-            TranslationProtocol.OPENAI_CHAT -> if (connection.presetFlavor != PresetFlavor.NONE) {
-                buildSet {
-                    add(AiGenerationField.TEMPERATURE)
-                    add(AiGenerationField.TOP_P)
-                    if (hasOutputField) add(AiGenerationField.OUTPUT_TOKENS)
-                }
-            } else {
-                emptySet()
+            TranslationProtocol.OPENAI_CHAT -> buildSet {
+                add(AiGenerationField.TEMPERATURE)
+                add(AiGenerationField.TOP_P)
+                if (hasOutputField) add(AiGenerationField.OUTPUT_TOKENS)
             }
             null -> emptySet()
         }
         return AiProfileDraft.from(entity, fields, discoveredContract)
     }
 
-    private fun mergeModelSelection(previous: GenerationSettings, next: ModelSelection): ModelSelection {
+    private fun mergeModelSelection(
+        previous: GenerationSettings,
+        next: ModelSelection,
+        protocol: TranslationProtocol? = null,
+    ): ModelSelection {
         val maxTokens = if (next.outputTokenField == OutputTokenField.OMIT) {
             null
         } else {
-            previous.maxOutputTokens ?: next.generation.maxOutputTokens
+            val candidate = previous.maxOutputTokens ?: next.generation.maxOutputTokens
+            if (protocol == TranslationProtocol.GEMINI_GENERATE) candidate?.coerceAtMost(65_536) else candidate
         }
+        val safeTopK = if (protocol == TranslationProtocol.OPENAI_CHAT) null else previous.topK
         val preservedReasoning = previous.reasoning
             .takeIf { choice ->
                 choice != ReasoningChoice.ApiDefault && isReasoningCompatible(choice, next.reasoningContract)
@@ -616,6 +648,7 @@ class AiTranslationSettingsScreenModel(
             ?: ReasoningChoice.ApiDefault
         return next.copy(
             generation = previous.copy(
+                topK = safeTopK,
                 maxOutputTokens = maxTokens,
                 reasoning = preservedReasoning,
             ),
@@ -693,7 +726,7 @@ class AiTranslationSettingsScreenModel(
         }
     }
 
-    private fun translateCurrentChapter(profileId: String) {
+    private fun translateCurrentChapter(profileId: String, forceRetranslate: Boolean = false) {
         val novel = novelId
         val chapter = chapterId
         if (novel == null || chapter == null) {
@@ -701,9 +734,25 @@ class AiTranslationSettingsScreenModel(
             return
         }
         mutate(closeEditor = false) {
-            requireProfile(profileId)
+            val profile = requireProfile(profileId)
             repository.saveAssignment(ProfileAssignment(ProfileAssignmentScope.NOVEL, novel, profileId))
-            queue.addToQueue(listOf(chapter), novel)
+            val startInReader = onStartChapterTranslation
+            if (startInReader != null) {
+                withContext(workScope.coroutineContext) { startInReader(profileId, forceRetranslate) }
+            } else if (forceRetranslate) {
+                val connection = repository.getConnection(profile.connectionId)
+                    ?: fail(AiTranslationSettingsMessage.VALIDATION)
+                queue.enqueueProfileChapters(
+                    chapterIds = listOf(chapter),
+                    novelId = novel,
+                    profile = profile,
+                    connection = connection,
+                    rules = emptyList(),
+                    forceRetranslate = true,
+                )
+            } else {
+                queue.addToQueue(listOf(chapter), novel)
+            }
         }
     }
 
@@ -1032,11 +1081,12 @@ class AiTranslationSettingsScreenModel(
                     }
                     true
                 }
-                AiTranslationJobCommand.RETRY_MISSING, AiTranslationJobCommand.RETRANSLATE -> queue.retryOwnedRun(
-                    run.chapterId,
-                    run.generation,
-                    request.command == AiTranslationJobCommand.RETRANSLATE,
-                )
+                AiTranslationJobCommand.RETRY_MISSING, AiTranslationJobCommand.RETRANSLATE ->
+                    ownedRunAction?.invoke(run, request.command) ?: queue.retryOwnedRun(
+                        run.chapterId,
+                        run.generation,
+                        request.command == AiTranslationJobCommand.RETRANSLATE,
+                    )
                 AiTranslationJobCommand.RESUME -> when {
                     run.actionPaused -> queue.resumeActionPaused(run.chapterId, run.generation)
                     run.implicitOwner -> ownedRunAction?.invoke(run, request.command)
@@ -1171,7 +1221,10 @@ private fun ProfileCatalog.applyTo(
     loadState = AiTranslationLoadState.READY,
 )
 
-private fun AiTranslationUiState.toQuickUiState(chapterId: Long?): AiTranslationQuickUiState {
+private fun AiTranslationUiState.toQuickUiState(
+    chapterId: Long?,
+    privateUnlocked: Boolean = false,
+): AiTranslationQuickUiState {
     val profileId = readerProfileId ?: defaultProfileId
     val profile = profiles.firstOrNull { it.id == profileId }
     val connection = profile?.let { selected ->
@@ -1188,11 +1241,39 @@ private fun AiTranslationUiState.toQuickUiState(chapterId: Long?): AiTranslation
         it.effectiveStatus in activeStatuses
     } ?: chapterJobs.lastOrNull { it.effectiveStatus != AiTranslationJobStatus.CANCELLED }
         ?: chapterJobs.lastOrNull()
+    val jobMatchesCurrentProfile = when {
+        job == null -> true
+        job.snapshotProfile == null -> true
+        profile == null || connection == null -> false
+        else -> {
+            val snap = job.snapshotProfile
+            val conn = job.snapshotConnection
+            snap.id == profile.id &&
+                snap.connectionId == profile.connectionId &&
+                snap.model == profile.model &&
+                snap.languages == profile.languages &&
+                snap.prompt == profile.prompt &&
+                (
+                    conn == null ||
+                        (
+                            conn.id == connection.id &&
+                                conn.protocol == connection.protocol &&
+                                conn.baseUrl == connection.baseUrl
+                            )
+                    )
+        }
+    }
+    val privateBlocked = connection != null &&
+        connection.presetFlavor == PresetFlavor.GEMINI_PRIVATE &&
+        GeminiPrivateBridge.isInstalled() &&
+        !GeminiPrivateBridge.isUnlocked() &&
+        !privateUnlocked
     return AiTranslationQuickUiState(
         profile = profile,
         profiles = profiles,
         job = job,
         canStart = connection != null &&
+            !privateBlocked &&
             (connection.auth == ProfileAuth.NONE || connection.credentialBindings.any { it.enabled }),
         loading = loadState == AiTranslationLoadState.LOADING,
         nowMillis = nowMillis,
@@ -1204,5 +1285,6 @@ private fun AiTranslationUiState.toQuickUiState(chapterId: Long?): AiTranslation
         catalogLoading = catalogLoading,
         probeStates = probeStates,
         activeJobsCount = jobs.count { it.effectiveStatus in activeStatuses },
+        jobMatchesCurrentProfile = jobMatchesCurrentProfile,
     )
 }

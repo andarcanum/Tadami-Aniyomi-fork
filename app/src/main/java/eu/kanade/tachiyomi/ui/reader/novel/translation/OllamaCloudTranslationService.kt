@@ -70,7 +70,11 @@ class OllamaCloudTranslationService(
             put("stream", false)
             when (val think = normalizeOllamaCloudThink(params.reasoningEffort)) {
                 is OllamaCloudThink.Disabled -> put("think", false)
-                is OllamaCloudThink.Level -> put("think", think.value)
+                is OllamaCloudThink.Level -> if (ollamaModelSupportsStringThinkLevel(model)) {
+                    put("think", think.value)
+                } else {
+                    put("think", true)
+                }
             }
             put(
                 "options",
@@ -133,6 +137,9 @@ class OllamaCloudTranslationService(
         }
     }
 }
+
+internal fun ollamaModelSupportsStringThinkLevel(model: String): Boolean =
+    model.trim().lowercase().startsWith("gpt-oss")
 
 private sealed interface OllamaCloudThink {
     data object Disabled : OllamaCloudThink

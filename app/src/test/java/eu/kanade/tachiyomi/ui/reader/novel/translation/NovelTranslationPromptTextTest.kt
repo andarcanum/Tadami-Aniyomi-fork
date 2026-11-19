@@ -14,8 +14,8 @@ class NovelTranslationPromptTextTest {
             family = NovelTranslationPromptFamily.ENGLISH,
         )
 
-        text shouldContain "Make the reader believe this was written by a native English author"
-        text shouldContain "Use popular genre terminology and natural English wording where appropriate"
+        text shouldContain "Make the reader believe this was written by a native Japanese author"
+        text shouldContain "Use popular genre terminology and natural Japanese wording where appropriate"
         text shouldContain "<s i='0'>Hello</s>"
     }
 }

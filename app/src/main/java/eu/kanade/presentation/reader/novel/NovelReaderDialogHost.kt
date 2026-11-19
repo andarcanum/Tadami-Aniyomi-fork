@@ -19,6 +19,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.more.settings.translation.AiTranslationAction
 import eu.kanade.presentation.more.settings.translation.AiTranslationEditorHost
+import eu.kanade.presentation.more.settings.translation.AiTranslationJobCommand
 import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsEffect
 import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsMessage
 import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsScreen
@@ -34,6 +35,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.util.system.toast
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.api.get
 
 /**
  * Host for every reader dialog and sheet.
@@ -85,6 +87,9 @@ internal fun NovelReaderDialogHost(
     val onSetGoogleTranslationSourceLang = actions.onSetGoogleTranslationSourceLang
     val onSetGoogleTranslationTargetLang = actions.onSetGoogleTranslationTargetLang
     val onStartGeminiTranslation = actions.onStartGeminiTranslation
+    val onStartGeminiTranslationForProfile = actions.onStartGeminiTranslationForProfile
+    val requestGeminiTranslationStartForProfile = actions.requestGeminiTranslationStartForProfile
+    val onClearSuppressedGeminiCompletion = actions.onClearSuppressedGeminiCompletion
     val onStartGoogleTranslation = actions.onStartGoogleTranslation
     if (showSettings) {
         NovelReaderSettingsDialog(
@@ -142,14 +147,46 @@ internal fun NovelReaderDialogHost(
     }
     // Always open the unified Aurora quick window when AI translation is enabled so the profile
     // grid and quick setup editors stay accessible even before the first profile is created.
-    val quickModel = if (showGeminiDialog && state.readerSettings.geminiEnabled) {
+    val quickModel = if (
+        showGeminiDialog &&
+        (state.readerSettings.geminiEnabled || state.readerSettings.aiTranslationProfileNeedsConfiguration)
+    ) {
         val quickScope = rememberCoroutineScope()
-        remember(state.novel.id, state.chapter.id, quickScope) {
+        remember(state.novel.id, state.chapter.id, state.readerSettings.geminiPrivateUnlocked, quickScope) {
             AiTranslationSettingsScreenModel(
                 scope = quickScope,
                 novelId = state.novel.id,
                 chapterId = state.chapter.id,
                 sourceId = state.novel.source,
+                privateUnlocked = state.readerSettings.geminiPrivateUnlocked,
+                onStartChapterTranslation = { profileId, forceRetranslate ->
+                    requestGeminiTranslationStartForProfile(profileId, forceRetranslate)
+                },
+                removeCredentialMetadata = { id ->
+                    TranslationProfileServices.repository.deleteCredentialMetadataIfUnused(id)
+                },
+                ownedRunAction = { run, command ->
+                    val queue = uy.kohesive.injekt.Injekt.get<
+                        eu.kanade.tachiyomi.data.translation.TranslationQueueManager,
+                        >()
+                    when (command) {
+                        AiTranslationJobCommand.PAUSE -> queue.pauseImplicitOwner(run.chapterId, run.generation)
+                        AiTranslationJobCommand.RESUME -> {
+                            onClearSuppressedGeminiCompletion()
+                            queue.resumeImplicitOwner(run.chapterId, run.generation)
+                        }
+                        AiTranslationJobCommand.CANCEL -> queue.detachImplicitOwner(run.chapterId, run.generation)
+                        AiTranslationJobCommand.RETRY_MISSING -> {
+                            onClearSuppressedGeminiCompletion()
+                            queue.retryOwnedRun(run.chapterId, run.generation, false)
+                        }
+                        AiTranslationJobCommand.RETRANSLATE -> {
+                            onClearSuppressedGeminiCompletion()
+                            queue.retryOwnedRun(run.chapterId, run.generation, true)
+                        }
+                        else -> false
+                    }
+                },
                 initialCatalog = TranslationProfileServices.cachedCatalog,
             )
         }
@@ -269,7 +306,16 @@ internal fun NovelReaderDialogHost(
                         }
                         onDismissTranslationSwitchRequest()
                         when (switchRequest.to) {
-                            TranslationKind.Gemini -> onStartGeminiTranslation()
+                            TranslationKind.Gemini -> if (
+                                switchRequest.profileId != null || switchRequest.forceRetranslate
+                            ) {
+                                onStartGeminiTranslationForProfile(
+                                    switchRequest.profileId,
+                                    switchRequest.forceRetranslate,
+                                )
+                            } else {
+                                onStartGeminiTranslation()
+                            }
                             TranslationKind.Google -> onStartGoogleTranslation()
                         }
                     },
@@ -304,6 +350,8 @@ internal data class NovelReaderDialogActions(
     val onDismissGoogleDialog: () -> Unit,
     val onDismissTranslationSwitchRequest: () -> Unit,
     val requestGeminiTranslationStart: () -> Unit,
+    val requestGeminiTranslationStartForProfile: (profileId: String?, forceRetranslate: Boolean) -> Unit = { _, _ -> },
+    val onClearSuppressedGeminiCompletion: () -> Unit = {},
     val requestGoogleTranslationStart: () -> Unit,
     val onPrepareWholeBook: () -> Unit,
     val onStopGeminiTranslation: () -> Unit,
@@ -369,5 +417,6 @@ internal data class NovelReaderDialogActions(
     val onSetGoogleTranslationSourceLang: (String) -> Unit,
     val onSetGoogleTranslationTargetLang: (String) -> Unit,
     val onStartGeminiTranslation: () -> Unit,
+    val onStartGeminiTranslationForProfile: (profileId: String?, forceRetranslate: Boolean) -> Unit = { _, _ -> },
     val onStartGoogleTranslation: () -> Unit,
 )

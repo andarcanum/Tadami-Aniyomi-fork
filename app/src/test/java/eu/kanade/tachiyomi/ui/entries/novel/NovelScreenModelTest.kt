@@ -1879,8 +1879,22 @@ class NovelScreenModelTest {
                 every { observeCatalog() } returns catalogFlow
             }
             mockkObject(NovelReaderTranslationDiskCacheStore)
-            every { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any()) } answers {
+            every { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any<String>()) } answers {
                 if (secondArg<String>() == "Spanish") setOf(10L) else emptySet()
+            }
+            every {
+                NovelReaderTranslationDiskCacheStore.chapterIds(
+                    any(),
+                    any<NovelReaderTranslationCacheRequirements>(),
+                )
+            } answers {
+                if (secondArg<NovelReaderTranslationCacheRequirements>().targetLang ==
+                    "Spanish"
+                ) {
+                    setOf(10L)
+                } else {
+                    emptySet()
+                }
             }
             every {
                 NovelReaderTranslationDiskCacheStore.has(any(), any<NovelReaderTranslationCacheRequirements>())
@@ -2052,9 +2066,20 @@ class NovelScreenModelTest {
                 every { manager.progressUpdates } returns progressFlow
             }
             mockkObject(NovelReaderTranslationDiskCacheStore)
-            every { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any()) } returns emptySet()
+            every { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any<String>()) } returns emptySet()
+            every {
+                NovelReaderTranslationDiskCacheStore.chapterIds(
+                    any(),
+                    any<NovelReaderTranslationCacheRequirements>(),
+                )
+            } returns emptySet()
             var cachedChapterOne = false
             every { NovelReaderTranslationDiskCacheStore.has(any(), any<String>()) } answers {
+                cachedChapterOne && firstArg<Long>() == 1L
+            }
+            every {
+                NovelReaderTranslationDiskCacheStore.has(any(), any<NovelReaderTranslationCacheRequirements>())
+            } answers {
                 cachedChapterOne && firstArg<Long>() == 1L
             }
 
@@ -2093,8 +2118,15 @@ class NovelScreenModelTest {
                 }
                 delay(100)
 
-                verify(exactly = 0) { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any()) }
-                verify(exactly = 0) { NovelReaderTranslationDiskCacheStore.has(any(), any<String>()) }
+                verify(exactly = 0) {
+                    NovelReaderTranslationDiskCacheStore.chapterIds(
+                        any(),
+                        any<NovelReaderTranslationCacheRequirements>(),
+                    )
+                }
+                verify(exactly = 0) {
+                    NovelReaderTranslationDiskCacheStore.has(any(), any<NovelReaderTranslationCacheRequirements>())
+                }
 
                 cachedChapterOne = true
                 progressFlow.emit(
@@ -2118,8 +2150,15 @@ class NovelScreenModelTest {
                     }
                 }
 
-                verify(exactly = 0) { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any()) }
-                verify(exactly = 1) { NovelReaderTranslationDiskCacheStore.has(1L, any<String>()) }
+                verify(exactly = 0) {
+                    NovelReaderTranslationDiskCacheStore.chapterIds(
+                        any(),
+                        any<NovelReaderTranslationCacheRequirements>(),
+                    )
+                }
+                verify(exactly = 1) {
+                    NovelReaderTranslationDiskCacheStore.has(1L, any<NovelReaderTranslationCacheRequirements>())
+                }
             } finally {
                 screenModel.onDispose()
                 unmockkObject(NovelReaderTranslationDiskCacheStore)

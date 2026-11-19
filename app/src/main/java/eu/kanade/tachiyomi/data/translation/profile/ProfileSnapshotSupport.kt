@@ -151,10 +151,18 @@ internal fun TranslationQueueProfileSnapshot.freezeProfileWire(
             put("topK", GeminiPrivateBridge.requestTopKOverride(geminiTopK))
             put("frequencyPenalty", GeminiPrivateBridge.requestFrequencyPenaltyOverride(0f))
             put("presencePenalty", GeminiPrivateBridge.requestPresencePenaltyOverride(0f))
+            val rawLevel = GeminiPrivateBridge.requestThinkingLevelOverride(geminiReasoningEffort)
+                .trim()
+                .lowercase()
+            val safeLevel = if (rawLevel in setOf("minimal", "low", "medium", "high")) {
+                rawLevel
+            } else {
+                "medium"
+            }
             put(
                 "thinkingConfig",
                 buildJsonObject {
-                    put("thinkingLevel", GeminiPrivateBridge.requestThinkingLevelOverride(geminiReasoningEffort))
+                    put("thinkingLevel", safeLevel)
                 },
             )
         }

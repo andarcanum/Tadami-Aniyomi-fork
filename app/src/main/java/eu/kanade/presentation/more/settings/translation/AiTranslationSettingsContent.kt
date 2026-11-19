@@ -1271,12 +1271,16 @@ private fun ProfileEditor(
     val errors = draft.errors()
     val connection = state.connections.firstOrNull { it.id == draft.connectionId }
     var connectionPickerTrigger by remember { mutableIntStateOf(0) }
-    EditorDialog(stringResource(AYMR.strings.ai_translation_profile_editor), dismiss, result != null, {
-        result?.let {
-            onAction(AiTranslationAction.SaveProfile(it, draft.pendingParallelism))
-            dismiss()
-        }
-    }) {
+    EditorDialog(
+        stringResource(AYMR.strings.ai_translation_profile_editor),
+        dismiss,
+        result != null && !state.editorSaving,
+        {
+            result?.let {
+                onAction(AiTranslationAction.SaveProfile(it, draft.pendingParallelism))
+            }
+        },
+    ) {
         Field(
             stringResource(AYMR.strings.ai_translation_name),
             draft.name,

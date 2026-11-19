@@ -146,6 +146,7 @@ data class NovelReaderSettings(
 
     // Gemini Translation
     val geminiEnabled: Boolean = false,
+    val aiTranslationProfileNeedsConfiguration: Boolean = false,
     val geminiApiKey: String = "",
     val geminiModel: String = "gemini-3.1-flash-lite-preview",
     val geminiBatchSize: Int = 40,

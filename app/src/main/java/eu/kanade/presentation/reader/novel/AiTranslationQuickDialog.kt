@@ -317,25 +317,30 @@ private fun QuickBasicsTab(
                 AiTranslationJobProgress(job, state.nowMillis)
             }
 
+            val matchesProfile = state.jobMatchesCurrentProfile
+            val canRetrySameProfile = job != null && !job.needsAction && matchesProfile
+            val isCompletedSameProfile = job?.effectiveStatus == AiTranslationJobStatus.COMPLETED && matchesProfile
             val primaryEnabled = when {
                 paused || active -> true
-                job?.effectiveStatus == AiTranslationJobStatus.COMPLETED -> !state.loading
-                job != null && !job.needsAction -> state.canStart && !state.loading
-                else -> profile != null && state.canStart && !state.loading && job?.needsAction != true
+                isCompletedSameProfile -> profile != null && state.canStart && !state.loading
+                canRetrySameProfile -> state.canStart && !state.loading
+                else ->
+                    profile != null && state.canStart && !state.loading &&
+                        (job?.needsAction != true || !matchesProfile)
             }
             val primaryLabel = stringResource(
                 when {
                     paused -> AYMR.strings.ai_translation_resume
                     active -> AYMR.strings.ai_translation_pause
-                    job?.effectiveStatus == AiTranslationJobStatus.COMPLETED -> AYMR.strings.ai_translation_retranslate
-                    job != null && !job.needsAction -> AYMR.strings.ai_translation_retry_missing
+                    isCompletedSameProfile -> AYMR.strings.ai_translation_retranslate
+                    canRetrySameProfile -> AYMR.strings.ai_translation_retry_missing
                     else -> AYMR.strings.ai_translation_translate_chapter
                 },
             )
             val primaryIcon = when {
                 paused -> Icons.Filled.PlayArrow
                 active -> Icons.Filled.Pause
-                job != null && !job.needsAction -> Icons.Filled.Refresh
+                isCompletedSameProfile || canRetrySameProfile -> Icons.Filled.Refresh
                 else -> Icons.Filled.Translate
             }
             val onPrimary = {
@@ -346,12 +351,18 @@ private fun QuickBasicsTab(
                     active && job != null -> onAction(
                         AiTranslationAction.RequestJobCommand(job.id, AiTranslationJobCommand.PAUSE),
                     )
-                    job?.effectiveStatus == AiTranslationJobStatus.COMPLETED ->
-                        requestJobCommand(job.id, AiTranslationJobCommand.RETRANSLATE, onAction)
-                    job != null && !job.needsAction -> onAction(
+                    isCompletedSameProfile && profile != null -> onAction(
+                        AiTranslationAction.TranslateCurrentChapter(profile.id, forceRetranslate = true),
+                    )
+                    canRetrySameProfile && job != null -> onAction(
                         AiTranslationAction.RequestJobCommand(job.id, AiTranslationJobCommand.RETRY_MISSING),
                     )
-                    profile != null -> onAction(AiTranslationAction.TranslateCurrentChapter(profile.id))
+                    profile != null -> onAction(
+                        AiTranslationAction.TranslateCurrentChapter(
+                            profile.id,
+                            forceRetranslate = job != null,
+                        ),
+                    )
                 }
             }
 
@@ -927,7 +938,7 @@ private fun QuickPromptTab(
                                 profile.generation.copy(
                                     temperature = preset.temperature.toDouble(),
                                     topP = preset.topP.toDouble(),
-                                    topK = if (supportsTopK) preset.topK else profile.generation.topK,
+                                    topK = if (supportsTopK) preset.topK else null,
                                 ),
                             ),
                         )
@@ -949,7 +960,7 @@ private fun QuickPromptTab(
             label = stringResource(AYMR.strings.novel_reader_gemini_temperature),
             valueText = String.format(Locale.US, "%.2f", tempSlider),
             value = tempSlider,
-            valueRange = if (isDeepSeek) 1.3f..1.5f else 0.0f..2.0f,
+            valueRange = 0.0f..2.0f,
             onValueChange = { tempSlider = ((it * 100f).roundToInt() / 100f) },
             onValueChangeFinished = {
                 onAction(
@@ -964,7 +975,7 @@ private fun QuickPromptTab(
             label = stringResource(AYMR.strings.novel_reader_gemini_top_p),
             valueText = String.format(Locale.US, "%.2f", topPSlider),
             value = topPSlider,
-            valueRange = if (isDeepSeek) 0.9f..0.95f else 0.0f..1.0f,
+            valueRange = 0.0f..1.0f,
             onValueChange = { topPSlider = ((it * 100f).roundToInt() / 100f) },
             onValueChangeFinished = {
                 onAction(
@@ -997,7 +1008,14 @@ private fun QuickPromptTab(
                 mutableStateOf(profile.generation.maxOutputTokens?.toString().orEmpty())
             }
             val parsedTokens = tokenInput.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
-            val tokensValid = tokenInput.isBlank() || (parsedTokens != null && parsedTokens > 0)
+            val maxAllowedTokens = if (connection?.protocol ==
+                TranslationProtocol.GEMINI_GENERATE
+            ) {
+                65_536
+            } else {
+                Int.MAX_VALUE
+            }
+            val tokensValid = tokenInput.isBlank() || (parsedTokens != null && parsedTokens in 1..maxAllowedTokens)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

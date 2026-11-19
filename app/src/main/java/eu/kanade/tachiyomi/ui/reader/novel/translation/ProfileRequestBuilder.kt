@@ -210,8 +210,10 @@ internal object ProfileRequestBuilder {
                         is ReasoningChoice.Toggle -> put("think", reasoning.enabled)
                         is ReasoningChoice.Level -> if (reasoning.value == "none") {
                             put("think", false)
-                        } else {
+                        } else if (ollamaModelSupportsStringThinkLevel(model.exactModelId)) {
                             put("think", reasoning.value)
+                        } else {
+                            put("think", true)
                         }
                         else -> Unit
                     }
@@ -241,16 +243,7 @@ internal object ProfileRequestBuilder {
                 if (enabled != null) {
                     put("thinking", buildJsonObject { put("type", if (enabled) "enabled" else "disabled") })
                     if (enabled) {
-                        put(
-                            "reasoning_effort",
-                            if ((choice as? ReasoningChoice.Level)?.value ==
-                                "max"
-                            ) {
-                                "max"
-                            } else {
-                                "high"
-                            },
-                        )
+                        put("reasoning_effort", "high")
                     }
                 }
                 put("presence_penalty", DEEPSEEK_DEFAULT_PRESENCE_PENALTY)

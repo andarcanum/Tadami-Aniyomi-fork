@@ -21,7 +21,7 @@ class NovelTranslationStylePresetsTest {
             family = NovelTranslationPromptFamily.ENGLISH,
         ) shouldBe
             "STYLE PRESET: PROFESSIONAL.\n" +
-            "Use neutral professional literary English.\n" +
+            "Use neutral professional literary prose in the target language.\n" +
             "Avoid slang, vulgarity, and over-stylization unless explicitly present in source."
     }
 }

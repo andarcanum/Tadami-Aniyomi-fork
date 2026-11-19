@@ -331,6 +331,8 @@ class NovelReaderScreen(
                             onToggleBookmark = screenModel::toggleChapterBookmark,
                             onOpenDictionaryHistory = { navigator.push(NovelDictionaryHistoryScreen()) },
                             onStartGeminiTranslation = screenModel::startGeminiTranslation,
+                            onStartGeminiTranslationForProfile = screenModel::startGeminiTranslationForProfile,
+                            onClearSuppressedGeminiCompletion = screenModel::clearSuppressedGeminiCompletion,
                             onStopGeminiTranslation = screenModel::stopGeminiTranslation,
                             onToggleGeminiTranslationVisibility = screenModel::toggleGeminiTranslationVisibility,
                             onClearGeminiTranslation = screenModel::clearGeminiTranslation,

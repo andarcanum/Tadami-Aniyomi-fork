@@ -52,6 +52,8 @@ data class AiTranslationJobUi(
     val errorClass: TranslationFailureKind? = null,
     val fragments: List<AiTranslationFragmentUi> = emptyList(),
     val execution: ExecutionPolicy? = null,
+    val snapshotProfile: TranslationProfile? = null,
+    val snapshotConnection: ConnectionProfile? = null,
 ) {
     val effectiveStatus: AiTranslationJobStatus
         get() = if (status == AiTranslationJobStatus.COMPLETED &&
@@ -141,6 +143,7 @@ data class AiTranslationQuickUiState(
     val catalogLoading: Boolean = false,
     val probeStates: Map<String, AiTranslationProbeStatus> = emptyMap(),
     val activeJobsCount: Int = 0,
+    val jobMatchesCurrentProfile: Boolean = true,
 )
 
 sealed interface AiTranslationAction {
@@ -190,7 +193,10 @@ sealed interface AiTranslationAction {
         val credentialId: String,
         val enabled: Boolean,
     ) : AiTranslationAction
-    data class TranslateCurrentChapter(val profileId: String) : AiTranslationAction
+    data class TranslateCurrentChapter(
+        val profileId: String,
+        val forceRetranslate: Boolean = false,
+    ) : AiTranslationAction
     data class RefreshModels(val connectionId: String) : AiTranslationAction
     data class TestConnection(val id: String) : AiTranslationAction
     data class RequestJobCommand(

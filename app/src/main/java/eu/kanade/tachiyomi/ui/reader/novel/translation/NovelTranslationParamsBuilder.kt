@@ -140,7 +140,16 @@ internal fun NovelReaderSettings.toOllamaCloudTranslationParams(
 
 internal fun NovelReaderSettings.hasConfiguredTranslationProvider(novelId: Long? = null): Boolean {
     if (!geminiEnabled) return false
-    if (translationProfile != null) return connectionProfile?.id == translationProfile.connectionId
+    if (translationProfile != null) {
+        val conn = connectionProfile ?: return false
+        if (conn.id != translationProfile.connectionId) return false
+        if (conn.presetFlavor == tachiyomi.domain.translation.profile.PresetFlavor.GEMINI_PRIVATE &&
+            GeminiPrivateBridge.isInstalled() && !isPrivateBridgeUnlocked()
+        ) {
+            return false
+        }
+        return true
+    }
     if (hasAssignedTranslationProfile(novelId)) return true
     // Live preference state never contains secrets. Dispatch performs the authoritative vault check.
     val referenced = translationProvider in translationCredentialProviders

@@ -27,7 +27,7 @@ class MistralPromptResolver(
                 NovelTranslationPromptFamily.RUSSIAN -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT
                 NovelTranslationPromptFamily.ENGLISH -> GeminiPromptResolver.CLASSIC_SYSTEM_PROMPT_EN
             }
-            GeminiPromptMode.ADULT_18 -> adultPrompt
+            GeminiPromptMode.ADULT_18 -> GeminiPromptResolver.adultPromptForFamily(adultPrompt, family)
         }
     }
 

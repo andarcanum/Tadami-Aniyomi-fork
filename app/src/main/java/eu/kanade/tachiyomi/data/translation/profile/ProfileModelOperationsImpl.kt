@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -370,11 +371,16 @@ internal class ProfileModelOperationsImpl(
             }
             val options = provider?.let { resolveTranslationReasoningOptions(it, id) }.orEmpty()
             val contract = if (options.isEmpty()) ReasoningContract.Unknown else ReasoningContract.Levels(options)
+            val defaultOpenAiSampling = connection.protocol == TranslationProtocol.OPENAI_CHAT && parameters.isEmpty()
             val fields = buildSet {
-                if (native || connection.protocol == TranslationProtocol.OLLAMA_NATIVE || "temperature" in parameters) {
+                if (native || connection.protocol == TranslationProtocol.OLLAMA_NATIVE || defaultOpenAiSampling ||
+                    "temperature" in parameters
+                ) {
                     add(AiGenerationField.TEMPERATURE)
                 }
-                if (native || connection.protocol == TranslationProtocol.OLLAMA_NATIVE || "top_p" in parameters) {
+                if (native || connection.protocol == TranslationProtocol.OLLAMA_NATIVE || defaultOpenAiSampling ||
+                    "top_p" in parameters
+                ) {
                     add(AiGenerationField.TOP_P)
                 }
                 if (connection.protocol == TranslationProtocol.OLLAMA_NATIVE) add(AiGenerationField.TOP_K)
@@ -384,16 +390,18 @@ internal class ProfileModelOperationsImpl(
         }.distinctBy { it.selection.exactModelId }.sortedBy { it.selection.exactModelId }
     }
 
-    private fun integer(item: JsonObject, field: String, positive: Boolean = true): Int? = item[field]?.let {
-        val number = (it as? JsonPrimitive)?.intOrNull ?: invalidCatalogue()
-        if (number < if (positive) 1 else 0) invalidCatalogue()
-        number
-    }
-    private fun decimal(item: JsonObject, field: String): Float? = item[field]?.let {
-        val number = (it as? JsonPrimitive)?.floatOrNull ?: invalidCatalogue()
-        if (!number.isFinite() || number < 0) invalidCatalogue()
-        number
-    }
+    private fun integer(item: JsonObject, field: String, positive: Boolean = true): Int? =
+        item[field]?.takeUnless { it is JsonNull }?.let {
+            val number = (it as? JsonPrimitive)?.intOrNull ?: invalidCatalogue()
+            if (number < if (positive) 1 else 0) invalidCatalogue()
+            number
+        }
+    private fun decimal(item: JsonObject, field: String): Float? =
+        item[field]?.takeUnless { it is JsonNull }?.let {
+            val number = (it as? JsonPrimitive)?.floatOrNull ?: invalidCatalogue()
+            if (!number.isFinite() || number < 0) invalidCatalogue()
+            number
+        }
     private fun headers(connection: ConnectionProfile, key: String): Headers = Headers.Builder().apply {
         when (connection.auth) {
             ProfileAuth.NONE -> Unit

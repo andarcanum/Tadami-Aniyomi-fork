@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.data.download.novel
 
 import android.app.Application
 import com.hippo.unifile.UniFile
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheRequirements
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import logcat.LogPriority
@@ -35,10 +37,13 @@ class NovelTranslatedDownloadManager(
     private val rootDir: UniFile?
         get() = storageManager?.getDownloadsDirectory()?.createDirectory(ROOT_DIR_NAME)
 
-    fun hasTranslationCache(chapterId: Long): Boolean {
-        return NovelReaderTranslationDiskCacheStore.get(chapterId)
-            ?.translatedByIndex
-            ?.isNotEmpty() == true
+    internal fun hasTranslationCache(
+        chapterId: Long,
+        requirements: NovelReaderTranslationCacheRequirements? = null,
+    ): Boolean {
+        val entry = NovelReaderTranslationDiskCacheStore.get(chapterId) ?: return false
+        if (!entry.isTranslationComplete) return false
+        return requirements == null || NovelReaderTranslationCacheResolver.matches(entry, requirements)
     }
 
     fun isTranslatedChapterDownloaded(
@@ -134,15 +139,19 @@ class NovelTranslatedDownloadManager(
         cachedTotalSize = null
     }
 
-    suspend fun exportTranslatedChapter(
+    internal suspend fun exportTranslatedChapter(
         novel: Novel,
         chapter: NovelChapter,
         format: NovelTranslatedDownloadFormat,
+        requirements: NovelReaderTranslationCacheRequirements? = null,
     ): Result<Unit> {
         val cached = NovelReaderTranslationDiskCacheStore.get(chapter.id)
             ?: return Result.failure(IllegalStateException("Translation cache not found"))
-        if (cached.translatedByIndex.isEmpty()) {
-            return Result.failure(IllegalStateException("Translation cache is empty"))
+        if (!cached.isTranslationComplete) {
+            return Result.failure(IllegalStateException("Translation cache is incomplete"))
+        }
+        if (requirements != null && !NovelReaderTranslationCacheResolver.matches(cached, requirements)) {
+            return Result.failure(IllegalStateException("Translation cache does not match current settings"))
         }
 
         val content = buildTranslatedText(cached.translatedByIndex)

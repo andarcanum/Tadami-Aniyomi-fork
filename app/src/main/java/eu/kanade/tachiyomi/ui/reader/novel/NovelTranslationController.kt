@@ -6,6 +6,8 @@ import eu.kanade.tachiyomi.data.translation.TranslationProgressUpdate
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationSessionResults
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
+import eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices
+import eu.kanade.tachiyomi.data.translation.profile.withTranslationProfile
 import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -112,8 +114,18 @@ internal class NovelTranslationController(
     private var cacheRestoreJob: Job? = null
     private var autoStartAfterRestoreJob: Job? = null
     private var displayedSettingsKey: String? = null
-    private val suppressedCompletions = mutableSetOf<Long>()
+    private val suppressedCompletions = java.util.Collections.synchronizedSet(mutableSetOf<Long>())
+
+    @Volatile
+    private var geminiTranslationHiddenByUser: Boolean = false
     private val googleSessionCache = GoogleTranslationSessionCache()
+
+    fun isGeminiTranslationHiddenByUser(): Boolean = geminiTranslationHiddenByUser
+
+    fun clearSuppressedCompletionForActiveChapter() {
+        targetTranslationChapterId()?.let { suppressedCompletions.remove(it) }
+        geminiTranslationHiddenByUser = false
+    }
 
     private var hasTriggeredGeminiAutoStart: Boolean = false
     private var pendingAutoStartGeminiTranslation: Boolean = false
@@ -197,7 +209,7 @@ internal class NovelTranslationController(
                 it.copy(
                     hasGeminiTranslationCache = true,
                     geminiTranslationProgress = 100,
-                    isGeminiTranslationVisible = true,
+                    isGeminiTranslationVisible = !geminiTranslationHiddenByUser,
                 )
             }
             addAiTranslationLog(
@@ -251,6 +263,7 @@ internal class NovelTranslationController(
         val previous = displayedSettingsKey
         displayedSettingsKey = key
         if (previous != null && previous != key) {
+            geminiTranslationHiddenByUser = false
             cacheRestoreEpoch.incrementAndGet()
             host.translationHolderClear("gemini")
             updateState {
@@ -504,17 +517,31 @@ internal class NovelTranslationController(
         }
     }
 
+    /**
+     * Synchronizes holder/cache/visibility flags when book mode scrolls across a chapter boundary
+     * without changing the user's explicit hide-translation preference.
+     */
+    fun syncBookModeChapterCache(chapterId: Long) {
+        val settings = host.translationReaderSettings() ?: return
+        if (!settings.geminiEnabled) return
+        restoreGeminiTranslationFromCache(chapterId, settings)
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Gemini / AI translation
     // ---------------------------------------------------------------------------------------------
 
-    fun startGeminiTranslation() {
+    fun startGeminiTranslation(
+        forceRetranslate: Boolean = false,
+        profileId: String? = null,
+    ) {
         if (state.isGeminiTranslating) return
         val currentState = host.translationReaderSettings() ?: return
         // Over a book this is the chapter under the reading position; the old `currentChapter` was
         // the chapter the book was entered from, so the queued job translated the wrong chapter.
         val translationChapterId = host.translationActiveChapterId() ?: return
         suppressedCompletions.remove(translationChapterId)
+        geminiTranslationHiddenByUser = false
         // The content model belongs to the entry chapter and is empty over a book, so it cannot gate
         // the queue there: the worker resolves the chapter payload itself.
         if (!host.translationIsBookRuntimeActive() && host.translationCurrentParsedTextBlocks().isEmpty()) return
@@ -523,7 +550,7 @@ internal class NovelTranslationController(
             addAiTranslationLog("AI translation is disabled.")
             return
         }
-        if (!host.translationHasConfiguredProvider(settings)) {
+        if (profileId == null && !host.translationHasConfiguredProvider(settings)) {
             addAiTranslationLog("? Translation provider is not configured")
             return
         }
@@ -541,12 +568,30 @@ internal class NovelTranslationController(
         addAiTranslationLog("AI translation queued in background.")
         geminiTranslationJob = host.translationScope.launch {
             try {
+                val effectiveSettings = if (profileId != null) {
+                    val repo = TranslationProfileServices.repository
+                    val profile = repo.getProfile(profileId)
+                    val connection = profile?.let { repo.getConnection(it.connectionId) }
+                    if (profile != null && connection != null) {
+                        settings.withTranslationProfile(profile, connection).copy(geminiEnabled = true)
+                    } else {
+                        settings
+                    }
+                } else {
+                    settings
+                }
+                if (!host.translationHasConfiguredProvider(effectiveSettings)) {
+                    addAiTranslationLog("? Translation provider is not configured")
+                    updateState { it.copy(isGeminiTranslating = false, geminiTranslationProgress = 0) }
+                    return@launch
+                }
                 val rules = novelReaderPreferences.enabledReplaceRules()
                 translationQueueManager.enqueueChapters(
                     listOf(translationChapterId),
                     novelIdForQueue(),
-                    settings,
+                    effectiveSettings,
                     rules,
+                    forceRetranslate = forceRetranslate,
                 )
                 val own = translationQueueManager.repository.getByChapterId(translationChapterId) ?: return@launch
                 val terminal = translationQueueManager.repository.observeRuns(
@@ -587,7 +632,7 @@ internal class NovelTranslationController(
                 ) {
                     restoreGeminiTranslationFromCache(
                         translationChapterId,
-                        settings,
+                        host.translationReaderSettings() ?: effectiveSettings,
                     ).join()
                 }
             } catch (error: CancellationException) {
@@ -630,8 +675,10 @@ internal class NovelTranslationController(
     }
 
     fun toggleGeminiTranslationVisibility() {
-        if (host.translationHolderIsEmpty("gemini")) return
-        updateState { it.copy(isGeminiTranslationVisible = !it.isGeminiTranslationVisible) }
+        if (host.translationHolderIsEmpty("gemini") && !state.hasGeminiTranslationCache) return
+        val nextVisible = !state.isGeminiTranslationVisible
+        geminiTranslationHiddenByUser = !nextVisible
+        updateState { it.copy(isGeminiTranslationVisible = nextVisible) }
         addAiTranslationLog(
             "👁️ Visibility: ${if (state.isGeminiTranslationVisible) "ON" else "OFF"}",
         )
@@ -652,6 +699,7 @@ internal class NovelTranslationController(
      * back must not silently throw away (paid-API) translations the user never asked to delete.
      */
     fun clearGeminiTranslationForSwitch() {
+        geminiTranslationHiddenByUser = true
         clearGeminiTranslationInternal(deleteDiskCache = false)
     }
 
@@ -973,6 +1021,7 @@ internal class NovelTranslationController(
         cacheRestoreJob = null
         displayedSettingsKey = null
         suppressedCompletions.clear()
+        geminiTranslationHiddenByUser = false
         updateState {
             it.copy(
                 isGeminiTranslating = false,

@@ -83,7 +83,7 @@ class DeepSeekTranslationServiceTest {
         body.shouldContain("\"stream\":false")
         body.shouldContain("adult_system")
         body.shouldContain("\"thinking\":{\"type\":\"enabled\"}")
-        body.shouldContain("\"reasoning_effort\":\"max\"")
+        body.shouldContain("\"reasoning_effort\":\"high\"")
     }
 
     @Test

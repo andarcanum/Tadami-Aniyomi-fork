@@ -1718,9 +1718,12 @@ class NovelScreenModel(
         queueState: NovelDownloadQueueState = NovelDownloadQueueManager.state.value,
     ): State.Success {
         readerSettingsCache = readerSettings
+        val translationCacheRequirements = readerSettings.toTranslationCacheRequirements(
+            replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+        )
         val translatedCacheChapterIds = NovelReaderTranslationDiskCacheStore.chapterIds(
             chapters.map { it.id },
-            readerSettings.geminiTargetLang,
+            translationCacheRequirements,
         )
         val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
         val translatedQueueChapterIds = resolveTranslatedQueueChapterIds(
@@ -3013,12 +3016,14 @@ class NovelScreenModel(
         val translatedCacheChapterIds = if (isTranslating) {
             emptySet()
         } else {
-            val targetLang = resolveCachedReaderSettings(current.novel.source).geminiTargetLang
+            val requirements = resolveCachedReaderSettings(current.novel.source).toTranslationCacheRequirements(
+                replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+            )
             chapterIds.filterTo(mutableSetOf()) { chapterId ->
                 current.chapterActionStates.containsKey(chapterId) &&
                     NovelReaderTranslationDiskCacheStore.has(
                         chapterId = chapterId,
-                        targetLang = targetLang,
+                        requirements = requirements,
                     )
             }
         }
