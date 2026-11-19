@@ -154,14 +154,38 @@ class ReelsOfflineStoreImplTest {
     }
 
     @Test
-    fun `adaptive manifests are rejected before any request`(): Unit = runBlocking {
+    fun `adaptive DASH manifests are rejected before any request`(): Unit = runBlocking {
         val store = store()
 
-        store.download(item("hls", server.url("/master.m3u8").toString()), 1L) shouldBe
+        store.download(item("dash", server.url("/manifest.mpd").toString()), 1L) shouldBe
             ReelsOfflineStore.DownloadResult.UNSUPPORTED
 
         server.requestCount shouldBe 0
         store.usedBytes() shouldBe 0L
+    }
+
+    @Test
+    fun `clear HLS m3u8 playlist stitches segments into offline store`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                #EXTM3U
+                #EXTINF:2.0,
+                seg1.ts
+                #EXTINF:2.0,
+                seg2.ts
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(MockResponse().setBody("partA-"))
+        server.enqueue(MockResponse().setBody("partB"))
+        val store = store()
+
+        store.download(item("hls", server.url("/playlist.m3u8").toString()), 1L) shouldBe
+            ReelsOfflineStore.DownloadResult.SAVED
+
+        store.isStored(1L, "hls") shouldBe true
+        store.usedBytes() shouldBe 11L
     }
 
     @Test

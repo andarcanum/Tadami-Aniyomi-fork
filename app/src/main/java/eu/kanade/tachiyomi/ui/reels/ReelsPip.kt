@@ -73,3 +73,14 @@ object ReelsPip {
         return builder.build()
     }
 }
+
+/**
+ * Hardware Volume-Up hook for the active Reels feed (Instagram / TikTok standard).
+ *
+ * When the feed is muted and the user presses the physical Volume Up button, the feed unmutes
+ * automatically while letting Android adjust the system media volume normally.
+ */
+object ReelsVolumeKeyHandler {
+    @Volatile
+    var onVolumeUp: (() -> Unit)? = null
+}

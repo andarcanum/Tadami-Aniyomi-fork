@@ -51,6 +51,10 @@ import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.ui.reels.components.legacyCookieMap
+import eu.kanade.tachiyomi.ui.reels.controllers.ReelsAuthController
+import eu.kanade.tachiyomi.ui.reels.controllers.ReelsEngagementController
+import eu.kanade.tachiyomi.ui.reels.controllers.ReelsFeedEngine
+import eu.kanade.tachiyomi.ui.reels.controllers.ReelsPlaybackSettingsController
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -369,14 +373,54 @@ class ReelsFeedScreenModel(
     @Volatile
     private var activeVisitSlotKey: String? = null
 
-    // videoIds the user liked/unliked this session (main-confined). Their DB state is already
-    // authoritative, so a concurrently-loaded persisted favorites snapshot must never
-    // resurrect an unlike or override a fresh like. Cleared on source switch.
-    private val decidedIds = mutableSetOf<String>()
+    // Modular controllers extracted from ReelsFeedScreenModel (Stage 4 decomposition).
+    private val feedEngine = ReelsFeedEngine()
+    private val playbackSettingsController by lazy {
+        ReelsPlaybackSettingsController(
+            scope = screenModelScope,
+            sourcePreferences = sourcePreferences,
+            sessionSound = sessionSound,
+            mutableState = mutableState,
+        )
+    }
+    private val authController by lazy {
+        ReelsAuthController(
+            scope = screenModelScope,
+            ioDispatcher = ioDispatcher,
+            mutableState = mutableState,
+            currentSource = { source },
+            onAccountScopeInvalidated = {
+                forYouScope = null
+                pinnedScope = null
+                watchedCommitted.clear()
+                skippedCommitted.clear()
+            },
+            onStopRoundRobin = { stopRoundRobin(clearProjection = true) },
+            onReloadFeed = { loadFeed(reset = true) },
+            onBlockedTagsUpdated = { tags -> feedEngine.tasteEngine.setBlockedTags(tags) },
+        )
+    }
+    private val engagementController by lazy {
+        ReelsEngagementController(
+            scope = screenModelScope,
+            ioDispatcher = ioDispatcher,
+            mutableState = mutableState,
+            sourceManager = sourceManager,
+            reelsFavoriteRepository = reelsFavoriteRepository,
+            reelsFollowRepository = reelsFollowRepository,
+            reelsAlbumRepository = reelsAlbumRepository,
+            tasteEngine = feedEngine.tasteEngine,
+            isIncognito = isIncognito,
+            currentSource = { source },
+            offlineSourceIds = { offlineSourceIds },
+        )
+    }
 
-    // Creators the user followed/unfollowed this session (main-confined): the same merge
-    // protection as [decidedIds], applied to the follows snapshot. Cleared on source switch.
-    private val decidedFollows = mutableSetOf<String>()
+    // videoIds the user liked/unliked this session (main-confined, memory-bounded).
+    private val decidedIds get() = engagementController.decidedIds
+
+    // Creators the user followed/unfollowed this session (main-confined, memory-bounded).
+    private val decidedFollows get() = engagementController.decidedFollows
 
     // ---------------------------------------------------------------------------
     // FOLLOWING aggregation (contract v18)
@@ -432,11 +476,10 @@ class ReelsFeedScreenModel(
     @Volatile
     private var forYouGeneration: Long = 0L
 
-    // Ids whose interaction was already committed in THIS session: duplicate player callbacks
-    // and repeated transitions must not issue duplicate writes (the DB upsert is idempotent
-    // as well — this only keeps the writer quiet).
-    private val watchedCommitted = mutableSetOf<String>()
-    private val skippedCommitted = mutableSetOf<String>()
+    // Ids whose interaction was already committed in THIS session (memory-bounded).
+    private val watchedCommitted = ReelsBoundedSet<String>()
+    private val skippedCommitted = ReelsBoundedSet<String>()
+    private val completedThisSession = ReelsBoundedSet<String>()
 
     // Pages fetched by the unseen refill loop in the current feed generation (bounded).
     private var unseenRefillPages = 0
@@ -850,6 +893,14 @@ class ReelsFeedScreenModel(
 
     fun onVideoCompleted(itemId: String) {
         if (isReplaySurface()) sessionContinuity.videoCompleted(itemId)
+        val item = state.value.items.firstOrNull { it.id == itemId }
+        if (item != null) {
+            if (!completedThisSession.add(itemId)) {
+                feedEngine.tasteEngine.recordRewatch(item)
+            } else {
+                feedEngine.tasteEngine.recordCompletion(item)
+            }
+        }
     }
 
     fun onSeekPositionConsumed(itemId: String) {
@@ -889,6 +940,14 @@ class ReelsFeedScreenModel(
         // tracker measured, not the wall time the card spent on screen.
         reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec, sourceId)
         recordWatchHistory(item, positionFraction, durationSec, sourceId)
+        // Feed on-device taste engine from real foreground playback behavior.
+        if (!state.value.isOffline && !isIncognito(sourceId)) {
+            if (durationSec > 0f && positionFraction >= ReelsForYou.COVERAGE_THRESHOLD) {
+                feedEngine.tasteEngine.recordCompletion(item)
+            } else if (snapshot.watchedMs < ReelsTasteEngine.FAST_SKIP_THRESHOLD_MS) {
+                feedEngine.tasteEngine.recordFastSkip(item)
+            }
+        }
         if (state.value.isOffline || sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
         if (isIncognito(sourceId)) return
 
@@ -2080,9 +2139,14 @@ class ReelsFeedScreenModel(
                 ensureActive()
                 if (loadGeneration.get() != generation || !state.value.isMixMode) return@launch
 
-                val newItems = batch.slots.map { it.item }
-                val newSlotIds = batch.slots.map { it.sourceId }
-                val newCompositeIds = batch.slots.map { "${it.sourceId}:${it.item.id}" }
+                val rankedSlots = feedEngine.rerankMixSlots(
+                    slots = batch.slots,
+                    itemOf = { it.item },
+                    recentTail = if (reset) emptyList() else state.value.items.takeLast(2),
+                )
+                val newItems = rankedSlots.map { it.item }
+                val newSlotIds = rankedSlots.map { it.sourceId }
+                val newCompositeIds = rankedSlots.map { "${it.sourceId}:${it.item.id}" }
                 val skippedCount = batch.statuses.values.count {
                     it == MixSourceStatus.NEEDS_AUTH || it == MixSourceStatus.CIRCUIT_OPEN
                 }
@@ -3044,7 +3108,14 @@ class ReelsFeedScreenModel(
                 val rawIncoming = pageData.videos.distinctBy { it.id }.filterHidden()
                 val (scope, _) = ensureForYouScope(sourceIdAtStart)
                 val consumed = reelsConsumptionRepository.consumedIds(scope, sourceIdAtStart, rawIncoming.map { it.id })
-                val incoming = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+                val rawFiltered = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+                val incoming = feedEngine.rerankSingleSource(
+                    incoming = rawFiltered,
+                    recentTail = state.value.items.takeLast(2),
+                    allowPersonalization = mode == FeedMode.GLOBAL &&
+                        state.value.searchQuery.isBlank() &&
+                        src !is AnimeReelsFeedbackSource,
+                )
 
                 if (incoming.isNotEmpty()) {
                     persistForYouPage(scope, sourceIdAtStart, incoming)
@@ -3147,6 +3218,13 @@ class ReelsFeedScreenModel(
         } else {
             loadFeed(reset = true)
         }
+    }
+
+    /** Pull-to-refresh entry point on page 0: resets playback state and reloads a fresh feed. */
+    fun refreshFeed() {
+        if (state.value.isOffline) return
+        playbackSettingsController.resetPlaybackTracking()
+        loadFeed(reset = true)
     }
 
     fun loadFeed(reset: Boolean = false) {
@@ -3369,7 +3447,14 @@ class ReelsFeedScreenModel(
                 } else {
                     emptySet()
                 }
-                val incoming = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+                val rawFiltered = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+                val incoming = feedEngine.rerankSingleSource(
+                    incoming = rawFiltered,
+                    recentTail = state.value.items.takeLast(2),
+                    allowPersonalization = mode == FeedMode.GLOBAL &&
+                        state.value.searchQuery.isBlank() &&
+                        src !is AnimeReelsFeedbackSource,
+                )
 
                 // One-shot resume navigation (watch-history entry, album grid tap): the tapped
                 // clip outranks the saved position. Deep albums keep the clip beyond page 1,
@@ -3724,29 +3809,11 @@ class ReelsFeedScreenModel(
     }
 
     /** Adds/removes an album to/from the collection (search cards, niche save row). */
-    fun toggleAlbumSaved(category: FeedCategory) {
-        val sourceId = state.value.currentSourceId
-        screenModelScope.launch(ioDispatcher) {
-            if (category.id in state.value.savedAlbumIds) {
-                reelsAlbumRepository.delete(sourceId, category.id)
-            } else {
-                reelsAlbumRepository.insert(
-                    ReelsAlbum(
-                        sourceId = sourceId,
-                        albumId = category.id,
-                        name = category.name,
-                        coverUrl = category.imageUrl,
-                        addedAt = Date(),
-                    ),
-                )
-            }
-        }
-    }
+    fun toggleAlbumSaved(category: FeedCategory) = engagementController.toggleAlbumSaved(category)
 
     /** Save-row action for NICHE mode: the currently open album/category. */
     fun toggleCurrentNicheAlbum() {
         val id = nicheId ?: return
-        // Report fix: keep a cover for the collection row (first reel's poster).
         toggleAlbumSaved(
             FeedCategory(
                 id = id,
@@ -3758,30 +3825,9 @@ class ReelsFeedScreenModel(
     }
 
     /** Long-press preview of an album's content (first page thumbnails) for search cards. */
-    fun loadAlbumPreview(albumId: String) {
-        mutableState.update {
-            it.copy(previewAlbumId = albumId, previewLoading = true, previewItems = persistentListOf())
-        }
-        screenModelScope.launch(ioDispatcher) {
-            val browse = source as? AnimeFeedBrowseSource
-            val items = runCatching { browse?.getCategoryFeed(albumId, 1, null)?.videos.orEmpty() }
-                .getOrDefault(emptyList())
-                .take(8)
-            mutableState.update { current ->
-                if (current.previewAlbumId == albumId) {
-                    current.copy(previewItems = items.toImmutableList(), previewLoading = false)
-                } else {
-                    current
-                }
-            }
-        }
-    }
+    fun loadAlbumPreview(albumId: String) = engagementController.loadAlbumPreview(albumId)
 
-    fun closeAlbumPreview() {
-        mutableState.update {
-            it.copy(previewAlbumId = null, previewItems = persistentListOf(), previewLoading = false)
-        }
-    }
+    fun closeAlbumPreview() = engagementController.closeAlbumPreview()
 
     /**
      * FOLLOWING generation (contract v18): fan out one page per followed creator in
@@ -4072,6 +4118,7 @@ class ReelsFeedScreenModel(
         // disposal (NonCancellable), and repository errors are logged, not surfaced.
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             if (willFollow && !isIncognito(sourceId)) {
+                feedEngine.tasteEngine.recordFollow(creator)
                 reelsFollowRepository.insert(ReelsFollow(sourceId = sourceId, creator = creator, addedAt = Date()))
             } else if (!willFollow) {
                 // A removal must always reach the DB so a stale persisted follow doesn't
@@ -4307,160 +4354,30 @@ class ReelsFeedScreenModel(
         mutableState.update { it.copy(isSourcePickerOpen = open) }
     }
 
-    fun toggleLoginDialog(open: Boolean) {
-        mutableState.update {
-            it.copy(
-                isLoginDialogOpen = open,
-                loginError = if (open) null else it.loginError,
-                loginRejected = if (open) false else it.loginRejected,
-            )
-        }
-    }
+    fun toggleLoginDialog(open: Boolean) = authController.toggleLoginDialog(open)
 
-    /** Opens/closes the hosted-web-login WebView dialog (contract v20). */
-    fun toggleWebLoginDialog(open: Boolean) {
-        mutableState.update {
-            it.copy(
-                isWebLoginDialogOpen = open,
-                webLoginHint = if (open) false else it.webLoginHint,
-                webLoginStage2Attempt = if (open) 0 else it.webLoginStage2Attempt,
-            )
-        }
-    }
+    fun toggleWebLoginDialog(open: Boolean) = authController.toggleWebLoginDialog(open)
 
-    /** Login entry routing (contract v20): hosted web flow first, password dialog otherwise. */
-    fun openLoginFlow() {
-        if (state.value.isWebLoginCapable) toggleWebLoginDialog(true) else toggleLoginDialog(true)
-    }
+    fun openLoginFlow() = authController.openLoginFlow()
 
-    /** Entry URL for the hosted web login of the current source; null when not capable. */
-    fun webLoginUrl(): String? = (source as? AnimeFeedWebLoginSource)?.webLoginUrl()
+    fun webLoginUrl(): String? = authController.webLoginUrl()
 
-    /**
-     * Contract v22: the source's own session instrumentation snippet for the login WebView.
-     * Null/empty = the host falls back to the generic cookie/localStorage dump.
-     */
-    fun sessionInstrumentationJs(): String? =
-        (source as? AnimeFeedLoginInstrumentationSource)?.sessionInstrumentationJs()
+    fun sessionInstrumentationJs(): String? = authController.sessionInstrumentationJs()
 
-    /** Contract v22: extra cookie origins the source wants inside the session dump. */
-    fun extraSessionCookieOrigins(): List<String> =
-        (source as? AnimeFeedLoginInstrumentationSource)?.extraSessionCookieOrigins().orEmpty()
+    fun extraSessionCookieOrigins(): List<String> = authController.extraSessionCookieOrigins()
 
-    /** Stage-2 PKCE authorize URL (fresh verifier); null when not capable. */
-    fun ownAuthorizeUrl(): String? = (source as? AnimeFeedWebLoginSource)?.ownAuthorizeUrl()
+    fun ownAuthorizeUrl(): String? = authController.ownAuthorizeUrl()
 
-    /**
-     * WebView session import (contract v20). A false answer keeps the dialog open (the host
-     * retries on the next page-finished/Done press) and surfaces [State.webLoginHint]; true
-     * closes the dialog, snapshots the account label and reloads the feed exactly like a
-     * password-login success. Transport failures of the import count as "not yet".
-     *
-     * Contract v24: [cookies] are origin-scoped records. A source implementing
-     * [AnimeFeedOriginScopedSessionSource] receives them as-is; legacy sources get the old
-     * last-wins name → value merge.
-     */
-    fun tryImportWebSession(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) {
-        val webSource = source as? AnimeFeedWebLoginSource ?: return
-        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching {
-                if (scopedSource != null) {
-                    scopedSource.importWebSessionScoped(cookies, localStorage)
-                } else {
-                    webSource.importWebSession(legacyCookieMap(cookies), localStorage)
-                }
-            }.getOrDefault(false)
-            if (imported) onWebSessionImported() else mutableState.update { it.copy(webLoginHint = true) }
-        }
-    }
+    fun tryImportWebSession(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) =
+        authController.tryImportWebSession(cookies, localStorage)
 
-    /** True when [url] is a redirect of the source's own in-flight authorize flow (stage 2). */
-    fun isOwnWebLoginRedirect(url: String): Boolean =
-        (source as? AnimeFeedWebLoginSource)?.isOwnLoginRedirect(url) == true
+    fun isOwnWebLoginRedirect(url: String): Boolean = authController.isOwnWebLoginRedirect(url)
 
-    /** Stage-2 code exchange (contract v20): same success/failure semantics as the SPA import. */
-    fun tryImportWebRedirect(url: String, cookies: List<WebLoginCookie>) {
-        val webSource = source as? AnimeFeedWebLoginSource ?: return
-        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching {
-                if (scopedSource != null) {
-                    scopedSource.importWebRedirectScoped(url, cookies)
-                } else {
-                    webSource.importWebRedirect(url, legacyCookieMap(cookies))
-                }
-            }.getOrDefault(false)
-            if (imported) applyWebLoginSuccess() else mutableState.update { it.copy(webLoginHint = true) }
-        }
-    }
+    fun tryImportWebRedirect(url: String, cookies: List<WebLoginCookie>) =
+        authController.tryImportWebRedirect(url, cookies)
 
-    /**
-     * Done-button path: try the SPA-session lift first; when the SPA keeps its tokens in
-     * memory (nothing to lift — the RedGIFs case), bump the stage-2 counter so the dialog
-     * loads the source's own PKCE authorize URL in the same WebView.
-     */
-    fun tryImportWebSessionStage2(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) {
-        val webSource = source as? AnimeFeedWebLoginSource ?: return
-        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching {
-                if (scopedSource != null) {
-                    scopedSource.importWebSessionScoped(cookies, localStorage)
-                } else {
-                    webSource.importWebSession(legacyCookieMap(cookies), localStorage)
-                }
-            }.getOrDefault(false)
-            if (imported) {
-                onWebSessionImported()
-            } else {
-                mutableState.update { current ->
-                    current.copy(webLoginHint = true, webLoginStage2Attempt = current.webLoginStage2Attempt + 1)
-                }
-            }
-        }
-    }
-
-    /**
-     * SPA import succeeded: the first time, upgrade to a refreshable session instead of
-     * closing — bump the stage-2 counter so the dialog loads the source's own PKCE authorize
-     * URL (with the auth2 cookie it auto-completes and the intercepted code yields a
-     * refresh_token). The second import (or a source without stage 2) closes the dialog.
-     */
-    private fun onWebSessionImported() {
-        if (!state.value.webLoginPendingClose) {
-            mutableState.update { current ->
-                current.copy(
-                    webLoginPendingClose = true,
-                    webLoginHint = false,
-                    webLoginStage2Attempt = current.webLoginStage2Attempt + 1,
-                )
-            }
-        } else {
-            applyWebLoginSuccess()
-        }
-    }
-
-    /** Shared post-web-login path: close the dialog, snapshot the account, reload the feed. */
-    private fun applyWebLoginSuccess() {
-        val loginSource = source as? AnimeFeedLoginSource
-        mutableState.update { current ->
-            current.copy(
-                isWebLoginDialogOpen = false,
-                webLoginHint = false,
-                webLoginPendingClose = false,
-                cfBootstrapAttempt = 0,
-                cfBootstrapExhausted = false,
-                loggedInAccount = loginSource?.takeIf { it.isLoggedIn() }?.loggedInAccount(),
-            )
-        }
-        // A re-lifted session must refresh whatever account sheet is open right now.
-        if (state.value.isContentPreferencesOpen) loadContentPreferences()
-        if (state.value.isBlockedTagsOpen) loadBlockedTags()
-        // Web login can change the account: drop the old RR owner/projection before reload.
-        stopRoundRobin(clearProjection = true)
-        loadFeed(reset = true)
-    }
+    fun tryImportWebSessionStage2(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) =
+        authController.tryImportWebSessionStage2(cookies, localStorage)
 
     // ---------------------------------------------------------------------------
     // Category subscriptions (contract v20)
@@ -4495,114 +4412,13 @@ class ReelsFeedScreenModel(
     // Content preferences (contract v20)
     // ---------------------------------------------------------------------------
 
-    /** Opens/closes the content-preferences sheet; opening (re)loads the account toggles. */
-    fun toggleContentPreferences(open: Boolean) {
-        mutableState.update {
-            it.copy(
-                isContentPreferencesOpen = open,
-                contentPreferencesError = if (open) null else it.contentPreferencesError,
-            )
-        }
-        if (open) loadContentPreferences()
-    }
+    fun toggleContentPreferences(open: Boolean) = authController.toggleContentPreferences(open)
 
-    private fun loadContentPreferences() {
-        val src = source as? AnimeContentPreferencesSource ?: return
-        val sourceId = state.value.currentSourceId
-        mutableState.update {
-            it.copy(
-                isContentPreferencesLoading = true,
-                contentPreferencesError = null,
-                contentPreferencesSaveFailed = false,
-            )
-        }
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val result = runCatching { src.getContentPreferences() }
-            mutableState.update { current ->
-                // The read may race a source switch: drop it if the source changed.
-                if (current.currentSourceId != sourceId) {
-                    return@update current.copy(isContentPreferencesLoading = false)
-                }
-                current.copy(
-                    isContentPreferencesLoading = false,
-                    contentPreferences = result.getOrNull()?.toImmutableList(),
-                    contentPreferencesError = result.exceptionOrNull()?.localizedMessage,
-                    contentPreferencesSaveFailed = false,
-                )
-            }
-            // Account session expired (short-lived Kinde bearer, no refresh token): silently
-            // re-lift a fresh one through the bootstrap WebView; the sheet reloads on success.
-            // Audit H6: only an AUTH failure is session-death evidence — a legitimately empty
-            // preference list (or a timeout) must not mount the bootstrap WebView.
-            maybeBumpBootstrap(
-                result.isFailure &&
-                    HTTP_SESSION_ERROR_REGEX.containsMatchIn(result.exceptionOrNull()?.localizedMessage.orEmpty()),
-            )
-        }
-    }
+    fun saveContentPreferences(enabledIds: List<String>) = authController.saveContentPreferences(enabledIds)
 
-    /** Persists the enabled-toggle set; reloads the sheet list on success. */
-    fun saveContentPreferences(enabledIds: List<String>) {
-        val src = source as? AnimeContentPreferencesSource ?: return
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val ok = runCatching { src.setContentPreferences(enabledIds) }.getOrDefault(false)
-            if (ok) {
-                loadContentPreferences()
-            } else {
-                mutableState.update { it.copy(contentPreferencesError = null, contentPreferencesSaveFailed = true) }
-            }
-        }
-    }
+    fun toggleBlockedTags(open: Boolean) = authController.toggleBlockedTags(open)
 
-    // ---------------------------------------------------------------------------
-    // Blocked tags (contract v20)
-    // ---------------------------------------------------------------------------
-
-    /** Opens/closes the blocked-tags editor; opening (re)loads the account list. */
-    fun toggleBlockedTags(open: Boolean) {
-        mutableState.update {
-            it.copy(
-                isBlockedTagsOpen = open,
-                blockedTagsError = if (open) null else it.blockedTagsError,
-            )
-        }
-        if (open) loadBlockedTags()
-    }
-
-    private fun loadBlockedTags() {
-        val src = source as? AnimeBlockedTagsSource ?: return
-        val sourceId = state.value.currentSourceId
-        mutableState.update {
-            it.copy(isBlockedTagsLoading = true, blockedTagsError = null, blockedTagsSaveFailed = false)
-        }
-        screenModelScope.launch(ioDispatcher) {
-            val result = runCatching { src.getBlockedTags() }
-            mutableState.update { current ->
-                if (current.currentSourceId != sourceId) {
-                    return@update current.copy(isBlockedTagsLoading = false)
-                }
-                current.copy(
-                    isBlockedTagsLoading = false,
-                    blockedTags = result.getOrNull()?.toImmutableList(),
-                    blockedTagsError = result.exceptionOrNull()?.localizedMessage,
-                    blockedTagsSaveFailed = false,
-                )
-            }
-        }
-    }
-
-    /** Persists the replaced blocked-tag set; reloads the sheet list on success. */
-    fun saveBlockedTags(tags: List<String>) {
-        val src = source as? AnimeBlockedTagsSource ?: return
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val ok = runCatching { src.setBlockedTags(tags) }.getOrDefault(false)
-            if (ok) {
-                loadBlockedTags()
-            } else {
-                mutableState.update { it.copy(blockedTagsError = null, blockedTagsSaveFailed = true) }
-            }
-        }
-    }
+    fun saveBlockedTags(tags: List<String>) = authController.saveBlockedTags(tags)
 
     /** Opens/closes the custom-feeds picker; opening also (re)loads the feed list. */
     fun toggleCustomFeeds(open: Boolean) {
@@ -4639,36 +4455,16 @@ class ReelsFeedScreenModel(
         }
     }
 
-    fun toggleAutoAdvance() {
-        val next = !state.value.isAutoAdvance
-        sourcePreferences.autoAdvanceReels().set(next)
-        mutableState.update { it.copy(isAutoAdvance = next) }
-    }
+    fun toggleAutoAdvance() = playbackSettingsController.toggleAutoAdvance()
 
-    fun toggleCropMode() {
-        val next = !state.value.isCropMode
-        sourcePreferences.reelsCropMode().set(next)
-        mutableState.update { it.copy(isCropMode = next) }
-    }
+    fun toggleCropMode() = playbackSettingsController.toggleCropMode()
 
-    fun togglePreload() {
-        val next = !state.value.preloadEnabled
-        sourcePreferences.reelsPreloadEnabled().set(next)
-        mutableState.update { it.copy(preloadEnabled = next) }
-    }
+    fun togglePreload() = playbackSettingsController.togglePreload()
 
-    fun togglePreloadWifiOnly() {
-        val next = !state.value.preloadWifiOnly
-        sourcePreferences.reelsPreloadWifiOnly().set(next)
-        mutableState.update { it.copy(preloadWifiOnly = next) }
-    }
+    fun togglePreloadWifiOnly() = playbackSettingsController.togglePreloadWifiOnly()
 
     /** B3.5: explicit picture-in-picture toggle (off by default). */
-    fun togglePip() {
-        val next = !state.value.isPipEnabled
-        sourcePreferences.reelsPipEnabled().set(next)
-        mutableState.update { it.copy(isPipEnabled = next) }
-    }
+    fun togglePip() = playbackSettingsController.togglePip()
 
     /**
      * Reels-only incognito (product decision): the global incognito switch, the NSFW auto
@@ -4694,146 +4490,15 @@ class ReelsFeedScreenModel(
 
     enum class SleepTimerOption { OFF, END_OF_VIDEO, M15, M30, M60 }
 
-    private var sleepTimerJob: Job? = null
+    fun setSleepTimer(option: SleepTimerOption) = playbackSettingsController.setSleepTimer(option)
 
-    /**
-     * Arms/disarms the feed sleep timer (YouTube pattern): a countdown that pauses the feed
-     * on expiry, or "after this video" consumed at the next completion boundary. Expiry is a
-     * STICKY pause (userPaused), so auto-advance and swipes do not undo it.
-     */
-    fun setSleepTimer(option: SleepTimerOption) {
-        sleepTimerJob?.cancel()
-        sleepTimerJob = null
-        when (option) {
-            SleepTimerOption.OFF -> mutableState.update {
-                it.copy(sleepTimerRemainingSec = 0, sleepAtVideoEnd = false)
-            }
-            SleepTimerOption.END_OF_VIDEO -> mutableState.update {
-                it.copy(sleepTimerRemainingSec = 0, sleepAtVideoEnd = true)
-            }
-            else -> {
-                val minutes = when (option) {
-                    SleepTimerOption.M15 -> 15
-                    SleepTimerOption.M30 -> 30
-                    else -> 60
-                }
-                mutableState.update {
-                    it.copy(sleepTimerRemainingSec = minutes * 60, sleepAtVideoEnd = false)
-                }
-                sleepTimerJob = screenModelScope.launch {
-                    while (true) {
-                        delay(1000)
-                        var expired = false
-                        mutableState.update { current ->
-                            val remaining = current.sleepTimerRemainingSec - 1
-                            if (remaining <= 0) {
-                                expired = true
-                                current.copy(sleepTimerRemainingSec = 0)
-                            } else {
-                                current.copy(sleepTimerRemainingSec = remaining)
-                            }
-                        }
-                        if (expired) {
-                            triggerSleep()
-                            break
-                        }
-                    }
-                }
-            }
-        }
-    }
+    fun consumeSleepAtVideoEnd(): Boolean = playbackSettingsController.consumeSleepAtVideoEnd()
 
-    /** Timer expiry / end-of-video consumption: sticky pause, playback stops for good. */
-    private fun triggerSleep() {
-        sleepTimerJob = null
-        mutableState.update {
-            it.copy(isPlaying = false, userPaused = true, sleepAtVideoEnd = false, sleepTimerRemainingSec = 0)
-        }
-    }
+    fun toggleLike(item: ShortVideoItem, itemIndex: Int = -1) =
+        engagementController.toggleLike(item, itemIndex)
 
-    /**
-     * Video-boundary hook (screen's onVideoCompleted): true when the "after this video" timer
-     * was armed — the feed pauses instead of advancing and the flag is consumed.
-     */
-    fun consumeSleepAtVideoEnd(): Boolean {
-        if (!state.value.sleepAtVideoEnd) return false
-        triggerSleep()
-        return true
-    }
-
-    fun toggleLike(item: ShortVideoItem, itemIndex: Int = -1) {
-        setLike(item, liked = !state.value.isLiked(item.id, itemIndex), itemIndex = itemIndex)
-    }
-
-    /**
-     * Idempotent like write. Gestures and accessibility actions can deliver the same intent
-     * twice (a double-tap replayed after the page was rebound, a repeated action) — a call
-     * whose target equals the current state must not flip the like back or duplicate the
-     * insert / remote feedback.
-     */
-    fun setLike(item: ShortVideoItem, liked: Boolean, itemIndex: Int = -1) {
-        val videoId = item.id
-        val current = state.value
-        val resolvedIndex = when {
-            itemIndex >= 0 -> itemIndex
-            current.isMixMode -> {
-                if (current.items.getOrNull(current.activeIndex)?.id == videoId) {
-                    current.activeIndex
-                } else {
-                    current.items.indexOfFirst { it.id == videoId }
-                }
-            }
-            else -> -1
-        }
-        val likeKey = current.likeKey(videoId, resolvedIndex)
-        if (liked == (likeKey in current.likedIds)) return
-        // The item comes from the caller (the page rendering it): re-finding it in state
-        // would silently skip the insert when a feed refresh displaced the video between
-        // the tap and the write. The write must survive screen disposal (NonCancellable).
-        // Offline and Mix playlists resolve sourceId by the item's SLOT (same videoId can exist
-        // for several sources — a videoId-keyed lookup would misattribute likes).
-        val sourceId = if (current.isOffline || current.isMixMode) {
-            current.itemSourceIds.getOrNull(resolvedIndex)
-                ?: offlineSourceIds.getOrNull(resolvedIndex)
-                ?: current.currentSourceId
-        } else {
-            current.currentSourceId
-        }
-        if (sourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
-        // Snapshot the feedback capability synchronously: reading the live `source` field
-        // inside the NonCancellable launch below could deliver the like signal to a DIFFERENT
-        // source's plugin if a source switch lands between the tap and the write.
-        val feedback = (
-            if (current.isMixMode || current.isOffline) {
-                sourceManager.get(sourceId) as? AnimeFeedSource
-            } else {
-                source
-            }
-            ) as? AnimeReelsFeedbackSource
-        decidedIds += likeKey
-        mutableState.update { state ->
-            val newLikes = if (liked) state.likedIds + likeKey else state.likedIds - likeKey
-            state.copy(likedIds = newLikes.toImmutableSet())
-        }
-        // Incognito blocks persisting a NEW like, but a removal must always reach the DB so a
-        // previously saved like doesn't "resurrect" after restart.
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            if (liked) {
-                if (!isIncognito(sourceId)) {
-                    reelsFavoriteRepository.insert(item.toReelsFavorite(sourceId))
-                }
-            } else {
-                reelsFavoriteRepository.delete(videoId, sourceId)
-            }
-            // Let a feedback-capable feed source adapt its recommendations to likes (opt-in,
-            // fire-and-forget; the local favorite stays authoritative for the offline playlist).
-            // Incognito suppresses the REMOTE signal too: privacy applies end-to-end, not only
-            // to the local DB.
-            if (feedback != null && !isIncognito(sourceId)) {
-                runCatching { feedback.onVideoLiked(videoId, liked) }
-            }
-        }
-    }
+    fun setLike(item: ShortVideoItem, liked: Boolean, itemIndex: Int = -1) =
+        engagementController.setLike(item, liked, itemIndex)
 
     /** Reports playback of a reel to a feedback-capable source (drives remote personalization). */
     fun reportVideoView(itemId: String, secondsWatched: Float, duration: Float) {
@@ -4937,71 +4602,10 @@ class ReelsFeedScreenModel(
      * stream). A rejected credential set surfaces in [State.loginError]; transport errors log
      * and surface their message — never a crash.
      */
-    fun login(email: String, password: String) {
-        val loginSource = source as? AnimeFeedLoginSource ?: return
-        if (state.value.isLoggingIn) return
-        mutableState.update { it.copy(isLoggingIn = true, loginError = null, loginRejected = false) }
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val ok = runCatching { loginSource.login(email, password) }.fold(
-                onSuccess = { it },
-                onFailure = { t ->
-                    logcat(LogPriority.ERROR, t) { "Login failed for source ${state.value.currentSourceId}" }
-                    mutableState.update {
-                        it.copy(isLoggingIn = false, loginError = t.localizedMessage.orEmpty())
-                    }
-                    return@launch
-                },
-            )
-            mutableState.update { current ->
-                current.copy(
-                    isLoggingIn = false,
-                    loggedInAccount = if (ok) loginSource.loggedInAccount() else null,
-                    loginError = null,
-                    loginRejected = !ok,
-                )
-            }
-            // A login can change the underlying account: the For You scope must be re-resolved
-            // instead of reusing the previous account's generation (or its pinned identity).
-            forYouScope = null
-            pinnedScope = null
-            watchedCommitted.clear()
-            skippedCommitted.clear()
-            if (ok) {
-                withContext(Dispatchers.Main.immediate) {
-                    stopRoundRobin(clearProjection = true)
-                    loadFeed(reset = true)
-                }
-            }
-        }
-    }
+    fun login(email: String, password: String) = authController.login(email, password)
 
     /** Clears the persisted login session of the current source and reloads the feed. */
-    fun logout() {
-        val loginSource = source as? AnimeFeedLoginSource ?: return
-        val webLoginSource = source as? AnimeFeedWebLoginSource
-        // The explicit logout request clears the old UI projection and stops the actor
-        // immediately; the account-scoped reload happens after the session is gone.
-        stopRoundRobin(clearProjection = true)
-        screenModelScope.launch(NonCancellable + ioDispatcher) {
-            runCatching { loginSource.logout() }
-            if (webLoginSource != null) {
-                // Contract v22: the source names the origins to purge; the generic same-site
-                // heuristic is the fallback for sources without the capability.
-                val purgeOrigins = (source as? AnimeFeedLoginInstrumentationSource)
-                    ?.logoutCookieOrigins()
-                    .orEmpty()
-                runCatching { clearWebLoginCookies(webLoginSource.webLoginUrl(), purgeOrigins) }
-            }
-            mutableState.update { it.copy(loggedInAccount = null, loginError = null, loginRejected = false) }
-            // Logout fences the account scope: the next load re-resolves it, so the previous
-            // account's history is never reused for a different session.
-            forYouScope = null
-            pinnedScope = null
-            watchedCommitted.clear()
-            skippedCommitted.clear()
-            loadFeed(reset = true)
-        }
-    }
+    fun logout() = authController.logout()
 
     /**
      * Contract v22: refresh the stored CDN links of favorites whose source supports
@@ -5029,58 +4633,7 @@ class ReelsFeedScreenModel(
         return favorite.copy(videoUrl = base, videoUrlHd = hd ?: favorite.videoUrlHd)
     }
 
-    private fun clearWebLoginCookies(startUrl: String, purgeOrigins: List<String>) {
-        val origins = mutableSetOf<String>()
-        if (purgeOrigins.isNotEmpty()) {
-            // Source-supplied purge set (contract v22): no host-side domain guessing.
-            purgeOrigins.forEach { if (it.isNotBlank()) origins += it }
-        } else {
-            val uri = runCatching { Uri.parse(startUrl) }.getOrNull() ?: return
-            val host = uri.host ?: return
-            val scheme = uri.scheme ?: "https"
-            origins += "$scheme://$host"
-            val labels = host.split('.')
-            val root = if (labels.size >= 2) labels.takeLast(2).joinToString(".") else host
-            if (labels.size >= 2) {
-                origins += "$scheme://$root"
-                origins += "$scheme://auth2.$root"
-                origins += "$scheme://api.$root"
-            }
-        }
-        val cm = CookieManager.getInstance()
-        val fallbackRoot = runCatching { Uri.parse(startUrl).host }.getOrNull().orEmpty()
-        origins.forEach { origin ->
-            val cookieStr = cm.getCookie(origin) ?: return@forEach
-            cookieStr.split(';').forEach { pair ->
-                val key = pair.substringBefore('=').trim()
-                if (key.isNotEmpty()) {
-                    cm.setCookie(origin, "$key=; Max-Age=0; Path=/")
-                    if (fallbackRoot.isNotEmpty()) {
-                        cm.setCookie(origin, "$key=; Domain=.$fallbackRoot; Max-Age=0; Path=/")
-                    }
-                    runCatching { Uri.parse(origin).host }.getOrNull()?.let { originHost ->
-                        cm.setCookie(origin, "$key=; Domain=$originHost; Max-Age=0; Path=/")
-                    }
-                }
-            }
-        }
-        cm.flush()
-    }
-
-    private fun loadPersistedFavorites(sourceId: Long) {
-        screenModelScope.launch(ioDispatcher) {
-            val favoriteIds = reelsFavoriteRepository.getIdsBySource(sourceId)
-            mutableState.update { current ->
-                // The read raced a source switch: its result belongs to the old source.
-                if (current.currentSourceId != sourceId) return@update current
-                // Merge instead of blind overwrite, but skip ids the user already decided
-                // this session: the (older) persisted snapshot must not resurrect an unlike
-                // or erase a like that happened while the DB read was in flight.
-                val persisted = favoriteIds.filterNot { it in decidedIds }
-                current.copy(likedIds = (persisted.toSet() + current.likedIds).toImmutableSet())
-            }
-        }
-    }
+    private fun loadPersistedFavorites(sourceId: Long) = engagementController.loadPersistedFavorites(sourceId)
 
     /** B3.2: loads the per-source hidden set; a raced source switch drops the answer. */
     private fun loadPersistedHidden(sourceId: Long) {
@@ -5112,6 +4665,7 @@ class ReelsFeedScreenModel(
             state.value.currentSourceId
         }
         if (targetSourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
+        feedEngine.tasteEngine.recordHideVideo(item)
         // The manager screen shows the captured title; the raw videoId is the fallback.
         applyHide(ReelsHiddenEntry.KIND_VIDEO, item.id, targetSourceId, item.title)
     }
@@ -5129,6 +4683,7 @@ class ReelsFeedScreenModel(
             state.value.currentSourceId
         }
         if (targetSourceId == SourcePreferences.REELS_ALL_SOURCES_ID) return
+        feedEngine.tasteEngine.recordHideAuthor(author)
         applyHide(ReelsHiddenEntry.KIND_AUTHOR, author, targetSourceId)
     }
 
@@ -5143,6 +4698,9 @@ class ReelsFeedScreenModel(
         if (token == null || lastHide != token) return
         val (kind, value, sourceId) = token
         lastHide = null
+        if (kind == ReelsHiddenEntry.KIND_AUTHOR) {
+            feedEngine.tasteEngine.unhideAuthor(value)
+        }
         if (!state.value.isMixMode && state.value.currentSourceId == sourceId) {
             val (videos, authors) = hiddenSnapshot
             hiddenSnapshot = when (kind) {
@@ -5349,6 +4907,7 @@ class ReelsFeedScreenModel(
             }
         }
         val local = offlineStore.localUrl(sourceId, item.id)
+        if (!isIncognito(sourceId)) feedEngine.tasteEngine.recordSave(item)
         mutableState.update { current ->
             current.copy(
                 offlineStored = (current.offlineStored + key).toImmutableSet(),
@@ -5430,71 +4989,79 @@ class ReelsFeedScreenModel(
         webUrl = webUrl,
     )
 
-    fun toggleMute() {
-        val next = !state.value.isMuted
-        // Any manual toggle ends the "undecided" part of the session: from now on the
-        // persisted preference applies on re-entry.
-        sessionSound.decided = true
-        sourcePreferences.reelsMuted().set(next)
-        mutableState.update { it.copy(isMuted = next, showUnmuteHint = false) }
-    }
-
-    fun dismissUnmuteHint() {
-        // Timeout dismissal is NOT a decision: a later re-entry shows the hint again while
-        // the session stays undecided.
-        mutableState.update { it.copy(showUnmuteHint = false) }
-    }
-
-    fun toggleDataSaver() {
-        val next = !state.value.dataSaverMetered
-        sourcePreferences.reelsDataSaverMetered().set(next)
-        mutableState.update { it.copy(dataSaverMetered = next) }
-    }
-
-    fun toggleQuality() {
-        val next = !state.value.isHdQuality
-        sourcePreferences.reelsHdQuality().set(next)
-        mutableState.update { it.copy(isHdQuality = next) }
-    }
-
-    fun togglePlayPause() {
-        val next = !state.value.isPlaying
-        // A tap is the ONLY playback decision: it sets or clears the sticky pause intent
-        // that survives swipes (auto-advance must not undo a deliberate pause).
-        mutableState.update { it.copy(isPlaying = next, userPaused = !next) }
-    }
-
-    // Device UX: the open ⋮ settings block holds playback; closing resumes it.
-    private var settingsHoldActive = false
-
     /**
-     * Temporary playback hold for the open ⋮ settings block (device UX): pause WITHOUT
-     * touching [State.userPaused] — the sticky pause stays the user's own decision — and on
-     * release resume only when that sticky pause is not set (a user who paused before opening
-     * the menu must stay paused after closing it).
+     * Silent CDN URL recovery (401/403/410) for both offline playlists and live feeds whose
+     * source supports [AnimeFeedVideoResolverSource] or [AnimeFeedVideoQualitySource].
      */
-    fun setSettingsHold(hold: Boolean) {
-        if (hold == settingsHoldActive) return
-        settingsHoldActive = hold
-        mutableState.update { current ->
-            if (hold) {
-                if (current.isPlaying) current.copy(isPlaying = false) else current
-            } else {
-                if (!current.userPaused) current.copy(isPlaying = true) else current
+    fun refreshExpiredUrlForIndex(itemIndex: Int): Boolean {
+        val current = state.value
+        val item = current.items.getOrNull(itemIndex) ?: return false
+        if (current.isOffline) {
+            if (item.videoUrl.startsWith("file://")) return false
+            refreshOfflineUrl(itemIndex)
+            return true
+        }
+        val slotSourceId = current.slotSourceId(itemIndex)
+        if (isQualityModeItem(item.id, slotSourceId)) {
+            prepareQualityForIndex(itemIndex)
+            return true
+        }
+        val resolver = sourceManager.get(slotSourceId) as? AnimeFeedVideoResolverSource ?: return false
+        screenModelScope.launch(ioDispatcher) {
+            val freshBase = runCatching { resolver.resolveVideoUrl(item.id, false) }.getOrNull()
+            val freshHd = runCatching { resolver.resolveVideoUrl(item.id, true) }.getOrNull()
+            val resolvedUrl =
+                freshBase?.takeIf { it.isNotBlank() } ?: freshHd?.takeIf { it.isNotBlank() } ?: return@launch
+            mutableState.update { state ->
+                val target = state.items.getOrNull(itemIndex)
+                if (target?.id != item.id) return@update state
+                state.copy(
+                    items = state.items.mapIndexed { idx, cur ->
+                        if (idx == itemIndex) {
+                            cur.copy(videoUrl = resolvedUrl, videoUrlHd = freshHd ?: cur.videoUrlHd)
+                        } else {
+                            cur
+                        }
+                    }.toImmutableList(),
+                )
             }
         }
+        return true
     }
 
     /**
-     * Mirrors the active player's real state (buffering, audio-focus, lifecycle pauses and
-     * seek can stop ExoPlayer without the model's play intent changing). Drives
-     * FLAG_KEEP_SCREEN_ON, PiP eligibility and chrome auto-hide via [State.isActuallyPlaying].
+     * Hardware codec fallback: when ExoPlayer reports a decoder error on an HEVC/AV1/4K rendition,
+     * blacklists the failing variant in [ReelsQualityController] and re-resolves a compatible
+     * lower/H.264 variant without surfacing an error toast.
      */
-    fun setPlaybackRunning(running: Boolean) {
-        mutableState.update { current ->
-            if (current.isActuallyPlaying == running) current else current.copy(isActuallyPlaying = running)
-        }
+    fun codecFallbackForIndex(itemIndex: Int): Boolean {
+        val current = state.value
+        val item = current.items.getOrNull(itemIndex) ?: return false
+        val slotSourceId = current.slotSourceId(itemIndex)
+        val controller = qualityControllerFor(item.id, slotSourceId) ?: return false
+        val owner = controller.state.value.owner ?: return false
+        if (!controller.markCurrentVariantIncompatible(owner, item.id)) return false
+        prepareQualityForIndex(itemIndex)
+        return true
     }
+
+    fun toggleMute() = playbackSettingsController.toggleMute()
+
+    /** Hardware Volume-Up hook: unmutes cleanly when muted, no-op if already audible. */
+    fun unmuteIfMuted() = playbackSettingsController.unmuteIfMuted()
+
+    fun dismissUnmuteHint() = playbackSettingsController.dismissUnmuteHint()
+
+    fun toggleDataSaver() = playbackSettingsController.toggleDataSaver()
+
+    fun toggleQuality() = playbackSettingsController.toggleQuality()
+
+    fun togglePlayPause() = playbackSettingsController.togglePlayPause()
+
+    fun setSettingsHold(hold: Boolean) = playbackSettingsController.setSettingsHold(hold)
+
+    fun setPlaybackRunning(running: Boolean, pageIndex: Int? = null) =
+        playbackSettingsController.setPlaybackRunning(running, pageIndex)
 
     /**
      * Contract v25: the source's typed verdict for a failed request, or null when it has no
@@ -5578,34 +5145,15 @@ class ReelsFeedScreenModel(
      * session otherwise); manual web login stays reachable. The budget resets on a source
      * switch and on a successful import.
      */
-    private fun maybeBumpBootstrap(shouldTrigger: Boolean) {
-        if (shouldTrigger && source is AnimeFeedWebLoginSource) {
-            mutableState.update { current ->
-                if (current.cfBootstrapExhausted) return@update current
-                if (current.cfBootstrapAttempt >= CF_BOOTSTRAP_MAX_ATTEMPTS) {
-                    return@update current.copy(cfBootstrapAttempt = 0, cfBootstrapExhausted = true)
-                }
-                current.copy(cfBootstrapAttempt = current.cfBootstrapAttempt + 1)
-            }
-        }
-    }
+    private fun maybeBumpBootstrap(shouldTrigger: Boolean) =
+        authController.maybeBumpBootstrap(shouldTrigger)
 
     fun onPageChanged(index: Int, cause: ReelsTransitionCause = ReelsTransitionCause.PROGRAMMATIC) {
         val previousIndex = state.value.activeIndex
         val previousItem = state.value.items.getOrNull(previousIndex)
-        // A skip exists only for a COMMITTED MANUAL forward move away from the card that was
-        // actually settled. Cancelled drags never reach this collector (settledPage does not
-        // change), auto-advance/restore/error-fallback arrive as PROGRAMMATIC and a backward
-        // move is USER_BACKWARD.
-        //
-        // EVERY card the user moved past is a skip, not only the origin: a fling settles one
-        // page further but means "I did not want any of these". Recording only the origin left
-        // the flown-over reels unconsumed, so they came back in the next generation.
         if (cause == ReelsTransitionCause.USER_FORWARD && index > previousIndex && previousItem != null) {
             val items = state.value.items
             val slotIds = state.value.itemSourceIds
-            // Manual-forward skips are consumption, so they must use the ACTIVE RR owner's
-            // immutable scope; the legacy path keeps its previous provenance.
             val roundRobinOwner = state.value.roundRobinOwner
             for (position in previousIndex until minOf(index, items.size)) {
                 items.getOrNull(position)?.let { item ->
@@ -5627,20 +5175,15 @@ class ReelsFeedScreenModel(
             } else {
                 current.qualityState
             }
+            val transition = playbackSettingsController.resolvePageTransitionState(current, index, cause)
             current.copy(
                 activeIndex = index,
                 qualityState = updatedQuality,
-                // Swiping resumes playback only when the user has not deliberately paused;
-                // the sticky pause keeps every subsequently swiped page paused until resumed.
-                isPlaying = !current.userPaused,
-                // P03: actual playback belongs to the settled page's player. The new page
-                // starts paused/preloaded, so claiming "running" here would keep the screen
-                // awake and hide the chrome while it is still buffering.
-                isActuallyPlaying = false,
+                isPlaying = transition.isPlaying,
+                userPaused = transition.userPaused,
+                isActuallyPlaying = transition.isActuallyPlaying,
             )
         }
-        // Every feed mode persists its own browsing position (B3.1); the offline and Mix
-        // playlists have no stable per-position cursor to restore.
         if (!state.value.isOffline && !state.value.isMixMode) {
             persistUnlessIncognito(state.value.currentSourceId) {
                 sourcePreferences.lastReelsPosition(state.value.currentSourceId, positionSuffix).set(index)
@@ -5648,6 +5191,12 @@ class ReelsFeedScreenModel(
         }
         loadNextPageIfNeeded(index)
         prepareQualityWindow(index)
+        feedEngine.pruneQualityWindows(
+            items = state.value.items,
+            activeIndex = index,
+            singleController = qualityController,
+            mixControllers = mixQualityControllers,
+        )
     }
 
     private fun qualityControllerFor(itemId: String, sourceId: Long? = null): ReelsQualityController? {
@@ -5982,6 +5531,7 @@ class ReelsFeedScreenModel(
      * RR/session state: re-entering the same context resumes the round.
      */
     override fun onDispose() {
+        playbackSettingsController.cancelSleepTimer()
         stopQualitySession()
         stopMixSession(stopCoordinator = true, fromDispose = true)
         stopRoundRobin(clearProjection = false)

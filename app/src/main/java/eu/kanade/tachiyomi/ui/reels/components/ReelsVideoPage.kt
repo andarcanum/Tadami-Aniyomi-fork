@@ -1,9 +1,12 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
 import android.app.Activity
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,6 +21,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +33,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -41,16 +47,17 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -79,6 +86,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AuroraFrostCancel
@@ -92,6 +100,7 @@ import eu.kanade.tachiyomi.ui.reels.ReelsForYou
 import eu.kanade.tachiyomi.ui.reels.ReelsQualityItemState
 import eu.kanade.tachiyomi.ui.reels.ReelsQualityPlayback
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
+import eu.kanade.tachiyomi.ui.reels.player.ReelsSeekRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -100,6 +109,8 @@ import tachiyomi.domain.reels.anime.model.ReelsQualityPreference
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import kotlin.math.roundToInt
+import kotlin.random.Random
 
 @Composable
 fun ReelsVideoPage(
@@ -121,6 +132,8 @@ fun ReelsVideoPage(
     onClearQualityOverride: (String) -> Unit = {},
     onQualityDialogOpenChanged: (Boolean) -> Unit = {},
     onRetryQuality: () -> Unit = {},
+    onRefreshExpiredUrl: (() -> Boolean)? = null,
+    onCodecFallback: (() -> Boolean)? = null,
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isLastPage: Boolean = false,
@@ -251,32 +264,56 @@ fun ReelsVideoPage(
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
-    // Progress lives in a State that only ReelsProgressBar reads; writing it 10Hz must NOT
-    // invalidate the whole page subtree (recomposition isolation).
-    val progressState = remember { mutableFloatStateOf(0f) }
-    var bufferFraction by remember { mutableFloatStateOf(0f) }
+    // Key per-page state on item.id so pager slot reuse never leaks stale progress, seek, or
+    // overlay state from a previous reel.
+    val progressState = remember(item.id) { mutableFloatStateOf(0f) }
+    var bufferFraction by remember(item.id) { mutableFloatStateOf(0f) }
     var durationSec by remember(item) { mutableFloatStateOf(item.durationSec ?: 0f) }
-    var seekFraction by remember { mutableStateOf<Float?>(null) }
+    var seekRequest by remember(item.id) { mutableStateOf<ReelsSeekRequest?>(null) }
+    var seekSequence by remember(item.id) { mutableLongStateOf(0L) }
     var initialSeekApplied by remember(item.id) { mutableStateOf(false) }
     var initialSeekPositionApplied by remember(item.id) { mutableStateOf(false) }
-    var showHeartPop by remember { mutableStateOf(false) }
-    var showHideDialog by remember { mutableStateOf(false) }
-    var isBuffering by remember { mutableStateOf(false) }
-    var drawerOpen by remember { mutableStateOf(false) }
-    var drawerTab by remember { mutableIntStateOf(0) }
+    val heartBursts = remember(item.id) { mutableStateListOf<HeartBurst>() }
+    var heartBurstSequence by remember(item.id) { mutableLongStateOf(0L) }
+    var showHideDialog by remember(item.id) { mutableStateOf(false) }
+    var isBuffering by remember(item.id) { mutableStateOf(false) }
+    var drawerOpen by remember(item.id) { mutableStateOf(false) }
+    var drawerTab by remember(item.id) { mutableIntStateOf(0) }
     var qualityDialogMode by remember(item.id) { mutableStateOf<ReelsQualityDialogMode?>(null) }
+    // Pinch-to-zoom state (1f..3f) with smooth spring snap-back on finger release.
+    val zoomScale = remember(item.id) { Animatable(1f) }
+    val zoomOffsetX = remember(item.id) { Animatable(0f) }
+    val zoomOffsetY = remember(item.id) { Animatable(0f) }
+    var isPinchZooming by remember(item.id) { mutableStateOf(false) }
     LaunchedEffect(isActive) {
         if (!isActive) {
             drawerOpen = false
             showHideDialog = false
+            isPinchZooming = false
+            zoomScale.snapTo(1f)
+            zoomOffsetX.snapTo(0f)
+            zoomOffsetY.snapTo(0f)
         }
     }
     val pageOverlayOpen = qualityDialogMode != null || drawerOpen || showHideDialog
+    val currentPageOverlayOpen by rememberUpdatedState(pageOverlayOpen)
+    val currentOnQualityDialogOpenChanged by rememberUpdatedState(onQualityDialogOpenChanged)
+    var reportedOverlayOpen by remember(item.id) { mutableStateOf(false) }
     LaunchedEffect(pageOverlayOpen) {
-        onQualityDialogOpenChanged(pageOverlayOpen)
+        if (pageOverlayOpen != reportedOverlayOpen) {
+            reportedOverlayOpen = pageOverlayOpen
+            currentOnQualityDialogOpenChanged(pageOverlayOpen)
+        }
     }
-    DisposableEffect(Unit) {
-        onDispose { onQualityDialogOpenChanged(false) }
+    DisposableEffect(item.id) {
+        onDispose {
+            // Only notify close when THIS page actually opened an overlay — a neighbor page
+            // leaving composition must never wipe out the active page's open sheet/dialog.
+            if (reportedOverlayOpen || currentPageOverlayOpen) {
+                reportedOverlayOpen = false
+                currentOnQualityDialogOpenChanged(false)
+            }
+        }
     }
     val seekNotice = rememberReelsSeekNotice(item.id, isActive, isInPictureInPicture)
     val currentSeekNotice by rememberUpdatedState(seekNotice)
@@ -290,12 +327,22 @@ fun ReelsVideoPage(
     // not be captured from the composition that launched it.
     val currentOnTogglePlayPause by rememberUpdatedState(onTogglePlayPause)
     val currentOnLike by rememberUpdatedState(onLike)
+    val currentOnFirstFramePresented by rememberUpdatedState(onFirstFramePresented)
+    val currentOnPlayingStateChanged by rememberUpdatedState(onPlayingStateChanged)
     val currentDurationSec by rememberUpdatedState(durationSec)
+    val currentItemId by rememberUpdatedState(item.id)
     // Real playback state of this page's player (audio-focus and lifecycle pauses stop the
     // player without changing the feed-level play intent); gates watched-time accrual.
     // Starts false: time must not accrue before the player confirms it is actually running
     // (a still reel reports its own eligibility).
     var actuallyPlaying by remember(item.id) { mutableStateOf(false) }
+    // Sync live playback state into the host whenever this page settles as active (fixes the
+    // preloaded-ready race where onPageChanged cleared isActuallyPlaying right after ready).
+    LaunchedEffect(isActive) {
+        if (isActive) {
+            currentOnPlayingStateChanged(actuallyPlaying)
+        }
+    }
     var localPlaybackSpeed by remember { mutableFloatStateOf(1f) }
     val effectivePlaybackSpeed = if (onPlaybackSpeedChange != null) playbackSpeed else localPlaybackSpeed
     val updatePlaybackSpeed: (Float) -> Unit = { newSpeed ->
@@ -307,12 +354,12 @@ fun ReelsVideoPage(
     }
     // Rate while a finger is held down at an edge. Kept apart from playbackSpeed on purpose:
     // playbackSpeed is the user's *chosen* rate (button, drawer) and must survive the finger lift.
-    var heldRate by remember { mutableStateOf<Float?>(null) }
-    // The lift at the end of a hold also reaches the tap detector; without this the reel would
-    // pause every time the user lets go of a speed hold.
-    var heldToIgnoreTap by remember { mutableStateOf(false) }
-    var retrySignal by remember { mutableIntStateOf(0) }
-    val heartScale = remember { Animatable(0f) }
+    var heldRate by remember(item.id) { mutableStateOf<Float?>(null) }
+    // Timestamp of the last speed-hold release: replaces the sticky boolean flag that stayed
+    // true forever when change.consume() cancelled detectTapGestures.
+    var lastHoldEndedAtMs by remember(item.id) { mutableLongStateOf(0L) }
+    var retrySignal by remember(item.id) { mutableIntStateOf(0) }
+    var urlRefreshSignal by remember(item.id) { mutableIntStateOf(0) }
     val hapticFeedback = LocalHapticFeedback.current
     // Real orientation of the media, reported by the player; null until known. Used for the
     // PiP aspect ratio and media diagnostics, not for the window orientation.
@@ -328,21 +375,22 @@ fun ReelsVideoPage(
     val speedLabel = stringResource(
         if (effectivePlaybackSpeed == 1f) MR.strings.reels_a11y_speed_2x else MR.strings.reels_a11y_speed_normal,
     )
+    fun requestSeek(fraction: Float, liveScrub: Boolean = false) {
+        val clamped = fraction.coerceIn(0f, 1f)
+        seekSequence++
+        seekRequest = ReelsSeekRequest(id = seekSequence, fraction = clamped, liveScrub = liveScrub)
+        progressState.floatValue = clamped
+    }
     fun seekBy(deltaSec: Float, showNotice: Boolean = false) {
         val activeDurationSec = currentDurationSec
         if (activeDurationSec <= 0f) return
         val currentSec = progressState.floatValue * activeDurationSec
         val target = ((currentSec + deltaSec) / activeDurationSec).coerceIn(0f, 1f)
-        seekFraction = target
-        progressState.floatValue = target
+        requestSeek(target, liveScrub = false)
         if (showNotice) {
             // The caption reports what the player really moved, so a tap near the ends
             // cannot promise +10 while the reel only had 3 seconds left.
             currentSeekNotice.show((target * activeDurationSec - currentSec).toInt())
-        }
-        coroutineScope.launch {
-            delay(50)
-            seekFraction = null
         }
     }
     fun toggleSpeed() {
@@ -425,7 +473,7 @@ fun ReelsVideoPage(
     LaunchedEffect(isActive, initialSeekFraction) {
         if (isActive && !initialSeekApplied && initialSeekFraction != null) {
             initialSeekApplied = true
-            seekFraction = initialSeekFraction
+            requestSeek(initialSeekFraction, liveScrub = false)
             onInitialSeekConsumed()
         }
     }
@@ -486,9 +534,11 @@ fun ReelsVideoPage(
     }
     // Lazy signing: a blank url resolves just-in-time; the player is only built once a real
     // url exists (a blank MediaItem would surface a playback error before signing finishes).
+    // Also re-runs when an expired signed CDN URL triggers urlRefreshSignal.
     var videoUrl by remember(rawUrl, item.id) { mutableStateOf(rawUrl) }
-    LaunchedEffect(rawUrl, item.id, retrySignal, mediaPlan) {
-        when (mediaPlan) {
+    LaunchedEffect(rawUrl, item.id, retrySignal, urlRefreshSignal, mediaPlan) {
+        val forceResolve = urlRefreshSignal > 0 && resolveUrl != null && !qualityModeEnabled
+        when (if (forceResolve) ReelMediaPlan.RESOLVE else mediaPlan) {
             ReelMediaPlan.READY -> videoUrl = rawUrl
             ReelMediaPlan.WAIT -> Unit
             ReelMediaPlan.RESOLVE -> {
@@ -583,7 +633,70 @@ fun ReelsVideoPage(
                     },
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(item.id) {
+                // Multi-touch Pinch-to-Zoom (1x..3x) with smooth spring snap-back on release.
+                // Activates strictly when >=2 fingers are down so single-finger vertical pager
+                // swipes, taps, and hold-to-rate gestures are completely unaffected.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var zooming = false
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressedCount = event.changes.count { it.pressed }
+                            if (pressedCount >= 2) {
+                                val zoomChange = event.calculateZoom()
+                                val panChange = event.calculatePan()
+                                if (!zooming && (zoomChange != 1f || pressedCount >= 2)) {
+                                    zooming = true
+                                    isPinchZooming = true
+                                }
+                                if (zooming) {
+                                    val nextScale = (zoomScale.value * zoomChange).coerceIn(1f, 3f)
+                                    val maxOffsetX = size.width * (nextScale - 1f) / 2f
+                                    val maxOffsetY = size.height * (nextScale - 1f) / 2f
+                                    val nextX = (zoomOffsetX.value + panChange.x).coerceIn(-maxOffsetX, maxOffsetX)
+                                    val nextY = (zoomOffsetY.value + panChange.y).coerceIn(-maxOffsetY, maxOffsetY)
+                                    coroutineScope.launch {
+                                        zoomScale.snapTo(nextScale)
+                                        zoomOffsetX.snapTo(nextX)
+                                        zoomOffsetY.snapTo(nextY)
+                                    }
+                                    event.changes.forEach { if (!it.isConsumed) it.consume() }
+                                }
+                            } else if (pressedCount == 0) {
+                                break
+                            }
+                        }
+                    } finally {
+                        if (zooming) {
+                            isPinchZooming = false
+                            lastHoldEndedAtMs = SystemClock.elapsedRealtime()
+                            coroutineScope.launch {
+                                launch {
+                                    zoomScale.animateTo(
+                                        1f,
+                                        spring(stiffness = Spring.StiffnessMediumLow),
+                                    )
+                                }
+                                launch {
+                                    zoomOffsetX.animateTo(
+                                        0f,
+                                        spring(stiffness = Spring.StiffnessMediumLow),
+                                    )
+                                }
+                                launch {
+                                    zoomOffsetY.animateTo(
+                                        0f,
+                                        spring(stiffness = Spring.StiffnessMediumLow),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .pointerInput(item.id) {
                 // Hold-to-rate. detectTapGestures' onLongPress is unusable here: it abandons the
                 // press the moment the finger drifts past touchSlop (~8dp) before the ~500ms
                 // timeout, which a one-handed thumb does constantly. Here the press only has to
@@ -600,6 +713,7 @@ fun ReelsVideoPage(
                     val gaveUpEarly = withTimeoutOrNull(timeout) {
                         while (true) {
                             val event = awaitPointerEvent()
+                            if (event.changes.count { it.pressed } >= 2) return@withTimeoutOrNull true
                             val change = event.changes.firstOrNull { it.id == down.id }
                                 ?: return@withTimeoutOrNull true
                             if (!change.pressed) return@withTimeoutOrNull true
@@ -609,29 +723,29 @@ fun ReelsVideoPage(
                         }
                     } == true
                     if (gaveUpEarly) return@awaitEachGesture
-                    heldRate = rate
-                    heldToIgnoreTap = true
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        // Consume so the pager cannot flip the reel under a holding finger.
-                        if (!change.isConsumed) change.consume()
-                        if (!change.pressed) break
+                    try {
+                        heldRate = rate
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            // Consume so the pager cannot flip the reel under a holding finger.
+                            if (!change.isConsumed) change.consume()
+                            if (!change.pressed) break
+                        }
+                    } finally {
+                        heldRate = null
+                        lastHoldEndedAtMs = SystemClock.elapsedRealtime()
                     }
-                    heldRate = null
                 }
             }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
-                        if (heldToIgnoreTap) {
-                            heldToIgnoreTap = false
-                        } else {
-                            // Device report: a reveal-only tap made pause unreachable — with the
-                            // 3s auto-hide it was buried behind a second, timed tap (landscape
-                            // had no pause path at all). Tap now reveals the chrome AND toggles
-                            // playback in both orientations; clean viewing stays on the eye
-                            // button (hides the chrome without pausing).
+                        // Suppress only a lift event arriving immediately after a hold/pinch;
+                        // never use a sticky boolean that stays true when consume() cancels tap.
+                        val sinceHold = SystemClock.elapsedRealtime() - lastHoldEndedAtMs
+                        if (heldRate == null && !isPinchZooming && sinceHold >= HOLD_TAP_SUPPRESS_MS) {
                             currentOnTogglePlayPause()
                         }
                     },
@@ -644,27 +758,27 @@ fun ReelsVideoPage(
                             else -> 0f
                         }
                         if (seekDeltaSec != 0f) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             seekBy(seekDeltaSec, showNotice = true)
                         } else {
                             // Set-like, not toggle: the second double-tap on an already liked
                             // reel must stay a like.
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
                             currentOnLike()
-                            coroutineScope.launch {
-                                showHeartPop = true
-                                heartScale.snapTo(0f)
-                                heartScale.animateTo(
-                                    targetValue = 1.3f,
-                                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                                )
-                                delay(200)
-                                showHeartPop = false
-                            }
+                            heartBurstSequence++
+                            val burst = HeartBurst(
+                                id = heartBurstSequence,
+                                position = offset,
+                                rotationDeg = Random.nextFloat() * 36f - 18f,
+                            )
+                            heartBursts.add(burst)
                         }
                     },
                 )
             },
     ) {
-        // 1. Video Player & Poster layer
+        val effectiveChromeVisible = chromeVisible && !isPinchZooming
+        // 1. Video Player & Poster layer (supports pinch-to-zoom via graphicsLayer)
         ReelsPlayerView(
             videoUrl = videoUrl,
             posterUrl = item.posterUrlVertical ?: item.posterUrl,
@@ -681,14 +795,14 @@ fun ReelsVideoPage(
             clipIdentity = clipIdentity,
             mediaIdentity = mediaIdentity,
             videoDescription = listOfNotNull(item.author, item.title).joinToString(" — ").ifBlank { null },
-            seekToFraction = seekFraction,
+            seekRequest = seekRequest,
             seekToPositionMs = if (isActive && !initialSeekPositionApplied) initialSeekPositionMs else null,
             onSeekPositionConsumed = {
                 initialSeekPositionApplied = true
                 onInitialSeekPositionConsumed()
             },
             onRenderedFirstFrame = {
-                if (isActive) onFirstFramePresented(item.id)
+                if (currentIsActive) currentOnFirstFramePresented(currentItemId)
             },
             onProgressUpdate = { progressState.floatValue = it },
             onBufferUpdate = { bufferFraction = it },
@@ -713,13 +827,43 @@ fun ReelsVideoPage(
             onBufferingChanged = { isBuffering = it },
             onPlaybackRunningChanged = { playing ->
                 actuallyPlaying = playing
-                if (currentIsActive) onPlayingStateChanged(playing)
+                if (currentIsActive) currentOnPlayingStateChanged(playing)
             },
+            onRefreshExpiredUrl = {
+                when {
+                    qualityModeEnabled -> {
+                        onRetryQuality()
+                        true
+                    }
+                    resolveUrl != null -> {
+                        urlRefreshSignal++
+                        true
+                    }
+                    else -> onRefreshExpiredUrl?.invoke() == true
+                }
+            },
+            onCodecFallback = {
+                when {
+                    !qualityModeEnabled && pinnedHd && item.videoUrl.isNotBlank() && item.videoUrl != videoUrl -> {
+                        pinnedHd = false
+                        true
+                    }
+                    else -> onCodecFallback?.invoke() == true
+                }
+            },
+            isInPictureInPicture = isInPictureInPicture,
             playbackSpeed = heldRate ?: effectivePlaybackSpeed,
             retrySignal = retrySignal,
             headers = headers,
             webUrl = item.webUrl,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoomScale.value
+                    scaleY = zoomScale.value
+                    translationX = zoomOffsetX.value
+                    translationY = zoomOffsetY.value
+                },
         )
 
         // Buffering spinner on the active page.
@@ -734,7 +878,7 @@ fun ReelsVideoPage(
         // chrome: in clean fullscreen / auto-hidden state the video must stay untouched
         // (the progress bar and fullscreen button carry their own backplates).
         AnimatedVisibility(
-            visible = chromeVisible && !isInPictureInPicture,
+            visible = effectiveChromeVisible && !isInPictureInPicture,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize(),
@@ -801,22 +945,17 @@ fun ReelsVideoPage(
             }
         }
 
-        // 4. Double tap Heart burst animation
-        if (showHeartPop && !isInPictureInPicture) {
-            Icon(
-                imageVector = Icons.Filled.Favorite,
-                contentDescription = null,
-                tint = AuroraTheme.colors.accent,
-                modifier = Modifier
-                    .size(100.dp)
-                    .align(Alignment.Center)
-                    // Read the anim value in the draw phase so the 60Hz burst does not
-                    // recompose the whole page (graphicsLayer avoids recomposition).
-                    .graphicsLayer {
-                        scaleX = heartScale.value
-                        scaleY = heartScale.value
-                    },
-            )
+        // 4. Double-tap Heart burst animation at exact tap point with random tilt & spring
+        if (!isInPictureInPicture && heartBursts.isNotEmpty()) {
+            heartBursts.forEach { burst ->
+                key(burst.id) {
+                    HeartBurstOverlay(
+                        burst = burst,
+                        tint = AuroraTheme.colors.accent,
+                        onFinished = { heartBursts.remove(burst) },
+                    )
+                }
+            }
         }
 
         // 5. Speed pill: one slot, two meanings kept visibly apart. While a finger holds an edge
@@ -953,7 +1092,7 @@ fun ReelsVideoPage(
                 if (isLandscape) {
                     // Landscape TopBar
                     AnimatedVisibility(
-                        visible = chromeVisible || isSearchBarOpen,
+                        visible = effectiveChromeVisible || isSearchBarOpen,
                         enter = fadeIn() + slideInVertically { -it },
                         exit = fadeOut() + slideOutVertically { -it },
                         modifier = Modifier.align(Alignment.TopCenter),
@@ -994,7 +1133,7 @@ fun ReelsVideoPage(
 
                     // Landscape Compact Bottom Meta (bottom-start, above the 2-row Unified Cinema Console)
                     AnimatedVisibility(
-                        visible = chromeVisible,
+                        visible = effectiveChromeVisible,
                         enter = fadeIn() + slideInVertically { it },
                         exit = fadeOut() + slideOutVertically { it },
                         modifier = Modifier.align(Alignment.BottomStart),
@@ -1026,7 +1165,7 @@ fun ReelsVideoPage(
 
                     // Landscape Bottom Unified Cinema Console (Seekbar + 36dp Unified Control Deck)
                     AnimatedVisibility(
-                        visible = chromeVisible,
+                        visible = effectiveChromeVisible,
                         enter = fadeIn() + slideInVertically { it },
                         exit = fadeOut() + slideOutVertically { it },
                         modifier = Modifier.align(Alignment.BottomCenter),
@@ -1078,14 +1217,8 @@ fun ReelsVideoPage(
                                 null
                             },
                             posterUrl = item.posterUrlVertical ?: item.posterUrl,
-                            onSeek = { frac ->
-                                seekFraction = frac
-                                progressState.floatValue = frac
-                                coroutineScope.launch {
-                                    delay(50)
-                                    seekFraction = null
-                                }
-                            },
+                            onSeek = { frac -> requestSeek(frac, liveScrub = false) },
+                            onScrubPreview = { frac -> requestSeek(frac, liveScrub = true) },
                             onScrubStart = onScrubStart,
                             modifier = Modifier.padding(bottom = 4.dp),
                         )
@@ -1163,7 +1296,7 @@ fun ReelsVideoPage(
                     val actionsBottomPadding =
                         metaBottomPadding + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
                     AnimatedVisibility(
-                        visible = chromeVisible,
+                        visible = effectiveChromeVisible,
                         enter = fadeIn() + slideInHorizontally { it },
                         exit = fadeOut() + slideOutHorizontally { it },
                         modifier = Modifier.align(Alignment.BottomEnd),
@@ -1214,7 +1347,7 @@ fun ReelsVideoPage(
 
                     // Portrait Bottom Meta info
                     AnimatedVisibility(
-                        visible = chromeVisible,
+                        visible = effectiveChromeVisible,
                         enter = fadeIn() + slideInVertically { it },
                         exit = fadeOut() + slideOutVertically { it },
                         modifier = Modifier.align(Alignment.BottomStart),
@@ -1242,7 +1375,7 @@ fun ReelsVideoPage(
 
                     // Portrait Interactive Scrubber / Seek Bar (Aurora style)
                     AnimatedVisibility(
-                        visible = chromeVisible,
+                        visible = effectiveChromeVisible,
                         enter = fadeIn() + slideInVertically { it },
                         exit = fadeOut() + slideOutVertically { it },
                         modifier = Modifier.align(Alignment.BottomCenter),
@@ -1252,15 +1385,9 @@ fun ReelsVideoPage(
                             durationSec = durationSec,
                             bufferFraction = bufferFraction,
                             posterUrl = item.posterUrlVertical ?: item.posterUrl,
-                            chromeVisible = chromeVisible,
-                            onSeek = { frac ->
-                                seekFraction = frac
-                                progressState.floatValue = frac
-                                coroutineScope.launch {
-                                    delay(50)
-                                    seekFraction = null
-                                }
-                            },
+                            chromeVisible = effectiveChromeVisible,
+                            onSeek = { frac -> requestSeek(frac, liveScrub = false) },
+                            onScrubPreview = { frac -> requestSeek(frac, liveScrub = true) },
                             onScrubStart = onScrubStart,
                             modifier = Modifier
                                 .padding(bottom = safeBottomInset + 4.dp),
@@ -1411,6 +1538,64 @@ fun ReelsVideoPage(
 
 internal const val REELS_HOLD_SLOW_RATE = 0.5f
 internal const val REELS_HOLD_FAST_RATE = 2f
+private const val HOLD_TAP_SUPPRESS_MS = 160L
+
+private data class HeartBurst(
+    val id: Long,
+    val position: Offset,
+    val rotationDeg: Float,
+)
+
+@Composable
+private fun HeartBurstOverlay(
+    burst: HeartBurst,
+    tint: Color,
+    onFinished: () -> Unit,
+) {
+    val scale = remember { Animatable(0.2f) }
+    val alpha = remember { Animatable(1f) }
+    val risePx = remember { Animatable(0f) }
+    val iconSizePx = with(LocalDensity.current) { 96.dp.roundToPx() }
+
+    LaunchedEffect(burst.id) {
+        launch {
+            scale.animateTo(
+                targetValue = 1.25f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium,
+                ),
+            )
+            scale.animateTo(1.05f, tween(120, easing = FastOutSlowInEasing))
+        }
+        launch {
+            delay(260)
+            launch { risePx.animateTo(-72f, tween(340, easing = FastOutSlowInEasing)) }
+            alpha.animateTo(0f, tween(340, easing = FastOutSlowInEasing))
+            onFinished()
+        }
+    }
+
+    Icon(
+        imageVector = Icons.Filled.Favorite,
+        contentDescription = null,
+        tint = tint,
+        modifier = Modifier
+            .offset {
+                IntOffset(
+                    x = (burst.position.x - iconSizePx / 2f).roundToInt(),
+                    y = (burst.position.y - iconSizePx / 2f + risePx.value).roundToInt(),
+                )
+            }
+            .size(96.dp)
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+                rotationZ = burst.rotationDeg
+                this.alpha = alpha.value
+            },
+    )
+}
 
 /** "2×" / "0.5×" — locale independent, so the pill never shows "2,0×" by accident. */
 internal fun reelsSpeedLabel(rate: Float): String {

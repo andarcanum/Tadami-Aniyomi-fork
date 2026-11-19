@@ -34,11 +34,16 @@ class ReelsQualityController(
     private var source: AnimeFeedVideoQualitySource? = null
     private val overrides = mutableMapOf<String, ReelsQualityPreference>()
 
+    // Variants that failed hardware decoding on this device during the session: excluded from
+    // compatibleIds on subsequent resolves so codec fallback drops to SD / H.264 cleanly.
+    private val incompatibleVariantIds = mutableMapOf<String, MutableSet<String>>()
+
     fun attach(source: AnimeFeedVideoQualitySource, owner: ReelsQualityOwner) {
         this.source = source
         val current = _state.value.owner
         if (current?.sourceId == owner.sourceId && current.accountId == owner.accountId) return
         overrides.clear()
+        incompatibleVariantIds.clear()
         val global = ReelsQualitySelector.parseGlobal(
             preferences.reelsVideoQuality(owner.sourceId).get(),
         )
@@ -53,6 +58,7 @@ class ReelsQualityController(
     fun detach() {
         source = null
         overrides.clear()
+        incompatibleVariantIds.clear()
         _state.value = ReelsQualityState(selectionRevision = _state.value.selectionRevision + 1)
     }
 
@@ -259,8 +265,10 @@ class ReelsQualityController(
             }
         }
 
+        val blockedIds = incompatibleVariantIds[item.id].orEmpty()
         val compatibleIds = options.asSequence()
             .filterNot { it.isSource }
+            .filterNot { it.id in blockedIds }
             .filter { variant -> runCatching { codecPredicate(variant) }.getOrDefault(false) }
             .map { it.id }
             .toSet()
@@ -413,6 +421,48 @@ class ReelsQualityController(
         )
     }
 
+    /**
+     * Marks the currently bound variant for [itemId] as incompatible on this device (e.g. after a
+     * hardware HEVC/AV1 decoder error) when an alternative variant exists in the item's catalog.
+     * Returns true if a fallback candidate is available and the caller should re-run [prepare].
+     */
+    fun markCurrentVariantIncompatible(expectedOwner: ReelsQualityOwner, itemId: String): Boolean {
+        val current = _state.value
+        if (current.owner != expectedOwner) return false
+        val item = current.items[itemId] ?: return false
+        val actualVariant = item.actual?.decision?.variant ?: return false
+        if (item.options.size <= 1) return false
+        val blocked = incompatibleVariantIds.getOrPut(itemId) { mutableSetOf() }
+        if (!blocked.add(actualVariant.id)) return false
+        val hasAlternative = item.options.any { it.id !in blocked }
+        if (!hasAlternative) return false
+        putItem(
+            item.copy(
+                actual = null,
+                failure = null,
+                revision = item.revision + 1L,
+            ),
+        )
+        return true
+    }
+
+    /**
+     * Evicts quality catalog/binding entries outside [keepItemIds] (e.g. a ±30 window around the
+     * active pager index) so hour-long sessions do not accumulate unbounded metadata in RAM.
+     */
+    fun pruneOutsideWindow(keepItemIds: Set<String>) {
+        if (_state.value.items.size <= MAX_UNPRUNED_ITEMS) return
+        _state.update { state ->
+            val filtered = state.items.filterKeys { it in keepItemIds }
+            if (filtered.size == state.items.size) {
+                state
+            } else {
+                state.copy(items = filtered)
+            }
+        }
+        incompatibleVariantIds.keys.retainAll(keepItemIds)
+    }
+
     fun onPlaybackFailure(expectedOwner: ReelsQualityOwner, itemId: String, revision: Long) {
         val current = _state.value
         if (current.owner != expectedOwner) return
@@ -526,6 +576,9 @@ class ReelsQualityController(
     }
 
     companion object {
+        internal const val QUALITY_WINDOW_RADIUS = 30
+        internal const val MAX_UNPRUNED_ITEMS = QUALITY_WINDOW_RADIUS * 2 + 4
+
         private val CACHED_CATALOG_STATUSES = setOf(
             ReelsQualityCatalogStatus.READY,
             ReelsQualityCatalogStatus.SOURCE_ONLY,

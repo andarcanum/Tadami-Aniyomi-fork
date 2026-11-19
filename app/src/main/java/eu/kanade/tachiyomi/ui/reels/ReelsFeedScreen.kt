@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material3.AlertDialog
@@ -83,6 +84,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -97,6 +99,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -104,6 +107,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -134,6 +138,7 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsContentPreferencesSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsCustomFeedsSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsEmptySearchState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
+import eu.kanade.tachiyomi.ui.reels.components.ReelsFeedSkeletonShimmer
 import eu.kanade.tachiyomi.ui.reels.components.ReelsLoginDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsNextPageLoader
 import eu.kanade.tachiyomi.ui.reels.components.ReelsQualityDialogMode
@@ -142,6 +147,7 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsTopBar
 import eu.kanade.tachiyomi.ui.reels.components.ReelsVideoPage
 import eu.kanade.tachiyomi.ui.reels.components.ReelsVideoQualityDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsWebLoginDialog
+import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerPool
 import eu.kanade.tachiyomi.ui.reels.player.clearReelsVideoCache
 import eu.kanade.tachiyomi.ui.reels.player.prewarmReelHead
 import kotlinx.collections.immutable.persistentListOf
@@ -183,24 +189,32 @@ internal fun resolveReelsDownloadTap(
     else -> ReelsDownloadTap.Open
 }
 
-private data class ReelsExportRequest(
-    val item: ShortVideoItem,
-    val sourceId: Long,
-    val headers: Map<String, String>,
-    val qualitySnapshot: ReelsQualityDownloadSnapshot? = null,
-) : Serializable {
-    val key: String get() = reelsDownloadKey(sourceId, item.id)
+/**
+ * Computes guaranteed-unique VerticalPager keys for [state.items].
+ *
+ * Preserves stable media identity (`item.id` / `owner.token:item.id` / `mix:sourceId:item.id`)
+ * for the first occurrence and suffixes `#dupN` on any unexpected duplicate so Compose's
+ * `VerticalPager` can never crash with `IllegalArgumentException: Key ... was already used`.
+ */
+internal fun buildUniqueReelsPageKeys(state: ReelsFeedScreenModel.State): List<String> {
+    val items = state.items
+    if (items.isEmpty()) return emptyList()
+    val counts = HashMap<String, Int>(items.size * 2)
+    val roundRobinOwner = state.roundRobinOwner
+    return List(items.size) { index ->
+        val item = items[index]
+        val offlineSourceId = state.offlineSourceIds.getOrNull(index)
+        val baseKey = when {
+            roundRobinOwner != null -> "${roundRobinOwner.token}:${item.id}"
+            state.isMixMode -> "mix:${state.slotSourceId(index)}:${item.id}"
+            state.isOffline && offlineSourceId != null -> "$offlineSourceId:${item.id}"
+            else -> item.id
+        }
+        val seen = counts[baseKey] ?: 0
+        counts[baseKey] = seen + 1
+        if (seen == 0) baseKey else "$baseKey#dup$seen"
+    }
 }
-
-private data class ReelsExportState(
-    val bytes: Long = 0L,
-    val total: Long? = null,
-    val inProgress: Boolean = true,
-    val uri: Uri? = null,
-    val operation: Any? = null,
-    val partial: Boolean = false,
-    val qualitySnapshot: ReelsQualityDownloadSnapshot? = null,
-)
 
 data class ReelsFeedScreen(
     val sourceId: Long,
@@ -247,6 +261,7 @@ data class ReelsFeedScreen(
         // the whole feed chain. Nested feeds overlap during Voyager transitions (the incoming
         // screen composes BEFORE the outgoing disposes), so the lock is a shared holder count.
         DisposableEffect(Unit) {
+            ReelsPlayerPool.retainScreen()
             if (activity != null) {
                 ReelsOrientationLock.acquire(activity)
             }
@@ -257,6 +272,7 @@ data class ReelsFeedScreen(
                         keepIntent = navigator.items.any { it is ReelsFeedScreen },
                     )
                 }
+                ReelsPlayerPool.releaseScreen()
             }
         }
         // The screen's content-based `key` (see above) already distinguishes the live feed from
@@ -375,28 +391,21 @@ data class ReelsFeedScreen(
         val downloadUnsupportedMessage = stringResource(MR.strings.reels_download_unsupported)
         val downloadPausedMessage = stringResource(MR.strings.reels_download_paused)
         val downloads = remember(context) { ReelsDownloads(context.applicationContext) }
-        val exportStates = remember { mutableStateMapOf<String, ReelsExportState>() }
-        val downloadJobs = remember { mutableStateMapOf<String, Job>() }
+        val exportStates by ReelsDownloadManager.states.collectAsStateWithLifecycle()
 
-        // Forgetting a partial without deleting it would leave an unpublished MediaStore row
-        // holding the user's storage.
-        fun clearDownload(key: String) {
-            val forgotten = exportStates.remove(key)
-            val uri = forgotten?.takeIf { it.partial }?.uri ?: return
-            coroutineScope.launch(Dispatchers.IO) { downloads.discard(uri) }
-        }
-
-        // Resume lives only as long as this screen: leaving it cancels running transfers (whose own
-        // finally removes the destination) and discards partials, so no pending row survives.
-        DisposableEffect(Unit) {
-            onDispose {
-                exportStates.values.filter { it.partial }.forEach { state ->
-                    state.uri?.let { uri -> runCatching { context.contentResolver.delete(uri, null, null) } }
+        LaunchedEffect(Unit) {
+            ReelsDownloadManager.events.collect { event ->
+                val message = when (event) {
+                    is ReelsDownloadEvent.Completed ->
+                        if (event.toCustomDocument) downloadFileSavedMessage else downloadSavedMessage
+                    is ReelsDownloadEvent.Paused -> downloadPausedMessage
+                    is ReelsDownloadEvent.Failed -> downloadFailedMessage
+                    is ReelsDownloadEvent.Unsupported -> downloadUnsupportedMessage
                 }
-                downloadJobs.values.forEach { it.cancel() }
-                downloadJobs.clear()
+                snackbarHostState.showSnackbar(message)
             }
         }
+
         var pendingDownload by rememberSaveable { mutableStateOf<ReelsExportRequest?>(null) }
 
         fun performDownload(
@@ -405,72 +414,13 @@ data class ReelsFeedScreen(
             resumeFrom: Long = 0L,
             resumeUri: Uri? = null,
         ) {
-            val operation = Any()
-            exportStates[request.key] = ReelsExportState(
-                operation = operation,
-                bytes = resumeFrom,
-                uri = resumeUri,
-                total = exportStates[request.key]?.total,
-                qualitySnapshot = request.qualitySnapshot,
+            ReelsDownloadManager.enqueue(
+                context = context,
+                request = request,
+                destination = destination,
+                resumeFrom = resumeFrom,
+                resumeUri = resumeUri,
             )
-            downloadJobs[request.key] = coroutineScope.launch {
-                val result = try {
-                    downloads.download(
-                        request.item,
-                        request.sourceId,
-                        request.headers,
-                        destination,
-                        resumeFrom,
-                        resumeUri,
-                        // Only the native Downloads entry is resumable: a caller-chosen document
-                        // has no append semantics we can trust across providers.
-                        keepPartial = destination == null,
-                    ) { bytes, total ->
-                        coroutineScope.launch(Dispatchers.Main.immediate) {
-                            val current = exportStates[request.key]
-                            if (current?.inProgress == true && current.operation === operation) {
-                                exportStates[request.key] = current.copy(bytes = bytes, total = total)
-                            }
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    clearDownload(request.key)
-                    throw e
-                } finally {
-                    if (downloadJobs[request.key]?.isActive != true) downloadJobs.remove(request.key)
-                }
-                val message = when (result) {
-                    is ReelsDownloadResult.Saved -> {
-                        exportStates[request.key] = ReelsExportState(
-                            bytes = result.bytes,
-                            inProgress = false,
-                            uri = result.uri,
-                            qualitySnapshot = request.qualitySnapshot,
-                        )
-                        if (destination == null) downloadSavedMessage else downloadFileSavedMessage
-                    }
-                    is ReelsDownloadResult.Partial -> {
-                        exportStates[request.key] = ReelsExportState(
-                            bytes = result.bytes,
-                            total = exportStates[request.key]?.total,
-                            inProgress = false,
-                            uri = result.uri,
-                            partial = true,
-                            qualitySnapshot = request.qualitySnapshot,
-                        )
-                        downloadPausedMessage
-                    }
-                    ReelsDownloadResult.Failed -> {
-                        clearDownload(request.key)
-                        downloadFailedMessage
-                    }
-                    ReelsDownloadResult.Unsupported -> {
-                        clearDownload(request.key)
-                        downloadUnsupportedMessage
-                    }
-                }
-                snackbarHostState.showSnackbar(message)
-            }
         }
 
         // Android 9 and older need a user-granted document, not a new broad storage permission.
@@ -488,7 +438,11 @@ data class ReelsFeedScreen(
             val request = pendingDownload
             pendingDownload = null
             if (request != null) {
-                if (uri == null) clearDownload(request.key) else performDownload(request, uri)
+                if (uri == null) {
+                    ReelsDownloadManager.clearAsync(context, request.key)
+                } else {
+                    performDownload(request, uri)
+                }
             }
         }
 
@@ -499,7 +453,7 @@ data class ReelsFeedScreen(
                 else -> state.currentSourceId
             }
             val key = reelsDownloadKey(sourceId, item.id)
-            val previous = exportStates[key]
+            val previous = ReelsDownloadManager.currentState(key)
             val resumable = previous?.takeIf { it.partial && it.uri != null }
             val resumeFrom = resumable?.bytes ?: 0L
             val resumeUri = resumable?.uri
@@ -510,16 +464,15 @@ data class ReelsFeedScreen(
                     resumable != null,
                 ) == ReelsDownloadTap.Cancel
             ) {
-                downloadJobs.remove(key)?.cancel()
-                clearDownload(key)
+                ReelsDownloadManager.cancel(context, key)
                 return
             }
             if (previous?.inProgress == true || pendingDownload != null ||
-                (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && exportStates.values.any { it.inProgress })
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && ReelsDownloadManager.hasActiveDownloads())
             ) {
                 return
             }
-            exportStates[key] = previous?.copy(inProgress = true, partial = false) ?: ReelsExportState()
+            ReelsDownloadManager.markStarting(key, previous)
             val headers = HashMap(screenModel.downloadHeaders(sourceId))
             val baseSnapshot = if (resumeUri != null) {
                 previous.qualitySnapshot
@@ -531,7 +484,7 @@ data class ReelsFeedScreen(
                 val qualitySnapshot = if (resumeFrom > 0L && baseSnapshot != null) {
                     val rehydrated = screenModel.rehydrateQualityDownload(baseSnapshot, resumeFrom)
                     if (rehydrated == null) {
-                        exportStates[key] = previous ?: ReelsExportState()
+                        ReelsDownloadManager.restoreState(key, previous ?: ReelsExportState())
                         snackbarHostState.showSnackbar(downloadFailedMessage)
                         return@launch
                     }
@@ -540,7 +493,7 @@ data class ReelsFeedScreen(
                     baseSnapshot
                 }
                 if (qualitySnapshot == null && screenModel.isQualityModeItem(item.id, sourceId)) {
-                    exportStates[key] = previous ?: ReelsExportState()
+                    ReelsDownloadManager.restoreState(key, previous ?: ReelsExportState())
                     snackbarHostState.showSnackbar(downloadFailedMessage)
                     return@launch
                 }
@@ -554,7 +507,7 @@ data class ReelsFeedScreen(
                         }
                     }
                     if (exists) {
-                        exportStates[key] = previous
+                        ReelsDownloadManager.restoreState(key, previous)
                         try {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW)
@@ -569,10 +522,9 @@ data class ReelsFeedScreen(
                         return@launch
                     }
                 }
-                exportStates[key] = ReelsExportState()
                 try {
                     if (!item.videoUrl.startsWith("file://") && descriptor?.offlineSupported == false) {
-                        clearDownload(key)
+                        ReelsDownloadManager.clearAsync(context, key)
                         snackbarHostState.showSnackbar(downloadUnsupportedMessage)
                         return@launch
                     }
@@ -581,21 +533,29 @@ data class ReelsFeedScreen(
                             .takeIf { it.isNotBlank() }
                         ?: screenModel.resolvePlaybackUrl(item, hd, sourceId)
                     if (url.isNullOrBlank()) {
-                        clearDownload(key)
+                        ReelsDownloadManager.clearAsync(context, key)
                         snackbarHostState.showSnackbar(downloadFailedMessage)
                         return@launch
                     }
                     val extension = Uri.parse(url).lastPathSegment?.substringAfterLast('.', "")?.lowercase()
-                    if (extension == "m3u8" || extension == "mpd") {
-                        clearDownload(key)
+                    if (extension == "mpd") {
+                        ReelsDownloadManager.clearAsync(context, key)
                         snackbarHostState.showSnackbar(downloadUnsupportedMessage)
                         return@launch
+                    }
+                    val cacheKeys = buildList<String> {
+                        qualitySnapshot?.let { snap ->
+                            add(ReelsQualityController.cacheKey(snap.owner, snap.item.id, snap.cacheIdentity))
+                        }
+                        add("$sourceId:${item.id}:${if (hd) "hd" else "sd"}")
+                        add(url)
                     }
                     val request = ReelsExportRequest(
                         item = qualitySnapshot?.item ?: item.copy(videoUrl = url, videoUrlHd = null),
                         sourceId = sourceId,
                         headers = headers,
                         qualitySnapshot = qualitySnapshot,
+                        cacheKeys = cacheKeys,
                     )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         performDownload(request, resumeFrom = resumeFrom, resumeUri = resumeUri)
@@ -604,11 +564,11 @@ data class ReelsFeedScreen(
                         legacyDownloadPicker.launch(downloads.fileName(request.item, sourceId))
                     }
                 } catch (e: CancellationException) {
-                    clearDownload(key)
+                    ReelsDownloadManager.clearAsync(context, key)
                     throw e
                 } catch (_: Exception) {
                     pendingDownload = null
-                    clearDownload(key)
+                    ReelsDownloadManager.clearAsync(context, key)
                     snackbarHostState.showSnackbar(downloadFailedMessage)
                 }
             }
@@ -691,7 +651,10 @@ data class ReelsFeedScreen(
         var chromeVisible by rememberSaveable { mutableStateOf(true) }
         // Device UX: the ⋮ settings block holds playback and pins the chrome while open.
         var moreMenuOpen by rememberSaveable { mutableStateOf(false) }
-        var qualityDialogOpen by remember { mutableStateOf(false) }
+        // Track open page overlays by pageKey so a neighbor card leaving composition can never
+        // overwrite the active card's open quality dialog or drawer.
+        val openOverlayPages = remember { mutableStateSetOf<String>() }
+        val qualityDialogOpen = openOverlayPages.isNotEmpty()
         var portraitQualityDialogMode by remember { mutableStateOf<ReelsQualityDialogMode?>(null) }
         var portraitQualityItemId by remember { mutableStateOf<String?>(null) }
         var portraitQualitySourceId by remember { mutableStateOf<Long?>(null) }
@@ -804,12 +767,19 @@ data class ReelsFeedScreen(
                 }
             }
             ReelsPip.handler = handler
+            val volumeUpHandler: () -> Unit = {
+                screenModel.unmuteIfMuted()
+            }
+            ReelsVolumeKeyHandler.onVolumeUp = volumeUpHandler
             onDispose {
                 // Owner check (audit H1): the incoming feed screen registers its own handler
                 // BEFORE this disposal runs — nulling unconditionally would kill PiP for the
                 // visible feed after any feed→feed navigation.
                 if (ReelsPip.handler === handler) {
                     ReelsPip.handler = null
+                }
+                if (ReelsVolumeKeyHandler.onVolumeUp === volumeUpHandler) {
+                    ReelsVolumeKeyHandler.onVolumeUp = null
                 }
             }
         }
@@ -910,7 +880,7 @@ data class ReelsFeedScreen(
                     onResetSearch = screenModel::clearSearch,
                 )
                 state.isLoading && state.items.isEmpty() -> {
-                    LoadingScreen(modifier = Modifier.fillMaxSize())
+                    ReelsFeedSkeletonShimmer(modifier = Modifier.fillMaxSize())
                 }
                 (state.error != null || state.errorRes != null) && state.items.isEmpty() && !state.isLoading -> {
                     ReelsErrorState(
@@ -1001,11 +971,19 @@ data class ReelsFeedScreen(
                     )
 
                     // PiP shape follows the settled reel, including one whose player already
-                    // reported its frame while the page was only preloaded.
+                    // reported its frame while the page was only preloaded. Also prunes stale
+                    // dimensions outside a ±30 window in long sessions.
                     LaunchedEffect(pagerState.settledPage, state.items) {
                         val settledId = state.items.getOrNull(state.activeIndex)?.id
                         activeVideoLandscape = settledId?.let(videoOrientations::get)
                         activeVideoSize = settledId?.let(videoSizes::get)
+                        if (videoOrientations.size > 64 || videoSizes.size > 64) {
+                            val from = (state.activeIndex - 30).coerceAtLeast(0)
+                            val to = (state.activeIndex + 30).coerceAtMost(state.items.lastIndex.coerceAtLeast(0))
+                            val keepIds = (from..to).mapNotNullTo(HashSet()) { state.items.getOrNull(it)?.id }
+                            videoOrientations.keys.retainAll(keepIds)
+                            videoSizes.keys.retainAll(keepIds)
+                        }
                     }
 
                     LaunchedEffect(state.dataSaverMetered, networkStatus.metered) {
@@ -1150,30 +1128,34 @@ data class ReelsFeedScreen(
                     val swipeThresholdPx = with(LocalDensity.current) { 110.dp.toPx() }
                     var horizontalDragPx by remember { mutableFloatStateOf(0f) }
 
+                    // Voyager stack guarantee: when a new screen (Following, Creator, Album,
+                    // Favorites) is pushed on top of this feed, immediately release this screen's
+                    // active/preload players back to the pool without waiting for Activity ON_PAUSE.
+                    val isTopScreen = navigator.lastItem.key == this@ReelsFeedScreen.key
+
+                    // Duplicate-proof page keys: prevents IllegalArgumentException in VerticalPager
+                    // if a plugin or multi-source mix serves a duplicate item.id.
+                    val pageKeys = remember(
+                        state.items,
+                        state.roundRobinOwner,
+                        state.isMixMode,
+                        state.isOffline,
+                        state.offlineSourceIds,
+                    ) {
+                        buildUniqueReelsPageKeys(state)
+                    }
+
+                    // Pull-to-refresh on page 0: pulling downward at the top of the feed refreshes
+                    // without opening the top menu.
+                    val pullRefreshThresholdPx = with(LocalDensity.current) { 84.dp.toPx() }
+                    var pullRefreshOffsetPx by remember { mutableFloatStateOf(0f) }
+                    val haptic = LocalHapticFeedback.current
+
                     // Vertical Pager for reels video cards
                     VerticalPager(
                         state = pagerState,
                         beyondViewportPageCount = 1,
-                        // Pages belong to the media identity, not the slot: after a feed reset
-                        // an index can point at an entirely different reel, and per-page state
-                        // (gesture captures, progress, speed) must not leak across. The offline
-                        // and Mix playlists merge items from several sources, so their keys include
-                        // the source — the same videoId may legitimately repeat across plugins.
-                        key = { index ->
-                            val item = state.items.getOrNull(index)
-                            val offlineSourceId = state.offlineSourceIds.getOrNull(index)
-                            val roundRobinOwner = state.roundRobinOwner
-                            when {
-                                item == null -> index
-                                // Round-robin pages belong to the published owner generation:
-                                // a recontext/account change must rebuild page state even when
-                                // the same item id is served again.
-                                roundRobinOwner != null -> "${roundRobinOwner.token}:${item.id}"
-                                state.isMixMode -> "mix:${state.slotSourceId(index)}:${item.id}"
-                                state.isOffline && offlineSourceId != null -> "$offlineSourceId:${item.id}"
-                                else -> item.id
-                            }
-                        },
+                        key = { index -> pageKeys.getOrNull(index) ?: index },
                         // The pager lives outside the software rotation, so manual swipes in
                         // landscape fullscreen would land sideways; auto-advance still moves
                         // the feed programmatically (portrait reels exit fullscreen, see
@@ -1181,23 +1163,47 @@ data class ReelsFeedScreen(
                         userScrollEnabled = !touchLocked && !qualityDialogVisible,
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(pagerState) {
-                                // Observe-only: reports a completed vertical drag. The page is
-                                // NOT required to have moved yet: a fling releases the finger
-                                // while the pager is still on the origin page, and that release
-                                // is exactly the "the user decided" signal the skip path needs.
-                                // A drag that snaps back never changes settledPage, so it still
-                                // records nothing (FY04: no skip).
+                            .pointerInput(pagerState, state.isOffline, touchLocked, qualityDialogVisible) {
+                                // Observe-only vertical gesture + Pull-to-Refresh on page 0.
                                 awaitEachGesture {
                                     val down = awaitFirstDown(
                                         requireUnconsumed = false,
                                         pass = PointerEventPass.Initial,
                                     )
                                     var dragged = false
+                                    var totalDy = 0f
+                                    var totalDx = 0f
+                                    var pullArmed = false
+                                    val canPullRefresh = !state.isOffline &&
+                                        !touchLocked &&
+                                        !qualityDialogVisible &&
+                                        pagerState.currentPage == 0 &&
+                                        pagerState.currentPageOffsetFraction <= 0.01f
                                     drag(down.id) { change ->
-                                        if (abs(change.positionChange().y) > 0f) dragged = true
+                                        val delta = change.positionChange()
+                                        if (abs(delta.y) > 0f) dragged = true
+                                        totalDy += delta.y
+                                        totalDx += delta.x
+                                        if (canPullRefresh && totalDy > 0f && totalDy > abs(totalDx) * 1.25f) {
+                                            val damped = (totalDy * 0.55f).coerceIn(0f, pullRefreshThresholdPx * 1.45f)
+                                            pullRefreshOffsetPx = damped
+                                            if (!pullArmed && damped >= pullRefreshThresholdPx) {
+                                                pullArmed = true
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            } else if (pullArmed && damped < pullRefreshThresholdPx) {
+                                                pullArmed = false
+                                            }
+                                        } else if (pullRefreshOffsetPx > 0f && totalDy <= 0f) {
+                                            pullRefreshOffsetPx = 0f
+                                            pullArmed = false
+                                        }
                                     }
                                     if (dragged) lastUserNavAtMs.set(SystemClock.elapsedRealtime())
+                                    if (pullArmed) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        screenModel.refreshFeed()
+                                    }
+                                    pullRefreshOffsetPx = 0f
                                 }
                             }
                             .pointerInput(feedSwipeEnabled, swipeThresholdPx) {
@@ -1248,15 +1254,15 @@ data class ReelsFeedScreen(
                                 screenModel.mediaDescriptor(item, slotSourceId)
                             }
                             val export = exportStates[reelsDownloadKey(slotSourceId, item.id)]
+                            val pageKey = pageKeys.getOrNull(page) ?: "$page:${item.id}"
                             ReelsVideoPage(
                                 item = item,
-                                // Activate only the settled page: during fast flings intermediate
-                                // pages must not spin up a player and start downloading.
-                                isActive = (page == pagerState.settledPage),
-                                // Preload only the forward neighbor: buffering both neighbors
-                                // kept up to three decoders alive and competed for bandwidth.
-                                // A back-swipe replays quickly from the disk cache instead.
-                                isPreload = preloadAllowed && page == pagerState.settledPage + 1,
+                                // Activate only the settled page of the TOP Voyager screen: during
+                                // fast flings or when another screen is pushed above, players must
+                                // not keep running.
+                                isActive = isTopScreen && (page == pagerState.settledPage),
+                                // Preload only the forward neighbor on the top screen.
+                                isPreload = isTopScreen && preloadAllowed && page == pagerState.settledPage + 1,
                                 isPlaying = state.isPlaying,
                                 isMuted = state.isMuted,
                                 isLiked = state.isLiked(item.id, page),
@@ -1272,8 +1278,12 @@ data class ReelsFeedScreen(
                                 onClearQualityOverride = { id ->
                                     screenModel.clearQualityOverrideForSource(id, slotSourceId)
                                 },
-                                onQualityDialogOpenChanged = { qualityDialogOpen = it },
+                                onQualityDialogOpenChanged = { open ->
+                                    if (open) openOverlayPages.add(pageKey) else openOverlayPages.remove(pageKey)
+                                },
                                 onRetryQuality = { screenModel.prepareQualityForIndex(page) },
+                                onRefreshExpiredUrl = { screenModel.refreshExpiredUrlForIndex(page) },
+                                onCodecFallback = { screenModel.codecFallbackForIndex(page) },
                                 playbackSpeed = playbackSpeed,
                                 onPlaybackSpeedChange = { playbackSpeed = it },
                                 isAutoAdvance = state.isAutoAdvance,
@@ -1487,7 +1497,9 @@ data class ReelsFeedScreen(
                                 onVisitEnded = pageCallbacks::onVisitEnded,
                                 onVisitSuspendedForConfiguration = screenModel::onVisitSuspendedForConfiguration,
                                 isForeground = isForeground,
-                                onPlayingStateChanged = screenModel::setPlaybackRunning,
+                                onPlayingStateChanged = { playing ->
+                                    screenModel.setPlaybackRunning(playing, pageIndex = page)
+                                },
                                 initialSeekFraction = if (item.id ==
                                     state.resumeVideoId
                                 ) {
@@ -1612,6 +1624,44 @@ data class ReelsFeedScreen(
                                 },
                                 onToggleChrome = { chromeVisible = !chromeVisible },
                                 headers = state.slotHeaders(page),
+                            )
+                        }
+                    }
+
+                    // Pull-to-refresh Aurora indicator pill on page 0
+                    val pullProgress = (pullRefreshOffsetPx / pullRefreshThresholdPx).coerceIn(0f, 1.2f)
+                    if (pullProgress > 0.05f && !inPictureInPicture) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = (56.dp + (pullProgress * 36f).dp))
+                                .graphicsLayer {
+                                    scaleX = pullProgress.coerceIn(0.6f, 1.08f)
+                                    scaleY = pullProgress.coerceIn(0.6f, 1.08f)
+                                    alpha = pullProgress.coerceIn(0f, 1f)
+                                    rotationZ = pullProgress * 220f
+                                }
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF141822).copy(alpha = 0.88f))
+                                .border(
+                                    1.dp,
+                                    if (pullProgress >=
+                                        1f
+                                    ) {
+                                        AuroraTheme.colors.accent
+                                    } else {
+                                        Color.White.copy(alpha = 0.25f)
+                                    },
+                                    CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = null,
+                                tint = if (pullProgress >= 1f) AuroraTheme.colors.accent else Color.White,
+                                modifier = Modifier.size(20.dp),
                             )
                         }
                     }

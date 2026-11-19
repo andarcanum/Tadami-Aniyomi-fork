@@ -127,6 +127,7 @@ import eu.kanade.tachiyomi.ui.player.PlayerActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reels.ReelsFullscreen
 import eu.kanade.tachiyomi.ui.reels.ReelsPip
+import eu.kanade.tachiyomi.ui.reels.ReelsVolumeKeyHandler
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
@@ -662,6 +663,13 @@ class MainActivity : BaseActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         ReelsPip.handler?.invoke()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) {
+            ReelsVolumeKeyHandler.onVolumeUp?.invoke()
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onPictureInPictureModeChanged(

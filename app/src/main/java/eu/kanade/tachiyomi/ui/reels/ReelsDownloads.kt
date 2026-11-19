@@ -10,6 +10,7 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.ui.reels.player.openCachedReelStreamIfComplete
 import eu.kanade.tachiyomi.ui.reels.player.reelsRequestHeaders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -59,7 +60,7 @@ internal fun reelsDownloadClient(base: OkHttpClient): OkHttpClient =
         .build()
 
 internal class ReelsDownloads(
-    context: Context,
+    private val context: Context,
     private val client: OkHttpClient = reelsDownloadClient(Injekt.get<NetworkHelper>().client),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val retryBaseDelayMs: Long = 1_000L,
@@ -74,6 +75,7 @@ internal class ReelsDownloads(
         resumeFrom: Long = 0L,
         resumeUri: Uri? = null,
         keepPartial: Boolean = false,
+        cacheKeys: List<String> = emptyList(),
         onProgress: (bytes: Long, total: Long?) -> Unit = { _, _ -> },
     ): ReelsDownloadResult {
         var target = destination ?: resumeUri
@@ -88,7 +90,8 @@ internal class ReelsDownloads(
                     if (destination == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                         return@withContext ReelsDownloadResult.Failed
                     }
-                    if (urlExtension(item.videoUrl) in ADAPTIVE_EXTENSIONS) {
+                    val urlExt = urlExtension(item.videoUrl)
+                    if (urlExt in UNSUPPORTED_ADAPTIVE_EXTENSIONS) {
                         return@withContext ReelsDownloadResult.Unsupported
                     }
 
@@ -109,6 +112,37 @@ internal class ReelsDownloads(
                         return ReelsDownloadResult.Saved(uri, bytes)
                     }
 
+                    suspend fun downloadHls(manifestUrl: String): ReelsDownloadResult {
+                        val reqHeaders = reelsRequestHeaders(headers, item.webUrl)
+                        val playlist = ReelsHlsDownloader.resolveMediaPlaylist(client, manifestUrl, reqHeaders)
+                            ?: return ReelsDownloadResult.Unsupported
+                        coroutineContext.ensureActive()
+                        val uri = destination ?: resumeUri ?: resolver.insert(
+                            MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+                            ContentValues().apply {
+                                put(
+                                    MediaStore.MediaColumns.DISPLAY_NAME,
+                                    fileName(item, sourceId, playlist.fileExtension),
+                                )
+                                put(MediaStore.MediaColumns.MIME_TYPE, playlist.mimeType)
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                                put(MediaStore.MediaColumns.IS_PENDING, 1)
+                            },
+                        ) ?: return ReelsDownloadResult.Failed
+                        target = uri
+                        val bytes = resolver.openOutputStream(uri, "wt")?.use { output ->
+                            ReelsHlsDownloader.stitchSegments(
+                                client = client,
+                                playlist = playlist,
+                                headers = reqHeaders,
+                                output = output,
+                                onProgress = onProgress,
+                            )
+                        } ?: return ReelsDownloadResult.Failed
+                        if (bytes <= 0L) return ReelsDownloadResult.Failed
+                        return ReelsDownloadResult.Saved(uri, bytes)
+                    }
+
                     fun transfer(
                         input: InputStream,
                         mediaUrl: String,
@@ -116,7 +150,9 @@ internal class ReelsDownloads(
                         total: Long?,
                     ): ReelsDownloadResult {
                         return input.buffered().use { buffered ->
-                            if (urlExtension(mediaUrl) in ADAPTIVE_EXTENSIONS || contentType in MANIFEST_TYPES) {
+                            if (urlExtension(mediaUrl) in UNSUPPORTED_ADAPTIVE_EXTENSIONS ||
+                                contentType in DASH_MANIFEST_TYPES
+                            ) {
                                 return ReelsDownloadResult.Unsupported
                             }
 
@@ -187,87 +223,100 @@ internal class ReelsDownloads(
                         }
                     }
 
-                    val result = if (Uri.parse(item.videoUrl).scheme == "file") {
+                    // Fast path 1: HLS (.m3u8) segment stitching
+                    val result = if (urlExt == "m3u8") {
+                        downloadHls(item.videoUrl)
+                    } else if (Uri.parse(item.videoUrl).scheme == "file") {
                         val source = File(URI(item.videoUrl))
                         if (!source.isFile) return@withContext ReelsDownloadResult.Failed
                         transfer(source.inputStream(), item.videoUrl, null, source.length())
                     } else {
-                        val request = Request.Builder()
-                            .url(item.videoUrl)
-                            .apply {
-                                reelsRequestHeaders(headers, item.webUrl).forEach { (name, value) ->
-                                    header(name, value)
-                                }
+                        // Fast path 2: 100% cache hit in process-wide SimpleCache -> instant local export
+                        val cached = if (!resuming) {
+                            val candidateKeys = buildList {
+                                addAll(cacheKeys)
+                                add(item.videoUrl)
                             }
-                            .apply { if (resuming) header("Range", "bytes=$resumeFrom-") }
-                            .build()
-                        var outcome: ReelsDownloadResult? = null
-                        var attempt = 0
-                        // The edge throttles a full GET while the feed keeps its own streams on the
-                        // same token. Retrying happens before any destination exists, so a throttle
-                        // never leaves a partial file behind.
-                        while (outcome == null && attempt < THROTTLE_ATTEMPTS) {
-                            if (attempt > 0) delay(retryBackoffMs(attempt - 1))
-                            attempt++
-                            outcome = suspendCancellableCoroutine<ReelsDownloadResult?> { continuation ->
-                                val call = client.newCall(request)
-                                // The handler fires as cancellation starts, including while execute/read is blocked.
-                                // A Job completion handler would run too late to abort the socket wait.
-                                continuation.invokeOnCancellation { call.cancel() }
-                                try {
-                                    coroutineContext.ensureActive()
-                                    val downloaded = call.execute().use { response ->
-                                        val contentRange = response.header("Content-Range")
-                                        when {
-                                            response.code in THROTTLE_CODES -> null
-                                            // An offset the edge won't serve means the partial is
-                                            // stale: discard it so the next tap starts clean.
-                                            resuming && response.code == 416 -> ReelsDownloadResult.Failed
-                                            resuming && response.code == 206 &&
-                                                contentRange.rangeStartOrNull() == resumeFrom -> {
-                                                val body = response.body
-                                                val appended = writeInto(
-                                                    requireNotNull(resumeUri),
-                                                    "wa",
-                                                    body.byteStream(),
-                                                    body.contentLength().takeIf { it >= 0L },
-                                                    offset = resumeFrom,
-                                                )
-                                                if (appended is ReelsDownloadResult.Saved) {
-                                                    ReelsDownloadResult.Saved(appended.uri, resumeFrom + appended.bytes)
-                                                } else {
-                                                    appended
+                            openCachedReelStreamIfComplete(context, candidateKeys)
+                        } else {
+                            null
+                        }
+                        if (cached != null) {
+                            cached.inputStream.use { stream ->
+                                transfer(stream, item.videoUrl, null, cached.contentLength)
+                            }
+                        } else {
+                            val request = Request.Builder()
+                                .url(item.videoUrl)
+                                .apply {
+                                    reelsRequestHeaders(headers, item.webUrl).forEach { (name, value) ->
+                                        header(name, value)
+                                    }
+                                }
+                                .apply { if (resuming) header("Range", "bytes=$resumeFrom-") }
+                                .build()
+                            var outcome: ReelsDownloadResult? = null
+                            var attempt = 0
+                            while (outcome == null && attempt < THROTTLE_ATTEMPTS) {
+                                if (attempt > 0) delay(retryBackoffMs(attempt - 1))
+                                attempt++
+                                outcome = suspendCancellableCoroutine<ReelsDownloadResult?> { continuation ->
+                                    val call = client.newCall(request)
+                                    continuation.invokeOnCancellation { call.cancel() }
+                                    try {
+                                        coroutineContext.ensureActive()
+                                        val downloaded = call.execute().use { response ->
+                                            val contentRange = response.header("Content-Range")
+                                            when {
+                                                response.code in THROTTLE_CODES -> null
+                                                resuming && response.code == 416 -> ReelsDownloadResult.Failed
+                                                resuming && response.code == 206 &&
+                                                    contentRange.rangeStartOrNull() == resumeFrom -> {
+                                                    val body = response.body
+                                                    val appended = writeInto(
+                                                        requireNotNull(resumeUri),
+                                                        "wa",
+                                                        body.byteStream(),
+                                                        body.contentLength().takeIf { it >= 0L },
+                                                        offset = resumeFrom,
+                                                    )
+                                                    if (appended is ReelsDownloadResult.Saved) {
+                                                        ReelsDownloadResult.Saved(
+                                                            appended.uri,
+                                                            resumeFrom + appended.bytes,
+                                                        )
+                                                    } else {
+                                                        appended
+                                                    }
+                                                }
+                                                !response.isSuccessful || response.code == 206 ||
+                                                    contentRange != null -> ReelsDownloadResult.Failed
+                                                else -> {
+                                                    val body = response.body
+                                                    val contentType = body.contentType()
+                                                        ?.let { it.type + "/" + it.subtype }
+                                                        ?.lowercase()
+                                                    transfer(
+                                                        body.byteStream(),
+                                                        response.request.url.toString(),
+                                                        contentType,
+                                                        body.contentLength().takeIf { it >= 0L },
+                                                    )
                                                 }
                                             }
-                                            !response.isSuccessful || response.code == 206 ||
-                                                contentRange != null -> ReelsDownloadResult.Failed
-                                            else -> {
-                                                val body = response.body
-                                                val contentType = body.contentType()
-                                                    ?.let { it.type + "/" + it.subtype }
-                                                    ?.lowercase()
-                                                transfer(
-                                                    body.byteStream(),
-                                                    response.request.url.toString(),
-                                                    contentType,
-                                                    body.contentLength().takeIf { it >= 0L },
-                                                )
-                                            }
                                         }
+                                        continuation.resume(downloaded)
+                                    } catch (e: Exception) {
+                                        continuation.resumeWithException(e)
                                     }
-                                    continuation.resume(downloaded)
-                                } catch (e: Exception) {
-                                    continuation.resumeWithException(e)
                                 }
                             }
-                        }
-                        // A throttled resume keeps what is already on disk; a throttled fresh start
-                        // has nothing worth keeping yet.
-                        outcome ?: if (resuming) {
-                            retained = true
-                            ReelsDownloadResult.Partial(requireNotNull(resumeUri), resumeFrom)
-                        } else {
-                            ReelsDownloadResult.Failed
+                            outcome ?: if (resuming) {
+                                retained = true
+                                ReelsDownloadResult.Partial(requireNotNull(resumeUri), resumeFrom)
+                            } else {
+                                ReelsDownloadResult.Failed
+                            }
                         }
                     }
                     coroutineContext.ensureActive()
@@ -405,16 +454,17 @@ internal class ReelsDownloads(
         val JPEG_SIGNATURE = "ffd8ff".decodeHex()
         val PNG_SIGNATURE = "89504e470d0a1a0a".decodeHex()
         val UNSAFE_FILE_CHARS = Regex("[^\\p{L}\\p{N} _-]")
-        val ADAPTIVE_EXTENSIONS = setOf("m3u8", "mpd")
-        val MANIFEST_TYPES = setOf(
+        val UNSUPPORTED_ADAPTIVE_EXTENSIONS = setOf("mpd")
+        val DASH_MANIFEST_TYPES = setOf(
+            "application/dash+xml",
             "application/vnd.apple.mpegurl",
             "application/x-mpegurl",
             "audio/mpegurl",
             "audio/x-mpegurl",
-            "application/dash+xml",
         )
         val MEDIA_TYPES = mapOf(
             "mp4" to "video/mp4",
+            "ts" to "video/mp2t",
             "webm" to "video/webm",
             "m4v" to "video/mp4",
             "mov" to "video/quicktime",

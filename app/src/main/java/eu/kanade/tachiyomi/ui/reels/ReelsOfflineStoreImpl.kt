@@ -4,6 +4,9 @@ import android.app.Application
 import android.net.Uri
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.ui.reels.player.isHlsReelUrl
+import eu.kanade.tachiyomi.ui.reels.player.openCachedReelStreamIfComplete
+import eu.kanade.tachiyomi.ui.reels.player.reelsRequestHeaders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -85,11 +88,114 @@ class ReelsOfflineStoreImpl(
         if (qualitySnapshot != null) {
             ReelsOfflineQualityMetadata.delete(dir, sourceId, item.id)
         }
-        // A manifest is not a standalone copy: saving just the playlist file would yield an
-        // "offline" item that cannot play in airplane mode.
-        if (isAdaptiveReelUrl(item.videoUrl)) return ReelsOfflineStore.DownloadResult.UNSUPPORTED
+        // DASH (.mpd) manifests require multi-track muxing and remain unsupported.
+        if (isDashReelUrl(item.videoUrl)) return ReelsOfflineStore.DownloadResult.UNSUPPORTED
         dir.mkdirs()
         sweepStaleTransfers()
+
+        // Fast path 1: HLS (.m3u8) segment stitching into a standalone offline file.
+        if (isHlsReelUrl(item.videoUrl)) {
+            val reqHeaders = reelsRequestHeaders(headers, item.webUrl)
+            val playlist = ReelsHlsDownloader.resolveMediaPlaylist(client, item.videoUrl, reqHeaders)
+                ?: return ReelsOfflineStore.DownloadResult.UNSUPPORTED
+            val used = usedBytes()
+            val budget = (maxBytes - used).coerceAtLeast(0L)
+            val target = File(dir, fileNameFor(sourceId, item.id, playlist.fileExtension))
+            val part = File(dir, "${target.name}.${System.nanoTime()}.$PART_SUFFIX")
+            val written = try {
+                part.outputStream().use { output ->
+                    ReelsHlsDownloader.stitchSegments(
+                        client = client,
+                        playlist = playlist,
+                        headers = reqHeaders,
+                        output = output,
+                        maxBytes = budget,
+                    )
+                }
+            } catch (e: CancellationException) {
+                part.delete()
+                throw e
+            } catch (_: ReelsHlsDownloader.HlsQuotaExceededException) {
+                part.delete()
+                return ReelsOfflineStore.DownloadResult.QUOTA
+            } catch (_: Exception) {
+                part.delete()
+                return ReelsOfflineStore.DownloadResult.NETWORK
+            }
+            if (written <= 0L) {
+                part.delete()
+                return ReelsOfflineStore.DownloadResult.NETWORK
+            }
+            if (!publish(part, target)) return ReelsOfflineStore.DownloadResult.NETWORK
+            if (qualitySnapshot != null) {
+                ReelsOfflineQualityMetadata.write(
+                    dir,
+                    ReelsStoredVideoQuality(
+                        schemaVersion = ReelsOfflineQualityMetadata.SCHEMA_VERSION,
+                        sourceId = sourceId,
+                        itemId = item.id,
+                        fileName = target.name,
+                        byteLength = target.length(),
+                        lastModifiedMs = target.lastModified(),
+                        variant = qualitySnapshot.variant,
+                    ),
+                )
+            }
+            return ReelsOfflineStore.DownloadResult.SAVED
+        }
+
+        // Fast path 2: 100% cache hit in process-wide SimpleCache -> instant offline copy without network.
+        val cacheKeys = buildList<String> {
+            qualitySnapshot?.let { snap ->
+                add(ReelsQualityController.cacheKey(snap.owner, snap.item.id, snap.cacheIdentity))
+            }
+            add("$sourceId:${item.id}:hd")
+            add("$sourceId:${item.id}:sd")
+            add(item.videoUrl)
+        }
+        val cached = openCachedReelStreamIfComplete(app, cacheKeys)
+        if (cached != null) {
+            val used = usedBytes()
+            if (cached.contentLength > 0L && used + cached.contentLength > maxBytes) {
+                cached.inputStream.close()
+                return ReelsOfflineStore.DownloadResult.QUOTA
+            }
+            val extension = resolveExtension(item.videoUrl, null)
+            val target = File(dir, fileNameFor(sourceId, item.id, extension))
+            val part = File(dir, "${target.name}.${System.nanoTime()}.$PART_SUFFIX")
+            val budget = (maxBytes - used).coerceAtLeast(0L)
+            val copied = try {
+                cached.inputStream.use { input ->
+                    part.outputStream().use { output ->
+                        copyWithinBudget(input, output, budget)
+                    }
+                }
+            } catch (e: CancellationException) {
+                part.delete()
+                throw e
+            } catch (_: Exception) {
+                part.delete()
+                null
+            }
+            if (copied != null && copied > 0L && publish(part, target)) {
+                if (qualitySnapshot != null) {
+                    ReelsOfflineQualityMetadata.write(
+                        dir,
+                        ReelsStoredVideoQuality(
+                            schemaVersion = ReelsOfflineQualityMetadata.SCHEMA_VERSION,
+                            sourceId = sourceId,
+                            itemId = item.id,
+                            fileName = target.name,
+                            byteLength = target.length(),
+                            lastModifiedMs = target.lastModified(),
+                            variant = qualitySnapshot.variant,
+                        ),
+                    )
+                }
+                return ReelsOfflineStore.DownloadResult.SAVED
+            }
+            part.delete()
+        }
         val request = Request.Builder()
             .url(item.videoUrl)
             .apply {
@@ -322,10 +428,10 @@ class ReelsOfflineStoreImpl(
         }
     }
 
-    private fun isAdaptiveReelUrl(url: String): Boolean =
+    private fun isDashReelUrl(url: String): Boolean =
         Uri.parse(url).lastPathSegment
             ?.substringAfterLast('.', "")
-            ?.lowercase() in ADAPTIVE_EXTENSIONS
+            ?.lowercase() in UNSUPPORTED_ADAPTIVE_EXTENSIONS
 
     private fun isAdaptiveContentType(contentType: MediaType?): Boolean {
         val mime = contentType?.let { "${it.type}/${it.subtype}".lowercase() } ?: return false
@@ -339,7 +445,7 @@ class ReelsOfflineStoreImpl(
         const val PART_SUFFIX = "part"
         const val STAGED_SUFFIX = "staged"
 
-        val ADAPTIVE_EXTENSIONS = setOf("m3u8", "mpd")
+        val UNSUPPORTED_ADAPTIVE_EXTENSIONS = setOf("mpd")
         val ADAPTIVE_CONTENT_TYPES = setOf(
             "application/vnd.apple.mpegurl",
             "application/x-mpegurl",
@@ -350,6 +456,7 @@ class ReelsOfflineStoreImpl(
         // else falls back to the response content type.
         val STORED_EXTENSIONS = setOf(
             "mp4",
+            "ts",
             "webm",
             "m4v",
             "mov",

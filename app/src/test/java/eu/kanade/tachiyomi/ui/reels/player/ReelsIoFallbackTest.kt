@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.reels.player
 
+import android.os.Bundle
+import androidx.media3.common.PlaybackException
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import io.kotest.matchers.shouldBe
@@ -86,5 +88,42 @@ class ReelsIoFallbackTest {
         val wrapper = Exception("Not found", http404)
 
         classifyPlaybackError(wrapper) shouldBe PlaybackErrorCategory.FATAL
+    }
+
+    @Test
+    fun `classifyPlaybackError detects HTTP 401 403 410 as EXPIRED_URL`() {
+        val dataSpec = mockk<DataSpec>(relaxed = true)
+        for (code in listOf(401, 403, 410)) {
+            val httpErr = HttpDataSource.InvalidResponseCodeException(
+                code,
+                "Expired",
+                null,
+                emptyMap<String, List<String>>(),
+                dataSpec,
+                byteArrayOf(),
+            )
+            classifyPlaybackError(Exception("Expired url", httpErr)) shouldBe PlaybackErrorCategory.EXPIRED_URL
+        }
+    }
+
+    @Test
+    fun `classifyPlaybackError detects hardware decoder failures as CODEC_ERROR`() {
+        val extras = mockk<Bundle>(relaxed = true)
+        val initFailed = object : PlaybackException(
+            "Decoder init failed",
+            null,
+            ERROR_CODE_DECODER_INIT_FAILED,
+            extras,
+            0L,
+        ) {}
+        val decodeFailed = object : PlaybackException(
+            "Decoding failed",
+            null,
+            ERROR_CODE_DECODING_FAILED,
+            extras,
+            0L,
+        ) {}
+        classifyPlaybackError(initFailed) shouldBe PlaybackErrorCategory.CODEC_ERROR
+        classifyPlaybackError(decodeFailed) shouldBe PlaybackErrorCategory.CODEC_ERROR
     }
 }

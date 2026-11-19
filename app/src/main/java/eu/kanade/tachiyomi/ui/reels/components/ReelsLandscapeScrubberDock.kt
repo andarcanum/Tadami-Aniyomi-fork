@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -51,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,11 +60,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -133,6 +137,7 @@ fun ReelsLandscapeScrubberDock(
     onShare: (() -> Unit)? = null,
     onOpenMore: (() -> Unit)? = null,
     onSeek: (Float) -> Unit,
+    onScrubPreview: ((Float) -> Unit)? = null,
     onScrubStart: () -> Unit = {},
     bufferFraction: Float = 0f,
     posterUrl: String? = null,
@@ -143,6 +148,10 @@ fun ReelsLandscapeScrubberDock(
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
     var barWidthPx by remember { mutableFloatStateOf(1f) }
+    val haptic = LocalHapticFeedback.current
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentOnScrubPreview by rememberUpdatedState(onScrubPreview)
+    val currentOnScrubStart by rememberUpdatedState(onScrubStart)
 
     val currentFraction = if (isDragging) dragProgress else progressState.value.coerceIn(0f, 1f)
     val barHeight by animateDpAsState(
@@ -191,7 +200,9 @@ fun ReelsLandscapeScrubberDock(
                             gesture.start(down.position.x, barWidthPx)
                             isDragging = true
                             dragProgress = gesture.progress
-                            onScrubStart()
+                            currentOnScrubStart()
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            var lastLiveSeekAtMs = 0L
                             while (true) {
                                 val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
                                 if (!change.pressed) break
@@ -201,8 +212,18 @@ fun ReelsLandscapeScrubberDock(
                                 if (outcome == ReelsScrubOutcome.Owned) change.consume()
                                 dragProgress = gesture.progress
                                 isDragging = gesture.isActive
+                                if (outcome == ReelsScrubOutcome.Owned) {
+                                    val now = SystemClock.elapsedRealtime()
+                                    if (now - lastLiveSeekAtMs >= 90L) {
+                                        lastLiveSeekAtMs = now
+                                        currentOnScrubPreview?.invoke(gesture.progress)
+                                    }
+                                }
                             }
-                            gesture.end()?.let(onSeek)
+                            gesture.end()?.let { target ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                currentOnSeek(target)
+                            }
                             isDragging = false
                         }
                     },

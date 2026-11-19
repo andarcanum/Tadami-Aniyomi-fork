@@ -290,8 +290,8 @@ class ReelsDownloadsTest {
     }
 
     @Test
-    fun `adaptive URLs are rejected before requesting and the new destination is removed`(): Unit = runBlocking {
-        for ((index, path) in listOf("/master.M3U8?token=signed", "/manifest.mpd").withIndex()) {
+    fun `adaptive DASH URLs are rejected before requesting and the new destination is removed`(): Unit = runBlocking {
+        for ((index, path) in listOf("/manifest.MPD?token=signed", "/manifest.mpd").withIndex()) {
             val file = temporaryFolder.newFile("adaptive-" + index + ".mp4")
 
             val result = downloads().download(item(server.url(path).toString()), 7L, destination = Uri.fromFile(file))
@@ -300,6 +300,47 @@ class ReelsDownloadsTest {
             assertFalse(file.exists())
         }
         assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `clear HLS m3u8 playlist resolves variant and stitches segments into destination`(): Unit = runBlocking {
+        val seg1 = "seg1-bytes-".toByteArray()
+        val seg2 = "seg2-bytes".toByteArray()
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                #EXTM3U
+                #EXT-X-STREAM-INF:BANDWIDTH=800000
+                low.m3u8
+                #EXT-X-STREAM-INF:BANDWIDTH=2400000
+                high.m3u8
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                #EXTM3U
+                #EXTINF:2.0,
+                seg1.ts
+                #EXTINF:2.0,
+                seg2.ts
+                #EXT-X-ENDLIST
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(MockResponse().setBody(Buffer().write(seg1)))
+        server.enqueue(MockResponse().setBody(Buffer().write(seg2)))
+        val file = temporaryFolder.newFile("hls-export.ts")
+
+        val result = downloads().download(
+            item(server.url("/master.m3u8").toString()),
+            7L,
+            destination = Uri.fromFile(file),
+        )
+
+        assertEquals(ReelsDownloadResult.Saved(Uri.fromFile(file), (seg1.size + seg2.size).toLong()), result)
+        assertArrayEquals(seg1 + seg2, file.readBytes())
     }
 
     @Test

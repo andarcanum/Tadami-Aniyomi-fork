@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
@@ -31,16 +32,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -62,6 +66,7 @@ fun ReelsProgressBar(
     progressState: State<Float>,
     durationSec: Float,
     onSeek: (Float) -> Unit,
+    onScrubPreview: ((Float) -> Unit)? = null,
     onScrubStart: () -> Unit = {},
     chromeVisible: Boolean = true,
     bufferFraction: Float = 0f,
@@ -71,6 +76,10 @@ fun ReelsProgressBar(
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
     var barWidthPx by remember { mutableFloatStateOf(1f) }
+    val haptic = LocalHapticFeedback.current
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentOnScrubPreview by rememberUpdatedState(onScrubPreview)
+    val currentOnScrubStart by rememberUpdatedState(onScrubStart)
 
     // Only this composable reads progressState.value, so the 10Hz updates recompose just the
     // bar, not the whole video page.
@@ -115,7 +124,9 @@ fun ReelsProgressBar(
                     gesture.start(down.position.x, barWidthPx)
                     isDragging = true
                     dragProgress = gesture.progress
-                    onScrubStart()
+                    currentOnScrubStart()
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    var lastLiveSeekAtMs = 0L
                     while (true) {
                         val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) break
@@ -125,10 +136,20 @@ fun ReelsProgressBar(
                         if (outcome == ReelsScrubOutcome.Owned) change.consume()
                         dragProgress = gesture.progress
                         isDragging = gesture.isActive
+                        if (outcome == ReelsScrubOutcome.Owned) {
+                            val now = SystemClock.elapsedRealtime()
+                            if (now - lastLiveSeekAtMs >= LIVE_SCRUB_THROTTLE_MS) {
+                                lastLiveSeekAtMs = now
+                                currentOnScrubPreview?.invoke(gesture.progress)
+                            }
+                        }
                     }
                     // Exactly one commit per gesture — and none when a competing gesture
                     // (vertical scroll) took it over.
-                    gesture.end()?.let(onSeek)
+                    gesture.end()?.let { target ->
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        currentOnSeek(target)
+                    }
                     isDragging = false
                 }
             },
@@ -266,6 +287,8 @@ fun ReelsProgressBar(
         }
     }
 }
+
+private const val LIVE_SCRUB_THROTTLE_MS = 90L
 
 private fun formatSeconds(totalSeconds: Int): String {
     val minutes = totalSeconds / 60
