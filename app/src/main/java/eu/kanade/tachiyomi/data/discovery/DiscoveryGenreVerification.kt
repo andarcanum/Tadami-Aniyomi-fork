@@ -93,6 +93,8 @@ data class DiscoveryGenrePage(
     val genreFilterApplied: Boolean? = null,
     /** True when the cards came from a text search for the requested genre rather than a browse. */
     val genreSearchApplied: Boolean = false,
+    /** True when the source itself applied server-side exclusion for EVERY requested excluded genre. */
+    val excludedGenresApplied: Boolean = false,
 )
 
 /** Verification result for a single selected source. */

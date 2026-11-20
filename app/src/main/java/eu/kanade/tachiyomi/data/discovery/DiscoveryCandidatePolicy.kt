@@ -126,6 +126,14 @@ class DiscoveryCandidatePolicy(
     val isStrictRequired: Boolean
         get() = strictRequired || requiredEnforcement == RequiredEnforcement.STRICT
 
+    /** Combined hard-exclusion set (per-media blacklist + globally ignored genres). */
+    val hardExcludedGenres: Set<String>
+        get() = blacklistedTags + ignoredGenres
+
+    /** True when the user configured any genre/tag that must never appear in recommendations. */
+    val hasHardExclusions: Boolean
+        get() = blacklistedTags.isNotEmpty() || ignoredGenres.isNotEmpty()
+
     // Предварительно развёрнутые множества жанров для быстрого сопоставления с учётом RU/EN переводов
     private val expandedBlacklist: Set<String> = expandGenreSet(this.blacklistedTags.toList())
     private val expandedIgnored: Set<String> = expandGenreSet(this.ignoredGenres.toList())

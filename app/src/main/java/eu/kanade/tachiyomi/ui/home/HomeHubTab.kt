@@ -1048,17 +1048,19 @@ object HomeHubTab : Tab {
             }
         }
         val onDiscoveryHide: (HomeHubDiscoveryItem) -> Unit = { item ->
-            discoveryHideScope.launch {
-                // mediaType берём из айтема, а не из текущей вкладки: snackbar переживает
-                // свайп между вкладками, и undo обязан целиться в исходный медиатип.
-                // Taste Engine: единый вызов записывает и скрытие, и негативный сигнал вкуса.
-                eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
-                    discoveryRepository,
-                    item.toDiscoverySuggestion(),
-                    tachiyomi.domain.discovery.model.DiscoverySignalType.HIDE,
-                )
-                hiddenSnackItem = item
+            // mediaType берём из айтема, а не из текущей вкладки: snackbar переживает
+            // свайп между вкладками, и undo обязан целиться в исходный медиатип.
+            // Оптимистично убираем карточку и показываем snackbar мгновенно; запись в БД и
+            // негативный сигнал вкуса выполняются в фоне контроллером.
+            when (item.mediaType) {
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL ->
+                    novelScreenModel.hideDiscoveryItem(item)
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA ->
+                    mangaScreenModel.hideDiscoveryItem(item)
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME ->
+                    animeScreenModel.hideDiscoveryItem(item)
             }
+            hiddenSnackItem = item
         }
         val onDiscoveryBlacklistTag: (HomeHubDiscoveryItem, String, Int) -> Unit = { item, tag, count ->
             discoveryHideScope.launch {

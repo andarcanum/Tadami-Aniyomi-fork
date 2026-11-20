@@ -99,6 +99,7 @@ object TasteSignalRecorder {
             fetchLocalGenres(mediaType, sourceId, sourceUrl)
         },
         sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
+        altKeyEnrichmentScope: CoroutineScope? = null,
     ): Boolean {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
         var genres = snapshotGenres(item)
@@ -162,13 +163,25 @@ object TasteSignalRecorder {
             }.getOrNull() ?: return false
         }
         if (signalType.excludesFromFeed) {
-            recordConsumedAltKeys(
-                repository = repository,
-                mediaType = item.mediaType,
-                primaryTitle = item.title,
-                sourceKey = sourceKey,
-                altMetaResolver = altMetaResolver,
-            )
+            if (altKeyEnrichmentScope != null) {
+                altKeyEnrichmentScope.launch {
+                    recordConsumedAltKeys(
+                        repository = repository,
+                        mediaType = item.mediaType,
+                        primaryTitle = item.title,
+                        sourceKey = sourceKey,
+                        altMetaResolver = altMetaResolver,
+                    )
+                }
+            } else {
+                recordConsumedAltKeys(
+                    repository = repository,
+                    mediaType = item.mediaType,
+                    primaryTitle = item.title,
+                    sourceKey = sourceKey,
+                    altMetaResolver = altMetaResolver,
+                )
+            }
         }
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)

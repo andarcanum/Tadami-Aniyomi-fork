@@ -30,6 +30,7 @@ import tachiyomi.domain.discovery.model.DiscoveryBatchReceipt
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
 import tachiyomi.domain.discovery.model.identityKeys
@@ -37,6 +38,7 @@ import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Единый контроллер Home-discovery (PR 3):
@@ -62,10 +64,14 @@ internal class HomeDiscoveryController(
     private var cachedPolicy: DiscoveryCandidatePolicy = DiscoveryCandidatePolicy()
     private var hasObservedPolicy: Boolean = false
     private var lastObservedInventoryComplete: Boolean? = null
+    private var lastObservedUsedProvisionalColdStart: Boolean = false
+    @Volatile
+    private var allowProvisionalColdStartNative: Boolean = false
     private var discoveryOffset: Int = 0
     private var lastReentryTime: Long = 0L
     private var lastRefreshClickTime: Long = 0L
     private var dismissedSessionTitles = mutableSetOf<String>()
+    private val optimisticDismissedTitles: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private var lastReconciledBatchSignature: Triple<Long, Long, List<String>>? = null
     private var coverRecoveryJob: Job? = null
     private var lastCoverRecoveryTargets: List<String> = emptyList()
@@ -110,16 +116,26 @@ internal class HomeDiscoveryController(
         onStateUpdate { current ->
             val updated = updater(current)
             val policy = sourcePolicies.current(mediaType)
+            val preserveFastCacheBeforeObserve = !policy.inventoryComplete &&
+                !hasObservedPolicy &&
+                current.discovery.isNotEmpty()
+            val allowProvisionalNative = allowProvisionalColdStartNative || preserveFastCacheBeforeObserve
             updated.copy(
                 discovery = updated.discovery.mapNotNull { item ->
-                    if (item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())) {
+                    if (item.cleanTitle in optimisticDismissedTitles) return@mapNotNull null
+                    if (item.mediaType != mediaType ||
+                        allowsColdStartDisplay(item.toDiscoverySuggestion(), policy, allowProvisionalNative)
+                    ) {
                         item.withRecoveredCover()
                     } else {
                         null
                     }
                 },
                 discoveryPool = updated.discoveryPool.mapNotNull { item ->
-                    if (item.mediaType != mediaType || policy.allows(item.toDiscoverySuggestion())) {
+                    if (item.cleanTitle in optimisticDismissedTitles) return@mapNotNull null
+                    if (item.mediaType != mediaType ||
+                        allowsColdStartDisplay(item.toDiscoverySuggestion(), policy, allowProvisionalNative)
+                    ) {
                         item.withRecoveredCover()
                     } else {
                         null
@@ -132,9 +148,14 @@ internal class HomeDiscoveryController(
     private fun projectPool(
         items: List<DiscoverySuggestion>,
         policy: DiscoveryCandidatePolicy,
+        sources: DiscoverySourcePolicy = sourcePolicies.current(mediaType),
+        allowProvisionalNative: Boolean = allowProvisionalColdStartNative,
     ): List<DiscoverySuggestion> {
-        val sources = sourcePolicies.current(mediaType)
-        val eligible = items.filter { sources.allows(it) && it.cleanTitle !in dismissedSessionTitles }
+        val eligible = items.filter {
+            allowsColdStartDisplay(it, sources, allowProvisionalNative) &&
+                it.cleanTitle !in dismissedSessionTitles &&
+                it.cleanTitle !in optimisticDismissedTitles
+        }
         val filtered = eligible.groupBy { it.rowType }.flatMap { (_, row) ->
             policy.filterRowCandidates(
                 row,
@@ -263,7 +284,8 @@ internal class HomeDiscoveryController(
                     ).let { policy -> Triple(policy, status, sourcePolicy) }
                 },
             ) { snapshot, enabled, count, (policy, status, sourcePolicy) ->
-                val visible = snapshot.eligibleSuggestions.filter(sourcePolicy::allows)
+                val allowProvisionalNative = !sourcePolicy.inventoryComplete && snapshot.generation > 0L
+                val visible = selectColdStartVisibleCandidates(snapshot, sourcePolicy)
                 val snapshotPendingSync = snapshot.sourcePolicyRevision.isNotEmpty() &&
                     snapshot.sourcePolicyRevision != sourcePolicy.revision
                 DiscoveryObservationState(
@@ -272,6 +294,7 @@ internal class HomeDiscoveryController(
                     enabled = enabled,
                     count = count,
                     policy = policy,
+                    sourcePolicy = sourcePolicy,
                     failedCsv = status.failedCsv,
                     lastStatus = status.lastStatus,
                     lastGenAt = status.lastGenAt,
@@ -279,14 +302,18 @@ internal class HomeDiscoveryController(
                     inventoryComplete = sourcePolicy.inventoryComplete,
                     inventoryFailure = status.inventoryFailure,
                     snapshotPendingSync = snapshotPendingSync,
+                    usedProvisionalColdStart = allowProvisionalNative && visible.any { it.sourceId != null },
                 )
             }.collectLatest { obs ->
                 mutex.withLock {
                     val previousPriorityGenres = cachedPolicy.priorityGenres
                     val hadObservedPolicy = hasObservedPolicy
+                    val wasProvisionalColdStart = lastObservedUsedProvisionalColdStart
                     val inventoryJustCompleted =
                         lastObservedInventoryComplete == false && obs.inventoryComplete
                     lastObservedInventoryComplete = obs.inventoryComplete
+                    lastObservedUsedProvisionalColdStart = obs.usedProvisionalColdStart
+                    allowProvisionalColdStartNative = obs.usedProvisionalColdStart
                     cachedPolicy = obs.policy
                     hasObservedPolicy = true
                     if (!obs.enabled) {
@@ -306,7 +333,12 @@ internal class HomeDiscoveryController(
                         onTeaserPersisted(emptyList())
                         return@collectLatest
                     }
-                    val projected = projectPool(obs.visible, obs.policy)
+                    val projected = projectPool(
+                        items = obs.visible,
+                        policy = obs.policy,
+                        sources = obs.sourcePolicy,
+                        allowProvisionalNative = obs.usedProvisionalColdStart,
+                    )
                     val snapshot = obs.snapshot
                     val batchKeys = snapshot.homeBatchKeys
                     if (snapshot.generation > 0L &&
@@ -367,6 +399,14 @@ internal class HomeDiscoveryController(
                         (!obs.inventoryComplete && obs.inventoryFailure == null) ||
                             obs.snapshotPendingSync
                         )
+                    val preserveCachedTeaser = waitingInventory && currentState().discovery.any { item ->
+                        item.cleanTitle !in dismissedSessionTitles &&
+                            item.cleanTitle !in optimisticDismissedTitles &&
+                            obs.policy.isAllowed(item.toDiscoverySuggestion())
+                    }
+                    if (preserveCachedTeaser) {
+                        allowProvisionalColdStartNative = true
+                    }
                     val isFailed = !waitingInventory && cachedDiscoveryPool.isEmpty() && (
                         (!obs.inventoryComplete && obs.inventoryFailure != null) ||
                             (obs.lastStatus == "FAILED") ||
@@ -375,9 +415,13 @@ internal class HomeDiscoveryController(
                         )
                     publishState {
                         it.copy(
-                            discoveryPool = updatedPool,
+                            discoveryPool = if (preserveCachedTeaser && updatedPool.isEmpty()) {
+                                it.discoveryPool
+                            } else {
+                                updatedPool
+                            },
                             discoveryEnabled = true,
-                            isDiscoveryLoading = waitingInventory,
+                            isDiscoveryLoading = waitingInventory && !preserveCachedTeaser,
                             discoveryLastUpdated = lastUpdated,
                             isDiscoveryFailed = isFailed,
                             discoveryFailedSourceCount = obs.sourceFailureCount,
@@ -386,12 +430,13 @@ internal class HomeDiscoveryController(
 
                     val isFirstTeaserLoad = currentState().discovery.isEmpty()
                     val priorityChanged = hadObservedPolicy && obs.policy.priorityGenres != previousPriorityGenres
-                    val forceRebalance = isFirstTeaserLoad || priorityChanged || inventoryJustCompleted
+                    val needsInventoryRebalance = inventoryJustCompleted && !wasProvisionalColdStart
+                    val forceRebalance = isFirstTeaserLoad || priorityChanged || needsInventoryRebalance
                     updateDiscoveryTeaserLocked(
                         advanceOffset = false,
                         forceUpdate = forceRebalance,
                         teaserCount = obs.count,
-                        avoidCurrentTitles = !(priorityChanged || inventoryJustCompleted),
+                        avoidCurrentTitles = !(priorityChanged || needsInventoryRebalance),
                         preserveCachedEmpty = waitingInventory,
                     )
                 }
@@ -415,6 +460,23 @@ internal class HomeDiscoveryController(
         val count = teaserCount ?: preferences.teaserCount().get().coerceIn(3, 20)
         val pool = cachedDiscoveryPool
         if (pool.isEmpty()) {
+            if (preserveCachedEmpty && currentState().discovery.isNotEmpty()) {
+                val surviving = currentState().discovery.filter { item ->
+                    item.cleanTitle !in dismissedSessionTitles &&
+                        item.cleanTitle !in optimisticDismissedTitles &&
+                        cachedPolicy.isAllowed(item.toDiscoverySuggestion())
+                }
+                if (surviving.isNotEmpty()) {
+                    publishState {
+                        it.copy(
+                            discovery = surviving,
+                            discoveryEnabled = true,
+                            isDiscoveryLoading = false,
+                        )
+                    }
+                    return
+                }
+            }
             publishState { it.copy(discovery = emptyList(), discoveryEnabled = true, discoveryPool = emptyList()) }
             if (!preserveCachedEmpty) {
                 onTeaserPersisted(emptyList())
@@ -640,8 +702,56 @@ internal class HomeDiscoveryController(
         }
     }
 
+    fun hideDiscoveryItem(item: HomeHubDiscoveryItem) {
+        dismissDiscoveryItemOptimistically(item, DiscoverySignalType.HIDE)
+    }
+
+    fun markDiscoveryItemConsumed(item: HomeHubDiscoveryItem) {
+        dismissDiscoveryItemOptimistically(item, DiscoverySignalType.CONSUMED)
+    }
+
+    private fun dismissDiscoveryItemOptimistically(
+        item: HomeHubDiscoveryItem,
+        signalType: DiscoverySignalType,
+    ) {
+        val cleanTitle = item.cleanTitle
+        if (cleanTitle.isBlank() || item.mediaType != mediaType) return
+        optimisticDismissedTitles += cleanTitle
+        val targetCount = preferences.teaserCount().get().coerceIn(3, 20)
+        // Synchronous UI removal + local in-place backfill (<1ms) before any DB/network work.
+        publishState { current ->
+            val updatedPool = current.discoveryPool.filterNot { it.cleanTitle == cleanTitle }
+            val patchedTeaser = patchAfterLocalLike(
+                currentTeaser = current.discovery,
+                persistedPool = updatedPool,
+                likedCleanTitle = cleanTitle,
+                targetCount = maxOf(targetCount, current.discovery.size),
+                dismissedTitles = optimisticDismissedTitles,
+            )
+            current.copy(
+                discovery = patchedTeaser,
+                discoveryPool = updatedPool,
+            )
+        }
+        scope.launchIO {
+            mutex.withLock {
+                dismissedSessionTitles += cleanTitle
+                dismissedSessionTitles = pruneDismissedSessionTitles(dismissedSessionTitles).toMutableSet()
+                cachedDiscoveryPool = cachedDiscoveryPool.filterNot { it.cleanTitle == cleanTitle }
+                onTeaserPersisted(currentState().discovery)
+            }
+            TasteSignalRecorder.record(
+                repository = repository,
+                item = item.toDiscoverySuggestion(),
+                signalType = signalType,
+                altKeyEnrichmentScope = scope,
+            )
+        }
+    }
+
     fun restoreHiddenTeaserItem(item: HomeHubDiscoveryItem) {
         if (item.cleanTitle.isBlank() || item.mediaType != mediaType) return
+        optimisticDismissedTitles -= item.cleanTitle
         scope.launchIO {
             repository.undoHide(item.mediaType, item.cleanTitle)
             mutex.withLock {
@@ -722,12 +832,46 @@ private data class DiscoveryStatusSnapshot(
     val inventoryFailure: Throwable? = null,
 )
 
+/**
+ * Shared cold-start visibility rule for HomeHub and DiscoveryFeed.
+ * Once [DiscoverySourcePolicy.inventoryComplete] is true, strict live source authorization applies.
+ * While extensions/sources are still cold-booting ([DiscoverySourcePolicy.inventoryComplete] == false),
+ * native cards from an already-committed SQLite publication ([DiscoveryPublicationSnapshot.generation] > 0L)
+ * are shown provisionally instead of blocking the UI behind a 5–10s skeleton, then reconciled as
+ * soon as the inventory finishes loading. External providers are always enforced synchronously.
+ */
+internal fun allowsColdStartDisplay(
+    candidate: DiscoverySuggestion,
+    sourcePolicy: DiscoverySourcePolicy,
+    allowProvisionalNative: Boolean,
+): Boolean {
+    if (sourcePolicy.inventoryComplete) return sourcePolicy.allows(candidate)
+    if (allowProvisionalNative && candidate.sourceId != null) {
+        return candidate.mediaType == sourcePolicy.mediaType
+    }
+    return sourcePolicy.allows(candidate)
+}
+
+internal fun selectColdStartVisibleCandidates(
+    snapshot: DiscoveryPublicationSnapshot,
+    sourcePolicy: DiscoverySourcePolicy,
+): List<DiscoverySuggestion> {
+    if (sourcePolicy.inventoryComplete) {
+        return snapshot.eligibleSuggestions.filter(sourcePolicy::allows)
+    }
+    val allowProvisionalNative = snapshot.generation > 0L
+    return snapshot.eligibleSuggestions.filter { candidate ->
+        allowsColdStartDisplay(candidate, sourcePolicy, allowProvisionalNative)
+    }
+}
+
 private data class DiscoveryObservationState(
     val snapshot: DiscoveryPublicationSnapshot,
     val visible: List<DiscoverySuggestion>,
     val enabled: Boolean,
     val count: Int,
     val policy: DiscoveryCandidatePolicy,
+    val sourcePolicy: DiscoverySourcePolicy,
     val failedCsv: String,
     val lastStatus: String,
     val lastGenAt: Long,
@@ -735,4 +879,5 @@ private data class DiscoveryObservationState(
     val inventoryComplete: Boolean = true,
     val inventoryFailure: Throwable? = null,
     val snapshotPendingSync: Boolean = false,
+    val usedProvisionalColdStart: Boolean = false,
 )

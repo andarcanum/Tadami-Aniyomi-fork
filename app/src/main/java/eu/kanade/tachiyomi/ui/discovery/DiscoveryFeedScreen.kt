@@ -74,6 +74,9 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
+import coil3.request.crossfade
+import coil3.size.Precision
+import coil3.size.Size as CoilSize
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.HazeBlurStyle
@@ -1019,25 +1022,31 @@ private fun FeedCard(
     val coverReloadTick = rememberCoverReloadTick()
     val coverModel = rememberDiscoveryCoverData(item, DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle))
     val coverRequest = remember(context, coverModel, coverReloadTick, coverRecoveryTick) {
-        buildAuroraCoverImageRequest(context, coverModel)
+        buildAuroraCoverImageRequest(context, coverModel) {
+            size(CoilSize(360, 540))
+            precision(Precision.INEXACT)
+            crossfade(false)
+        }
     }
-    val containerShape = RoundedCornerShape(18.dp)
-    val posterShape = RoundedCornerShape(16.dp)
+    val containerShape = remember { RoundedCornerShape(18.dp) }
+    val posterShape = remember { RoundedCornerShape(16.dp) }
 
-    val borderBrush = if (isDark) {
-        Brush.verticalGradient(
-            listOf(
-                Color.White.copy(alpha = 0.12f),
-                Color.White.copy(alpha = 0.02f),
-            ),
-        )
-    } else {
-        Brush.verticalGradient(
-            listOf(
-                Color.Black.copy(alpha = 0.08f),
-                Color.Black.copy(alpha = 0.02f),
-            ),
-        )
+    val borderBrush = remember(isDark) {
+        if (isDark) {
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.12f),
+                    Color.White.copy(alpha = 0.02f),
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                listOf(
+                    Color.Black.copy(alpha = 0.08f),
+                    Color.Black.copy(alpha = 0.02f),
+                ),
+            )
+        }
     }
 
     Column(

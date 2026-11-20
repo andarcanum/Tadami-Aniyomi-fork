@@ -396,16 +396,36 @@ class DiscoveryLikeRowBuilder(
                         releaseStatuses = context.releaseStatuses,
                     )
                 } else {
-                    catalog.popularWithGenresAllocated(
-                        context.mediaType,
-                        sourceId,
-                        genres = genres,
-                        page = page,
-                        releaseStatuses = context.releaseStatuses,
-                        budget = budget,
-                        maxDetails = minOf(NATIVE_LIKE_HYDRATE_MAX_DETAILS, budget.remainingDetails),
-                        excludedKeys = context.exclusionKeys,
-                    ).items
+                    val likeDetailCap = if (context.candidatePolicy.hasHardExclusions) {
+                        minOf(maxOf(NATIVE_LIKE_HYDRATE_MAX_DETAILS, 24), budget.remainingDetails)
+                    } else {
+                        minOf(NATIVE_LIKE_HYDRATE_MAX_DETAILS, budget.remainingDetails)
+                    }
+                    val excludedGenres = context.candidatePolicy.hardExcludedGenres
+                    if (excludedGenres.isEmpty()) {
+                        catalog.popularWithGenresAllocated(
+                            context.mediaType,
+                            sourceId,
+                            genres = genres,
+                            page = page,
+                            releaseStatuses = context.releaseStatuses,
+                            budget = budget,
+                            maxDetails = likeDetailCap,
+                            excludedKeys = context.exclusionKeys,
+                        ).items
+                    } else {
+                        catalog.popularWithGenresAllocated(
+                            context.mediaType,
+                            sourceId,
+                            genres = genres,
+                            page = page,
+                            releaseStatuses = context.releaseStatuses,
+                            budget = budget,
+                            maxDetails = likeDetailCap,
+                            excludedKeys = context.exclusionKeys,
+                            excludedGenres = excludedGenres,
+                        ).items
+                    }
                 }
             }
         }.getOrNull().orEmpty()
@@ -418,16 +438,29 @@ class DiscoveryLikeRowBuilder(
         val policy = context.candidatePolicy
         val needsTierSort = policy.requiredGenres.isNotEmpty() || policy.priorityGenres.isNotEmpty()
         val representatives = seedResultRepresentatives(groups.map { it.items }).values.toList()
-        val hydrateCap = if (includeExternal) 6 else NATIVE_LIKE_HYDRATE_MAX_DETAILS
+        val missingNativeCount = representatives.count { it.genres.isEmpty() && it.sourceId != null }
+        val budget = context.verificationBudget
+        val hydrateCap = if (policy.hasHardExclusions && budget != null) {
+            minOf(missingNativeCount.coerceAtLeast(NATIVE_LIKE_HYDRATE_MAX_DETAILS), budget.remainingDetails)
+        } else if (includeExternal) {
+            6
+        } else {
+            NATIVE_LIKE_HYDRATE_MAX_DETAILS
+        }
         val hydrated = hydrateEmptyGenreItems(
             catalog,
             context.mediaType,
             representatives,
-            context.verificationBudget,
+            budget,
             hydrateCap,
         )
+        val verifiedForExclusions = if (policy.hasHardExclusions && budget != null && !includeExternal) {
+            hydrated.filter { it.sourceId == null || it.genres.isNotEmpty() }
+        } else {
+            hydrated
+        }
         // Admission precedes the per-seed quota; preserve required/priority tier order before perSeedCap cuts.
-        val admitted = context.admittedCandidates(rowType, hydrated).associateBy { it.cleanTitle }
+        val admitted = context.admittedCandidates(rowType, verifiedForExclusions).associateBy { it.cleanTitle }
         val eligiblePerSeed = groups.map { group ->
             val mapped = group.items.mapNotNull { original ->
                 val resolved = admitted[original.cleanTitle] ?: return@mapNotNull null
@@ -500,15 +533,36 @@ class DiscoveryLikeRowBuilder(
                                         )
                                     } else {
                                         // Fan-out must not multiply uncharged status/details lookups.
-                                        catalog.popularWithGenresAllocated(
-                                            context.mediaType,
-                                            sourceId,
-                                            genres = listOf(genre),
-                                            page = 1,
-                                            releaseStatuses = context.releaseStatuses,
-                                            budget = budget,
-                                            maxDetails = 6,
-                                        ).items
+                                        val excludedGenres = context.candidatePolicy.hardExcludedGenres
+                                        val maxDetails = if (context.candidatePolicy.hasHardExclusions) {
+                                            minOf(24, budget.remainingDetails)
+                                        } else {
+                                            6
+                                        }
+                                        if (excludedGenres.isEmpty()) {
+                                            catalog.popularWithGenresAllocated(
+                                                context.mediaType,
+                                                sourceId,
+                                                genres = listOf(genre),
+                                                page = 1,
+                                                releaseStatuses = context.releaseStatuses,
+                                                budget = budget,
+                                                maxDetails = maxDetails,
+                                                excludedKeys = context.exclusionKeys,
+                                            ).items
+                                        } else {
+                                            catalog.popularWithGenresAllocated(
+                                                context.mediaType,
+                                                sourceId,
+                                                genres = listOf(genre),
+                                                page = 1,
+                                                releaseStatuses = context.releaseStatuses,
+                                                budget = budget,
+                                                maxDetails = maxDetails,
+                                                excludedKeys = context.exclusionKeys,
+                                                excludedGenres = excludedGenres,
+                                            ).items
+                                        }
                                     }
                                 }
                             }
@@ -593,7 +647,7 @@ class DiscoveryTrendRowBuilder(
                     score = 0.0,
                 )
             }.let { items ->
-                hydrateLatestIfPermitted(items, context.mediaType, preferredSourceId, context.verificationBudget)
+                hydrateLatestIfPermitted(items, context.mediaType, preferredSourceId, context.verificationBudget, policy)
             }.let { items -> context.admittedCandidates(rowType, items) }
         } else {
             emptyList()
@@ -670,7 +724,7 @@ class DiscoveryTrendRowBuilder(
                         score = 0.0,
                     )
                 }.let { items ->
-                    hydrateLatestIfPermitted(items, context.mediaType, preferredSourceId, context.verificationBudget)
+                    hydrateLatestIfPermitted(items, context.mediaType, preferredSourceId, context.verificationBudget, policy)
                 }.let { items -> context.admittedCandidates(rowType, items) }
                 if (fallbackSource.isNotEmpty()) {
                     if (trendingResult.isFailure) isDegraded = true
@@ -688,17 +742,33 @@ class DiscoveryTrendRowBuilder(
         mediaType: DiscoveryMediaType,
         sourceId: Long,
         budget: DiscoveryVerificationBudget?,
+        policy: DiscoveryCandidatePolicy,
     ): List<DiscoveryRowItem> {
-        if (budget == null || budget.isExpired() || items.none { it.genres.isEmpty() }) return items
-        return runCatchingUnlessCancelled {
-            catalog.hydrateGenres(
-                mediaType = mediaType,
-                sourceId = sourceId,
-                items = items,
-                budget = budget,
-                maxDetails = 6,
-            ).items
-        }.getOrDefault(items)
+        if (budget == null) return items
+        val missingCount = items.count { it.genres.isEmpty() }
+        val hydrated = if (budget.isExpired() || missingCount == 0) {
+            items
+        } else {
+            val maxDetails = if (policy.hasHardExclusions) {
+                minOf(missingCount, budget.remainingDetails)
+            } else {
+                6
+            }
+            if (maxDetails <= 0) {
+                items
+            } else {
+                runCatchingUnlessCancelled {
+                    catalog.hydrateGenres(
+                        mediaType = mediaType,
+                        sourceId = sourceId,
+                        items = items,
+                        budget = budget,
+                        maxDetails = maxDetails,
+                    ).items
+                }.getOrDefault(items)
+            }
+        }
+        return if (policy.hasHardExclusions) hydrated.filter { it.genres.isNotEmpty() } else hydrated
     }
 }
 
@@ -887,8 +957,9 @@ class DiscoveryTasteRowBuilder(
             } else {
                 val rotation = (context.pageOffset - 1).coerceAtLeast(0) % sourceIds.size
                 val ordered = sourceIds.drop(rotation) + sourceIds.take(rotation)
-                // Required mode pays for verification; the ordinary taste path keeps
-                // its previous cheap shape (six sources, no details hydration).
+                // Required mode and hard genre exclusions pay for metadata verification;
+                // the ordinary taste path without exclusions keeps its previous cheap shape.
+                val needsVerification = required || policy.hasHardExclusions
                 val toQuery = if (required) ordered else ordered.take(6)
                 queryDiscoveryGenreSources(
                     catalog = catalog,
@@ -899,16 +970,17 @@ class DiscoveryTasteRowBuilder(
                     pages = context.harvestPages,
                     releaseStatuses = context.releaseStatuses,
                     policy = policy,
-                    timeoutMs = if (required) {
+                    timeoutMs = if (needsVerification) {
                         genreSourceTimeoutMs(context.verificationBudget, toQuery.size, maxConcurrency = 4)
                     } else {
                         SOURCE_FETCH_TIMEOUT_MS
                     },
-                    hydrate = required,
+                    hydrate = needsVerification,
                     targetItems = 50,
                     budget = context.verificationBudget,
                     excludedKeys = context.exclusionKeys,
                     matchMode = nativeMatchMode,
+                    excludedGenres = policy.hardExcludedGenres,
                 )
             }
         } else {
@@ -1160,6 +1232,7 @@ class DiscoverySourceRowBuilder(
                     targetItems = rowCap,
                     budget = context.verificationBudget,
                     excludedKeys = context.exclusionKeys,
+                    excludedGenres = policy.hardExcludedGenres,
                 )
             }
             failedSourceIds = results.filter { it.failure != null }.map { it.sourceId }.toSet()
@@ -1253,14 +1326,27 @@ class DiscoverySourceRowBuilder(
                                 } else {
                                     runCatchingUnlessCancelled {
                                         withHardTimeoutOrNull(timeout) {
-                                            catalog.popularPage(
-                                                context.mediaType,
-                                                state.id,
-                                                page,
-                                                context.releaseStatuses,
-                                                context.verificationBudget,
-                                                context.exclusionKeys,
-                                            )
+                                            val excludedGenres = policy.hardExcludedGenres
+                                            if (excludedGenres.isEmpty()) {
+                                                catalog.popularPage(
+                                                    context.mediaType,
+                                                    state.id,
+                                                    page,
+                                                    context.releaseStatuses,
+                                                    context.verificationBudget,
+                                                    context.exclusionKeys,
+                                                )
+                                            } else {
+                                                catalog.popularPage(
+                                                    context.mediaType,
+                                                    state.id,
+                                                    page,
+                                                    context.releaseStatuses,
+                                                    context.verificationBudget,
+                                                    context.exclusionKeys,
+                                                    excludedGenres,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1269,25 +1355,41 @@ class DiscoverySourceRowBuilder(
                             val popularResult = popular.await()
                             val budget = context.verificationBudget
                             val needsGenreHydration = budget != null && !budget.isExpired()
-                            suspend fun filterAndHydrate(items: List<DiscoveryRowItem>): List<DiscoveryRowItem> {
+                            suspend fun filterAndHydrate(
+                                items: List<DiscoveryRowItem>,
+                                excludedGenresApplied: Boolean,
+                            ): List<DiscoveryRowItem> {
                                 val candidates = items
                                     .filterNot { it.isExcludedBy(context.exclusionKeys, context.mediaType) }
-                                val missingGenres = candidates.any { it.genres.isEmpty() }
+                                val missingCount = candidates.count { it.genres.isEmpty() }
                                 val hydrated = if (
                                     needsGenreHydration &&
                                     budget != null &&
                                     !budget.isExpired() &&
-                                    missingGenres
+                                    missingCount > 0
                                 ) {
-                                    val page = runCatchingUnlessCancelled {
-                                        catalog.hydrateGenres(
-                                            mediaType = context.mediaType,
-                                            sourceId = state.id,
-                                            items = candidates,
-                                            budget = budget,
-                                            maxDetails = 8,
+                                    val detailCap = if (policy.hasHardExclusions) {
+                                        val fairShare = maxOf(
+                                            24,
+                                            (budget.remainingDetails + activeSources.size - 1) / activeSources.size,
                                         )
-                                    }.getOrNull()
+                                        minOf(missingCount, fairShare, budget.remainingDetails)
+                                    } else {
+                                        8
+                                    }
+                                    val page = if (detailCap > 0) {
+                                        runCatchingUnlessCancelled {
+                                            catalog.hydrateGenres(
+                                                mediaType = context.mediaType,
+                                                sourceId = state.id,
+                                                items = candidates,
+                                                budget = budget,
+                                                maxDetails = detailCap,
+                                            )
+                                        }.getOrNull()
+                                    } else {
+                                        null
+                                    }
                                     if (page == null || page.unattempted > 0 || page.pending.isNotEmpty() ||
                                         page.metadataUnavailable > 0 || page.transientFailures > 0
                                     ) {
@@ -1295,10 +1397,19 @@ class DiscoverySourceRowBuilder(
                                     }
                                     page?.items ?: candidates
                                 } else {
-                                    if (budget != null && missingGenres) state.metadataIncomplete = true
+                                    if (budget != null && missingCount > 0) state.metadataIncomplete = true
                                     candidates
                                 }
-                                return context.admittedCandidates(rowType, hydrated)
+                                val verifiedForExclusions = if (
+                                    policy.hasHardExclusions &&
+                                    budget != null &&
+                                    !excludedGenresApplied
+                                ) {
+                                    hydrated.filter { it.genres.isNotEmpty() }
+                                } else {
+                                    hydrated
+                                }
+                                return context.admittedCandidates(rowType, verifiedForExclusions)
                             }
                             if (latestResult != null) {
                                 val response = latestResult.getOrNull()
@@ -1307,7 +1418,7 @@ class DiscoverySourceRowBuilder(
                                 } else {
                                     state.latestNext = response.hasNextPage
                                     state.successfulFetches++
-                                    state.latest += filterAndHydrate(response.items)
+                                    state.latest += filterAndHydrate(response.items, excludedGenresApplied = false)
                                 }
                             }
                             if (popularResult != null) {
@@ -1317,7 +1428,10 @@ class DiscoverySourceRowBuilder(
                                 } else {
                                     state.popularNext = response.hasNextPage
                                     state.successfulFetches++
-                                    state.popular += filterAndHydrate(response.items)
+                                    state.popular += filterAndHydrate(
+                                        response.items,
+                                        excludedGenresApplied = response.excludedGenresApplied,
+                                    )
                                 }
                             }
                         }
@@ -1405,10 +1519,14 @@ internal fun mergeExistingRowItems(
     val compatibleExisting = if (existing.isEmpty()) {
         emptyList()
     } else {
-        val eligible = if (sourceIds == null) {
-            existing
-        } else {
-            existing.filter { it.sourceId == null || it.sourceId in sourceIds }
+        val eligible = (
+            if (sourceIds == null) {
+                existing
+            } else {
+                existing.filter { it.sourceId == null || it.sourceId in sourceIds }
+            }
+            ).let { items ->
+            if (policy.hasHardExclusions) items.filter { it.genres.isNotEmpty() } else items
         }
         policy.filterRowCandidates(eligible, { it.genres })
     }

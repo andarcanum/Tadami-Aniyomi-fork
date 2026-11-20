@@ -252,6 +252,7 @@ internal fun AnimeHomeHub(
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
+        onDiscoveryMarkConsumed = { screenModel.markDiscoveryItemConsumed(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -395,6 +396,7 @@ internal fun MangaHomeHub(
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
+        onDiscoveryMarkConsumed = { screenModel.markDiscoveryItemConsumed(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -541,6 +543,7 @@ internal fun NovelHomeHub(
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
+        onDiscoveryMarkConsumed = { screenModel.markDiscoveryItemConsumed(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -582,6 +585,7 @@ private fun HomeHubScreen(
     onDiscoveryRefreshClick: (() -> Unit)? = null,
     onDiscoveryItemFocused: (HomeHubDiscoveryItem) -> Unit = {},
     onDiscoveryLikeClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
+    onDiscoveryMarkConsumed: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryItemClick: (HomeHubDiscoveryItem) -> Unit,
     // Direct open тизера: пушит экран тайтла своего медиатипа (fromSource = true).
     openDirectEntry: ((Long) -> Unit)? = null,
@@ -1131,13 +1135,18 @@ private fun HomeHubScreen(
                 },
                 onMarkConsumed = {
                     longPressItem = null
-                    // Taste Engine: «просмотрено» — нейтральное исключение (вкус не трогает).
-                    scope.launch {
-                        eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
-                            tasteRepository,
-                            lpItem.toDiscoverySuggestion(),
-                            tachiyomi.domain.discovery.model.DiscoverySignalType.CONSUMED,
-                        )
+                    // Taste Engine: «просмотрено» — мгновенное удаление карточки + фоновое исключение.
+                    if (onDiscoveryMarkConsumed != null) {
+                        onDiscoveryMarkConsumed.invoke(lpItem)
+                    } else {
+                        scope.launch {
+                            eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
+                                tasteRepository,
+                                lpItem.toDiscoverySuggestion(),
+                                tachiyomi.domain.discovery.model.DiscoverySignalType.CONSUMED,
+                                altKeyEnrichmentScope = scope,
+                            )
+                        }
                     }
                     context.toast(
                         context.contextStringResource(AYMR.strings.for_you_mark_consumed_toast),

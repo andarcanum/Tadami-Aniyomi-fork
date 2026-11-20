@@ -57,7 +57,10 @@ import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import eu.kanade.tachiyomi.ui.home.allowsColdStartDisplay
+import eu.kanade.tachiyomi.ui.home.selectColdStartVisibleCandidates
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 internal data class DiscoveryFeedUiState(
@@ -68,6 +71,7 @@ internal data class DiscoveryFeedUiState(
     val lastUpdatedAt: Long? = null,
     val isRefreshing: Boolean = false,
     val isLoading: Boolean = true,
+    val isProvisionalColdStart: Boolean = false,
     val hiddenSnackbarTitle: String? = null,
     val addedSnackbarTitle: String? = null,
     // «+» промахнулся (внешний провайдер или нет точного совпадения): экран
@@ -228,7 +232,12 @@ internal fun feedTabPool(
     policy: DiscoverySourcePolicy? = null,
 ): List<DiscoverySuggestion> {
     val tabItems = itemsForTab(state, tab)
-    val allowed = if (policy != null) tabItems.filter(policy::allows) else tabItems
+    val allowed = if (policy != null) {
+        val allowProvisional = state.isProvisionalColdStart && !policy.inventoryComplete
+        tabItems.filter { allowsColdStartDisplay(it, policy, allowProvisional) }
+    } else {
+        tabItems
+    }
     return filterByProvider(allowed, provider)
 }
 
@@ -244,7 +253,12 @@ internal fun sliceFeedForGenre(
         return filterDiscoveryFeed(fullPool, selectedGenre)
     }
     val window = state.activeWindows[tab] ?: itemsForTab(state, tab)
-    val allowed = if (policy != null) window.filter(policy::allows) else window
+    val allowed = if (policy != null) {
+        val allowProvisional = state.isProvisionalColdStart && !policy.inventoryComplete
+        window.filter { allowsColdStartDisplay(it, policy, allowProvisional) }
+    } else {
+        window
+    }
     return filterByProvider(allowed, provider)
 }
 
@@ -343,6 +357,8 @@ internal class DiscoveryFeedScreenModel(
     private var lastBlacklistedTag: String? = null
     private var lastObservedPriorityGenres: Set<String>? = null
     private var lastObservedInventoryComplete: Boolean? = null
+    private var lastObservedUsedProvisionalColdStart: Boolean = false
+    private val optimisticExcludedTitles: MutableSet<Pair<DiscoveryMediaType, String>> = ConcurrentHashMap.newKeySet()
 
     fun start() {
         observeMedia(state.value.mediaType)
@@ -395,6 +411,7 @@ internal class DiscoveryFeedScreenModel(
     private fun observeMedia(mediaType: DiscoveryMediaType) {
         lastObservedPriorityGenres = null
         lastObservedInventoryComplete = null
+        lastObservedUsedProvisionalColdStart = false
         observeProgress(mediaType)
         failureJob?.cancel()
         failureJob = screenModelScope.launchIO {
@@ -465,12 +482,17 @@ internal class DiscoveryFeedScreenModel(
                     val priorityChanged = lastObservedPriorityGenres != null &&
                         lastObservedPriorityGenres != policy.priorityGenres
                     lastObservedPriorityGenres = policy.priorityGenres
+                    val wasProvisionalColdStart = lastObservedUsedProvisionalColdStart
                     val inventoryJustCompleted =
                         lastObservedInventoryComplete == false && sources.inventoryComplete
                     lastObservedInventoryComplete = sources.inventoryComplete
-                    val resetWindows = priorityChanged || inventoryJustCompleted
-                    val eligible = snapshot.eligibleSuggestions
-                    val visible = projectCandidates(eligible, policy, sources)
+                    val allowProvisionalNative = !sources.inventoryComplete && snapshot.generation > 0L
+                    val resetWindows = priorityChanged || (inventoryJustCompleted && !wasProvisionalColdStart)
+                    val eligible = selectColdStartVisibleCandidates(snapshot, sources)
+                        .filterNot { (mediaType to it.cleanTitle) in optimisticExcludedTitles }
+                    val isProvisionalColdStart = allowProvisionalNative && eligible.any { it.sourceId != null }
+                    lastObservedUsedProvisionalColdStart = isProvisionalColdStart
+                    val visible = projectCandidates(eligible, policy, sources, allowProvisionalNative)
                     val rows = groupFeedRows(visible)
                     // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
                     val mixTotal = DiscoveryMixQuotas().total
@@ -489,9 +511,16 @@ internal class DiscoveryFeedScreenModel(
                     }
                     mutableState.update { current ->
                         if (current.mediaType != mediaType) return@update current
-                        val liveMix = mix.filter(sources::allows)
+                        val liveAllowProvisional = isProvisionalColdStart && !sources.inventoryComplete
+                        val liveMix = mix.filter {
+                            allowsColdStartDisplay(it, sources, liveAllowProvisional) &&
+                                (mediaType to it.cleanTitle) !in optimisticExcludedTitles
+                        }
                         val liveRows = rows.mapValues { (_, row) ->
-                            row.filter(sources::allows)
+                            row.filter {
+                                allowsColdStartDisplay(it, sources, liveAllowProvisional) &&
+                                    (mediaType to it.cleanTitle) !in optimisticExcludedTitles
+                            }
                         }.filterValues {
                             it.isNotEmpty()
                         }
@@ -539,6 +568,7 @@ internal class DiscoveryFeedScreenModel(
                                 ?: snapshot.committedAt.takeIf { it > 0L },
                             isRefreshing = refreshing,
                             isLoading = waitingInventory,
+                            isProvisionalColdStart = liveAllowProvisional && liveMix.isNotEmpty(),
                             failedRows = parseFailedRows(failedCsv),
                             poolSize = visible.size,
                             failedSourceCount = failedSourceCount,
@@ -576,8 +606,11 @@ internal class DiscoveryFeedScreenModel(
         items: List<DiscoverySuggestion>,
         policy: DiscoveryCandidatePolicy,
         sources: DiscoverySourcePolicy = sourcePolicies.current(state.value.mediaType),
+        allowProvisionalNative: Boolean = false,
     ): List<DiscoverySuggestion> {
-        val eligible = items.filter { sources.allows(it) && policy.isAllowed(it) }
+        val eligible = items.filter {
+            allowsColdStartDisplay(it, sources, allowProvisionalNative) && policy.isAllowed(it)
+        }
         return dedupeCrossRow(
             eligible.groupBy { it.rowType }.flatMap { (_, row) ->
                 policy.filterRowCandidates(
@@ -670,27 +703,46 @@ internal class DiscoveryFeedScreenModel(
         return 0L
     }
 
-    private suspend fun backfillRemovedItem(removed: DiscoverySuggestion, tab: FeedSignalTab) {
-        val currentState = state.value
-        val pool = itemsForTab(currentState, tab)
-        val currentWindow = currentState.activeWindows[tab] ?: pool
-        val currentWindowTitles = currentWindow.map { it.cleanTitle }.toSet()
-        val shownTitles = repository.getRecentExclusions(currentState.mediaType)
-
-        val candidate = selectBackfillCandidate(
-            removedItem = removed,
-            pool = pool,
-            currentWindowTitles = currentWindowTitles,
-            shownTitles = shownTitles,
-        )
-        val patchedWindow = patchFeedWindowAfterRemoval(
-            currentWindow = currentWindow,
-            removedTitle = removed.cleanTitle,
-            replacement = candidate,
-        )
+    private fun applyOptimisticRemoval(
+        removed: DiscoverySuggestion,
+        activeTab: FeedSignalTab,
+        markHidden: Boolean,
+    ) {
+        val cleanTitle = removed.cleanTitle
+        if (cleanTitle.isBlank()) return
+        val exclusionKey = removed.mediaType to cleanTitle
+        optimisticExcludedTitles += exclusionKey
+        val mediaOptimisticTitles = optimisticExcludedTitles
+            .mapNotNullTo(HashSet()) { (media, title) -> title.takeIf { media == removed.mediaType } }
         mutableState.update { current ->
+            if (current.mediaType != removed.mediaType) return@update current
+            val updatedMix = current.mix.filterNot { it.cleanTitle == cleanTitle }
+            val updatedRows = current.rows.mapValues { (_, list) ->
+                list.filterNot { it.cleanTitle == cleanTitle }
+            }.filterValues { it.isNotEmpty() }
+            val pool = itemsForTab(current, activeTab)
+            val currentWindow = current.activeWindows[activeTab] ?: pool
+            val currentWindowTitles = currentWindow.mapTo(HashSet()) { it.cleanTitle }
+            val candidate = selectBackfillCandidate(
+                removedItem = removed,
+                pool = pool,
+                currentWindowTitles = currentWindowTitles,
+                shownTitles = mediaOptimisticTitles,
+            )
+            val patchedActiveWindow = patchFeedWindowAfterRemoval(
+                currentWindow = currentWindow,
+                removedTitle = cleanTitle,
+                replacement = candidate,
+            )
+            val updatedWindows = current.activeWindows
+                .mapValues { (_, w) -> w.filterNot { it.cleanTitle == cleanTitle } } +
+                (activeTab to patchedActiveWindow)
             current.copy(
-                activeWindows = current.activeWindows + (tab to patchedWindow),
+                mix = updatedMix,
+                rows = updatedRows,
+                hidden = if (markHidden) current.hidden + cleanTitle else current.hidden,
+                activeWindows = updatedWindows,
+                hiddenSnackbarTitle = if (markHidden) removed.title else current.hiddenSnackbarTitle,
             )
         }
     }
@@ -714,19 +766,24 @@ internal class DiscoveryFeedScreenModel(
     fun hide(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
         lastHidden = item
         lastHiddenTab = activeTab
+        // Remove synchronously before queued persistence so the card vanishes in <1ms.
+        applyOptimisticRemoval(item, activeTab, markHidden = true)
         hideUndoOperations.enqueue {
-            backfillRemovedItem(item, activeTab)
             // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
-            TasteSignalRecorder.record(repository, item, DiscoverySignalType.HIDE)
+            TasteSignalRecorder.record(
+                repository = repository,
+                item = item,
+                signalType = DiscoverySignalType.HIDE,
+                altKeyEnrichmentScope = screenModelScope,
+            )
         }
-        // Register Hide before exposing its Undo action.
-        mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
     }
 
     fun undoHide() {
         val item = lastHidden ?: return
         val tab = lastHiddenTab
         lastHidden = null
+        optimisticExcludedTitles -= (item.mediaType to item.cleanTitle)
         hideUndoOperations.enqueue {
             repository.undoHide(item.mediaType, item.cleanTitle)
             if (!preferences.discoveryEnabled().get() || state.value.mediaType != item.mediaType) return@enqueue
@@ -835,11 +892,16 @@ internal class DiscoveryFeedScreenModel(
         )
     }
 
-    /** Taste Engine: «Просмотрено» — нейтральное исключение (вкус не трогает) + тост. */
+    /** Taste Engine: «Просмотрено» — мгновенное удаление карточки + фоновое исключение. */
     fun recordConsumed(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
+        applyOptimisticRemoval(item, activeTab, markHidden = false)
         screenModelScope.launchIO {
-            backfillRemovedItem(item, activeTab)
-            TasteSignalRecorder.record(repository, item, DiscoverySignalType.CONSUMED)
+            TasteSignalRecorder.record(
+                repository = repository,
+                item = item,
+                signalType = DiscoverySignalType.CONSUMED,
+                altKeyEnrichmentScope = screenModelScope,
+            )
         }
         context.toast(
             context.contextStringResource(AYMR.strings.for_you_mark_consumed_toast),

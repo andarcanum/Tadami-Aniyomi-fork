@@ -601,7 +601,11 @@ class DiscoveryRunner(
         }
         val verificationBudget = DiscoveryVerificationBudget(
             budgetMs = (remainingBudgetMs - FINALIZE_RESERVE_MS).coerceAtLeast(MIN_GENRE_PASS_MS),
-            maxDetails = if (genreFilterSpec.requiredGenres.isNotEmpty()) {
+            maxDetails = if (
+                genreFilterSpec.requiredGenres.isNotEmpty() ||
+                genreFilterSpec.ignoredGenres.isNotEmpty() ||
+                blacklistedTags.isNotEmpty()
+            ) {
                 DiscoveryVerificationBudget.DEFAULT_REQUIRED_MAX_DETAILS
             } else {
                 DiscoveryVerificationBudget.DEFAULT_MAX_DETAILS

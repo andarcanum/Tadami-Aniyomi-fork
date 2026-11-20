@@ -40,6 +40,7 @@ import kotlin.coroutines.coroutineContext
 data class DiscoveryBrowsePage(
     val items: List<DiscoveryRowItem>,
     val hasNextPage: Boolean? = null,
+    val excludedGenresApplied: Boolean = false,
 )
 
 /**
@@ -91,8 +92,27 @@ interface DiscoverySourceCatalog {
         DiscoveryBrowsePage(
             items = result.items.filterNot { it.isExcludedBy(excludedKeys, mediaType) },
             hasNextPage = result.hasNextPage,
+            excludedGenresApplied = result.excludedGenresApplied,
         )
     }
+
+    /** Popular browse with optional native TriState genre exclusions. */
+    suspend fun popularPage(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        page: Int = 1,
+        releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
+        budget: DiscoveryVerificationBudget? = null,
+        excludedKeys: Set<String>,
+        excludedGenres: Set<String>,
+    ): DiscoveryBrowsePage = popularPage(
+        mediaType = mediaType,
+        sourceId = sourceId,
+        page = page,
+        releaseStatuses = releaseStatuses,
+        budget = budget,
+        excludedKeys = excludedKeys,
+    )
 
     suspend fun popularWithGenres(
         mediaType: DiscoveryMediaType,
@@ -175,6 +195,28 @@ interface DiscoverySourceCatalog {
             pending = result.pending.filterNot { it.isExcludedBy(excludedKeys, mediaType) },
         )
     }
+
+    /** Genre query with optional native TriState genre exclusions. */
+    suspend fun popularWithGenresAllocated(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        genres: List<String>,
+        page: Int = 1,
+        releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
+        budget: DiscoveryVerificationBudget? = null,
+        maxDetails: Int = 0,
+        excludedKeys: Set<String>,
+        excludedGenres: Set<String>,
+    ): DiscoveryGenrePage = popularWithGenresAllocated(
+        mediaType = mediaType,
+        sourceId = sourceId,
+        genres = genres,
+        page = page,
+        releaseStatuses = releaseStatuses,
+        budget = budget,
+        maxDetails = maxDetails,
+        excludedKeys = excludedKeys,
+    )
 
     /**
      * Hydrates cards already fetched from a source without asking for a page
@@ -411,6 +453,24 @@ class AppDiscoverySourceCatalog(
         releaseStatuses: Set<DiscoveryReleaseStatus>,
         budget: DiscoveryVerificationBudget?,
         excludedKeys: Set<String>,
+    ): DiscoveryBrowsePage = popularPage(
+        mediaType = mediaType,
+        sourceId = sourceId,
+        page = page,
+        releaseStatuses = releaseStatuses,
+        budget = budget,
+        excludedKeys = excludedKeys,
+        excludedGenres = emptySet(),
+    )
+
+    override suspend fun popularPage(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        page: Int,
+        releaseStatuses: Set<DiscoveryReleaseStatus>,
+        budget: DiscoveryVerificationBudget?,
+        excludedKeys: Set<String>,
+        excludedGenres: Set<String>,
     ): DiscoveryBrowsePage = fetchPage(
         mediaType,
         sourceId,
@@ -419,8 +479,9 @@ class AppDiscoverySourceCatalog(
         releaseStatuses = releaseStatuses,
         budget = budget,
         excludedKeys = excludedKeys,
+        excludedGenres = excludedGenres,
         strictPage = true,
-    ).let { DiscoveryBrowsePage(it.items, it.hasNextPage) }
+    ).let { DiscoveryBrowsePage(it.items, it.hasNextPage, it.excludedGenresApplied) }
 
     override suspend fun popularWithGenres(
         mediaType: DiscoveryMediaType,
@@ -476,6 +537,28 @@ class AppDiscoverySourceCatalog(
         budget: DiscoveryVerificationBudget?,
         maxDetails: Int,
         excludedKeys: Set<String>,
+    ): DiscoveryGenrePage = popularWithGenresAllocated(
+        mediaType = mediaType,
+        sourceId = sourceId,
+        genres = genres,
+        page = page,
+        releaseStatuses = releaseStatuses,
+        budget = budget,
+        maxDetails = maxDetails,
+        excludedKeys = excludedKeys,
+        excludedGenres = emptySet(),
+    )
+
+    override suspend fun popularWithGenresAllocated(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        genres: List<String>,
+        page: Int,
+        releaseStatuses: Set<DiscoveryReleaseStatus>,
+        budget: DiscoveryVerificationBudget?,
+        maxDetails: Int,
+        excludedKeys: Set<String>,
+        excludedGenres: Set<String>,
     ): DiscoveryGenrePage {
         val fetched = fetchPage(
             mediaType,
@@ -486,13 +569,14 @@ class AppDiscoverySourceCatalog(
             budget = budget,
             maxDetails = maxDetails,
             excludedKeys = excludedKeys,
+            excludedGenres = excludedGenres,
             strictPage = true,
         )
         val queryKey = discoveryGenreQueryKey(mediaType, sourceId, genres, releaseStatuses)
         val items = fetched.items.filterNot { it.isExcludedBy(excludedKeys, mediaType) }
         logcat {
             "[DiscoverySourceCatalog] genreQuery source=$sourceId page=$page requested=$genres " +
-                "filterApplied=${fetched.genreFilterApplied}"
+                "filterApplied=${fetched.genreFilterApplied} excludedApplied=${fetched.excludedGenresApplied}"
         }
         if (budget == null) {
             return DiscoveryGenrePage(
@@ -508,6 +592,7 @@ class AppDiscoverySourceCatalog(
                 queryKey = queryKey,
                 genreFilterApplied = fetched.genreFilterApplied,
                 genreSearchApplied = fetched.genreSearchApplied,
+                excludedGenresApplied = fetched.excludedGenresApplied,
             )
         }
         val settled = hydrateItems(
@@ -524,6 +609,7 @@ class AppDiscoverySourceCatalog(
             queryKey = queryKey,
             genreFilterApplied = fetched.genreFilterApplied,
             genreSearchApplied = fetched.genreSearchApplied,
+            excludedGenresApplied = fetched.excludedGenresApplied,
         )
     }
 
@@ -998,6 +1084,14 @@ class AppDiscoverySourceCatalog(
         /** Null for a plain browse; true when the source accepted the genre filter. */
         val genreFilterApplied: Boolean? = null,
         val genreSearchApplied: Boolean = false,
+        val excludedGenresApplied: Boolean = false,
+    )
+
+    internal data class GenreFilterApplication<T>(
+        val filters: T?,
+        val includeApplied: Boolean = false,
+        val excludeApplied: Boolean = false,
+        val excludedAll: Boolean = false,
     )
 
     private data class StatusEnrichment<T>(
@@ -1022,6 +1116,7 @@ class AppDiscoverySourceCatalog(
         budget: DiscoveryVerificationBudget? = null,
         maxDetails: Int = DETAILS_ENRICH_CAP,
         excludedKeys: Set<String> = emptySet(),
+        excludedGenres: Set<String> = emptySet(),
         strictPage: Boolean = false,
         latest: Boolean = false,
     ): FetchedPage = try {
@@ -1034,20 +1129,21 @@ class AppDiscoverySourceCatalog(
                     } else {
                         return FetchedPage(emptyList(), hasNextPage = false)
                     }
-                var filters = if (genres !=
-                    null
-                ) {
-                    withMangaGenreFilters(
+                val genreApplication = if (!latest && (genres != null || excludedGenres.isNotEmpty())) {
+                    applyMangaGenreFilters(
                         guardedSourceCall(mediaType, sourceId, source) {
                             source.getFilterList()
                         },
                         genres,
                         source.lang,
+                        excludedGenres,
                     )
                 } else {
-                    null
+                    GenreFilterApplication<FilterList>(null)
                 }
-                val genreFilterApplied = genres != null && filters != null
+                var filters = genreApplication.filters
+                val genreFilterApplied = genres != null && genreApplication.includeApplied
+                var effectiveExcludedGenresApplied = genreApplication.excludedAll
                 // Unsupported query filters fall back to bounded browse + observed-details verification.
                 // V4: статус выпуска — в тот же FilterList поверх жанров; не применим
                 // (нет фильтра / одиночный Select при 2+ статусах) — best-effort без него.
@@ -1060,10 +1156,28 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
+                val excludeOnlySearch = genres == null && releaseStatuses.isEmpty() && genreApplication.excludeApplied
+                val activeFilters = filters
                 val rawPage = when {
-                    filters != null -> runCatchingUnlessCancelled {
+                    activeFilters != null && excludeOnlySearch -> {
+                        val searchAttempt = runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchManga(page, "", activeFilters)
+                            }
+                        }.getOrNull()
+                        if (searchAttempt != null && (searchAttempt.mangas.isNotEmpty() || page > 1)) {
+                            searchAttempt
+                        } else {
+                            effectiveExcludedGenresApplied = false
+                            filters = null
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) { source.getPopularManga(page) }
+                            }.let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
+                        }
+                    }
+                    activeFilters != null -> runCatchingUnlessCancelled {
                         guardedSourceCall(mediaType, sourceId, source) {
-                            source.getSearchManga(page, "", filters)
+                            source.getSearchManga(page, "", activeFilters)
                         }
                     }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
@@ -1079,8 +1193,9 @@ class AppDiscoverySourceCatalog(
                 // Genre pagination is a continuation: falling back to page 1 would
                 // re-serve the same cards and hide the real end of the query.
                 val usedFallback = !strictPage && nonEmptyPage == null && genres == null && page > 1
+                val fallbackFilters = filters
                 val pageData = nonEmptyPage ?: if (usedFallback) {
-                    if (filters == null) {
+                    if (fallbackFilters == null) {
                         runCatchingUnlessCancelled {
                             guardedSourceCall(mediaType, sourceId, source) {
                                 source.getPopularManga(1)
@@ -1089,7 +1204,7 @@ class AppDiscoverySourceCatalog(
                     } else {
                         runCatchingUnlessCancelled {
                             guardedSourceCall(mediaType, sourceId, source) {
-                                source.getSearchManga(1, "", filters)
+                                source.getSearchManga(1, "", fallbackFilters)
                             }
                         }.getOrNull()
                     }
@@ -1128,6 +1243,7 @@ class AppDiscoverySourceCatalog(
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
                     genreSearchApplied = false,
+                    excludedGenresApplied = effectiveExcludedGenresApplied,
                 )
             }
             DiscoveryMediaType.ANIME -> {
@@ -1137,20 +1253,21 @@ class AppDiscoverySourceCatalog(
                     } else {
                         return FetchedPage(emptyList(), hasNextPage = false)
                     }
-                var filters = if (genres !=
-                    null
-                ) {
-                    withAnimeGenreFilters(
+                val genreApplication = if (!latest && (genres != null || excludedGenres.isNotEmpty())) {
+                    applyAnimeGenreFilters(
                         guardedSourceCall(mediaType, sourceId, source) {
                             source.getFilterList()
                         },
                         genres,
                         source.lang,
+                        excludedGenres,
                     )
                 } else {
-                    null
+                    GenreFilterApplication<AnimeFilterList>(null)
                 }
-                val genreFilterApplied = genres != null && filters != null
+                var filters = genreApplication.filters
+                val genreFilterApplied = genres != null && genreApplication.includeApplied
+                var effectiveExcludedGenresApplied = genreApplication.excludedAll
                 if (releaseStatuses.isNotEmpty()) {
                     val candidate = filters ?: guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                     val applied = applyAnimeStatusFilter(candidate, releaseStatuses)
@@ -1160,10 +1277,28 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
+                val excludeOnlySearch = genres == null && releaseStatuses.isEmpty() && genreApplication.excludeApplied
+                val activeFilters = filters
                 val rawPage = when {
-                    filters != null -> runCatchingUnlessCancelled {
+                    activeFilters != null && excludeOnlySearch -> {
+                        val searchAttempt = runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchAnime(page, "", activeFilters)
+                            }
+                        }.getOrNull()
+                        if (searchAttempt != null && (searchAttempt.animes.isNotEmpty() || page > 1)) {
+                            searchAttempt
+                        } else {
+                            effectiveExcludedGenresApplied = false
+                            filters = null
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) { source.getPopularAnime(page) }
+                            }.let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
+                        }
+                    }
+                    activeFilters != null -> runCatchingUnlessCancelled {
                         guardedSourceCall(mediaType, sourceId, source) {
-                            source.getSearchAnime(page, "", filters)
+                            source.getSearchAnime(page, "", activeFilters)
                         }
                     }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
@@ -1177,8 +1312,9 @@ class AppDiscoverySourceCatalog(
                 }
                 val nonEmptyPage = rawPage?.takeIf { it.animes.isNotEmpty() }
                 val usedFallback = !strictPage && nonEmptyPage == null && genres == null && page > 1
+                val fallbackFilters = filters
                 val pageData = nonEmptyPage ?: if (usedFallback) {
-                    if (filters == null) {
+                    if (fallbackFilters == null) {
                         runCatchingUnlessCancelled {
                             guardedSourceCall(mediaType, sourceId, source) {
                                 source.getPopularAnime(1)
@@ -1187,7 +1323,7 @@ class AppDiscoverySourceCatalog(
                     } else {
                         runCatchingUnlessCancelled {
                             guardedSourceCall(mediaType, sourceId, source) {
-                                source.getSearchAnime(1, "", filters)
+                                source.getSearchAnime(1, "", fallbackFilters)
                             }
                         }.getOrNull()
                     }
@@ -1226,6 +1362,7 @@ class AppDiscoverySourceCatalog(
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
                     genreSearchApplied = false,
+                    excludedGenresApplied = effectiveExcludedGenresApplied,
                 )
             }
             DiscoveryMediaType.NOVEL -> {
@@ -1235,20 +1372,21 @@ class AppDiscoverySourceCatalog(
                     } else {
                         return FetchedPage(emptyList(), hasNextPage = false)
                     }
-                var filters = if (genres !=
-                    null
-                ) {
-                    withNovelGenreFilters(
+                val genreApplication = if (!latest && (genres != null || excludedGenres.isNotEmpty())) {
+                    applyNovelGenreFilters(
                         guardedSourceCall(mediaType, sourceId, source) {
                             source.getFilterList()
                         },
                         genres,
                         source.lang,
+                        excludedGenres,
                     )
                 } else {
-                    null
+                    GenreFilterApplication<NovelFilterList>(null)
                 }
-                val genreFilterApplied = genres != null && filters != null
+                var filters = genreApplication.filters
+                val genreFilterApplied = genres != null && genreApplication.includeApplied
+                var effectiveExcludedGenresApplied = genreApplication.excludedAll
                 if (releaseStatuses.isNotEmpty()) {
                     val candidate = filters ?: guardedSourceCall(mediaType, sourceId, source) { source.getFilterList() }
                     val applied = applyNovelStatusFilter(candidate, releaseStatuses)
@@ -1258,10 +1396,28 @@ class AppDiscoverySourceCatalog(
                             "source=$sourceId statuses=$releaseStatuses"
                     }
                 }
+                val excludeOnlySearch = genres == null && releaseStatuses.isEmpty() && genreApplication.excludeApplied
+                val activeFilters = filters
                 val rawPage = when {
-                    filters != null -> runCatchingUnlessCancelled {
+                    activeFilters != null && excludeOnlySearch -> {
+                        val searchAttempt = runCatchingUnlessCancelled {
+                            guardedSourceCall(mediaType, sourceId, source) {
+                                source.getSearchNovels(page, "", activeFilters)
+                            }
+                        }.getOrNull()
+                        if (searchAttempt != null && (searchAttempt.novels.isNotEmpty() || page > 1)) {
+                            searchAttempt
+                        } else {
+                            effectiveExcludedGenresApplied = false
+                            filters = null
+                            runCatchingUnlessCancelled {
+                                guardedSourceCall(mediaType, sourceId, source) { source.getPopularNovels(page) }
+                            }.let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
+                        }
+                    }
+                    activeFilters != null -> runCatchingUnlessCancelled {
                         guardedSourceCall(mediaType, sourceId, source) {
-                            source.getSearchNovels(page, "", filters)
+                            source.getSearchNovels(page, "", activeFilters)
                         }
                     }
                         .let { if (strictPage) it.getOrThrow() else it.getForDiscoveryGenreQuery(genres) }
@@ -1275,8 +1431,9 @@ class AppDiscoverySourceCatalog(
                 }
                 val nonEmptyPage = rawPage?.takeIf { it.novels.isNotEmpty() }
                 val usedFallback = !strictPage && nonEmptyPage == null && genres == null && page > 1
+                val fallbackFilters = filters
                 val pageData = nonEmptyPage ?: if (usedFallback) {
-                    if (filters == null) {
+                    if (fallbackFilters == null) {
                         runCatchingUnlessCancelled {
                             guardedSourceCall(mediaType, sourceId, source) {
                                 source.getPopularNovels(1)
@@ -1285,7 +1442,7 @@ class AppDiscoverySourceCatalog(
                     } else {
                         runCatchingUnlessCancelled {
                             guardedSourceCall(mediaType, sourceId, source) {
-                                source.getSearchNovels(1, "", filters)
+                                source.getSearchNovels(1, "", fallbackFilters)
                             }
                         }.getOrNull()
                     }
@@ -1324,6 +1481,7 @@ class AppDiscoverySourceCatalog(
                     statusDetailsUsed = statusEnrichment.detailsUsed,
                     genreFilterApplied = genreFilterApplied,
                     genreSearchApplied = false,
+                    excludedGenresApplied = effectiveExcludedGenresApplied,
                 )
             }
         }
@@ -1363,143 +1521,296 @@ class AppDiscoverySourceCatalog(
         genres = genres,
     )
 
+    private suspend fun selectExcludedTriNames(
+        excludedGenres: Set<String>,
+        triNames: List<String>,
+        alreadyIncludedNormalized: Set<String>,
+    ): Pair<Set<String>, Boolean> {
+        val wanted = excludedGenres.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (wanted.isEmpty() || triNames.isEmpty()) return emptySet<String>() to false
+        val matched = genreFallback.selectSourceGenres(wanted, triNames)
+            .filterNot { GenreMatcher.normalize(it) in alreadyIncludedNormalized }
+            .distinct()
+        if (matched.isEmpty()) return emptySet<String>() to false
+        val excludedAll = wanted.all { excluded ->
+            matched.any { opt -> GenreMatcher.matchesConstraint(excluded, opt) } ||
+                MultilingualQueryHelper.getGenreTranslations(excluded).any { syn ->
+                    matched.any { opt -> GenreMatcher.matchesConstraint(syn, opt) }
+                } ||
+                matched.count { opt -> GenreMatcher.matches(excluded, opt) } == 1
+        }
+        return matched.toSet() to excludedAll
+    }
+
     internal suspend fun withMangaGenreFilters(
         filters: FilterList,
         genres: List<String>,
         lang: String = "en",
-    ): FilterList? {
+        excludedGenres: Set<String> = emptySet(),
+    ): FilterList? = applyMangaGenreFilters(filters, genres, lang, excludedGenres).filters
+
+    internal suspend fun applyMangaGenreFilters(
+        filters: FilterList,
+        genres: List<String>?,
+        lang: String = "en",
+        excludedGenres: Set<String> = emptySet(),
+    ): GenreFilterApplication<FilterList> {
         val groups = filters.filterIsInstance<Filter.Group<*>>().filter { isGenreGroupName(it.name) }
         val topBoxes = filters.filterIsInstance<Filter.CheckBox>()
         val topTris = filters.filterIsInstance<Filter.TriState>()
+        var includeApplied = false
+        var excludeApplied = false
+        var excludedAll = false
         if (groups.isNotEmpty() || topBoxes.isNotEmpty() || topTris.isNotEmpty()) {
             // LibGroup has distinct GenreList and TagList; keep the original plugin instances and IDs.
             val options = groups.flatMap { it.state } + topBoxes + topTris
             val boxes = options.filterIsInstance<Filter.CheckBox>()
             val tris = options.filterIsInstance<Filter.TriState>()
             val allOptions = (boxes.map { it.name } + tris.map { it.name }).distinct()
-            // Эвристика жанров: чекбоксы и тристейты любого языка матчатся с запросом; непонятые
-            // названия источник-специфичной экзотики переводятся один раз (M2).
-            val matched = genreFallback.selectSourceGenres(genres, allOptions)
             val selectedNames = HashSet<String>()
-            for (option in options) {
-                when (option) {
-                    is Filter.CheckBox -> {
-                        if (option.name in matched && selectedNames.add(GenreMatcher.normalize(option.name))) {
-                            option.state = true
+            if (!genres.isNullOrEmpty()) {
+                // Эвристика жанров: чекбоксы и тристейты любого языка матчатся с запросом; непонятые
+                // названия источник-специфичной экзотики переводятся один раз (M2).
+                val matched = genreFallback.selectSourceGenres(genres, allOptions)
+                for (option in options) {
+                    when (option) {
+                        is Filter.CheckBox -> {
+                            if (option.name in matched && selectedNames.add(GenreMatcher.normalize(option.name))) {
+                                option.state = true
+                            }
                         }
-                    }
-                    is Filter.TriState -> {
-                        if (option.name in matched && selectedNames.add(GenreMatcher.normalize(option.name))) {
-                            option.state = Filter.TriState.STATE_INCLUDE
+                        is Filter.TriState -> {
+                            if (option.name in matched && selectedNames.add(GenreMatcher.normalize(option.name))) {
+                                option.state = Filter.TriState.STATE_INCLUDE
+                            }
                         }
                     }
                 }
+                includeApplied = matched.isNotEmpty()
             }
-            if (matched.isNotEmpty()) return filters
-        }
-        val selects = filters.filterIsInstance<Filter.Select<*>>().filter { isGenreGroupName(it.name) }
-        for (select in selects) {
-            val names = select.values.map(::optionName)
-            val matched = genreFallback.selectSourceGenres(genres, names)
-            val targetName = matched.firstOrNull() ?: continue
-            val idx = names.indexOfFirst { it == targetName }
-            if (idx >= 0) {
-                select.state = idx
-                return filters
+            if (excludedGenres.isNotEmpty() && tris.isNotEmpty()) {
+                val (excludedMatched, allCovered) = selectExcludedTriNames(
+                    excludedGenres = excludedGenres,
+                    triNames = tris.map { it.name }.distinct(),
+                    alreadyIncludedNormalized = selectedNames,
+                )
+                if (excludedMatched.isNotEmpty()) {
+                    val excludedNorms = HashSet<String>()
+                    for (option in tris) {
+                        val norm = GenreMatcher.normalize(option.name)
+                        if (
+                            option.name in excludedMatched &&
+                            norm !in selectedNames &&
+                            excludedNorms.add(norm)
+                        ) {
+                            option.state = Filter.TriState.STATE_EXCLUDE
+                            excludeApplied = true
+                        }
+                    }
+                    excludedAll = excludeApplied && allCovered
+                }
+            }
+            if (includeApplied) {
+                return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
             }
         }
-        val textFilter = filters.filterIsInstance<Filter.Text>().firstOrNull { isGenreGroupName(it.name) }
-            ?: groups.flatMap { it.state }.filterIsInstance<Filter.Text>().firstOrNull()
-        if (textFilter != null) {
-            val query = discoveryGenreSearchQuery(genres, lang)
-            if (query.isNotBlank()) {
-                textFilter.state = query
-                return filters
+        if (!genres.isNullOrEmpty()) {
+            val selects = filters.filterIsInstance<Filter.Select<*>>().filter { isGenreGroupName(it.name) }
+            for (select in selects) {
+                val names = select.values.map(::optionName)
+                val matched = genreFallback.selectSourceGenres(genres, names)
+                val targetName = matched.firstOrNull() ?: continue
+                val idx = names.indexOfFirst { it == targetName }
+                if (idx >= 0) {
+                    select.state = idx
+                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                }
+            }
+            val textFilter = filters.filterIsInstance<Filter.Text>().firstOrNull { isGenreGroupName(it.name) }
+                ?: groups.flatMap { it.state }.filterIsInstance<Filter.Text>().firstOrNull()
+            if (textFilter != null) {
+                val query = discoveryGenreSearchQuery(genres, lang)
+                if (query.isNotBlank()) {
+                    textFilter.state = query
+                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                }
             }
         }
-        return null
+        return if (excludeApplied) {
+            GenreFilterApplication(filters, includeApplied = false, excludeApplied = true, excludedAll = excludedAll)
+        } else {
+            GenreFilterApplication(null)
+        }
     }
 
-    private suspend fun withAnimeGenreFilters(
+    internal suspend fun applyAnimeGenreFilters(
         filters: AnimeFilterList,
-        genres: List<String>,
+        genres: List<String>?,
         lang: String = "en",
-    ): AnimeFilterList? {
+        excludedGenres: Set<String> = emptySet(),
+    ): GenreFilterApplication<AnimeFilterList> {
         val groups = filters.filterIsInstance<AnimeFilter.Group<*>>().filter { isGenreGroupName(it.name) }
         val topBoxes = filters.filterIsInstance<AnimeFilter.CheckBox>()
         val topTris = filters.filterIsInstance<AnimeFilter.TriState>()
+        var includeApplied = false
+        var excludeApplied = false
+        var excludedAll = false
         if (groups.isNotEmpty() || topBoxes.isNotEmpty() || topTris.isNotEmpty()) {
             val options = groups.flatMap { it.state } + topBoxes + topTris
             val boxes = options.filterIsInstance<AnimeFilter.CheckBox>()
             val tris = options.filterIsInstance<AnimeFilter.TriState>()
             val allOptions = (boxes.map { it.name } + tris.map { it.name }).distinct()
-            val matched = genreFallback.selectSourceGenres(genres, allOptions)
-            boxes.filter { it.name in matched }.forEach { it.state = true }
-            tris.filter { it.name in matched }.forEach { it.state = AnimeFilter.TriState.STATE_INCLUDE }
-            if (matched.isNotEmpty()) return filters
-        }
-        val selects = filters.filterIsInstance<AnimeFilter.Select<*>>().filter { isGenreGroupName(it.name) }
-        for (select in selects) {
-            val names = select.values.map(::optionName)
-            val matched = genreFallback.selectSourceGenres(genres, names)
-            val targetName = matched.firstOrNull() ?: continue
-            val idx = names.indexOfFirst { it == targetName }
-            if (idx >= 0) {
-                select.state = idx
-                return filters
+            val selectedNames = HashSet<String>()
+            if (!genres.isNullOrEmpty()) {
+                val matched = genreFallback.selectSourceGenres(genres, allOptions)
+                boxes.filter { it.name in matched }.forEach {
+                    it.state = true
+                    selectedNames.add(GenreMatcher.normalize(it.name))
+                }
+                tris.filter { it.name in matched }.forEach {
+                    it.state = AnimeFilter.TriState.STATE_INCLUDE
+                    selectedNames.add(GenreMatcher.normalize(it.name))
+                }
+                includeApplied = matched.isNotEmpty()
+            }
+            if (excludedGenres.isNotEmpty() && tris.isNotEmpty()) {
+                val (excludedMatched, allCovered) = selectExcludedTriNames(
+                    excludedGenres = excludedGenres,
+                    triNames = tris.map { it.name }.distinct(),
+                    alreadyIncludedNormalized = selectedNames,
+                )
+                if (excludedMatched.isNotEmpty()) {
+                    val excludedNorms = HashSet<String>()
+                    for (option in tris) {
+                        val norm = GenreMatcher.normalize(option.name)
+                        if (
+                            option.name in excludedMatched &&
+                            norm !in selectedNames &&
+                            excludedNorms.add(norm)
+                        ) {
+                            option.state = AnimeFilter.TriState.STATE_EXCLUDE
+                            excludeApplied = true
+                        }
+                    }
+                    excludedAll = excludeApplied && allCovered
+                }
+            }
+            if (includeApplied) {
+                return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
             }
         }
-        val textFilter = filters.filterIsInstance<AnimeFilter.Text>().firstOrNull { isGenreGroupName(it.name) }
-            ?: groups.flatMap { it.state }.filterIsInstance<AnimeFilter.Text>().firstOrNull()
-        if (textFilter != null) {
-            val query = discoveryGenreSearchQuery(genres, lang)
-            if (query.isNotBlank()) {
-                textFilter.state = query
-                return filters
+        if (!genres.isNullOrEmpty()) {
+            val selects = filters.filterIsInstance<AnimeFilter.Select<*>>().filter { isGenreGroupName(it.name) }
+            for (select in selects) {
+                val names = select.values.map(::optionName)
+                val matched = genreFallback.selectSourceGenres(genres, names)
+                val targetName = matched.firstOrNull() ?: continue
+                val idx = names.indexOfFirst { it == targetName }
+                if (idx >= 0) {
+                    select.state = idx
+                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                }
+            }
+            val textFilter = filters.filterIsInstance<AnimeFilter.Text>().firstOrNull { isGenreGroupName(it.name) }
+                ?: groups.flatMap { it.state }.filterIsInstance<AnimeFilter.Text>().firstOrNull()
+            if (textFilter != null) {
+                val query = discoveryGenreSearchQuery(genres, lang)
+                if (query.isNotBlank()) {
+                    textFilter.state = query
+                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                }
             }
         }
-        return null
+        return if (excludeApplied) {
+            GenreFilterApplication(filters, includeApplied = false, excludeApplied = true, excludedAll = excludedAll)
+        } else {
+            GenreFilterApplication(null)
+        }
     }
 
-    private suspend fun withNovelGenreFilters(
+    internal suspend fun applyNovelGenreFilters(
         filters: NovelFilterList,
-        genres: List<String>,
+        genres: List<String>?,
         lang: String = "en",
-    ): NovelFilterList? {
+        excludedGenres: Set<String> = emptySet(),
+    ): GenreFilterApplication<NovelFilterList> {
         val groups = filters.filterIsInstance<NovelFilter.Group<*>>().filter { isGenreGroupName(it.name) }
         val topBoxes = filters.filterIsInstance<NovelFilter.CheckBox>()
         val topTris = filters.filterIsInstance<NovelFilter.TriState>()
+        var includeApplied = false
+        var excludeApplied = false
+        var excludedAll = false
         if (groups.isNotEmpty() || topBoxes.isNotEmpty() || topTris.isNotEmpty()) {
             val options = groups.flatMap { it.state } + topBoxes + topTris
             val boxes = options.filterIsInstance<NovelFilter.CheckBox>()
             val tris = options.filterIsInstance<NovelFilter.TriState>()
             val allOptions = (boxes.map { it.name } + tris.map { it.name }).distinct()
-            val matched = genreFallback.selectSourceGenres(genres, allOptions)
-            boxes.filter { it.name in matched }.forEach { it.state = true }
-            tris.filter { it.name in matched }.forEach { it.state = NovelFilter.TriState.STATE_INCLUDE }
-            if (matched.isNotEmpty()) return filters
-        }
-        val selects = filters.filterIsInstance<NovelFilter.Select<*>>().filter { isGenreGroupName(it.name) }
-        for (select in selects) {
-            val names = select.values.map(::optionName)
-            val matched = genreFallback.selectSourceGenres(genres, names)
-            val targetName = matched.firstOrNull() ?: continue
-            val idx = names.indexOfFirst { it == targetName }
-            if (idx >= 0) {
-                select.state = idx
-                return filters
+            val selectedNames = HashSet<String>()
+            if (!genres.isNullOrEmpty()) {
+                val matched = genreFallback.selectSourceGenres(genres, allOptions)
+                boxes.filter { it.name in matched }.forEach {
+                    it.state = true
+                    selectedNames.add(GenreMatcher.normalize(it.name))
+                }
+                tris.filter { it.name in matched }.forEach {
+                    it.state = NovelFilter.TriState.STATE_INCLUDE
+                    selectedNames.add(GenreMatcher.normalize(it.name))
+                }
+                includeApplied = matched.isNotEmpty()
+            }
+            if (excludedGenres.isNotEmpty() && tris.isNotEmpty()) {
+                val (excludedMatched, allCovered) = selectExcludedTriNames(
+                    excludedGenres = excludedGenres,
+                    triNames = tris.map { it.name }.distinct(),
+                    alreadyIncludedNormalized = selectedNames,
+                )
+                if (excludedMatched.isNotEmpty()) {
+                    val excludedNorms = HashSet<String>()
+                    for (option in tris) {
+                        val norm = GenreMatcher.normalize(option.name)
+                        if (
+                            option.name in excludedMatched &&
+                            norm !in selectedNames &&
+                            excludedNorms.add(norm)
+                        ) {
+                            option.state = NovelFilter.TriState.STATE_EXCLUDE
+                            excludeApplied = true
+                        }
+                    }
+                    excludedAll = excludeApplied && allCovered
+                }
+            }
+            if (includeApplied) {
+                return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
             }
         }
-        val textFilter = filters.filterIsInstance<NovelFilter.Text>().firstOrNull { isGenreGroupName(it.name) }
-            ?: groups.flatMap { it.state }.filterIsInstance<NovelFilter.Text>().firstOrNull()
-        if (textFilter != null) {
-            val query = discoveryGenreSearchQuery(genres, lang)
-            if (query.isNotBlank()) {
-                textFilter.state = query
-                return filters
+        if (!genres.isNullOrEmpty()) {
+            val selects = filters.filterIsInstance<NovelFilter.Select<*>>().filter { isGenreGroupName(it.name) }
+            for (select in selects) {
+                val names = select.values.map(::optionName)
+                val matched = genreFallback.selectSourceGenres(genres, names)
+                val targetName = matched.firstOrNull() ?: continue
+                val idx = names.indexOfFirst { it == targetName }
+                if (idx >= 0) {
+                    select.state = idx
+                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                }
+            }
+            val textFilter = filters.filterIsInstance<NovelFilter.Text>().firstOrNull { isGenreGroupName(it.name) }
+                ?: groups.flatMap { it.state }.filterIsInstance<NovelFilter.Text>().firstOrNull()
+            if (textFilter != null) {
+                val query = discoveryGenreSearchQuery(genres, lang)
+                if (query.isNotBlank()) {
+                    textFilter.state = query
+                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                }
             }
         }
-        return null
+        return if (excludeApplied) {
+            GenreFilterApplication(filters, includeApplied = false, excludeApplied = true, excludedAll = excludedAll)
+        } else {
+            GenreFilterApplication(null)
+        }
     }
 
     /**

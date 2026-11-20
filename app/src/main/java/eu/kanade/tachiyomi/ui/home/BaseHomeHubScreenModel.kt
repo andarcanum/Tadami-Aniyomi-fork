@@ -70,6 +70,14 @@ internal abstract class BaseHomeHubScreenModel(
         discoveryController?.likeDiscoveryItem(item)
     }
 
+    open fun hideDiscoveryItem(item: HomeHubDiscoveryItem) {
+        discoveryController?.hideDiscoveryItem(item)
+    }
+
+    open fun markDiscoveryItemConsumed(item: HomeHubDiscoveryItem) {
+        discoveryController?.markDiscoveryItemConsumed(item)
+    }
+
     open fun restoreHiddenTeaserItem(item: HomeHubDiscoveryItem) {
         discoveryController?.restoreHiddenTeaserItem(item)
     }

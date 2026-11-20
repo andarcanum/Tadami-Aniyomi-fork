@@ -7,11 +7,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -64,7 +65,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.FloatState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -74,6 +77,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -107,6 +111,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil3.compose.AsyncImage
+import coil3.request.crossfade
+import coil3.size.Precision
+import coil3.size.Size as CoilSize
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.ui.model.HomeHeroMode
 import eu.kanade.presentation.components.AdaptiveSheet
@@ -138,6 +145,7 @@ import eu.kanade.tachiyomi.ui.discovery.buildDiscoverySuggestionItem
 import eu.kanade.tachiyomi.ui.discovery.discoveryCoverData
 import eu.kanade.tachiyomi.ui.discovery.rememberDiscoveryCoverData
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -2322,10 +2330,12 @@ internal fun DiscoveryHeroStage(
     var savedOffset by rememberSaveable { mutableIntStateOf(offset) }
     var savedFocusedTitle by rememberSaveable { mutableStateOf<String?>(null) }
     var isDragging by remember { mutableStateOf(false) }
+    // Синхронная позиция драга без аллокации корутин и захвата мьютекса Animatable на каждый сэмпл
+    // тачскрина (60/120Hz). Пока NaN — визуальный центр берётся из centerAnim.
+    val dragCenterState = remember { mutableFloatStateOf(Float.NaN) }
 
-    // B1: непрерывный центр сцены. Драг двигает его за пальцем (snapTo), отпускание/кнопки/авто-ротация
-    // доводят tween'ом от текущей визуальной позиции — без скачков. Касание ловит сцену в любой точке
-    // (см. жест ниже). Значение читается только внутри graphicsLayer/derivedStateOf: рекомпозиций на кадр нет.
+    // B1: непрерывный центр сцены. Драг обновляет dragCenterState напрямую в draw-фазе, отпускание
+    // плавно передаёт позицию и реальную скорость пальца в centerAnim без скачка скорости.
     val centerAnim = remember { Animatable(center.toFloat()) }
     val scope = rememberCoroutineScope()
 
@@ -2349,12 +2359,14 @@ internal fun DiscoveryHeroStage(
         lastItems.value = items
     }
     val ordered = orderedState.value
+    val currentOnItemFocused by rememberUpdatedState(onItemFocused)
     var focusMarkJob by remember { mutableStateOf<Job?>(null) }
     fun markFocusedSoon() {
         focusMarkJob?.cancel()
         focusMarkJob = scope.launch {
             delay(1200) // визуальная устойчивость фокуса, не пересборка
-            ordered.getOrNull(stageItemIndex(center, 0, ordered.size))?.let(onItemFocused)
+            val latestOrdered = orderedState.value
+            latestOrdered.getOrNull(stageItemIndex(center, 0, latestOrdered.size))?.let(currentOnItemFocused)
         }
     }
     LaunchedEffect(ordered) { markFocusedSoon() }
@@ -2370,20 +2382,61 @@ internal fun DiscoveryHeroStage(
     // e-ink и выключенные анимации — мгновенно.
     // Пользовательское движение штампует stageLastRotationTime: авто-ротация не дёргает
     // ленту сразу после ручного перехода (штамп учитывается при следующем пересчёте ожидания).
-    fun settleTo(target: Int, isFlick: Boolean, userInitiated: Boolean = true) {
+    fun settleTo(
+        target: Int,
+        isFlick: Boolean,
+        userInitiated: Boolean = true,
+        velocityPagesPerSec: Float = 0f,
+        releaseCenter: Float = Float.NaN,
+    ) {
         if (userInitiated) {
-            discoveryPreferences.stageLastRotationTime(coverMediaType).set(System.currentTimeMillis())
+            // Запись в SharedPreferences уводим с UI-потока, чтобы начало свайпа не спотыкалось о диск/лок.
+            val now = System.currentTimeMillis()
+            scope.launch(Dispatchers.IO) {
+                discoveryPreferences.stageLastRotationTime(coverMediaType).set(now)
+            }
         }
         if (target != center) {
             center = target
         }
         markFocusedSoon()
         if (motionSpec.settleMillis == 0) {
-            scope.launch(start = CoroutineStart.UNDISPATCHED) { centerAnim.snapTo(target.toFloat()) }
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                centerAnim.snapTo(target.toFloat())
+                dragCenterState.floatValue = Float.NaN
+            }
             return
         }
-        val easing = if (isFlick) LinearOutSlowInEasing else FastOutSlowInEasing
-        scope.launch { centerAnim.animateTo(target.toFloat(), tween(motionSpec.settleMillis, easing = easing)) }
+        // Критически демпфированная пружина (DampingRatioNoBouncy = 1f) при отпускании драга сохраняет
+        // реальный импульс пальца без отскока и без разрыва скорости, который давал фиксированный tween.
+        val useSpring = isFlick || (!releaseCenter.isNaN() && abs(velocityPagesPerSec) > 0.25f)
+        val stiffness = when {
+            motionSpec.settleMillis <= 280 -> Spring.StiffnessMedium
+            motionSpec.settleMillis >= 480 -> Spring.StiffnessLow
+            else -> 280f
+        }
+        val initialVelocity = (-velocityPagesPerSec).coerceIn(-12f, 12f)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            if (!releaseCenter.isNaN()) {
+                centerAnim.snapTo(releaseCenter)
+                dragCenterState.floatValue = Float.NaN
+            }
+            if (useSpring) {
+                centerAnim.animateTo(
+                    targetValue = target.toFloat(),
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = stiffness,
+                    ),
+                    initialVelocity = initialVelocity,
+                )
+            } else {
+                centerAnim.animateTo(
+                    targetValue = target.toFloat(),
+                    animationSpec = tween(motionSpec.settleMillis, easing = FastOutSlowInEasing),
+                )
+            }
+        }
     }
 
     // Ре-анкор фокуса при смене СОСТАВА ленты (items) — синхронно, до первого кадра:
@@ -2397,8 +2450,12 @@ internal fun DiscoveryHeroStage(
             var center: Int = 0
         }
     }
-    if (ordered.isNotEmpty()) {
-        val currentOrderedTitles = ordered.map { it.cleanTitle }
+    if (ordered.isNotEmpty() && (focusAnchor.items !== items || focusAnchor.center != center)) {
+        val currentOrderedTitles = if (focusAnchor.items === items && focusAnchor.orderedTitles.isNotEmpty()) {
+            focusAnchor.orderedTitles
+        } else {
+            ordered.map { it.cleanTitle }
+        }
         val hasSavedSession = focusAnchor.items == null && savedOrderedTitles.isNotEmpty() && savedOffset == offset
         val itemsChanged = (focusAnchor.items != null && focusAnchor.items !== items) ||
             (hasSavedSession && savedOrderedTitles != currentOrderedTitles)
@@ -2420,6 +2477,7 @@ internal fun DiscoveryHeroStage(
         if (reanchorCenter != center) {
             center = reanchorCenter
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                dragCenterState.floatValue = Float.NaN
                 centerAnim.snapTo(reanchorCenter.toFloat())
             }
             markFocusedSoon()
@@ -2427,9 +2485,20 @@ internal fun DiscoveryHeroStage(
         focusAnchor.items = items
         focusAnchor.orderedTitles = currentOrderedTitles
         focusAnchor.center = center
-        savedOrderedTitles = ArrayList(currentOrderedTitles)
-        savedOffset = offset
-        savedFocusedTitle = ordered.getOrNull(stageItemIndex(center, 0, ordered.size))?.cleanTitle
+    }
+    SideEffect {
+        if (ordered.isNotEmpty()) {
+            if (savedOffset != offset) {
+                savedOffset = offset
+            }
+            if (savedOrderedTitles != focusAnchor.orderedTitles && focusAnchor.orderedTitles.isNotEmpty()) {
+                savedOrderedTitles = ArrayList(focusAnchor.orderedTitles)
+            }
+            val currentFocusedTitle = ordered.getOrNull(stageItemIndex(center, 0, ordered.size))?.cleanTitle
+            if (savedFocusedTitle != currentFocusedTitle) {
+                savedFocusedTitle = currentFocusedTitle
+            }
+        }
     }
     // Ken-burns у фокуса: состояние читается внутри graphicsLayer, поэтому кадры не рекомпозируют слоты.
     // B3: профиль (направление/дрейф) выбирается по постеру и применяется в слое слота.
@@ -2520,12 +2589,14 @@ internal fun DiscoveryHeroStage(
                         scope.launch(start = CoroutineStart.UNDISPATCHED) { centerAnim.stop() }
                         // База драга — позиция сцены на момент касания: захват середины довода
                         // не телепортирует карусель к целому слоту.
-                        val dragBase = centerAnim.value
+                        val currentDrag = dragCenterState.floatValue
+                        val dragBase = if (!currentDrag.isNaN()) currentDrag else centerAnim.value
                         val caughtMoving = abs(dragBase - center) > STAGE_CAUGHT_EPSILON
                         var lockedAxis = 0 // 0 — ось не выбрана, 1 — горизонталь (наш драг), −1 — вертикаль
                         var totalDx = 0f
                         var totalDy = 0f
                         var dragAccumulator = 0f
+                        var releasedNormally = false
                         val pointerId = down.id
                         try {
                             while (true) {
@@ -2541,6 +2612,7 @@ internal fun DiscoveryHeroStage(
                                     if (lockedAxis == 1 || (caughtMoving && lockedAxis == 0)) {
                                         change.consume()
                                     }
+                                    releasedNormally = true
                                     break
                                 }
                                 val delta = change.positionChange()
@@ -2554,19 +2626,15 @@ internal fun DiscoveryHeroStage(
                                                 isDragging = true
                                                 dragAccumulator = totalDx
                                                 tracker.addPosition(change.uptimeMillis, change.position)
+                                                dragCenterState.floatValue = dragBase - dragAccumulator / travelPx
                                             }
                                         }
                                     } else if (lockedAxis == 1) {
                                         isDragging = true
                                         dragAccumulator += delta.x
                                         tracker.addPosition(change.uptimeMillis, change.position)
-                                        // Сцена едет за пальцем. Restricted-ско́п жеста не позволяет
-                                        // звать suspend напрямую — UNDISPATCHED-запуск выполняется
-                                        // синхронно до первой приостановки, а snapTo на свободном
-                                        // (уже остановленном на down) мьютексе не подвисает.
-                                        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                            centerAnim.snapTo(dragBase - dragAccumulator / travelPx)
-                                        }
+                                        // Обновляем FloatState напрямую без запуска корутин на каждый кадр.
+                                        dragCenterState.floatValue = dragBase - dragAccumulator / travelPx
                                     }
                                 }
                                 if (lockedAxis == 1) {
@@ -2579,19 +2647,27 @@ internal fun DiscoveryHeroStage(
                             }
                         } finally {
                             isDragging = false
+                            if (!releasedNormally && !dragCenterState.floatValue.isNaN()) {
+                                val cancelledPos = dragCenterState.floatValue
+                                settleTo(
+                                    target = cancelledPos.roundToInt(),
+                                    isFlick = false,
+                                    releaseCenter = cancelledPos,
+                                )
+                            }
                         }
                         if (lockedAxis == 1) {
-                            // Отпускание с драгом: флик проецирует полёт от позиции пальца.
-                            // Клампа скорости: реальные флики ~0.02 стр/мс, выше — цифрайзерные
-                            // спайки (завышенная или развёрнутая скорость при подъёме пальца).
+                            // Отпускание с драгом: VelocityTracker возвращает px/сек, переводим в px/мс.
                             val maxVelocityPxPerMs = STAGE_FLICK_VELOCITY_MAX_PAGES * travelPx
-                            val velocityPxPerMs = tracker.calculateVelocity().x
+                            val velocityPxPerSec = tracker.calculateVelocity().x
+                            val velocityPxPerMs = (velocityPxPerSec / 1000f)
                                 .coerceIn(-maxVelocityPxPerMs, maxVelocityPxPerMs)
                             val velocityPagesPerMs = velocityPxPerMs / travelPx
                             val displacementPages = dragAccumulator / travelPx
+                            val releaseCenter = dragBase - displacementPages
                             val target = resolveStageDragTarget(
                                 dragBase = dragBase,
-                                intent = dragBase - displacementPages,
+                                intent = releaseCenter,
                                 velocityPagesPerMs = velocityPagesPerMs,
                                 displacementPages = displacementPages,
                                 flickMinPages = flickMinPx / travelPx,
@@ -2603,10 +2679,19 @@ internal fun DiscoveryHeroStage(
                                 appHaptics.tap()
                                 userInteractionToken++
                             }
-                            settleTo(target, isFlick)
+                            settleTo(
+                                target = target,
+                                isFlick = isFlick,
+                                velocityPagesPerSec = velocityPagesPerMs * 1000f,
+                                releaseCenter = releaseCenter,
+                            )
                         } else if (caughtMoving) {
                             // Тап/удержание поймали летящую сцену — спокойно доводим до ближайшего.
-                            settleTo(centerAnim.value.roundToInt(), isFlick = false)
+                            settleTo(
+                                target = dragBase.roundToInt(),
+                                isFlick = false,
+                                releaseCenter = dragCenterState.floatValue,
+                            )
                         }
                         // Чистый тап по спокойной сцене: события не потреблены, clickable слота работает.
                     }
@@ -2615,34 +2700,42 @@ internal fun DiscoveryHeroStage(
             // Окно слотов следует за ВИЗУАЛЬНЫМ центром: при пути 1:1 свайп на весь экран ≈ 4 страницы,
             // и коммитное окно ±3 оставило бы пустой край. derivedStateOf рекомпозирует только на
             // пересечении целых границ; слоты переиспользуются по key(absIndex).
-            val windowBase by remember { derivedStateOf { centerAnim.value.roundToInt() } }
+            val windowBase by remember {
+                derivedStateOf {
+                    val d = dragCenterState.floatValue
+                    (if (!d.isNaN()) d else centerAnim.value).roundToInt()
+                }
+            }
+            val onSlotClick: (Int, HomeHubDiscoveryItem) -> Unit = remember(onItemClick, motionSpec, coverMediaType) {
+                { slotAbsIndex, clickedItem ->
+                    appHaptics.tap()
+                    if (slotAbsIndex == center) {
+                        onItemClick(clickedItem)
+                    } else {
+                        // Шаг всегда один: слоты живут окном вокруг центра, переброс не нужен.
+                        settleTo(center + if (slotAbsIndex > center) 1 else -1, isFlick = false)
+                        userInteractionToken++
+                    }
+                }
+            }
             for (absIndex in (windowBase - STAGE_BUFFER)..(windowBase + STAGE_BUFFER)) {
                 val item = ordered[stageItemIndex(absIndex, 0, ordered.size)]
                 val rel = absIndex - windowBase
                 key(absIndex) {
                     StageSlot(
                         item = item,
-                        rel = rel,
                         absIndex = absIndex,
                         distanceToFocus = abs(rel),
                         animatedCenter = centerAnim,
+                        dragCenterState = dragCenterState,
+                        isDragging = isDragging,
                         kenBurnsScale = kenBurnsScale,
                         kenBurnsProfile = remember(item.cleanTitle) {
                             stageKenBurnsProfile(item.cleanTitle)
                         },
                         useKenBurns = !colors.isEInk,
-                        coverMediaType = coverMediaType,
-                        onClick = {
-                            appHaptics.tap()
-                            if (rel == 0) {
-                                onItemClick(item)
-                            } else {
-                                // Шаг всегда один: слоты живут окном вокруг центра, переброс не нужен.
-                                settleTo(center + if (rel > 0) 1 else -1, isFlick = false)
-                                userInteractionToken++
-                            }
-                        },
-                        onLongClick = onLongClick?.let { callback -> { callback(item) } },
+                        onSlotClick = onSlotClick,
+                        onSlotLongClick = onLongClick,
                     )
                 }
             }
@@ -2777,22 +2870,24 @@ private fun StageNavButton(
 }
 
 /**
- * Слот карусели. Обложка создаётся только для слотов внутри окна (|rel| ≤ 2), буферные слоты
- * остаются пустыми — так 7 загрузок Coil не плодятся на каждый переброс.
+ * Слот карусели. Все слоты буферного окна (|rel| ≤ STAGE_BUFFER) держат обложку, градиент и
+ * подпись предсобранными с ограниченным размером декодирования Coil, а видимость переключается
+ * исключительно в draw-фазе (graphicsLayer) — это убирает рывки при пересечении границ слотов
+ * во время свайпа.
  */
 @Composable
 private fun BoxScope.StageSlot(
     item: HomeHubDiscoveryItem,
-    rel: Int,
     absIndex: Int,
     distanceToFocus: Int,
     animatedCenter: Animatable<Float, AnimationVector1D>,
+    dragCenterState: FloatState,
+    isDragging: Boolean,
     kenBurnsScale: State<Float>,
     kenBurnsProfile: StageKenBurnsProfile,
     useKenBurns: Boolean,
-    coverMediaType: DiscoveryMediaType,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)?,
+    onSlotClick: (Int, HomeHubDiscoveryItem) -> Unit,
+    onSlotLongClick: ((HomeHubDiscoveryItem) -> Unit)?,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
@@ -2800,16 +2895,40 @@ private fun BoxScope.StageSlot(
     val coverReloadTick = rememberCoverReloadTick()
     val coverModel = rememberDiscoveryCoverData(item.toDiscoverySuggestion())
     val coverRequest = remember(context, coverModel, coverReloadTick) {
-        buildAuroraCoverImageRequest(context, coverModel)
+        buildAuroraCoverImageRequest(context, coverModel) {
+            size(CoilSize(540, 810))
+            precision(Precision.INEXACT)
+            crossfade(false)
+        }
     }
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
-    val tileShape = RoundedCornerShape(18.dp)
-    // B2: фокус считается по визуальному центру — подпись, градиент и подсветка сменяются
-    // в середине перелёта, а не по коммиту. derivedStateOf рекомпозирует слот только на пересечении.
-    val isVisualFocus by remember {
-        derivedStateOf { abs(absIndex - animatedCenter.value) < STAGE_FOCUS_EPSILON }
+    val tileShape = remember { RoundedCornerShape(18.dp) }
+    val neutralCoverBrush = remember(colors) {
+        Brush.verticalGradient(
+            listOf(
+                colors.cardBackground,
+                colors.divider.copy(alpha = if (colors.isEInk) 0.30f else 0.22f),
+            ),
+        )
     }
-    val focusReason = if (isVisualFocus) discoveryReasonOrNull(item) else null
+    val focusScrimBrush = remember(colors.isEInk) {
+        Brush.verticalGradient(
+            0.55f to Color.Transparent,
+            1.0f to if (colors.isEInk) Color.White.copy(alpha = 0.95f) else Color(0xCC04060A),
+        )
+    }
+    val focusReason = discoveryReasonOrNull(item)
+    val clickHandler = remember(absIndex, item, onSlotClick) {
+        { onSlotClick(absIndex, item) }
+    }
+    val longClickHandler = remember(item, onSlotLongClick, appHaptics) {
+        onSlotLongClick?.let { callback ->
+            {
+                appHaptics.tap()
+                callback(item)
+            }
+        }
+    }
 
     Box(
         Modifier
@@ -2818,7 +2937,9 @@ private fun BoxScope.StageSlot(
             .fillMaxWidth(0.6f)
             .zIndex(10f - distanceToFocus)
             .graphicsLayer {
-                val relFloat = absIndex - animatedCenter.value
+                val d = dragCenterState.floatValue
+                val visualCenter = if (!d.isNaN()) d else animatedCenter.value
+                val relFloat = absIndex - visualCenter
                 val base = floor(relFloat).toInt()
                 val pose = lerpStageSlotPose(
                     from = resolveStageSlotPose(base),
@@ -2833,7 +2954,7 @@ private fun BoxScope.StageSlot(
                 alpha = pose.alpha
             }
             .then(
-                if (isVisualFocus) {
+                if (distanceToFocus == 0) {
                     Modifier.semantics {
                         contentDescription = listOfNotNull(item.title, focusReason).joinToString(", ")
                     }
@@ -2851,110 +2972,110 @@ private fun BoxScope.StageSlot(
                 },
             )
             .then(
-                if (onLongClick != null) {
+                if (longClickHandler != null) {
                     Modifier.combinedClickable(
-                        onClick = onClick,
-                        onLongClick = {
-                            appHaptics.tap()
-                            onLongClick()
-                        },
+                        onClick = clickHandler,
+                        onLongClick = longClickHandler,
                     )
                 } else {
-                    Modifier.clickable(onClick = onClick)
+                    Modifier.clickable(onClick = clickHandler)
                 },
             ),
     ) {
-        if (distanceToFocus <= 2) {
-            // Нейтральная подложка на время загрузки: тематическая Aurora-заглушка слишком яркая для hero-слота.
-            val neutralCoverBrush = remember(colors) {
-                Brush.verticalGradient(
-                    listOf(
-                        colors.cardBackground,
-                        colors.divider.copy(alpha = if (colors.isEInk) 0.30f else 0.22f),
-                    ),
-                )
-            }
-            Box(Modifier.fillMaxSize().background(neutralCoverBrush))
-            AsyncImage(
-                model = coverRequest,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                colorFilter = rememberAuroraPosterColorFilter(),
-                // Ken-burns живёт только на обложке: раньше он масштабировал весь слот вместе с подписью.
-                // B3: профиль по хешу постера — наезд/отъезд и дрейф различаются между соседями;
-                // дрейф в фазе с наездом (|сдвиг| ≤ амплитуда/2), края не оголяются.
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        if (useKenBurns && isVisualFocus) {
-                            val phase = (
-                                (kenBurnsScale.value - STAGE_KEN_BURNS_MIN_SCALE) /
-                                    (STAGE_KEN_BURNS_MAX_SCALE - STAGE_KEN_BURNS_MIN_SCALE)
-                                ).coerceIn(0f, 1f)
-                            val scale = 1f + kenBurnsProfile.scaleAmplitude * phase
-                            scaleX = scale
-                            scaleY = scale
-                            translationX = size.width * kenBurnsProfile.driftXFraction * phase
-                            translationY = size.height * kenBurnsProfile.driftYFraction * phase
-                        } else {
-                            scaleX = 1f
-                            scaleY = 1f
-                        }
-                    },
-                error = fallbackPainter,
-                fallback = fallbackPainter,
-            )
-            // Затемнение соседей: brightness в graphicsLayer нет, поэтому кладём scrim-слой.
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        val relFloat = absIndex - animatedCenter.value
-                        val base = floor(relFloat).toInt()
-                        alpha = lerpStageSlotPose(
-                            from = resolveStageSlotPose(base),
-                            to = resolveStageSlotPose(base + 1),
-                            fraction = relFloat - base,
-                        ).dimAlpha
+        // Нейтральная подложка на время загрузки: тематическая Aurora-заглушка слишком яркая для hero-слота.
+        Box(Modifier.fillMaxSize().background(neutralCoverBrush))
+        AsyncImage(
+            model = coverRequest,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            colorFilter = rememberAuroraPosterColorFilter(),
+            // Ken-burns живёт только на обложке и не тратит GPU-кадры во время активного свайпа.
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val d = dragCenterState.floatValue
+                    val visualCenter = if (!d.isNaN()) d else animatedCenter.value
+                    val focused = abs(absIndex - visualCenter) < STAGE_FOCUS_EPSILON
+                    if (useKenBurns && !isDragging && focused) {
+                        val phase = (
+                            (kenBurnsScale.value - STAGE_KEN_BURNS_MIN_SCALE) /
+                                (STAGE_KEN_BURNS_MAX_SCALE - STAGE_KEN_BURNS_MIN_SCALE)
+                            ).coerceIn(0f, 1f)
+                        val scale = 1f + kenBurnsProfile.scaleAmplitude * phase
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = size.width * kenBurnsProfile.driftXFraction * phase
+                        translationY = size.height * kenBurnsProfile.driftYFraction * phase
+                    } else {
+                        scaleX = 1f
+                        scaleY = 1f
+                        translationX = 0f
+                        translationY = 0f
                     }
-                    .background(if (colors.isEInk) Color.White else Color.Black),
-            )
-            if (isVisualFocus) {
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(
-                            0.55f to Color.Transparent,
-                            1.0f to if (colors.isEInk) Color.White.copy(alpha = 0.95f) else Color(0xCC04060A),
-                        ),
-                    ),
-                )
-            }
-        }
-
-        // V1: подпись переключается мгновенно на пересечении визуального фокуса (как в прототипе),
-        // без enter/exit-анимаций — кадр меняется целиком, кино даёт движение сцены, а не текста.
-        if (isVisualFocus) {
-            Column(Modifier.align(Alignment.BottomStart).padding(start = 14.dp, end = 14.dp, bottom = 70.dp)) {
-                Text(
-                    item.title,
-                    color = if (colors.isEInk) Color.Black else Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 22.sp,
-                )
-                focusReason?.let { reason ->
-                    Text(
-                        reason,
-                        color = colors.accent,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                },
+            error = fallbackPainter,
+            fallback = fallbackPainter,
+        )
+        // Затемнение соседей: brightness в graphicsLayer нет, поэтому кладём scrim-слой.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val d = dragCenterState.floatValue
+                    val visualCenter = if (!d.isNaN()) d else animatedCenter.value
+                    val relFloat = absIndex - visualCenter
+                    val base = floor(relFloat).toInt()
+                    alpha = lerpStageSlotPose(
+                        from = resolveStageSlotPose(base),
+                        to = resolveStageSlotPose(base + 1),
+                        fraction = relFloat - base,
+                    ).dimAlpha
                 }
+                .background(if (colors.isEInk) Color.White else Color.Black),
+        )
+        // Градиент и подпись всегда предсобраны и управляются в draw-фазе: ноль рекомпозиций и
+        // ноль re-layout текста при пересечении границы фокуса на лету.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val d = dragCenterState.floatValue
+                    val visualCenter = if (!d.isNaN()) d else animatedCenter.value
+                    val dist = abs(absIndex - visualCenter)
+                    alpha = (1f - ((dist - 0.15f) / (STAGE_FOCUS_EPSILON - 0.15f))).coerceIn(0f, 1f)
+                }
+                .background(focusScrimBrush),
+        )
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 14.dp, end = 14.dp, bottom = 70.dp)
+                .graphicsLayer {
+                    val d = dragCenterState.floatValue
+                    val visualCenter = if (!d.isNaN()) d else animatedCenter.value
+                    val dist = abs(absIndex - visualCenter)
+                    alpha = (1f - ((dist - 0.15f) / (STAGE_FOCUS_EPSILON - 0.15f))).coerceIn(0f, 1f)
+                },
+        ) {
+            Text(
+                item.title,
+                color = if (colors.isEInk) Color.Black else Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 22.sp,
+            )
+            focusReason?.let { reason ->
+                Text(
+                    reason,
+                    color = colors.accent,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
     }

@@ -141,6 +141,7 @@ internal suspend fun queryDiscoveryGenreSources(
     pages: Int = 1,
     excludedKeys: Set<String> = emptySet(),
     matchMode: RequiredMatchMode = policy.requiredMatchMode,
+    excludedGenres: Set<String> = policy.hardExcludedGenres,
 ): List<GenreSourceVerification> = supervisorScope {
     require(maxConcurrency > 0 && timeoutMs > 0L && targetItems > 0)
     val requestedIds = sourceIds.filter { it > 0L }.distinct()
@@ -256,6 +257,7 @@ internal suspend fun queryDiscoveryGenreSources(
                             state, catalog, media, state.queryGenres, releaseStatuses,
                             policy, callTimeout, hydrate, budget,
                             allowance[state.allocationId] ?: 0, isProbe = state.allocationId in probeAlloc, wave,
+                            excludedGenres = excludedGenres,
                         )
                     }
                 }
@@ -329,6 +331,7 @@ private suspend fun runWaveSafely(
     allowance: Int,
     isProbe: Boolean,
     wave: Int,
+    excludedGenres: Set<String> = emptySet(),
 ) {
     try {
         advanceSource(
@@ -344,6 +347,7 @@ private suspend fun runWaveSafely(
             allowance = allowance,
             isProbe = isProbe,
             wave = wave,
+            excludedGenres = excludedGenres,
         )
     } catch (e: CancellationException) {
         throw e
@@ -387,6 +391,7 @@ private class SourceQueryState(
     var timedOut = false
     var budgetExpired = false
     var genreFilterApplied: Boolean? = null
+    var excludedGenresApplied = false
     var matchedRequired = 0
     var failure: GenreSourceException? = null
     var secondProbeUsed = false
@@ -500,6 +505,7 @@ private suspend fun advanceSource(
     allowance: Int,
     isProbe: Boolean,
     wave: Int,
+    excludedGenres: Set<String> = emptySet(),
 ) {
     var allowanceLeft = allowance.coerceAtLeast(0)
     if (hydrate && budget != null && state.detailsUseless()) {
@@ -553,6 +559,9 @@ private suspend fun advanceSource(
                 }
                 val verified = refilled.items.filterNot { it.isExcludedBy(state.excludedKeys, media) }
                 for (candidate in verified) {
+                    if (policy.hasHardExclusions && !state.excludedGenresApplied && candidate.genres.isEmpty()) {
+                        continue
+                    }
                     val verdict = policy.evaluate(candidate.genres) as? CandidateVerdict.Admitted ?: continue
                     state.admit(candidate, verdict)
                     if (state.matchedAdmitted.size >= state.target) break
@@ -583,16 +592,30 @@ private suspend fun advanceSource(
     }
     val page = state.nextPage
     val pageResult = withHardTimeoutOrNull(minOf(timeoutMs, remaining)) {
-        catalog.popularWithGenresAllocated(
-            mediaType = media,
-            sourceId = state.sourceId,
-            genres = genres,
-            page = page,
-            releaseStatuses = releaseStatuses,
-            budget = if (hydrate) budget else null,
-            maxDetails = if (hydrate) allowanceLeft else 0,
-            excludedKeys = state.excludedKeys,
-        )
+        if (excludedGenres.isEmpty()) {
+            catalog.popularWithGenresAllocated(
+                mediaType = media,
+                sourceId = state.sourceId,
+                genres = genres,
+                page = page,
+                releaseStatuses = releaseStatuses,
+                budget = if (hydrate) budget else null,
+                maxDetails = if (hydrate) allowanceLeft else 0,
+                excludedKeys = state.excludedKeys,
+            )
+        } else {
+            catalog.popularWithGenresAllocated(
+                mediaType = media,
+                sourceId = state.sourceId,
+                genres = genres,
+                page = page,
+                releaseStatuses = releaseStatuses,
+                budget = if (hydrate) budget else null,
+                maxDetails = if (hydrate) allowanceLeft else 0,
+                excludedKeys = state.excludedKeys,
+                excludedGenres = excludedGenres,
+            )
+        }
     }
     if (pageResult == null) {
         state.transientFailures++
@@ -617,6 +640,7 @@ private suspend fun advanceSource(
     if (pageResult.genreFilterApplied == true) {
         state.genreFilterApplied = true
     }
+    state.excludedGenresApplied = pageResult.excludedGenresApplied
     val unique = pageResult.items.filter {
         state.seen.add(it.sourceUrl?.takeIf(String::isNotBlank) ?: it.cleanTitle)
     }
@@ -627,6 +651,15 @@ private suspend fun advanceSource(
     }
     val eligible = unique.filterNot { it.isExcludedBy(state.excludedKeys, media) }
     for (candidate in eligible) {
+        if (
+            policy.hasHardExclusions &&
+            hydrate &&
+            budget != null &&
+            !pageResult.excludedGenresApplied &&
+            candidate.genres.isEmpty()
+        ) {
+            continue
+        }
         val verdict = policy.evaluate(candidate.genres) as? CandidateVerdict.Admitted ?: continue
         state.admit(candidate, verdict)
         if (state.matchedAdmitted.size >= state.target) break
