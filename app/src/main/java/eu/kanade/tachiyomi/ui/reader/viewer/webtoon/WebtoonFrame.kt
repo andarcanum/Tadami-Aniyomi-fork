@@ -68,11 +68,16 @@ class WebtoonFrame(context: Context) : FrameLayout(context) {
         if (enablePinchToZoom) {
             scaleDetector.onTouchEvent(ev)
         }
-        flingDetector.onTouchEvent(ev)
+        val activeRecycler = recycler
+        // zoomFling is a no-op at 1x scale; skip the redundant GestureDetector + VelocityTracker
+        // pass on every ACTION_MOVE during normal unzoomed scrolling.
+        if (activeRecycler?.isZoomedIn == true) {
+            flingDetector.onTouchEvent(ev)
+        }
 
         // Get the bounding box of the recyclerview and translate any motion events to be within it.
         // Used to allow scrolling outside the recyclerview.
-        recycler?.getHitRect(recyclerRect) ?: return super.dispatchTouchEvent(ev)
+        activeRecycler?.getHitRect(recyclerRect) ?: return super.dispatchTouchEvent(ev)
         // Shrink the box to account for any rounding issues.
         recyclerRect.inset(1, 1)
 
@@ -80,10 +85,11 @@ class WebtoonFrame(context: Context) : FrameLayout(context) {
             return super.dispatchTouchEvent(ev)
         }
 
-        ev.setLocation(
-            ev.x.coerceIn(recyclerRect.left.toFloat(), recyclerRect.right.toFloat()),
-            ev.y.coerceIn(recyclerRect.top.toFloat(), recyclerRect.bottom.toFloat()),
-        )
+        val clampedX = ev.x.coerceIn(recyclerRect.left.toFloat(), recyclerRect.right.toFloat())
+        val clampedY = ev.y.coerceIn(recyclerRect.top.toFloat(), recyclerRect.bottom.toFloat())
+        if (clampedX != ev.x || clampedY != ev.y) {
+            ev.setLocation(clampedX, clampedY)
+        }
         return super.dispatchTouchEvent(ev)
     }
 

@@ -13,6 +13,7 @@ import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -99,6 +100,10 @@ public class SubsamplingScaleImageView extends View {
      */
     public static final int EASE_IN_OUT_QUAD = 2;
     /**
+     * Quartic ease out for natural, wave-like fling deceleration on high-refresh-rate displays.
+     */
+    public static final int EASE_OUT_QUART = 3;
+    /**
      * Don't allow the image to be panned off screen. As much of the image as possible is always displayed, centered in the view when it is smaller. This is the best option for galleries.
      */
     public static final int PAN_LIMIT_INSIDE = 1;
@@ -146,7 +151,7 @@ public class SubsamplingScaleImageView extends View {
     public static final int TILE_SIZE_AUTO = Integer.MAX_VALUE;
     private static final String TAG = SubsamplingScaleImageView.class.getSimpleName();
     private static final List<Integer> VALID_ZOOM_STYLES = Arrays.asList(ZOOM_FOCUS_FIXED, ZOOM_FOCUS_CENTER, ZOOM_FOCUS_CENTER_IMMEDIATE);
-    private static final List<Integer> VALID_EASING_STYLES = Arrays.asList(EASE_IN_OUT_QUAD, EASE_OUT_QUAD);
+    private static final List<Integer> VALID_EASING_STYLES = Arrays.asList(EASE_IN_OUT_QUAD, EASE_OUT_QUAD, EASE_OUT_QUART);
     private static final List<Integer> VALID_PAN_LIMITS = Arrays.asList(PAN_LIMIT_INSIDE, PAN_LIMIT_OUTSIDE, PAN_LIMIT_CENTER);
     private static final List<Integer> VALID_SCALE_TYPES = Arrays.asList(SCALE_TYPE_CENTER_CROP, SCALE_TYPE_CENTER_INSIDE, SCALE_TYPE_CUSTOM, SCALE_TYPE_FIT_WIDTH, SCALE_TYPE_FIT_HEIGHT, SCALE_TYPE_ORIGINAL_SIZE, SCALE_TYPE_SMART_FIT);
     private static final int MESSAGE_LONG_CLICK = 1;
@@ -806,7 +811,14 @@ public class SubsamplingScaleImageView extends View {
                     PointF vTranslateEnd = new PointF(vTranslate.x + (velocityX * 0.25f), vTranslate.y + (velocityY * 0.25f));
                     float sCenterXEnd = ((getWidth() / 2) - vTranslateEnd.x) / scale;
                     float sCenterYEnd = ((getHeight() / 2) - vTranslateEnd.y) / scale;
-                    new AnimationBuilder(new PointF(sCenterXEnd, sCenterYEnd)).withEasing(EASE_OUT_QUAD).withPanLimited(false).withOrigin(ORIGIN_FLING).start();
+                    float speed = (float) Math.hypot(velocityX, velocityY);
+                    long flingDurationMs = Math.max(460L, Math.min(820L, (long) (420f + speed * 0.06f)));
+                    new AnimationBuilder(new PointF(sCenterXEnd, sCenterYEnd))
+                            .withEasing(EASE_OUT_QUART)
+                            .withDuration(flingDurationMs)
+                            .withPanLimited(false)
+                            .withOrigin(ORIGIN_FLING)
+                            .start();
                     return true;
                 }
                 return super.onFling(e1, e2, velocityX, velocityY);
@@ -1285,8 +1297,15 @@ public class SubsamplingScaleImageView extends View {
                     }
                 }
                 anim = null;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                    setRequestedFrameRate(View.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT);
+                }
+            } else {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                    setRequestedFrameRate(View.REQUESTED_FRAME_RATE_CATEGORY_HIGH);
+                }
             }
-            invalidate();
+            postInvalidateOnAnimation();
         }
 
         if (tileMap != null && isBaseLayerReady()) {
@@ -1784,10 +1803,11 @@ public class SubsamplingScaleImageView extends View {
                     boolean shouldLoad = tileVisible(tile);
                     boolean shouldRetain = shouldLoad
                             || (externalViewportEnabled && tileVisibleIn(tile, externalRetainViewport));
+                    boolean affectsVisible = !externalViewportEnabled || tileVisibleIn(tile, externalVisibleViewport);
                     if (shouldLoad) {
                         if (!tile.visible) {
                             tile.visible = true;
-                            if (tile.bitmap != null || debug) {
+                            if ((tile.bitmap != null && affectsVisible) || debug) {
                                 changed = true;
                             }
                         }
@@ -1799,7 +1819,7 @@ public class SubsamplingScaleImageView extends View {
                     } else if (shouldRetain) {
                         if (tile.visible) {
                             tile.visible = false;
-                            if (tile.bitmap != null || debug) {
+                            if ((tile.bitmap != null && affectsVisible) || debug) {
                                 changed = true;
                             }
                         }
@@ -2121,14 +2141,22 @@ public class SubsamplingScaleImageView extends View {
      */
     private synchronized void onTileLoaded(@NonNull Tile loadedTile) {
         debug("onTileLoaded");
+        boolean wasBaseReady = isBaseLayerReady();
         checkReady();
         checkImageLoaded();
-        if (loadedTile.sampleSize < fullImageSampleSize && tileFadeDurationMs > 0L && isBaseLayerReady()) {
+        boolean baseReadyNow = isBaseLayerReady();
+        boolean inVisibleViewport = !externalViewportEnabled
+                || loadedTile.sampleSize == fullImageSampleSize
+                || tileVisibleIn(loadedTile, externalVisibleViewport);
+        if (loadedTile.sampleSize < fullImageSampleSize
+                && tileFadeDurationMs > 0L
+                && baseReadyNow
+                && inVisibleViewport) {
             loadedTile.fadeStartTimeMs = SystemClock.uptimeMillis();
         } else {
             loadedTile.fadeStartTimeMs = 0L;
         }
-        if (isBaseLayerReady()) {
+        if (baseReadyNow) {
             previewBitmap = null;
             if (bitmap != null) {
                 if (!bitmapIsCached) {
@@ -2138,7 +2166,9 @@ public class SubsamplingScaleImageView extends View {
                 bitmapIsCached = false;
             }
         }
-        invalidate();
+        if (inVisibleViewport || (baseReadyNow && !wasBaseReady) || debug) {
+            invalidate();
+        }
     }
 
     private void onTileDecodeFailed(@NonNull Tile tile, @NonNull Exception error) {
@@ -2825,8 +2855,15 @@ public class SubsamplingScaleImageView extends View {
         return switch (type) {
             case EASE_IN_OUT_QUAD -> easeInOutQuad(time, from, change, duration);
             case EASE_OUT_QUAD -> easeOutQuad(time, from, change, duration);
+            case EASE_OUT_QUART -> easeOutQuart(time, from, change, duration);
             default -> throw new IllegalStateException("Unexpected easing type: " + type);
         };
+    }
+
+    private float easeOutQuart(long time, float from, float change, long duration) {
+        float inv = 1f - ((float) time / (float) duration);
+        float inv2 = inv * inv;
+        return change * (1f - inv2 * inv2) + from;
     }
 
     /**

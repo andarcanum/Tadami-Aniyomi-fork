@@ -96,6 +96,8 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
     private var boundarySelectionRetry: OneShotPreDrawListener? = null
     private val activePageFrames = Collections.newSetFromMap(WeakHashMap<ReaderPageImageView, Boolean>())
     private var hasHdrPages = false
+    private var lastHdrFirstVisible = RecyclerView.NO_POSITION
+    private var lastHdrLastVisible = RecyclerView.NO_POSITION
 
     /**
      * Until this uptime timestamp a programmatic chapter switch is still settling: relayouts caused
@@ -198,12 +200,16 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                     if (dy != 0) {
                         pendingSeekTargetPosition = null
                     }
-                    onScrolled()
+                    val resolvedPos = onScrolled()
                     applyPendingRelativeRestore(clearWhenApplied = false)
-                    val now = SystemClock.uptimeMillis()
-                    if (now - lastProgressUpdateMs >= SCROLL_PROGRESS_UPDATE_INTERVAL_MS) {
-                        lastProgressUpdateMs = now
-                        getCurrentScrollProgress()?.let(activity.viewModel::onWebtoonScrollProgressChanged)
+                    // Avoid cancelling/relaunching progress-save IO coroutines mid-fling;
+                    // exact resting progress is always flushed in SCROLL_STATE_IDLE.
+                    if (recyclerView.scrollState != RecyclerView.SCROLL_STATE_SETTLING) {
+                        val now = SystemClock.uptimeMillis()
+                        if (now - lastProgressUpdateMs >= SCROLL_PROGRESS_UPDATE_INTERVAL_MS) {
+                            lastProgressUpdateMs = now
+                            getCurrentScrollProgress()?.let(activity.viewModel::onWebtoonScrollProgressChanged)
+                        }
                     }
 
                     if ((dy > threshold || dy < -threshold) && activity.viewModel.state.value.menuVisible) {
@@ -227,7 +233,11 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                     }
 
                     if (dy > 0) {
-                        val lastIndex = layoutManager.findLastEndVisibleItemPosition()
+                        val lastIndex = if (resolvedPos != RecyclerView.NO_POSITION) {
+                            resolvedPos
+                        } else {
+                            layoutManager.findLastEndVisibleItemPosition()
+                        }
                         val lastItem = adapter.items.getOrNull(lastIndex)
                         if (lastItem is ChapterTransition.Next && lastItem.to == null) {
                             activity.showMenu()
@@ -446,6 +456,11 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         if (!hasHdrPages) return
         val firstVisible = layoutManager.findFirstVisibleItemPosition()
         val lastVisible = layoutManager.findLastVisibleItemPosition()
+        if (!isPageHdr && firstVisible == lastHdrFirstVisible && lastVisible == lastHdrLastVisible) {
+            return
+        }
+        lastHdrFirstVisible = firstVisible
+        lastHdrLastVisible = lastVisible
         var anyVisibleHdr = false
         if (firstVisible != RecyclerView.NO_POSITION && lastVisible != RecyclerView.NO_POSITION) {
             for (pos in firstVisible..lastVisible) {
@@ -865,7 +880,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
         return fallback
     }
 
-    fun onScrolled(pos: Int? = null) {
+    fun onScrolled(pos: Int? = null): Int {
         updateWindowHdrState()
         val position = pos ?: resolveScrolledPosition()
         val item = adapter.items.getOrNull(position)
@@ -875,7 +890,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
             // moveToPage, not by the user. Propagating it would make the VM bounce back to the
             // reported chapter ("the previous chapter stayed"); re-anchor instead.
             reanchorDuringSwitchSettle()
-            return
+            return position
         }
         if (item != null) {
             val selectionChanged = currentPage != item
@@ -897,6 +912,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                 onTransitionSelected = ::onTransitionSelected,
             )
         }
+        return position
     }
 
     private fun resolveScrolledPosition(): Int {
@@ -1068,7 +1084,7 @@ private data class PendingRelativeRestore(
 private const val MAX_PENDING_RELATIVE_RESTORE_DURATION_MS = 30_000L
 
 // Minimum interval between webtoon scroll progress reports while actively scrolling.
-private const val SCROLL_PROGRESS_UPDATE_INTERVAL_MS = 150L
+private const val SCROLL_PROGRESS_UPDATE_INTERVAL_MS = 350L
 private const val MIN_STABLE_HEIGHT_FRAMES = 2
 private const val RESTORE_SETTLE_TOLERANCE_PX = 2
 private const val MIN_READY_STATE_FRAMES_FALLBACK = 30

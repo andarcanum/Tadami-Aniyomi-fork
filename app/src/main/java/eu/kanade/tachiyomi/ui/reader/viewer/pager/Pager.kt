@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import androidx.viewpager.widget.DirectionalViewPager
 import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
+import eu.kanade.tachiyomi.ui.reader.viewer.ViewMotionFrameRateBooster
 
 /**
  * Pager implementation that listens for tap and long tap and allows temporarily disabling touch
@@ -56,6 +57,20 @@ open class Pager(
      * Gesture detector which handles motion events.
      */
     private val gestureDetector = GestureDetectorWithLongTap(context, gestureListener)
+    private val frameRateBooster = ViewMotionFrameRateBooster(this)
+
+    internal fun setScrollMotionActive(active: Boolean) {
+        if (active) {
+            frameRateBooster.onMotionStart()
+        } else {
+            frameRateBooster.onMotionIdle()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        frameRateBooster.releaseImmediately()
+        super.onDetachedFromWindow()
+    }
 
     /**
      * Whether the gesture detector is currently enabled.
@@ -76,6 +91,7 @@ open class Pager(
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            frameRateBooster.onMotionStart()
             onTouchDownListener?.invoke()
             // ev.x/y are viewport coordinates; children are laid out in content coordinates
             // (the pager's own scroll offset positions the pages), so add scrollX/scrollY.

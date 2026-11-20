@@ -17,6 +17,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.ViewMotionFrameRateBooster
+import eu.kanade.tachiyomi.ui.reader.viewer.WebtoonViewportPushCoalescer
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -61,6 +63,20 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     private val minRate
         get() = if (zoomOutDisabled) DEFAULT_RATE else MIN_RATE
 
+    private val frameRateBooster = ViewMotionFrameRateBooster(this)
+    private val viewportCoalescer = WebtoonViewportPushCoalescer()
+
+    internal val isZoomedIn: Boolean
+        get() = currentScale > DEFAULT_RATE
+
+    internal fun notifyExternalScrollMotion(active: Boolean) {
+        if (active) {
+            frameRateBooster.onMotionStart()
+        } else if (scrollState == SCROLL_STATE_IDLE && activeZoomAnimator == null && activeFlingAnimator == null) {
+            frameRateBooster.onMotionIdle()
+        }
+    }
+
     private val listener = GestureListener()
     private val detector = Detector()
 
@@ -83,12 +99,21 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> frameRateBooster.onMotionStart()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (scrollState == SCROLL_STATE_IDLE && activeZoomAnimator == null && activeFlingAnimator == null) {
+                    frameRateBooster.onMotionIdle()
+                }
+            }
+        }
         detector.onTouchEvent(e)
         return super.onTouchEvent(e)
     }
 
     override fun onDetachedFromWindow() {
         cancelActiveAnimators()
+        frameRateBooster.releaseImmediately()
         super.onDetachedFromWindow()
     }
 
@@ -101,11 +126,26 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 
     override fun onScrolled(dx: Int, dy: Int) {
         super.onScrolled(dx, dy)
-        val layoutManager = layoutManager as? LinearLayoutManager ?: return
-        lastVisibleItemPosition = layoutManager.findLastVisibleItemPosition()
-        firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
+        if (currentScale > DEFAULT_RATE) {
+            val layoutManager = layoutManager as? LinearLayoutManager
+            if (layoutManager != null) {
+                lastVisibleItemPosition = layoutManager.findLastVisibleItemPosition()
+                firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
+            }
+        }
+        if (dy != 0 || dx != 0) {
+            frameRateBooster.onMotionStart()
+        }
         lastScrollDy = dy
-        updateChildViewports()
+        val shouldPush = viewportCoalescer.onScrollDelta(
+            dy = dy,
+            viewportHeightPx = height.toFloat(),
+            density = resources.displayMetrics.density,
+            scale = currentScale,
+        )
+        if (shouldPush) {
+            updateChildViewports()
+        }
     }
 
     /**
@@ -132,18 +172,30 @@ class WebtoonRecyclerView @JvmOverloads constructor(
             SCROLL_STATE_IDLE -> {
                 lastScrollDy = 0
                 lastFlingVelocityY = 0
+                viewportCoalescer.resetVelocity()
+                viewportCoalescer.markForcedPush(currentScale)
                 updateChildViewports()
+                if (activeZoomAnimator == null && activeFlingAnimator == null) {
+                    frameRateBooster.onMotionIdle()
+                }
             }
             SCROLL_STATE_DRAGGING -> {
                 lastFlingVelocityY = 0
+                frameRateBooster.onMotionStart()
+                viewportCoalescer.markForcedPush(currentScale)
                 updateChildViewports()
+            }
+            SCROLL_STATE_SETTLING -> {
+                frameRateBooster.onMotionStart()
             }
         }
     }
 
     override fun fling(velocityX: Int, velocityY: Int): Boolean {
         lastFlingVelocityY = velocityY
+        frameRateBooster.onMotionStart()
         val flung = super.fling(velocityX, velocityY)
+        viewportCoalescer.markForcedPush(currentScale)
         updateChildViewports()
         return flung
     }
@@ -279,17 +331,13 @@ class WebtoonRecyclerView @JvmOverloads constructor(
             else -> 0
         }
         if (scrollState != SCROLL_STATE_IDLE && direction != 0 && viewportHeight > 0f) {
-            val lookaheadFactor = if (scrollState == SCROLL_STATE_SETTLING && lastFlingVelocityY != 0) {
-                (abs(lastFlingVelocityY) / (viewportHeight * 2.5f)).coerceIn(
-                    MIN_LOOKAHEAD_FACTOR,
-                    MAX_LOOKAHEAD_FACTOR,
-                )
-            } else {
-                (abs(lastScrollDy) / (viewportHeight * 0.08f).coerceAtLeast(1f)).coerceIn(
-                    MIN_LOOKAHEAD_FACTOR,
-                    MAX_LOOKAHEAD_FACTOR,
-                )
-            }
+            val lookaheadFactor = viewportCoalescer.computeSmoothedLookaheadFactor(
+                isSettling = scrollState == SCROLL_STATE_SETTLING,
+                flingVelocityY = lastFlingVelocityY,
+                viewportHeightPx = viewportHeight,
+                minFactor = MIN_LOOKAHEAD_FACTOR,
+                maxFactor = MAX_LOOKAHEAD_FACTOR,
+            )
             val lookaheadPx = viewportHeight * lookaheadFactor
             if (direction > 0) {
                 prefetchRect.bottom += lookaheadPx
@@ -325,6 +373,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         toY: Float,
     ) {
         cancelActiveAnimators()
+        frameRateBooster.onMotionStart()
         isZooming = true
         var cancelled = false
         val animator = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -351,7 +400,11 @@ class WebtoonRecyclerView @JvmOverloads constructor(
                     y = toY
                     currentScale = toRate
                     setScaleRate(currentScale, pushViewports = false)
+                    viewportCoalescer.markForcedPush(currentScale)
                     updateChildViewports()
+                }
+                if (scrollState == SCROLL_STATE_IDLE && activeFlingAnimator == null) {
+                    frameRateBooster.onMotionIdle()
                 }
             }
         }
@@ -367,6 +420,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         if (!animateX && !animateY) return false
 
         cancelActiveAnimators()
+        frameRateBooster.onMotionStart()
 
         val distanceTimeFactor = 0.4f
         val startX = x
@@ -392,6 +446,9 @@ class WebtoonRecyclerView @JvmOverloads constructor(
                     activeFlingAnimator = null
                 }
                 updateChildViewports()
+                if (scrollState == SCROLL_STATE_IDLE && activeZoomAnimator == null) {
+                    frameRateBooster.onMotionIdle()
+                }
             }
         }
         activeFlingAnimator = animator
