@@ -1303,7 +1303,9 @@ data class ReelsFeedScreen(
                                 onPlaybackSpeedChange = { playbackSpeed = it },
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
-                                chromeVisible = chromeVisible && page == pagerState.settledPage,
+                                chromeVisible = chromeVisible && (
+                                    page == pagerState.settledPage || page == pagerState.currentPage
+                                ),
                                 isLandscape = windowIsLandscape,
                                 showSearch = state.supportsSearch &&
                                     state.supportsTags &&

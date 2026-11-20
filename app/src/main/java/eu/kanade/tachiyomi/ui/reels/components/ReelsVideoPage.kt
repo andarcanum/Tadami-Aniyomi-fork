@@ -30,15 +30,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -751,6 +752,9 @@ fun ReelsVideoPage(
                                 }
                             } else if (pressedCount == 0) {
                                 break
+                            } else if (zooming) {
+                                // Only 1 finger remains after pinch: restore chrome immediately.
+                                isPinchZooming = false
                             }
                         }
                     } finally {
@@ -1023,7 +1027,7 @@ fun ReelsVideoPage(
                     }
                 }
             }
-            .pointerInput(Unit) {
+            .pointerInput(item.id) {
                 detectTapGestures(
                     onTap = {
                         // Suppress only a lift event arriving immediately after a hold/pinch;
@@ -1275,11 +1279,14 @@ fun ReelsVideoPage(
         }
         val topHudModifier = Modifier
             .align(Alignment.TopCenter)
-            .then(
+            .windowInsetsPadding(
                 if (isLandscape) {
-                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                    WindowInsets.safeDrawing
                 } else {
-                    Modifier.statusBarsPadding()
+                    // Use safeDrawing (statusBars + displayCutout) so the Zoom/Speed HUD
+                    // stays below the camera notch/punch-hole even when immersive mode hides
+                    // the status bar (when statusBarsPadding() collapses to 0dp).
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
                 },
             )
             .padding(top = topHudPadding, start = 12.dp, end = 12.dp)
