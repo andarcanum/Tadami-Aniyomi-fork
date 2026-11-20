@@ -119,14 +119,19 @@ internal class NovelProgressPersistenceController(
 
     /** Restarts the session read timer (chapter anchor moved or a new chapter was loaded). */
     fun resetSessionReadTimer() {
-        chapterReadStartTimeMs = clockMs()
+        synchronized(historyDurationLock) {
+            chapterReadStartTimeMs = clockMs()
+        }
     }
 
     /** Consumes and returns milliseconds elapsed since the session read timer was last reset or captured. */
     fun takeSessionReadDurationMs(): Long {
-        val now = clockMs()
-        val delta = (now - chapterReadStartTimeMs).coerceAtLeast(0L)
-        chapterReadStartTimeMs = now
+        val delta = synchronized(historyDurationLock) {
+            val now = clockMs()
+            val elapsed = (now - chapterReadStartTimeMs).coerceAtLeast(0L)
+            chapterReadStartTimeMs = now
+            elapsed
+        }
         val currentNovel = host.progressCurrentNovel()
         if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
             return 0L

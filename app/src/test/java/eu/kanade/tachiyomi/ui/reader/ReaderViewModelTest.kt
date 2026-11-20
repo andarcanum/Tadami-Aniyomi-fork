@@ -87,6 +87,56 @@ class ReaderViewModelTest {
     }
 
     @Test
+    fun `read session timer preserves full duration across consecutive chapter switches`() {
+        var nowMs = 1_000L
+        val timer = ReaderReadSessionTimer(clockMs = { nowMs })
+        val persistedDurations = mutableListOf<Long>()
+
+        // Open chapter 1 and read for 10 minutes
+        timer.restart()
+        nowMs += 600_000L
+
+        // Switch to chapter 2: snapshot is captured synchronously BEFORE restart()
+        prepareAdjacentChapterSwitch(
+            flushReadTimer = { persistedDurations += timer.consumeAndStop().durationMs },
+            restartReadTimer = { timer.restart() },
+        )
+
+        // Read chapter 2 for 15 minutes
+        nowMs += 900_000L
+
+        // Switch to chapter 3
+        prepareAdjacentChapterSwitch(
+            flushReadTimer = { persistedDurations += timer.consumeAndStop().durationMs },
+            restartReadTimer = { timer.restart() },
+        )
+
+        // Read chapter 3 for 20 minutes and pause/exit
+        nowMs += 1_200_000L
+        persistedDurations += timer.consumeAndStop().durationMs
+
+        // Background time after pause must not accumulate
+        nowMs += 3_600_000L
+        timer.consumeAndStop().durationMs shouldBe 0L
+
+        persistedDurations shouldBe listOf(600_000L, 900_000L, 1_200_000L)
+    }
+
+    @Test
+    fun `read session timer clamps negative clock rollbacks and clears state on stop`() {
+        var nowMs = 10_000L
+        val timer = ReaderReadSessionTimer(clockMs = { nowMs })
+
+        timer.restart()
+        nowMs = 5_000L
+
+        val snapshot = timer.consumeAndStop()
+        snapshot.readAtMs shouldBe 5_000L
+        snapshot.durationMs shouldBe 0L
+        timer.currentStartTimeMs() shouldBe null
+    }
+
+    @Test
     fun `initial auto-scroll speed comes from saved preference`() {
         val readerPreferences = ReaderPreferences(
             MutablePreferenceStore(

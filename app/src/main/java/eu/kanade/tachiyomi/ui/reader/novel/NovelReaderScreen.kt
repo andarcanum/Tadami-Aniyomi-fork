@@ -121,15 +121,26 @@ class NovelReaderScreen(
         val lifecycleOwner = LocalLifecycleOwner.current
         DisposableEffect(lifecycleOwner, screenModel) {
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP) {
-                    screenModel.flushBookModeProgress()
-                    // Per-chapter progress has the same debounce tail: a reader recreated after the
-                    // process is killed restores from the last flushed row, so an unflushed tail
-                    // shows up as a jump back, a jump to the chapter start, or a resume on the
-                    // previous chapter (its history snapshot was flushed, the current one was not).
-                    coroutineScope.launch {
-                        screenModel.persistCurrentChapterExitState()
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> {
+                        screenModel.flushBookModeProgress()
+                        // Bank elapsed reading duration synchronously before launching async
+                        // exit persistence so a quick ON_RESUME cannot reset the timer first.
+                        screenModel.captureCurrentChapterReadDuration()
+                        // Per-chapter progress has the same debounce tail: a reader recreated after the
+                        // process is killed restores from the last flushed row, so an unflushed tail
+                        // shows up as a jump back, a jump to the chapter start, or a resume on the
+                        // previous chapter (its history snapshot was flushed, the current one was not).
+                        coroutineScope.launch {
+                            screenModel.persistCurrentChapterExitState()
+                        }
                     }
+                    Lifecycle.Event.ON_RESUME -> {
+                        // Discard time spent stopped/backgrounded so returning later does not
+                        // inflate novel reading duration statistics.
+                        screenModel.resetSessionReadTimer()
+                    }
+                    else -> Unit
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)

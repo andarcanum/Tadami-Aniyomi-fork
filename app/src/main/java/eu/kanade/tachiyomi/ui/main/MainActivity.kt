@@ -649,7 +649,7 @@ class MainActivity : BaseActivity() {
             val duration = System.currentTimeMillis() - startTime
             // Only record if session was longer than 5 seconds (filter out accidental opens)
             if (duration > 5000) {
-                lifecycleScope.launch {
+                lifecycleScope.launchIO {
                     activityDataRepository.recordAppSession(duration)
                 }
             }

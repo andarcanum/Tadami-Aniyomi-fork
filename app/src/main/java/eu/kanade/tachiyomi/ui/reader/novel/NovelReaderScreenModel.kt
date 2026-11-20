@@ -2165,6 +2165,18 @@ class NovelReaderScreenModel(
     suspend fun awaitPendingProgressPersistence() =
         progressPersistenceController.awaitPendingProgressPersistence()
 
+    fun captureCurrentChapterReadDuration() {
+        val chapterId = currentChapter?.id ?: return
+        val elapsed = progressPersistenceController.takeSessionReadDurationMs()
+        if (elapsed > 0L) {
+            progressPersistenceController.queueHistoryReadDuration(chapterId, elapsed)
+        }
+    }
+
+    fun resetSessionReadTimer() {
+        progressPersistenceController.resetSessionReadTimer()
+    }
+
     suspend fun persistCurrentChapterExitState() =
         progressPersistenceController.persistCurrentChapterExitState()
 

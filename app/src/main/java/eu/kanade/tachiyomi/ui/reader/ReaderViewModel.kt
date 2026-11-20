@@ -229,9 +229,11 @@ class ReaderViewModel @JvmOverloads constructor(
     private var loader: ChapterLoader? = null
 
     /**
-     * The time the chapter was started reading
+     * Thread-safe session timer for chapter reading duration.
+     * Snapshots elapsed time synchronously on flush/switch so detached IO writes
+     * never race with restartReadTimer() or clear the incoming chapter's timer.
      */
-    private var chapterReadStartTime: Long? = null
+    private val readSessionTimer = ReaderReadSessionTimer()
     private var seriesId: Long? = null
     private var seriesInterstitialState: MangaSeriesInterstitialState? = null
     private var seriesInterstitialShownForChapterId: Long? = null
@@ -420,6 +422,9 @@ class ReaderViewModel @JvmOverloads constructor(
         ForegroundIncognitoState.set(this, false)
         webtoonProgressSaveJob?.cancel()
         flushPendingWebtoonScrollProgress()
+        if (readSessionTimer.currentStartTimeMs() != null) {
+            flushReadTimer()
+        }
 
         val currentChapters = state.value.viewerChapters
         if (currentChapters != null) {
@@ -565,9 +570,19 @@ class ReaderViewModel @JvmOverloads constructor(
 
     private fun observeForegroundIncognito(sourceId: Long?) {
         foregroundIncognitoJob?.cancel()
+        var lastShouldPause: Boolean? = null
         foregroundIncognitoJob = viewModelScope.launch {
             getIncognitoState.subscribe(sourceId).collect { active ->
                 ForegroundIncognitoState.set(this@ReaderViewModel, active)
+                val currentShouldPause = shouldPauseHistory()
+                if (lastShouldPause != null && lastShouldPause != currentShouldPause) {
+                    if (currentShouldPause) {
+                        readSessionTimer.consumeAndStop()
+                    } else {
+                        readSessionTimer.restart()
+                    }
+                }
+                lastShouldPause = currentShouldPause
             }
         }
     }
@@ -668,11 +683,14 @@ class ReaderViewModel @JvmOverloads constructor(
     private fun loadNewChapter(chapter: ReaderChapter) {
         val loader = loader ?: return
 
+        // Snapshot outgoing chapter duration and start the incoming chapter's timer synchronously
+        // before launching IO work so getCurrentChapter() still points to the outgoing chapter and
+        // onPause() cannot interleave before restartReadTimer().
+        flushReadTimer()
+        restartReadTimer()
+
         viewModelScope.launchIO {
             logcat { "Loading ${chapter.chapter.url}" }
-
-            flushReadTimer()
-            restartReadTimer()
 
             try {
                 loadChapter(loader, chapter)
@@ -1037,16 +1055,15 @@ class ReaderViewModel @JvmOverloads constructor(
             }
         }
 
-        // Record reading activity for stats
+        // Record reading activity for stats. Session duration is flushed atomically in
+        // updateHistory() on chapter switch and pause so mid-chapter sessions count, re-reads
+        // still log time, and chapter completion never double-counts or reads a cleared timer.
         val chapterId = readerChapter.chapter.id ?: 0L
-        if (chapterId > 0) {
+        if (chapterId > 0L && chapterWasUnread) {
             activityDataRepository.recordReading(
                 id = chapterId,
-                // Re-visits of an already-read chapter must not inflate the daily chapter count;
-                // the re-read session duration still counts (incrementChapters keeps the level
-                // via MAX and adds 0 to chapters_read).
-                chaptersCount = if (chapterWasUnread) 1 else 0,
-                durationMs = chapterReadStartTime?.let { System.currentTimeMillis() - it } ?: 0L,
+                chaptersCount = 1,
+                durationMs = 0L,
             )
         }
 
@@ -1208,36 +1225,42 @@ class ReaderViewModel @JvmOverloads constructor(
     fun clearFinale() = setFinaleState(null)
 
     fun restartReadTimer() {
-        chapterReadStartTime = Instant.now().toEpochMilli()
+        readSessionTimer.restart()
     }
 
     @OptIn(DelicateCoroutinesApi::class)
     fun flushReadTimer() {
-        getCurrentChapter()?.let {
-            // Detached: called from the activity finish/destroy path where viewModelScope may
-            // already be closed - the child launch never dispatched and the history entry was
-            // lost (launchNonCancellable only protects an already-started coroutine).
-            launchIO {
-                updateHistory(it)
-            }
+        val snapshot = readSessionTimer.consumeAndStop()
+        val chapter = getCurrentChapter() ?: return
+        // Detached: called from the activity finish/destroy path where viewModelScope may
+        // already be closed - the child launch never dispatched and the history entry was
+        // lost (launchNonCancellable only protects an already-started coroutine).
+        launchIO {
+            updateHistory(chapter, snapshot)
         }
     }
 
     /**
      * Saves the chapter last read history if incognito mode isn't on.
      */
-    private suspend fun updateHistory(readerChapter: ReaderChapter) {
+    private suspend fun updateHistory(
+        readerChapter: ReaderChapter,
+        snapshot: ReadSessionSnapshot,
+    ) {
         if (shouldPauseHistory()) return
 
-        val chapterId = readerChapter.chapter.id!!
-        val readAt = Date()
-        val sessionReadDuration = resolveSessionReadDurationMs(
-            readAtMs = readAt.time,
-            startMs = chapterReadStartTime,
-        )
+        val chapterId = readerChapter.chapter.id ?: return
+        val readAt = Date(snapshot.readAtMs)
 
-        upsertHistory.await(MangaHistoryUpdate(chapterId, readAt, sessionReadDuration))
-        chapterReadStartTime = null
+        upsertHistory.await(MangaHistoryUpdate(chapterId, readAt, snapshot.durationMs))
+
+        if (snapshot.durationMs > 0L && chapterId > 0L) {
+            activityDataRepository.recordReading(
+                id = chapterId,
+                chaptersCount = 0,
+                durationMs = snapshot.durationMs,
+            )
+        }
     }
 
     /**
@@ -2021,6 +2044,33 @@ internal fun shouldRestoreSavedProgress(
  */
 internal fun resolveSessionReadDurationMs(readAtMs: Long, startMs: Long?): Long {
     return startMs?.let { (readAtMs - it).coerceAtLeast(0L) } ?: 0L
+}
+
+internal data class ReadSessionSnapshot(
+    val readAtMs: Long,
+    val durationMs: Long,
+)
+
+internal class ReaderReadSessionTimer(
+    private val clockMs: () -> Long = { Instant.now().toEpochMilli() },
+) {
+    private val lock = Any()
+    private var startTimeMs: Long? = null
+
+    fun restart(): Long = synchronized(lock) {
+        val now = clockMs()
+        startTimeMs = now
+        now
+    }
+
+    fun consumeAndStop(): ReadSessionSnapshot = synchronized(lock) {
+        val now = clockMs()
+        val duration = resolveSessionReadDurationMs(readAtMs = now, startMs = startTimeMs)
+        startTimeMs = null
+        ReadSessionSnapshot(readAtMs = now, durationMs = duration)
+    }
+
+    fun currentStartTimeMs(): Long? = synchronized(lock) { startTimeMs }
 }
 
 internal fun prepareAdjacentChapterSwitch(
