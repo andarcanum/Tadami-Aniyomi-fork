@@ -24,6 +24,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +38,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -764,9 +767,9 @@ fun ReelsVideoPage(
                 }
             }
             .pointerInput(item.id) {
-                // Landscape-only edge vertical drags: left 0..30% adjusts screen brightness,
-                // right 70..100% adjusts media volume. Center 30..70% stays untouched so
-                // VerticalPager swipes work naturally.
+                // Landscape-only edge vertical drags: left 0..16% adjusts screen brightness,
+                // right 84..100% adjusts media volume. Center 16..84% stays untouched so
+                // VerticalPager swipes work effortlessly.
                 val topExclusionPx = 48.dp.toPx()
                 val bottomExclusionPx = 72.dp.toPx()
                 val minGestureSpanPx = 180.dp.toPx()
@@ -1244,147 +1247,192 @@ fun ReelsVideoPage(
             }
         }
 
-        // 5. Speed pill: one slot, two meanings kept visibly apart. While a finger holds an edge
-        // the pill shows that temporary rate with a direction chevron; a rate chosen from the
-        // button or drawer stays on screen without the chevron.
+        // 5. Speed pill + 5b. Pro-player Zoom HUD pill.
+        // Anchored below the actual top bar using real window insets (safeDrawing in landscape,
+        // statusBarsPadding in portrait) so neither pill overlaps ReelsTopBar, ReelsLandscapeTopBar,
+        // or the landscape center transport.
         val holdingRate = heldRate
         val pillRate = holdingRate ?: effectivePlaybackSpeed
         val pillFast = (holdingRate ?: effectivePlaybackSpeed) > 1f
         val auroraColors = AuroraTheme.colors
-        AnimatedVisibility(
-            visible = pillRate != 1f && !isInPictureInPicture,
-            enter = fadeIn() + scaleIn(initialScale = 0.9f),
-            exit = fadeOut() + scaleOut(targetScale = 0.9f),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 70.dp),
-        ) {
-            // TalkBack needs the spoken meaning; the visible text stays a bare "2×" / "0.5×".
-            val holdLabel = stringResource(
-                if (pillFast) MR.strings.reels_hold_fast else MR.strings.reels_hold_slow,
+        val showSpeedPill = pillRate != 1f && !isInPictureInPicture
+        val isZoomed = ReelsZoom.isZoomed(zoomScale.value)
+        val showZoomHud = !isInPictureInPicture &&
+            isActive &&
+            !isSearchBarOpen &&
+            !drawerOpen &&
+            qualityDialogMode == null &&
+            !scrubUiState.isActive &&
+            (isPinchZooming || (isZoomed && chromeVisible))
+        val topHudPadding = if (isLandscape) {
+            if (effectiveChromeVisible) 60.dp else 12.dp
+        } else {
+            when {
+                !effectiveChromeVisible -> 14.dp
+                searchQuery.isNotBlank() && !isSearchBarOpen -> 112.dp
+                else -> 72.dp
+            }
+        }
+        val topHudModifier = Modifier
+            .align(Alignment.TopCenter)
+            .then(
+                if (isLandscape) {
+                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                } else {
+                    Modifier.statusBarsPadding()
+                },
             )
-            Row(
-                modifier = Modifier
-                    .reelsFrostPill(
-                        rim = auroraMenuRimLightBrush(auroraColors),
-                        eInk = auroraColors.isEInk,
-                        solid = auroraColors.cardBackground,
-                        strong = true,
-                    )
-                    .padding(horizontal = 13.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            .padding(top = topHudPadding, start = 12.dp, end = 12.dp)
+
+        val renderSpeedPill: @Composable () -> Unit = {
+            AnimatedVisibility(
+                visible = showSpeedPill,
+                enter = fadeIn() + scaleIn(initialScale = 0.9f),
+                exit = fadeOut() + scaleOut(targetScale = 0.9f),
             ) {
-                if (holdingRate != null) {
+                // TalkBack needs the spoken meaning; the visible text stays a bare "2×" / "0.5×".
+                val holdLabel = stringResource(
+                    if (pillFast) MR.strings.reels_hold_fast else MR.strings.reels_hold_slow,
+                )
+                Row(
+                    modifier = Modifier
+                        .reelsFrostPill(
+                            rim = auroraMenuRimLightBrush(auroraColors),
+                            eInk = auroraColors.isEInk,
+                            solid = auroraColors.cardBackground,
+                            strong = true,
+                        )
+                        .padding(horizontal = 13.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    if (holdingRate != null) {
+                        Text(
+                            text = if (pillFast) "»" else "«",
+                            color = if (pillFast) auroraColors.accent else Color.White.copy(alpha = 0.75f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     Text(
-                        text = if (pillFast) "»" else "«",
-                        color = if (pillFast) auroraColors.accent else Color.White.copy(alpha = 0.75f),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = reelsSpeedLabel(pillRate),
+                        color = if (pillFast && holdingRate != null) auroraColors.accent else Color.White,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFeatureSettings = "tnum",
+                        ),
+                        modifier = Modifier.semantics {
+                            contentDescription = holdLabel
+                        },
                     )
                 }
-                Text(
-                    text = reelsSpeedLabel(pillRate),
-                    color = if (pillFast && holdingRate != null) auroraColors.accent else Color.White,
-                    style = TextStyle(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFeatureSettings = "tnum",
-                    ),
-                    modifier = Modifier.semantics {
-                        contentDescription = holdLabel
-                    },
-                )
             }
         }
 
-        // 5b. Pro-player Zoom HUD pill: live zoom badge while pinching, plus quick presets
-        // (Fit / Fill / 1.5× / 2× / 3× + one-tap reset) when zoomed and chrome is visible.
-        val isZoomed = ReelsZoom.isZoomed(zoomScale.value)
-        val showZoomHud = !isInPictureInPicture && isActive && (isPinchZooming || (isZoomed && chromeVisible))
-        AnimatedVisibility(
-            visible = showZoomHud,
-            enter = fadeIn() + scaleIn(initialScale = 0.92f),
-            exit = fadeOut() + scaleOut(targetScale = 0.92f),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = if (pillRate != 1f) 114.dp else 70.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .reelsFrostPill(
-                        rim = auroraMenuRimLightBrush(auroraColors),
-                        eInk = auroraColors.isEInk,
-                        solid = auroraColors.cardBackground,
-                        strong = true,
-                    )
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+        val renderZoomHud: @Composable () -> Unit = {
+            AnimatedVisibility(
+                visible = showZoomHud,
+                enter = fadeIn() + scaleIn(initialScale = 0.92f),
+                exit = fadeOut() + scaleOut(targetScale = 0.92f),
             ) {
-                Text(
-                    text = ReelsZoom.formatScaleLabel(zoomScale.value),
-                    color = auroraColors.accent,
-                    style = TextStyle(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFeatureSettings = "tnum",
-                    ),
-                )
-                if (!isPinchZooming && isZoomed) {
-                    val fitLabel = stringResource(MR.strings.reels_aspect_fit)
-                    val fillLabel = stringResource(MR.strings.reels_aspect_fill)
-                    ReelsZoomPresetChip(
-                        label = fitLabel,
-                        selected = false,
-                        accent = auroraColors.accent,
-                        onClick = {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            if (isCropMode) onToggleCropMode()
-                            animateZoomTo(1f, resetPan = true)
-                        },
+                Row(
+                    modifier = Modifier
+                        .reelsFrostPill(
+                            rim = auroraMenuRimLightBrush(auroraColors),
+                            eInk = auroraColors.isEInk,
+                            solid = auroraColors.cardBackground,
+                            strong = true,
+                        )
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = ReelsZoom.formatScaleLabel(zoomScale.value),
+                        color = auroraColors.accent,
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFeatureSettings = "tnum",
+                        ),
                     )
-                    ReelsZoomPresetChip(
-                        label = fillLabel,
-                        selected = false,
-                        accent = auroraColors.accent,
-                        onClick = {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            if (!isCropMode) onToggleCropMode()
-                            animateZoomTo(1f, resetPan = true)
-                        },
-                    )
-                    ReelsZoom.SCALE_PRESETS.forEach { preset ->
-                        val activePreset = kotlin.math.abs(zoomScale.value - preset) < 0.08f
+                    if (!isPinchZooming && isZoomed) {
+                        val fitLabel = stringResource(MR.strings.reels_aspect_fit)
+                        val fillLabel = stringResource(MR.strings.reels_aspect_fill)
                         ReelsZoomPresetChip(
-                            label = ReelsZoom.formatScaleLabel(preset),
-                            selected = activePreset,
+                            label = fitLabel,
+                            selected = false,
                             accent = auroraColors.accent,
                             onClick = {
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                animateZoomTo(preset)
-                            },
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.14f))
-                            .clickable(role = Role.Button) {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (isCropMode) onToggleCropMode()
                                 animateZoomTo(1f, resetPan = true)
                             },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(MR.strings.action_reset),
-                            tint = Color.White,
-                            modifier = Modifier.size(13.dp),
                         )
+                        ReelsZoomPresetChip(
+                            label = fillLabel,
+                            selected = false,
+                            accent = auroraColors.accent,
+                            onClick = {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (!isCropMode) onToggleCropMode()
+                                animateZoomTo(1f, resetPan = true)
+                            },
+                        )
+                        ReelsZoom.SCALE_PRESETS.forEach { preset ->
+                            val activePreset = kotlin.math.abs(zoomScale.value - preset) < 0.08f
+                            ReelsZoomPresetChip(
+                                label = ReelsZoom.formatScaleLabel(preset),
+                                selected = activePreset,
+                                accent = auroraColors.accent,
+                                onClick = {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    animateZoomTo(preset)
+                                },
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.14f))
+                                .clickable(role = Role.Button) {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    animateZoomTo(1f, resetPan = true)
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = stringResource(MR.strings.action_reset),
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
                     }
                 }
+            }
+        }
+
+        if (isLandscape) {
+            Row(
+                modifier = topHudModifier,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                renderSpeedPill()
+                renderZoomHud()
+            }
+        } else {
+            Column(
+                modifier = topHudModifier,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                renderSpeedPill()
+                renderZoomHud()
             }
         }
 
@@ -1825,8 +1873,10 @@ fun ReelsVideoPage(
                 fineScrubEnabled = landscapePullUpSeekEnabled,
                 bottomAnchorPadding = if (isLandscape) 66.dp else portraitAnchorPadding,
             )
+        }
 
-            // Landscape edge brightness / volume HUD (Aurora Frost glass capsule).
+        // Landscape edge brightness / volume HUD (Aurora Frost glass capsule).
+        if (isActive && !isInPictureInPicture) {
             ReelsEdgeGestureHud(state = edgeGestureHud)
         }
     }

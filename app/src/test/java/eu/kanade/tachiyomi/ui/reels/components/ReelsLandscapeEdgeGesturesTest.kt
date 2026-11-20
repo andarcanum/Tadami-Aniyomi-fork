@@ -43,6 +43,29 @@ class ReelsLandscapeEdgeGesturesTest {
             brightnessEnabled = true,
             volumeEnabled = true,
         ) shouldBe null
+
+        // Inner side bands (22% and 78%) belong to the center paging lane, not edge gestures.
+        resolveLandscapeEdgeZone(
+            xPx = 220f,
+            yPx = 250f,
+            widthPx = width,
+            heightPx = height,
+            topExclusionPx = 48f,
+            bottomExclusionPx = 72f,
+            brightnessEnabled = true,
+            volumeEnabled = true,
+        ) shouldBe null
+
+        resolveLandscapeEdgeZone(
+            xPx = 780f,
+            yPx = 250f,
+            widthPx = width,
+            heightPx = height,
+            topExclusionPx = 48f,
+            bottomExclusionPx = 72f,
+            brightnessEnabled = true,
+            volumeEnabled = true,
+        ) shouldBe null
     }
 
     @Test

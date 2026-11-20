@@ -16,12 +16,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +35,10 @@ import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,8 +56,8 @@ import kotlin.math.roundToInt
 
 /**
  * Side zones for landscape-only vertical edge gestures in Reels.
- * Left edge (0%..30%) adjusts window brightness; right edge (70%..100%) adjusts media volume.
- * Center (30%..70%) stays untouched so VerticalPager swipes work naturally.
+ * Left edge (0%..16%) adjusts window brightness; right edge (84%..100%) adjusts media volume.
+ * Center (16%..84%) stays untouched so VerticalPager swipes work effortlessly.
  */
 enum class ReelsLandscapeEdgeZone {
     Brightness,
@@ -63,7 +70,7 @@ data class ReelsEdgeGestureHudState(
     val isDragging: Boolean = false,
 )
 
-internal const val LANDSCAPE_EDGE_ZONE_FRACTION = 0.30f
+internal const val LANDSCAPE_EDGE_ZONE_FRACTION = 0.16f
 internal const val LANDSCAPE_MIN_BRIGHTNESS = 0.01f
 internal const val LANDSCAPE_EDGE_HUD_HOLD_MS = 550L
 
@@ -195,16 +202,23 @@ internal fun BoxScope.ReelsEdgeGestureHud(
     state: ReelsEdgeGestureHudState?,
     modifier: Modifier = Modifier,
 ) {
+    // Remember the last active state so the exit fade-out animates at the exact side and
+    // percentage where the drag ended instead of jumping to Volume 0%.
+    var lastState by remember { mutableStateOf(state) }
+    if (state != null) {
+        lastState = state
+    }
+    val displayed = state ?: lastState
     val visible = state != null
-    val activeZone = state?.zone ?: ReelsLandscapeEdgeZone.Volume
-    val level = (state?.level ?: 0f).coerceIn(0f, 1f)
+    val activeZone = displayed?.zone ?: ReelsLandscapeEdgeZone.Volume
+    val level = (displayed?.level ?: 0f).coerceIn(0f, 1f)
     val alignment = when (activeZone) {
         ReelsLandscapeEdgeZone.Brightness -> Alignment.CenterStart
         ReelsLandscapeEdgeZone.Volume -> Alignment.CenterEnd
     }
     val horizontalPad = when (activeZone) {
-        ReelsLandscapeEdgeZone.Brightness -> Modifier.padding(start = 88.dp)
-        ReelsLandscapeEdgeZone.Volume -> Modifier.padding(end = 88.dp)
+        ReelsLandscapeEdgeZone.Brightness -> Modifier.padding(start = 72.dp)
+        ReelsLandscapeEdgeZone.Volume -> Modifier.padding(end = 72.dp)
     }
 
     AnimatedVisibility(
@@ -213,6 +227,7 @@ internal fun BoxScope.ReelsEdgeGestureHud(
         exit = fadeOut() + scaleOut(targetScale = 0.94f),
         modifier = modifier
             .align(alignment)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .then(horizontalPad),
     ) {
         val percentText = formatGesturePercent(level)
