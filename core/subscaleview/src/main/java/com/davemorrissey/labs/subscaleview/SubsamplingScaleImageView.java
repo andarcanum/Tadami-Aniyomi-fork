@@ -13,9 +13,9 @@ import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
@@ -158,6 +158,8 @@ public class SubsamplingScaleImageView extends View {
     private static final int MAX_TILE_RETRIES = 2;
     private static final long TILE_RETRY_BASE_DELAY_MS = 50L;
     private static final long TILE_FADE_DURATION_MS = 100L;
+    private static final float COMMIT_VIEWPORT_MARGIN_FRACTION = 0.25f;
+    private static final float COMMIT_VIEWPORT_MIN_MARGIN_PX = 160f;
     private static final Object TILE_RETRY_TOKEN = new Object();
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final ThreadPoolExecutor DEFAULT_EXECUTOR = createDefaultExecutor();
@@ -168,7 +170,16 @@ public class SubsamplingScaleImageView extends View {
         int maxPoolSize = Math.max(corePoolSize, Math.min(8, cpus));
         AtomicInteger threadId = new AtomicInteger(1);
         ThreadFactory factory = runnable -> {
-            Thread thread = new Thread(runnable, "ssiv-decode-" + threadId.getAndIncrement());
+            Thread thread = new Thread(() -> {
+                try {
+                    Process.setThreadPriority(
+                            Process.THREAD_PRIORITY_DEFAULT + Process.THREAD_PRIORITY_LESS_FAVORABLE * 2
+                    );
+                } catch (Throwable ignored) {
+                    // Best-effort priority hint; ignore on host JVM tests.
+                }
+                runnable.run();
+            }, "ssiv-decode-" + threadId.getAndIncrement());
             thread.setDaemon(true);
             return thread;
         };
@@ -265,6 +276,7 @@ public class SubsamplingScaleImageView extends View {
     private final RectF externalVisibleViewport = new RectF();
     private final RectF externalViewport = new RectF();
     private final RectF externalRetainViewport = new RectF();
+    private final RectF commitViewportRect = new RectF();
     private float externalScale = 1f;
     private boolean decodePriorityBoost = true;
     private boolean hardwareTilesEnabled = false;
@@ -399,6 +411,7 @@ public class SubsamplingScaleImageView extends View {
                     if (tile.bitmap != null) {
                         tile.bitmap.recycle();
                         tile.bitmap = null;
+                        tile.drawnInDisplayList = false;
                         tile.fadeStartTimeMs = 0L;
                         trimmed = true;
                     }
@@ -734,6 +747,7 @@ public class SubsamplingScaleImageView extends View {
             for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
                 for (Tile tile : tileMapEntry.getValue()) {
                     tile.visible = false;
+                    tile.drawnInDisplayList = false;
                     cancelTileTask(tile);
                     tile.fadeStartTimeMs = 0L;
                     if (tile.bitmap != null) {
@@ -1297,13 +1311,6 @@ public class SubsamplingScaleImageView extends View {
                     }
                 }
                 anim = null;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                    setRequestedFrameRate(View.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT);
-                }
-            } else {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                    setRequestedFrameRate(View.REQUESTED_FRAME_RATE_CATEGORY_HIGH);
-                }
             }
             postInvalidateOnAnimation();
         }
@@ -1356,23 +1363,6 @@ public class SubsamplingScaleImageView extends View {
                             if (tileBgPaint != null) {
                                 canvas.drawRect(tile.vRect, tileBgPaint);
                             }
-                            if (matrix == null) {
-                                matrix = new Matrix();
-                            }
-                            matrix.reset();
-                            setMatrixArray(srcArray, 0, 0, tile.bitmap.getWidth(), 0, tile.bitmap.getWidth(), tile.bitmap.getHeight(), 0, tile.bitmap.getHeight());
-
-                            switch (getImageRotation()) {
-                                case ROTATION_0 ->
-                                        setMatrixArray(dstArray, tile.vRect.left, tile.vRect.top, tile.vRect.right, tile.vRect.top, tile.vRect.right, tile.vRect.bottom, tile.vRect.left, tile.vRect.bottom);
-                                case ROTATION_90 ->
-                                        setMatrixArray(dstArray, tile.vRect.right, tile.vRect.top, tile.vRect.right, tile.vRect.bottom, tile.vRect.left, tile.vRect.bottom, tile.vRect.left, tile.vRect.top);
-                                case ROTATION_180 ->
-                                        setMatrixArray(dstArray, tile.vRect.right, tile.vRect.bottom, tile.vRect.left, tile.vRect.bottom, tile.vRect.left, tile.vRect.top, tile.vRect.right, tile.vRect.top);
-                                case ROTATION_270 ->
-                                        setMatrixArray(dstArray, tile.vRect.left, tile.vRect.bottom, tile.vRect.left, tile.vRect.top, tile.vRect.right, tile.vRect.top, tile.vRect.right, tile.vRect.bottom);
-                            }
-                            matrix.setPolyToPoly(srcArray, 0, dstArray, 0, 4);
                             int alpha = 255;
                             if (tile.sampleSize < fullImageSampleSize && tile.fadeStartTimeMs > 0L && tileFadeDurationMs > 0L) {
                                 long elapsed = Math.max(0L, now - tile.fadeStartTimeMs);
@@ -1384,19 +1374,47 @@ public class SubsamplingScaleImageView extends View {
                                 }
                             }
                             bitmapPaint.setAlpha(alpha);
-                            drawBitmapSafely(canvas, tile.bitmap, matrix, bitmapPaint);
+                            ImageRotation rotation = getImageRotation();
+                            if (rotation == ImageRotation.ROTATION_0) {
+                                drawBitmapSafely(canvas, tile.bitmap, tile.vRect, bitmapPaint);
+                            } else {
+                                if (matrix == null) {
+                                    matrix = new Matrix();
+                                }
+                                matrix.reset();
+                                setMatrixArray(srcArray, 0, 0, tile.bitmap.getWidth(), 0, tile.bitmap.getWidth(), tile.bitmap.getHeight(), 0, tile.bitmap.getHeight());
+                                switch (rotation) {
+                                    case ROTATION_90 ->
+                                            setMatrixArray(dstArray, tile.vRect.right, tile.vRect.top, tile.vRect.right, tile.vRect.bottom, tile.vRect.left, tile.vRect.bottom, tile.vRect.left, tile.vRect.top);
+                                    case ROTATION_180 ->
+                                            setMatrixArray(dstArray, tile.vRect.right, tile.vRect.bottom, tile.vRect.left, tile.vRect.bottom, tile.vRect.left, tile.vRect.top, tile.vRect.right, tile.vRect.top);
+                                    case ROTATION_270 ->
+                                            setMatrixArray(dstArray, tile.vRect.left, tile.vRect.bottom, tile.vRect.left, tile.vRect.top, tile.vRect.right, tile.vRect.top, tile.vRect.right, tile.vRect.bottom);
+                                    case ROTATION_0 -> {}
+                                }
+                                matrix.setPolyToPoly(srcArray, 0, dstArray, 0, 4);
+                                drawBitmapSafely(canvas, tile.bitmap, matrix, bitmapPaint);
+                            }
                             if (alpha != 255) {
                                 bitmapPaint.setAlpha(255);
                             }
+                            tile.drawnInDisplayList = true;
                             if (debug) {
                                 canvas.drawRect(tile.vRect, debugLinePaint);
                             }
-                        } else if (tile.loading && debug) {
-                            canvas.drawText("LOADING", tile.vRect.left + px(5), tile.vRect.top + px(35), debugTextPaint);
+                        } else {
+                            tile.drawnInDisplayList = false;
+                            if (tile.loading && debug) {
+                                canvas.drawText("LOADING", tile.vRect.left + px(5), tile.vRect.top + px(35), debugTextPaint);
+                            }
                         }
                         if (tile.visible && debug) {
                             canvas.drawText("ISS " + tile.sampleSize + " RECT " + tile.sRect.top + "," + tile.sRect.left + "," + tile.sRect.bottom + "," + tile.sRect.right, tile.vRect.left + px(5), tile.vRect.top + px(15), debugTextPaint);
                         }
+                    }
+                } else {
+                    for (Tile tile : tileMapEntry.getValue()) {
+                        tile.drawnInDisplayList = false;
                     }
                 }
             }
@@ -1634,6 +1652,26 @@ public class SubsamplingScaleImageView extends View {
         canvas.drawBitmap(targetBitmap, drawMatrix, paint);
     }
 
+    private void drawBitmapSafely(
+            @NonNull Canvas canvas,
+            @NonNull Bitmap targetBitmap,
+            @NonNull Rect dstRect,
+            @NonNull Paint paint
+    ) {
+        if (!canvas.isHardwareAccelerated() && targetBitmap.getConfig() == Bitmap.Config.HARDWARE) {
+            Bitmap softwareCopy = targetBitmap.copy(Bitmap.Config.ARGB_8888, false);
+            if (softwareCopy != null) {
+                try {
+                    canvas.drawBitmap(softwareCopy, null, dstRect, paint);
+                } finally {
+                    softwareCopy.recycle();
+                }
+            }
+            return;
+        }
+        canvas.drawBitmap(targetBitmap, null, dstRect, paint);
+    }
+
     /**
      * Called on first draw when the view has dimensions. Calculates the initial sample size and starts async loading of
      * the base layer image - the whole source subsampled as necessary.
@@ -1788,10 +1826,11 @@ public class SubsamplingScaleImageView extends View {
         for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
             for (Tile tile : tileMapEntry.getValue()) {
                 if (tile.sampleSize < sampleSize || (tile.sampleSize > sampleSize && tile.sampleSize != fullImageSampleSize)) {
-                    if (tile.visible || tile.bitmap != null) {
+                    if (tile.visible || tile.drawnInDisplayList || tile.bitmap != null) {
                         changed = true;
                     }
                     tile.visible = false;
+                    tile.drawnInDisplayList = false;
                     cancelTileTask(tile);
                     tile.fadeStartTimeMs = 0L;
                     if (tile.bitmap != null) {
@@ -1803,13 +1842,15 @@ public class SubsamplingScaleImageView extends View {
                     boolean shouldLoad = tileVisible(tile);
                     boolean shouldRetain = shouldLoad
                             || (externalViewportEnabled && tileVisibleIn(tile, externalRetainViewport));
-                    boolean affectsVisible = !externalViewportEnabled || tileVisibleIn(tile, externalVisibleViewport);
+                    boolean inCommitViewport = tileVisibleInCommitViewport(tile);
                     if (shouldLoad) {
-                        if (!tile.visible) {
+                        boolean becameVisible = !tile.visible;
+                        if (becameVisible) {
                             tile.visible = true;
-                            if ((tile.bitmap != null && affectsVisible) || debug) {
-                                changed = true;
-                            }
+                        }
+                        if ((tile.bitmap != null && !tile.drawnInDisplayList && inCommitViewport)
+                                || (becameVisible && debug)) {
+                            changed = true;
                         }
                         if (load && !tile.failed && !tile.retryPending && tile.bitmap == null) {
                             if (enqueueOrPromoteTile(tile) && debug) {
@@ -1819,7 +1860,8 @@ public class SubsamplingScaleImageView extends View {
                     } else if (shouldRetain) {
                         if (tile.visible) {
                             tile.visible = false;
-                            if ((tile.bitmap != null && affectsVisible) || debug) {
+                            if ((tile.drawnInDisplayList && (!externalViewportEnabled || tileVisibleIn(tile, externalVisibleViewport)))
+                                    || debug) {
                                 changed = true;
                             }
                         }
@@ -1831,10 +1873,11 @@ public class SubsamplingScaleImageView extends View {
                             tile.retryCount = 0;
                         }
                     } else if (tile.sampleSize != fullImageSampleSize) {
-                        if (tile.visible) {
+                        if (tile.visible || tile.drawnInDisplayList) {
                             changed = true;
                         }
                         tile.visible = false;
+                        tile.drawnInDisplayList = false;
                         cancelTileTask(tile);
                         tile.failed = false;
                         tile.retryCount = 0;
@@ -1881,6 +1924,31 @@ public class SubsamplingScaleImageView extends View {
                 sVisTop = viewToSourceY(viewport.top),
                 sVisBottom = viewToSourceY(viewport.bottom);
         return !(sVisLeft > tile.sRect.right || tile.sRect.left > sVisRight || sVisTop > tile.sRect.bottom || tile.sRect.top > sVisBottom);
+    }
+
+    /**
+     * Returns true when a tile is inside or just outside the visible viewport and should be
+     * committed into the hardware RenderNode DisplayList so it is already sharp before reaching
+     * the visible screen edge.
+     */
+    private boolean tileVisibleInCommitViewport(@NonNull Tile tile) {
+        if (!externalViewportEnabled || tile.sampleSize == fullImageSampleSize) {
+            return true;
+        }
+        if (externalVisibleViewport.isEmpty()) {
+            return false;
+        }
+        float margin = Math.max(
+                COMMIT_VIEWPORT_MIN_MARGIN_PX,
+                externalVisibleViewport.height() * COMMIT_VIEWPORT_MARGIN_FRACTION
+        );
+        commitViewportRect.set(
+                externalVisibleViewport.left,
+                externalVisibleViewport.top - margin,
+                externalVisibleViewport.right,
+                externalVisibleViewport.bottom + margin
+        );
+        return tileVisibleIn(tile, commitViewportRect);
     }
 
     /**
@@ -2168,6 +2236,8 @@ public class SubsamplingScaleImageView extends View {
         }
         if (inVisibleViewport || (baseReadyNow && !wasBaseReady) || debug) {
             invalidate();
+        } else if (tileVisibleInCommitViewport(loadedTile)) {
+            postInvalidateOnAnimation();
         }
     }
 
@@ -2176,7 +2246,9 @@ public class SubsamplingScaleImageView extends View {
         if (tile.retryCount <= MAX_TILE_RETRIES) {
             if (tile.retryCount == 1) {
                 // Free offscreen retained tiles before retrying in case of native/GPU memory pressure.
-                evictOffscreenDetailTiles();
+                if (evictOffscreenDetailTiles()) {
+                    invalidate();
+                }
             } else if (tile.retryCount == MAX_TILE_RETRIES && hardwareTilesEnabled && !hardwareFallbackTriggered) {
                 // Fall back to software tiles for the final retry in case HARDWARE/Gralloc allocation failed.
                 hardwareFallbackTriggered = true;
@@ -3872,6 +3944,7 @@ public class SubsamplingScaleImageView extends View {
                     tile.retryCount = 0;
                     tile.failed = false;
                     tile.bitmap = finalBitmap;
+                    tile.drawnInDisplayList = false;
                     view.onTileLoaded(tile);
                 } else if (finalError != null) {
                     view.onTileDecodeFailed(tile, finalError);
@@ -3891,6 +3964,7 @@ public class SubsamplingScaleImageView extends View {
         private Bitmap bitmap;
         private volatile boolean loading;
         private volatile boolean visible;
+        private boolean drawnInDisplayList;
         private TileLoadTask activeTask;
         private int retryCount;
         private boolean retryPending;

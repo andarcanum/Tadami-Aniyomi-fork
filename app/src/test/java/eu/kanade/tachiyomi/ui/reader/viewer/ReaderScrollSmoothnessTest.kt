@@ -8,74 +8,27 @@ import org.junit.jupiter.api.Test
 class ReaderScrollSmoothnessTest {
 
     @Test
-    fun `selectFastestDisplayMode returns fastest matching mode even when already active on LTPO`() {
-        val current120 = DisplayModeCandidate(modeId = 1, physicalWidth = 1260, physicalHeight = 2800, refreshRate = 120f)
-        val mode60 = DisplayModeCandidate(modeId = 2, physicalWidth = 1260, physicalHeight = 2800, refreshRate = 60f)
-        val otherRes144 = DisplayModeCandidate(modeId = 3, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 144f)
+    fun `floorFrameContentVelocityForArr lifts slow fling-tail velocity above high refresh threshold`() {
+        val density = 3.5f
+        val expectedFloor = 300f * density
 
-        val picked = selectFastestDisplayMode(
-            current = current120,
-            supported = listOf(mode60, current120, otherRes144),
-        )
-
-        picked shouldBe current120
+        floorFrameContentVelocityForArr(pixelsPerSecond = 25f, density = density) shouldBe expectedFloor
+        floorFrameContentVelocityForArr(pixelsPerSecond = 2500f, density = density) shouldBe 2500f
     }
 
     @Test
-    fun `selectFastestDisplayMode upgrades from capped 60Hz mode to 120Hz mode of same resolution`() {
-        val current60 = DisplayModeCandidate(modeId = 2, physicalWidth = 1260, physicalHeight = 2800, refreshRate = 60f)
-        val mode90 = DisplayModeCandidate(modeId = 3, physicalWidth = 1260, physicalHeight = 2800, refreshRate = 90f)
-        val mode120 = DisplayModeCandidate(modeId = 1, physicalWidth = 1260, physicalHeight = 2800, refreshRate = 120f)
-
-        val picked = selectFastestDisplayMode(
-            current = current60,
-            supported = listOf(current60, mode90, mode120),
-        )
-
-        picked shouldBe mode120
+    fun `floorFrameContentVelocityForArr passes zero and non-finite velocity through so LTPO idles down`() {
+        floorFrameContentVelocityForArr(pixelsPerSecond = 0f, density = 3.5f) shouldBe 0f
+        floorFrameContentVelocityForArr(pixelsPerSecond = -10f, density = 3.5f) shouldBe -10f
+        floorFrameContentVelocityForArr(pixelsPerSecond = Float.NaN, density = 3.5f).isNaN() shouldBe true
     }
 
     @Test
-    fun `WebtoonViewportPushCoalescer coalesces slow 120Hz scroll frames and flushes at threshold`() {
-        val coalescer = WebtoonViewportPushCoalescer()
-        coalescer.markForcedPush(scale = 1f)
+    fun `WebtoonLookaheadSmoother smooths and quantizes lookahead factor without jitter`() {
+        val smoother = WebtoonLookaheadSmoother()
 
-        val viewportHeight = 2400f
-        val density = 3f
-        // Threshold = max(48*3=144, 2400*0.08=192) = 192px
-        coalescer.computePushThresholdPx(viewportHeight, density) shouldBe 192f
-
-        var flushes = 0
-        repeat(100) {
-            if (coalescer.onScrollDelta(dy = 10, viewportHeightPx = viewportHeight, density = density, scale = 1f)) {
-                flushes++
-            }
-        }
-        // 1000px total / 192px threshold -> 5 flushes (200px, 400px, 600px, 800px, 1000px) instead of 100
-        flushes shouldBe 5
-    }
-
-    @Test
-    fun `WebtoonViewportPushCoalescer flushes immediately on direction reversal and scale change`() {
-        val coalescer = WebtoonViewportPushCoalescer()
-        coalescer.markForcedPush(scale = 1f)
-
-        coalescer.onScrollDelta(dy = 20, viewportHeightPx = 2400f, density = 3f, scale = 1f) shouldBe false
-        // Direction reverses -> immediate flush so prefetch shifts to the new direction
-        coalescer.onScrollDelta(dy = -5, viewportHeightPx = 2400f, density = 3f, scale = 1f) shouldBe true
-        // Small move in same direction -> coalesced
-        coalescer.onScrollDelta(dy = -10, viewportHeightPx = 2400f, density = 3f, scale = 1f) shouldBe false
-        // Zoom scale change -> immediate flush
-        coalescer.onScrollDelta(dy = 0, viewportHeightPx = 2400f, density = 3f, scale = 1.5f) shouldBe true
-    }
-
-    @Test
-    fun `WebtoonViewportPushCoalescer smooths lookahead factor without jitter`() {
-        val coalescer = WebtoonViewportPushCoalescer()
-        coalescer.markForcedPush(scale = 1f)
-
-        coalescer.onScrollDelta(dy = 2, viewportHeightPx = 2400f, density = 3f, scale = 1f)
-        val slowLookahead = coalescer.computeSmoothedLookaheadFactor(
+        smoother.onScrollDelta(dy = 2)
+        val slowLookahead = smoother.computeLookaheadFactor(
             isSettling = false,
             flingVelocityY = 0,
             viewportHeightPx = 2400f,
@@ -84,7 +37,7 @@ class ReaderScrollSmoothnessTest {
         )
         slowLookahead shouldBe 0.5f
 
-        val flingLookahead = coalescer.computeSmoothedLookaheadFactor(
+        val flingLookahead = smoother.computeLookaheadFactor(
             isSettling = true,
             flingVelocityY = 9000,
             viewportHeightPx = 2400f,
@@ -93,5 +46,25 @@ class ReaderScrollSmoothnessTest {
         )
         flingLookahead shouldBeGreaterThanOrEqual 0.5f
         flingLookahead shouldBeLessThanOrEqual 1.0f
+
+        // Small single-frame spike does not jump the EMA lookahead abruptly
+        smoother.reset()
+        repeat(10) { smoother.onScrollDelta(dy = 10) }
+        val beforeSpike = smoother.computeLookaheadFactor(
+            isSettling = false,
+            flingVelocityY = 0,
+            viewportHeightPx = 2400f,
+            minFactor = 0.5f,
+            maxFactor = 1.0f,
+        )
+        smoother.onScrollDelta(dy = 12)
+        val afterTinyDelta = smoother.computeLookaheadFactor(
+            isSettling = false,
+            flingVelocityY = 0,
+            viewportHeightPx = 2400f,
+            minFactor = 0.5f,
+            maxFactor = 1.0f,
+        )
+        afterTinyDelta shouldBe beforeSpike
     }
 }

@@ -160,7 +160,6 @@ class WebtoonAutoScrollManager(
     private fun startAnimator() {
         lastFrameTimeNs = 0L
         scrollRemainder = 0f
-        recyclerView.notifyExternalScrollMotion(true)
 
         valueAnimator = ValueAnimator.ofInt(0, Int.MAX_VALUE).apply {
             duration = Long.MAX_VALUE
@@ -219,6 +218,5 @@ class WebtoonAutoScrollManager(
     private fun stopAnimator() {
         valueAnimator?.cancel()
         valueAnimator = null
-        recyclerView.notifyExternalScrollMotion(false)
     }
 }

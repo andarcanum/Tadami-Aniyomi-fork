@@ -80,7 +80,20 @@ class TilePriorityAndPreviewTest {
     private class TestView(
         val fake: RecordingDecoder = RecordingDecoder(),
     ) : SubsamplingScaleImageView(ApplicationProvider.getApplicationContext<Context>()) {
+        var invalidateCount = 0
+        var postInvalidateOnAnimationCount = 0
+
         override fun createRegionDecoder(): ImageRegionDecoder = fake
+
+        override fun invalidate() {
+            invalidateCount++
+            super.invalidate()
+        }
+
+        override fun postInvalidateOnAnimation() {
+            postInvalidateOnAnimationCount++
+            super.postInvalidateOnAnimation()
+        }
     }
 
     private fun TestView.render(target: Bitmap) {
@@ -273,6 +286,72 @@ class TilePriorityAndPreviewTest {
             executor.drainAll()
             assertFalse(preview.isRecycled, "Non-owned preview bitmap must never be recycled on view.recycle()")
             preview.recycle()
+            target.recycle()
+        }
+    }
+
+    @Test
+    fun offscreenPrefetchedTileInvalidatesOnceWhenScrolledIntoVisibleViewport() {
+        val executor = PriorityDrainExecutor()
+        val view = TestView(RecordingDecoder(Point(1000, 4000))).apply {
+            setExecutor(executor)
+            setMaxTileSize(512)
+            setMinimumTileDpi(0)
+            setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH)
+            // Visible viewport is only the top [0..400], while prefetch extends down to 1600.
+            setExternalViewport(
+                RectF(0f, 0f, 400f, 400f),
+                RectF(0f, 0f, 400f, 1600f),
+                RectF(0f, 0f, 400f, 1600f),
+                1f,
+            )
+        }
+        val target = Bitmap.createBitmap(400, 1600, Bitmap.Config.ARGB_8888)
+        try {
+            view.setImage(ImageSource.inputStream(byteArrayOf(1).inputStream()).dimensions(1000, 4000))
+            // Run TilesInitTask + base layer, then render once so vTranslate is established and
+            // prefetch detail tiles [0..1600] are enqueued while visible viewport is [0..400].
+            view.render(target)
+            executor.drainAll()
+            view.render(target)
+            // Drain all detail tile decodes while bottom tiles [1000..1600] are strictly offscreen
+            // (outside both visible [0..400] and commit margin [0..560]).
+            executor.drainAll()
+
+            // Now scroll down to [1000..1400]: the bottom tiles were already decoded while
+            // tile.visible was true, so they MUST still invalidate once to commit into the DisplayList.
+            view.invalidateCount = 0
+            view.postInvalidateOnAnimationCount = 0
+            view.setExternalViewport(
+                RectF(0f, 1000f, 400f, 1400f),
+                RectF(0f, 800f, 400f, 1600f),
+                RectF(0f, 0f, 400f, 1600f),
+                1f,
+            )
+            assertTrue(
+                view.invalidateCount > 0 || view.postInvalidateOnAnimationCount > 0,
+                "Pre-decoded offscreen tiles must trigger a redraw when entering the visible viewport",
+            )
+
+            // Draw commits the sharp tiles into the DisplayList; a tiny scroll inside the same
+            // already-committed tiles must NOT keep invalidating on every frame.
+            view.render(target)
+            view.invalidateCount = 0
+            view.postInvalidateOnAnimationCount = 0
+            view.setExternalViewport(
+                RectF(0f, 1005f, 400f, 1405f),
+                RectF(0f, 805f, 400f, 1600f),
+                RectF(0f, 0f, 400f, 1600f),
+                1f,
+            )
+            assertEquals(
+                0,
+                view.invalidateCount + view.postInvalidateOnAnimationCount,
+                "Already-committed tiles must not trigger redundant invalidations on minor scroll",
+            )
+        } finally {
+            view.recycle()
+            executor.drainAll()
             target.recycle()
         }
     }

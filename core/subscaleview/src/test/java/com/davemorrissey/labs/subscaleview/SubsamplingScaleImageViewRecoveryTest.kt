@@ -36,6 +36,11 @@ class SubsamplingScaleImageViewRecoveryTest {
             drawnBitmaps += bitmap
             super.drawBitmap(bitmap, matrix, paint)
         }
+
+        override fun drawBitmap(bitmap: Bitmap, src: Rect?, dst: Rect, paint: Paint?) {
+            drawnBitmaps += bitmap
+            super.drawBitmap(bitmap, src, dst, paint)
+        }
     }
 
     private class ControllableDecoder(

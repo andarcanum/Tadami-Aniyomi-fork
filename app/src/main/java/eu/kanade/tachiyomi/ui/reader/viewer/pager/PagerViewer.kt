@@ -147,7 +147,6 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 }
 
                 override fun onPageScrollStateChanged(state: Int) {
-                    pager.setScrollMotionActive(state != ViewPager.SCROLL_STATE_IDLE)
                     when (state) {
                         ViewPager.SCROLL_STATE_DRAGGING -> {
                             // Record if user starts dragging when already at the reading end
@@ -162,7 +161,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                             dragStartedAtLastPage = false
                             resumeAutoScroll()
                         }
-                        else -> { /* SETTLING — keep HIGH frame rate active until IDLE */ }
+                        else -> { /* SETTLING — ignore */ }
                     }
                     isIdle = state == ViewPager.SCROLL_STATE_IDLE
                 }

@@ -110,9 +110,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
-import eu.kanade.tachiyomi.ui.reader.viewer.DisplayModeCandidate
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
-import eu.kanade.tachiyomi.ui.reader.viewer.selectFastestDisplayMode
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScrubPreviewLoader
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
@@ -451,66 +449,22 @@ class ReaderActivity : BaseActivity() {
         if (isEInkMode()) return
         val currentDisplay = display ?: return
         val current = currentDisplay.mode
-        val fastest = selectFastestDisplayMode(
-            current = DisplayModeCandidate(
-                modeId = current.modeId,
-                physicalWidth = current.physicalWidth,
-                physicalHeight = current.physicalHeight,
-                refreshRate = current.refreshRate,
-            ),
-            supported = currentDisplay.supportedModes.map {
-                DisplayModeCandidate(
-                    modeId = it.modeId,
-                    physicalWidth = it.physicalWidth,
-                    physicalHeight = it.physicalHeight,
-                    refreshRate = it.refreshRate,
-                )
-            },
-        ) ?: return
-        val attrs = window.attributes
-        if (!refreshRateOverrideApplied) {
-            savedDisplayModeId = attrs.preferredDisplayModeId
-            savedPreferredRefreshRate = attrs.preferredRefreshRate
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                savedFrameRateBoostOnTouch = attrs.frameRateBoostOnTouchEnabled
-            }
-            refreshRateOverrideApplied = true
-        }
-        val needsBoostOnTouch = Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM &&
-            !attrs.frameRateBoostOnTouchEnabled
-        if (attrs.preferredDisplayModeId != fastest.modeId ||
-            attrs.preferredRefreshRate != fastest.refreshRate ||
-            needsBoostOnTouch
-        ) {
-            window.attributes = attrs.apply {
-                preferredDisplayModeId = fastest.modeId
-                preferredRefreshRate = fastest.refreshRate
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                    frameRateBoostOnTouchEnabled = true
-                }
-            }
-        }
+        val fastest = currentDisplay.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .maxByOrNull { it.refreshRate }
+            ?: return
+        if (fastest.modeId == current.modeId) return
+        savedDisplayModeId = current.modeId
+        window.attributes = window.attributes.apply { preferredDisplayModeId = fastest.modeId }
     }
 
     private fun restoreDisplayMode() {
-        if (!refreshRateOverrideApplied) return
-        window.attributes = window.attributes.apply {
-            preferredDisplayModeId = savedDisplayModeId
-            preferredRefreshRate = savedPreferredRefreshRate
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                frameRateBoostOnTouchEnabled = savedFrameRateBoostOnTouch
-            }
-        }
+        if (savedDisplayModeId == 0) return
+        window.attributes = window.attributes.apply { preferredDisplayModeId = savedDisplayModeId }
         savedDisplayModeId = 0
-        savedPreferredRefreshRate = 0f
-        savedFrameRateBoostOnTouch = true
-        refreshRateOverrideApplied = false
     }
 
     private var savedDisplayModeId = 0
-    private var savedPreferredRefreshRate = 0f
-    private var savedFrameRateBoostOnTouch = true
-    private var refreshRateOverrideApplied = false
 
     /**
      * Called when the window focus changes. It sets the menu visibility to the last known state
@@ -520,7 +474,6 @@ class ReaderActivity : BaseActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             setMenuVisibility(viewModel.state.value.menuVisible)
-            requestMaxRefreshRate()
         }
     }
 
