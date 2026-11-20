@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +66,7 @@ import coil3.request.crossfade
 import coil3.request.transformations
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.reels.ReelsHlsDownloader
+import eu.kanade.tachiyomi.ui.reels.components.computeScrubThumbnailSize
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
@@ -109,6 +112,8 @@ fun ReelsPlayerView(
     seekRequest: ReelsSeekRequest? = null,
     seekToPositionMs: Long? = null,
     onSeekPositionConsumed: () -> Unit = {},
+    isScrubbing: Boolean = false,
+    onScrubFrameCaptured: ((fraction: Float, bitmap: ImageBitmap) -> Unit)? = null,
     onRenderedFirstFrame: () -> Unit = {},
     onProgressUpdate: (Float) -> Unit,
     onBufferUpdate: (Float) -> Unit = {},
@@ -206,6 +211,10 @@ fun ReelsPlayerView(
     val currentOnPlaybackRunningChanged by rememberUpdatedState(onPlaybackRunningChanged)
     val currentOnRefreshExpiredUrl by rememberUpdatedState(onRefreshExpiredUrl)
     val currentOnCodecFallback by rememberUpdatedState(onCodecFallback)
+    val currentIsScrubbing by rememberUpdatedState(isScrubbing)
+    val currentOnScrubFrameCaptured by rememberUpdatedState(onScrubFrameCaptured)
+    var lastScrubCaptureAtMs by remember { mutableLongStateOf(0L) }
+    var lastRequestedScrubFraction by remember { mutableFloatStateOf(0f) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var isLifecycleStarted by remember(lifecycleOwner) {
@@ -749,10 +758,39 @@ fun ReelsPlayerView(
         )
     }
 
+    fun captureScrubFrame(tv: TextureView?, force: Boolean = false) {
+        val callback = currentOnScrubFrameCaptured ?: return
+        if (tv == null || !tv.isAvailable) return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastScrubCaptureAtMs < SCRUB_FRAME_CAPTURE_INTERVAL_MS) return
+        val (targetW, targetH) = computeScrubThumbnailSize(
+            videoWidth = videoWidth.takeIf { it > 0 } ?: tv.width,
+            videoHeight = videoHeight.takeIf { it > 0 } ?: tv.height,
+        )
+        val bitmap = runCatching { tv.getBitmap(targetW, targetH) }.getOrNull() ?: return
+        lastScrubCaptureAtMs = now
+        val p = pooledPlayer?.player
+        val capturedFraction = if (p != null && p.duration > 0L) {
+            (p.currentPosition.toFloat() / p.duration.toFloat()).coerceIn(0f, 1f)
+        } else {
+            lastRequestedScrubFraction
+        }
+        callback(capturedFraction, bitmap.asImageBitmap())
+    }
+
+    LaunchedEffect(isScrubbing, textureViewRef) {
+        if (isScrubbing) {
+            captureScrubFrame(textureViewRef, force = true)
+        }
+    }
+
     // React to monotonic seek requests (double-tap ±10s, live keyframe scrub, final commit).
     LaunchedEffect(seekRequest?.id, player) {
         val req = seekRequest ?: return@LaunchedEffect
         val frac = req.fraction.coerceIn(0f, 1f)
+        if (req.liveScrub) {
+            lastRequestedScrubFraction = frac
+        }
         player?.let { p ->
             p.setSeekParameters(if (req.liveScrub) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT)
             if (p.duration > 0) {
@@ -1019,6 +1057,9 @@ fun ReelsPlayerView(
 
                             override fun onSurfaceTextureUpdated(st: SurfaceTexture) {
                                 isFirstFrameRendered = true
+                                if (currentIsScrubbing) {
+                                    captureScrubFrame(this@apply)
+                                }
                             }
                         }
                     }
@@ -1482,3 +1523,5 @@ internal fun calculateReelTextureScale(
         }
     }
 }
+
+private const val SCRUB_FRAME_CAPTURE_INTERVAL_MS = 65L

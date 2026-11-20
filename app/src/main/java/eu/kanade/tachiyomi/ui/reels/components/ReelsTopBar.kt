@@ -35,13 +35,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DataSaverOn
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
@@ -147,6 +150,12 @@ fun ReelsTopBar(
     onOpenFollows: () -> Unit = {},
     isPipEnabled: Boolean = false,
     onTogglePip: () -> Unit = {},
+    landscapeBrightnessGestureEnabled: Boolean = true,
+    onToggleLandscapeBrightnessGesture: () -> Unit = {},
+    landscapeVolumeGestureEnabled: Boolean = true,
+    onToggleLandscapeVolumeGesture: () -> Unit = {},
+    landscapePullUpSeekEnabled: Boolean = true,
+    onToggleLandscapePullUpSeek: () -> Unit = {},
     // Audit H8: offline-copy storage visibility + user-initiated cleanup (More menu).
     offlineUsedBytes: Long = 0L,
     onClearOfflineStorage: () -> Unit = {},
@@ -589,6 +598,9 @@ fun ReelsTopBar(
                             preloadEnabled = preloadEnabled,
                             preloadWifiOnly = preloadWifiOnly,
                             isPipEnabled = isPipEnabled,
+                            landscapeBrightnessGestureEnabled = landscapeBrightnessGestureEnabled,
+                            landscapeVolumeGestureEnabled = landscapeVolumeGestureEnabled,
+                            landscapePullUpSeekEnabled = landscapePullUpSeekEnabled,
                             offlineUsedBytes = offlineUsedBytes,
                             sleepTimerValue = sleepTimerValue,
                             isTouchLocked = isTouchLocked,
@@ -647,6 +659,9 @@ fun ReelsTopBar(
                             // Audit H11: setting toggles keep the menu OPEN — flipping several
                             // switches in a row must not require reopening the popup each time.
                             onTogglePip = onTogglePip,
+                            onToggleLandscapeBrightnessGesture = onToggleLandscapeBrightnessGesture,
+                            onToggleLandscapeVolumeGesture = onToggleLandscapeVolumeGesture,
+                            onToggleLandscapePullUpSeek = onToggleLandscapePullUpSeek,
                             onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
                             onClearVideoCache = {
                                 onClearVideoCache()
@@ -1031,6 +1046,9 @@ private fun ReelsMoreMenu(
     preloadEnabled: Boolean,
     preloadWifiOnly: Boolean,
     isPipEnabled: Boolean,
+    landscapeBrightnessGestureEnabled: Boolean,
+    landscapeVolumeGestureEnabled: Boolean,
+    landscapePullUpSeekEnabled: Boolean,
     offlineUsedBytes: Long,
     sleepTimerValue: String,
     isTouchLocked: Boolean,
@@ -1055,6 +1073,9 @@ private fun ReelsMoreMenu(
     onTogglePreload: () -> Unit,
     onTogglePreloadWifiOnly: () -> Unit,
     onTogglePip: () -> Unit,
+    onToggleLandscapeBrightnessGesture: () -> Unit,
+    onToggleLandscapeVolumeGesture: () -> Unit,
+    onToggleLandscapePullUpSeek: () -> Unit,
     onClearVideoCache: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1217,6 +1238,49 @@ private fun ReelsMoreMenu(
                 value = stringResource(if (isCropMode) MR.strings.reels_aspect_fill else MR.strings.reels_aspect_fit),
                 checked = null,
                 onClick = onToggleCropMode,
+            )
+            MoreMenuSection(stringResource(MR.strings.reels_landscape_gestures_section))
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        Icons.Filled.Brightness6,
+                        null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                label = stringResource(MR.strings.reels_gesture_brightness_title),
+                value = null,
+                checked = landscapeBrightnessGestureEnabled,
+                onClick = onToggleLandscapeBrightnessGesture,
+            )
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                        null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                label = stringResource(MR.strings.reels_gesture_volume_title),
+                value = null,
+                checked = landscapeVolumeGestureEnabled,
+                onClick = onToggleLandscapeVolumeGesture,
+            )
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        Icons.Filled.FastForward,
+                        null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                label = stringResource(MR.strings.reels_gesture_pull_up_seek_title),
+                value = null,
+                checked = landscapePullUpSeekEnabled,
+                onClick = onToggleLandscapePullUpSeek,
             )
             MoreMenuSection(stringResource(MR.strings.reels_menu_section_quality))
             if (qualityModeEnabled) {

@@ -201,6 +201,20 @@ class SourcePreferences(
     // B3.5: explicit picture-in-picture, off by default (no surprise background rendering).
     fun reelsPipEnabled() = preferenceStore.getBoolean("pref_reels_pip", false)
 
+    // Landscape-only Reels gesture toggles (on by default; independently configurable in player settings).
+    fun reelsLandscapeBrightnessGesture() = preferenceStore.getBoolean(
+        "pref_reels_landscape_brightness_gesture",
+        true,
+    )
+    fun reelsLandscapeVolumeGesture() = preferenceStore.getBoolean(
+        "pref_reels_landscape_volume_gesture",
+        true,
+    )
+    fun reelsLandscapePullUpSeek() = preferenceStore.getBoolean(
+        "pref_reels_landscape_pull_up_seek",
+        true,
+    )
+
     // Reels owns its incognito: the global switch, the NSFW auto policy and the per-extension
     // incognito set deliberately do NOT apply inside the feed (product decision) — this
     // reels-only toggle is the single source of truth for history/position/last-source writes

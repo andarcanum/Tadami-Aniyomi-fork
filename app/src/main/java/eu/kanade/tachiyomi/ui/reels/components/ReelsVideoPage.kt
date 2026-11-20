@@ -76,6 +76,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -112,6 +113,8 @@ import tachiyomi.domain.reels.anime.model.ReelsQualityPreference
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -234,6 +237,13 @@ fun ReelsVideoPage(
     onPlayingStateChanged: (Boolean) -> Unit = {},
     isTouchLocked: Boolean = false,
     onToggleTouchLock: () -> Unit = {},
+    landscapeBrightnessGestureEnabled: Boolean = true,
+    landscapeVolumeGestureEnabled: Boolean = true,
+    landscapePullUpSeekEnabled: Boolean = true,
+    onToggleLandscapeBrightnessGesture: () -> Unit = {},
+    onToggleLandscapeVolumeGesture: () -> Unit = {},
+    onToggleLandscapePullUpSeek: () -> Unit = {},
+    onUnmuteIfMuted: () -> Unit = {},
     sourceName: String = "Tadami Feed",
     feedSectionLabel: String? = null,
     sourceBadgeName: String? = null,
@@ -274,6 +284,12 @@ fun ReelsVideoPage(
     var durationSec by remember(item) { mutableFloatStateOf(item.durationSec ?: 0f) }
     var seekRequest by remember(item.id) { mutableStateOf<ReelsSeekRequest?>(null) }
     var seekSequence by remember(item.id) { mutableLongStateOf(0L) }
+    var scrubUiState by remember(item.id) { mutableStateOf(ReelsScrubUiState()) }
+    val scrubThumbnailCache = remember(item.id) { ReelsScrubThumbnailCache<ImageBitmap>() }
+    var scrubThumbVersion by remember(item.id) { mutableIntStateOf(0) }
+    DisposableEffect(item.id) {
+        onDispose { scrubThumbnailCache.clear() }
+    }
     var initialSeekApplied by remember(item.id) { mutableStateOf(false) }
     var initialSeekPositionApplied by remember(item.id) { mutableStateOf(false) }
     val heartBursts = remember(item.id) { mutableStateListOf<HeartBurst>() }
@@ -367,6 +383,25 @@ fun ReelsVideoPage(
     val currentOnPlayingStateChanged by rememberUpdatedState(onPlayingStateChanged)
     val currentDurationSec by rememberUpdatedState(durationSec)
     val currentItemId by rememberUpdatedState(item.id)
+    val currentIsLandscape by rememberUpdatedState(isLandscape)
+    val currentIsTouchLocked by rememberUpdatedState(isTouchLocked)
+    val currentBrightnessGestureEnabled by rememberUpdatedState(landscapeBrightnessGestureEnabled)
+    val currentVolumeGestureEnabled by rememberUpdatedState(landscapeVolumeGestureEnabled)
+    val currentLandscapePullUpSeek by rememberUpdatedState(landscapePullUpSeekEnabled)
+    val currentOnScrubStart by rememberUpdatedState(onScrubStart)
+    val currentOnUnmuteIfMuted by rememberUpdatedState(onUnmuteIfMuted)
+    val currentIsScrubbing by rememberUpdatedState(scrubUiState.isActive)
+    var edgeGestureHud by remember(item.id) { mutableStateOf<ReelsEdgeGestureHudState?>(null) }
+    var edgeGestureHideToken by remember(item.id) { mutableLongStateOf(0L) }
+    LaunchedEffect(edgeGestureHideToken, edgeGestureHud?.isDragging) {
+        val hud = edgeGestureHud ?: return@LaunchedEffect
+        if (hud.isDragging) return@LaunchedEffect
+        delay(LANDSCAPE_EDGE_HUD_HOLD_MS)
+        edgeGestureHud = null
+    }
+    LaunchedEffect(isLandscape) {
+        if (!isLandscape) edgeGestureHud = null
+    }
     // Real playback state of this page's player (audio-focus and lifecycle pauses stop the
     // player without changing the feed-level play intent); gates watched-time accrual.
     // Starts false: time must not accrue before the player confirms it is actually running
@@ -391,6 +426,7 @@ fun ReelsVideoPage(
     // Rate while a finger is held down at an edge. Kept apart from playbackSpeed on purpose:
     // playbackSpeed is the user's *chosen* rate (button, drawer) and must survive the finger lift.
     var heldRate by remember(item.id) { mutableStateOf<Float?>(null) }
+    val currentHeldRate by rememberUpdatedState(heldRate)
     // Timestamp of the last speed-hold release: replaces the sticky boolean flag that stayed
     // true forever when change.consume() cancelled detectTapGestures.
     var lastHoldEndedAtMs by remember(item.id) { mutableLongStateOf(0L) }
@@ -490,7 +526,8 @@ fun ReelsVideoPage(
     // watched clip on dispose too, so the last reel doesn't escape the history / feedback.
     // A configuration recreation is not a user leaving the clip — the visit stays open and
     // the position is restored on the new composition (see ReelsFeedScreenModel).
-    val hostActivity = LocalContext.current as? Activity
+    val pageContext = LocalContext.current
+    val hostActivity = pageContext as? Activity
     DisposableEffect(item.id) {
         onDispose {
             if (hostActivity?.isChangingConfigurations == true && wasActivated && !visitEndReported) {
@@ -727,45 +764,259 @@ fun ReelsVideoPage(
                 }
             }
             .pointerInput(item.id) {
-                // Hold-to-rate. detectTapGestures' onLongPress is unusable here: it abandons the
-                // press the moment the finger drifts past touchSlop (~8dp) before the ~500ms
-                // timeout, which a one-handed thumb does constantly. Here the press only has to
-                // stay inside a wider slop until the timeout; after activation every movement is
-                // ignored and the rate is held until the finger lifts.
+                // Landscape-only edge vertical drags: left 0..30% adjusts screen brightness,
+                // right 70..100% adjusts media volume. Center 30..70% stays untouched so
+                // VerticalPager swipes work naturally.
+                val topExclusionPx = 48.dp.toPx()
+                val bottomExclusionPx = 72.dp.toPx()
+                val minGestureSpanPx = 180.dp.toPx()
+                val touchSlop = viewConfiguration.touchSlop
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    if (!currentIsLandscape || currentIsTouchLocked) return@awaitEachGesture
+                    val zone = resolveLandscapeEdgeZone(
+                        xPx = down.position.x,
+                        yPx = down.position.y,
+                        widthPx = size.width.toFloat(),
+                        heightPx = size.height.toFloat(),
+                        topExclusionPx = topExclusionPx,
+                        bottomExclusionPx = bottomExclusionPx,
+                        brightnessEnabled = currentBrightnessGestureEnabled,
+                        volumeEnabled = currentVolumeGestureEnabled,
+                    ) ?: return@awaitEachGesture
+
+                    val gestureSpanPx = maxOf(size.height.toFloat() * 0.65f, minGestureSpanPx)
+                    val claimSlopPx = touchSlop * 0.85f
+                    var totalDx = 0f
+                    var totalDy = 0f
+                    var dragging = false
+                    var startLevel = 0.5f
+                    var maxVolume = 15
+                    var lastAppliedVolIndex = -1
+                    var lastLevel = 0.5f
+
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.changes.count { it.pressed } >= 2) break
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            if (!dragging && (change.isConsumed || currentIsScrubbing || currentHeldRate != null)) {
+                                break
+                            }
+                            val delta = change.positionChange()
+                            totalDx += delta.x
+                            totalDy += delta.y
+
+                            if (!dragging) {
+                                // Yield immediately if predominantly horizontal (e.g. hold/scrub).
+                                if (abs(totalDx) > claimSlopPx && abs(totalDx) > abs(totalDy) * 1.15f) {
+                                    break
+                                }
+                                if (abs(totalDy) >= claimSlopPx && abs(totalDy) > abs(totalDx) * 1.25f) {
+                                    dragging = true
+                                    when (zone) {
+                                        ReelsLandscapeEdgeZone.Brightness -> {
+                                            startLevel = readCurrentScreenBrightness(hostActivity)
+                                        }
+                                        ReelsLandscapeEdgeZone.Volume -> {
+                                            val (volLevel, maxVol) = readCurrentMediaVolume(pageContext)
+                                            startLevel = volLevel
+                                            maxVolume = maxVol
+                                            lastAppliedVolIndex = mapNormalizedVolumeToStreamIndex(volLevel, maxVol)
+                                        }
+                                    }
+                                    lastLevel = startLevel
+                                    // Subtract the initial slop so the level begins smoothly without jumping.
+                                    totalDy = if (totalDy > 0f) {
+                                        (totalDy - claimSlopPx).coerceAtLeast(0f)
+                                    } else {
+                                        (totalDy + claimSlopPx).coerceAtMost(0f)
+                                    }
+                                }
+                            }
+
+                            if (dragging) {
+                                if (!change.isConsumed) change.consume()
+                                val minLevel = if (zone == ReelsLandscapeEdgeZone.Brightness) {
+                                    LANDSCAPE_MIN_BRIGHTNESS
+                                } else {
+                                    0f
+                                }
+                                val nextLevel = computeUpdatedEdgeGestureLevel(
+                                    startLevel = startLevel,
+                                    totalDyPx = totalDy,
+                                    gestureSpanPx = gestureSpanPx,
+                                    minLevel = minLevel,
+                                    maxLevel = 1f,
+                                )
+                                when (zone) {
+                                    ReelsLandscapeEdgeZone.Brightness -> {
+                                        applyScreenBrightness(hostActivity, nextLevel)
+                                    }
+                                    ReelsLandscapeEdgeZone.Volume -> {
+                                        if (nextLevel > lastLevel + 0.005f) {
+                                            currentOnUnmuteIfMuted()
+                                        }
+                                        val applied = applyMediaVolume(
+                                            context = pageContext,
+                                            level = nextLevel,
+                                            maxVolume = maxVolume,
+                                            lastAppliedIndex = lastAppliedVolIndex,
+                                        )
+                                        if (applied != lastAppliedVolIndex) {
+                                            lastAppliedVolIndex = applied
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        }
+                                    }
+                                }
+                                lastLevel = nextLevel
+                                edgeGestureHud = ReelsEdgeGestureHudState(
+                                    zone = zone,
+                                    level = nextLevel,
+                                    isDragging = true,
+                                )
+                            }
+                        }
+                    } finally {
+                        if (dragging) {
+                            lastHoldEndedAtMs = SystemClock.elapsedRealtime()
+                            edgeGestureHud = ReelsEdgeGestureHudState(
+                                zone = zone,
+                                level = lastLevel,
+                                isDragging = false,
+                            )
+                            edgeGestureHideToken = SystemClock.elapsedRealtime()
+                        }
+                    }
+                }
+            }
+            .pointerInput(item.id) {
+                // Hold-to-rate in portrait (0.5x / 2x) OR YouTube-style hold-and-lift direct
+                // scrubbing in landscape when landscapePullUpSeekEnabled is active.
+                val fineEnterLiftPx = 32.dp.toPx()
+                val fineExitLiftPx = 10.dp.toPx()
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (currentIsTouchLocked) return@awaitEachGesture
                     val rate = reelsHoldRate(down.position.x, size.width.toFloat())
                         ?: return@awaitEachGesture
-                    val timeout = viewConfiguration.longPressTimeoutMillis
-                    val slop = viewConfiguration.touchSlop * 3f
-                    // A perfectly still finger emits no pointer events, so activation has to be
-                    // timed out rather than waited for.
+                    val useLandscapeHoldSeek =
+                        currentIsLandscape && currentLandscapePullUpSeek && currentDurationSec > 0f
+                    val timeout = if (useLandscapeHoldSeek) {
+                        min(viewConfiguration.longPressTimeoutMillis, 260L)
+                    } else {
+                        viewConfiguration.longPressTimeoutMillis
+                    }
+                    val slop = if (useLandscapeHoldSeek) {
+                        viewConfiguration.touchSlop * 2f
+                    } else {
+                        viewConfiguration.touchSlop * 3f
+                    }
                     val gaveUpEarly = withTimeoutOrNull(timeout) {
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.changes.count { it.pressed } >= 2) return@withTimeoutOrNull true
                             val change = event.changes.firstOrNull { it.id == down.id }
                                 ?: return@withTimeoutOrNull true
-                            if (!change.pressed) return@withTimeoutOrNull true
+                            if (!change.pressed || change.isConsumed) return@withTimeoutOrNull true
                             if ((change.position - down.position).getDistance() > slop) {
                                 return@withTimeoutOrNull true
                             }
                         }
                     } == true
                     if (gaveUpEarly) return@awaitEachGesture
-                    try {
-                        heldRate = rate
+
+                    if (useLandscapeHoldSeek) {
+                        val fineController = ReelsFineScrubController(
+                            fineEnterLiftPx = fineEnterLiftPx,
+                            fineExitLiftPx = fineExitLiftPx,
+                        )
+                        val startProgress = progressState.floatValue.coerceIn(0f, 1f)
+                        val trackWidthPx = (size.width.toFloat() - 32.dp.toPx()).coerceAtLeast(1f)
+                        fineController.start(
+                            initialProgress = startProgress,
+                            barWidthPx = trackWidthPx,
+                            durationSec = currentDurationSec,
+                            startProgress = startProgress,
+                        )
+                        currentOnScrubStart()
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            // Consume so the pager cannot flip the reel under a holding finger.
-                            if (!change.isConsumed) change.consume()
-                            if (!change.pressed) break
+                        scrubUiState = ReelsScrubUiState(
+                            isActive = true,
+                            progress = fineController.progress,
+                            startProgress = startProgress,
+                            isFineMode = false,
+                            fromScreenGesture = true,
+                            barWidthPx = trackWidthPx,
+                        )
+                        var lastLiveSeekAtMs = SystemClock.elapsedRealtime()
+                        var lastFineTickSec = (fineController.progress * currentDurationSec).roundToInt()
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.changes.count { it.pressed } >= 2) {
+                                    fineController.cancel()
+                                    break
+                                }
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                val delta = change.positionChange()
+                                if (!change.isConsumed) change.consume()
+                                val modeToggled = fineController.move(
+                                    dx = delta.x,
+                                    dy = delta.y,
+                                    allowFineMode = true,
+                                )
+                                if (modeToggled) {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                                if (fineController.isFineMode && currentDurationSec > 0f) {
+                                    val tickSec = (fineController.progress * currentDurationSec).roundToInt()
+                                    if (tickSec != lastFineTickSec) {
+                                        lastFineTickSec = tickSec
+                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                }
+                                scrubUiState = ReelsScrubUiState(
+                                    isActive = true,
+                                    progress = fineController.progress,
+                                    startProgress = startProgress,
+                                    isFineMode = fineController.isFineMode,
+                                    fromScreenGesture = true,
+                                    barWidthPx = trackWidthPx,
+                                )
+                                val now = SystemClock.elapsedRealtime()
+                                if (now - lastLiveSeekAtMs >= 75L) {
+                                    lastLiveSeekAtMs = now
+                                    requestSeek(fineController.progress, liveScrub = true)
+                                }
+                            }
+                            fineController.end()?.let { target ->
+                                if (abs(target - startProgress) > 0.001f) {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    requestSeek(target, liveScrub = false)
+                                }
+                            }
+                        } finally {
+                            fineController.cancel()
+                            scrubUiState = ReelsScrubUiState()
+                            lastHoldEndedAtMs = SystemClock.elapsedRealtime()
                         }
-                    } finally {
-                        heldRate = null
-                        lastHoldEndedAtMs = SystemClock.elapsedRealtime()
+                    } else {
+                        try {
+                            heldRate = rate
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.isConsumed) change.consume()
+                                if (!change.pressed) break
+                            }
+                        } finally {
+                            heldRate = null
+                            lastHoldEndedAtMs = SystemClock.elapsedRealtime()
+                        }
                     }
                 }
             }
@@ -831,10 +1082,19 @@ fun ReelsVideoPage(
                 initialSeekPositionApplied = true
                 onInitialSeekPositionConsumed()
             },
+            isScrubbing = scrubUiState.isActive,
+            onScrubFrameCaptured = { capturedFraction, bitmap ->
+                scrubThumbnailCache.put(capturedFraction, currentDurationSec, bitmap)
+                scrubThumbVersion++
+            },
             onRenderedFirstFrame = {
                 if (currentIsActive) currentOnFirstFramePresented(currentItemId)
             },
-            onProgressUpdate = { progressState.floatValue = it },
+            onProgressUpdate = {
+                if (!scrubUiState.isActive) {
+                    progressState.floatValue = it
+                }
+            },
             onBufferUpdate = { bufferFraction = it },
             onVideoCompleted = onVideoCompleted,
             // The player-reported duration is authoritative; the server value is only a
@@ -1249,7 +1509,7 @@ fun ReelsVideoPage(
 
                     // Landscape Compact Bottom Meta (bottom-start, above the 2-row Unified Cinema Console)
                     AnimatedVisibility(
-                        visible = effectiveChromeVisible,
+                        visible = effectiveChromeVisible && !scrubUiState.isActive,
                         enter = fadeIn() + slideInVertically { it },
                         exit = fadeOut() + slideOutVertically { it },
                         modifier = Modifier.align(Alignment.BottomStart),
@@ -1336,6 +1596,13 @@ fun ReelsVideoPage(
                             onSeek = { frac -> requestSeek(frac, liveScrub = false) },
                             onScrubPreview = { frac -> requestSeek(frac, liveScrub = true) },
                             onScrubStart = onScrubStart,
+                            onScrubStateChange = { state -> scrubUiState = state },
+                            externalScrubFraction = if (scrubUiState.isActive && scrubUiState.fromScreenGesture) {
+                                scrubUiState.progress
+                            } else {
+                                null
+                            },
+                            fineScrubEnabled = landscapePullUpSeekEnabled,
                             modifier = Modifier.padding(bottom = 4.dp),
                         )
                     }
@@ -1364,6 +1631,12 @@ fun ReelsVideoPage(
                             onSetPlaybackSpeed = { updatePlaybackSpeed(it) },
                             isAutoAdvance = isAutoAdvance,
                             onToggleAutoAdvance = onToggleAutoAdvance,
+                            landscapeBrightnessGestureEnabled = landscapeBrightnessGestureEnabled,
+                            onToggleLandscapeBrightnessGesture = onToggleLandscapeBrightnessGesture,
+                            landscapeVolumeGestureEnabled = landscapeVolumeGestureEnabled,
+                            onToggleLandscapeVolumeGesture = onToggleLandscapeVolumeGesture,
+                            landscapePullUpSeekEnabled = landscapePullUpSeekEnabled,
+                            onToggleLandscapePullUpSeek = onToggleLandscapePullUpSeek,
                             sleepTimerValue = sleepTimerValue,
                             onCycleSleepTimer = onCycleSleepTimer,
                             isIncognito = isIncognito,
@@ -1463,7 +1736,7 @@ fun ReelsVideoPage(
 
                     // Portrait Bottom Meta info
                     AnimatedVisibility(
-                        visible = effectiveChromeVisible,
+                        visible = effectiveChromeVisible && !scrubUiState.isActive,
                         enter = fadeIn() + slideInVertically { it },
                         exit = fadeOut() + slideOutVertically { it },
                         modifier = Modifier.align(Alignment.BottomStart),
@@ -1505,12 +1778,56 @@ fun ReelsVideoPage(
                             onSeek = { frac -> requestSeek(frac, liveScrub = false) },
                             onScrubPreview = { frac -> requestSeek(frac, liveScrub = true) },
                             onScrubStart = onScrubStart,
+                            onScrubStateChange = { state -> scrubUiState = state },
+                            externalScrubFraction = if (scrubUiState.isActive && scrubUiState.fromScreenGesture) {
+                                scrubUiState.progress
+                            } else {
+                                null
+                            },
                             modifier = Modifier
                                 .padding(bottom = safeBottomInset + 4.dp),
                         )
                     }
                 }
             }
+        }
+
+        // Unclipped Full-Page Scrub Thumbnail Preview & YouTube Fine-Scrubbing Filmstrip
+        if (isActive && !isInPictureInPicture && scrubUiState.isActive) {
+            val thumbVersion = scrubThumbVersion
+            val previewFrame = remember(thumbVersion, scrubUiState.progress, durationSec) {
+                scrubThumbnailCache.getBestFrame(scrubUiState.progress, durationSec)
+            }
+            val filmstripFrames = remember(thumbVersion, scrubUiState.progress, scrubUiState.isFineMode, durationSec) {
+                if (scrubUiState.isFineMode && isLandscape) {
+                    val centerSec = scrubUiState.progress.coerceIn(0f, 1f) * durationSec.coerceAtLeast(0f)
+                    val halfWindow = (
+                        min(
+                            durationSec.coerceAtLeast(12f),
+                            ReelsFineScrubController.DEFAULT_FINE_WINDOW_SEC,
+                        ) / 2f
+                        ).coerceAtLeast(3f)
+                    scrubThumbnailCache.framesInWindow(centerSec, halfWindow)
+                } else {
+                    emptyList()
+                }
+            }
+            val portraitNavBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val portraitAnchorPadding = maxOf(portraitNavBottom, 26.dp) + 18.dp
+            ReelsScrubPreviewOverlay(
+                scrubState = scrubUiState,
+                durationSec = durationSec,
+                previewFrame = previewFrame,
+                filmstripFrames = filmstripFrames,
+                posterUrl = item.posterUrlVertical ?: item.posterUrl,
+                isLandscape = isLandscape,
+                chromeVisible = effectiveChromeVisible,
+                fineScrubEnabled = landscapePullUpSeekEnabled,
+                bottomAnchorPadding = if (isLandscape) 66.dp else portraitAnchorPadding,
+            )
+
+            // Landscape edge brightness / volume HUD (Aurora Frost glass capsule).
+            ReelsEdgeGestureHud(state = edgeGestureHud)
         }
     }
 

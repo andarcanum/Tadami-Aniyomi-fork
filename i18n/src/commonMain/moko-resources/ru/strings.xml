@@ -2009,4 +2009,15 @@
     <string name="reels_mix_open_plugin_desc">Перейти только к ленте этого плагина</string>
     <string name="reels_mix_exclude_plugin">Исключить из общей ленты</string>
     <string name="reels_mix_exclude_plugin_desc">Скрыть %1$s из микса плагинов</string>
+    <string name="reels_scrub_pull_up_hint">↑ Вверх — точная перемотка</string>
+    <string name="reels_scrub_fine_mode">Точная перемотка</string>
+    <string name="reels_landscape_gestures_section">ЖЕСТЫ (LANDSCAPE)</string>
+    <string name="reels_gesture_brightness_title">Яркость по левому краю</string>
+    <string name="reels_gesture_brightness_subtitle">Свайп вверх/вниз слева в горизонтальном режиме</string>
+    <string name="reels_gesture_volume_title">Громкость по правому краю</string>
+    <string name="reels_gesture_volume_subtitle">Свайп вверх/вниз справа в горизонтальном режиме</string>
+    <string name="reels_gesture_pull_up_seek_title">Точная перемотка жестом</string>
+    <string name="reels_gesture_pull_up_seek_subtitle">Удержание сбоку и подъём вверх на шкале (как в YouTube)</string>
+    <string name="reels_gesture_brightness_label">Яркость</string>
+    <string name="reels_gesture_volume_label">Громкость</string>
 </resources>

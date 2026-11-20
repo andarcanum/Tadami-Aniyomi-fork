@@ -211,6 +211,9 @@ class ReelsFeedScreenModel(
         preloadEnabled = sourcePreferences.reelsPreloadEnabled().get(),
         preloadWifiOnly = sourcePreferences.reelsPreloadWifiOnly().get(),
         isPipEnabled = sourcePreferences.reelsPipEnabled().get(),
+        landscapeBrightnessGesture = sourcePreferences.reelsLandscapeBrightnessGesture().get(),
+        landscapeVolumeGesture = sourcePreferences.reelsLandscapeVolumeGesture().get(),
+        landscapePullUpSeek = sourcePreferences.reelsLandscapePullUpSeek().get(),
         unseenOnly = sourcePreferences.reelsUnseenOnly().get(),
         mixUnseenOnly = sourcePreferences.reelsMixUnseenOnly().get(),
         showUnmuteHint = !sessionSound.decided,
@@ -4466,6 +4469,12 @@ class ReelsFeedScreenModel(
     /** B3.5: explicit picture-in-picture toggle (off by default). */
     fun togglePip() = playbackSettingsController.togglePip()
 
+    fun toggleLandscapeBrightnessGesture() = playbackSettingsController.toggleLandscapeBrightnessGesture()
+
+    fun toggleLandscapeVolumeGesture() = playbackSettingsController.toggleLandscapeVolumeGesture()
+
+    fun toggleLandscapePullUpSeek() = playbackSettingsController.toggleLandscapePullUpSeek()
+
     /**
      * Reels-only incognito (product decision): the global incognito switch, the NSFW auto
      * policy and the per-extension set do not apply inside the feed — this toggle is the
@@ -5747,6 +5756,10 @@ class ReelsFeedScreenModel(
         val unseenOnly: Boolean = true,
         val unseenHidden: Int = 0,
         val unseenScanStopped: Boolean = false,
+        // Landscape-only edge brightness/volume drags and YouTube-style pull-up/hold fine seek.
+        val landscapeBrightnessGesture: Boolean = true,
+        val landscapeVolumeGesture: Boolean = true,
+        val landscapePullUpSeek: Boolean = true,
     ) {
         /** Resolves the owning plugin id for pager slot [itemIndex] (Mix / Offline / single-source). */
         fun slotSourceId(itemIndex: Int): Long =

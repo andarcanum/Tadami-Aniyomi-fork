@@ -735,6 +735,14 @@ data class ReelsFeedScreen(
                 // for good, otherwise the nested feed's screen goes dark mid-playback.
                 if (navigator.lastItem !is ReelsFeedScreen) {
                     window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    val activity = context as? Activity
+                    if (activity?.isChangingConfigurations != true && window != null) {
+                        val attrs = window.attributes
+                        if (attrs.screenBrightness != WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) {
+                            attrs.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                            window.attributes = attrs
+                        }
+                    }
                 }
             }
         }
@@ -1121,7 +1129,7 @@ data class ReelsFeedScreen(
                     // Horizontal swipe switches feeds: left on the global feed opens this
                     // source's Following feed, right on Following pops back. The vertical
                     // pager owns the orthogonal axis.
-                    val feedSwipeEnabled = !state.isMixMode && (
+                    val feedSwipeEnabled = !windowIsLandscape && !state.isMixMode && (
                         followingFeed ||
                             (state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL && state.isCreatorCapable)
                         )
@@ -1163,7 +1171,13 @@ data class ReelsFeedScreen(
                         userScrollEnabled = !touchLocked && !qualityDialogVisible,
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(pagerState, state.isOffline, touchLocked, qualityDialogVisible) {
+                            .pointerInput(
+                                pagerState,
+                                state.isOffline,
+                                touchLocked,
+                                qualityDialogVisible,
+                                windowIsLandscape,
+                            ) {
                                 // Observe-only vertical gesture + Pull-to-Refresh on page 0.
                                 awaitEachGesture {
                                     val down = awaitFirstDown(
@@ -1174,7 +1188,8 @@ data class ReelsFeedScreen(
                                     var totalDy = 0f
                                     var totalDx = 0f
                                     var pullArmed = false
-                                    val canPullRefresh = !state.isOffline &&
+                                    val canPullRefresh = !windowIsLandscape &&
+                                        !state.isOffline &&
                                         !touchLocked &&
                                         !qualityDialogVisible &&
                                         pagerState.currentPage == 0 &&
@@ -1532,6 +1547,13 @@ data class ReelsFeedScreen(
                                 isLastPage = page == state.items.lastIndex,
                                 isTouchLocked = touchLocked,
                                 onToggleTouchLock = { touchLocked = !touchLocked },
+                                landscapeBrightnessGestureEnabled = state.landscapeBrightnessGesture,
+                                landscapeVolumeGestureEnabled = state.landscapeVolumeGesture,
+                                landscapePullUpSeekEnabled = state.landscapePullUpSeek,
+                                onToggleLandscapeBrightnessGesture = screenModel::toggleLandscapeBrightnessGesture,
+                                onToggleLandscapeVolumeGesture = screenModel::toggleLandscapeVolumeGesture,
+                                onToggleLandscapePullUpSeek = screenModel::toggleLandscapePullUpSeek,
+                                onUnmuteIfMuted = screenModel::unmuteIfMuted,
                                 sourceName = when {
                                     state.isOffline -> ""
                                     state.isMixMode -> stringResource(MR.strings.reels_mix_title)
@@ -1882,6 +1904,12 @@ data class ReelsFeedScreen(
                     onTogglePreloadWifiOnly = screenModel::togglePreloadWifiOnly,
                     isPipEnabled = state.isPipEnabled,
                     onTogglePip = screenModel::togglePip,
+                    landscapeBrightnessGestureEnabled = state.landscapeBrightnessGesture,
+                    onToggleLandscapeBrightnessGesture = screenModel::toggleLandscapeBrightnessGesture,
+                    landscapeVolumeGestureEnabled = state.landscapeVolumeGesture,
+                    onToggleLandscapeVolumeGesture = screenModel::toggleLandscapeVolumeGesture,
+                    landscapePullUpSeekEnabled = state.landscapePullUpSeek,
+                    onToggleLandscapePullUpSeek = screenModel::toggleLandscapePullUpSeek,
                     offlineUsedBytes = offlineUsedBytes,
                     onClearOfflineStorage = { confirmClearOffline = true },
                     isIncognito = isIncognito && !state.isOffline,

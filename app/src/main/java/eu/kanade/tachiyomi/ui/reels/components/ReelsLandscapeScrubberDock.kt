@@ -1,15 +1,10 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
 import android.os.SystemClock
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,16 +16,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -63,9 +55,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -77,12 +68,8 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
-import coil3.request.crossfade
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -139,6 +126,9 @@ fun ReelsLandscapeScrubberDock(
     onSeek: (Float) -> Unit,
     onScrubPreview: ((Float) -> Unit)? = null,
     onScrubStart: () -> Unit = {},
+    onScrubStateChange: ((ReelsScrubUiState) -> Unit)? = null,
+    externalScrubFraction: Float? = null,
+    fineScrubEnabled: Boolean = true,
     bufferFraction: Float = 0f,
     posterUrl: String? = null,
     modifier: Modifier = Modifier,
@@ -149,13 +139,24 @@ fun ReelsLandscapeScrubberDock(
     var dragProgress by remember { mutableFloatStateOf(0f) }
     var barWidthPx by remember { mutableFloatStateOf(1f) }
     val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val fineEnterLiftPx = with(density) { 32.dp.toPx() }
+    val fineExitLiftPx = with(density) { 10.dp.toPx() }
     val currentOnSeek by rememberUpdatedState(onSeek)
     val currentOnScrubPreview by rememberUpdatedState(onScrubPreview)
     val currentOnScrubStart by rememberUpdatedState(onScrubStart)
+    val currentOnScrubStateChange by rememberUpdatedState(onScrubStateChange)
+    val currentDurationSec by rememberUpdatedState(durationSec)
+    val currentFineScrubEnabled by rememberUpdatedState(fineScrubEnabled)
 
-    val currentFraction = if (isDragging) dragProgress else progressState.value.coerceIn(0f, 1f)
+    val effectiveDragging = isDragging || externalScrubFraction != null
+    val currentFraction = when {
+        isDragging -> dragProgress
+        externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+        else -> progressState.value.coerceIn(0f, 1f)
+    }
     val barHeight by animateDpAsState(
-        targetValue = if (isDragging) 6.dp else 4.dp,
+        targetValue = if (effectiveDragging) 6.dp else 4.dp,
         label = "landscape_scrub_height",
     )
     val likeScale by animateFloatAsState(
@@ -192,39 +193,86 @@ fun ReelsLandscapeScrubberDock(
                         }
                     }
                     .onSizeChanged { barWidthPx = it.width.toFloat().coerceAtLeast(1f) }
-                    .pointerInput(Unit) {
-                        val gesture = ReelsScrubGesture(touchSlop = viewConfiguration.touchSlop)
+                    .pointerInput(fineEnterLiftPx, fineExitLiftPx) {
+                        val fineController = ReelsFineScrubController(
+                            fineEnterLiftPx = fineEnterLiftPx,
+                            fineExitLiftPx = fineExitLiftPx,
+                        )
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             down.consume()
-                            gesture.start(down.position.x, barWidthPx)
+                            val startProgress = progressState.value.coerceIn(0f, 1f)
+                            val initialTapProgress = (down.position.x / barWidthPx).coerceIn(0f, 1f)
+                            fineController.start(
+                                initialProgress = initialTapProgress,
+                                barWidthPx = barWidthPx,
+                                durationSec = currentDurationSec,
+                                startProgress = startProgress,
+                            )
                             isDragging = true
-                            dragProgress = gesture.progress
+                            dragProgress = fineController.progress
                             currentOnScrubStart()
+                            currentOnScrubStateChange?.invoke(
+                                ReelsScrubUiState(
+                                    isActive = true,
+                                    progress = fineController.progress,
+                                    startProgress = startProgress,
+                                    isFineMode = false,
+                                    fromScreenGesture = false,
+                                    barWidthPx = barWidthPx,
+                                ),
+                            )
+                            currentOnScrubPreview?.invoke(fineController.progress)
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            var lastLiveSeekAtMs = 0L
-                            while (true) {
-                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                                if (!change.pressed) break
-                                val delta = change.positionChange()
-                                val outcome = gesture.move(delta.x, delta.y, consumedByOther = change.isConsumed)
-                                if (outcome == ReelsScrubOutcome.Cancelled) break
-                                if (outcome == ReelsScrubOutcome.Owned) change.consume()
-                                dragProgress = gesture.progress
-                                isDragging = gesture.isActive
-                                if (outcome == ReelsScrubOutcome.Owned) {
+                            var lastLiveSeekAtMs = SystemClock.elapsedRealtime()
+                            var lastFineTickSec = (fineController.progress * currentDurationSec).roundToInt()
+                            try {
+                                while (true) {
+                                    val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) break
+                                    val delta = change.positionChange()
+                                    change.consume()
+                                    val modeToggled = fineController.move(
+                                        dx = delta.x,
+                                        dy = delta.y,
+                                        allowFineMode = currentFineScrubEnabled,
+                                    )
+                                    if (modeToggled) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                    dragProgress = fineController.progress
+                                    if (fineController.isFineMode && currentDurationSec > 0f) {
+                                        val tickSec = (fineController.progress * currentDurationSec).roundToInt()
+                                        if (tickSec != lastFineTickSec) {
+                                            lastFineTickSec = tickSec
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        }
+                                    }
+                                    currentOnScrubStateChange?.invoke(
+                                        ReelsScrubUiState(
+                                            isActive = true,
+                                            progress = fineController.progress,
+                                            startProgress = startProgress,
+                                            isFineMode = fineController.isFineMode,
+                                            fromScreenGesture = false,
+                                            barWidthPx = barWidthPx,
+                                        ),
+                                    )
                                     val now = SystemClock.elapsedRealtime()
-                                    if (now - lastLiveSeekAtMs >= 90L) {
+                                    if (now - lastLiveSeekAtMs >= 75L) {
                                         lastLiveSeekAtMs = now
-                                        currentOnScrubPreview?.invoke(gesture.progress)
+                                        currentOnScrubPreview?.invoke(fineController.progress)
                                     }
                                 }
+                                fineController.end()?.let { target ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    currentOnSeek(target)
+                                }
+                            } finally {
+                                fineController.cancel()
+                                isDragging = false
+                                currentOnScrubStateChange?.invoke(ReelsScrubUiState())
                             }
-                            gesture.end()?.let { target ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                currentOnSeek(target)
-                            }
-                            isDragging = false
                         }
                     },
                 contentAlignment = Alignment.CenterStart,
@@ -261,7 +309,7 @@ fun ReelsLandscapeScrubberDock(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(if (isDragging) 14.dp else 11.dp)
+                            .size(if (effectiveDragging) 15.dp else 11.dp)
                             .clip(CircleShape)
                             .background(Color.White, CircleShape)
                             .border(2.dp, auroraColors.accent, CircleShape),
@@ -269,96 +317,7 @@ fun ReelsLandscapeScrubberDock(
                 }
             }
 
-            // Floating Precision Scrubber Preview Card
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isDragging,
-                enter = fadeIn() + scaleIn(initialScale = 0.9f),
-                exit = fadeOut() + scaleOut(targetScale = 0.9f),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset {
-                        val cardWidthPx = 124.dp.roundToPx()
-                        val rawCenterPx = (currentFraction * barWidthPx).toInt()
-                        val halfWidthPx = cardWidthPx / 2
-                        val clampedX = rawCenterPx.coerceIn(
-                            halfWidthPx,
-                            (barWidthPx - halfWidthPx).toInt().coerceAtLeast(halfWidthPx),
-                        )
-                        IntOffset(x = clampedX - halfWidthPx, y = -104.dp.roundToPx())
-                    },
-            ) {
-                Column(
-                    modifier = Modifier
-                        .width(124.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (auroraColors.isEInk) {
-                                auroraColors.cardBackground
-                            } else {
-                                Color(0xFF0F141E).copy(alpha = 0.96f)
-                            },
-                        )
-                        .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(12.dp))
-                        .padding(5.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(58.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black)
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (!posterUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(posterUrl)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            Text(
-                                text = "Tadami Reel",
-                                color = auroraColors.accent,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = formatSeconds(currentSec),
-                            color = contentTint,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            style = TextStyle(fontFeatureSettings = "tnum"),
-                        )
-                        Text(
-                            text = " / ${formatSeconds(totalSec)}",
-                            color = contentTint.copy(alpha = 0.6f),
-                            fontSize = 10.5.sp,
-                            style = TextStyle(fontFeatureSettings = "tnum"),
-                        )
-                    }
-
-                    Text(
-                        text = stringResource(MR.strings.reels_landscape_preview_frame),
-                        color = auroraColors.accent,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-            }
+            // Preview card and fine-scrub filmstrip are rendered unclipped by ReelsScrubPreviewOverlay.
         }
 
         // Row 2: Unified Control Deck (36dp visual pills/circles inside 48dp touch targets)

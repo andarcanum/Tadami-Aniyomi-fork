@@ -2215,4 +2215,15 @@
     <string name="reels_mix_open_plugin_desc">Switch to this plugin feed only</string>
     <string name="reels_mix_exclude_plugin">Exclude from shuffle</string>
     <string name="reels_mix_exclude_plugin_desc">Hide %1$s from All Plugins mix</string>
+    <string name="reels_scrub_pull_up_hint">↑ Slide up for fine seek</string>
+    <string name="reels_scrub_fine_mode">Fine seeking</string>
+    <string name="reels_landscape_gestures_section">LANDSCAPE GESTURES</string>
+    <string name="reels_gesture_brightness_title">Brightness gesture (left)</string>
+    <string name="reels_gesture_brightness_subtitle">Swipe up or down on the left edge in landscape</string>
+    <string name="reels_gesture_volume_title">Volume gesture (right)</string>
+    <string name="reels_gesture_volume_subtitle">Swipe up or down on the right edge in landscape</string>
+    <string name="reels_gesture_pull_up_seek_title">Fine scrub gesture</string>
+    <string name="reels_gesture_pull_up_seek_subtitle">Hold &amp; slide or pull up on timeline for precision seek</string>
+    <string name="reels_gesture_brightness_label">Brightness</string>
+    <string name="reels_gesture_volume_label">Volume</string>
 </resources>

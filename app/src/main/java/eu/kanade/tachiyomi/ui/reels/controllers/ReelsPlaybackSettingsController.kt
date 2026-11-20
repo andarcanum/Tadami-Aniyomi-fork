@@ -67,6 +67,24 @@ internal class ReelsPlaybackSettingsController(
         mutableState.update { it.copy(isPipEnabled = next) }
     }
 
+    fun toggleLandscapeBrightnessGesture() {
+        val next = !mutableState.value.landscapeBrightnessGesture
+        sourcePreferences.reelsLandscapeBrightnessGesture().set(next)
+        mutableState.update { it.copy(landscapeBrightnessGesture = next) }
+    }
+
+    fun toggleLandscapeVolumeGesture() {
+        val next = !mutableState.value.landscapeVolumeGesture
+        sourcePreferences.reelsLandscapeVolumeGesture().set(next)
+        mutableState.update { it.copy(landscapeVolumeGesture = next) }
+    }
+
+    fun toggleLandscapePullUpSeek() {
+        val next = !mutableState.value.landscapePullUpSeek
+        sourcePreferences.reelsLandscapePullUpSeek().set(next)
+        mutableState.update { it.copy(landscapePullUpSeek = next) }
+    }
+
     fun toggleDataSaver() {
         val next = !mutableState.value.dataSaverMetered
         sourcePreferences.reelsDataSaverMetered().set(next)

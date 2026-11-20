@@ -22,8 +22,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.DataSaverOn
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Timer
@@ -86,6 +89,12 @@ fun ReelsAuroraFrostDrawer(
     onSetPlaybackSpeed: (Float) -> Unit = {},
     isAutoAdvance: Boolean = false,
     onToggleAutoAdvance: () -> Unit = {},
+    landscapeBrightnessGestureEnabled: Boolean = true,
+    onToggleLandscapeBrightnessGesture: () -> Unit = {},
+    landscapeVolumeGestureEnabled: Boolean = true,
+    onToggleLandscapeVolumeGesture: () -> Unit = {},
+    landscapePullUpSeekEnabled: Boolean = true,
+    onToggleLandscapePullUpSeek: () -> Unit = {},
     sleepTimerValue: String = "Выкл",
     onCycleSleepTimer: () -> Unit = {},
     isIncognito: Boolean = false,
@@ -155,6 +164,12 @@ fun ReelsAuroraFrostDrawer(
                 onSetPlaybackSpeed = onSetPlaybackSpeed,
                 isAutoAdvance = isAutoAdvance,
                 onToggleAutoAdvance = onToggleAutoAdvance,
+                landscapeBrightnessGestureEnabled = landscapeBrightnessGestureEnabled,
+                onToggleLandscapeBrightnessGesture = onToggleLandscapeBrightnessGesture,
+                landscapeVolumeGestureEnabled = landscapeVolumeGestureEnabled,
+                onToggleLandscapeVolumeGesture = onToggleLandscapeVolumeGesture,
+                landscapePullUpSeekEnabled = landscapePullUpSeekEnabled,
+                onToggleLandscapePullUpSeek = onToggleLandscapePullUpSeek,
                 sleepTimerValue = sleepTimerValue,
                 onCycleSleepTimer = onCycleSleepTimer,
                 isIncognito = isIncognito,
@@ -218,6 +233,12 @@ private fun PlayerTabContent(
     onSetPlaybackSpeed: (Float) -> Unit,
     isAutoAdvance: Boolean,
     onToggleAutoAdvance: () -> Unit,
+    landscapeBrightnessGestureEnabled: Boolean,
+    onToggleLandscapeBrightnessGesture: () -> Unit,
+    landscapeVolumeGestureEnabled: Boolean,
+    onToggleLandscapeVolumeGesture: () -> Unit,
+    landscapePullUpSeekEnabled: Boolean,
+    onToggleLandscapePullUpSeek: () -> Unit,
     sleepTimerValue: String,
     onCycleSleepTimer: () -> Unit,
     isIncognito: Boolean,
@@ -310,6 +331,31 @@ private fun PlayerTabContent(
                     }
                 }
             }
+        }
+
+        // Card: Жесты в горизонтальном режиме
+        FrostCard(title = stringResource(MR.strings.reels_landscape_gestures_section)) {
+            FrostSwitchRow(
+                icon = Icons.Filled.Brightness6,
+                title = stringResource(MR.strings.reels_gesture_brightness_title),
+                subtitle = stringResource(MR.strings.reels_gesture_brightness_subtitle),
+                checked = landscapeBrightnessGestureEnabled,
+                onCheckedChange = onToggleLandscapeBrightnessGesture,
+            )
+            FrostSwitchRow(
+                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                title = stringResource(MR.strings.reels_gesture_volume_title),
+                subtitle = stringResource(MR.strings.reels_gesture_volume_subtitle),
+                checked = landscapeVolumeGestureEnabled,
+                onCheckedChange = onToggleLandscapeVolumeGesture,
+            )
+            FrostSwitchRow(
+                icon = Icons.Filled.FastForward,
+                title = stringResource(MR.strings.reels_gesture_pull_up_seek_title),
+                subtitle = stringResource(MR.strings.reels_gesture_pull_up_seek_subtitle),
+                checked = landscapePullUpSeekEnabled,
+                onCheckedChange = onToggleLandscapePullUpSeek,
+            )
         }
 
         // Card: Автоматизация & Сон
