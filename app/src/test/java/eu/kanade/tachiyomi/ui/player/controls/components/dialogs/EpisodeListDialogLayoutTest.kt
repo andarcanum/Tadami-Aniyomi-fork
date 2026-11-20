@@ -23,4 +23,12 @@ class EpisodeListDialogLayoutTest {
             maxWidthDp = 960,
         )
     }
+
+    @Test
+    fun `resolveEpisodeListScrollIndex handles empty lists and out-of-bounds indices safely`() {
+        resolveEpisodeListScrollIndex(episodeCount = 0, currentEpisodeIndex = -1) shouldBe 0
+        resolveEpisodeListScrollIndex(episodeCount = 12, currentEpisodeIndex = -1) shouldBe 0
+        resolveEpisodeListScrollIndex(episodeCount = 12, currentEpisodeIndex = 11) shouldBe 0
+        resolveEpisodeListScrollIndex(episodeCount = 12, currentEpisodeIndex = 0) shouldBe 11
+    }
 }

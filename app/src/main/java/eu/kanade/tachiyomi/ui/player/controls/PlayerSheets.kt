@@ -22,8 +22,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import dev.vivvvek.seeker.Segment
+import eu.kanade.tachiyomi.ui.player.AbLoopState
 import eu.kanade.tachiyomi.ui.player.ArtType
 import eu.kanade.tachiyomi.ui.player.Decoder
+import eu.kanade.tachiyomi.ui.player.VideoAspect
 import eu.kanade.tachiyomi.ui.player.Panels
 import eu.kanade.tachiyomi.ui.player.PlayerViewModel.VideoTrack
 import eu.kanade.tachiyomi.ui.player.Sheets
@@ -93,6 +95,16 @@ fun PlayerSheets(
     // More sheet
     sleepTimerTimeRemaining: Int,
     onStartSleepTimer: (Int) -> Unit,
+    aspectRatio: VideoAspect = VideoAspect.Fit,
+    onSelectAspectRatio: (VideoAspect) -> Unit = {},
+    videoZoom: Float = 0f,
+    onVideoZoomChange: (Float) -> Unit = {},
+    onResetVideoZoom: () -> Unit = {},
+    repeatEpisode: Boolean = false,
+    onToggleRepeatEpisode: () -> Unit = {},
+    abLoopState: AbLoopState = AbLoopState(),
+    onCycleAbLoop: () -> Unit = {},
+    onClearAbLoop: () -> Unit = {},
     buttons: ImmutableList<CustomButton>,
 
     // Screenshot sheet
@@ -107,6 +119,7 @@ fun PlayerSheets(
     onDismissScreenshot: () -> Unit,
 
     onOpenPanel: (Panels) -> Unit,
+    onReloadPlayer: () -> Unit = {},
     onDismissRequest: () -> Unit,
     dismissSheet: Boolean,
 ) {
@@ -195,6 +208,20 @@ fun PlayerSheets(
                 onStartTimer = onStartSleepTimer,
                 onDismissRequest = onDismissRequest,
                 onEnterFiltersPanel = { onOpenPanel(Panels.VideoFilters) },
+                onOpenAudioDelay = { onOpenPanel(Panels.AudioDelay) },
+                onOpenSubtitleDelay = { onOpenPanel(Panels.SubtitleDelay) },
+                onOpenSubtitleSettings = { onOpenPanel(Panels.SubtitleSettings) },
+                aspectRatio = aspectRatio,
+                onSelectAspectRatio = onSelectAspectRatio,
+                videoZoom = videoZoom,
+                onVideoZoomChange = onVideoZoomChange,
+                onResetVideoZoom = onResetVideoZoom,
+                repeatEpisode = repeatEpisode,
+                onToggleRepeatEpisode = onToggleRepeatEpisode,
+                abLoopState = abLoopState,
+                onCycleAbLoop = onCycleAbLoop,
+                onClearAbLoop = onClearAbLoop,
+                onReloadPlayer = onReloadPlayer,
                 customButtons = buttons,
             )
         }

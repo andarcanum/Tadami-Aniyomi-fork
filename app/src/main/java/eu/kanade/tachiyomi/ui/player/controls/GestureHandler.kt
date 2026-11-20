@@ -19,9 +19,13 @@ package eu.kanade.tachiyomi.ui.player.controls
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import eu.kanade.tachiyomi.ui.player.controls.components.resolvePinchAspectTransition
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -126,6 +130,34 @@ fun GestureHandler(
         modifier = modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeGestures)
+            .pointerInput(areControlsLocked, isDynamicSpeedActive) {
+                if (areControlsLocked || isDynamicSpeedActive) return@pointerInput
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var cumulativeZoom = 1f
+                    var switchedInGesture = false
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressedCount = event.changes.count { it.pressed }
+                        if (pressedCount >= 2) {
+                            val zoomChange = event.calculateZoom()
+                            if (zoomChange != 1f) {
+                                cumulativeZoom *= zoomChange
+                                event.changes.forEach { it.consume() }
+                                if (!switchedInGesture) {
+                                    val currentAspect = playerPreferences.aspectState().get()
+                                    val targetAspect = resolvePinchAspectTransition(cumulativeZoom, currentAspect)
+                                    if (targetAspect != null) {
+                                        switchedInGesture = true
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.changeVideoAspect(targetAspect)
+                                    }
+                                }
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
             .pointerInput(longPressAction, speedGestureResetOnRelease) {
                 if (areControlsLocked || longPressAction != LongPressGesture.PlaybackSpeed) return@pointerInput
                 awaitPointerEventScope {

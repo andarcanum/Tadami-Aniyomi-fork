@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.easteregg.lattice.LatticeCarrier
 import eu.kanade.presentation.easteregg.lattice.LatticeCarrierSlot
@@ -66,44 +67,46 @@ fun TopRightPlayerControls(
 
     modifier: Modifier = Modifier,
 ) {
+    val isCompactWidth = LocalConfiguration.current.screenWidthDp < 600
+    val buttonSpacing = if (isCompactWidth) MaterialTheme.padding.extraSmall else MaterialTheme.padding.mediumSmall
     Row(
         modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Absolute.SpaceEvenly,
+        horizontalArrangement = Arrangement.spacedBy(if (isCompactWidth) 0.dp else 2.dp),
     ) {
         LatticeCarrierSlot(LatticeCarrier.ANIME)
         AutoPlaySwitch(
             isChecked = autoPlayEnabled,
             onToggleAutoPlay = onToggleAutoPlay,
             modifier = Modifier
-                .padding(vertical = MaterialTheme.padding.medium, horizontal = MaterialTheme.padding.mediumSmall)
-                .size(width = 48.dp, height = 24.dp),
+                .padding(vertical = MaterialTheme.padding.medium, horizontal = buttonSpacing)
+                .size(width = if (isCompactWidth) 42.dp else 48.dp, height = 24.dp),
         )
         ControlsButton(
             icon = Icons.Default.Subtitles,
             onClick = onSubtitlesClick,
             onLongClick = onSubtitlesLongClick,
-            horizontalSpacing = MaterialTheme.padding.mediumSmall,
+            horizontalSpacing = buttonSpacing,
         )
         ControlsButton(
             icon = Icons.Default.Audiotrack,
             onClick = onAudioClick,
             onLongClick = onAudioLongClick,
-            horizontalSpacing = MaterialTheme.padding.mediumSmall,
+            horizontalSpacing = buttonSpacing,
         )
         if (isEpisodeOnline == true) {
             ControlsButton(
                 icon = Icons.Default.HighQuality,
                 onClick = onQualityClick,
                 onLongClick = onQualityClick,
-                horizontalSpacing = MaterialTheme.padding.mediumSmall,
+                horizontalSpacing = buttonSpacing,
             )
         }
         if (showScreenshotButton) {
             ControlsButton(
                 icon = Icons.Default.CameraAlt,
                 onClick = onScreenshotClick,
-                horizontalSpacing = MaterialTheme.padding.mediumSmall,
+                horizontalSpacing = buttonSpacing,
             )
         }
         ControlsButton(

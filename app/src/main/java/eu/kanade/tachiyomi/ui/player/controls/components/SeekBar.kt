@@ -43,9 +43,31 @@ import dev.vivvvek.seeker.Segment
 import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.ui.player.controls.LocalPlayerButtonsClickEvent
 import `is`.xyz.mpv.Utils
+import androidx.compose.runtime.remember
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import tachiyomi.presentation.core.components.material.padding
+
+internal fun buildSeekbarSegments(
+    chapters: List<Segment>,
+    duration: Float,
+): List<Segment> {
+    if (duration <= 0f || chapters.isEmpty()) return emptyList()
+    val validSorted = chapters
+        .filter { it.start in 0f..duration }
+        .sortedBy { it.start }
+        .distinctBy { it.start }
+    if (validSorted.isEmpty()) return emptyList()
+    return if (validSorted.first().start != 0f) {
+        buildList(validSorted.size + 1) {
+            add(Segment("", 0f))
+            addAll(validSorted)
+        }
+    } else {
+        validSorted
+    }
+}
 
 @Immutable
 data class IndexedSegment(
@@ -96,16 +118,9 @@ fun SeekbarWithTimers(
             onValueChange = onValueChange,
             onValueChangeFinished = onValueChangeFinished,
             readAheadValue = readAheadValue,
-            segments = chapters
-                .filter { it.start in 0f..duration }
-                .let {
-                    // add an extra segment at 0 if it doesn't exist.
-                    if (it.isNotEmpty() && it[0].start != 0f) {
-                        persistentListOf(Segment("", 0f)) + it
-                    } else {
-                        it
-                    } + it
-                },
+            segments = remember(chapters, duration) {
+                buildSeekbarSegments(chapters, duration).toImmutableList()
+            },
             modifier = Modifier.weight(1f),
             colors = SeekerDefaults.seekerColors(
                 progressColor = MaterialTheme.colorScheme.primary,

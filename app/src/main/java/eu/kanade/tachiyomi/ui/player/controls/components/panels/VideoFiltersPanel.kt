@@ -33,7 +33,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.TextButton
+import eu.kanade.tachiyomi.ui.player.VideoFilterPreset
+import eu.kanade.tachiyomi.ui.player.VideoFilterSnapshot
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -114,6 +118,31 @@ fun FiltersCard(
                     Text(text = stringResource(MR.strings.action_reset))
                 }
                 ControlsButton(Icons.Default.Close, onClose)
+            }
+        }
+        val brightness by decoderPreferences.brightnessFilter().collectAsState()
+        val saturation by decoderPreferences.saturationFilter().collectAsState()
+        val contrast by decoderPreferences.contrastFilter().collectAsState()
+        val gamma by decoderPreferences.gammaFilter().collectAsState()
+        val hue by decoderPreferences.hueFilter().collectAsState()
+        val activeFilterPreset = remember(brightness, saturation, contrast, gamma, hue) {
+            VideoFilterPreset.resolveActive(
+                VideoFilterSnapshot(brightness, saturation, contrast, gamma, hue),
+            )
+        }
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.extraSmall),
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+        ) {
+            VideoFilterPreset.entries.forEach { preset ->
+                FilterChip(
+                    selected = activeFilterPreset == preset,
+                    onClick = { preset.applyTo(decoderPreferences, applyLiveToMpv = true) },
+                    label = { Text(text = stringResource(preset.titleRes)) },
+                )
             }
         }
         LazyColumn {

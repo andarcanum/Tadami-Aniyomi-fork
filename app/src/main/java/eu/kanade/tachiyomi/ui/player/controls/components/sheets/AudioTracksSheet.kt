@@ -32,8 +32,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.player.PlayerViewModel.VideoTrack
 import kotlinx.collections.immutable.ImmutableList
 import tachiyomi.i18n.aniyomi.AYMR
@@ -92,11 +97,15 @@ fun AudioTrackRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val accent = AuroraTheme.colors.accent
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = MaterialTheme.padding.small, vertical = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isSelected) accent.copy(alpha = 0.14f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(start = MaterialTheme.padding.small, end = MaterialTheme.padding.medium),
+            .padding(start = MaterialTheme.padding.extraSmall, end = MaterialTheme.padding.medium),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
     ) {
@@ -105,9 +114,9 @@ fun AudioTrackRow(
             onClick = onClick,
         )
         Text(
-            title,
-            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Normal,
-            fontStyle = if (isSelected) FontStyle.Italic else FontStyle.Normal,
+            text = title,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isSelected) accent else MaterialTheme.colorScheme.onSurface,
         )
     }
 }

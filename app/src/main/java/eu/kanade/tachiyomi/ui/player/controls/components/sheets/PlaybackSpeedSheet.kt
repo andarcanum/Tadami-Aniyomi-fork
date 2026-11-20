@@ -55,8 +55,43 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
+
+private const val SPEED_PRESET_EPSILON = 0.005f
+private const val SPEED_SLIDER_MIN = 0.25f
+private const val SPEED_SLIDER_MAX = 6.0f
+private const val SPEED_SLIDER_STEP = 0.05f
+
+internal fun snapPlaybackSpeed(value: Float): Float {
+    val clamped = value.coerceIn(SPEED_SLIDER_MIN, SPEED_SLIDER_MAX)
+    val snapped = (clamped / SPEED_SLIDER_STEP).roundToInt() * SPEED_SLIDER_STEP
+    return snapped.toFixed(2)
+}
+
+internal fun parseSortedSpeedPresets(rawPresets: Set<String>): List<Float> {
+    return rawPresets
+        .mapNotNull { it.toFloatOrNull()?.toFixed(2) }
+        .distinct()
+        .sorted()
+}
+
+internal fun removeSpeedPreset(rawPresets: Set<String>, target: Float): Set<String> {
+    return rawPresets.filterTo(LinkedHashSet()) { raw ->
+        val parsed = raw.toFloatOrNull()
+        parsed == null || abs(parsed - target) >= SPEED_PRESET_EPSILON
+    }
+}
+
+internal fun addSpeedPreset(rawPresets: Set<String>, target: Float): Set<String> {
+    val normalized = target.toFixed(2)
+    val alreadyPresent = rawPresets.any { raw ->
+        val parsed = raw.toFloatOrNull()
+        parsed != null && abs(parsed - normalized) < SPEED_PRESET_EPSILON
+    }
+    return if (alreadyPresent) rawPresets else rawPresets + normalized.toString()
+}
 
 @Composable
 fun PlaybackSpeedSheet(
@@ -75,13 +110,16 @@ fun PlaybackSpeedSheet(
         ) {
             SliderItem(
                 label = stringResource(AYMR.strings.player_sheets_speed_slider_label),
-                value = speed,
+                value = speed.coerceIn(SPEED_SLIDER_MIN, SPEED_SLIDER_MAX),
                 valueText = stringResource(AYMR.strings.player_speed, speed),
-                onChange = onSpeedChange,
-                max = 6f,
-                min = 0.01f,
+                onChange = { rawValue -> onSpeedChange(snapPlaybackSpeed(rawValue)) },
+                max = SPEED_SLIDER_MAX,
+                min = SPEED_SLIDER_MIN,
             )
             val playbackSpeedPresets by preferences.speedPresets().collectAsState()
+            val sortedPresets = remember(playbackSpeedPresets) {
+                parseSortedSpeedPresets(playbackSpeedPresets)
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -100,13 +138,13 @@ fun PlaybackSpeedSheet(
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
                 ) {
                     items(
-                        playbackSpeedPresets.map { it.toFloat() }.sorted(),
+                        sortedPresets,
                         key = { it },
-                    ) {
+                    ) { presetSpeed ->
                         InputChip(
-                            selected = speed == it,
-                            onClick = { onSpeedChange(it) },
-                            label = { Text(stringResource(AYMR.strings.player_speed, it)) },
+                            selected = abs(speed - presetSpeed) < SPEED_PRESET_EPSILON,
+                            onClick = { onSpeedChange(presetSpeed) },
+                            label = { Text(stringResource(AYMR.strings.player_speed, presetSpeed)) },
                             modifier = Modifier
                                 .animateItem(),
                             trailingIcon = {
@@ -116,7 +154,7 @@ fun PlaybackSpeedSheet(
                                     modifier = Modifier
                                         .clickable {
                                             preferences.speedPresets().set(
-                                                playbackSpeedPresets.minus(it.toFixed(2).toString()),
+                                                removeSpeedPreset(playbackSpeedPresets, presetSpeed),
                                             )
                                         },
                                 )
@@ -126,7 +164,7 @@ fun PlaybackSpeedSheet(
                 }
                 FilledTonalIconButton(
                     onClick = {
-                        preferences.speedPresets().set(playbackSpeedPresets.plus(speed.toFixed(2).toString()))
+                        preferences.speedPresets().set(addSpeedPreset(playbackSpeedPresets, speed))
                     },
                 ) {
                     Icon(Icons.Default.Add, null)

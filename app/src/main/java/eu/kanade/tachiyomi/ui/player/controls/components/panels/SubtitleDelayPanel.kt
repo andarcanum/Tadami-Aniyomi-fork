@@ -40,6 +40,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -235,6 +236,20 @@ fun DelayCard(
                 max = Int.MAX_VALUE,
                 suffix = { Text(stringResource(AYMR.strings.player_generic_unit_ms)) },
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+            ) {
+                listOf(-250, -50, 50, 250).forEach { deltaMs ->
+                    val sign = if (deltaMs > 0) "+" else ""
+                    FilterChip(
+                        selected = false,
+                        onClick = { onDelayChange(delay + deltaMs) },
+                        label = { Text(text = "${sign}${deltaMs}ms") },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
             Column(
                 modifier = Modifier.animateContentSize(),
             ) { extraSettings() }

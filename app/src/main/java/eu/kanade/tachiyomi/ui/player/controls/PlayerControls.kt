@@ -81,8 +81,13 @@ import eu.kanade.tachiyomi.ui.player.PlayerActivity
 import eu.kanade.tachiyomi.ui.player.PlayerUpdates
 import eu.kanade.tachiyomi.ui.player.PlayerViewModel
 import eu.kanade.tachiyomi.ui.player.Sheets
+import eu.kanade.tachiyomi.ui.player.AbLoopState
 import eu.kanade.tachiyomi.ui.player.VideoAspect
+import eu.kanade.tachiyomi.ui.player.formatBufferingCaption
 import eu.kanade.tachiyomi.ui.player.controls.components.BrightnessOverlay
+import eu.kanade.tachiyomi.ui.player.controls.components.NextEpisodeCountdownOverlay
+import eu.kanade.tachiyomi.ui.player.controls.components.computeNextEpisodeCountdownSeconds
+import eu.kanade.tachiyomi.ui.player.controls.components.resolveChapterTitleAtPosition
 import eu.kanade.tachiyomi.ui.player.controls.components.BrightnessSlider
 import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
 import eu.kanade.tachiyomi.ui.player.controls.components.SeekbarWithTimers
@@ -228,6 +233,7 @@ fun PlayerControls(
                 val seekbar = createRef()
                 val (playerUpdates) = createRefs()
                 val speedPill = createRef()
+                val nextEpisodeCard = createRef()
 
                 val hasPreviousEpisode by viewModel.hasPreviousEpisode.collectAsStateWithLifecycle()
                 val hasNextEpisode by viewModel.hasNextEpisode.collectAsStateWithLifecycle()
@@ -393,6 +399,16 @@ fun PlayerControls(
                     },
                 ) {
                     val showLoadingCircle by playerPreferences.showLoadingCircle().collectAsStateWithLifecycle()
+                    val bufferingPercent by viewModel.bufferingPercent.collectAsStateWithLifecycle()
+                    val cacheSpeedBytesPerSec by viewModel.cacheSpeedBytesPerSec.collectAsStateWithLifecycle()
+                    val bufferingCaption = remember(bufferingPercent, cacheSpeedBytesPerSec, isLoading) {
+                        if (isLoading) formatBufferingCaption(bufferingPercent, cacheSpeedBytesPerSec) else null
+                    }
+                    val seekChapterTitle = remember(gestureSeekAmount, chapterSegments) {
+                        gestureSeekAmount?.let { (basePos, delta) ->
+                            resolveChapterTitleAtPosition(chapterSegments, (basePos + delta).toFloat())
+                        }
+                    }
                     MiddlePlayerControls(
                         hasPrevious = hasPreviousEpisode,
                         onSkipPrevious = { viewModel.changeEpisode(true) },
@@ -400,11 +416,13 @@ fun PlayerControls(
                         onSkipNext = { viewModel.changeEpisode(false) },
                         isLoading = isLoading,
                         isLoadingEpisode = isLoadingEpisode,
+                        bufferingCaption = bufferingCaption,
                         controlsShown = controlsShown,
                         areControlsLocked = areControlsLocked,
                         showLoadingCircle = showLoadingCircle,
                         paused = paused,
                         gestureSeekAmount = gestureSeekAmount,
+                        gestureSeekChapterTitle = seekChapterTitle,
                         onPlayPauseClick = viewModel::pauseUnpause,
                         enter = fadeIn(playerControlsEnterAnimationSpec()),
                         exit = fadeOut(playerControlsExitAnimationSpec()),
@@ -516,11 +534,44 @@ fun PlayerControls(
                         onScreenshotClick = { viewModel.showSheet(Sheets.Screenshot) },
                     )
                 }
-                // Bottom right controls
+                // Shared actions for customizable bottom control slots
                 val skipIntroButton by viewModel.skipIntroText.collectAsStateWithLifecycle()
                 val customButtonTitle by viewModel.primaryButtonTitle.collectAsStateWithLifecycle()
                 val visibleCustomButton = resolveVisibleCustomButton(showCustomButtons, customButton)
                 val visibleSkipIntroButton = skipIntroButton
+                val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+                val playerActivity = LocalContext.current as PlayerActivity
+                val bottomSlotActions = BottomPlayerSlotActions(
+                    playbackSpeed = playbackSpeed,
+                    customButton = visibleCustomButton,
+                    customButtonTitle = customButtonTitle,
+                    skipIntroButton = visibleSkipIntroButton,
+                    isPipAvailable = playerActivity.isPipSupportedAndEnabled,
+                    onLockControls = viewModel::lockControls,
+                    onCycleRotation = viewModel::cycleScreenRotations,
+                    onPlaybackSpeedTap = { viewModel.showSheet(Sheets.PlaybackSpeed) },
+                    onPlaybackSpeedQuickToggle = {
+                        val nextSpeed = resolveQuickTogglePlaybackSpeed(playbackSpeed)
+                        MPVLib.setPropertyDouble("speed", nextSpeed.toDouble())
+                        playerPreferences.playerSpeed().set(nextSpeed)
+                    },
+                    onPressSkipIntroButton = viewModel::onSkipIntro,
+                    onPipClick = {
+                        if (!viewModel.isLoadingEpisode.value) {
+                            playerActivity.enterPictureInPictureMode(playerActivity.createPipParams())
+                        }
+                    },
+                    onAspectClick = {
+                        viewModel.changeVideoAspect(
+                            when (aspectRatio) {
+                                VideoAspect.Fit -> VideoAspect.Stretch
+                                VideoAspect.Stretch -> VideoAspect.Crop
+                                VideoAspect.Crop -> VideoAspect.Fit
+                            },
+                        )
+                    },
+                )
+                // Bottom right controls
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {
@@ -540,32 +591,12 @@ fun PlayerControls(
                         end.linkTo(seekbar.end)
                     },
                 ) {
-                    val activity = LocalContext.current as PlayerActivity
                     BottomRightPlayerControls(
                         layoutSlots = bottomRightLayoutSlots,
-                        customButton = visibleCustomButton,
-                        customButtonTitle = customButtonTitle,
-                        skipIntroButton = visibleSkipIntroButton,
-                        onPressSkipIntroButton = viewModel::onSkipIntro,
-                        isPipAvailable = activity.isPipSupportedAndEnabled,
-                        onPipClick = {
-                            if (!viewModel.isLoadingEpisode.value) {
-                                activity.enterPictureInPictureMode(activity.createPipParams())
-                            }
-                        },
-                        onAspectClick = {
-                            viewModel.changeVideoAspect(
-                                when (aspectRatio) {
-                                    VideoAspect.Fit -> VideoAspect.Stretch
-                                    VideoAspect.Stretch -> VideoAspect.Crop
-                                    VideoAspect.Crop -> VideoAspect.Fit
-                                },
-                            )
-                        },
+                        slotActions = bottomSlotActions,
                     )
                 }
                 // Bottom left controls
-                val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {
@@ -589,13 +620,8 @@ fun PlayerControls(
                 ) {
                     BottomLeftPlayerControls(
                         layoutSlots = bottomLeftLayoutSlots,
-                        playbackSpeed = playbackSpeed,
+                        slotActions = bottomSlotActions,
                         currentChapter = currentChapterSegment,
-                        onLockControls = viewModel::lockControls,
-                        onCycleRotation = viewModel::cycleScreenRotations,
-                        onPlaybackSpeedChange = {
-                            MPVLib.setPropertyDouble("speed", it.toDouble())
-                        },
                         onOpenSheet = viewModel::showSheet,
                     )
                 }
@@ -615,9 +641,50 @@ fun PlayerControls(
                 ) {
                     PlaybackSpeedPill(speed = gesturePlaybackSpeed)
                 }
+
+                val currentEpisode by viewModel.currentEpisode.collectAsStateWithLifecycle()
+                val episodePlaylist by viewModel.currentPlaylist.collectAsStateWithLifecycle()
+                val repeatEpisode by viewModel.repeatEpisode.collectAsStateWithLifecycle()
+                val countdownPos by viewModel.pos.collectAsStateWithLifecycle()
+                val countdownDuration by viewModel.duration.collectAsStateWithLifecycle()
+                var dismissedNextOverlayEpisodeId by remember { mutableStateOf<Long?>(null) }
+                val nextEpisodeCountdown = computeNextEpisodeCountdownSeconds(
+                    positionSec = countdownPos,
+                    durationSec = countdownDuration,
+                    hasNextEpisode = hasNextEpisode,
+                    autoPlayEnabled = autoPlayEnabled,
+                    repeatEpisode = repeatEpisode,
+                    dismissedEpisodeId = dismissedNextOverlayEpisodeId,
+                    currentEpisodeId = currentEpisode?.id,
+                )
+                val nextEpisodeName = remember(episodePlaylist, currentEpisode?.id) {
+                    val idx = viewModel.getCurrentEpisodeIndex()
+                    episodePlaylist.getOrNull(idx + 1)?.name
+                }
+                AnimatedVisibility(
+                    visible = nextEpisodeCountdown != null && !areControlsLocked && !nextEpisodeName.isNullOrBlank(),
+                    enter = fadeIn(playerControlsEnterAnimationSpec()) +
+                        slideInHorizontally(playerControlsEnterAnimationSpec()) { it / 2 },
+                    exit = fadeOut(playerControlsExitAnimationSpec()) +
+                        slideOutHorizontally(playerControlsExitAnimationSpec()) { it / 2 },
+                    modifier = Modifier.constrainAs(nextEpisodeCard) {
+                        end.linkTo(parent.end, spacing.medium)
+                        bottom.linkTo(parent.bottom, if (controlsShown) 104.dp else 24.dp)
+                    },
+                ) {
+                    if (nextEpisodeCountdown != null && !nextEpisodeName.isNullOrBlank()) {
+                        NextEpisodeCountdownOverlay(
+                            nextEpisodeTitle = nextEpisodeName,
+                            secondsRemaining = nextEpisodeCountdown,
+                            onPlayNextNow = { viewModel.changeEpisode(previous = false) },
+                            onDismiss = { dismissedNextOverlayEpisodeId = currentEpisode?.id },
+                        )
+                    }
+                }
             }
         }
 
+        val hostActivity = LocalContext.current as PlayerActivity
         PlayerSheetsHost(
             viewModel = viewModel,
             playerPreferences = playerPreferences,
@@ -626,6 +693,7 @@ fun PlayerControls(
             showCustomButtons = showCustomButtons,
             currentChapterSegment = currentChapterSegment,
             chapterSegments = chapterSegments,
+            onReloadPlayer = hostActivity::reloadPlayerPreservingProgress,
         )
         val panel by viewModel.panelShown.collectAsStateWithLifecycle()
         PlayerPanels(
@@ -669,6 +737,7 @@ private fun PlayerSheetsHost(
     showCustomButtons: Boolean,
     currentChapterSegment: Segment?,
     chapterSegments: ImmutableList<Segment>,
+    onReloadPlayer: () -> Unit,
 ) {
     val sheetShown by viewModel.sheetShown.collectAsStateWithLifecycle()
     val dismissSheet by viewModel.dismissSheet.collectAsStateWithLifecycle()
@@ -684,6 +753,10 @@ private fun PlayerSheetsHost(
     val decoder by viewModel.currentDecoder.collectAsStateWithLifecycle()
     val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
     val sleepTimerTimeRemaining by viewModel.remainingTime.collectAsStateWithLifecycle()
+    val aspectRatio by playerPreferences.aspectState().collectAsStateWithLifecycle()
+    val videoZoom by viewModel.videoZoom.collectAsStateWithLifecycle()
+    val repeatEpisode by viewModel.repeatEpisode.collectAsStateWithLifecycle()
+    val abLoopState by viewModel.abLoopState.collectAsStateWithLifecycle()
     val showSubtitles by subtitlePreferences.screenshotSubtitles().collectAsStateWithLifecycle()
     val currentSource by viewModel.currentSource.collectAsStateWithLifecycle()
     val showFailedHosters by playerPreferences.showFailedHosters().collectAsStateWithLifecycle()
@@ -739,6 +812,16 @@ private fun PlayerSheetsHost(
         onSpeedChange = { MPVLib.setPropertyDouble("speed", it.toFixed(2).toDouble()) },
         sleepTimerTimeRemaining = sleepTimerTimeRemaining,
         onStartSleepTimer = viewModel::startTimer,
+        aspectRatio = aspectRatio,
+        onSelectAspectRatio = viewModel::changeVideoAspect,
+        videoZoom = videoZoom,
+        onVideoZoomChange = viewModel::setVideoZoom,
+        onResetVideoZoom = viewModel::resetVideoZoom,
+        repeatEpisode = repeatEpisode,
+        onToggleRepeatEpisode = viewModel::toggleRepeatEpisode,
+        abLoopState = abLoopState,
+        onCycleAbLoop = viewModel::cycleAbLoop,
+        onClearAbLoop = viewModel::clearAbLoop,
         buttons = immutableButtons,
         isLocalSource = currentSource?.id == LocalAnimeSource.ID,
         showSubtitles = showSubtitles,
@@ -753,6 +836,7 @@ private fun PlayerSheetsHost(
             viewModel.unpause()
         },
         onOpenPanel = viewModel::showPanel,
+        onReloadPlayer = onReloadPlayer,
         onDismissRequest = { viewModel.showSheet(Sheets.None) },
         dismissSheet = dismissSheet,
     )

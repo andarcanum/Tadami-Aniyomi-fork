@@ -805,6 +805,8 @@ class PlayerActivity : BaseActivity() {
                 viewModel.setChapter(value.toFloat())
             }
             "demuxer-cache-time" -> viewModel.updateReadAhead(value = value)
+            "cache-buffering-state" -> viewModel.updateBufferingPercent(value.toInt())
+            "cache-speed" -> viewModel.updateCacheSpeed(value)
             "volume" -> viewModel.setMPVVolume(value.toInt())
             "volume-max" -> viewModel.volumeBoostCap = value.toInt() - 100
             // "chapter" -> viewModel.updateChapter(value)
@@ -843,6 +845,9 @@ class PlayerActivity : BaseActivity() {
 
             "paused-for-cache" -> {
                 viewModel.isLoading.update { value }
+                if (!value) {
+                    viewModel.updateBufferingPercent(null)
+                }
             }
 
             "seeking" -> {
@@ -1145,6 +1150,22 @@ class PlayerActivity : BaseActivity() {
      * @param episodeId id of the episode to switch the player to
      * @param autoPlay whether the episode is switching due to auto play
      */
+    internal fun reloadPlayerPreservingProgress() {
+        viewModel.sheetShown.update { _ -> Sheets.None }
+        viewModel.panelShown.update { _ -> Panels.None }
+        viewModel.saveCurrentEpisodeWatchingProgress()
+        val animeId = viewModel.currentAnime.value?.id
+        val episodeId = viewModel.currentEpisode.value?.id
+        if (animeId != null && episodeId != null) {
+            intent.putExtra("animeId", animeId)
+            intent.putExtra("episodeId", episodeId)
+            intent.removeExtra("hostList")
+            intent.removeExtra("hostIndex")
+            intent.removeExtra("vidIndex")
+        }
+        recreate()
+    }
+
     internal fun changeEpisode(episodeId: Long?, autoPlay: Boolean = false) {
         viewModel.sheetShown.update { _ -> Sheets.None }
         viewModel.panelShown.update { _ -> Panels.None }

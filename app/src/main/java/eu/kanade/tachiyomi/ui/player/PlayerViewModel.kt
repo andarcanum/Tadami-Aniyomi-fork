@@ -260,6 +260,11 @@ class PlayerViewModel @JvmOverloads constructor(
     val animeTitle = MutableStateFlow("")
 
     val isLoading = MutableStateFlow(true)
+    val bufferingPercent = MutableStateFlow<Int?>(null)
+    val cacheSpeedBytesPerSec = MutableStateFlow<Long?>(null)
+    val videoZoom = MutableStateFlow(0f)
+    val repeatEpisode = MutableStateFlow(false)
+    val abLoopState = MutableStateFlow(AbLoopState())
     val playbackSpeed = MutableStateFlow(playerPreferences.playerSpeed().get())
 
     private val _subtitleTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
@@ -1157,6 +1162,51 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     @Suppress("DEPRECATION")
+    fun updateBufferingPercent(percent: Int?) {
+        bufferingPercent.update { percent?.coerceIn(0, 100) }
+    }
+
+    fun updateCacheSpeed(bytesPerSec: Long) {
+        cacheSpeedBytesPerSec.update { bytesPerSec.takeIf { it > 0L } }
+    }
+
+    fun setVideoZoom(zoom: Float) {
+        val clamped = zoom.coerceIn(-0.4f, 1.0f)
+        videoZoom.update { clamped }
+        MPVLib.setPropertyDouble("video-zoom", clamped.toDouble())
+    }
+
+    fun resetVideoZoom() {
+        setVideoZoom(0f)
+    }
+
+    fun toggleRepeatEpisode() {
+        val enabled = !repeatEpisode.value
+        repeatEpisode.update { enabled }
+        MPVLib.setPropertyString("loop-file", if (enabled) "inf" else "no")
+    }
+
+    fun cycleAbLoop() {
+        val next = abLoopState.value.advance(pos.value.toDouble())
+        abLoopState.update { next }
+        if (next.pointA != null) {
+            MPVLib.setPropertyDouble("ab-loop-a", next.pointA)
+        } else {
+            MPVLib.setPropertyString("ab-loop-a", "no")
+        }
+        if (next.pointB != null) {
+            MPVLib.setPropertyDouble("ab-loop-b", next.pointB)
+        } else {
+            MPVLib.setPropertyString("ab-loop-b", "no")
+        }
+    }
+
+    fun clearAbLoop() {
+        abLoopState.update { it.clear() }
+        MPVLib.setPropertyString("ab-loop-a", "no")
+        MPVLib.setPropertyString("ab-loop-b", "no")
+    }
+
     fun changeVideoAspect(aspect: VideoAspect) {
         var ratio = -1.0
         var pan = 1.0
