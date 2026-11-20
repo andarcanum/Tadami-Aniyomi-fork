@@ -271,4 +271,74 @@ class DiscoveryColdStartAndInstantActionsTest {
         selectColdStartVisibleCandidates(snapshot, mixedIncomplete).map { it.title } shouldBe
             listOf("Native", "External")
     }
+
+    @Test
+    fun `onScreenReentry before first publication keeps fast-cached discovery`(): Unit =
+        runBlocking {
+            val card1 = suggestion("Alpha")
+            val card2 = suggestion("Beta")
+            val cachedItems = listOf(card1.toHomeHubDiscoveryItem(), card2.toHomeHubDiscoveryItem())
+            val repo = object : FakeDiscoveryRepositoryBase() {
+                override fun observePublication(media: DiscoveryMediaType): Flow<DiscoveryPublicationSnapshot> =
+                    kotlinx.coroutines.flow.emptyFlow()
+            }
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
+                discoveryEnabled().set(true)
+                lastGenerationAt(DiscoveryMediaType.MANGA).set(10_000L)
+            }
+            val incompletePolicy = DiscoverySourcePolicy(
+                mediaType = DiscoveryMediaType.MANGA,
+                revision = "cold",
+                inventoryComplete = false,
+                allowedPluginKeys = emptySet(),
+                pluginMembers = emptyMap(),
+            )
+            val policyProvider = object : DiscoverySourcePolicyProvider {
+                override fun current(mediaType: DiscoveryMediaType) = incompletePolicy
+                override fun observe(mediaType: DiscoveryMediaType) = MutableStateFlow(incompletePolicy)
+                override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = incompletePolicy
+            }
+            var state = HomeHubUiState(
+                userName = "User",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+                discovery = cachedItems,
+                discoveryPool = cachedItems,
+                discoveryEnabled = true,
+                isDiscoveryLoading = false,
+                discoveryLastUpdated = 10_000L,
+            )
+            val persisted = mutableListOf<List<HomeHubDiscoveryItem>>()
+            val controller = HomeDiscoveryController(
+                sourcePolicyProvider = policyProvider,
+                mediaType = DiscoveryMediaType.MANGA,
+                repository = repo,
+                preferences = prefs,
+                context = mockk(relaxed = true),
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> state = updater(state) },
+                currentState = { state },
+                onEmitEffect = {},
+                onTeaserPersisted = { persisted += it },
+            )
+
+            // Cold-start ON_RESUME triggers onScreenReentry() before observePublication() emits.
+            controller.onScreenReentry()
+
+            state.discovery.map { it.title } shouldBe listOf("Alpha", "Beta")
+            state.discoveryPool.map { it.title } shouldBe listOf("Alpha", "Beta")
+            state.isDiscoveryLoading shouldBe false
+            persisted shouldBe emptyList()
+            resolveForYouEmptyState(
+                discoveryEnabled = state.discoveryEnabled,
+                isRefreshing = state.isDiscoveryRefreshing,
+                hasItems = state.discoveryPool.isNotEmpty(),
+                lastUpdatedAt = state.discoveryLastUpdated,
+                isFailed = state.isDiscoveryFailed,
+                isLoading = state.isDiscoveryLoading,
+            ) shouldBe null
+        }
 }

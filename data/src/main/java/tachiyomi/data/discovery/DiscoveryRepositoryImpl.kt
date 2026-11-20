@@ -1882,10 +1882,15 @@ class DiscoveryRepositoryImpl(
         val publication = settlePublicationRow(media, row)
         val eligibility = buildEligibility(media, known, memory, hidden)
         val validatedSourceRevision = candidateValidator.sourcePolicyRevision(media)
+        val allowProvisionalNative = publication.generation > 0L
         val eligible = suggestions.filter { candidate ->
             candidate.mediaType == media &&
                 !candidate.isExcludedBy(eligibility) &&
-                candidateValidator.isAllowed(candidate, blacklist)
+                candidateValidator.isAllowedForRead(
+                    candidate = candidate,
+                    liveBlacklistedTags = blacklist,
+                    allowProvisionalNative = allowProvisionalNative,
+                )
         }
         return DiscoveryPublicationSnapshot(
             mediaType = media,

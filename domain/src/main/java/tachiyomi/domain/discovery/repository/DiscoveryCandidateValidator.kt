@@ -9,6 +9,18 @@ import tachiyomi.domain.discovery.model.DiscoverySuggestion
 interface DiscoveryCandidateValidator {
     fun isAllowed(candidate: DiscoverySuggestion, liveBlacklistedTags: Set<String>): Boolean
 
+    /**
+     * Read-time admission check for already-committed SQLite snapshots.
+     * When [allowProvisionalNative] is true (committed generation > 0 while source inventory is
+     * still cold-booting), native candidates (`sourceId != null`) bypass only the incomplete
+     * inventory gate while external providers, genre filters, and blacklists remain enforced.
+     */
+    fun isAllowedForRead(
+        candidate: DiscoverySuggestion,
+        liveBlacklistedTags: Set<String>,
+        allowProvisionalNative: Boolean = false,
+    ): Boolean = isAllowed(candidate, liveBlacklistedTags)
+
     /** Pure live-config comparison after repository awaits, before any publication/top-up mutation. */
     fun isConfigurationCurrent(media: DiscoveryMediaType, capturedKey: String): Boolean = true
 

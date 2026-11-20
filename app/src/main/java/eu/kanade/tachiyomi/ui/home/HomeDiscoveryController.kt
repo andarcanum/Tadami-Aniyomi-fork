@@ -244,6 +244,7 @@ internal class HomeDiscoveryController(
                             advanceOffset = false,
                             forceUpdate = true,
                             notifyIfLimited = true,
+                            preserveCachedEmpty = cachedDiscoveryPool.isEmpty() && !inventoryComplete,
                         )
                     }
                 }
@@ -601,7 +602,13 @@ internal class HomeDiscoveryController(
         lastReentryTime = now
         scope.launchIO {
             mutex.withLock {
-                updateDiscoveryTeaserLocked(advanceOffset = false)
+                if (!hasObservedPolicy) return@withLock
+                val waitingInventory = cachedDiscoveryPool.isEmpty() &&
+                    !sourcePolicies.current(mediaType).inventoryComplete
+                updateDiscoveryTeaserLocked(
+                    advanceOffset = false,
+                    preserveCachedEmpty = waitingInventory,
+                )
             }
         }
     }

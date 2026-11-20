@@ -34,8 +34,25 @@ class AppDiscoveryCandidateValidator(
             ) == capturedKey
         }.getOrDefault(false)
 
-    override fun isAllowed(candidate: DiscoverySuggestion, liveBlacklistedTags: Set<String>): Boolean {
-        if (!sourcePolicyProvider.current(candidate.mediaType).allows(candidate)) return false
+    override fun isAllowed(candidate: DiscoverySuggestion, liveBlacklistedTags: Set<String>): Boolean =
+        isAllowedForRead(candidate, liveBlacklistedTags, allowProvisionalNative = false)
+
+    override fun isAllowedForRead(
+        candidate: DiscoverySuggestion,
+        liveBlacklistedTags: Set<String>,
+        allowProvisionalNative: Boolean,
+    ): Boolean {
+        val sourcePolicy = sourcePolicyProvider.current(candidate.mediaType)
+        val sourceAllowed = if (
+            !sourcePolicy.inventoryComplete &&
+            allowProvisionalNative &&
+            candidate.sourceId != null
+        ) {
+            candidate.mediaType == sourcePolicy.mediaType
+        } else {
+            sourcePolicy.allows(candidate)
+        }
+        if (!sourceAllowed) return false
         val policy = DiscoveryCandidatePolicy(
             spec = preferences.genreFilterSpec(candidate.mediaType),
             blacklistedTags = liveBlacklistedTags,
