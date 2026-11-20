@@ -1,4 +1,5 @@
 import mihon.buildlogic.Config
+import mihon.buildlogic.GenerateShortcutsTask
 import mihon.buildlogic.generatedBuildDir
 import mihon.buildlogic.getBuildTime
 import mihon.buildlogic.getCommitCount
@@ -169,6 +170,22 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val variantName = variant.name.replaceFirstChar { it.uppercaseChar() }
+        val generateShortcutsTask = tasks.register<GenerateShortcutsTask>(
+            "generate${variantName}Shortcuts",
+        ) {
+            templateFile.set(layout.projectDirectory.file("shortcuts.xml"))
+            applicationId.set(variant.applicationId)
+        }
+        variant.sources.res?.addGeneratedSourceDirectory(
+            generateShortcutsTask,
+            GenerateShortcutsTask::outputDir,
+        )
     }
 }
 

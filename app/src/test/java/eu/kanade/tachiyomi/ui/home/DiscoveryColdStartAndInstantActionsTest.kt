@@ -103,127 +103,130 @@ class DiscoveryColdStartAndInstantActionsTest {
     }
 
     @Test
-    fun `committed SQLite publication shows cached native cards immediately before inventoryComplete`(): Unit = runBlocking {
-        val card1 = suggestion("Alpha")
-        val card2 = suggestion("Beta")
-        val repo = SlowWriteCommittedRepo(generation = 3L).apply {
-            poolFlow.value = listOf(card1, card2)
-        }
-        val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
-            discoveryEnabled().set(true)
-            lastGenerationAt(DiscoveryMediaType.MANGA).set(10_000L)
-        }
-        val incompletePolicy = DiscoverySourcePolicy(
-            mediaType = DiscoveryMediaType.MANGA,
-            revision = "cold",
-            inventoryComplete = false,
-            allowedPluginKeys = emptySet(),
-            pluginMembers = emptyMap(),
-        )
-        val completePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(42L))
-        val policyFlow = MutableStateFlow(incompletePolicy)
-        val policyProvider = object : DiscoverySourcePolicyProvider {
-            override fun current(mediaType: DiscoveryMediaType) = policyFlow.value
-            override fun observe(mediaType: DiscoveryMediaType) = policyFlow
-            override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = completePolicy
-        }
-        var state = HomeHubUiState(
-            userName = "User",
-            userAvatar = "",
-            greeting = tachiyomi.i18n.MR.strings.app_name,
-            greetingReady = true,
-            isLoading = false,
-            showWelcome = false,
-        )
-        val controller = HomeDiscoveryController(
-            sourcePolicyProvider = policyProvider,
-            mediaType = DiscoveryMediaType.MANGA,
-            repository = repo,
-            preferences = prefs,
-            context = mockk(relaxed = true),
-            scope = CoroutineScope(Dispatchers.Unconfined),
-            onStateUpdate = { updater -> state = updater(state) },
-            currentState = { state },
-            onEmitEffect = {},
-        )
+    fun `committed SQLite publication shows cached native cards immediately before inventoryComplete`(): Unit =
+        runBlocking {
+            val card1 = suggestion("Alpha")
+            val card2 = suggestion("Beta")
+            val repo = SlowWriteCommittedRepo(generation = 3L).apply {
+                poolFlow.value = listOf(card1, card2)
+            }
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
+                discoveryEnabled().set(true)
+                lastGenerationAt(DiscoveryMediaType.MANGA).set(10_000L)
+            }
+            val incompletePolicy = DiscoverySourcePolicy(
+                mediaType = DiscoveryMediaType.MANGA,
+                revision = "cold",
+                inventoryComplete = false,
+                allowedPluginKeys = emptySet(),
+                pluginMembers = emptyMap(),
+            )
+            val completePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(42L))
+            val policyFlow = MutableStateFlow(incompletePolicy)
+            val policyProvider = object : DiscoverySourcePolicyProvider {
+                override fun current(mediaType: DiscoveryMediaType) = policyFlow.value
+                override fun observe(mediaType: DiscoveryMediaType) = policyFlow
+                override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = completePolicy
+            }
+            var state = HomeHubUiState(
+                userName = "User",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+            )
+            val controller = HomeDiscoveryController(
+                sourcePolicyProvider = policyProvider,
+                mediaType = DiscoveryMediaType.MANGA,
+                repository = repo,
+                preferences = prefs,
+                context = mockk(relaxed = true),
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> state = updater(state) },
+                currentState = { state },
+                onEmitEffect = {},
+            )
 
-        controller.startObserving()
-        waitUntil { state.discovery.size == 2 }
+            controller.startObserving()
+            waitUntil { state.discovery.size == 2 }
 
-        state.discovery.map { it.title } shouldBe listOf("Alpha", "Beta")
-        state.isDiscoveryLoading shouldBe false
+            state.discovery.map { it.title } shouldBe listOf("Alpha", "Beta")
+            state.isDiscoveryLoading shouldBe false
 
-        // Once inventory finishes loading, the visible cards stay intact without flashing empty/skeleton.
-        policyFlow.value = completePolicy
-        waitUntil { !state.isDiscoveryLoading && state.discovery.size == 2 }
-        state.discovery.map { it.title } shouldBe listOf("Alpha", "Beta")
-        state.isDiscoveryLoading shouldBe false
-    }
+            // Once inventory finishes loading, the visible cards stay intact without flashing empty/skeleton.
+            policyFlow.value = completePolicy
+            waitUntil { !state.isDiscoveryLoading && state.discovery.size == 2 }
+            state.discovery.map { it.title } shouldBe listOf("Alpha", "Beta")
+            state.isDiscoveryLoading shouldBe false
+        }
 
     @Test
-    fun `hideDiscoveryItem and markDiscoveryItemConsumed remove cards synchronously before DB completes`(): Unit = runBlocking {
-        val card1 = suggestion("Alpha")
-        val card2 = suggestion("Beta")
-        val card3 = suggestion("Gamma")
-        val repo = SlowWriteCommittedRepo(generation = 2L).apply {
-            poolFlow.value = listOf(card1, card2, card3)
+    fun `hideDiscoveryItem and markDiscoveryItemConsumed remove cards synchronously before DB completes`(): Unit =
+        runBlocking {
+            val card1 = suggestion("Alpha")
+            val card2 = suggestion("Beta")
+            val card3 = suggestion("Gamma")
+            val repo = SlowWriteCommittedRepo(generation = 2L).apply {
+                poolFlow.value = listOf(card1, card2, card3)
+            }
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
+                discoveryEnabled().set(true)
+                lastGenerationAt(DiscoveryMediaType.MANGA).set(10_000L)
+            }
+            val completePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(42L))
+            val policyProvider = object : DiscoverySourcePolicyProvider {
+                override fun current(mediaType: DiscoveryMediaType) = completePolicy
+                override fun observe(mediaType: DiscoveryMediaType) = MutableStateFlow(completePolicy)
+                override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = completePolicy
+            }
+            var state = HomeHubUiState(
+                userName = "User",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+            )
+            val controller = HomeDiscoveryController(
+                sourcePolicyProvider = policyProvider,
+                mediaType = DiscoveryMediaType.MANGA,
+                repository = repo,
+                preferences = prefs,
+                context = mockk(relaxed = true),
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> state = updater(state) },
+                currentState = { state },
+                onEmitEffect = {},
+            )
+
+            controller.startObserving()
+            waitUntil { state.discovery.size == 3 }
+
+            // DB writeGate is still locked: UI removal MUST happen synchronously on the very next line.
+            controller.hideDiscoveryItem(card1.toHomeHubDiscoveryItem())
+            state.discovery.map { it.title } shouldBe listOf("Beta", "Gamma")
+
+            controller.markDiscoveryItemConsumed(card2.toHomeHubDiscoveryItem())
+            state.discovery.map { it.title } shouldBe listOf("Gamma")
+
+            // Racing emission from repo while DB write is still in flight must NOT resurrect dismissed cards.
+            repo.poolFlow.value = listOf(card1, card2, card3)
+            state.discovery.map { it.title } shouldBe listOf("Gamma")
+
+            // Undo restores the hidden item cleanly.
+            controller.restoreHiddenTeaserItem(card1.toHomeHubDiscoveryItem())
+            waitUntil { state.discovery.any { it.title == "Alpha" } }
+            state.discovery.map { it.title }.contains("Alpha") shouldBe true
+
+            repo.writeGate.complete(Unit)
         }
-        val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
-            discoveryEnabled().set(true)
-            lastGenerationAt(DiscoveryMediaType.MANGA).set(10_000L)
-        }
-        val completePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(42L))
-        val policyProvider = object : DiscoverySourcePolicyProvider {
-            override fun current(mediaType: DiscoveryMediaType) = completePolicy
-            override fun observe(mediaType: DiscoveryMediaType) = MutableStateFlow(completePolicy)
-            override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = completePolicy
-        }
-        var state = HomeHubUiState(
-            userName = "User",
-            userAvatar = "",
-            greeting = tachiyomi.i18n.MR.strings.app_name,
-            greetingReady = true,
-            isLoading = false,
-            showWelcome = false,
-        )
-        val controller = HomeDiscoveryController(
-            sourcePolicyProvider = policyProvider,
-            mediaType = DiscoveryMediaType.MANGA,
-            repository = repo,
-            preferences = prefs,
-            context = mockk(relaxed = true),
-            scope = CoroutineScope(Dispatchers.Unconfined),
-            onStateUpdate = { updater -> state = updater(state) },
-            currentState = { state },
-            onEmitEffect = {},
-        )
-
-        controller.startObserving()
-        waitUntil { state.discovery.size == 3 }
-
-        // DB writeGate is still locked: UI removal MUST happen synchronously on the very next line.
-        controller.hideDiscoveryItem(card1.toHomeHubDiscoveryItem())
-        state.discovery.map { it.title } shouldBe listOf("Beta", "Gamma")
-
-        controller.markDiscoveryItemConsumed(card2.toHomeHubDiscoveryItem())
-        state.discovery.map { it.title } shouldBe listOf("Gamma")
-
-        // Racing emission from repo while DB write is still in flight must NOT resurrect dismissed cards.
-        repo.poolFlow.value = listOf(card1, card2, card3)
-        state.discovery.map { it.title } shouldBe listOf("Gamma")
-
-        // Undo restores the hidden item cleanly.
-        controller.restoreHiddenTeaserItem(card1.toHomeHubDiscoveryItem())
-        waitUntil { state.discovery.any { it.title == "Alpha" } }
-        state.discovery.map { it.title }.contains("Alpha") shouldBe true
-
-        repo.writeGate.complete(Unit)
-    }
 
     @Test
     fun `selectColdStartVisibleCandidates enforces external provider policy during provisional cold start`() {
         val nativeCard = suggestion("Native", sourceId = 42L, provider = "MangaLib")
-        val externalCard = suggestion("External", sourceId = null, provider = "anilist_trend", rowType = DiscoveryRowType.TREND)
+        val externalCard =
+            suggestion("External", sourceId = null, provider = "anilist_trend", rowType = DiscoveryRowType.TREND)
         val snapshot = DiscoveryPublicationSnapshot(
             mediaType = DiscoveryMediaType.MANGA,
             generation = 4L,
@@ -265,6 +268,7 @@ class DiscoveryColdStartAndInstantActionsTest {
             pluginMembers = emptyMap(),
             allowedExternalProviders = mapOf(DiscoveryRowType.TREND to setOf(DiscoveryExternalProvider.ANILIST)),
         )
-        selectColdStartVisibleCandidates(snapshot, mixedIncomplete).map { it.title } shouldBe listOf("Native", "External")
+        selectColdStartVisibleCandidates(snapshot, mixedIncomplete).map { it.title } shouldBe
+            listOf("Native", "External")
     }
 }

@@ -41,7 +41,9 @@ enum class DecoderPreset(
     ),
     ;
 
-    fun expectedSnapshot(supportsGpuNext: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q): DecoderPresetSnapshot {
+    fun expectedSnapshot(
+        supportsGpuNext: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+    ): DecoderPresetSnapshot {
         return DecoderPresetSnapshot(
             tryHwDecoding = true,
             gpuNext = when (this) {

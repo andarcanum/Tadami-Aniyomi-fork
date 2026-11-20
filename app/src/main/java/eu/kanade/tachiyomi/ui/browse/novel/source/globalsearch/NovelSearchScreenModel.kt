@@ -70,7 +70,9 @@ abstract class NovelSearchScreenModel(
     @Volatile
     private var sourceOrder: Map<Long, Int> = emptyMap()
 
-    private fun sortComparator(map: Map<NovelCatalogueSource, NovelSearchItemResult>): Comparator<NovelCatalogueSource> {
+    private fun sortComparator(
+        map: Map<NovelCatalogueSource, NovelSearchItemResult>,
+    ): Comparator<NovelCatalogueSource> {
         val order = sourceOrder
         return compareBy<NovelCatalogueSource>(
             { (map[it] as? NovelSearchItemResult.Success)?.isEmpty ?: true },

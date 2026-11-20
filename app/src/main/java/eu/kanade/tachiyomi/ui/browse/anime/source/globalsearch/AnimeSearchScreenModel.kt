@@ -77,7 +77,9 @@ abstract class AnimeSearchScreenModel(
     @Volatile
     private var sourceOrder: Map<Long, Int> = emptyMap()
 
-    private fun sortComparator(map: Map<AnimeCatalogueSource, AnimeSearchItemResult>): Comparator<AnimeCatalogueSource> {
+    private fun sortComparator(
+        map: Map<AnimeCatalogueSource, AnimeSearchItemResult>,
+    ): Comparator<AnimeCatalogueSource> {
         val order = sourceOrder
         return compareBy<AnimeCatalogueSource>(
             { (map[it] as? AnimeSearchItemResult.Success)?.isEmpty ?: true },

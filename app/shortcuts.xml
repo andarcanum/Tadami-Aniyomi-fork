@@ -8,7 +8,8 @@
         android:shortcutShortLabel="@string/aurora_home">
         <intent
             android:action="eu.kanade.tachiyomi.SHOW_HOME"
-            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity" />
+            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity"
+            android:targetPackage="${applicationId}" />
     </shortcut>
     <shortcut
         android:enabled="true"
@@ -19,7 +20,8 @@
         android:shortcutShortLabel="@string/label_titles">
         <intent
             android:action="eu.kanade.tachiyomi.SHOW_ANIMELIB"
-            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity" />
+            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity"
+            android:targetPackage="${applicationId}" />
     </shortcut>
     <shortcut
         android:enabled="true"
@@ -30,7 +32,8 @@
         android:shortcutShortLabel="@string/aurora_updates">
         <intent
             android:action="eu.kanade.tachiyomi.SHOW_RECENTLY_UPDATED"
-            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity" />
+            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity"
+            android:targetPackage="${applicationId}" />
     </shortcut>
     <shortcut
         android:enabled="true"
@@ -41,6 +44,7 @@
         android:shortcutShortLabel="@string/aurora_browse">
         <intent
             android:action="eu.kanade.tachiyomi.SHOW_CATALOGUES"
-            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity" />
+            android:targetClass="eu.kanade.tachiyomi.ui.main.MainActivity"
+            android:targetPackage="${applicationId}" />
     </shortcut>
 </shortcuts>
