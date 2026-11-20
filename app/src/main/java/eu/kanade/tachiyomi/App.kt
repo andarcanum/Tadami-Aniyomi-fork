@@ -44,6 +44,7 @@ import eu.kanade.presentation.tutorial.CoachTipRegistry
 import eu.kanade.tachiyomi.crash.CrashActivity
 import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
+import eu.kanade.tachiyomi.data.cache.EntryMemoryCacheTrimCallbacks
 import eu.kanade.tachiyomi.data.coil.AnimatedNativeImageDecoder
 import eu.kanade.tachiyomi.data.coil.AnimeCoverKeyer
 import eu.kanade.tachiyomi.data.coil.AnimeImageFetcher
@@ -77,7 +78,6 @@ import eu.kanade.tachiyomi.extension.installer.PendingApkInstallStore
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.novel.NovelPluginSourceFactory
 import eu.kanade.tachiyomi.extension.novel.kotlin.sweepOrphanedNovelPluginDownloads
-import eu.kanade.tachiyomi.data.cache.EntryMemoryCacheTrimCallbacks
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelRuntimeCacheTrimCallbacks
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences

@@ -304,11 +304,13 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                         emptySet()
                     }
 
-                    (if (excludedMangaIds.isEmpty()) {
-                        includedManga
-                    } else {
-                        includedManga.filterNot { it.manga.id in excludedMangaIds }
-                    }).distinctBy { it.manga.id }
+                    (
+                        if (excludedMangaIds.isEmpty()) {
+                            includedManga
+                        } else {
+                            includedManga.filterNot { it.manga.id in excludedMangaIds }
+                        }
+                        ).distinctBy { it.manga.id }
                 }
             }
         }

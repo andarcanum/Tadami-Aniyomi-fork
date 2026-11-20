@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.extension.anime.model.selectAnimeInstalledRepoDisplay
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeReinstallCandidates
 import eu.kanade.tachiyomi.extension.anime.toInstalledAnimeExtensionPkgName
 import eu.kanade.tachiyomi.extension.installer.ApkExtensionKind
+import eu.kanade.tachiyomi.ui.browse.ExtensionSearchFilter
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CompletableDeferred
@@ -29,7 +30,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
-import eu.kanade.tachiyomi.ui.browse.ExtensionSearchFilter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate

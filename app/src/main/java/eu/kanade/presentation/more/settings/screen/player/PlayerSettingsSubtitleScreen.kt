@@ -96,14 +96,18 @@ object PlayerSettingsSubtitleScreen : SearchableSettings {
                 add(
                     Preference.PreferenceItem.EditTextInfoPreference(
                         preference = subtitleTranslationSourceLanguage,
-                        dialogSubtitle = stringResource(AYMR.strings.pref_player_subtitle_translation_source_lang_summary),
+                        dialogSubtitle = stringResource(
+                            AYMR.strings.pref_player_subtitle_translation_source_lang_summary,
+                        ),
                         title = stringResource(AYMR.strings.pref_player_subtitle_translation_source_lang),
                     ),
                 )
                 add(
                     Preference.PreferenceItem.EditTextInfoPreference(
                         preference = subtitleTranslationTargetLanguage,
-                        dialogSubtitle = stringResource(AYMR.strings.pref_player_subtitle_translation_target_lang_summary),
+                        dialogSubtitle = stringResource(
+                            AYMR.strings.pref_player_subtitle_translation_target_lang_summary,
+                        ),
                         title = stringResource(AYMR.strings.pref_player_subtitle_translation_target_lang),
                     ),
                 )

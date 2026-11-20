@@ -647,7 +647,13 @@ class DiscoveryTrendRowBuilder(
                     score = 0.0,
                 )
             }.let { items ->
-                hydrateLatestIfPermitted(items, context.mediaType, preferredSourceId, context.verificationBudget, policy)
+                hydrateLatestIfPermitted(
+                    items,
+                    context.mediaType,
+                    preferredSourceId,
+                    context.verificationBudget,
+                    policy,
+                )
             }.let { items -> context.admittedCandidates(rowType, items) }
         } else {
             emptyList()
@@ -724,7 +730,13 @@ class DiscoveryTrendRowBuilder(
                         score = 0.0,
                     )
                 }.let { items ->
-                    hydrateLatestIfPermitted(items, context.mediaType, preferredSourceId, context.verificationBudget, policy)
+                    hydrateLatestIfPermitted(
+                        items,
+                        context.mediaType,
+                        preferredSourceId,
+                        context.verificationBudget,
+                        policy,
+                    )
                 }.let { items -> context.admittedCandidates(rowType, items) }
                 if (fallbackSource.isNotEmpty()) {
                     if (trendingResult.isFailure) isDegraded = true

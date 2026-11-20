@@ -64,8 +64,10 @@ class NextEpisodeCountdownAndGesturesTest {
 
     @Test
     fun `computeEpisodeProgressFraction computes ratio only for partially watched episodes`() {
-        computeEpisodeProgressFraction(lastSecondSeenMs = 600_000L, totalSecondsMs = 1_200_000L, seen = false) shouldBe 0.5f
-        computeEpisodeProgressFraction(lastSecondSeenMs = 600_000L, totalSecondsMs = 1_200_000L, seen = true) shouldBe null
+        computeEpisodeProgressFraction(lastSecondSeenMs = 600_000L, totalSecondsMs = 1_200_000L, seen = false) shouldBe
+            0.5f
+        computeEpisodeProgressFraction(lastSecondSeenMs = 600_000L, totalSecondsMs = 1_200_000L, seen = true) shouldBe
+            null
         computeEpisodeProgressFraction(lastSecondSeenMs = 0L, totalSecondsMs = 1_200_000L, seen = false) shouldBe null
     }
 }

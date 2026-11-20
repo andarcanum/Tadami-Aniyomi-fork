@@ -65,6 +65,7 @@ internal class HomeDiscoveryController(
     private var hasObservedPolicy: Boolean = false
     private var lastObservedInventoryComplete: Boolean? = null
     private var lastObservedUsedProvisionalColdStart: Boolean = false
+
     @Volatile
     private var allowProvisionalColdStartNative: Boolean = false
     private var discoveryOffset: Int = 0

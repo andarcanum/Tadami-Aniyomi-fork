@@ -153,6 +153,14 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         updateChildViewports()
     }
 
+    override fun onChildAttachedToWindow(child: View) {
+        super.onChildAttachedToWindow(child)
+        val displayScale = computeViewportBounds()
+        if (displayScale > 0f) {
+            pushViewportToHolderChild(child, displayScale)
+        }
+    }
+
     internal fun updateChildViewports() {
         val displayScale = computeViewportBounds()
         if (displayScale <= 0f) return
@@ -383,6 +391,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
                 if (activeFlingAnimator === this) {
                     activeFlingAnimator = null
                 }
+                updateChildViewports()
             }
         }
         activeFlingAnimator = animator
@@ -449,6 +458,11 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 
         if (heightChanged) {
             requestLayout()
+            post {
+                if (isAttachedToWindow) {
+                    updateChildViewports()
+                }
+            }
         }
         updateChildViewports()
     }

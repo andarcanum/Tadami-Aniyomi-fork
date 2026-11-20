@@ -118,7 +118,6 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.theme.LocalLiveBackdropBlurEnabled
 import eu.kanade.presentation.theme.shouldUseLiveBackdropBlur
-import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.presentation.tutorial.coachAnchorForTab
 import eu.kanade.presentation.util.BottomNavVisibilityController
 import eu.kanade.presentation.util.LocalBottomNavVisibilityController
@@ -135,6 +134,7 @@ import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryTab
 import eu.kanade.tachiyomi.ui.more.MoreTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesTab
+import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.powerManager
 import kotlinx.coroutines.channels.BufferOverflow

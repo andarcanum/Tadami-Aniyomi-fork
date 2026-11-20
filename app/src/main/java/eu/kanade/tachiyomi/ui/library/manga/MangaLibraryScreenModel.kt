@@ -69,11 +69,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
-import java.text.CollationKey
 import tachiyomi.core.common.util.lang.compareCollationKeys
-import tachiyomi.core.common.util.lang.toCollationKey
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.lang.toCollationKey
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.GetVisibleMangaCategories
@@ -107,6 +106,7 @@ import tachiyomi.domain.track.manga.model.MangaTrack
 import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.text.CollationKey
 import kotlin.random.Random
 
 /**
@@ -964,7 +964,9 @@ class MangaLibraryScreenModel(
                         } else {
                             false
                         },
-                        sourceLanguageValue = librarySeries.entries.firstOrNull()?.manga?.source?.let(::resolveLang).orEmpty(),
+                        sourceLanguageValue = librarySeries.entries.firstOrNull()?.manga?.source?.let(
+                            ::resolveLang,
+                        ).orEmpty(),
                         sourceManager = sourceManager,
                     )
                 }

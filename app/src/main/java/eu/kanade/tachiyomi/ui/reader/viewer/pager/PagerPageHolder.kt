@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.panel.MangaPanelDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.panel.PanelRect
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -36,6 +37,7 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
+import java.io.FileNotFoundException
 import java.io.InputStream
 
 /**
@@ -71,6 +73,9 @@ class PagerPageHolder(
      */
     private var loadJob: Job? = null
 
+    private var cacheEvictionRetried = false
+    private var tileErrorRetried = false
+
     private var panelDetectJob: Job? = null
     private var detectedPanels: List<PanelRect> = emptyList()
     private val guidedPanelController = GuidedPanelController()
@@ -87,6 +92,8 @@ class PagerPageHolder(
     override fun recycle() {
         loadJob?.cancel()
         loadJob = null
+        cacheEvictionRetried = false
+        tileErrorRetried = false
         panelDetectJob?.cancel()
         panelDetectJob = null
         detectedPanels = emptyList()
@@ -98,6 +105,13 @@ class PagerPageHolder(
     /**
      * Called when this view is detached from the window. Unsubscribes any active subscription.
      */
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (loadJob == null) {
+            loadJob = scope.launch { loadPageAndProcessStatus() }
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
@@ -178,7 +192,10 @@ class PagerPageHolder(
     private suspend fun setImage() {
         progressIndicator?.setProgress(0)
 
-        val streamFn = page.stream ?: return
+        val streamFn = page.stream ?: run {
+            markDecodeError()
+            return
+        }
 
         try {
             val prepared = withIOContext {
@@ -303,9 +320,20 @@ class PagerPageHolder(
                 removeErrorLayout()
             }
         } catch (e: Throwable) {
+            if (e is CancellationException) {
+                throw e
+            }
             logcat(LogPriority.ERROR, e)
             withUIContext {
-                markDecodeError()
+                if (e is FileNotFoundException &&
+                    !cacheEvictionRetried &&
+                    page.status == Page.State.READY
+                ) {
+                    cacheEvictionRetried = true
+                    page.chapter.pageLoader?.retryPage(page)
+                } else {
+                    markDecodeError()
+                }
             }
         }
     }
@@ -379,9 +407,14 @@ class PagerPageHolder(
         }
         val rotation = if (viewer.config.dualPageRotateToFitInvert) -90f else 90f
         // peek() keeps the source intact so the stream variant remains a viable fallback.
-        return ImageUtil.rotateImageBitmap(imageSource.peek(), rotation)
-            ?.let { ProcessedPageImage.Decoded(it) }
-            ?: ProcessedPageImage.Encoded(ImageUtil.rotateImage(imageSource, rotation))
+        val rotatedBitmap = ImageUtil.rotateImageBitmap(imageSource.peek(), rotation)
+        if (rotatedBitmap != null) {
+            if (maxOf(rotatedBitmap.width, rotatedBitmap.height) <= ImageUtil.hardwareBitmapThreshold) {
+                return ProcessedPageImage.Decoded(rotatedBitmap)
+            }
+            rotatedBitmap.recycle()
+        }
+        return ProcessedPageImage.Encoded(ImageUtil.rotateImage(imageSource, rotation))
     }
 
     private fun splitInHalf(imageSource: BufferedSource): ProcessedPageImage {
@@ -401,10 +434,16 @@ class PagerPageHolder(
         }
 
         // Region-decode only the kept half and skip the JPEG q=100 re-encode; fall back to the
-        // stream variant on the rare decoder failure (peek() left the source unconsumed).
-        return ImageUtil.splitInHalfBitmap(imageSource.peek(), side, viewer.config.dualPageSmartGutter)
-            ?.let { ProcessedPageImage.Decoded(it) }
-            ?: ProcessedPageImage.Encoded(ImageUtil.splitInHalf(imageSource, side))
+        // stream variant on the rare decoder failure or oversized texture (peek() left the
+        // source unconsumed).
+        val splitBitmap = ImageUtil.splitInHalfBitmap(imageSource.peek(), side, viewer.config.dualPageSmartGutter)
+        if (splitBitmap != null) {
+            if (maxOf(splitBitmap.width, splitBitmap.height) <= ImageUtil.hardwareBitmapThreshold) {
+                return ProcessedPageImage.Decoded(splitBitmap)
+            }
+            splitBitmap.recycle()
+        }
+        return ProcessedPageImage.Encoded(ImageUtil.splitInHalf(imageSource, side))
     }
 
     private fun onPageSplit(page: ReaderPage) {
@@ -429,7 +468,9 @@ class PagerPageHolder(
         if (page.status == Page.State.READY) {
             page.status = Page.State.ERROR
         }
-        setError()
+        if (page.status == Page.State.ERROR) {
+            setError()
+        }
     }
 
     override fun onPageSelected(forward: Boolean) {
@@ -558,6 +599,7 @@ class PagerPageHolder(
 
     override fun onImageLoaded() {
         super.onImageLoaded()
+        cacheEvictionRetried = false
         progressIndicator?.hide()
         if (viewer.config.guidedPanelMode) {
             ensurePanelsDetected()
@@ -570,6 +612,14 @@ class PagerPageHolder(
     override fun onImageLoadError() {
         super.onImageLoadError()
         markDecodeError()
+    }
+
+    override fun onTileLoadError(e: Exception) {
+        super.onTileLoadError(e)
+        if (!tileErrorRetried && page.status == Page.State.READY) {
+            tileErrorRetried = true
+            page.chapter.pageLoader?.retryPage(page)
+        }
     }
 
     /**

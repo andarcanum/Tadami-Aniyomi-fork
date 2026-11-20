@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScaleUtil
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
@@ -39,6 +40,7 @@ import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
+import java.io.FileNotFoundException
 import java.io.InputStream
 
 /**
@@ -94,6 +96,9 @@ class WebtoonPageHolder(
      */
     private var loadJob: Job? = null
 
+    private var cacheEvictionRetried = false
+    private var tileErrorRetried = false
+
     init {
         refreshLayoutParams()
 
@@ -116,6 +121,7 @@ class WebtoonPageHolder(
         viewer.registerPageFrame(frame)
         frame.onImageLoaded = { onImageDecoded() }
         frame.onImageLoadError = { markDecodeError() }
+        frame.onTileLoadError = { handleTileLoadError() }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
         frame.onHdrChanged = { isHdr ->
             page?.isHdr = isHdr
@@ -132,6 +138,8 @@ class WebtoonPageHolder(
     fun bind(page: ReaderPage) {
         this.page = page
         layoutSettledForPage = null
+        cacheEvictionRetried = false
+        tileErrorRetried = false
         // The bind-induced layout happens in the traversal this call belongs to, so anything the
         // view reports after it has settled is a genuine reflow of this page.
         frame.post {
@@ -290,6 +298,8 @@ class WebtoonPageHolder(
     override fun recycle() {
         loadJob?.cancel()
         loadJob = null
+        cacheEvictionRetried = false
+        tileErrorRetried = false
 
         removeErrorLayout()
         frame.recycle()
@@ -513,9 +523,21 @@ class WebtoonPageHolder(
                 removeErrorLayout()
             }
         } catch (e: Throwable) {
+            if (e is CancellationException) {
+                throw e
+            }
             logcat(LogPriority.ERROR, e)
             withUIContext {
-                markDecodeError()
+                if (e is FileNotFoundException &&
+                    !cacheEvictionRetried &&
+                    this@WebtoonPageHolder.page === currentPage &&
+                    currentPage.status == Page.State.READY
+                ) {
+                    cacheEvictionRetried = true
+                    currentPage.chapter.pageLoader?.retryPage(currentPage)
+                } else {
+                    markDecodeError()
+                }
             }
         }
     }
@@ -558,9 +580,14 @@ class WebtoonPageHolder(
             return ProcessedPageImage.Encoded(imageSource)
         }
         val rotation = if (viewer.config.dualPageRotateToFitInvert) -90f else 90f
-        return ImageUtil.rotateImageBitmap(imageSource.peek(), rotation)
-            ?.let { ProcessedPageImage.Decoded(it) }
-            ?: ProcessedPageImage.Encoded(ImageUtil.rotateImage(imageSource, rotation))
+        val rotatedBitmap = ImageUtil.rotateImageBitmap(imageSource.peek(), rotation)
+        if (rotatedBitmap != null) {
+            if (maxOf(rotatedBitmap.width, rotatedBitmap.height) <= ImageUtil.hardwareBitmapThreshold) {
+                return ProcessedPageImage.Decoded(rotatedBitmap)
+            }
+            rotatedBitmap.recycle()
+        }
+        return ProcessedPageImage.Encoded(ImageUtil.rotateImage(imageSource, rotation))
     }
 
     /**
@@ -577,17 +604,28 @@ class WebtoonPageHolder(
      * the status at READY and retryPage() became a no-op (the loader skips non-QUEUE pages).
      */
     private fun markDecodeError() {
-        val currentPage = page
-        if (currentPage != null && currentPage.status == Page.State.READY) {
+        val currentPage = page ?: return
+        if (currentPage.status == Page.State.READY) {
             currentPage.status = Page.State.ERROR
         }
-        setError()
+        if (currentPage.status == Page.State.ERROR) {
+            setError()
+        }
+    }
+
+    private fun handleTileLoadError() {
+        val currentPage = page ?: return
+        if (!tileErrorRetried && currentPage.status == Page.State.READY) {
+            tileErrorRetried = true
+            currentPage.chapter.pageLoader?.retryPage(currentPage)
+        }
     }
 
     /**
      * Called when the image is decoded and going to be displayed.
      */
     private fun onImageDecoded() {
+        cacheEvictionRetried = false
         progressContainer.isVisible = false
         removeErrorLayout()
         page?.let(viewer::onPageImageReady)

@@ -43,7 +43,6 @@ import dev.vivvvek.seeker.Segment
 import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.ui.player.controls.LocalPlayerButtonsClickEvent
 import `is`.xyz.mpv.Utils
-import androidx.compose.runtime.remember
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList

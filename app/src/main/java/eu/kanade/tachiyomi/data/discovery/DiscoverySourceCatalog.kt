@@ -1611,7 +1611,12 @@ class AppDiscoverySourceCatalog(
                 }
             }
             if (includeApplied) {
-                return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                return GenreFilterApplication(
+                    filters,
+                    includeApplied = true,
+                    excludeApplied = excludeApplied,
+                    excludedAll = excludedAll,
+                )
             }
         }
         if (!genres.isNullOrEmpty()) {
@@ -1623,7 +1628,12 @@ class AppDiscoverySourceCatalog(
                 val idx = names.indexOfFirst { it == targetName }
                 if (idx >= 0) {
                     select.state = idx
-                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                    return GenreFilterApplication(
+                        filters,
+                        includeApplied = true,
+                        excludeApplied = excludeApplied,
+                        excludedAll = excludedAll,
+                    )
                 }
             }
             val textFilter = filters.filterIsInstance<Filter.Text>().firstOrNull { isGenreGroupName(it.name) }
@@ -1632,7 +1642,12 @@ class AppDiscoverySourceCatalog(
                 val query = discoveryGenreSearchQuery(genres, lang)
                 if (query.isNotBlank()) {
                     textFilter.state = query
-                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                    return GenreFilterApplication(
+                        filters,
+                        includeApplied = true,
+                        excludeApplied = excludeApplied,
+                        excludedAll = excludedAll,
+                    )
                 }
             }
         }
@@ -1696,7 +1711,12 @@ class AppDiscoverySourceCatalog(
                 }
             }
             if (includeApplied) {
-                return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                return GenreFilterApplication(
+                    filters,
+                    includeApplied = true,
+                    excludeApplied = excludeApplied,
+                    excludedAll = excludedAll,
+                )
             }
         }
         if (!genres.isNullOrEmpty()) {
@@ -1708,7 +1728,12 @@ class AppDiscoverySourceCatalog(
                 val idx = names.indexOfFirst { it == targetName }
                 if (idx >= 0) {
                     select.state = idx
-                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                    return GenreFilterApplication(
+                        filters,
+                        includeApplied = true,
+                        excludeApplied = excludeApplied,
+                        excludedAll = excludedAll,
+                    )
                 }
             }
             val textFilter = filters.filterIsInstance<AnimeFilter.Text>().firstOrNull { isGenreGroupName(it.name) }
@@ -1717,7 +1742,12 @@ class AppDiscoverySourceCatalog(
                 val query = discoveryGenreSearchQuery(genres, lang)
                 if (query.isNotBlank()) {
                     textFilter.state = query
-                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                    return GenreFilterApplication(
+                        filters,
+                        includeApplied = true,
+                        excludeApplied = excludeApplied,
+                        excludedAll = excludedAll,
+                    )
                 }
             }
         }
@@ -1781,7 +1811,12 @@ class AppDiscoverySourceCatalog(
                 }
             }
             if (includeApplied) {
-                return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                return GenreFilterApplication(
+                    filters,
+                    includeApplied = true,
+                    excludeApplied = excludeApplied,
+                    excludedAll = excludedAll,
+                )
             }
         }
         if (!genres.isNullOrEmpty()) {
@@ -1793,7 +1828,12 @@ class AppDiscoverySourceCatalog(
                 val idx = names.indexOfFirst { it == targetName }
                 if (idx >= 0) {
                     select.state = idx
-                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                    return GenreFilterApplication(
+                        filters,
+                        includeApplied = true,
+                        excludeApplied = excludeApplied,
+                        excludedAll = excludedAll,
+                    )
                 }
             }
             val textFilter = filters.filterIsInstance<NovelFilter.Text>().firstOrNull { isGenreGroupName(it.name) }
@@ -1802,7 +1842,12 @@ class AppDiscoverySourceCatalog(
                 val query = discoveryGenreSearchQuery(genres, lang)
                 if (query.isNotBlank()) {
                     textFilter.state = query
-                    return GenreFilterApplication(filters, includeApplied = true, excludeApplied = excludeApplied, excludedAll = excludedAll)
+                    return GenreFilterApplication(
+                        filters,
+                        includeApplied = true,
+                        excludeApplied = excludeApplied,
+                        excludedAll = excludedAll,
+                    )
                 }
             }
         }

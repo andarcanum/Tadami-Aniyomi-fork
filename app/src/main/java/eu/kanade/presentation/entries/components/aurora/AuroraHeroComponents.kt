@@ -48,8 +48,8 @@ import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.theme.rememberLiveBackdropBlurEnabled
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
+import eu.kanade.presentation.theme.rememberLiveBackdropBlurEnabled
 import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource

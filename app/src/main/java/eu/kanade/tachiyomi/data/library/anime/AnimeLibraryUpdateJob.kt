@@ -292,11 +292,13 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                         emptySet()
                     }
 
-                    (if (excludedAnimeIds.isEmpty()) {
-                        includedAnime
-                    } else {
-                        includedAnime.filterNot { it.anime.id in excludedAnimeIds }
-                    }).distinctBy { it.anime.id }
+                    (
+                        if (excludedAnimeIds.isEmpty()) {
+                            includedAnime
+                        } else {
+                            includedAnime.filterNot { it.anime.id in excludedAnimeIds }
+                        }
+                        ).distinctBy { it.anime.id }
                 }
             }
         }

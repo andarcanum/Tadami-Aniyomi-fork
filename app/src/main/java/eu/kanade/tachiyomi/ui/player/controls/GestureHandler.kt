@@ -25,7 +25,6 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import eu.kanade.tachiyomi.ui.player.controls.components.resolvePinchAspectTransition
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -68,6 +67,7 @@ import eu.kanade.tachiyomi.ui.player.PlayerUpdates
 import eu.kanade.tachiyomi.ui.player.PlayerViewModel
 import eu.kanade.tachiyomi.ui.player.Sheets
 import eu.kanade.tachiyomi.ui.player.controls.components.DoubleTapSeekTriangles
+import eu.kanade.tachiyomi.ui.player.controls.components.resolvePinchAspectTransition
 import eu.kanade.tachiyomi.ui.player.settings.AudioPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences

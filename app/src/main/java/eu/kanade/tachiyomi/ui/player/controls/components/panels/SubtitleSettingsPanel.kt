@@ -30,13 +30,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Card
-import androidx.compose.runtime.remember
-import eu.kanade.presentation.player.components.SubtitleStylePreviewAndPresets
-import eu.kanade.tachiyomi.ui.player.controls.panelCardsColors
-import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
@@ -45,6 +38,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -59,10 +54,15 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
+import eu.kanade.presentation.player.components.SubtitleStylePreviewAndPresets
 import eu.kanade.tachiyomi.ui.player.controls.CARDS_MAX_WIDTH
+import eu.kanade.tachiyomi.ui.player.controls.panelCardsColors
+import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Composable
 fun SubtitleSettingsPanel(

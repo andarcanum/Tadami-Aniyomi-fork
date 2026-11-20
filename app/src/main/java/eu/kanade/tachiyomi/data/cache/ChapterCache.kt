@@ -5,7 +5,6 @@ import android.text.format.Formatter
 import com.jakewharton.disklrucache.DiskLruCache
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.storage.DiskUtil
-import eu.kanade.tachiyomi.util.storage.saveTo
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -146,6 +145,17 @@ class ChapterCache(
     }
 
     /**
+     * Removes a single cached image entry so retries can re-download a clean copy.
+     */
+    fun removeImageFromCache(imageUrl: String): Boolean {
+        return runCatching {
+            diskCache.remove(DiskUtil.hashKeyForDisk(imageUrl))
+        }.onFailure {
+            logcat(LogPriority.WARN, it) { "Failed to remove image from cache" }
+        }.getOrDefault(false)
+    }
+
+    /**
      * Opens a cached image stream via [DiskLruCache.get] so LRU recency is updated and the
      * underlying entry stays protected until the returned stream is closed.
      */
@@ -199,12 +209,36 @@ class ChapterCache(
         var editor: DiskLruCache.Editor? = null
 
         try {
+            val mediaType = response.body.contentType()
+            if (mediaType != null &&
+                (
+                    (
+                        mediaType.type.equals("text", ignoreCase = true) &&
+                            mediaType.subtype.equals("html", ignoreCase = true)
+                        ) ||
+                        mediaType.subtype.equals("xhtml+xml", ignoreCase = true)
+                    )
+            ) {
+                throw IOException("Unexpected HTML response for image: $mediaType")
+            }
+
             // Get editor from md5 key.
             val key = DiskUtil.hashKeyForDisk(imageUrl)
             editor = diskCache.edit(key) ?: throw IOException("Unable to edit key")
 
-            // Get OutputStream and write image with Okio.
-            response.body.source().saveTo(editor.newOutputStream(0))
+            // Write image body and verify we did not commit an empty or truncated payload.
+            val expectedLength = response.body.contentLength()
+            val bytesWritten = editor.newOutputStream(0).sink().buffer().use { sink ->
+                val count = sink.writeAll(response.body.source())
+                sink.flush()
+                count
+            }
+            if (bytesWritten <= 0L) {
+                throw IOException("Empty image response")
+            }
+            if (expectedLength > 0L && bytesWritten < expectedLength) {
+                throw IOException("Truncated image response ($bytesWritten/$expectedLength bytes)")
+            }
 
             editor.commit()
         } finally {

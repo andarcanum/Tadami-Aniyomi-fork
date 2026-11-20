@@ -263,7 +263,9 @@ public class SubsamplingScaleImageView extends View {
     private float externalScale = 1f;
     private boolean decodePriorityBoost = true;
     private boolean hardwareTilesEnabled = false;
+    private boolean hardwareFallbackTriggered = false;
     private long tileFadeDurationMs = TILE_FADE_DURATION_MS;
+    private final Rect clipBoundsRect = new Rect();
     private final Set<CancellableTask> activeTasks = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /** The viewport is in this view's coordinates. It does not change layout or gesture state. */
@@ -369,27 +371,65 @@ public class SubsamplingScaleImageView extends View {
         if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
                 || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
                 || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
-            boolean trimmed = false;
-            for (Map.Entry<Integer, List<Tile>> entry : tileMap.entrySet()) {
-                if (entry.getKey() == fullImageSampleSize) {
-                    continue;
-                }
-                for (Tile tile : entry.getValue()) {
-                    if (!tile.visible) {
-                        cancelTileTask(tile);
-                        if (tile.bitmap != null) {
-                            tile.bitmap.recycle();
-                            tile.bitmap = null;
-                            tile.fadeStartTimeMs = 0L;
-                            trimmed = true;
-                        }
-                    }
-                }
-            }
-            if (trimmed) {
+            if (evictOffscreenDetailTiles()) {
                 invalidate();
             }
         }
+    }
+
+    private boolean evictOffscreenDetailTiles() {
+        if (tileMap == null) {
+            return false;
+        }
+        boolean trimmed = false;
+        for (Map.Entry<Integer, List<Tile>> entry : tileMap.entrySet()) {
+            if (entry.getKey() == fullImageSampleSize) {
+                continue;
+            }
+            for (Tile tile : entry.getValue()) {
+                if (!tile.visible) {
+                    cancelTileTask(tile);
+                    tile.failed = false;
+                    tile.retryCount = 0;
+                    if (tile.bitmap != null) {
+                        tile.bitmap.recycle();
+                        tile.bitmap = null;
+                        tile.fadeStartTimeMs = 0L;
+                        trimmed = true;
+                    }
+                }
+            }
+        }
+        return trimmed;
+    }
+
+    /**
+     * Clears terminal failure markers on tiles and re-enqueues any visible or base tiles that
+     * previously failed to decode. Returns true if at least one failed tile was reset.
+     */
+    public final boolean retryFailedTiles() {
+        if (decoder == null || tileMap == null) {
+            return false;
+        }
+        boolean resetAny = false;
+        for (Map.Entry<Integer, List<Tile>> entry : tileMap.entrySet()) {
+            for (Tile tile : entry.getValue()) {
+                if (tile.failed) {
+                    tile.failed = false;
+                    tile.retryCount = 0;
+                    resetAny = true;
+                }
+            }
+        }
+        if (!resetAny) {
+            return false;
+        }
+        if (!isBaseLayerReady()) {
+            enqueueMissingBaseTiles();
+        }
+        refreshRequiredTiles(true);
+        invalidate();
+        return true;
     }
 
     protected ImageRegionDecoder createRegionDecoder() {
@@ -680,6 +720,7 @@ public class SubsamplingScaleImageView extends View {
             readySent = false;
             imageLoadedSent = false;
             imageLoadErrorSent = false;
+            hardwareFallbackTriggered = false;
             bitmap = null;
             bitmapIsCached = false;
             previewBitmap = null;
@@ -705,6 +746,16 @@ public class SubsamplingScaleImageView extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (decoder != null && tileMap != null) {
+            // Reset failed tiles when returning from RecyclerView cache or background so transient
+            // decode/memory failures self-heal automatically on re-entry.
+            for (Map.Entry<Integer, List<Tile>> entry : tileMap.entrySet()) {
+                for (Tile tile : entry.getValue()) {
+                    if (tile.failed) {
+                        tile.failed = false;
+                        tile.retryCount = 0;
+                    }
+                }
+            }
             if (!isBaseLayerReady()) {
                 enqueueMissingBaseTiles();
                 invalidate();
@@ -1245,17 +1296,33 @@ public class SubsamplingScaleImageView extends View {
             long now = SystemClock.uptimeMillis();
             boolean hasAnimatingFade = false;
 
-            // Keep base layer visible while fine tiles are missing OR cross-fading in.
+            // Keep base layer visible while fine tiles are missing, cross-fading in, OR whenever
+            // the external viewport is empty/lagging behind the actual visible canvas clip bounds.
+            boolean hasClip = externalViewportEnabled && canvas.getClipBounds(clipBoundsRect);
             boolean needBaseLayer = false;
+            int visibleDetailCount = 0;
             for (Map.Entry<Integer, List<Tile>> tileMapEntry : tileMap.entrySet()) {
                 if (tileMapEntry.getKey() == sampleSize) {
                     for (Tile tile : tileMapEntry.getValue()) {
-                        if (tile.visible && (tile.loading || tile.bitmap == null || isTileFading(tile, now))) {
-                            needBaseLayer = true;
-                            break;
+                        if (tile.visible) {
+                            visibleDetailCount++;
+                            if (tile.loading || tile.bitmap == null || isTileFading(tile, now)) {
+                                needBaseLayer = true;
+                                break;
+                            }
+                        } else if (hasClip && sampleSize < fullImageSampleSize) {
+                            sourceToViewRect(tile.sRect, tile.vRect);
+                            if (Rect.intersects(tile.vRect, clipBoundsRect)
+                                    && (tile.loading || tile.bitmap == null || isTileFading(tile, now))) {
+                                needBaseLayer = true;
+                                break;
+                            }
                         }
                     }
                 }
+            }
+            if (sampleSize < fullImageSampleSize && visibleDetailCount == 0) {
+                needBaseLayer = true;
             }
 
             // Render all loaded tiles. LinkedHashMap used for bottom up rendering - lower res tiles underneath.
@@ -1263,7 +1330,10 @@ public class SubsamplingScaleImageView extends View {
                 if (tileMapEntry.getKey() == sampleSize || (needBaseLayer && tileMapEntry.getKey() == fullImageSampleSize)) {
                     for (Tile tile : tileMapEntry.getValue()) {
                         sourceToViewRect(tile.sRect, tile.vRect);
-                        if (!tile.loading && tile.bitmap != null && (tile.visible || tile.sampleSize == fullImageSampleSize)) {
+                        boolean shouldDrawTile = tile.visible
+                                || tile.sampleSize == fullImageSampleSize
+                                || (hasClip && Rect.intersects(tile.vRect, clipBoundsRect));
+                        if (!tile.loading && tile.bitmap != null && shouldDrawTile) {
                             if (tileBgPaint != null) {
                                 canvas.drawRect(tile.vRect, tileBgPaint);
                             }
@@ -1736,6 +1806,9 @@ public class SubsamplingScaleImageView extends View {
                         tile.fadeStartTimeMs = 0L;
                         if (tile.bitmap == null) {
                             cancelTileTask(tile);
+                            // Allow previously failed tiles to retry once they scroll back into view.
+                            tile.failed = false;
+                            tile.retryCount = 0;
                         }
                     } else if (tile.sampleSize != fullImageSampleSize) {
                         if (tile.visible) {
@@ -1743,6 +1816,8 @@ public class SubsamplingScaleImageView extends View {
                         }
                         tile.visible = false;
                         cancelTileTask(tile);
+                        tile.failed = false;
+                        tile.retryCount = 0;
                         tile.fadeStartTimeMs = 0L;
                         if (tile.bitmap != null) {
                             tile.bitmap.recycle();
@@ -2014,10 +2089,10 @@ public class SubsamplingScaleImageView extends View {
      */
     private synchronized void onTilesInited(ImageRegionDecoder decoder, int sWidth, int sHeight) {
         debug("onTilesInited sWidth=%d, sHeight=%d", sWidth, sHeight);
-        // If actual dimensions don't match the declared size, reset everything.
+        // If actual dimensions don't match the declared size, reset tiles/transform while keeping
+        // previewBitmap until the base tile layer finishes loading (avoids a black flash).
         if (this.sWidth > 0 && this.sHeight > 0 && (this.sWidth != sWidth || this.sHeight != sHeight)) {
             reset(false);
-            previewBitmap = null;
             if (bitmap != null) {
                 if (!bitmapIsCached) {
                     bitmap.recycle();
@@ -2069,6 +2144,14 @@ public class SubsamplingScaleImageView extends View {
     private void onTileDecodeFailed(@NonNull Tile tile, @NonNull Exception error) {
         tile.retryCount++;
         if (tile.retryCount <= MAX_TILE_RETRIES) {
+            if (tile.retryCount == 1) {
+                // Free offscreen retained tiles before retrying in case of native/GPU memory pressure.
+                evictOffscreenDetailTiles();
+            } else if (tile.retryCount == MAX_TILE_RETRIES && hardwareTilesEnabled && !hardwareFallbackTriggered) {
+                // Fall back to software tiles for the final retry in case HARDWARE/Gralloc allocation failed.
+                hardwareFallbackTriggered = true;
+                setHardwareTilesEnabled(false);
+            }
             tile.retryPending = true;
             long expectedGen = tileGeneration;
             Runnable retryRunnable = () -> {

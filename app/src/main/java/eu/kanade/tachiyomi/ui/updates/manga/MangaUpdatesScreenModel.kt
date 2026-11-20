@@ -8,7 +8,6 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
-import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import eu.kanade.domain.items.chapter.interactor.SetReadStatus
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.updates.manga.MangaUpdatesUiModel
@@ -16,6 +15,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentListOf

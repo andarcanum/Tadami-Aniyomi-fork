@@ -23,6 +23,7 @@ class HosterLoader {
     companion object {
         internal const val MAX_CONCURRENT_HOSTER_LOADS = 4
         internal const val DEFAULT_RESOLVE_TIMEOUT_MS = 15_000L
+
         /**
          * Check for the best video from the current hosterState.
          *

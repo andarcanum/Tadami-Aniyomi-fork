@@ -41,6 +41,21 @@ open class WebtoonSubsamplingImageView @JvmOverloads constructor(
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Re-sync viewport immediately when returning from RecyclerView.mCachedViews so holders
+        // that skip onLayout(changed=true) do not stay stuck with the empty viewport set on detach.
+        if (width > 0 && height > 0) {
+            findAncestorRecyclerView()?.updateViewportForChild(this)
+        } else {
+            post {
+                if (isAttachedToWindow && width > 0 && height > 0) {
+                    findAncestorRecyclerView()?.updateViewportForChild(this)
+                }
+            }
+        }
+    }
+
     override fun onDetachedFromWindow() {
         // Clear visible & prefetch so off-window mCachedViews holders stop requesting new loads
         // while preserving already-decoded detail tiles inside retainViewport across scroll reversals.
@@ -48,6 +63,15 @@ open class WebtoonSubsamplingImageView @JvmOverloads constructor(
         localViewport.setEmpty()
         setExternalViewport(visibleViewport, localViewport, retainViewport, lastDisplayScale)
         super.onDetachedFromWindow()
+    }
+
+    override fun recycle() {
+        visibleViewport.setEmpty()
+        localViewport.setEmpty()
+        retainViewport.setEmpty()
+        lastDisplayScale = 1f
+        setExternalViewport(visibleViewport, localViewport, retainViewport, lastDisplayScale)
+        super.recycle()
     }
 
     private fun findAncestorRecyclerView(): WebtoonRecyclerView? {

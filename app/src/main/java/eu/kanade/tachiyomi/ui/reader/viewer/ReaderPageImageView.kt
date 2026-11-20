@@ -131,8 +131,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
         landscapeZoomRunnable = null
     }
 
+    private var tileLoadErrorDispatched: Boolean = false
+
     var onImageLoaded: (() -> Unit)? = null
     var onImageLoadError: (() -> Unit)? = null
+    var onTileLoadError: ((Exception) -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
     var onCenterChanged: ((newCenter: PointF?) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
@@ -159,6 +162,19 @@ open class ReaderPageImageView @JvmOverloads constructor(
     @CallSuper
     open fun onImageLoadError() {
         onImageLoadError?.invoke()
+    }
+
+    @CallSuper
+    open fun onTileLoadError(e: Exception) {
+        if (tileLoadErrorDispatched) return
+        tileLoadErrorDispatched = true
+        (pageView as? SubsamplingScaleImageView)?.let { view ->
+            view.trimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
+            if (view.isHardwareTilesEnabled) {
+                view.setHardwareTilesEnabled(false)
+            }
+        }
+        onTileLoadError?.invoke(e)
     }
 
     @CallSuper
@@ -193,8 +209,16 @@ open class ReaderPageImageView @JvmOverloads constructor(
                             this@ReaderPageImageView.onImageLoaded()
                         }
 
+                        override fun onImageLoaded() {
+                            this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
+                        }
+
                         override fun onImageLoadError(e: Exception) {
-                            onImageLoadError()
+                            this@ReaderPageImageView.onImageLoadError()
+                        }
+
+                        override fun onTileLoadError(e: Exception) {
+                            this@ReaderPageImageView.onTileLoadError(e)
                         }
                     },
                 )
@@ -276,6 +300,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     private fun setImageInternal(data: Any, isAnimated: Boolean, config: Config) {
         this.config = config
+        tileLoadErrorDispatched = false
         pendingSmartFit = null
         pendingAnimatedImage = null
         smartFitJob?.cancel()
@@ -291,6 +316,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     open fun recycle() {
+        tileLoadErrorDispatched = false
         pendingSmartFit = null
         pendingAnimatedImage = null
         smartFitJob?.cancel()
@@ -333,6 +359,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     fun trimMemory(level: Int) {
         (pageView as? SubsamplingScaleImageView)?.trimMemory(level)
+    }
+
+    fun retryFailedTiles(): Boolean {
+        return (pageView as? SubsamplingScaleImageView)?.retryFailedTiles() == true
     }
 
     /**
@@ -533,6 +563,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
                 override fun onImageLoadError(e: Exception) {
                     this@ReaderPageImageView.onImageLoadError()
+                }
+
+                override fun onTileLoadError(e: Exception) {
+                    this@ReaderPageImageView.onTileLoadError(e)
                 }
             },
         )

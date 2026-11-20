@@ -20,13 +20,13 @@ import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.extension.novel.NovelPluginId
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
+import eu.kanade.tachiyomi.ui.browse.ExtensionSearchFilter
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import eu.kanade.tachiyomi.ui.browse.ExtensionSearchFilter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate

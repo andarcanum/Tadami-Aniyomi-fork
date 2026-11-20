@@ -77,11 +77,10 @@ import mihon.core.archive.epubReader
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.getAndSet
-import java.text.CollationKey
 import tachiyomi.core.common.util.lang.compareCollationKeys
-import tachiyomi.core.common.util.lang.toCollationKey
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.lang.toCollationKey
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.GetVisibleNovelCategories
@@ -116,6 +115,7 @@ import tachiyomi.source.local.entries.novel.LocalNovelSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.IOException
+import java.text.CollationKey
 import kotlin.random.Random
 
 typealias NovelLibraryMap = PersistentMap<Category, PersistentList<NovelLibraryItem>>

@@ -10,12 +10,15 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.items.chapter.model.Chapter
 import java.io.FileNotFoundException
+import java.io.IOException
 import java.nio.file.Path
 import kotlin.test.assertFailsWith
 
@@ -110,6 +113,70 @@ class ChapterCacheTest {
         cache.putPageListToCache(chapter, pages)
         cache.getPageListFromCache(chapter, maxAgeMs = -1L) shouldBe emptyList()
         cache.getPageListFromCache(chapter, maxAgeMs = 60_000L).size shouldBe 1
+    }
+
+    @Test
+    fun `putImageToCache rejects empty response body without committing`() {
+        val cache = createCache().also { this.cache = it }
+        val url = "https://example.org/empty.png"
+
+        assertFailsWith<IOException> {
+            cache.putImageToCache(url, createImageResponse(url, ByteArray(0)))
+        }
+        cache.isImageInCache(url) shouldBe false
+    }
+
+    @Test
+    fun `putImageToCache rejects truncated response body shorter than content length`() {
+        val cache = createCache().also { this.cache = it }
+        val url = "https://example.org/truncated.png"
+        val truncatedBody = object : ResponseBody() {
+            override fun contentType() = "image/png".toMediaType()
+            override fun contentLength() = 1024L
+            override fun source() = Buffer().write(ByteArray(128) { 7 })
+        }
+        val response = Response.Builder()
+            .request(Request.Builder().url(url).build())
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .body(truncatedBody)
+            .build()
+
+        assertFailsWith<IOException> {
+            cache.putImageToCache(url, response)
+        }
+        cache.isImageInCache(url) shouldBe false
+    }
+
+    @Test
+    fun `putImageToCache rejects html error pages without committing`() {
+        val cache = createCache().also { this.cache = it }
+        val url = "https://example.org/cloudflare.png"
+        val response = Response.Builder()
+            .request(Request.Builder().url(url).build())
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .body("<html><body>Challenge</body></html>".toResponseBody("text/html; charset=utf-8".toMediaType()))
+            .build()
+
+        assertFailsWith<IOException> {
+            cache.putImageToCache(url, response)
+        }
+        cache.isImageInCache(url) shouldBe false
+    }
+
+    @Test
+    fun `removeImageFromCache evicts existing entry and returns false when missing`() {
+        val cache = createCache().also { this.cache = it }
+        val url = "https://example.org/removable.png"
+        cache.putImageToCache(url, createImageResponse(url, ByteArray(64) { 3 }))
+        cache.isImageInCache(url) shouldBe true
+
+        cache.removeImageFromCache(url) shouldBe true
+        cache.isImageInCache(url) shouldBe false
+        cache.removeImageFromCache(url) shouldBe false
     }
 
     private fun createImageResponse(url: String, bytes: ByteArray): Response {

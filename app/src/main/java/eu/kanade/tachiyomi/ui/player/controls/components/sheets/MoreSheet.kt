@@ -485,7 +485,9 @@ fun MoreSheet(
                             }
 
                             Text(
-                                text = "HDR: ${stringResource(hdrMode.titleRes)} · AFR: ${if (matchRefreshRate) "ON" else "OFF"}",
+                                text = "HDR: ${stringResource(
+                                    hdrMode.titleRes,
+                                )} · AFR: ${if (matchRefreshRate) "ON" else "OFF"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -577,7 +579,9 @@ fun MoreSheet(
                                                 MPVLib.command(arrayOf("script-binding", "stats/display-stats-toggle"))
                                             }
                                             if (statsPage != 0) {
-                                                MPVLib.command(arrayOf("script-binding", "stats/display-page-$statsPage"))
+                                                MPVLib.command(
+                                                    arrayOf("script-binding", "stats/display-page-$statsPage"),
+                                                )
                                             }
                                             advancedPreferences.playerStatisticsPage().set(statsPage)
                                         },
@@ -703,7 +707,13 @@ fun TimePickerDialog(
                 ) {
                     IconButton(onClick = { currentLayoutType = if (currentLayoutType == 0) 1 else 0 }) {
                         Icon(
-                            imageVector = if (currentLayoutType == 0) Icons.Default.KeyboardAlt else Icons.Outlined.Schedule,
+                            imageVector = if (currentLayoutType ==
+                                0
+                            ) {
+                                Icons.Default.KeyboardAlt
+                            } else {
+                                Icons.Outlined.Schedule
+                            },
                             contentDescription = null,
                         )
                     }

@@ -113,7 +113,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil3.compose.AsyncImage
 import coil3.request.crossfade
 import coil3.size.Precision
-import coil3.size.Size as CoilSize
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.ui.model.HomeHeroMode
 import eu.kanade.presentation.components.AdaptiveSheet
@@ -162,6 +161,7 @@ import uy.kohesive.injekt.api.get
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import coil3.size.Size as CoilSize
 
 // ============================ Чистые функции (тестируются) ============================
 

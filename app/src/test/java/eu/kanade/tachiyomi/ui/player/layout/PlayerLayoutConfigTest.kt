@@ -59,6 +59,7 @@ class PlayerLayoutConfigTest {
             PlayerLayoutOrientation.Landscape,
         )
         PlayerLayoutPreset.Minimal.matches(minimal, PlayerLayoutOrientation.Landscape) shouldBe true
-        minimal.regionFor(PlayerLayoutOrientation.Landscape, PlayerLayoutSlot.PictureInPicture) shouldBe PlayerLayoutRegion.Hidden
+        minimal.regionFor(PlayerLayoutOrientation.Landscape, PlayerLayoutSlot.PictureInPicture) shouldBe
+            PlayerLayoutRegion.Hidden
     }
 }

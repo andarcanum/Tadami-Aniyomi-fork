@@ -3,9 +3,9 @@ package eu.kanade.tachiyomi.ui.history.novel
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.tachiyomi.ui.library.leadingDebounce
 import eu.kanade.domain.entries.novel.LocalNovelVisibility
 import eu.kanade.presentation.history.novel.NovelHistoryUiModel
+import eu.kanade.tachiyomi.ui.library.leadingDebounce
 import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel

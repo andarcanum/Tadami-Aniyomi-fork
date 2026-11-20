@@ -76,7 +76,6 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import coil3.request.crossfade
 import coil3.size.Precision
-import coil3.size.Size as CoilSize
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.HazeBlurStyle
@@ -131,6 +130,7 @@ import uy.kohesive.injekt.api.get
 import java.io.Serializable
 import androidx.compose.foundation.lazy.items as lazyRowItems
 import cafe.adriel.voyager.core.screen.Screen as VoyagerScreenInterface
+import coil3.size.Size as CoilSize
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as prefCollectAsStateWithLifecycle
 

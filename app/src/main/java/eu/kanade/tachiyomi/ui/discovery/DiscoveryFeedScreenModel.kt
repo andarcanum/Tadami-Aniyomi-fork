@@ -25,6 +25,8 @@ import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
+import eu.kanade.tachiyomi.ui.home.allowsColdStartDisplay
+import eu.kanade.tachiyomi.ui.home.selectColdStartVisibleCandidates
 import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.workManager
@@ -57,8 +59,6 @@ import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import eu.kanade.tachiyomi.ui.home.allowsColdStartDisplay
-import eu.kanade.tachiyomi.ui.home.selectColdStartVisibleCandidates
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import tachiyomi.core.common.i18n.stringResource as contextStringResource

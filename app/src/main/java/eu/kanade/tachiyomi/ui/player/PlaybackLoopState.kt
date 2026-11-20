@@ -51,7 +51,7 @@ internal fun formatBufferingCaption(
 }
 
 internal fun formatNetworkRate(bytesPerSec: Long): String {
-    if (bytesPerSec < 1024L) return "${bytesPerSec} B/s"
+    if (bytesPerSec < 1024L) return "$bytesPerSec B/s"
     val kb = bytesPerSec / 1024.0
     if (kb < 1024.0) return "${kb.roundToInt()} KB/s"
     val mb = kb / 1024.0

@@ -25,10 +25,10 @@ import dev.vivvvek.seeker.Segment
 import eu.kanade.tachiyomi.ui.player.AbLoopState
 import eu.kanade.tachiyomi.ui.player.ArtType
 import eu.kanade.tachiyomi.ui.player.Decoder
-import eu.kanade.tachiyomi.ui.player.VideoAspect
 import eu.kanade.tachiyomi.ui.player.Panels
 import eu.kanade.tachiyomi.ui.player.PlayerViewModel.VideoTrack
 import eu.kanade.tachiyomi.ui.player.Sheets
+import eu.kanade.tachiyomi.ui.player.VideoAspect
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.AudioTracksSheet
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.ChaptersSheet
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState

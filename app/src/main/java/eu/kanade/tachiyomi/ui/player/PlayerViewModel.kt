@@ -299,6 +299,7 @@ class PlayerViewModel @JvmOverloads constructor(
     private val isAutoFallingBack = AtomicBoolean(false)
     private val progressPersistencePolicy = PlaybackProgressPersistencePolicy()
     private val nextEpisodePrefetcher = NextEpisodePrefetcher()
+
     @Volatile
     private var downloadAheadTriggeredForEpisodeId: Long? = null
     private val _currentVideo = MutableStateFlow<Video?>(null)

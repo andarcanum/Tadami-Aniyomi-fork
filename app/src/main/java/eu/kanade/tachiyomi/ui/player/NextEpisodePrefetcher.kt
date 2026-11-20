@@ -40,7 +40,9 @@ internal class NextEpisodePrefetcher(
         val now = clockMs()
         synchronized(lock) {
             val currentCached = cached
-            if (currentCached != null && currentCached.episodeId == episodeId && (now - currentCached.cachedAtMs) < ttlMs) {
+            if (currentCached != null && currentCached.episodeId == episodeId &&
+                (now - currentCached.cachedAtMs) < ttlMs
+            ) {
                 return
             }
             if (inFlightEpisodeId == episodeId && inFlightJob?.isActive == true) {

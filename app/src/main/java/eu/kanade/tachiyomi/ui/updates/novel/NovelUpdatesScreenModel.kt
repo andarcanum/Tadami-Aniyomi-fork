@@ -7,9 +7,9 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
-import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import eu.kanade.presentation.updates.novel.NovelUpdatesUiModel
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
