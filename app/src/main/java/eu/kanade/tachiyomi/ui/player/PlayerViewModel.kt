@@ -113,6 +113,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
@@ -124,7 +125,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
@@ -533,30 +536,42 @@ class PlayerViewModel @JvmOverloads constructor(
         MPVLib.getPropertyString("track-list/$it/type")
     }
 
+    private val trackLoadingMutex = Mutex()
     private var trackLoadingJob: Job? = null
     fun loadTracks() {
         trackLoadingJob?.cancel()
         trackLoadingJob = viewModelScope.launchIO {
+            // Coalesce burst `track-list` observer notifications during file load / track-add
+            // and serialize JNI reads so two IO threads never query `track-list/*` concurrently.
+            delay(25)
             val possibleTrackTypes = listOf("audio", "sub")
             val subTracks = mutableListOf<VideoTrack>()
             val audioTracks = mutableListOf(
                 VideoTrack(-1, activity.stringResource(MR.strings.off), null),
             )
-            try {
-                val tracksCount = MPVLib.getPropertyInt("track-list/count") ?: 0
-                for (i in 0..<tracksCount) {
-                    val type = getTrackType(i)
-                    if (!possibleTrackTypes.contains(type) || type == null) continue
-                    when (type) {
-                        "sub" -> subTracks.add(VideoTrack(getTrackMPVId(i), getTrackTitle(i), getTrackLanguage(i)))
-                        "audio" -> audioTracks.add(VideoTrack(getTrackMPVId(i), getTrackTitle(i), getTrackLanguage(i)))
-                        else -> error("Unrecognized track type")
+            val loaded = trackLoadingMutex.withLock {
+                ensureActive()
+                if (activity.player.isExiting) return@withLock false
+                try {
+                    val tracksCount = MPVLib.getPropertyInt("track-list/count") ?: 0
+                    for (i in 0..<tracksCount) {
+                        ensureActive()
+                        val type = getTrackType(i)
+                        if (!possibleTrackTypes.contains(type) || type == null) continue
+                        when (type) {
+                            "sub" -> subTracks.add(VideoTrack(getTrackMPVId(i), getTrackTitle(i), getTrackLanguage(i)))
+                            "audio" -> audioTracks.add(VideoTrack(getTrackMPVId(i), getTrackTitle(i), getTrackLanguage(i)))
+                            else -> error("Unrecognized track type")
+                        }
                     }
+                    true
+                } catch (e: NullPointerException) {
+                    logcat(LogPriority.ERROR) { "Couldn't load tracks, probably cause mpv was destroyed" }
+                    false
                 }
-            } catch (e: NullPointerException) {
-                logcat(LogPriority.ERROR) { "Couldn't load tracks, probably cause mpv was destroyed" }
-                return@launchIO
             }
+            if (!loaded) return@launchIO
+            ensureActive()
             _subtitleTracks.update { subTracks }
             _audioTracks.update { audioTracks }
 
@@ -1218,7 +1233,6 @@ class PlayerViewModel @JvmOverloads constructor(
 
             VideoAspect.Fit -> {
                 pan = 0.0
-                MPVLib.setPropertyDouble("panscan", 0.0)
             }
 
             VideoAspect.Stretch -> {
@@ -1229,7 +1243,11 @@ class PlayerViewModel @JvmOverloads constructor(
             }
         }
         MPVLib.setPropertyDouble("panscan", pan)
-        MPVLib.setPropertyDouble("video-aspect-override", ratio)
+        if (ratio < 0.0) {
+            MPVLib.setPropertyString("video-aspect-override", "no")
+        } else {
+            MPVLib.setPropertyDouble("video-aspect-override", ratio)
+        }
         if (playerPreferences.aspectState().get() != aspect) {
             playerPreferences.aspectState().set(aspect)
             playerUpdate.update { PlayerUpdates.AspectRatio }
@@ -1932,10 +1950,13 @@ class PlayerViewModel @JvmOverloads constructor(
         }
 
         getHosterVideoLinksJob?.cancel()
+        val useFastLazyStartup = hosterIndex < 0 &&
+            filteredHosterList.count { !it.lazy && it.videoList == null } > HosterStartupPlanner.EAGER_HOSTER_LOAD_THRESHOLD
+
         getHosterVideoLinksJob = viewModelScope.launchIO {
             _hosterState.update { _ ->
                 filteredHosterList.map { hoster ->
-                    if (hoster.lazy) {
+                    if (hoster.lazy || (useFastLazyStartup && hoster.videoList == null)) {
                         HosterState.Idle(
                             name = hoster.hosterName,
                             playerId = hoster.playerId,
@@ -1979,89 +2000,155 @@ class PlayerViewModel @JvmOverloads constructor(
                 }
             }
 
-            val hosterLoadSemaphore = Semaphore(HosterLoader.MAX_CONCURRENT_HOSTER_LOADS)
             try {
-                coroutineScope {
-                    filteredHosterList.mapIndexed { hosterIdx, hoster ->
-                        async {
-                            val hosterState = hosterLoadSemaphore.withPermit {
-                                EpisodeLoader.loadHosterVideos(source, hoster)
+                if (useFastLazyStartup) {
+                    // Prioritize hosters by metadata (preferred player/dubbing) and start playback
+                    // as soon as the first viable hoster resolves. Remaining hosters stay Idle
+                    // (loaded on demand in QualitySheet or on runtime playback fallback) instead
+                    // of blocking startup on all N hosters and allocating hundreds of MB in JS.
+                    val orderedCandidates = HosterStartupPlanner.orderIndicesForStartup(
+                        hosters = filteredHosterList,
+                        preferences = playbackPreferences,
+                    )
+                    logcat(LogPriority.DEBUG) {
+                        "loadHosters: fast-start mode (${filteredHosterList.size} hosters), order=${orderedCandidates.take(5)}"
+                    }
+
+                    var started = false
+                    for (candidateIdx in orderedCandidates) {
+                        val hoster = filteredHosterList[candidateIdx]
+                        val readyState = when (val existing = _hosterState.value[candidateIdx]) {
+                            is HosterState.Ready -> existing
+                            else -> {
+                                _hosterState.updateAt(
+                                    candidateIdx,
+                                    HosterState.Loading(
+                                        name = hoster.hosterName,
+                                        playerId = hoster.playerId,
+                                        playerLabel = hoster.playerLabel,
+                                        dubbingId = hoster.dubbingId,
+                                        dubbingLabel = hoster.dubbingLabel,
+                                        sortOrder = hoster.sortOrder,
+                                    ),
+                                )
+                                val loaded = EpisodeLoader.loadHosterVideos(source, hoster)
+                                _hosterState.updateAt(candidateIdx, loaded)
+                                loaded as? HosterState.Ready
                             }
+                        }
 
-                            _hosterState.updateAt(hosterIdx, hosterState)
+                        if (readyState != null && readyState.videoList.isNotEmpty()) {
+                            val selectedVideoIdx = HosterStartupPlanner.selectVideoIndexForHoster(
+                                hoster = readyState,
+                                preferences = playbackPreferences,
+                            )
+                            if (selectedVideoIdx != null) {
+                                val success = loadVideo(
+                                    source = source,
+                                    video = readyState.videoList[selectedVideoIdx],
+                                    hosterIndex = candidateIdx,
+                                    videoIndex = selectedVideoIdx,
+                                    allowDeferredFallback = true,
+                                )
+                                if (success) {
+                                    hasFoundPreferredVideo.set(true)
+                                    started = true
+                                    break
+                                }
+                            }
+                        }
+                    }
 
-                            if (hosterState is HosterState.Ready) {
-                                val prefIndex = hosterState.videoList.indexOfFirst { it.preferred }
-                                if (!hasExplicitPlaybackPreferences(playbackPreferences) &&
-                                    prefIndex != -1 &&
-                                    hosterIndex == -1
-                                ) {
-                                    if (hasFoundPreferredVideo.compareAndSet(false, true)) {
-                                        if (selectedHosterVideoIndex.value == Pair(-1, -1)) {
-                                            val success =
-                                                loadVideo(
-                                                    source,
-                                                    hosterState.videoList[prefIndex],
-                                                    hosterIdx,
-                                                    prefIndex,
-                                                )
-                                            if (!success) {
-                                                hasFoundPreferredVideo.set(false)
+                    if (!started) {
+                        logcat(LogPriority.DEBUG) {
+                            "loadHosters: fast-start exhausted all ${orderedCandidates.size} candidates"
+                        }
+                        throw ExceptionWithStringResource("No available videos", AYMR.strings.no_available_videos)
+                    }
+                } else {
+                    val hosterLoadSemaphore = Semaphore(HosterLoader.MAX_CONCURRENT_HOSTER_LOADS)
+                    coroutineScope {
+                        filteredHosterList.mapIndexed { hosterIdx, hoster ->
+                            async {
+                                val hosterState = hosterLoadSemaphore.withPermit {
+                                    EpisodeLoader.loadHosterVideos(source, hoster)
+                                }
+
+                                _hosterState.updateAt(hosterIdx, hosterState)
+
+                                if (hosterState is HosterState.Ready) {
+                                    val prefIndex = hosterState.videoList.indexOfFirst { it.preferred }
+                                    if (!hasExplicitPlaybackPreferences(playbackPreferences) &&
+                                        prefIndex != -1 &&
+                                        hosterIndex == -1
+                                    ) {
+                                        if (hasFoundPreferredVideo.compareAndSet(false, true)) {
+                                            if (selectedHosterVideoIndex.value == Pair(-1, -1)) {
+                                                val success =
+                                                    loadVideo(
+                                                        source,
+                                                        hosterState.videoList[prefIndex],
+                                                        hosterIdx,
+                                                        prefIndex,
+                                                    )
+                                                if (!success) {
+                                                    hasFoundPreferredVideo.set(false)
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }.awaitAll()
+                        }.awaitAll()
 
-                    if (hasFoundPreferredVideo.compareAndSet(false, true)) {
-                        var (hosterIdx, videoIdx) = findVideoByPlaybackPreferences(
-                            hosterState.value,
-                            playbackPreferences,
-                        )
-
-                        logcat(LogPriority.DEBUG) {
-                            "loadHosters: playback resolver returned hosterIdx=$hosterIdx, videoIdx=$videoIdx"
-                        }
-
-                        if (hosterIdx == -1) {
-                            val legacyDubbing = playbackPreferences.preferredDubbingCdn.ifBlank {
-                                playbackPreferences.preferredDubbingKodik
-                            }
-                            val legacyQuality = if (legacyDubbing == playbackPreferences.preferredDubbingKodik) {
-                                playbackPreferences.preferredQualityKodik
-                            } else {
-                                playbackPreferences.preferredQualityCdn
-                            }
-                            val legacy = findLegacyVideoByDubbingAndQuality(
+                        if (hasFoundPreferredVideo.compareAndSet(false, true)) {
+                            var (hosterIdx, videoIdx) = findVideoByPlaybackPreferences(
                                 hosterState.value,
-                                legacyDubbing,
-                                legacyQuality,
+                                playbackPreferences,
                             )
-                            hosterIdx = legacy.first
-                            videoIdx = legacy.second
-                        }
 
-                        if (hosterIdx == -1) {
-                            val best = HosterLoader.selectBestVideo(hosterState.value)
-                            hosterIdx = best.first
-                            videoIdx = best.second
                             logcat(LogPriority.DEBUG) {
-                                "loadHosters: Using selectBestVideo fallback: hosterIdx=$hosterIdx, videoIdx=$videoIdx"
+                                "loadHosters: playback resolver returned hosterIdx=$hosterIdx, videoIdx=$videoIdx"
                             }
-                        }
 
-                        if (hosterIdx == -1) {
-                            logcat(LogPriority.DEBUG) {
-                                "loadHosters: no playable hoster after resolver and fallback checks; hosters=${hosterState.value.size}"
+                            if (hosterIdx == -1) {
+                                val legacyDubbing = playbackPreferences.preferredDubbingCdn.ifBlank {
+                                    playbackPreferences.preferredDubbingKodik
+                                }
+                                val legacyQuality = if (legacyDubbing == playbackPreferences.preferredDubbingKodik) {
+                                    playbackPreferences.preferredQualityKodik
+                                } else {
+                                    playbackPreferences.preferredQualityCdn
+                                }
+                                val legacy = findLegacyVideoByDubbingAndQuality(
+                                    hosterState.value,
+                                    legacyDubbing,
+                                    legacyQuality,
+                                )
+                                hosterIdx = legacy.first
+                                videoIdx = legacy.second
                             }
-                            throw ExceptionWithStringResource("No available videos", AYMR.strings.no_available_videos)
+
+                            if (hosterIdx == -1) {
+                                val best = HosterLoader.selectBestVideo(hosterState.value)
+                                hosterIdx = best.first
+                                videoIdx = best.second
+                                logcat(LogPriority.DEBUG) {
+                                    "loadHosters: Using selectBestVideo fallback: hosterIdx=$hosterIdx, videoIdx=$videoIdx"
+                                }
+                            }
+
+                            if (hosterIdx == -1) {
+                                logcat(LogPriority.DEBUG) {
+                                    "loadHosters: no playable hoster after resolver and fallback checks; hosters=${hosterState.value.size}"
+                                }
+                                throw ExceptionWithStringResource("No available videos", AYMR.strings.no_available_videos)
+                            }
+
+                            val video = (hosterState.value[hosterIdx] as HosterState.Ready).videoList[videoIdx]
+
+                            loadVideo(source, video, hosterIdx, videoIdx)
                         }
-
-                        val video = (hosterState.value[hosterIdx] as HosterState.Ready).videoList[videoIdx]
-
-                        loadVideo(source, video, hosterIdx, videoIdx)
                     }
                 }
             } catch (e: CancellationException) {
@@ -2089,6 +2176,7 @@ class PlayerViewModel @JvmOverloads constructor(
         hosterIndex: Int,
         videoIndex: Int,
         resumePositionMs: Long? = null,
+        allowDeferredFallback: Boolean = false,
     ): Boolean {
         val selectedHosterState = (_hosterState.value[hosterIndex] as? HosterState.Ready) ?: return false
         updateIsLoadingEpisode(true)
@@ -2134,7 +2222,7 @@ class PlayerViewModel @JvmOverloads constructor(
                         "loadVideo: no fallback videos after resolve failure; " +
                             "loadingHosters=${_hosterState.value.count { it is HosterState.Loading }}"
                     }
-                    if (_hosterState.value.any { it is HosterState.Loading }) {
+                    if (allowDeferredFallback || _hosterState.value.any { it is HosterState.Loading }) {
                         _selectedHosterVideoIndex.update { _ -> Pair(-1, -1) }
                         return false
                     } else {
@@ -2205,40 +2293,119 @@ class PlayerViewModel @JvmOverloads constructor(
             failedIndex = failedIndex,
             attemptedIndices = attemptedSnapshot,
         )
-        if (nextIndex == null) {
-            isAutoFallingBack.set(false)
-            return false
-        }
-
-        val nextHoster = _hosterState.value.getOrNull(nextIndex.first) as? HosterState.Ready
-        val nextVideo = nextHoster?.videoList?.getOrNull(nextIndex.second)
-        if (nextHoster == null || nextVideo == null) {
-            isAutoFallingBack.set(false)
-            return false
-        }
-
         val resumePositionMs = (pos.value * 1000f).toLong().takeIf { it > 0L }
-        playerUpdate.update {
-            PlayerUpdates.ShowText("${nextHoster.name}: ${nextVideo.videoTitle}")
+
+        if (nextIndex != null) {
+            val nextHoster = _hosterState.value.getOrNull(nextIndex.first) as? HosterState.Ready
+            val nextVideo = nextHoster?.videoList?.getOrNull(nextIndex.second)
+            if (nextHoster == null || nextVideo == null) {
+                isAutoFallingBack.set(false)
+                return false
+            }
+
+            playerUpdate.update {
+                PlayerUpdates.ShowText("${nextHoster.name}: ${nextVideo.videoTitle}")
+            }
+
+            viewModelScope.launchIO {
+                try {
+                    val switched = loadVideo(
+                        source = currentSource.value,
+                        video = nextVideo,
+                        hosterIndex = nextIndex.first,
+                        videoIndex = nextIndex.second,
+                        resumePositionMs = resumePositionMs,
+                    )
+                    if (!switched) {
+                        updateIsLoadingEpisode(false)
+                        activity.showToast(errorMessage)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Auto-fallback failed after playback error: $errorMessage" }
+                    updateIsLoadingEpisode(false)
+                    activity.showToast(errorMessage)
+                } finally {
+                    isAutoFallingBack.set(false)
+                }
+            }
+            return true
         }
 
+        // Fast-start mode keeps non-primary hosters Idle until needed; load the next untried
+        // Idle hoster on demand when runtime playback fails.
+        if (attemptedSnapshot.size >= PlaybackFallbackSelector.MAX_AUTO_FALLBACK_ATTEMPTS) {
+            isAutoFallingBack.set(false)
+            return false
+        }
+        val excludedHosters = attemptedSnapshot.map { it.first }.toSet() + failedIndex.first
+        val nextIdleHosterIdx = HosterStartupPlanner.selectNextIdleHosterIndex(
+            hosterStates = _hosterState.value,
+            excludedHosterIndices = excludedHosters,
+        )
+        val source = currentSource.value
+        val idleHoster = nextIdleHosterIdx?.let { hosterList.value.getOrNull(it) }
+        if (nextIdleHosterIdx == null || source == null || idleHoster == null) {
+            isAutoFallingBack.set(false)
+            return false
+        }
+
+        val playbackPreferences = getPlaybackSelectionPreferences(_currentAnime.value)
         viewModelScope.launchIO {
             try {
-                val switched = loadVideo(
-                    source = currentSource.value,
-                    video = nextVideo,
-                    hosterIndex = nextIndex.first,
-                    videoIndex = nextIndex.second,
-                    resumePositionMs = resumePositionMs,
+                _hosterState.updateAt(
+                    nextIdleHosterIdx,
+                    HosterState.Loading(
+                        name = idleHoster.hosterName,
+                        playerId = idleHoster.playerId,
+                        playerLabel = idleHoster.playerLabel,
+                        dubbingId = idleHoster.dubbingId,
+                        dubbingLabel = idleHoster.dubbingLabel,
+                        sortOrder = idleHoster.sortOrder,
+                    ),
                 )
-                if (!switched) {
+                val loaded = EpisodeLoader.loadHosterVideos(
+                    source = source,
+                    hoster = idleHoster,
+                    force = true,
+                )
+                _hosterState.updateAt(nextIdleHosterIdx, loaded)
+
+                val ready = loaded as? HosterState.Ready
+                val nextVideoIdx = ready?.let {
+                    HosterStartupPlanner.selectVideoIndexForHoster(it, playbackPreferences)
+                }
+                val nextVideo = if (ready != null && nextVideoIdx != null) {
+                    ready.videoList.getOrNull(nextVideoIdx)
+                } else {
+                    null
+                }
+
+                if (ready != null && nextVideoIdx != null && nextVideo != null) {
+                    playerUpdate.update {
+                        PlayerUpdates.ShowText("${ready.name}: ${nextVideo.videoTitle}")
+                    }
+                    val switched = loadVideo(
+                        source = source,
+                        video = nextVideo,
+                        hosterIndex = nextIdleHosterIdx,
+                        videoIndex = nextVideoIdx,
+                        resumePositionMs = resumePositionMs,
+                        allowDeferredFallback = true,
+                    )
+                    if (!switched) {
+                        updateIsLoadingEpisode(false)
+                        activity.showToast(errorMessage)
+                    }
+                } else {
                     updateIsLoadingEpisode(false)
                     activity.showToast(errorMessage)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Auto-fallback failed after playback error: $errorMessage" }
+                logcat(LogPriority.ERROR, e) { "On-demand auto-fallback failed after playback error: $errorMessage" }
                 updateIsLoadingEpisode(false)
                 activity.showToast(errorMessage)
             } finally {
@@ -2275,12 +2442,14 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     fun onHosterClicked(index: Int) {
-        when (hosterState.value[index]) {
+        val currentState = hosterState.value.getOrNull(index) ?: return
+        when (currentState) {
             is HosterState.Ready -> {
                 _hosterExpandedList.updateAt(index, !_hosterExpandedList.value[index])
             }
-            is HosterState.Idle -> {
-                val hoster = hosterList.value[index]
+            is HosterState.Idle, is HosterState.Error -> {
+                val source = currentSource.value ?: return
+                val hoster = hosterList.value.getOrNull(index) ?: return
                 _hosterState.updateAt(
                     index,
                     HosterState.Loading(
@@ -2294,15 +2463,18 @@ class PlayerViewModel @JvmOverloads constructor(
                 )
 
                 viewModelScope.launchIO {
-                    val hosterState = EpisodeLoader.loadHosterVideos(
-                        source = currentSource.value!!,
+                    val loaded = EpisodeLoader.loadHosterVideos(
+                        source = source,
                         hoster = hoster,
                         force = true,
                     )
-                    _hosterState.updateAt(index, hosterState)
+                    _hosterState.updateAt(index, loaded)
+                    if (loaded is HosterState.Ready && index in _hosterExpandedList.value.indices) {
+                        _hosterExpandedList.updateAt(index, true)
+                    }
                 }
             }
-            is HosterState.Loading, is HosterState.Error -> {}
+            is HosterState.Loading -> {}
         }
     }
 

@@ -67,9 +67,8 @@ fun parseOriginalTitle(description: String?): String? {
     for (pattern in patterns) {
         val match = pattern.find(description)
         if (match != null) {
-            val title = match.groupValues[1].trim()
-            val cleaned = title.trimEnd('.', ',', '"', '\'')
-            if (cleaned.isNotEmpty()) {
+            val cleaned = match.groupValues[1].trim().trimEnd('.', ',', '"', '\'')
+            if (cleaned.any { it.isLetterOrDigit() }) {
                 return cleaned
             }
         }
@@ -83,17 +82,37 @@ fun parseOriginalTitle(description: String?): String? {
         ) {
             val colonIndex = line.indexOf(':')
             if (colonIndex > 0) {
-                val afterColon = line.substring(colonIndex + 1).trim()
-                if (afterColon.isNotEmpty()) {
-                    return afterColon.trimEnd('.', ',', '"', '\'')
+                val afterColon = line.substring(colonIndex + 1).trim().trimEnd('.', ',', '"', '\'')
+                if (afterColon.any { it.isLetterOrDigit() }) {
+                    return afterColon
                 }
             }
         }
-        val nonCyrillic = line.filter { char -> char.code < 0x400 || char.code > 0x4FF }.trim()
-        if (nonCyrillic.length > 5 && nonCyrillic.length < 200) {
-            return nonCyrillic.trimEnd('.', ',', '"', '\'')
-        }
+        extractNonCyrillicTitleCandidate(line)?.let { return it }
     }
 
     return null
+}
+
+internal fun extractNonCyrillicTitleCandidate(line: String): String? {
+    val cleaned = line
+        .filter { char -> char.code < 0x400 || char.code > 0x4FF }
+        .replace(Regex("\\s+"), " ")
+        .trim { ch -> ch.isWhitespace() || ch in ".,;:!?\"'()[]{}—–-/|" }
+    if (cleaned.length !in 4..199) return null
+
+    val letterCount = cleaned.count { it.isLetter() }
+    if (letterCount < 3) return null
+
+    // Reject punctuation/number remnants stripped out of Cyrillic prose (e.g. ",   .   ,  .")
+    val nonWhitespaceCount = cleaned.count { !it.isWhitespace() }
+    if (nonWhitespaceCount == 0 || letterCount.toDouble() / nonWhitespaceCount < 0.5) {
+        return null
+    }
+
+    // Reject mostly-Cyrillic narrative lines that happen to contain a stray Latin token
+    val cyrillicCount = line.count { char -> char.code in 0x400..0x4FF }
+    if (cyrillicCount > letterCount * 2) return null
+
+    return cleaned
 }

@@ -876,7 +876,11 @@ class PlayerActivity : BaseActivity() {
             "secondary-sid" -> trackId(value)?.let {
                 viewModel.updateSubtitle(viewModel.selectedSubtitles.value.first, it)
             }
-            "hwdec", "hwdec-current" -> viewModel.getDecoder()
+            "hwdec", "hwdec-current" -> {
+                if (viewModel.currentVideo.value != null) {
+                    viewModel.getDecoder()
+                }
+            }
             "user-data/aniyomi" -> viewModel.handleLuaInvocation(property, value)
         }
     }
@@ -886,7 +890,9 @@ class PlayerActivity : BaseActivity() {
         if (player.isExiting) return
         when (property) {
             "speed" -> viewModel.playbackSpeed.update { value.toFloat() }
-            "video-params/aspect" -> if (isPipSupportedAndEnabled) createPipParams()
+            "video-params/aspect" -> if (isPipSupportedAndEnabled) {
+                runCatching { setPictureInPictureParams(createPipParams()) }
+            }
         }
     }
 
@@ -926,14 +932,18 @@ class PlayerActivity : BaseActivity() {
             ),
         )
         builder.setSourceRectHint(pipRect)
-        val height = player.videoH
-        val aspect = player.getVideoOutAspect()
-        if (height != null && height > 0 && aspect != null && aspect > 0.0) {
-            val width = (height * aspect).toInt()
-            if (width > 0) {
-                val ratio = width.toFloat() / height.toFloat()
-                if (ratio in 0.42f..2.38f) {
-                    builder.setAspectRatio(Rational(width, height))
+        // Avoid querying mpv video geometry before a stream has finished loading, which
+        // spams mpv_get_property errors during Activity startup and episode switches.
+        if (!viewModel.isLoadingEpisode.value && viewModel.currentVideo.value != null) {
+            val height = player.videoH
+            val aspect = player.getVideoOutAspect()
+            if (height != null && height > 0 && aspect != null && aspect > 0.0) {
+                val width = (height * aspect).toInt()
+                if (width > 0) {
+                    val ratio = width.toFloat() / height.toFloat()
+                    if (ratio in 0.42f..2.38f) {
+                        builder.setAspectRatio(Rational(width, height))
+                    }
                 }
             }
         }
@@ -1243,11 +1253,15 @@ class PlayerActivity : BaseActivity() {
                     } else {
                         episode.last_second_seen
                     }
-                MPVLib.command(arrayOf("set", "start", "${resumePosition / 1000F}"))
+                MPVLib.command(
+                    arrayOf("set", "start", MpvStartupOptions.formatStartArgumentFromMillis(resumePosition)),
+                )
             }
         } else {
-            player.timePos?.let {
-                MPVLib.command(arrayOf("set", "start", "${player.timePos}"))
+            player.timePos?.let { currentPos ->
+                MPVLib.command(
+                    arrayOf("set", "start", MpvStartupOptions.formatStartArgumentFromSeconds(currentPos)),
+                )
             }
         }
 

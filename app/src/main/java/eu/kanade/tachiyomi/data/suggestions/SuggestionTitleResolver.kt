@@ -68,7 +68,7 @@ object SuggestionTitleResolver {
             val normalized = normalizeMetadataSearchQuery(raw.trim())
             if (normalized != raw.trim()) listOf(raw.trim(), normalized) else listOf(raw.trim())
         }
-        .filter { it.isNotBlank() }
+        .filter { candidate -> candidate.isNotBlank() && candidate.count(Char::isLetterOrDigit) >= 2 }
         .distinct()
         .also { candidates ->
             logcat { "SuggestionTitleResolver: resolved ${candidates.size} candidates for '$title': $candidates" }

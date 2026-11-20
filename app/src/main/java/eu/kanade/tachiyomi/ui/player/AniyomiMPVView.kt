@@ -139,10 +139,12 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
         MPVLib.setOptionString("ytdl", "no")
         MPVLib.setOptionString("tls-verify", "yes")
         MPVLib.setOptionString("tls-ca-file", "${context.filesDir.path}/${PlayerActivity.MPV_DIR}/cacert.pem")
-        MPVLib.setOptionString("stream-lavf-o", "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5")
+        MPVLib.setOptionString("stream-lavf-o", MpvStartupOptions.STREAM_LAVF_OPTIONS)
         MPVLib.setOptionString("network-timeout", "20")
         MPVLib.setOptionString("cache-pause-initial", "yes")
-        MPVLib.setOptionString("cache-pause-wait", "1")
+        MPVLib.setOptionString("cache-pause-wait", MpvStartupOptions.CACHE_PAUSE_WAIT_SECONDS)
+        MPVLib.setOptionString("demuxer-lavf-probesize", MpvStartupOptions.DEMUXER_LAVF_PROBESIZE_BYTES)
+        MPVLib.setOptionString("demuxer-lavf-analyzeduration", MpvStartupOptions.DEMUXER_LAVF_ANALYZE_DURATION_SECONDS)
 
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         val isLowRamDevice = activityManager?.isLowRamDevice == true
@@ -348,5 +350,29 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
         MPVLib.setOptionString("sub-shadow-offset", subtitlePreferences.shadowOffsetSubtitles().get().toString())
         MPVLib.setOptionString("sub-pos", subtitlePreferences.subtitlePos().get().toString())
         MPVLib.setOptionString("sub-scale", subtitlePreferences.subtitleFontScale().get().toString())
+    }
+}
+
+internal object MpvStartupOptions {
+    const val STREAM_LAVF_OPTIONS =
+        "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5,http_persistent=1"
+    const val CACHE_PAUSE_WAIT_SECONDS = "0.3"
+    const val DEMUXER_LAVF_PROBESIZE_BYTES = "1048576"
+    const val DEMUXER_LAVF_ANALYZE_DURATION_SECONDS = "1.5"
+
+    /**
+     * Returns the mpv `start` argument for a resume offset in milliseconds.
+     * Passing `"none"` instead of `"0.0"` avoids an unnecessary initial seek and
+     * MediaCodec flush when starting a fresh episode from the beginning.
+     */
+    fun formatStartArgumentFromMillis(positionMs: Long): String {
+        return if (positionMs > 0L) "${positionMs / 1000F}" else "none"
+    }
+
+    /**
+     * Returns the mpv `start` argument for a resume offset in whole seconds.
+     */
+    fun formatStartArgumentFromSeconds(positionSeconds: Int): String {
+        return if (positionSeconds > 0) "$positionSeconds" else "none"
     }
 }
