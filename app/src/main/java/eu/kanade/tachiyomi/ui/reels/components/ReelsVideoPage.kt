@@ -27,6 +27,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -57,6 +58,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -1252,240 +1254,34 @@ fun ReelsVideoPage(
         }
 
         // 5. Speed pill + 5b. Pro-player Zoom HUD pill.
-        // Anchored below the actual top bar using real window insets (safeDrawing in landscape,
-        // statusBarsPadding in portrait) so neither pill overlaps ReelsTopBar, ReelsLandscapeTopBar,
-        // or the landscape center transport.
-        val holdingRate = heldRate
-        val pillRate = holdingRate ?: effectivePlaybackSpeed
-        val pillFast = (holdingRate ?: effectivePlaybackSpeed) > 1f
-        val auroraColors = AuroraTheme.colors
-        val showSpeedPill = pillRate != 1f && !isInPictureInPicture
-        val isZoomed = ReelsZoom.isZoomed(zoomScale.value)
-        val showZoomHud = !isInPictureInPicture &&
-            isActive &&
-            !isSearchBarOpen &&
-            !drawerOpen &&
-            qualityDialogMode == null &&
-            !scrubUiState.isActive &&
-            (isPinchZooming || (isZoomed && chromeVisible))
-        val topHudPadding = if (isLandscape) {
-            if (effectiveChromeVisible) 60.dp else 12.dp
-        } else {
-            when {
-                !effectiveChromeVisible -> 14.dp
-                searchQuery.isNotBlank() && !isSearchBarOpen -> 112.dp
-                else -> 72.dp
-            }
-        }
-        val topHudModifier = Modifier
-            .align(Alignment.TopCenter)
-            .windowInsetsPadding(
-                if (isLandscape) {
-                    WindowInsets.safeDrawing
-                } else {
-                    // Use safeDrawing (statusBars + displayCutout) so the Zoom/Speed HUD
-                    // stays below the camera notch/punch-hole even when immersive mode hides
-                    // the status bar (when statusBarsPadding() collapses to 0dp).
-                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-                },
-            )
-            .padding(top = topHudPadding, start = 12.dp, end = 12.dp)
+        ReelsTopSpeedAndZoomHud(
+            holdingRate = heldRate,
+            effectivePlaybackSpeed = effectivePlaybackSpeed,
+            zoomScale = zoomScale.value,
+            isPinchZooming = isPinchZooming,
+            isCropMode = isCropMode,
+            isActive = isActive,
+            isLandscape = isLandscape,
+            isInPictureInPicture = isInPictureInPicture,
+            chromeVisible = chromeVisible,
+            effectiveChromeVisible = effectiveChromeVisible,
+            isSearchBarOpen = isSearchBarOpen,
+            searchQuery = searchQuery,
+            drawerOpen = drawerOpen,
+            qualityDialogOpen = qualityDialogMode != null,
+            isScrubbing = scrubUiState.isActive,
+            onToggleCropMode = onToggleCropMode,
+            onAnimateZoomTo = ::animateZoomTo,
+        )
 
-        val renderSpeedPill: @Composable () -> Unit = {
-            AnimatedVisibility(
-                visible = showSpeedPill,
-                enter = fadeIn() + scaleIn(initialScale = 0.9f),
-                exit = fadeOut() + scaleOut(targetScale = 0.9f),
-            ) {
-                // TalkBack needs the spoken meaning; the visible text stays a bare "2×" / "0.5×".
-                val holdLabel = stringResource(
-                    if (pillFast) MR.strings.reels_hold_fast else MR.strings.reels_hold_slow,
-                )
-                Row(
-                    modifier = Modifier
-                        .reelsFrostPill(
-                            rim = auroraMenuRimLightBrush(auroraColors),
-                            eInk = auroraColors.isEInk,
-                            solid = auroraColors.cardBackground,
-                            strong = true,
-                        )
-                        .padding(horizontal = 13.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    if (holdingRate != null) {
-                        Text(
-                            text = if (pillFast) "»" else "«",
-                            color = if (pillFast) auroraColors.accent else Color.White.copy(alpha = 0.75f),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Text(
-                        text = reelsSpeedLabel(pillRate),
-                        color = if (pillFast && holdingRate != null) auroraColors.accent else Color.White,
-                        style = TextStyle(
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFeatureSettings = "tnum",
-                        ),
-                        modifier = Modifier.semantics {
-                            contentDescription = holdLabel
-                        },
-                    )
-                }
-            }
-        }
-
-        val renderZoomHud: @Composable () -> Unit = {
-            AnimatedVisibility(
-                visible = showZoomHud,
-                enter = fadeIn() + scaleIn(initialScale = 0.92f),
-                exit = fadeOut() + scaleOut(targetScale = 0.92f),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .reelsFrostPill(
-                            rim = auroraMenuRimLightBrush(auroraColors),
-                            eInk = auroraColors.isEInk,
-                            solid = auroraColors.cardBackground,
-                            strong = true,
-                        )
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = ReelsZoom.formatScaleLabel(zoomScale.value),
-                        color = auroraColors.accent,
-                        style = TextStyle(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFeatureSettings = "tnum",
-                        ),
-                    )
-                    if (!isPinchZooming && isZoomed) {
-                        val fitLabel = stringResource(MR.strings.reels_aspect_fit)
-                        val fillLabel = stringResource(MR.strings.reels_aspect_fill)
-                        ReelsZoomPresetChip(
-                            label = fitLabel,
-                            selected = false,
-                            accent = auroraColors.accent,
-                            onClick = {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                if (isCropMode) onToggleCropMode()
-                                animateZoomTo(1f, resetPan = true)
-                            },
-                        )
-                        ReelsZoomPresetChip(
-                            label = fillLabel,
-                            selected = false,
-                            accent = auroraColors.accent,
-                            onClick = {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                if (!isCropMode) onToggleCropMode()
-                                animateZoomTo(1f, resetPan = true)
-                            },
-                        )
-                        ReelsZoom.SCALE_PRESETS.forEach { preset ->
-                            val activePreset = kotlin.math.abs(zoomScale.value - preset) < 0.08f
-                            ReelsZoomPresetChip(
-                                label = ReelsZoom.formatScaleLabel(preset),
-                                selected = activePreset,
-                                accent = auroraColors.accent,
-                                onClick = {
-                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    animateZoomTo(preset)
-                                },
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.14f))
-                                .clickable(role = Role.Button) {
-                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    animateZoomTo(1f, resetPan = true)
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = stringResource(MR.strings.action_reset),
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        if (isLandscape) {
-            Row(
-                modifier = topHudModifier,
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                renderSpeedPill()
-                renderZoomHud()
-            }
-        } else {
-            Column(
-                modifier = topHudModifier,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                renderSpeedPill()
-                renderZoomHud()
-            }
-        }
-
-        // 6. Seek caption: light frost plate hugging the edge of the seek direction. The type
-        // scales with the window: a portrait screen has no room for a 18sp block over the caption,
-        // while landscape has the whole width to spare.
-        AnimatedVisibility(
-            visible = seekNotice.seconds != null && heldRate == null && isActive && !isInPictureInPicture,
-            enter = fadeIn() + slideInHorizontally { if (seekNotice.forward) it / 5 else -it / 5 },
-            exit = fadeOut() + slideOutHorizontally { if (seekNotice.forward) it / 5 else -it / 5 },
-            modifier = Modifier
-                .align(if (seekNotice.forward) Alignment.CenterEnd else Alignment.CenterStart)
-                .then(
-                    if (isLandscape) {
-                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
-                    } else {
-                        Modifier
-                    },
-                )
-                .padding(horizontal = reelsSeekNoticeHorizontalPadding(isLandscape)),
-        ) {
-            Text(
-                text = seekNotice.seconds?.let { seconds ->
-                    stringResource(
-                        if (seconds < 0) MR.strings.reels_seek_notice_back else MR.strings.reels_seek_notice_forward,
-                        kotlin.math.abs(seconds),
-                    )
-                }.orEmpty(),
-                style = TextStyle(
-                    color = Color.White,
-                    fontSize = if (isLandscape) 18.sp else 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFeatureSettings = "tnum",
-                    shadow = Shadow(color = Color.Black, offset = Offset(0f, 1f), blurRadius = 4f),
-                ),
-                maxLines = 1,
-                modifier = Modifier
-                    .reelsFrostPill(
-                        rim = auroraMenuRimLightBrush(auroraColors),
-                        eInk = auroraColors.isEInk,
-                        solid = auroraColors.cardBackground,
-                        strong = false,
-                    )
-                    .padding(horizontal = if (isLandscape) 12.dp else 9.dp, vertical = if (isLandscape) 5.dp else 3.dp),
-            )
-        }
+        // 6. Seek caption: light frost plate hugging the edge of the seek direction.
+        ReelsSeekNoticeOverlay(
+            seekNotice = seekNotice,
+            heldRate = heldRate,
+            isActive = isActive,
+            isInPictureInPicture = isInPictureInPicture,
+            isLandscape = isLandscape,
+        )
 
         // 7. Controls sit inside the rotated frame and are inset from physical safe edges
         if (!isInPictureInPicture) {
@@ -1521,364 +1317,152 @@ fun ReelsVideoPage(
                     )
                 }
                 if (isLandscape) {
-                    // Landscape TopBar
-                    AnimatedVisibility(
-                        visible = effectiveChromeVisible || isSearchBarOpen,
-                        enter = fadeIn() + slideInVertically { -it },
-                        exit = fadeOut() + slideOutVertically { -it },
-                        modifier = Modifier.align(Alignment.TopCenter),
-                    ) {
-                        ReelsLandscapeTopBar(
-                            sourceName = sourceName,
-                            onBackClick = onBack,
-                            onOpenPlaylist = {
-                                drawerTab = 2
-                                drawerOpen = true
-                            },
-                            onClearDisplay = onToggleChrome,
-                            playbackSpeed = effectivePlaybackSpeed,
-                            isCropMode = isCropMode,
-                            onToggleCropMode = {
-                                onScrubStart()
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                onToggleCropMode()
-                            },
-                            showSearch = showSearch,
-                            isSearchOpen = isSearchBarOpen,
-                            onToggleSearch = {
-                                if (!isSearchBarOpen) onScrubStart()
-                                onToggleSearch()
-                            },
-                            searchQuery = searchQuery,
-                            onSearchSubmit = onSearchSubmit,
-                            onClearSearch = onClearSearch,
-                            onOpenSourcePicker = onOpenSourcePicker,
-                            onOpenSettings = {
-                                drawerTab = 0
-                                drawerOpen = true
-                            },
-                            onExitLandscape = onExitLandscape,
-                            feedSectionLabel = feedSectionLabel,
-                        )
-                    }
-
-                    // Landscape Compact Bottom Meta (bottom-start, above the 2-row Unified Cinema Console)
-                    AnimatedVisibility(
-                        visible = effectiveChromeVisible && !scrubUiState.isActive,
-                        enter = fadeIn() + slideInVertically { it },
-                        exit = fadeOut() + slideOutVertically { it },
-                        modifier = Modifier.align(Alignment.BottomStart),
-                    ) {
-                        ReelsBottomMeta(
-                            item = item,
-                            onTagClick = onTagClick,
-                            onAuthorClick = onAuthorClick,
-                            onCreatorClick = onCreatorClick,
-                            showFollowAction = showFollowAction,
-                            isFollowingCreator = isFollowingCreator,
-                            onToggleFollowCreator = onToggleFollowCreator,
-                            onMetaStatsClick = {
-                                drawerTab = 0
-                                drawerOpen = true
-                            },
-                            sourceBadgeName = sourceBadgeName,
-                            sourceBadgeIcon = sourceBadgeIcon,
-                            onSourceBadgeClick = onSourceBadgeClick,
-                            isLandscapeCompact = true,
-                            modifier = Modifier
-                                .fillMaxWidth(0.58f)
-                                .padding(
-                                    start = 16.dp,
-                                    bottom = 78.dp,
-                                ),
-                        )
-                    }
-
-                    // Landscape Bottom Unified Cinema Console (Seekbar + 36dp Unified Control Deck)
-                    AnimatedVisibility(
-                        visible = effectiveChromeVisible,
-                        enter = fadeIn() + slideInVertically { it },
-                        exit = fadeOut() + slideOutVertically { it },
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    ) {
-                        ReelsLandscapeScrubberDock(
-                            progressState = progressState,
-                            bufferFraction = bufferFraction,
-                            durationSec = durationSec,
-                            isMuted = isMuted,
-                            onToggleMute = onToggleMute,
-                            onLockScreen = onToggleTouchLock,
-                            qualityLabel = qualityEntryLabel?.let { "$it ▾" },
-                            onQualityClick = {
-                                if (qualityModeEnabled) {
-                                    qualityDialogMode = ReelsQualityDialogMode.VIDEO
-                                }
-                            },
-                            isCropMode = isCropMode,
-                            onToggleCropMode = {
-                                onScrubStart()
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                onToggleCropMode()
-                            },
-                            playbackSpeed = effectivePlaybackSpeed,
-                            onCycleSpeed = {
-                                onScrubStart()
-                                updatePlaybackSpeed(nextReelsLandscapeSpeed(effectivePlaybackSpeed))
-                            },
-                            isLiked = isLiked,
-                            likesCount = item.likesCount,
-                            onToggleLike = {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                onToggleLike()
-                            },
-                            isDownloaded = isDownloaded,
-                            isDownloading = isDownloading,
-                            isPartial = isPartial,
-                            downloadProgress = downloadProgress,
-                            onDownload = onDownload?.let { download ->
-                                {
-                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    download()
-                                }
-                            },
-                            onShare = { onShare(progressState.floatValue * durationSec.coerceAtLeast(0f)) },
-                            onOpenMore = if (showHideAction) {
-                                { showHideDialog = true }
-                            } else {
-                                null
-                            },
-                            posterUrl = item.posterUrlVertical ?: item.posterUrl,
-                            onSeek = { frac -> requestSeek(frac, liveScrub = false) },
-                            onScrubPreview = { frac -> requestSeek(frac, liveScrub = true) },
-                            onScrubStart = onScrubStart,
-                            onScrubStateChange = { state -> scrubUiState = state },
-                            externalScrubFraction = if (scrubUiState.isActive && scrubUiState.fromScreenGesture) {
-                                scrubUiState.progress
-                            } else {
-                                null
-                            },
-                            fineScrubEnabled = landscapePullUpSeekEnabled,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
-                    }
-
-                    // Aurora Frost Drawer
-                    if (drawerOpen) {
-                        ReelsAuroraFrostDrawer(
-                            isOpen = drawerOpen,
-                            initialTab = drawerTab,
-                            currentItem = item,
-                            playlistItems = playlistItems,
-                            currentPlaylistIndex = playlistIndex,
-                            isHdQuality = isHdQuality,
-                            onToggleQuality = onToggleQuality,
-                            qualityModeEnabled = qualityModeEnabled,
-                            qualityLabel = qualityEntryLabel,
-                            onOpenQualityVideo = { qualityDialogMode = ReelsQualityDialogMode.VIDEO },
-                            onOpenQualityDefault = { qualityDialogMode = ReelsQualityDialogMode.GLOBAL },
-                            isCropMode = isCropMode,
-                            onToggleCropMode = {
-                                onScrubStart()
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                onToggleCropMode()
-                            },
-                            playbackSpeed = effectivePlaybackSpeed,
-                            onSetPlaybackSpeed = { updatePlaybackSpeed(it) },
-                            isAutoAdvance = isAutoAdvance,
-                            onToggleAutoAdvance = onToggleAutoAdvance,
-                            landscapeBrightnessGestureEnabled = landscapeBrightnessGestureEnabled,
-                            onToggleLandscapeBrightnessGesture = onToggleLandscapeBrightnessGesture,
-                            landscapeVolumeGestureEnabled = landscapeVolumeGestureEnabled,
-                            onToggleLandscapeVolumeGesture = onToggleLandscapeVolumeGesture,
-                            landscapePullUpSeekEnabled = landscapePullUpSeekEnabled,
-                            onToggleLandscapePullUpSeek = onToggleLandscapePullUpSeek,
-                            sleepTimerValue = sleepTimerValue,
-                            onCycleSleepTimer = onCycleSleepTimer,
-                            isIncognito = isIncognito,
-                            onToggleIncognito = onToggleIncognito,
-                            isDownloaded = isDownloaded,
-                            isDownloading = isDownloading,
-                            isPartial = isPartial,
-                            downloadSizeText = downloadSizeText,
-                            onDownloadCurrent = onDownload,
-                            preloadWifiOnly = preloadWifiOnly,
-                            onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
-                            dataSaverEnabled = dataSaverEnabled,
-                            onToggleDataSaver = onToggleDataSaver,
-                            offlineUsedText = offlineUsedText,
-                            offlineUsedFraction = offlineUsedFraction,
-                            canClearOffline = canClearOffline,
-                            onClearOffline = onClearOffline,
-                            onOpenHide = if (showHideAction) {
-                                {
-                                    drawerOpen = false
-                                    showHideDialog = true
-                                }
-                            } else {
-                                null
-                            },
-                            currentSourceName = sourceBadgeName,
-                            onOpenSource = onSourceBadgeClick,
-                            onExcludeSourceFromMix = onExcludeSourceFromMix,
-                            onClearVideoCache = onClearVideoCache,
-                            onSelectClip = { idx ->
-                                drawerOpen = false
-                                onSelectPlaylistItem(idx)
-                            },
-                            onDismiss = { drawerOpen = false },
-                        )
-                    }
+                    ReelsLandscapeControlsOverlay(
+                        item = item,
+                        effectiveChromeVisible = effectiveChromeVisible,
+                        scrubUiState = scrubUiState,
+                        progressState = progressState,
+                        bufferFraction = bufferFraction,
+                        durationSec = durationSec,
+                        sourceName = sourceName,
+                        feedSectionLabel = feedSectionLabel,
+                        isMuted = isMuted,
+                        isLiked = isLiked,
+                        isHdQuality = isHdQuality,
+                        qualityModeEnabled = qualityModeEnabled,
+                        qualityEntryLabel = qualityEntryLabel,
+                        isCropMode = isCropMode,
+                        effectivePlaybackSpeed = effectivePlaybackSpeed,
+                        isAutoAdvance = isAutoAdvance,
+                        showSearch = showSearch,
+                        isSearchBarOpen = isSearchBarOpen,
+                        searchQuery = searchQuery,
+                        showFollowAction = showFollowAction,
+                        isFollowingCreator = isFollowingCreator,
+                        showHideAction = showHideAction,
+                        isDownloaded = isDownloaded,
+                        isDownloading = isDownloading,
+                        isPartial = isPartial,
+                        downloadSizeText = downloadSizeText,
+                        downloadProgress = downloadProgress,
+                        sourceBadgeName = sourceBadgeName,
+                        sourceBadgeIcon = sourceBadgeIcon,
+                        playlistItems = playlistItems,
+                        playlistIndex = playlistIndex,
+                        preloadWifiOnly = preloadWifiOnly,
+                        dataSaverEnabled = dataSaverEnabled,
+                        sleepTimerValue = sleepTimerValue,
+                        offlineUsedText = offlineUsedText,
+                        offlineUsedFraction = offlineUsedFraction,
+                        canClearOffline = canClearOffline,
+                        isIncognito = isIncognito,
+                        landscapeBrightnessGestureEnabled = landscapeBrightnessGestureEnabled,
+                        landscapeVolumeGestureEnabled = landscapeVolumeGestureEnabled,
+                        landscapePullUpSeekEnabled = landscapePullUpSeekEnabled,
+                        drawerOpen = drawerOpen,
+                        drawerTab = drawerTab,
+                        onOpenDrawer = { tab ->
+                            drawerTab = tab
+                            drawerOpen = true
+                        },
+                        onCloseDrawer = { drawerOpen = false },
+                        onOpenQualityDialog = { mode -> qualityDialogMode = mode },
+                        onOpenHideDialog = {
+                            drawerOpen = false
+                            showHideDialog = true
+                        },
+                        onBack = onBack,
+                        onToggleChrome = onToggleChrome,
+                        onToggleCropMode = onToggleCropMode,
+                        onToggleSearch = onToggleSearch,
+                        onSearchSubmit = onSearchSubmit,
+                        onClearSearch = onClearSearch,
+                        onOpenSourcePicker = onOpenSourcePicker,
+                        onExitLandscape = onExitLandscape,
+                        onTagClick = onTagClick,
+                        onAuthorClick = onAuthorClick,
+                        onCreatorClick = onCreatorClick,
+                        onToggleFollowCreator = onToggleFollowCreator,
+                        onSourceBadgeClick = onSourceBadgeClick,
+                        onExcludeSourceFromMix = onExcludeSourceFromMix,
+                        onToggleMute = onToggleMute,
+                        onToggleTouchLock = onToggleTouchLock,
+                        onUpdatePlaybackSpeed = updatePlaybackSpeed,
+                        onToggleLike = onToggleLike,
+                        onDownload = onDownload,
+                        onShare = onShare,
+                        onRequestSeek = ::requestSeek,
+                        onScrubStart = onScrubStart,
+                        onScrubStateChange = { state -> scrubUiState = state },
+                        onToggleQuality = onToggleQuality,
+                        onToggleAutoAdvance = onToggleAutoAdvance,
+                        onToggleLandscapeBrightnessGesture = onToggleLandscapeBrightnessGesture,
+                        onToggleLandscapeVolumeGesture = onToggleLandscapeVolumeGesture,
+                        onToggleLandscapePullUpSeek = onToggleLandscapePullUpSeek,
+                        onCycleSleepTimer = onCycleSleepTimer,
+                        onToggleIncognito = onToggleIncognito,
+                        onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
+                        onToggleDataSaver = onToggleDataSaver,
+                        onClearOffline = onClearOffline,
+                        onClearVideoCache = onClearVideoCache,
+                        onSelectPlaylistItem = onSelectPlaylistItem,
+                    )
                 } else {
-                    // Portrait Right Action Bar — raised so its bottom sits at the
-                    // author-name horizon (top edge of the caption block): the stack
-                    // clears the description instead of interleaving with it.
-                    val density = LocalDensity.current
-                    val navBarsBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                    // Guarantee a safe margin of at least 26.dp even when system gesture bar is hidden (navBars == 0dp)
-                    val safeBottomInset = maxOf(navBarsBottomPadding, 26.dp)
-                    val metaBottomPadding = safeBottomInset + 28.dp
-                    val actionsBottomPadding =
-                        metaBottomPadding + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
-                    AnimatedVisibility(
-                        visible = effectiveChromeVisible,
-                        enter = fadeIn() + slideInHorizontally { it },
-                        exit = fadeOut() + slideOutHorizontally { it },
-                        modifier = Modifier.align(Alignment.BottomEnd),
-                    ) {
-                        ReelsActionsColumn(
-                            isLiked = isLiked,
-                            isMuted = isMuted,
-                            onToggleLike = {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                onToggleLike()
-                            },
-                            onToggleMute = onToggleMute,
-                            // B3.6: share carries the current playback second for a timeline URL.
-                            onShare = { onShare(progressState.floatValue * durationSec.coerceAtLeast(0f)) },
-                            showFollow = showFollowAction,
-                            isFollowing = isFollowingCreator,
-                            onToggleFollow = {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                onToggleFollowCreator()
-                            },
-                            onOpenHide = if (showHideAction) {
-                                { showHideDialog = true }
-                            } else {
-                                null
-                            },
-                            onToggleOffline = if (showOfflineAction) {
-                                onToggleOffline
-                            } else {
-                                null
-                            },
-                            isOfflineStored = isOfflineStored,
-                            landscape = landscape,
-                            onToggleLandscape = onToggleLandscape,
-                            onDownload = onDownload?.let { download ->
-                                {
-                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    download()
-                                }
-                            },
-                            isDownloaded = isDownloaded,
-                            isDownloading = isDownloading,
-                            isPartial = isPartial,
-                            downloadSizeText = downloadSizeText,
-                            downloadProgress = downloadProgress,
-                            modifier = Modifier.padding(end = 8.dp, bottom = actionsBottomPadding),
-                        )
-                    }
-
-                    // Portrait Bottom Meta info
-                    AnimatedVisibility(
-                        visible = effectiveChromeVisible && !scrubUiState.isActive,
-                        enter = fadeIn() + slideInVertically { it },
-                        exit = fadeOut() + slideOutVertically { it },
-                        modifier = Modifier.align(Alignment.BottomStart),
-                    ) {
-                        ReelsBottomMeta(
-                            item = item,
-                            onTagClick = onTagClick,
-                            onAuthorClick = onAuthorClick,
-                            onCreatorClick = onCreatorClick,
-                            showFollowAction = showFollowAction,
-                            isFollowingCreator = isFollowingCreator,
-                            onToggleFollowCreator = onToggleFollowCreator,
-                            sourceBadgeName = sourceBadgeName,
-                            sourceBadgeIcon = sourceBadgeIcon,
-                            onSourceBadgeClick = onSourceBadgeClick,
-                            modifier = Modifier
-                                .padding(
-                                    start = 16.dp,
-                                    end = 76.dp,
-                                    bottom = metaBottomPadding,
-                                )
-                                .onSizeChanged { portraitMetaHeightPx = it.height },
-                        )
-                    }
-
-                    // Portrait Interactive Scrubber / Seek Bar (Aurora style)
-                    AnimatedVisibility(
-                        visible = effectiveChromeVisible,
-                        enter = fadeIn() + slideInVertically { it },
-                        exit = fadeOut() + slideOutVertically { it },
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    ) {
-                        ReelsProgressBar(
-                            progressState = progressState,
-                            durationSec = durationSec,
-                            bufferFraction = bufferFraction,
-                            posterUrl = item.posterUrlVertical ?: item.posterUrl,
-                            chromeVisible = effectiveChromeVisible,
-                            onSeek = { frac -> requestSeek(frac, liveScrub = false) },
-                            onScrubPreview = { frac -> requestSeek(frac, liveScrub = true) },
-                            onScrubStart = onScrubStart,
-                            onScrubStateChange = { state -> scrubUiState = state },
-                            externalScrubFraction = if (scrubUiState.isActive && scrubUiState.fromScreenGesture) {
-                                scrubUiState.progress
-                            } else {
-                                null
-                            },
-                            modifier = Modifier
-                                .padding(bottom = safeBottomInset + 4.dp),
-                        )
-                    }
+                    ReelsPortraitControlsOverlay(
+                        item = item,
+                        effectiveChromeVisible = effectiveChromeVisible,
+                        scrubUiState = scrubUiState,
+                        progressState = progressState,
+                        bufferFraction = bufferFraction,
+                        durationSec = durationSec,
+                        portraitMetaHeightPx = portraitMetaHeightPx,
+                        onPortraitMetaHeightChanged = { portraitMetaHeightPx = it },
+                        isLiked = isLiked,
+                        isMuted = isMuted,
+                        showFollowAction = showFollowAction,
+                        isFollowingCreator = isFollowingCreator,
+                        showHideAction = showHideAction,
+                        showOfflineAction = showOfflineAction,
+                        isOfflineStored = isOfflineStored,
+                        landscape = landscape,
+                        isDownloaded = isDownloaded,
+                        isDownloading = isDownloading,
+                        isPartial = isPartial,
+                        downloadSizeText = downloadSizeText,
+                        downloadProgress = downloadProgress,
+                        sourceBadgeName = sourceBadgeName,
+                        sourceBadgeIcon = sourceBadgeIcon,
+                        onToggleLike = onToggleLike,
+                        onToggleMute = onToggleMute,
+                        onShare = onShare,
+                        onToggleFollowCreator = onToggleFollowCreator,
+                        onOpenHideDialog = { showHideDialog = true },
+                        onToggleOffline = onToggleOffline,
+                        onToggleLandscape = onToggleLandscape,
+                        onDownload = onDownload,
+                        onTagClick = onTagClick,
+                        onAuthorClick = onAuthorClick,
+                        onCreatorClick = onCreatorClick,
+                        onSourceBadgeClick = onSourceBadgeClick,
+                        onRequestSeek = ::requestSeek,
+                        onScrubStart = onScrubStart,
+                        onScrubStateChange = { state -> scrubUiState = state },
+                    )
                 }
             }
         }
 
         // Unclipped Full-Page Scrub Thumbnail Preview & YouTube Fine-Scrubbing Filmstrip
         if (isActive && !isInPictureInPicture && scrubUiState.isActive) {
-            val thumbVersion = scrubThumbVersion
-            val previewFrame = remember(thumbVersion, scrubUiState.progress, durationSec) {
-                scrubThumbnailCache.getBestFrame(scrubUiState.progress, durationSec)
-            }
-            val filmstripFrames = remember(thumbVersion, scrubUiState.progress, scrubUiState.isFineMode, durationSec) {
-                if (scrubUiState.isFineMode && isLandscape) {
-                    val centerSec = scrubUiState.progress.coerceIn(0f, 1f) * durationSec.coerceAtLeast(0f)
-                    val halfWindow = (
-                        min(
-                            durationSec.coerceAtLeast(12f),
-                            ReelsFineScrubController.DEFAULT_FINE_WINDOW_SEC,
-                        ) / 2f
-                        ).coerceAtLeast(3f)
-                    scrubThumbnailCache.framesInWindow(centerSec, halfWindow)
-                } else {
-                    emptyList()
-                }
-            }
-            val portraitNavBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            val portraitAnchorPadding = maxOf(portraitNavBottom, 26.dp) + 18.dp
-            ReelsScrubPreviewOverlay(
-                scrubState = scrubUiState,
+            ReelsScrubOverlayHost(
+                scrubUiState = scrubUiState,
+                scrubThumbVersion = scrubThumbVersion,
+                scrubThumbnailCache = scrubThumbnailCache,
                 durationSec = durationSec,
-                previewFrame = previewFrame,
-                filmstripFrames = filmstripFrames,
                 posterUrl = item.posterUrlVertical ?: item.posterUrl,
                 isLandscape = isLandscape,
                 chromeVisible = effectiveChromeVisible,
                 fineScrubEnabled = landscapePullUpSeekEnabled,
-                bottomAnchorPadding = if (isLandscape) 66.dp else portraitAnchorPadding,
             )
         }
 
@@ -1890,20 +1474,793 @@ fun ReelsVideoPage(
 
     // B3.2 hide choice: Aurora Frost Dialog with danger actions
     if (showHideDialog) {
-        AuroraFrostDialog(
+        ReelsHideVideoDialog(
             onDismiss = { showHideDialog = false },
-            title = stringResource(MR.strings.reels_hide_dialog_title),
-            footer = {
-                AuroraFrostCancel(
-                    label = stringResource(MR.strings.action_cancel),
-                    onClick = { showHideDialog = false },
-                )
+            onHideVideo = onHideVideo,
+            onHideAuthor = onHideAuthor,
+            sourceBadgeName = sourceBadgeName,
+            onSourceBadgeClick = onSourceBadgeClick,
+            onExcludeSourceFromMix = onExcludeSourceFromMix,
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.ReelsTopSpeedAndZoomHud(
+    holdingRate: Float?,
+    effectivePlaybackSpeed: Float,
+    zoomScale: Float,
+    isPinchZooming: Boolean,
+    isCropMode: Boolean,
+    isActive: Boolean,
+    isLandscape: Boolean,
+    isInPictureInPicture: Boolean,
+    chromeVisible: Boolean,
+    effectiveChromeVisible: Boolean,
+    isSearchBarOpen: Boolean,
+    searchQuery: String,
+    drawerOpen: Boolean,
+    qualityDialogOpen: Boolean,
+    isScrubbing: Boolean,
+    onToggleCropMode: () -> Unit,
+    onAnimateZoomTo: (Float, Boolean) -> Unit,
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val pillRate = holdingRate ?: effectivePlaybackSpeed
+    val pillFast = pillRate > 1f
+    val auroraColors = AuroraTheme.colors
+    val showSpeedPill = pillRate != 1f && !isInPictureInPicture
+    val isZoomed = ReelsZoom.isZoomed(zoomScale)
+    val showZoomHud = !isInPictureInPicture &&
+        isActive &&
+        !isSearchBarOpen &&
+        !drawerOpen &&
+        !qualityDialogOpen &&
+        !isScrubbing &&
+        (isPinchZooming || (isZoomed && chromeVisible))
+    val topHudPadding = if (isLandscape) {
+        if (effectiveChromeVisible) 60.dp else 12.dp
+    } else {
+        when {
+            !effectiveChromeVisible -> 14.dp
+            searchQuery.isNotBlank() && !isSearchBarOpen -> 112.dp
+            else -> 72.dp
+        }
+    }
+    val topHudModifier = Modifier
+        .align(Alignment.TopCenter)
+        .windowInsetsPadding(
+            if (isLandscape) {
+                WindowInsets.safeDrawing
+            } else {
+                // Use safeDrawing (statusBars + displayCutout) so the Zoom/Speed HUD
+                // stays below the camera notch/punch-hole even when immersive mode hides
+                // the status bar (when statusBarsPadding() collapses to 0dp).
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
             },
+        )
+        .padding(top = topHudPadding, start = 12.dp, end = 12.dp)
+
+    val renderSpeedPill: @Composable () -> Unit = {
+        AnimatedVisibility(
+            visible = showSpeedPill,
+            enter = fadeIn() + scaleIn(initialScale = 0.9f),
+            exit = fadeOut() + scaleOut(targetScale = 0.9f),
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            val holdLabel = stringResource(
+                if (pillFast) MR.strings.reels_hold_fast else MR.strings.reels_hold_slow,
+            )
+            Row(
+                modifier = Modifier
+                    .reelsFrostPill(
+                        rim = auroraMenuRimLightBrush(auroraColors),
+                        eInk = auroraColors.isEInk,
+                        solid = auroraColors.cardBackground,
+                        strong = true,
+                    )
+                    .padding(horizontal = 13.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
+                if (holdingRate != null) {
+                    Text(
+                        text = if (pillFast) "»" else "«",
+                        color = if (pillFast) auroraColors.accent else Color.White.copy(alpha = 0.75f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    text = reelsSpeedLabel(pillRate),
+                    color = if (pillFast && holdingRate != null) auroraColors.accent else Color.White,
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = "tnum",
+                    ),
+                    modifier = Modifier.semantics {
+                        contentDescription = holdLabel
+                    },
+                )
+            }
+        }
+    }
+
+    val renderZoomHud: @Composable () -> Unit = {
+        AnimatedVisibility(
+            visible = showZoomHud,
+            enter = fadeIn() + scaleIn(initialScale = 0.92f),
+            exit = fadeOut() + scaleOut(targetScale = 0.92f),
+        ) {
+            Row(
+                modifier = Modifier
+                    .reelsFrostPill(
+                        rim = auroraMenuRimLightBrush(auroraColors),
+                        eInk = auroraColors.isEInk,
+                        solid = auroraColors.cardBackground,
+                        strong = true,
+                    )
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = ReelsZoom.formatScaleLabel(zoomScale),
+                    color = auroraColors.accent,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = "tnum",
+                    ),
+                )
+                if (!isPinchZooming && isZoomed) {
+                    val fitLabel = stringResource(MR.strings.reels_aspect_fit)
+                    val fillLabel = stringResource(MR.strings.reels_aspect_fill)
+                    ReelsZoomPresetChip(
+                        label = fitLabel,
+                        selected = false,
+                        accent = auroraColors.accent,
+                        onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (isCropMode) onToggleCropMode()
+                            onAnimateZoomTo(1f, true)
+                        },
+                    )
+                    ReelsZoomPresetChip(
+                        label = fillLabel,
+                        selected = false,
+                        accent = auroraColors.accent,
+                        onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (!isCropMode) onToggleCropMode()
+                            onAnimateZoomTo(1f, true)
+                        },
+                    )
+                    ReelsZoom.SCALE_PRESETS.forEach { preset ->
+                        val activePreset = abs(zoomScale - preset) < 0.08f
+                        ReelsZoomPresetChip(
+                            label = ReelsZoom.formatScaleLabel(preset),
+                            selected = activePreset,
+                            accent = auroraColors.accent,
+                            onClick = {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onAnimateZoomTo(preset, false)
+                            },
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .clickable(role = Role.Button) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onAnimateZoomTo(1f, true)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(MR.strings.action_reset),
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (isLandscape) {
+        Row(
+            modifier = topHudModifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            renderSpeedPill()
+            renderZoomHud()
+        }
+    } else {
+        Column(
+            modifier = topHudModifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            renderSpeedPill()
+            renderZoomHud()
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.ReelsSeekNoticeOverlay(
+    seekNotice: ReelsSeekNotice,
+    heldRate: Float?,
+    isActive: Boolean,
+    isInPictureInPicture: Boolean,
+    isLandscape: Boolean,
+) {
+    val auroraColors = AuroraTheme.colors
+    AnimatedVisibility(
+        visible = seekNotice.seconds != null && heldRate == null && isActive && !isInPictureInPicture,
+        enter = fadeIn() + slideInHorizontally { if (seekNotice.forward) it / 5 else -it / 5 },
+        exit = fadeOut() + slideOutHorizontally { if (seekNotice.forward) it / 5 else -it / 5 },
+        modifier = Modifier
+            .align(if (seekNotice.forward) Alignment.CenterEnd else Alignment.CenterStart)
+            .then(
+                if (isLandscape) {
+                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = reelsSeekNoticeHorizontalPadding(isLandscape)),
+    ) {
+        Text(
+            text = seekNotice.seconds?.let { seconds ->
+                stringResource(
+                    if (seconds < 0) MR.strings.reels_seek_notice_back else MR.strings.reels_seek_notice_forward,
+                    abs(seconds),
+                )
+            }.orEmpty(),
+            style = TextStyle(
+                color = Color.White,
+                fontSize = if (isLandscape) 18.sp else 12.sp,
+                fontWeight = FontWeight.Bold,
+                fontFeatureSettings = "tnum",
+                shadow = Shadow(color = Color.Black, offset = Offset(0f, 1f), blurRadius = 4f),
+            ),
+            maxLines = 1,
+            modifier = Modifier
+                .reelsFrostPill(
+                    rim = auroraMenuRimLightBrush(auroraColors),
+                    eInk = auroraColors.isEInk,
+                    solid = auroraColors.cardBackground,
+                    strong = false,
+                )
+                .padding(horizontal = if (isLandscape) 12.dp else 9.dp, vertical = if (isLandscape) 5.dp else 3.dp),
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.ReelsLandscapeControlsOverlay(
+    item: ShortVideoItem,
+    effectiveChromeVisible: Boolean,
+    scrubUiState: ReelsScrubUiState,
+    progressState: State<Float>,
+    bufferFraction: Float,
+    durationSec: Float,
+    sourceName: String,
+    feedSectionLabel: String?,
+    isMuted: Boolean,
+    isLiked: Boolean,
+    isHdQuality: Boolean,
+    qualityModeEnabled: Boolean,
+    qualityEntryLabel: String?,
+    isCropMode: Boolean,
+    effectivePlaybackSpeed: Float,
+    isAutoAdvance: Boolean,
+    showSearch: Boolean,
+    isSearchBarOpen: Boolean,
+    searchQuery: String,
+    showFollowAction: Boolean,
+    isFollowingCreator: Boolean,
+    showHideAction: Boolean,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    isPartial: Boolean,
+    downloadSizeText: String?,
+    downloadProgress: Float?,
+    sourceBadgeName: String?,
+    sourceBadgeIcon: ImageBitmap?,
+    playlistItems: List<ShortVideoItem>,
+    playlistIndex: Int,
+    preloadWifiOnly: Boolean,
+    dataSaverEnabled: Boolean,
+    sleepTimerValue: String,
+    offlineUsedText: String,
+    offlineUsedFraction: Float,
+    canClearOffline: Boolean,
+    isIncognito: Boolean,
+    landscapeBrightnessGestureEnabled: Boolean,
+    landscapeVolumeGestureEnabled: Boolean,
+    landscapePullUpSeekEnabled: Boolean,
+    drawerOpen: Boolean,
+    drawerTab: Int,
+    onOpenDrawer: (Int) -> Unit,
+    onCloseDrawer: () -> Unit,
+    onOpenQualityDialog: (ReelsQualityDialogMode) -> Unit,
+    onOpenHideDialog: () -> Unit,
+    onBack: () -> Unit,
+    onToggleChrome: () -> Unit,
+    onToggleCropMode: () -> Unit,
+    onToggleSearch: () -> Unit,
+    onSearchSubmit: (String) -> Unit,
+    onClearSearch: () -> Unit,
+    onOpenSourcePicker: (() -> Unit)?,
+    onExitLandscape: () -> Unit,
+    onTagClick: (String) -> Unit,
+    onAuthorClick: (() -> Unit)?,
+    onCreatorClick: ((String) -> Unit)?,
+    onToggleFollowCreator: () -> Unit,
+    onSourceBadgeClick: (() -> Unit)?,
+    onExcludeSourceFromMix: (() -> Unit)?,
+    onToggleMute: () -> Unit,
+    onToggleTouchLock: () -> Unit,
+    onUpdatePlaybackSpeed: (Float) -> Unit,
+    onToggleLike: () -> Unit,
+    onDownload: (() -> Unit)?,
+    onShare: (Float) -> Unit,
+    onRequestSeek: (Float, Boolean) -> Unit,
+    onScrubStart: () -> Unit,
+    onScrubStateChange: (ReelsScrubUiState) -> Unit,
+    onToggleQuality: () -> Unit,
+    onToggleAutoAdvance: () -> Unit,
+    onToggleLandscapeBrightnessGesture: () -> Unit,
+    onToggleLandscapeVolumeGesture: () -> Unit,
+    onToggleLandscapePullUpSeek: () -> Unit,
+    onCycleSleepTimer: () -> Unit,
+    onToggleIncognito: () -> Unit,
+    onTogglePreloadWifiOnly: () -> Unit,
+    onToggleDataSaver: () -> Unit,
+    onClearOffline: () -> Unit,
+    onClearVideoCache: () -> Unit,
+    onSelectPlaylistItem: (Int) -> Unit,
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    // Landscape TopBar
+    AnimatedVisibility(
+        visible = effectiveChromeVisible || isSearchBarOpen,
+        enter = fadeIn() + slideInVertically { -it },
+        exit = fadeOut() + slideOutVertically { -it },
+        modifier = Modifier.align(Alignment.TopCenter),
+    ) {
+        ReelsLandscapeTopBar(
+            sourceName = sourceName,
+            onBackClick = onBack,
+            onOpenPlaylist = { onOpenDrawer(2) },
+            onClearDisplay = onToggleChrome,
+            playbackSpeed = effectivePlaybackSpeed,
+            isCropMode = isCropMode,
+            onToggleCropMode = {
+                onScrubStart()
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onToggleCropMode()
+            },
+            showSearch = showSearch,
+            isSearchOpen = isSearchBarOpen,
+            onToggleSearch = {
+                if (!isSearchBarOpen) onScrubStart()
+                onToggleSearch()
+            },
+            searchQuery = searchQuery,
+            onSearchSubmit = onSearchSubmit,
+            onClearSearch = onClearSearch,
+            onOpenSourcePicker = onOpenSourcePicker,
+            onOpenSettings = { onOpenDrawer(0) },
+            onExitLandscape = onExitLandscape,
+            feedSectionLabel = feedSectionLabel,
+        )
+    }
+
+    // Landscape Compact Bottom Meta (bottom-start, above the 2-row Unified Cinema Console)
+    AnimatedVisibility(
+        visible = effectiveChromeVisible && !scrubUiState.isActive,
+        enter = fadeIn() + slideInVertically { it },
+        exit = fadeOut() + slideOutVertically { it },
+        modifier = Modifier.align(Alignment.BottomStart),
+    ) {
+        ReelsBottomMeta(
+            item = item,
+            onTagClick = onTagClick,
+            onAuthorClick = onAuthorClick,
+            onCreatorClick = onCreatorClick,
+            showFollowAction = showFollowAction,
+            isFollowingCreator = isFollowingCreator,
+            onToggleFollowCreator = onToggleFollowCreator,
+            onMetaStatsClick = { onOpenDrawer(0) },
+            sourceBadgeName = sourceBadgeName,
+            sourceBadgeIcon = sourceBadgeIcon,
+            onSourceBadgeClick = onSourceBadgeClick,
+            isLandscapeCompact = true,
+            modifier = Modifier
+                .fillMaxWidth(0.58f)
+                .padding(
+                    start = 16.dp,
+                    bottom = 78.dp,
+                ),
+        )
+    }
+
+    // Landscape Bottom Unified Cinema Console (Seekbar + 36dp Unified Control Deck)
+    AnimatedVisibility(
+        visible = effectiveChromeVisible,
+        enter = fadeIn() + slideInVertically { it },
+        exit = fadeOut() + slideOutVertically { it },
+        modifier = Modifier.align(Alignment.BottomCenter),
+    ) {
+        ReelsLandscapeScrubberDock(
+            progressState = progressState,
+            bufferFraction = bufferFraction,
+            durationSec = durationSec,
+            isMuted = isMuted,
+            onToggleMute = onToggleMute,
+            onLockScreen = onToggleTouchLock,
+            qualityLabel = qualityEntryLabel?.let { "$it ▾" },
+            onQualityClick = {
+                if (qualityModeEnabled) {
+                    onOpenQualityDialog(ReelsQualityDialogMode.VIDEO)
+                }
+            },
+            isCropMode = isCropMode,
+            onToggleCropMode = {
+                onScrubStart()
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onToggleCropMode()
+            },
+            playbackSpeed = effectivePlaybackSpeed,
+            onCycleSpeed = {
+                onScrubStart()
+                onUpdatePlaybackSpeed(nextReelsLandscapeSpeed(effectivePlaybackSpeed))
+            },
+            isLiked = isLiked,
+            likesCount = item.likesCount,
+            onToggleLike = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onToggleLike()
+            },
+            isDownloaded = isDownloaded,
+            isDownloading = isDownloading,
+            isPartial = isPartial,
+            downloadProgress = downloadProgress,
+            onDownload = onDownload?.let { download ->
+                {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                    download()
+                }
+            },
+            onShare = { onShare(progressState.value * durationSec.coerceAtLeast(0f)) },
+            onOpenMore = if (showHideAction) onOpenHideDialog else null,
+            posterUrl = item.posterUrlVertical ?: item.posterUrl,
+            onSeek = { frac -> onRequestSeek(frac, false) },
+            onScrubPreview = { frac -> onRequestSeek(frac, true) },
+            onScrubStart = onScrubStart,
+            onScrubStateChange = onScrubStateChange,
+            externalScrubFraction = if (scrubUiState.isActive && scrubUiState.fromScreenGesture) {
+                scrubUiState.progress
+            } else {
+                null
+            },
+            fineScrubEnabled = landscapePullUpSeekEnabled,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+    }
+
+    // Aurora Frost Drawer
+    if (drawerOpen) {
+        ReelsAuroraFrostDrawer(
+            isOpen = drawerOpen,
+            initialTab = drawerTab,
+            currentItem = item,
+            playlistItems = playlistItems,
+            currentPlaylistIndex = playlistIndex,
+            isHdQuality = isHdQuality,
+            onToggleQuality = onToggleQuality,
+            qualityModeEnabled = qualityModeEnabled,
+            qualityLabel = qualityEntryLabel,
+            onOpenQualityVideo = { onOpenQualityDialog(ReelsQualityDialogMode.VIDEO) },
+            onOpenQualityDefault = { onOpenQualityDialog(ReelsQualityDialogMode.GLOBAL) },
+            isCropMode = isCropMode,
+            onToggleCropMode = {
+                onScrubStart()
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onToggleCropMode()
+            },
+            playbackSpeed = effectivePlaybackSpeed,
+            onSetPlaybackSpeed = onUpdatePlaybackSpeed,
+            isAutoAdvance = isAutoAdvance,
+            onToggleAutoAdvance = onToggleAutoAdvance,
+            landscapeBrightnessGestureEnabled = landscapeBrightnessGestureEnabled,
+            onToggleLandscapeBrightnessGesture = onToggleLandscapeBrightnessGesture,
+            landscapeVolumeGestureEnabled = landscapeVolumeGestureEnabled,
+            onToggleLandscapeVolumeGesture = onToggleLandscapeVolumeGesture,
+            landscapePullUpSeekEnabled = landscapePullUpSeekEnabled,
+            onToggleLandscapePullUpSeek = onToggleLandscapePullUpSeek,
+            sleepTimerValue = sleepTimerValue,
+            onCycleSleepTimer = onCycleSleepTimer,
+            isIncognito = isIncognito,
+            onToggleIncognito = onToggleIncognito,
+            isDownloaded = isDownloaded,
+            isDownloading = isDownloading,
+            isPartial = isPartial,
+            downloadSizeText = downloadSizeText,
+            onDownloadCurrent = onDownload,
+            preloadWifiOnly = preloadWifiOnly,
+            onTogglePreloadWifiOnly = onTogglePreloadWifiOnly,
+            dataSaverEnabled = dataSaverEnabled,
+            onToggleDataSaver = onToggleDataSaver,
+            offlineUsedText = offlineUsedText,
+            offlineUsedFraction = offlineUsedFraction,
+            canClearOffline = canClearOffline,
+            onClearOffline = onClearOffline,
+            onOpenHide = if (showHideAction) onOpenHideDialog else null,
+            currentSourceName = sourceBadgeName,
+            onOpenSource = onSourceBadgeClick,
+            onExcludeSourceFromMix = onExcludeSourceFromMix,
+            onClearVideoCache = onClearVideoCache,
+            onSelectClip = { idx ->
+                onCloseDrawer()
+                onSelectPlaylistItem(idx)
+            },
+            onDismiss = onCloseDrawer,
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.ReelsPortraitControlsOverlay(
+    item: ShortVideoItem,
+    effectiveChromeVisible: Boolean,
+    scrubUiState: ReelsScrubUiState,
+    progressState: State<Float>,
+    bufferFraction: Float,
+    durationSec: Float,
+    portraitMetaHeightPx: Int,
+    onPortraitMetaHeightChanged: (Int) -> Unit,
+    isLiked: Boolean,
+    isMuted: Boolean,
+    showFollowAction: Boolean,
+    isFollowingCreator: Boolean,
+    showHideAction: Boolean,
+    showOfflineAction: Boolean,
+    isOfflineStored: Boolean,
+    landscape: Boolean,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    isPartial: Boolean,
+    downloadSizeText: String?,
+    downloadProgress: Float?,
+    sourceBadgeName: String?,
+    sourceBadgeIcon: ImageBitmap?,
+    onToggleLike: () -> Unit,
+    onToggleMute: () -> Unit,
+    onShare: (Float) -> Unit,
+    onToggleFollowCreator: () -> Unit,
+    onOpenHideDialog: () -> Unit,
+    onToggleOffline: () -> Unit,
+    onToggleLandscape: () -> Unit,
+    onDownload: (() -> Unit)?,
+    onTagClick: (String) -> Unit,
+    onAuthorClick: (() -> Unit)?,
+    onCreatorClick: ((String) -> Unit)?,
+    onSourceBadgeClick: (() -> Unit)?,
+    onRequestSeek: (Float, Boolean) -> Unit,
+    onScrubStart: () -> Unit,
+    onScrubStateChange: (ReelsScrubUiState) -> Unit,
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val navBarsBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Guarantee a safe margin of at least 26.dp even when system gesture bar is hidden (navBars == 0dp)
+    val safeBottomInset = maxOf(navBarsBottomPadding, 26.dp)
+    val metaBottomPadding = safeBottomInset + 28.dp
+    val actionsBottomPadding =
+        metaBottomPadding + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
+    AnimatedVisibility(
+        visible = effectiveChromeVisible,
+        enter = fadeIn() + slideInHorizontally { it },
+        exit = fadeOut() + slideOutHorizontally { it },
+        modifier = Modifier.align(Alignment.BottomEnd),
+    ) {
+        ReelsActionsColumn(
+            isLiked = isLiked,
+            isMuted = isMuted,
+            onToggleLike = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onToggleLike()
+            },
+            onToggleMute = onToggleMute,
+            // B3.6: share carries the current playback second for a timeline URL.
+            onShare = { onShare(progressState.value * durationSec.coerceAtLeast(0f)) },
+            showFollow = showFollowAction,
+            isFollowing = isFollowingCreator,
+            onToggleFollow = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onToggleFollowCreator()
+            },
+            onOpenHide = if (showHideAction) onOpenHideDialog else null,
+            onToggleOffline = if (showOfflineAction) onToggleOffline else null,
+            isOfflineStored = isOfflineStored,
+            landscape = landscape,
+            onToggleLandscape = onToggleLandscape,
+            onDownload = onDownload?.let { download ->
+                {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                    download()
+                }
+            },
+            isDownloaded = isDownloaded,
+            isDownloading = isDownloading,
+            isPartial = isPartial,
+            downloadSizeText = downloadSizeText,
+            downloadProgress = downloadProgress,
+            modifier = Modifier.padding(end = 8.dp, bottom = actionsBottomPadding),
+        )
+    }
+
+    // Portrait Bottom Meta info
+    AnimatedVisibility(
+        visible = effectiveChromeVisible && !scrubUiState.isActive,
+        enter = fadeIn() + slideInVertically { it },
+        exit = fadeOut() + slideOutVertically { it },
+        modifier = Modifier.align(Alignment.BottomStart),
+    ) {
+        ReelsBottomMeta(
+            item = item,
+            onTagClick = onTagClick,
+            onAuthorClick = onAuthorClick,
+            onCreatorClick = onCreatorClick,
+            showFollowAction = showFollowAction,
+            isFollowingCreator = isFollowingCreator,
+            onToggleFollowCreator = onToggleFollowCreator,
+            sourceBadgeName = sourceBadgeName,
+            sourceBadgeIcon = sourceBadgeIcon,
+            onSourceBadgeClick = onSourceBadgeClick,
+            modifier = Modifier
+                .padding(
+                    start = 16.dp,
+                    end = 76.dp,
+                    bottom = metaBottomPadding,
+                )
+                .onSizeChanged { onPortraitMetaHeightChanged(it.height) },
+        )
+    }
+
+    // Portrait Interactive Scrubber / Seek Bar (Aurora style)
+    AnimatedVisibility(
+        visible = effectiveChromeVisible,
+        enter = fadeIn() + slideInVertically { it },
+        exit = fadeOut() + slideOutVertically { it },
+        modifier = Modifier.align(Alignment.BottomCenter),
+    ) {
+        ReelsProgressBar(
+            progressState = progressState,
+            durationSec = durationSec,
+            bufferFraction = bufferFraction,
+            posterUrl = item.posterUrlVertical ?: item.posterUrl,
+            chromeVisible = effectiveChromeVisible,
+            onSeek = { frac -> onRequestSeek(frac, false) },
+            onScrubPreview = { frac -> onRequestSeek(frac, true) },
+            onScrubStart = onScrubStart,
+            onScrubStateChange = onScrubStateChange,
+            externalScrubFraction = if (scrubUiState.isActive && scrubUiState.fromScreenGesture) {
+                scrubUiState.progress
+            } else {
+                null
+            },
+            modifier = Modifier
+                .padding(bottom = safeBottomInset + 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.ReelsScrubOverlayHost(
+    scrubUiState: ReelsScrubUiState,
+    scrubThumbVersion: Int,
+    scrubThumbnailCache: ReelsScrubThumbnailCache<ImageBitmap>,
+    durationSec: Float,
+    posterUrl: String?,
+    isLandscape: Boolean,
+    chromeVisible: Boolean,
+    fineScrubEnabled: Boolean,
+) {
+    val previewFrame = remember(scrubThumbVersion, scrubUiState.progress, durationSec) {
+        scrubThumbnailCache.getBestFrame(scrubUiState.progress, durationSec)
+    }
+    val filmstripFrames = remember(scrubThumbVersion, scrubUiState.progress, scrubUiState.isFineMode, durationSec) {
+        if (scrubUiState.isFineMode && isLandscape) {
+            val centerSec = scrubUiState.progress.coerceIn(0f, 1f) * durationSec.coerceAtLeast(0f)
+            val halfWindow = (
+                min(
+                    durationSec.coerceAtLeast(12f),
+                    ReelsFineScrubController.DEFAULT_FINE_WINDOW_SEC,
+                ) / 2f
+                ).coerceAtLeast(3f)
+            scrubThumbnailCache.framesInWindow(centerSec, halfWindow)
+        } else {
+            emptyList()
+        }
+    }
+    val portraitNavBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val portraitAnchorPadding = maxOf(portraitNavBottom, 26.dp) + 18.dp
+    ReelsScrubPreviewOverlay(
+        scrubState = scrubUiState,
+        durationSec = durationSec,
+        previewFrame = previewFrame,
+        filmstripFrames = filmstripFrames,
+        posterUrl = posterUrl,
+        isLandscape = isLandscape,
+        chromeVisible = chromeVisible,
+        fineScrubEnabled = fineScrubEnabled,
+        bottomAnchorPadding = if (isLandscape) 66.dp else portraitAnchorPadding,
+    )
+}
+
+@Composable
+private fun ReelsHideVideoDialog(
+    onDismiss: () -> Unit,
+    onHideVideo: () -> Unit,
+    onHideAuthor: (() -> Unit)?,
+    sourceBadgeName: String?,
+    onSourceBadgeClick: (() -> Unit)?,
+    onExcludeSourceFromMix: (() -> Unit)?,
+) {
+    AuroraFrostDialog(
+        onDismiss = onDismiss,
+        title = stringResource(MR.strings.reels_hide_dialog_title),
+        footer = {
+            AuroraFrostCancel(
+                label = stringResource(MR.strings.action_cancel),
+                onClick = onDismiss,
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFEF4444).copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                    .clickable {
+                        onDismiss()
+                        onHideVideo()
+                    }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.VisibilityOff,
+                    contentDescription = null,
+                    tint = Color(0xFFF87171),
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = stringResource(MR.strings.reels_hide_video),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            if (onHideAuthor != null) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1911,8 +2268,68 @@ fun ReelsVideoPage(
                         .background(Color(0xFFEF4444).copy(alpha = 0.15f))
                         .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
                         .clickable {
-                            showHideDialog = false
-                            onHideVideo()
+                            onDismiss()
+                            onHideAuthor()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = Color(0xFFF87171),
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(MR.strings.reels_hide_author),
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            if (!sourceBadgeName.isNullOrBlank() && onSourceBadgeClick != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AuroraTheme.colors.accent.copy(alpha = 0.14f))
+                        .border(1.dp, AuroraTheme.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            onDismiss()
+                            onSourceBadgeClick()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null,
+                        tint = AuroraTheme.colors.accent,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(MR.strings.reels_mix_open_plugin, sourceBadgeName),
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            if (!sourceBadgeName.isNullOrBlank() && onExcludeSourceFromMix != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
+                        .clickable {
+                            onDismiss()
+                            onExcludeSourceFromMix()
                         }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1921,105 +2338,15 @@ fun ReelsVideoPage(
                     Icon(
                         imageVector = Icons.Filled.VisibilityOff,
                         contentDescription = null,
-                        tint = Color(0xFFF87171),
+                        tint = Color.White.copy(alpha = 0.85f),
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
-                        text = stringResource(MR.strings.reels_hide_video),
+                        text = stringResource(MR.strings.reels_mix_exclude_plugin),
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     )
-                }
-
-                if (onHideAuthor != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFEF4444).copy(alpha = 0.15f))
-                            .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                            .clickable {
-                                showHideDialog = false
-                                onHideAuthor()
-                            }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = null,
-                            tint = Color(0xFFF87171),
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            text = stringResource(MR.strings.reels_hide_author),
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-
-                if (!sourceBadgeName.isNullOrBlank() && onSourceBadgeClick != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(AuroraTheme.colors.accent.copy(alpha = 0.14f))
-                            .border(1.dp, AuroraTheme.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                            .clickable {
-                                showHideDialog = false
-                                onSourceBadgeClick()
-                            }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = null,
-                            tint = AuroraTheme.colors.accent,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            text = stringResource(MR.strings.reels_mix_open_plugin, sourceBadgeName),
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-
-                if (!sourceBadgeName.isNullOrBlank() && onExcludeSourceFromMix != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
-                            .clickable {
-                                showHideDialog = false
-                                onExcludeSourceFromMix()
-                            }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.VisibilityOff,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.85f),
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            text = stringResource(MR.strings.reels_mix_exclude_plugin),
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
                 }
             }
         }
