@@ -535,12 +535,16 @@ class PagerPageHolder(
             pageIndex = page.index,
             cropBorders = cropBorders,
         )
+        val cachedPreview = previewKey?.let(ReaderPreviewCache::get)?.bitmap?.takeIf { !it.isRecycled }
         val streamFn = page.stream
+        if (cachedPreview == null && streamFn == null) return
+
         panelDetectJob = scope.launch(Dispatchers.Default) {
             val panels = try {
-                val cachedPreview = previewKey?.let(ReaderPreviewCache::get)?.bitmap
-                if (cachedPreview != null && !cachedPreview.isRecycled) {
-                    MangaPanelDetector.detectFromBitmap(cachedPreview, isRtl = isRtl)
+                val preview =
+                    cachedPreview ?: previewKey?.let(ReaderPreviewCache::get)?.bitmap?.takeIf { !it.isRecycled }
+                if (preview != null) {
+                    MangaPanelDetector.detectFromBitmap(preview, isRtl = isRtl)
                 } else if (streamFn != null) {
                     withIOContext {
                         decodePanelAnalysisBitmap(streamFn, cropBorders)?.let { bmp ->
@@ -549,19 +553,23 @@ class PagerPageHolder(
                             } finally {
                                 if (!bmp.isRecycled) bmp.recycle()
                             }
-                        } ?: emptyList()
+                        }
                     }
                 } else {
-                    emptyList()
+                    null
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Throwable) {
-                emptyList()
+                null
             }
-            if (cacheKey != null) {
-                MangaPanelCache.put(cacheKey, panels)
-            }
-            withUIContext {
-                applyDetectedPanels(panels)
+            if (panels != null) {
+                if (cacheKey != null) {
+                    MangaPanelCache.put(cacheKey, panels)
+                }
+                withUIContext {
+                    applyDetectedPanels(panels)
+                }
             }
         }
     }

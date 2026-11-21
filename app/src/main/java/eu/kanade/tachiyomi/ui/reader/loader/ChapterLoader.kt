@@ -35,6 +35,7 @@ class ChapterLoader(
     private val downloadProvider: MangaDownloadProvider,
     private val manga: Manga,
     private val source: MangaSource,
+    private val pageLoaderFactory: ((ReaderChapter) -> PageLoader)? = null,
 ) {
 
     private val readerPreferences: ReaderPreferences by injectLazy()
@@ -94,8 +95,9 @@ class ChapterLoader(
     private suspend fun loadPages(chapter: ReaderChapter) {
         withIOContext {
             logcat { "Loading pages for ${chapter.chapter.name}" }
+            var loader: PageLoader? = null
             try {
-                val loader = getPageLoader(chapter)
+                loader = getPageLoader(chapter)
                 // Defense in depth: never orphan an already-assigned loader.
                 chapter.pageLoader?.takeIf { it !== loader }?.recycle()
                 chapter.pageLoader = loader
@@ -126,6 +128,12 @@ class ChapterLoader(
 
                 chapter.state = ReaderChapter.State.Loaded(pages)
             } catch (e: Throwable) {
+                if (loader != null) {
+                    if (chapter.pageLoader === loader) {
+                        chapter.pageLoader = null
+                    }
+                    loader.recycle()
+                }
                 chapter.state = ReaderChapter.State.Error(e)
                 throw e
             }
@@ -143,6 +151,7 @@ class ChapterLoader(
      * Returns the page loader to use for this [chapter].
      */
     private fun getPageLoader(chapter: ReaderChapter): PageLoader {
+        pageLoaderFactory?.let { return it(chapter) }
         val dbChapter = chapter.chapter
         val isDownloaded = downloadManager.isChapterDownloaded(
             dbChapter.name,

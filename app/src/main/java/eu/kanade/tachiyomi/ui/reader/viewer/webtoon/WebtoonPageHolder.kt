@@ -279,7 +279,6 @@ class WebtoonPageHolder(
             page.imageDimensions = dimensions
         }
 
-        val boundPage = this.page
         withUIContext {
             dimensions
                 ?.takeIf { it.width > 0 && it.height > 0 }
@@ -288,7 +287,7 @@ class WebtoonPageHolder(
                     page.chapter.notePageRatio(ratio)
                     viewer.activity.viewModel.noteSessionPageRatio(ratio)
                 }
-            if (boundPage === page) refreshPlaceholderHeight()
+            if (this@WebtoonPageHolder.page === page) refreshPlaceholderHeight()
         }
     }
 

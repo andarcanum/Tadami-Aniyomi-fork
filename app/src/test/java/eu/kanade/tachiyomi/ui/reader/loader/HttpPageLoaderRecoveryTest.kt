@@ -18,6 +18,7 @@ import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -27,13 +28,24 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import okio.BufferedSource
+import okio.Source
+import okio.Timeout
+import okio.blackholeSink
+import okio.buffer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.domain.items.chapter.model.Chapter
 import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class HttpPageLoaderRecoveryTest {
@@ -363,4 +375,110 @@ class HttpPageLoaderRecoveryTest {
             loader.recycle()
         }
     }
+
+    @Test
+    fun `retryPage closes blocked response stream immediately and awaits cleanup before redownloading`(): Unit =
+        runBlocking {
+            val firstReadStarted = CountDownLatch(1)
+            val firstResponseClosed = CountDownLatch(1)
+            val firstWriteExited = AtomicBoolean(false)
+            val secondAttemptSawCleanExit = AtomicBoolean(false)
+            val attempts = AtomicInteger(0)
+
+            val blockingBody = object : ResponseBody() {
+                override fun contentType() = "image/png".toMediaType()
+                override fun contentLength() = -1L
+                override fun source(): BufferedSource {
+                    return object : Source {
+                        override fun read(sink: Buffer, byteCount: Long): Long {
+                            firstReadStarted.countDown()
+                            firstResponseClosed.await(5, TimeUnit.SECONDS)
+                            throw IOException("Socket closed")
+                        }
+
+                        override fun timeout() = Timeout.NONE
+
+                        override fun close() {
+                            firstResponseClosed.countDown()
+                        }
+                    }.buffer()
+                }
+            }
+
+            val source = mockk<HttpSource>()
+            every { source.baseUrl } returns "https://example.org"
+            coEvery { source.getImage(any()) } answers {
+                val p = firstArg<Page>()
+                if (attempts.incrementAndGet() == 1) {
+                    Response.Builder()
+                        .request(Request.Builder().url(p.imageUrl!!).build())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body(blockingBody)
+                        .build()
+                } else {
+                    secondAttemptSawCleanExit.set(firstWriteExited.get())
+                    createResponse(p.imageUrl!!)
+                }
+            }
+
+            val cachedUrls = mutableSetOf<String>()
+            val chapterCache = mockk<ChapterCache>()
+            every { chapterCache.isImageInCache(any()) } answers { firstArg<String>() in cachedUrls }
+            every { chapterCache.removeImageFromCache(any()) } answers { cachedUrls.remove(firstArg()) }
+            every { chapterCache.putImageToCache(any(), any()) } answers {
+                val url = firstArg<String>()
+                val response = secondArg<Response>()
+                try {
+                    response.body.source().readAll(blackholeSink())
+                    cachedUrls.add(url)
+                } finally {
+                    response.body.close()
+                    if (attempts.get() == 1) {
+                        firstWriteExited.set(true)
+                    }
+                }
+            }
+            every { chapterCache.openImageStream(any()) } answers { ByteArrayInputStream(ByteArray(16)) }
+            justRun { chapterCache.putPageListToCache(any(), any()) }
+
+            val chapter = ReaderChapter(
+                Chapter.create().copy(id = 15L, mangaId = 1L, url = "https://example.org/ch-15"),
+            )
+            val page = ReaderPage(0, "https://example.org/p0", "https://example.org/stalled.png").apply {
+                this.chapter = chapter
+            }
+            chapter.state = ReaderChapter.State.Loaded(listOf(page))
+
+            val loader = HttpPageLoader(
+                chapter = chapter,
+                source = source,
+                chapterCache = chapterCache,
+                sourcePreferences = createSourcePreferences(),
+                readerPreferences = createReaderPreferences(),
+                stallRetryThresholdMs = 30L,
+            )
+
+            try {
+                val loadJob = launch(Dispatchers.IO) { loader.loadPage(page) }
+                firstReadStarted.await(5, TimeUnit.SECONDS) shouldBe true
+                kotlinx.coroutines.delay(60L)
+
+                loader.retryPage(page)
+
+                firstResponseClosed.await(2, TimeUnit.SECONDS) shouldBe true
+                withTimeout(5_000L) {
+                    page.statusFlow.first { it == Page.State.READY }
+                }
+                page.status shouldBe Page.State.READY
+                secondAttemptSawCleanExit.get() shouldBe true
+                attempts.get() shouldBe 2
+
+                loadJob.cancel()
+            } finally {
+                firstResponseClosed.countDown()
+                loader.recycle()
+            }
+        }
 }

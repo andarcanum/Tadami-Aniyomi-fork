@@ -16,15 +16,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
@@ -33,7 +36,10 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.PriorityBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * Loader used to load chapters from an online source.
@@ -114,8 +120,8 @@ internal class HttpPageLoader(
                             job.join()
                         }
                     } finally {
-                        entry?.let { inFlightEntries.remove(page, it) }
                         removeQueuedPage(queuedPage)
+                        entry?.let { inFlightEntries.remove(page, it) }
                     }
                 }
             }
@@ -200,38 +206,52 @@ internal class HttpPageLoader(
         // skipping the re-offered page (it only processes QUEUE) - Retry was a dead button.
         // Orphaned QUEUE pages (dropped from the queue while a holder still waited) and
         // stalled LOAD_PAGE/DOWNLOAD_IMAGE requests are also recoverable.
-        val shouldRetry = when (page.status) {
-            Page.State.ERROR, Page.State.READY -> true
+        when (page.status) {
+            Page.State.ERROR, Page.State.READY -> {
+                val active = inFlightEntries[page]
+                if (active != null) {
+                    if (!active.retryRequested.compareAndSet(false, true)) return
+                    requeueAfterCancel(page, active)
+                    return
+                }
+            }
             Page.State.QUEUE -> {
                 val isQueued = synchronized(queuedPages) { queuedPages.containsKey(page) }
-                !isQueued && !inFlightEntries.containsKey(page)
+                if (isQueued || inFlightEntries.containsKey(page)) return
             }
             Page.State.LOAD_PAGE, Page.State.DOWNLOAD_IMAGE -> {
                 val active = inFlightEntries[page]
-                if (active == null) {
-                    true
-                } else {
+                if (active != null) {
                     val idleMs = System.currentTimeMillis() - active.lastActivityMs
-                    if (idleMs >= stallRetryThresholdMs) {
-                        inFlightEntries.remove(page, active)
-                        active.job?.cancel(PageRetryCancellationException())
-                        synchronized(queuedPages) {
-                            if (queuedPages[page]?.dequeued == true) {
-                                queuedPages.remove(page)
-                            }
-                        }
-                        true
-                    } else {
-                        false
-                    }
+                    if (idleMs < stallRetryThresholdMs) return
+                    if (!active.retryRequested.compareAndSet(false, true)) return
+                    requeueAfterCancel(page, active)
+                    return
                 }
             }
         }
-        if (!shouldRetry) return
 
         clearPageCacheAndMetadata(page)
         page.status = Page.State.QUEUE
         offerPage(page, 2)
+    }
+
+    private fun requeueAfterCancel(page: ReaderPage, active: InFlightEntry) {
+        active.job?.cancel(PageRetryCancellationException())
+        scope.launch {
+            // Wait until the aborted worker exits putImageToCache's finally block (aborting any
+            // open DiskLruCache.Editor) before clearing cache metadata and re-offering the page.
+            active.job?.join()
+            if (isRecycled) return@launch
+            synchronized(queuedPages) {
+                if (queuedPages[page]?.dequeued == true) {
+                    queuedPages.remove(page)
+                }
+            }
+            clearPageCacheAndMetadata(page)
+            page.status = Page.State.QUEUE
+            offerPage(page, 2)
+        }
     }
 
     private fun clearPageCacheAndMetadata(page: ReaderPage) {
@@ -407,7 +427,7 @@ internal class HttpPageLoader(
         } catch (_: TimeoutCancellationException) {
             page.status = Page.State.ERROR
         } catch (e: CancellationException) {
-            if (!isRecycled && scope.isActive) {
+            if (!entry.retryRequested.get() && !isRecycled && scope.isActive) {
                 page.status = Page.State.ERROR
             }
             throw e
@@ -425,9 +445,41 @@ internal class HttpPageLoader(
         coroutineScope {
             val downloadJob = launch {
                 val imageResponse = source.getImage(page, dataSaver)
-                entry.lastActivityMs = System.currentTimeMillis()
-                chapterCache.putImageToCache(imageUrl, imageResponse)
-                entry.lastActivityMs = System.currentTimeMillis()
+                var writeError: Throwable? = null
+                val writeJob = launch(Dispatchers.IO) {
+                    try {
+                        entry.lastActivityMs = System.currentTimeMillis()
+                        chapterCache.putImageToCache(imageUrl, imageResponse)
+                        entry.lastActivityMs = System.currentTimeMillis()
+                    } catch (t: Throwable) {
+                        writeError = t
+                        if (t is CancellationException) throw t
+                    } finally {
+                        runCatching { imageResponse.close() }
+                    }
+                }
+                try {
+                    suspendCancellableCoroutine<Unit> { cont ->
+                        cont.invokeOnCancellation {
+                            runCatching { imageResponse.close() }
+                        }
+                        writeJob.invokeOnCompletion { cause ->
+                            if (!cont.isCompleted) {
+                                val failure = writeError ?: cause
+                                if (failure == null) {
+                                    cont.resume(Unit)
+                                } else {
+                                    cont.resumeWithException(failure)
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    withContext(NonCancellable) {
+                        writeJob.join()
+                    }
+                    runCatching { imageResponse.close() }
+                }
             }
             val progressObserver = launch {
                 page.progressFlow.collect {
@@ -466,6 +518,7 @@ internal class HttpPageLoader(
 private class InFlightEntry(
     @Volatile var job: Job? = null,
     @Volatile var lastActivityMs: Long,
+    val retryRequested: AtomicBoolean = AtomicBoolean(false),
 )
 
 private class PageRetryCancellationException : CancellationException("Page retry requested")

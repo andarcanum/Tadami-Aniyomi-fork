@@ -42,6 +42,7 @@ import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -242,7 +243,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
             cancelLandscapeZoom()
             val runnable = Runnable {
                 landscapeZoomRunnable = null
-                val point = when (config!!.zoomStartPosition) {
+                if (!isReady || sHeight <= 0 || height <= 0) return@Runnable
+                val currentConfig = config ?: return@Runnable
+                val point = when (currentConfig.zoomStartPosition) {
                     ZoomStartPosition.LEFT -> if (forward) {
                         PointF(0F, 0F)
                     } else {
@@ -263,11 +266,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 }
 
                 val targetScale = height.toFloat() / sHeight.toFloat()
-                animateScaleAndCenter(targetScale, point)!!
-                    .withDuration(500)
-                    .withEasing(EASE_IN_OUT_QUAD)
-                    .withInterruptible(true)
-                    .start()
+                animateScaleAndCenter(targetScale, point)?.apply {
+                    withDuration(500)
+                        .withEasing(EASE_IN_OUT_QUAD)
+                        .withInterruptible(true)
+                        .start()
+                }
             }
             landscapeZoomRunnable = runnable
             handler?.postDelayed(runnable, 500)
@@ -275,6 +279,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     fun setImage(drawable: Drawable, config: Config) {
+        cancelLandscapeZoom()
         this.config = config
         pendingSmartFit = null
         pendingAnimatedImage = null
@@ -299,6 +304,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     private fun setImageInternal(data: Any, isAnimated: Boolean, config: Config) {
+        cancelLandscapeZoom()
         this.config = config
         tileLoadErrorDispatched = false
         pendingSmartFit = null
@@ -584,8 +590,18 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     pendingSmartFit = PendingSmartFit(data, config)
                     scope?.let { activeScope ->
                         smartFitJob = activeScope.launch {
-                            val bounds = withContext(Dispatchers.Default) {
-                                WebtoonBorderDetector.detectContentBounds(bitmap)
+                            val bounds = try {
+                                withContext(Dispatchers.Default) {
+                                    WebtoonBorderDetector.detectContentBounds(bitmap)
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Throwable) {
+                                if (!isActive) return@launch
+                                pendingSmartFit = null
+                                smartFitJob = null
+                                onImageLoadError()
+                                return@launch
                             }
                             pendingSmartFit = null
                             smartFitJob = null
@@ -627,13 +643,23 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     pendingSmartFit = PendingSmartFit(data, config)
                     scope?.let { activeScope ->
                         smartFitJob = activeScope.launch {
-                            val bounds = withContext(Dispatchers.IO) {
-                                data.open().use { stream ->
-                                    WebtoonBorderDetector.detectContentBounds(
-                                        stream,
-                                        config.cropBorders,
-                                    )
+                            val bounds = try {
+                                withContext(Dispatchers.IO) {
+                                    data.open().use { stream ->
+                                        WebtoonBorderDetector.detectContentBounds(
+                                            stream,
+                                            config.cropBorders,
+                                        )
+                                    }
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Throwable) {
+                                if (!isActive) return@launch
+                                pendingSmartFit = null
+                                smartFitJob = null
+                                onImageLoadError()
+                                return@launch
                             }
                             pendingSmartFit = null
                             smartFitJob = null
@@ -674,11 +700,21 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     pendingSmartFit = PendingSmartFit(data, config)
                     scope?.let { activeScope ->
                         smartFitJob = activeScope.launch {
-                            val bounds = withContext(Dispatchers.IO) {
-                                WebtoonBorderDetector.detectContentBounds(
-                                    data.peek().inputStream(),
-                                    config.cropBorders,
-                                )
+                            val bounds = try {
+                                withContext(Dispatchers.IO) {
+                                    WebtoonBorderDetector.detectContentBounds(
+                                        data.peek().inputStream(),
+                                        config.cropBorders,
+                                    )
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Throwable) {
+                                if (!isActive) return@launch
+                                pendingSmartFit = null
+                                smartFitJob = null
+                                onImageLoadError()
+                                return@launch
                             }
                             pendingSmartFit = null
                             smartFitJob = null

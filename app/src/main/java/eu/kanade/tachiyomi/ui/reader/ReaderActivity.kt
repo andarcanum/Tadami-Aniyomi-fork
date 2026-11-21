@@ -126,6 +126,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -137,8 +138,6 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
-import tachiyomi.core.common.util.lang.launchNonCancellable
-import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.AchievementProgress
@@ -254,30 +253,8 @@ class ReaderActivity : BaseActivity() {
         applyReaderSystemBarIconStyle(viewModel.state.value.menuVisible)
         seriesId = intent.extras?.getLong(Constants.SERIES_EXTRA, -1)?.takeIf { it > 0 }
 
-        if (viewModel.needsInit()) {
-            val manga = intent.extras?.getLong("manga", -1) ?: -1L
-            val chapter = intent.extras?.getLong("chapter", -1) ?: -1L
-            if (manga == -1L || chapter == -1L) {
-                finish()
-                return
-            }
-            NotificationReceiver.dismissNotification(
-                this,
-                manga.hashCode(),
-                Notifications.ID_NEW_CHAPTERS,
-            )
-
-            lifecycleScope.launchNonCancellable {
-                val initResult = viewModel.init(manga, chapter, seriesId)
-                if (!initResult.getOrDefault(false)) {
-                    val exception = initResult.exceptionOrNull() ?: IllegalStateException(
-                        "Unknown err",
-                    )
-                    withUIContext {
-                        setInitialChapterError(exception)
-                    }
-                }
-            }
+        if (viewModel.needsInit() && !initReaderFromIntent(intent)) {
+            return
         }
 
         config = ReaderConfig()
@@ -296,9 +273,9 @@ class ReaderActivity : BaseActivity() {
             .launchIn(lifecycleScope)
 
         viewModel.state
-            .map { it.manga }
+            .map { it.sessionId to it.manga }
             .distinctUntilChanged()
-            .filterNotNull()
+            .filter { it.second != null }
             .onEach { updateViewer() }
             .launchIn(lifecycleScope)
 
@@ -338,12 +315,62 @@ class ReaderActivity : BaseActivity() {
                     is ReaderViewModel.Event.CopyImage -> {
                         onCopyImageResult(event.uri)
                     }
+                    is ReaderViewModel.Event.InitialLoadError -> {
+                        setInitialChapterError(event.exception)
+                    }
                     is ReaderViewModel.Event.SetCoverResult -> {
                         onSetAsCoverResult(event.result)
                     }
                 }
             }
             .launchIn(lifecycleScope)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val newMangaId = intent.extras?.getLong("manga", -1) ?: -1L
+        val newChapterId = intent.extras?.getLong("chapter", -1) ?: -1L
+        if (newMangaId == -1L || newChapterId == -1L) return
+
+        val newSeriesId = intent.extras?.getLong(Constants.SERIES_EXTRA, -1)?.takeIf { it > 0 }
+        val currentMangaId = viewModel.manga?.id
+        val currentChapterId = viewModel.state.value.currentChapter?.chapter?.id
+        if (newMangaId == currentMangaId && newChapterId == currentChapterId && newSeriesId == seriesId) {
+            setIntent(intent)
+            return
+        }
+
+        setIntent(intent)
+        (viewModel.state.value.viewer as? WebtoonViewer)?.let(viewModel::saveWebtoonScrollProgressOnExit)
+        viewModel.state.value.viewer?.destroy()
+        binding.viewerContainer.removeAllViews()
+        viewModel.onViewerLoaded(null)
+        loadingIndicator?.let { binding.readerContainer.removeView(it) }
+        loadingIndicator = null
+        setWindowHdrEnabled(false)
+        assistUrl = null
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache.clear()
+
+        seriesId = newSeriesId
+        viewModel.resetForNewIntent()
+        initReaderFromIntent(intent)
+    }
+
+    private fun initReaderFromIntent(targetIntent: Intent): Boolean {
+        val manga = targetIntent.extras?.getLong("manga", -1) ?: -1L
+        val chapter = targetIntent.extras?.getLong("chapter", -1) ?: -1L
+        if (manga == -1L || chapter == -1L) {
+            finish()
+            return false
+        }
+        NotificationReceiver.dismissNotification(
+            this,
+            manga.hashCode(),
+            Notifications.ID_NEW_CHAPTERS,
+        )
+
+        viewModel.startInit(manga, chapter, seriesId)
+        return true
     }
 
     /**
@@ -447,24 +474,34 @@ class ReaderActivity : BaseActivity() {
      */
     private fun requestMaxRefreshRate() {
         if (isEInkMode()) return
-        val currentDisplay = display ?: return
+        val currentDisplay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
         val current = currentDisplay.mode
         val fastest = currentDisplay.supportedModes
             .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
             .maxByOrNull { it.refreshRate }
             ?: return
         if (fastest.modeId == current.modeId) return
-        savedDisplayModeId = current.modeId
+        if (!hasSavedDisplayMode) {
+            savedDisplayModeId = window.attributes.preferredDisplayModeId
+            hasSavedDisplayMode = true
+        }
         window.attributes = window.attributes.apply { preferredDisplayModeId = fastest.modeId }
     }
 
     private fun restoreDisplayMode() {
-        if (savedDisplayModeId == 0) return
+        if (!hasSavedDisplayMode) return
         window.attributes = window.attributes.apply { preferredDisplayModeId = savedDisplayModeId }
         savedDisplayModeId = 0
+        hasSavedDisplayMode = false
     }
 
     private var savedDisplayModeId = 0
+    private var hasSavedDisplayMode = false
 
     /**
      * Called when the window focus changes. It sets the menu visibility to the last known state
@@ -981,7 +1018,6 @@ class ReaderActivity : BaseActivity() {
                                                 seriesId,
                                             ),
                                         )
-                                        finish()
                                     }
                                 }
                             }

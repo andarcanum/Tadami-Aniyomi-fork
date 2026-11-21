@@ -1,16 +1,26 @@
 package eu.kanade.tachiyomi.ui.reader
 
 import eu.kanade.tachiyomi.data.database.models.manga.ChapterImpl
+import eu.kanade.tachiyomi.ui.reader.loader.PageLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class ReaderViewModelTest {
 
@@ -247,6 +257,58 @@ class ReaderViewModelTest {
             isSeriesOverrideEnabled = true,
             isAutoWebtoonModeActive = true,
         ) shouldBe ReadingModeApplyTarget.SeriesFlags
+    }
+
+    @Test
+    fun `swapViewerChaptersState refs and unrefs exactly once under CAS contention`(): Unit = runBlocking {
+        class CountingPageLoader : PageLoader() {
+            override var isLocal: Boolean = false
+            val recycleCount = AtomicInteger(0)
+            override suspend fun getPages(): List<ReaderPage> = emptyList()
+            override fun recycle() {
+                super.recycle()
+                recycleCount.incrementAndGet()
+            }
+        }
+
+        val oldLoader = CountingPageLoader()
+        val oldChapter = readerChapter(read = false, lastPageRead = 0L).apply { pageLoader = oldLoader }
+        val oldChapters = ViewerChapters(oldChapter, null, null).apply { ref() }
+
+        val newLoader = CountingPageLoader()
+        val newChapter = readerChapter(read = false, lastPageRead = 0L).apply { pageLoader = newLoader }
+        val newChapters = ViewerChapters(newChapter, null, null)
+
+        val stateFlow = MutableStateFlow(ReaderViewModel.State(viewerChapters = oldChapters))
+        val keepContending = AtomicBoolean(true)
+        val contender = launch(Dispatchers.Default) {
+            while (keepContending.get()) {
+                stateFlow.update { it.copy(menuVisible = !it.menuVisible) }
+            }
+        }
+
+        val replacedCount = AtomicInteger(0)
+        try {
+            swapViewerChaptersState(
+                stateFlow = stateFlow,
+                newChapters = newChapters,
+                chapterList = listOf(newChapter),
+            ) { previous ->
+                replacedCount.incrementAndGet()
+                previous?.unref()
+            }
+        } finally {
+            keepContending.set(false)
+            contender.join()
+        }
+
+        replacedCount.get() shouldBe 1
+        oldLoader.recycleCount.get() shouldBe 1
+        newLoader.recycleCount.get() shouldBe 0
+        stateFlow.value.viewerChapters shouldBe newChapters
+
+        newChapters.unref()
+        newLoader.recycleCount.get() shouldBe 1
     }
 
     private fun readerChapter(

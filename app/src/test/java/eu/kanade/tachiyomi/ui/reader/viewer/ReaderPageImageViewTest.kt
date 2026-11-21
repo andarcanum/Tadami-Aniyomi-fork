@@ -35,6 +35,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
 import tachiyomi.core.common.util.image.NativeImageDecoder
 import java.io.Closeable
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -715,6 +716,44 @@ class ReaderPageImageViewTest {
             assertEquals(0, errorCount)
             assertEquals(1, loadedCount, "Pending animated request should complete after reattach")
             assertTrue(drawable.running)
+        } finally {
+            pageView.recycle()
+            canvasBitmap.recycle()
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun smartFitJobStreamErrorInvokesOnImageLoadErrorWithoutCrashing() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val root = FrameLayout(activity)
+        val pageView = ReaderPageImageView(activity, isWebtoon = true)
+        root.addView(pageView, FrameLayout.LayoutParams(400, 400))
+        activity.setContentView(root)
+        val canvasBitmap = Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+
+        var errorCount = 0
+        pageView.onImageLoadError = { errorCount++ }
+
+        try {
+            layoutAndDraw(root, 400, 400, canvasBitmap)
+            pageView.setImage(
+                streamFn = { throw IOException("corrupt stream") },
+                isAnimated = false,
+                config = ReaderPageImageView.Config(
+                    zoomDuration = 100,
+                    minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
+                    webtoonSmartFit = true,
+                ),
+            )
+
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (errorCount == 0 && System.nanoTime() < deadline) {
+                ShadowLooper.idleMainLooper()
+                Thread.sleep(10)
+            }
+            assertEquals(1, errorCount)
         } finally {
             pageView.recycle()
             canvasBitmap.recycle()
