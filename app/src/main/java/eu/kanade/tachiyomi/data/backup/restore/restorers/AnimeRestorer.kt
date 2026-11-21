@@ -360,7 +360,7 @@ class AnimeRestorer(
         restoreCategories(anime, categories, backupCategories)
         restoreEpisodes(anime, episodes)
         restoreTracking(anime, tracks)
-        restoreHistory(history)
+        restoreHistory(anime.id, history)
         updateAnime.awaitUpdateFetchInterval(anime, now, currentFetchWindow)
         return anime
     }
@@ -399,13 +399,17 @@ class AnimeRestorer(
         }
     }
 
-    private suspend fun restoreHistory(backupHistory: List<BackupAnimeHistory>) {
+    private suspend fun restoreHistory(animeId: Long, backupHistory: List<BackupAnimeHistory>) {
         val toUpdate = backupHistory.mapNotNull { history ->
-            val dbHistory = handler.awaitOneOrNull { db -> db.animehistoryQueries.getHistoryByEpisodeUrl(history.url) }
+            val dbHistory = handler.awaitOneOrNull { db ->
+                db.animehistoryQueries.getHistoryByEpisodeUrlAndAnimeId(history.url, animeId)
+            }
             val item = history.getHistoryImpl()
 
             if (dbHistory == null) {
-                val episode = handler.awaitOneOrNull { db -> db.episodesQueries.getEpisodeByUrl(history.url) }
+                val episode = handler.awaitOneOrNull { db ->
+                    db.episodesQueries.getEpisodeByUrlAndAnimeId(history.url, animeId)
+                }
                 return@mapNotNull if (episode == null) {
                     // Episode doesn't exist; skip
                     null

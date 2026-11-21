@@ -148,4 +148,16 @@ WHERE manga_id = :mangaId;
 
 getAllChaptersForBackup:
 SELECT C.*
-FROM chapters C;
+FROM chapters C
+JOIN mangas M ON C.manga_id = M._id
+WHERE M.favorite = 1
+OR M._id IN (
+    SELECT DISTINCT chapters.manga_id
+    FROM chapters
+    WHERE read = 1 OR last_page_read != 0
+)
+OR M._id IN (
+    SELECT DISTINCT C2.manga_id
+    FROM history H
+    JOIN chapters C2 ON H.chapter_id = C2._id
+);

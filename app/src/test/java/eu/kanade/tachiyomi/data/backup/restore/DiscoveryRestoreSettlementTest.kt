@@ -60,7 +60,7 @@ class DiscoveryRestoreSettlementTest {
         val releaseApp = CompletableDeferred<Unit>()
         val releaseSource = CompletableDeferred<Unit>()
         val preferences = mockk<PreferenceRestorer>()
-        coEvery { preferences.restoreApp(any(), any()) } coAnswers {
+        coEvery { preferences.restoreApp(any(), any(), any(), any()) } coAnswers {
             appEntered.complete(Unit)
             releaseApp.await()
         }
@@ -86,7 +86,7 @@ class DiscoveryRestoreSettlementTest {
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val preferences = mockk<PreferenceRestorer>()
-        coEvery { preferences.restoreApp(any(), any()) } coAnswers {
+        coEvery { preferences.restoreApp(any(), any(), any(), any()) } coAnswers {
             entered.complete(Unit)
             release.await()
         }
@@ -214,7 +214,7 @@ class DiscoveryRestoreSettlementTest {
     fun `restore precision ignores runtime or UI keys and scopes per-media preferences accurately`() = runTest {
         val calls = mutableListOf<Set<DiscoveryMediaType>>()
         val preferences = mockk<PreferenceRestorer>()
-        coEvery { preferences.restoreApp(any(), any()) } returns Unit
+        coEvery { preferences.restoreApp(any(), any(), any(), any()) } returns Unit
         coEvery { preferences.restoreSource(any()) } returns Unit
         val payload = Backup(
             backupPreferences = listOf(

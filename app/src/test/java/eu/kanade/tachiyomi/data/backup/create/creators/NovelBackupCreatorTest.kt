@@ -169,6 +169,31 @@ class NovelBackupCreatorTest {
         n1.bookState!!.lastChapterUrl shouldBe "/c1"
     }
 
+    @Test
+    fun `getAllChaptersForBackup includes read non-favorite entries and skips unread non-library entries`() = runTest {
+        val readNonFavId = insertNovel(url = "https://x/read-non-fav", favorite = false)
+        val unreadNonFavId = insertNovel(url = "https://x/unread-non-fav", favorite = false)
+        database.novel_chaptersQueries.insert(
+            novelId = readNonFavId,
+            url = "/read-c1",
+            name = "Ch 1",
+            scanlator = null,
+            read = true,
+            bookmark = false,
+            lastPageRead = 0L,
+            chapterNumber = 1.0,
+            sourceOrder = 0L,
+            dateFetch = 0L,
+            dateUpload = 0L,
+            dateUploadRaw = null,
+            version = 0L,
+        )
+        insertChapter(novelId = unreadNonFavId, url = "/unread-c1", sourceOrder = 0)
+
+        val rows = database.novel_chaptersQueries.getAllChaptersForBackup().executeAsList()
+        rows.map { it.url } shouldBe listOf("/read-c1")
+    }
+
     private fun insertNovel(url: String, favorite: Boolean): Long {
         database.novelsQueries.insert(
             source = 1L,

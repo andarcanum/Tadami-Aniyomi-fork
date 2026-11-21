@@ -156,6 +156,34 @@ class AnimeBackupCreatorTest {
         a1.history shouldBe emptyList()
     }
 
+    @Test
+    fun `getAllEpisodesForBackup includes seen non-favorite entries and skips unseen non-library entries`() = runTest {
+        val seenNonFavId = insertAnime(url = "https://x/seen-non-fav", favorite = false)
+        val unseenNonFavId = insertAnime(url = "https://x/unseen-non-fav", favorite = false)
+        database.episodesQueries.insert(
+            animeId = seenNonFavId,
+            url = "/seen-e1",
+            name = "Episode 1",
+            scanlator = null,
+            seen = true,
+            bookmark = false,
+            lastSecondSeen = 0L,
+            totalSeconds = 0L,
+            episodeNumber = 1.0,
+            sourceOrder = 0L,
+            dateFetch = 0L,
+            dateUpload = 0L,
+            version = 0L,
+            summary = null,
+            previewUrl = null,
+            fillermark = false,
+        )
+        insertEpisode(animeId = unseenNonFavId, url = "/unseen-e1", sourceOrder = 0)
+
+        val rows = database.episodesQueries.getAllEpisodesForBackup().executeAsList()
+        rows.map { it.url } shouldBe listOf("/seen-e1")
+    }
+
     private fun insertAnime(url: String, favorite: Boolean): Long {
         database.animesQueries.insert(
             source = 1L,

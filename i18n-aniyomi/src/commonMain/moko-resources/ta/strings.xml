@@ -128,7 +128,7 @@
     <string name="anime_interval_expected_update_null">இந்த அனிம் முடிந்தது, அல்லது கணிக்கப்பட்ட வெளியீட்டு தேதி எதுவும் இல்லை.</string>
     <string name="confirm_tracker_update_anime">எபிசோட் %d க்கு டிராக்கர்களைப் புதுப்பிக்கவா?</string>
     <string name="trackers_updated_summary_manga">டிராக்கர்கள் அத்தியாயம் %d க்கு புதுப்பிக்கப்பட்டன</string>
-    <string name="trackers_updated_summary_anime">டிராக்கர்கள் எபிசோட் %க்கு புதுப்பிக்கப்பட்டன</string>
+    <string name="trackers_updated_summary_anime">டிராக்கர்கள் எபிசோட் %d க்கு புதுப்பிக்கப்பட்டன</string>
     <string name="download_notifier_download_finish">பதிவிறக்கம் முடிந்தது</string>
     <string name="action_hide">மறை</string>
     <string name="label_all">அனைத்தும்</string>

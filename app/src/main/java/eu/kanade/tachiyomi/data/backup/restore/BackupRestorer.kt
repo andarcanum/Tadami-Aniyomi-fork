@@ -295,7 +295,12 @@ class BackupRestorer(
                 )
             }
             if (options.appSettings) {
-                restoreAppPreferences(backup.backupPreferences, backup.backupCategories.takeIf { options.categories })
+                restoreAppPreferences(
+                    preferences = backup.backupPreferences,
+                    mangaCategories = backup.backupCategories.takeIf { shouldRestoreMangaCategories },
+                    animeCategories = backup.backupAnimeCategories.takeIf { shouldRestoreAnimeCategories },
+                    novelCategories = backup.backupNovelCategories.takeIf { shouldRestoreNovelCategories },
+                )
             }
             if (options.sourceSettings) {
                 restoreSourcePreferences(backup.backupSourcePreferences)
@@ -456,15 +461,15 @@ class BackupRestorer(
         if (affected.isNotEmpty()) afterRestoreDiscovery(affected)
     }
 
-    private fun CoroutineScope.restoreCategories(
+    private suspend fun restoreCategories(
         backupAnimeCategories: List<BackupCategory>,
         backupMangaCategories: List<BackupCategory>,
         backupNovelCategories: List<BackupCategory>,
         restoreAnimeCategories: Boolean,
         restoreMangaCategories: Boolean,
         restoreNovelCategories: Boolean,
-    ) = launch {
-        ensureActive()
+    ) {
+        kotlin.coroutines.coroutineContext.ensureActive()
         if (restoreAnimeCategories) {
             if (backupAnimeCategories.isNotEmpty()) {
                 animeCategoriesRestorer(backupAnimeCategories)
@@ -513,6 +518,7 @@ class BackupRestorer(
                     animeRestorer.restore(it, backupAnimeCategories, seasons)
                     markRestored(TYPE_ANIME)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     markFailed(TYPE_ANIME)
                     val sourceName = animeSourceMapping[it.source] ?: it.source.toString()
                     errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
@@ -534,6 +540,7 @@ class BackupRestorer(
                     mangaRestorer.restore(it, backupMangaCategories)
                     markRestored(TYPE_MANGA)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     markFailed(TYPE_MANGA)
                     val sourceName = mangaSourceMapping[it.source] ?: it.source.toString()
                     errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
@@ -555,6 +562,7 @@ class BackupRestorer(
                     novelRestorer.restore(it, backupNovelCategories)
                     markRestored(TYPE_NOVEL)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     markFailed(TYPE_NOVEL)
                     val sourceName = novelSourceMapping[it.source] ?: it.source.toString()
                     errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
@@ -568,9 +576,11 @@ class BackupRestorer(
         backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupAnimeSeries>,
     ) {
         backupSeries.forEach {
+            kotlin.coroutines.coroutineContext.ensureActive()
             try {
                 animeSeriesRestorer.restore(listOf(it))
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errors.add(
                     Date() to "Anime series '${it.title}': ${e.message}",
                 )
@@ -583,9 +593,11 @@ class BackupRestorer(
         backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupMangaSeries>,
     ) {
         backupSeries.forEach {
+            kotlin.coroutines.coroutineContext.ensureActive()
             try {
                 mangaSeriesRestorer.restore(listOf(it))
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errors.add(
                     Date() to "Manga series '${it.title}': ${e.message}",
                 )
@@ -598,9 +610,11 @@ class BackupRestorer(
         backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupNovelSeries>,
     ) {
         backupSeries.forEach {
+            kotlin.coroutines.coroutineContext.ensureActive()
             try {
                 novelSeriesRestorer.restore(listOf(it))
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errors.add(
                     Date() to "Novel series '${it.title}': ${e.message}",
                 )
@@ -655,12 +669,16 @@ class BackupRestorer(
 
     private fun CoroutineScope.restoreAppPreferences(
         preferences: List<BackupPreference>,
-        categories: List<BackupCategory>?,
+        mangaCategories: List<BackupCategory>?,
+        animeCategories: List<BackupCategory>?,
+        novelCategories: List<BackupCategory>?,
     ) = launch {
         ensureActive()
         preferenceRestorer.restoreApp(
-            preferences,
-            categories,
+            preferences = preferences,
+            backupCategories = mangaCategories,
+            backupAnimeCategories = animeCategories,
+            backupNovelCategories = novelCategories,
         )
 
         notifier.showRestoreProgress(
@@ -695,6 +713,7 @@ class BackupRestorer(
                 try {
                     animeExtensionRepoRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Anime Repo: ${it.name} : ${e.message}",
                     )
@@ -715,6 +734,7 @@ class BackupRestorer(
                 try {
                     mangaExtensionRepoRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Manga Repo: ${it.name} : ${e.message}",
                     )
@@ -735,6 +755,7 @@ class BackupRestorer(
                 try {
                     novelExtensionRepoRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Novel Repo: ${it.name} : ${e.message}",
                     )
@@ -761,6 +782,7 @@ class BackupRestorer(
                 try {
                     animeExtensionStoreRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Anime Store: ${it.name} : ${e.message}",
                     )
@@ -781,6 +803,7 @@ class BackupRestorer(
                 try {
                     mangaExtensionStoreRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Manga Store: ${it.name} : ${e.message}",
                     )
@@ -801,6 +824,7 @@ class BackupRestorer(
                 try {
                     novelExtensionStoreRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Novel Store: ${it.name} : ${e.message}",
                     )

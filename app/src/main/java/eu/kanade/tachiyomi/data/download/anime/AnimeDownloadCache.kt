@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +45,7 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
+import logcat.asLog
 import tachiyomi.core.common.storage.extension
 import tachiyomi.core.common.storage.nameWithoutExtension
 import tachiyomi.core.common.util.lang.launchIO
@@ -55,6 +57,7 @@ import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
@@ -70,13 +73,14 @@ class AnimeDownloadCache(
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val extensionManager: AnimeExtensionManager = Injekt.get(),
     private val storageManager: StorageManager = Injekt.get(),
-) {
-
-    private val scope = CoroutineScope(
+    private val scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, error ->
-            logcat(LogPriority.ERROR, error) { "AnimeDownloadCache: uncaught coroutine error" }
+            logcat.logcat("AnimeDownloadCache", LogPriority.ERROR) {
+                "AnimeDownloadCache: uncaught coroutine error\n${error.asLog()}"
+            }
         },
-    )
+    ),
+) {
 
     private val _changes = MutableSharedFlow<Unit>(
         replay = 1,
@@ -98,6 +102,7 @@ class AnimeDownloadCache(
     @Volatile
     private var lastRenew = 0L
     private val renewalLock = Any()
+    private val storageGeneration = AtomicLong(0L)
     private var renewalJob: Job? = null
 
     private val _isInitializing = MutableStateFlow(false)
@@ -119,6 +124,7 @@ class AnimeDownloadCache(
         _changes.tryEmit(Unit)
 
         // Attempt to read cache file
+        val restoreGeneration = storageGeneration.get()
         scope.launch {
             diskCacheMutex.withLock {
                 rootDownloadsDirMutex.withLock {
@@ -126,8 +132,12 @@ class AnimeDownloadCache(
                         val atomicFile = AtomicFile(diskCacheFile)
                         if (atomicFile.baseFile.exists()) {
                             val diskCache = ProtoBuf.decodeFromByteArray<RootDirectory>(atomicFile.readFully())
-                            rootDownloadsDir = diskCache
-                            lastRenew = System.currentTimeMillis()
+                            synchronized(renewalLock) {
+                                if (storageGeneration.get() == restoreGeneration && lastRenew == 0L) {
+                                    rootDownloadsDir = diskCache
+                                    lastRenew = System.currentTimeMillis()
+                                }
+                            }
                         }
                     } catch (e: Throwable) {
                         logcat(LogPriority.ERROR, e) { "Failed to initialize disk cache" }
@@ -336,16 +346,24 @@ class AnimeDownloadCache(
     }
 
     fun invalidateCache() {
-        synchronized(renewalLock) {
+        val generation = synchronized(renewalLock) {
+            val next = storageGeneration.incrementAndGet()
             lastRenew = 0L
             renewalJob?.cancel()
             renewalJob = null
+            next
+        }
+        synchronized(writerLock) {
+            updateDiskCacheJob?.cancel()
+            updateDiskCacheJob = null
         }
         scope.launch {
             diskCacheMutex.withLock {
-                AtomicFile(diskCacheFile).delete()
+                if (storageGeneration.get() == generation) {
+                    AtomicFile(diskCacheFile).delete()
+                }
             }
-            renewCache()
+            if (storageGeneration.get() == generation) renewCache()
         }
     }
 
@@ -355,12 +373,16 @@ class AnimeDownloadCache(
      */
     private fun renewCache() {
         synchronized(renewalLock) {
-            if (lastRenew + renewInterval >= System.currentTimeMillis() || renewalJob?.isActive == true) {
+            if ((lastRenew > 0L && lastRenew + renewInterval >= System.currentTimeMillis()) ||
+                renewalJob?.isActive == true
+            ) {
                 return
             }
 
+            val generation = storageGeneration.get()
             val job = scope.launch(start = CoroutineStart.LAZY) {
                 var renewalSucceeded = false
+                var wasCancelled = false
                 try {
                     if (lastRenew == 0L) {
                         _isInitializing.emit(true)
@@ -424,23 +446,43 @@ class AnimeDownloadCache(
                             .awaitAll()
 
                         ensureActive()
-                        rootDownloadsDir = updatedRootDir
+                        synchronized(renewalLock) {
+                            if (storageGeneration.get() != generation || renewalJob !== coroutineContext[Job]) {
+                                return@launch
+                            }
+                            rootDownloadsDir = updatedRootDir
+                        }
                     }
 
                     renewalSucceeded = true
                 } catch (e: CancellationException) {
+                    wasCancelled = true
                     throw e
                 } catch (e: Exception) {
                     logcat(LogPriority.ERROR, e) { "Failed to create download cache" }
                 } finally {
-                    _isInitializing.value = false
-                    val now = System.currentTimeMillis()
-                    lastRenew = if (renewalSucceeded) {
-                        now
-                    } else {
-                        now - renewInterval + failedRenewRetryInterval
+                    val shouldNotify = synchronized(renewalLock) {
+                        val currentJob = coroutineContext[Job]
+                        val isCurrentActiveJob = !wasCancelled &&
+                            coroutineContext.isActive &&
+                            storageGeneration.get() == generation &&
+                            renewalJob === currentJob
+                        if (renewalJob == null || renewalJob === currentJob) {
+                            _isInitializing.value = false
+                        }
+                        if (isCurrentActiveJob) {
+                            val now = System.currentTimeMillis()
+                            lastRenew = if (renewalSucceeded) {
+                                now
+                            } else {
+                                now - renewInterval + failedRenewRetryInterval
+                            }
+                        }
+                        isCurrentActiveJob
                     }
-                    notifyChanges(persist = renewalSucceeded)
+                    if (shouldNotify) {
+                        notifyChanges(persist = renewalSucceeded)
+                    }
                 }
             }
             renewalJob = job
@@ -464,11 +506,13 @@ class AnimeDownloadCache(
 
     private fun updateDiskCache() {
         synchronized(writerLock) {
+            val expectedGeneration = storageGeneration.get()
             updateDiskCacheJob?.cancel()
             updateDiskCacheJob = scope.launchIO {
                 delay(1000L)
                 try {
                     diskCacheMutex.withLock {
+                        if (storageGeneration.get() != expectedGeneration) return@withLock
                         val snapshot = rootDownloadsDirMutex.withLock {
                             rootDownloadsDir.copyForDisk()
                         }

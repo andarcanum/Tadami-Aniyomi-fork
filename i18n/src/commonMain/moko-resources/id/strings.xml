@@ -904,8 +904,8 @@
     <string name="label_used">Digunakan</string>
     <string name="not_applicable">N/A</string>
     <string name="day_short">%dh</string>
-    <string name="hour_short">%jj</string>
-    <string name="minute_short">%mm</string>
+    <string name="hour_short">%1$dj</string>
+    <string name="minute_short">%1$dm</string>
     <string name="seconds_short">%dd</string>
 
     <!-- Downloads activity and service -->

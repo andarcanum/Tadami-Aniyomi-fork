@@ -28,6 +28,12 @@ class NovelBackupCreator(
             .filter { it.novel_id in scopeIds }
             .groupBy({ it.novel_id }, { it.scanlator })
 
+        // novel_books.novel_id is the primary key: a novel has at most one book state.
+        val bookStateByNovel = getNovelBookState.awaitAll().associateBy { it.novelId }
+        val neededBookStateChapterIds = bookStateByNovel.values.mapNotNullTo(hashSetOf()) { state ->
+            state.lastChapterId?.takeIf { state.novelId in scopeIds }
+        }
+
         val chapterRows = if (!options.chapters) {
             emptyList()
         } else {
@@ -38,13 +44,15 @@ class NovelBackupCreator(
         // Single-pass grouping for the chapters table: filter().groupBy() would allocate an
         // intermediate list of every row.
         val chaptersByNovel = LinkedHashMap<Long, MutableList<BackupChapter>>()
+        val chapterUrlById = HashMap<Long, String>(neededBookStateChapterIds.size)
         chapterRows.forEach { row ->
             if (row.novelId in scopeIds) {
                 chaptersByNovel.getOrPut(row.novelId) { ArrayList() }.add(row.backup)
             }
+            if (row.chapterId in neededBookStateChapterIds) {
+                chapterUrlById[row.chapterId] = row.backup.url
+            }
         }
-        // One fetch serves both the payload and bookState lastChapterUrl lookups.
-        val chapterUrlById = chapterRows.associate { it.chapterId to it.backup.url }
 
         val highlightsByNovel = if (!options.chapters) {
             emptyMap()
@@ -69,9 +77,6 @@ class NovelBackupCreator(
                 .filter { it.novel_id in scopeIds }
                 .groupBy { it.novel_id }
         }
-
-        // novel_books.novel_id is the primary key: a novel has at most one book state.
-        val bookStateByNovel = getNovelBookState.awaitAll().associateBy { it.novelId }
 
         return novels.map { novel ->
             novel.toBackupNovel().apply {

@@ -103,7 +103,8 @@ getChapterByUrlAndNovelId:
 SELECT *
 FROM novel_chapters
 WHERE url = :chapterUrl
-AND novel_id = :novelId;
+AND novel_id = :novelId
+LIMIT 1;
 
 removeChaptersWithIds:
 DELETE FROM novel_chapters
@@ -145,4 +146,20 @@ WHERE novel_id = :novelId;
 
 getAllChaptersForBackup:
 SELECT C.*
-FROM novel_chapters C;
+FROM novel_chapters C
+JOIN novels N ON C.novel_id = N._id
+WHERE N.favorite = 1
+OR N._id IN (
+    SELECT DISTINCT novel_chapters.novel_id
+    FROM novel_chapters
+    WHERE read = 1 OR last_page_read != 0
+)
+OR N._id IN (
+    SELECT DISTINCT C2.novel_id
+    FROM novel_history H
+    JOIN novel_chapters C2 ON H.chapter_id = C2._id
+)
+OR N._id IN (
+    SELECT novel_books.novel_id
+    FROM novel_books
+);
