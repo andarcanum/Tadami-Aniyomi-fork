@@ -30,10 +30,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -164,13 +166,13 @@ internal fun AnimeHomeHub(
         }
     }
 
+    val isAnimeActive = activeSection == HomeHubSection.Anime
+    val currentIsAnimeActive by rememberUpdatedState(isAnimeActive)
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, activeSection) {
+    DisposableEffect(lifecycleOwner, screenModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (activeSection == HomeHubSection.Anime) {
-                    screenModel.onScreenReentry()
-                }
+            if (event == Lifecycle.Event.ON_RESUME && currentIsAnimeActive) {
+                screenModel.onScreenReentry()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -179,21 +181,19 @@ internal fun AnimeHomeHub(
         }
     }
 
-    var lastSourceId by remember(activeSection) {
-        mutableLongStateOf(
-            if (activeSection == HomeHubSection.Anime) screenModel.getLastUsedAnimeSourceId() else -1L,
-        )
+    var lastSourceId by remember(screenModel) {
+        mutableLongStateOf(screenModel.getLastUsedAnimeSourceId())
     }
-    var lastSourceName by remember(activeSection) {
-        mutableStateOf<String?>(
-            if (activeSection ==
-                HomeHubSection.Anime
-            ) {
-                screenModel.getLastUsedAnimeSourceName()
-            } else {
-                null
-            },
-        )
+    var lastSourceName by remember(screenModel) {
+        mutableStateOf(screenModel.getLastUsedAnimeSourceName())
+    }
+    LaunchedEffect(isAnimeActive, screenModel) {
+        if (isAnimeActive) {
+            val latestId = screenModel.getLastUsedAnimeSourceId()
+            val latestName = screenModel.getLastUsedAnimeSourceName()
+            if (lastSourceId != latestId) lastSourceId = latestId
+            if (lastSourceName != latestName) lastSourceName = latestName
+        }
     }
     val availableSources = state.availableSources
 
@@ -294,13 +294,13 @@ internal fun MangaHomeHub(
         }
     }
 
+    val isMangaActive = activeSection == HomeHubSection.Manga
+    val currentIsMangaActive by rememberUpdatedState(isMangaActive)
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, activeSection) {
+    DisposableEffect(lifecycleOwner, screenModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (activeSection == HomeHubSection.Manga) {
-                    screenModel.onScreenReentry()
-                }
+            if (event == Lifecycle.Event.ON_RESUME && currentIsMangaActive) {
+                screenModel.onScreenReentry()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -310,8 +310,8 @@ internal fun MangaHomeHub(
     }
 
     var isFirstComposition by remember { mutableStateOf(true) }
-    LaunchedEffect(activeSection, tabNavigator.current) {
-        if (activeSection == HomeHubSection.Manga && tabNavigator.current is HomeHubTab) {
+    LaunchedEffect(isMangaActive, tabNavigator.current) {
+        if (isMangaActive && tabNavigator.current is HomeHubTab) {
             if (isFirstComposition) {
                 isFirstComposition = false
             } else {
@@ -320,21 +320,19 @@ internal fun MangaHomeHub(
         }
     }
 
-    var lastSourceId by remember(activeSection) {
-        mutableLongStateOf(
-            if (activeSection == HomeHubSection.Manga) screenModel.getLastUsedMangaSourceId() else -1L,
-        )
+    var lastSourceId by remember(screenModel) {
+        mutableLongStateOf(screenModel.getLastUsedMangaSourceId())
     }
-    var lastSourceName by remember(activeSection) {
-        mutableStateOf<String?>(
-            if (activeSection ==
-                HomeHubSection.Manga
-            ) {
-                screenModel.getLastUsedMangaSourceName()
-            } else {
-                null
-            },
-        )
+    var lastSourceName by remember(screenModel) {
+        mutableStateOf(screenModel.getLastUsedMangaSourceName())
+    }
+    LaunchedEffect(isMangaActive, screenModel) {
+        if (isMangaActive) {
+            val latestId = screenModel.getLastUsedMangaSourceId()
+            val latestName = screenModel.getLastUsedMangaSourceName()
+            if (lastSourceId != latestId) lastSourceId = latestId
+            if (lastSourceName != latestName) lastSourceName = latestName
+        }
     }
     val availableSources = state.availableSources
 
@@ -437,13 +435,13 @@ internal fun NovelHomeHub(
         }
     }
 
+    val isNovelActive = activeSection == HomeHubSection.Novel
+    val currentIsNovelActive by rememberUpdatedState(isNovelActive)
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, activeSection) {
+    DisposableEffect(lifecycleOwner, screenModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (activeSection == HomeHubSection.Novel) {
-                    screenModel.onScreenReentry()
-                }
+            if (event == Lifecycle.Event.ON_RESUME && currentIsNovelActive) {
+                screenModel.onScreenReentry()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -453,8 +451,8 @@ internal fun NovelHomeHub(
     }
 
     var isFirstComposition by remember { mutableStateOf(true) }
-    LaunchedEffect(activeSection, tabNavigator.current) {
-        if (activeSection == HomeHubSection.Novel && tabNavigator.current is HomeHubTab) {
+    LaunchedEffect(isNovelActive, tabNavigator.current) {
+        if (isNovelActive && tabNavigator.current is HomeHubTab) {
             if (isFirstComposition) {
                 isFirstComposition = false
             } else {
@@ -463,21 +461,19 @@ internal fun NovelHomeHub(
         }
     }
 
-    var lastSourceId by remember(activeSection) {
-        mutableLongStateOf(
-            if (activeSection == HomeHubSection.Novel) screenModel.getLastUsedNovelSourceId() else -1L,
-        )
+    var lastSourceId by remember(screenModel) {
+        mutableLongStateOf(screenModel.getLastUsedNovelSourceId())
     }
-    var lastSourceName by remember(activeSection) {
-        mutableStateOf<String?>(
-            if (activeSection ==
-                HomeHubSection.Novel
-            ) {
-                screenModel.getLastUsedNovelSourceName()
-            } else {
-                null
-            },
-        )
+    var lastSourceName by remember(screenModel) {
+        mutableStateOf(screenModel.getLastUsedNovelSourceName())
+    }
+    LaunchedEffect(isNovelActive, screenModel) {
+        if (isNovelActive) {
+            val latestId = screenModel.getLastUsedNovelSourceId()
+            val latestName = screenModel.getLastUsedNovelSourceName()
+            if (lastSourceId != latestId) lastSourceId = latestId
+            if (lastSourceName != latestName) lastSourceName = latestName
+        }
     }
     val availableSources = state.availableSources
 
@@ -612,9 +608,21 @@ private fun HomeHubScreen(
 
     // Home hub should open from the top after app relaunch; avoid saveable scroll restoration.
     val listState = remember(section) { LazyListState() }
+    var lastHandledResetToken by remember(section) { mutableIntStateOf(scrollResetToken) }
     LaunchedEffect(section, activeSection, scrollResetToken) {
-        if (section == activeSection) {
+        if (
+            shouldResetHomeHubListPosition(
+                scrollResetToken = scrollResetToken,
+                lastHandledToken = lastHandledResetToken,
+                isSectionActive = section == activeSection,
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+            )
+        ) {
             listState.scrollToItem(0)
+        }
+        if (section == activeSection && scrollResetToken > lastHandledResetToken) {
+            lastHandledResetToken = scrollResetToken
         }
     }
     val nestedScrollConnection = remember(section, activeSection, listState) {
