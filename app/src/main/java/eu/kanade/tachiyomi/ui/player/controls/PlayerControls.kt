@@ -106,6 +106,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -558,7 +560,7 @@ fun PlayerControls(
                     onPressSkipIntroButton = viewModel::onSkipIntro,
                     onPipClick = {
                         if (!viewModel.isLoadingEpisode.value) {
-                            playerActivity.enterPictureInPictureMode(playerActivity.createPipParams())
+                            playerActivity.enterPipModeSafely()
                         }
                     },
                     onAspectClick = {
@@ -642,45 +644,16 @@ fun PlayerControls(
                     PlaybackSpeedPill(speed = gesturePlaybackSpeed)
                 }
 
-                val currentEpisode by viewModel.currentEpisode.collectAsStateWithLifecycle()
-                val episodePlaylist by viewModel.currentPlaylist.collectAsStateWithLifecycle()
-                val repeatEpisode by viewModel.repeatEpisode.collectAsStateWithLifecycle()
-                val countdownPos by viewModel.pos.collectAsStateWithLifecycle()
-                val countdownDuration by viewModel.duration.collectAsStateWithLifecycle()
-                var dismissedNextOverlayEpisodeId by remember { mutableStateOf<Long?>(null) }
-                val nextEpisodeCountdown = computeNextEpisodeCountdownSeconds(
-                    positionSec = countdownPos,
-                    durationSec = countdownDuration,
+                NextEpisodeCountdownSlot(
+                    viewModel = viewModel,
                     hasNextEpisode = hasNextEpisode,
                     autoPlayEnabled = autoPlayEnabled,
-                    repeatEpisode = repeatEpisode,
-                    dismissedEpisodeId = dismissedNextOverlayEpisodeId,
-                    currentEpisodeId = currentEpisode?.id,
-                )
-                val nextEpisodeName = remember(episodePlaylist, currentEpisode?.id) {
-                    val idx = viewModel.getCurrentEpisodeIndex()
-                    episodePlaylist.getOrNull(idx + 1)?.name
-                }
-                AnimatedVisibility(
-                    visible = nextEpisodeCountdown != null && !areControlsLocked && !nextEpisodeName.isNullOrBlank(),
-                    enter = fadeIn(playerControlsEnterAnimationSpec()) +
-                        slideInHorizontally(playerControlsEnterAnimationSpec()) { it / 2 },
-                    exit = fadeOut(playerControlsExitAnimationSpec()) +
-                        slideOutHorizontally(playerControlsExitAnimationSpec()) { it / 2 },
+                    areControlsLocked = areControlsLocked,
                     modifier = Modifier.constrainAs(nextEpisodeCard) {
                         end.linkTo(parent.end, spacing.medium)
                         bottom.linkTo(parent.bottom, if (controlsShown) 104.dp else 24.dp)
                     },
-                ) {
-                    if (nextEpisodeCountdown != null && !nextEpisodeName.isNullOrBlank()) {
-                        NextEpisodeCountdownOverlay(
-                            nextEpisodeTitle = nextEpisodeName,
-                            secondsRemaining = nextEpisodeCountdown,
-                            onPlayNextNow = { viewModel.changeEpisode(previous = false) },
-                            onDismiss = { dismissedNextOverlayEpisodeId = currentEpisode?.id },
-                        )
-                    }
-                }
+                )
             }
         }
 
@@ -725,6 +698,64 @@ fun PlayerControls(
         BrightnessOverlay(
             brightness = currentBrightness,
         )
+    }
+}
+
+@Composable
+private fun NextEpisodeCountdownSlot(
+    viewModel: PlayerViewModel,
+    hasNextEpisode: Boolean,
+    autoPlayEnabled: Boolean,
+    areControlsLocked: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val currentEpisode by viewModel.currentEpisode.collectAsStateWithLifecycle()
+    val episodePlaylist by viewModel.currentPlaylist.collectAsStateWithLifecycle()
+    var dismissedNextOverlayEpisodeId by remember { mutableStateOf<Long?>(null) }
+    val nextEpisodeCountdown by remember(
+        viewModel,
+        hasNextEpisode,
+        autoPlayEnabled,
+        dismissedNextOverlayEpisodeId,
+    ) {
+        combine(
+            viewModel.pos,
+            viewModel.duration,
+            viewModel.repeatEpisode,
+            viewModel.currentEpisode,
+        ) { pos, duration, repeatEpisode, episode ->
+            computeNextEpisodeCountdownSeconds(
+                positionSec = pos,
+                durationSec = duration,
+                hasNextEpisode = hasNextEpisode,
+                autoPlayEnabled = autoPlayEnabled,
+                repeatEpisode = repeatEpisode,
+                dismissedEpisodeId = dismissedNextOverlayEpisodeId,
+                currentEpisodeId = episode?.id,
+            )
+        }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
+    val nextEpisodeName = remember(episodePlaylist, currentEpisode?.id) {
+        val idx = viewModel.getCurrentEpisodeIndex()
+        episodePlaylist.getOrNull(idx + 1)?.name
+    }
+    AnimatedVisibility(
+        visible = nextEpisodeCountdown != null && !areControlsLocked && !nextEpisodeName.isNullOrBlank(),
+        enter = fadeIn(playerControlsEnterAnimationSpec()) +
+            slideInHorizontally(playerControlsEnterAnimationSpec()) { it / 2 },
+        exit = fadeOut(playerControlsExitAnimationSpec()) +
+            slideOutHorizontally(playerControlsExitAnimationSpec()) { it / 2 },
+        modifier = modifier,
+    ) {
+        val countdown = nextEpisodeCountdown
+        if (countdown != null && !nextEpisodeName.isNullOrBlank()) {
+            NextEpisodeCountdownOverlay(
+                nextEpisodeTitle = nextEpisodeName,
+                secondsRemaining = countdown,
+                onPlayNextNow = { viewModel.changeEpisode(previous = false) },
+                onDismiss = { dismissedNextOverlayEpisodeId = currentEpisode?.id },
+            )
+        }
     }
 }
 

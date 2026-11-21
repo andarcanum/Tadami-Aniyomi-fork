@@ -97,8 +97,6 @@ fun GestureHandler(
     val allowGesturesInPanels by playerPreferences.allowGestures().collectAsStateWithLifecycle()
     val speedGestureResetOnRelease by gesturePreferences.speedGestureResetOnRelease()
         .collectAsStateWithLifecycle()
-    val duration by viewModel.duration.collectAsStateWithLifecycle()
-    val position by viewModel.pos.collectAsStateWithLifecycle()
     val controlsShown by viewModel.controlsShown.collectAsStateWithLifecycle()
     val areControlsLocked by viewModel.areControlsLocked.collectAsStateWithLifecycle()
     val seekAmount by viewModel.doubleTapSeekAmount.collectAsStateWithLifecycle()
@@ -232,7 +230,6 @@ fun GestureHandler(
                 }
             }
             .pointerInput(longPressAction) {
-                val originalSpeed = viewModel.playbackSpeed.value
                 detectTapGestures(
                     onTap = {
                         if (controlsShown) viewModel.hideControls() else viewModel.showControls()
@@ -275,10 +272,14 @@ fun GestureHandler(
                         tryAwaitRelease()
                         if (isLongPressing) {
                             isLongPressing = false
-                            if (longPressAction == LongPressGesture.PlaybackSpeed) {
-                                // Handled in outer Initial pointerInput
-                            } else {
-                                MPVLib.setPropertyDouble("speed", originalSpeed.toDouble())
+                            if (longPressAction == LongPressGesture.PlaybackSpeed &&
+                                viewModel.isDynamicSpeedActive.value
+                            ) {
+                                viewModel.isDynamicSpeedActive.update { false }
+                                MPVLib.setPropertyDouble(
+                                    "speed",
+                                    viewModel.preGesturePlaybackSpeed.value.toDouble(),
+                                )
                             }
                             viewModel.playerUpdate.update { PlayerUpdates.None }
                         }
@@ -307,33 +308,39 @@ fun GestureHandler(
             }
             .pointerInput(areControlsLocked, isDynamicSpeedActive) {
                 if (!seekGesture || areControlsLocked || isDynamicSpeedActive) return@pointerInput
-                var startingPosition = position.toInt()
+                var startingPosition = 0
                 var startingX = 0f
                 var wasPlayerAlreadyPause = false
+                val finishHorizontalDrag = {
+                    viewModel.gestureSeekAmount.update { null }
+                    viewModel.hideSeekBar()
+                    if (!wasPlayerAlreadyPause) viewModel.unpause()
+                }
                 detectHorizontalDragGestures(
                     onDragStart = {
-                        startingPosition = position.toInt()
+                        startingPosition = viewModel.pos.value.toInt()
                         startingX = it.x
                         wasPlayerAlreadyPause = viewModel.paused.value
                         viewModel.pause()
                     },
-                    onDragEnd = {
-                        viewModel.gestureSeekAmount.update { null }
-                        viewModel.hideSeekBar()
-                        if (!wasPlayerAlreadyPause) viewModel.unpause()
-                    },
+                    onDragEnd = finishHorizontalDrag,
+                    onDragCancel = finishHorizontalDrag,
                 ) { change, dragAmount ->
-                    if (position <= 0f && dragAmount < 0) return@detectHorizontalDragGestures
-                    if (position >= duration && dragAmount > 0) return@detectHorizontalDragGestures
+                    val currentPos = viewModel.pos.value
+                    val currentDuration = viewModel.duration.value
+                    if (currentPos <= 0f && dragAmount < 0) return@detectHorizontalDragGestures
+                    if (currentPos >= currentDuration && dragAmount > 0) return@detectHorizontalDragGestures
+                    val maxDurationInt = currentDuration.toInt().coerceAtLeast(0)
+                    val minDelta = 0 - startingPosition
+                    val maxDelta = (maxDurationInt - startingPosition).coerceAtLeast(minDelta)
                     calculateNewHorizontalGestureValue(startingPosition, startingX, change.position.x, 0.15f).let {
                         viewModel.gestureSeekAmount.update { _ ->
                             Pair(
                                 startingPosition,
-                                (it - startingPosition)
-                                    .coerceIn(0 - startingPosition, (duration - startingPosition).toInt()),
+                                (it - startingPosition).coerceIn(minDelta, maxDelta),
                             )
                         }
-                        viewModel.seekTo(it.coerceIn(0, duration.toInt()), preciseSeeking)
+                        viewModel.seekTo(it.coerceIn(0, maxDurationInt), preciseSeeking)
                     }
 
                     if (showSeekbar) viewModel.showSeekBar()

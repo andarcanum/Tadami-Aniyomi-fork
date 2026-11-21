@@ -17,7 +17,6 @@
 
 package eu.kanade.tachiyomi.ui.player.controls.components.panels
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +67,8 @@ import eu.kanade.tachiyomi.ui.player.controls.panelCardsColors
 import eu.kanade.tachiyomi.ui.player.settings.SubtitleJustification
 import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
 import `is`.xyz.mpv.MPVLib
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -80,7 +81,6 @@ import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-@SuppressLint("MutableCollectionMutableState")
 @Composable
 fun SubtitleSettingsTypographyCard(
     modifier: Modifier = Modifier,
@@ -90,30 +90,32 @@ fun SubtitleSettingsTypographyCard(
     var isExpanded by remember { mutableStateOf(true) }
 
     val fontsDir = storageManager.getFontsDirectory()
-    val fonts by remember { mutableStateOf(mutableListOf(preferences.subtitleFont().defaultValue())) }
-    var fontsLoadingIndicator: (@Composable () -> Unit)? by remember {
-        val indicator: (@Composable () -> Unit) = {
-            CircularProgressIndicator(Modifier.size(32.dp))
-        }
-        mutableStateOf(indicator)
+    val defaultFont = remember(preferences) { preferences.subtitleFont().defaultValue() }
+    var fonts by remember(defaultFont) { mutableStateOf<ImmutableList<String>>(persistentListOf(defaultFont)) }
+    var fontsLoading by remember(fontsDir) { mutableStateOf(fontsDir != null) }
+    val fontsLoadingIndicator: (@Composable () -> Unit)? = if (fontsLoading) {
+        { CircularProgressIndicator(Modifier.size(32.dp)) }
+    } else {
+        null
     }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(fontsDir, defaultFont) {
         if (fontsDir == null) {
-            fontsLoadingIndicator = null
+            fontsLoading = false
             return@LaunchedEffect
         }
-        withContext(Dispatchers.IO) {
+        val loadedFonts = withContext(Dispatchers.IO) {
             fontsDir.listFiles()?.filter { file ->
                 file.name?.lowercase()?.matches(FONT_EXTENSION_REGEX) == true
-            }?.mapNotNull {
-                runCatching { TTFFile.open(it.openInputStream()).families.values.first() }.getOrNull()
-            }?.let {
-                fonts.addAll(
-                    it.distinct(),
-                )
-            }
-            fontsLoadingIndicator = null
+            }?.mapNotNull { file ->
+                runCatching {
+                    file.openInputStream().use { stream ->
+                        TTFFile.open(stream).families.values.firstOrNull()
+                    }
+                }.getOrNull()
+            }.orEmpty().distinct()
         }
+        fonts = (listOf(defaultFont) + loadedFonts).distinct().toImmutableList()
+        fontsLoading = false
     }
 
     ExpandableCard(
@@ -131,32 +133,54 @@ fun SubtitleSettingsTypographyCard(
         colors = panelCardsColors(),
     ) {
         Column {
-            var isBold by remember { mutableStateOf(MPVLib.getPropertyBoolean("sub-bold")) }
-            var isItalic by remember { mutableStateOf(MPVLib.getPropertyBoolean("sub-italic")) }
-            var justify by remember {
+            var isBold by remember {
                 mutableStateOf(
-                    SubtitleJustification.entries.first {
-                        it.value == MPVLib.getPropertyString("sub-justify")
-                    },
+                    runCatching { MPVLib.getPropertyBoolean("sub-bold") }.getOrNull()
+                        ?: preferences.boldSubtitles().get(),
                 )
             }
-            var font by remember { mutableStateOf(MPVLib.getPropertyString("sub-font")) }
+            var isItalic by remember {
+                mutableStateOf(
+                    runCatching { MPVLib.getPropertyBoolean("sub-italic") }.getOrNull()
+                        ?: preferences.italicSubtitles().get(),
+                )
+            }
+            var justify by remember {
+                mutableStateOf(
+                    resolveSubtitleJustification(
+                        runCatching { MPVLib.getPropertyString("sub-justify") }.getOrNull(),
+                    ),
+                )
+            }
+            var font by remember {
+                mutableStateOf(
+                    runCatching { MPVLib.getPropertyString("sub-font") }.getOrNull()
+                        ?: preferences.subtitleFont().get(),
+                )
+            }
             var fontSize by remember {
-                mutableStateOf(MPVLib.getPropertyInt("sub-font-size"))
+                mutableStateOf(
+                    runCatching { MPVLib.getPropertyInt("sub-font-size") }.getOrNull()
+                        ?: preferences.subtitleFontSize().get(),
+                )
             }
             var borderStyle by remember {
                 mutableStateOf(
-                    SubtitlesBorderStyle.entries.first { it.value == MPVLib.getPropertyString("sub-border-style") },
+                    resolveSubtitlesBorderStyle(
+                        runCatching { MPVLib.getPropertyString("sub-border-style") }.getOrNull(),
+                    ),
                 )
             }
             var borderSize by remember {
                 mutableStateOf(
-                    MPVLib.getPropertyInt("sub-border-size"),
+                    runCatching { MPVLib.getPropertyInt("sub-border-size") }.getOrNull()
+                        ?: preferences.subtitleBorderSize().get(),
                 )
             }
             var shadowOffset by remember {
                 mutableStateOf(
-                    MPVLib.getPropertyInt("sub-shadow-offset"),
+                    runCatching { MPVLib.getPropertyInt("sub-shadow-offset") }.getOrNull()
+                        ?: preferences.shadowOffsetSubtitles().get(),
                 )
             }
             Row(
@@ -215,16 +239,24 @@ fun SubtitleSettingsTypographyCard(
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = {
                     resetTypography(preferences)
-                    isBold = MPVLib.getPropertyBoolean("sub-bold")
-                    isItalic = MPVLib.getPropertyBoolean("sub-italic")
-                    justify =
-                        SubtitleJustification.entries.first { it.value == MPVLib.getPropertyString("sub-justify") }
-                    font = MPVLib.getPropertyString("sub-font")
-                    fontSize = MPVLib.getPropertyInt("sub-font-size")
-                    borderStyle =
-                        SubtitlesBorderStyle.entries.first { it.value == MPVLib.getPropertyString("sub-border-style") }
-                    borderSize = MPVLib.getPropertyInt("sub-border-size")
-                    shadowOffset = MPVLib.getPropertyInt("sub-shadow-offset")
+                    isBold = runCatching { MPVLib.getPropertyBoolean("sub-bold") }.getOrNull()
+                        ?: preferences.boldSubtitles().defaultValue()
+                    isItalic = runCatching { MPVLib.getPropertyBoolean("sub-italic") }.getOrNull()
+                        ?: preferences.italicSubtitles().defaultValue()
+                    justify = resolveSubtitleJustification(
+                        runCatching { MPVLib.getPropertyString("sub-justify") }.getOrNull(),
+                    )
+                    font = runCatching { MPVLib.getPropertyString("sub-font") }.getOrNull()
+                        ?: preferences.subtitleFont().defaultValue()
+                    fontSize = runCatching { MPVLib.getPropertyInt("sub-font-size") }.getOrNull()
+                        ?: preferences.subtitleFontSize().defaultValue()
+                    borderStyle = resolveSubtitlesBorderStyle(
+                        runCatching { MPVLib.getPropertyString("sub-border-style") }.getOrNull(),
+                    )
+                    borderSize = runCatching { MPVLib.getPropertyInt("sub-border-size") }.getOrNull()
+                        ?: preferences.subtitleBorderSize().defaultValue()
+                    shadowOffset = runCatching { MPVLib.getPropertyInt("sub-shadow-offset") }.getOrNull()
+                        ?: preferences.shadowOffsetSubtitles().defaultValue()
                 }) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
@@ -247,7 +279,7 @@ fun SubtitleSettingsTypographyCard(
                 )
                 ExposedTextDropDownMenu(
                     selectedValue = font,
-                    options = fonts.toImmutableList(),
+                    options = fonts,
                     label = stringResource(AYMR.strings.player_sheets_sub_typography_font),
                     onValueChangedEvent = {
                         font = it
@@ -363,6 +395,14 @@ fun resetTypography(preferences: SubtitlePreferences) {
     MPVLib.setPropertyInt("sub-border-size", preferences.subtitleBorderSize().deleteAndGet())
     MPVLib.setPropertyInt("sub-shadow-offset", preferences.shadowOffsetSubtitles().deleteAndGet())
     MPVLib.setPropertyString("sub-border-style", preferences.borderStyleSubtitles().deleteAndGet().value)
+}
+
+internal fun resolveSubtitleJustification(value: String?): SubtitleJustification {
+    return SubtitleJustification.entries.firstOrNull { it.value == value } ?: SubtitleJustification.Auto
+}
+
+internal fun resolveSubtitlesBorderStyle(value: String?): SubtitlesBorderStyle {
+    return SubtitlesBorderStyle.entries.firstOrNull { it.value == value } ?: SubtitlesBorderStyle.OutlineAndShadow
 }
 
 enum class SubtitlesBorderStyle(
