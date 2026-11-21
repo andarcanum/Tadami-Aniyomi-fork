@@ -85,6 +85,9 @@ class AuroraPosterRequestFetcher(
             return customCoverLoader(file)
         }
         readFromDiskCache()?.let { return it }
+        if (!options.networkCachePolicy.readEnabled) {
+            throw IOException("Network fetch disabled by cache policy")
+        }
 
         val fetched = loadAuroraPosterSource(
             callFactory = data.client ?: callFactoryLazy.value,

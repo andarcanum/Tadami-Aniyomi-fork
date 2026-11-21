@@ -124,7 +124,6 @@ import eu.kanade.presentation.components.AdaptiveSheet
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.AuroraSheetWindowFx
 import eu.kanade.presentation.components.auroraPingPong
-import eu.kanade.presentation.components.buildAuroraCoverImageRequestOrNull
 import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.components.shouldAnimateAuroraBackground
@@ -146,10 +145,12 @@ import eu.kanade.tachiyomi.data.discovery.filterFranchiseClusteringGeneric
 import eu.kanade.tachiyomi.data.discovery.interleaveMix
 import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
+import eu.kanade.tachiyomi.ui.discovery.DiscoveryCoverResolution
 import eu.kanade.tachiyomi.ui.discovery.ProvideDiscoveryCoverContext
+import eu.kanade.tachiyomi.ui.discovery.buildDiscoveryCoverImageRequest
 import eu.kanade.tachiyomi.ui.discovery.buildDiscoverySuggestionItem
 import eu.kanade.tachiyomi.ui.discovery.discoveryCoverData
-import eu.kanade.tachiyomi.ui.discovery.rememberDiscoveryCoverData
+import eu.kanade.tachiyomi.ui.discovery.rememberDiscoveryCoverResolution
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -848,22 +849,27 @@ internal fun DiscoveryPosterCard(
             ) {
                 val posterContext = LocalContext.current
                 val posterCoverReloadTick = rememberCoverReloadTick()
-                val sourceBoundCoverData = if (suggestion != null) rememberDiscoveryCoverData(suggestion) else null
-                val posterCoverData = if (suggestion != null) {
-                    sourceBoundCoverData
+                val coverResolution = if (suggestion != null) {
+                    rememberDiscoveryCoverResolution(suggestion)
                 } else {
-                    discoveryCoverData(coverMediaType, coverProvider, coverUrl)
+                    val legacyModel = discoveryCoverData(coverMediaType, coverProvider, coverUrl)
+                    if (legacyModel != null) {
+                        DiscoveryCoverResolution.Ready(legacyModel)
+                    } else {
+                        DiscoveryCoverResolution.Unavailable
+                    }
                 }
                 val posterCoverRequest = remember(
                     posterContext,
-                    posterCoverData,
+                    coverResolution,
                     posterCoverReloadTick,
                 ) {
-                    buildAuroraCoverImageRequestOrNull(
+                    buildDiscoveryCoverImageRequest(
                         posterContext,
-                        posterCoverData,
+                        coverResolution,
                     )
                 }
+                val isCoverPending = coverResolution is DiscoveryCoverResolution.PendingCacheOnly
                 val posterColorFilter = rememberAuroraPosterColorFilter()
                 if (posterCoverRequest != null) {
                     AsyncImage(
@@ -872,8 +878,8 @@ internal fun DiscoveryPosterCard(
                         contentScale = ContentScale.Crop,
                         colorFilter = posterColorFilter,
                         modifier = Modifier.fillMaxSize(),
-                        error = fallbackPainter,
-                        fallback = fallbackPainter,
+                        error = if (isCoverPending) null else fallbackPainter,
+                        fallback = if (isCoverPending) null else fallbackPainter,
                     )
                 } else {
                     Image(
@@ -3001,14 +3007,15 @@ private fun BoxScope.StageSlot(
     val context = LocalContext.current
     val coverReloadTick = rememberCoverReloadTick()
     val suggestion = remember(item) { item.toDiscoverySuggestion() }
-    val coverModel = rememberDiscoveryCoverData(suggestion)
-    val coverRequest = remember(context, coverModel, coverReloadTick) {
-        buildAuroraCoverImageRequestOrNull(context, coverModel) {
+    val coverResolution = rememberDiscoveryCoverResolution(suggestion)
+    val coverRequest = remember(context, coverResolution, coverReloadTick) {
+        buildDiscoveryCoverImageRequest(context, coverResolution) {
             size(CoilSize(540, 810))
             precision(Precision.INEXACT)
             crossfade(false)
         }
     }
+    val isCoverPending = coverResolution is DiscoveryCoverResolution.PendingCacheOnly
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
     val tileShape = remember { RoundedCornerShape(18.dp) }
     val neutralCoverBrush = remember(colors) {
@@ -3123,8 +3130,8 @@ private fun BoxScope.StageSlot(
                             translationY = 0f
                         }
                     },
-                error = fallbackPainter,
-                fallback = fallbackPainter,
+                error = if (isCoverPending) null else fallbackPainter,
+                fallback = if (isCoverPending) null else fallbackPainter,
             )
         } else {
             Image(
@@ -3215,10 +3222,11 @@ private fun CollageTile(
     val context = LocalContext.current
     val coverReloadTick = rememberCoverReloadTick()
     val suggestion = remember(item) { item.toDiscoverySuggestion() }
-    val coverModel = rememberDiscoveryCoverData(suggestion)
-    val coverRequest = remember(context, coverModel, coverReloadTick) {
-        buildAuroraCoverImageRequestOrNull(context, coverModel)
+    val coverResolution = rememberDiscoveryCoverResolution(suggestion)
+    val coverRequest = remember(context, coverResolution, coverReloadTick) {
+        buildDiscoveryCoverImageRequest(context, coverResolution)
     }
+    val isCoverPending = coverResolution is DiscoveryCoverResolution.PendingCacheOnly
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
     val tileShape = RoundedCornerShape(16.dp)
 
@@ -3261,8 +3269,8 @@ private fun CollageTile(
                 contentScale = ContentScale.Crop,
                 colorFilter = collageColorFilter,
                 modifier = Modifier.fillMaxSize(),
-                error = fallbackPainter,
-                fallback = fallbackPainter,
+                error = if (isCoverPending) null else fallbackPainter,
+                fallback = if (isCoverPending) null else fallbackPainter,
             )
         } else {
             Image(

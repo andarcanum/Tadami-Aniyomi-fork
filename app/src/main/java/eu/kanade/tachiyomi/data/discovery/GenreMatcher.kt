@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import java.text.Normalizer
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.min
 
 /**
@@ -27,9 +29,42 @@ object GenreMatcher {
 
     /** Жанры длиннее — мусор, игнорируются целиком. */
     private const val MAX_INPUT_LENGTH = 64
+    private const val MAX_COMPILED_CACHE_SIZE = 4096
     private const val MIN_TYPO_LENGTH = 4
     private const val MIN_DOUBLE_TYPO_LENGTH = 6
     private const val MIN_TOKEN_LENGTH = 4
+
+    internal class CompiledGenre(
+        val pool: Set<String>,
+        val canonicals: Set<String>,
+    ) {
+        val tokens: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            if (pool.isEmpty()) {
+                emptySet()
+            } else {
+                buildSet {
+                    for (entry in pool) {
+                        var start = 0
+                        while (start <= entry.length) {
+                            val sep = entry.indexOf(' ', start)
+                            val end = if (sep == -1) entry.length else sep
+                            if (end - start >= MIN_TOKEN_LENGTH) {
+                                add(entry.substring(start, end))
+                            }
+                            if (sep == -1) break
+                            start = sep + 1
+                        }
+                    }
+                }
+            }
+        }
+
+        companion object {
+            val EMPTY = CompiledGenre(emptySet(), emptySet())
+        }
+    }
+
+    private val compiledCache = ConcurrentHashMap<String, CompiledGenre>()
 
     /** Мягкая романизация: общепринятые формы вроде `meha`, `hentay`, `drama`. */
     private val SOFT_CYR_TO_LAT = mapOf(
@@ -58,23 +93,31 @@ object GenreMatcher {
     /** Нормализация: регистр, диакритики, ё→е, пунктуация→пробел, схлопывание пробелов. */
     fun normalize(raw: String): String {
         if (raw.isBlank()) return ""
-        val decomposed = Normalizer.normalize(raw.trim().lowercase(), Normalizer.Form.NFD)
+        val decomposed = Normalizer.normalize(raw.lowercase(), Normalizer.Form.NFD)
         val builder = StringBuilder(decomposed.length)
-        for (ch in decomposed) {
+        var pendingSpace = false
+        for (i in 0 until decomposed.length) {
+            val ch = decomposed[i]
             when {
                 Character.getType(ch) == Character.NON_SPACING_MARK.toInt() -> Unit // диакритика
-                ch.isLetterOrDigit() -> builder.append(ch)
-                else -> builder.append(' ')
+                ch.isLetterOrDigit() -> {
+                    if (pendingSpace && builder.isNotEmpty()) {
+                        builder.append(' ')
+                    }
+                    pendingSpace = false
+                    builder.append(ch)
+                }
+                else -> pendingSpace = true
             }
         }
-        return builder.toString().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+        return builder.toString()
     }
 
     /** Мягкая романизация кириллицы (ожидает нормализованную строку). */
     fun translitCyrillicToLatin(normalized: String): String = translit(normalized, SOFT_CYR_TO_LAT)
 
     private fun translit(s: String, table: Map<Char, String>): String =
-        buildString(s.length) { s.forEach { append(table[it] ?: it.toString()) } }
+        buildString(s.length) { s.forEach { table[it]?.let(::append) ?: append(it) } }
 
     /**
      * Формы жанра: нормализация + обе романизации. Пусто для пустого/мусорного/
@@ -93,16 +136,53 @@ object GenreMatcher {
         return out
     }
 
-    /** Канонические жанры [GenreOntology], которые обозначает строка. */
-    fun resolve(genre: String): Set<String> {
-        val pool = matchPool(genre)
-        if (pool.isEmpty()) return emptySet()
-        val out = mutableSetOf<String>()
-        for (form in pool) {
-            GenreOntology.aliasIndex[form]?.let(out::addAll)
+    internal fun compile(genre: String): CompiledGenre {
+        if (genre.isBlank()) return CompiledGenre.EMPTY
+        compiledCache[genre]?.let { return it }
+        val trimmed = genre.trim()
+        if (trimmed.isEmpty() || trimmed.length > MAX_INPUT_LENGTH) return CompiledGenre.EMPTY
+        if (trimmed != genre) {
+            compiledCache[trimmed]?.let { return it }
         }
-        return out
+        val pool = computeMatchPool(trimmed)
+        val compiled = if (pool.isEmpty()) {
+            CompiledGenre.EMPTY
+        } else {
+            val canonicals = canonicalsOf(pool)
+            CompiledGenre(
+                pool = Collections.unmodifiableSet(pool),
+                canonicals = if (canonicals.isEmpty()) emptySet() else Collections.unmodifiableSet(canonicals),
+            )
+        }
+        if (compiledCache.size >= MAX_COMPILED_CACHE_SIZE) {
+            compiledCache.clear()
+        }
+        val stored = compiledCache.putIfAbsent(trimmed, compiled) ?: compiled
+        if (trimmed != genre) {
+            compiledCache.putIfAbsent(genre, stored)
+        }
+        return stored
     }
+
+    internal fun setsOverlap(a: Set<String>, b: Set<String>): Boolean {
+        if (a.isEmpty() || b.isEmpty()) return false
+        val smaller: Set<String>
+        val larger: Set<String>
+        if (a.size <= b.size) {
+            smaller = a
+            larger = b
+        } else {
+            smaller = b
+            larger = a
+        }
+        for (item in smaller) {
+            if (item in larger) return true
+        }
+        return false
+    }
+
+    /** Канонические жанры [GenreOntology], которые обозначает строка. */
+    fun resolve(genre: String): Set<String> = compile(genre).canonicals
 
     /** The same matchable, CSV-safe domain used for input and effective saved constraints. Stored drafts are not rewritten. */
     internal fun normalizeRawConstraint(value: String): String? {
@@ -146,22 +226,18 @@ object GenreMatcher {
      * исключений; неизвестные и мусорные жанры возвращают false.
      */
     fun matches(userGenre: String, sourceGenre: String): Boolean {
-        val poolA = matchPool(userGenre)
-        val poolB = matchPool(sourceGenre)
-        if (poolA.isEmpty() || poolB.isEmpty()) return false
+        val compiledA = compile(userGenre)
+        val compiledB = compile(sourceGenre)
+        if (compiledA.pool.isEmpty() || compiledB.pool.isEmpty()) return false
         // 1. Семантический мост онтологии: любая пара языков через канонический жанр.
-        val canonA = canonicalsOf(poolA)
-        val canonB = canonicalsOf(poolB)
-        if (canonA.isNotEmpty() && canonB.isNotEmpty() && canonA.intersect(canonB).isNotEmpty()) return true
+        if (setsOverlap(compiledA.canonicals, compiledB.canonicals)) return true
         // 2. Прямое пересечение форм (нормализация, романизации, мягкие окончания).
-        if (poolA.intersect(poolB).isNotEmpty()) return true
+        if (setsOverlap(compiledA.pool, compiledB.pool)) return true
         // 3. Токены многословных жанров: «жанр экшен» ↔ «экшен», «science fiction» ↔ «science».
-        val tokensA = poolA.flatMap { it.split(' ') }.filter { it.length >= MIN_TOKEN_LENGTH }
-        val tokensB = poolB.flatMap { it.split(' ') }.filter { it.length >= MIN_TOKEN_LENGTH }
-        if (tokensA.isNotEmpty() && tokensA.toSet().intersect(tokensB.toSet()).isNotEmpty()) return true
+        if (setsOverlap(compiledA.tokens, compiledB.tokens)) return true
         // 4. Опечатки по всем парам форм.
-        for (a in poolA) {
-            for (b in poolB) {
+        for (a in compiledA.pool) {
+            for (b in compiledB.pool) {
                 if (levenshteinMatches(a, b)) return true
             }
         }
@@ -174,17 +250,15 @@ object GenreMatcher {
      * 2. Точное совпадение нормализованных форм/романизаций и основ (без Левенштейна и разбивки на токены).
      */
     fun matchesConstraint(constraintGenre: String, itemGenre: String): Boolean {
-        val poolA = matchPool(constraintGenre)
-        val poolB = matchPool(itemGenre)
-        if (poolA.isEmpty() || poolB.isEmpty()) return false
+        val compiledA = compile(constraintGenre)
+        val compiledB = compile(itemGenre)
+        if (compiledA.pool.isEmpty() || compiledB.pool.isEmpty()) return false
 
         // 1. Семантический мост онтологии: совпадение канонических категорий
-        val canonA = canonicalsOf(poolA)
-        val canonB = canonicalsOf(poolB)
-        if (canonA.isNotEmpty() && canonB.isNotEmpty() && canonA.intersect(canonB).isNotEmpty()) return true
+        if (setsOverlap(compiledA.canonicals, compiledB.canonicals)) return true
 
         // 2. Прямое пересечение нормализованных форм (включая романизации и мягкие основы)
-        if (poolA.intersect(poolB).isNotEmpty()) return true
+        if (setsOverlap(compiledA.pool, compiledB.pool)) return true
 
         return false
     }
@@ -206,7 +280,7 @@ object GenreMatcher {
     }
 
     /** Пул форм для сравнения: варианты + мягкие формы окончаний. */
-    private fun matchPool(genre: String): Set<String> {
+    private fun computeMatchPool(genre: String): Set<String> {
         val base = variants(genre)
         if (base.isEmpty()) return emptySet()
         val out = LinkedHashSet(base)

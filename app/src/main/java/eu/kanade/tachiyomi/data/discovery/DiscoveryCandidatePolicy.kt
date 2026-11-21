@@ -134,13 +134,14 @@ class DiscoveryCandidatePolicy(
     val hasHardExclusions: Boolean
         get() = blacklistedTags.isNotEmpty() || ignoredGenres.isNotEmpty()
 
-    // Предварительно развёрнутые множества жанров для быстрого сопоставления с учётом RU/EN переводов
-    private val expandedBlacklist: Set<String> = expandGenreSet(this.blacklistedTags.toList())
-    private val expandedIgnored: Set<String> = expandGenreSet(this.ignoredGenres.toList())
-    private val expandedRequired: Set<String> = expandGenreSet(this.requiredGenres.toList())
-    private val expandedPriority: Set<String> = expandGenreSet(this.priorityGenres.toList())
-    private val expandedRequiredByGenre: List<Set<String>> = this.requiredGenres.map { expandGenreSet(listOf(it)) }
-    private val expandedPriorityByGenre: List<Set<String>> = this.priorityGenres.map { expandGenreSet(listOf(it)) }
+    private val compiledBlacklist = CompiledConstraintGroup.compile(expandGenreSet(this.blacklistedTags.toList()))
+    private val compiledIgnored = CompiledConstraintGroup.compile(expandGenreSet(this.ignoredGenres.toList()))
+    private val compiledRequiredByGenre: List<CompiledConstraintGroup> = this.requiredGenres.map {
+        CompiledConstraintGroup.compile(expandGenreSet(listOf(it)))
+    }
+    private val compiledPriorityByGenre: List<CompiledConstraintGroup> = this.priorityGenres.map {
+        CompiledConstraintGroup.compile(expandGenreSet(listOf(it)))
+    }
 
     /**
      * Возвращает true, если переданный список жанров содержит запрещённый (блэклист или глобальный игнор).
@@ -421,16 +422,16 @@ class DiscoveryCandidatePolicy(
     }
 
     private fun matchesBlacklist(itemGenres: List<String>): String? {
-        if (blacklistedTags.isEmpty() || itemGenres.isEmpty()) return null
+        if (compiledBlacklist.forms.isEmpty() || itemGenres.isEmpty()) return null
         return itemGenres.firstOrNull { genre ->
-            expandedBlacklist.any { tag -> GenreMatcher.matchesConstraint(tag, genre) }
+            compiledBlacklist.matches(GenreMatcher.compile(genre))
         }
     }
 
     private fun matchesIgnored(itemGenres: List<String>): String? {
-        if (ignoredGenres.isEmpty() || itemGenres.isEmpty()) return null
+        if (compiledIgnored.forms.isEmpty() || itemGenres.isEmpty()) return null
         return itemGenres.firstOrNull { genre ->
-            expandedIgnored.any { ignored -> GenreMatcher.matchesConstraint(ignored, genre) }
+            compiledIgnored.matches(GenreMatcher.compile(genre))
         }
     }
 
@@ -440,27 +441,30 @@ class DiscoveryCandidatePolicy(
         val matchCount = countRequiredMatches(itemGenres)
         return when (requiredMatchMode) {
             RequiredMatchMode.ANY -> matchCount > 0
-            RequiredMatchMode.ALL -> matchCount == expandedRequiredByGenre.size
+            RequiredMatchMode.ALL -> matchCount == compiledRequiredByGenre.size
         }
     }
 
     internal fun countRequiredMatchTier(itemGenres: List<String>): Int = countRequiredMatches(itemGenres)
 
-    private fun countRequiredMatches(itemGenres: List<String>): Int {
-        if (requiredGenres.isEmpty() || itemGenres.isEmpty()) return 0
-        return expandedRequiredByGenre.count { expanded ->
-            itemGenres.any { itemG ->
-                expanded.any { exp -> GenreMatcher.matchesConstraint(exp, itemG) }
-            }
-        }
-    }
+    private fun countRequiredMatches(itemGenres: List<String>): Int =
+        countGroupMatches(compiledRequiredByGenre, itemGenres)
 
-    private fun countPriorityMatches(itemGenres: List<String>): Int {
-        if (priorityGenres.isEmpty() || itemGenres.isEmpty()) return 0
-        return expandedPriorityByGenre.count { expanded ->
-            itemGenres.any { genre ->
-                expanded.any { exp -> GenreMatcher.matchesConstraint(exp, genre) }
+    private fun countPriorityMatches(itemGenres: List<String>): Int =
+        countGroupMatches(compiledPriorityByGenre, itemGenres)
+
+    private fun countGroupMatches(
+        groups: List<CompiledConstraintGroup>,
+        itemGenres: List<String>,
+    ): Int {
+        if (groups.isEmpty() || itemGenres.isEmpty()) return 0
+        return if (groups.size == 1 || itemGenres.size == 1) {
+            groups.count { group ->
+                itemGenres.any { group.matches(GenreMatcher.compile(it)) }
             }
+        } else {
+            val compiledGenres = itemGenres.map { GenreMatcher.compile(it) }
+            groups.count { group -> compiledGenres.any { group.matches(it) } }
         }
     }
 
@@ -473,6 +477,40 @@ class DiscoveryCandidatePolicy(
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .toList()
+        }
+    }
+}
+
+private class CompiledConstraintGroup(
+    val canonicals: Set<String>,
+    val forms: Set<String>,
+) {
+    fun matches(genre: GenreMatcher.CompiledGenre): Boolean = genre.pool.isNotEmpty() && (
+        GenreMatcher.setsOverlap(genre.canonicals, canonicals) ||
+            GenreMatcher.setsOverlap(genre.pool, forms)
+        )
+
+    companion object {
+        val EMPTY = CompiledConstraintGroup(emptySet(), emptySet())
+
+        fun compile(constraints: Collection<String>): CompiledConstraintGroup {
+            if (constraints.isEmpty()) return EMPTY
+            val canonicals = HashSet<String>()
+            val forms = HashSet<String>()
+            for (constraint in constraints) {
+                val compiled = GenreMatcher.compile(constraint)
+                if (compiled.pool.isEmpty()) continue
+                canonicals.addAll(compiled.canonicals)
+                forms.addAll(compiled.pool)
+            }
+            return if (forms.isEmpty()) {
+                EMPTY
+            } else {
+                CompiledConstraintGroup(
+                    canonicals = if (canonicals.isEmpty()) emptySet() else canonicals,
+                    forms = forms,
+                )
+            }
         }
     }
 }

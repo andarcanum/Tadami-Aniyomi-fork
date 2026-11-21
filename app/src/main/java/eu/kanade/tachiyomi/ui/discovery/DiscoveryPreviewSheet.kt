@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.discovery
 
 import android.graphics.drawable.ColorDrawable
 import android.view.WindowManager
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,7 +59,6 @@ import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
@@ -97,10 +97,14 @@ internal fun DiscoveryPreviewSheet(
     val context = LocalContext.current
     val appHaptics = LocalAppHaptics.current
     val coverReloadTick = rememberCoverReloadTick()
-    val coverModel = rememberDiscoveryCoverData(item, DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle))
-    val coverRequest = remember(context, coverModel, coverReloadTick) {
-        buildAuroraCoverImageRequest(context, coverModel)
+    val coverResolution = rememberDiscoveryCoverResolution(
+        item,
+        DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle),
+    )
+    val coverRequest = remember(context, coverResolution, coverReloadTick) {
+        buildDiscoveryCoverImageRequest(context, coverResolution)
     }
+    val isCoverPending = coverResolution is DiscoveryCoverResolution.PendingCacheOnly
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Portrait)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var isDescriptionExpanded by remember { mutableStateOf(false) }
@@ -249,15 +253,26 @@ internal fun DiscoveryPreviewSheet(
                                 RoundedCornerShape(18.dp),
                             ),
                     ) {
-                        AsyncImage(
-                            model = coverRequest,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            colorFilter = rememberAuroraPosterColorFilter(),
-                            modifier = Modifier.matchParentSize(),
-                            error = fallbackPainter,
-                            fallback = fallbackPainter,
-                        )
+                        val coverColorFilter = rememberAuroraPosterColorFilter()
+                        if (coverRequest != null) {
+                            AsyncImage(
+                                model = coverRequest,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                colorFilter = coverColorFilter,
+                                modifier = Modifier.matchParentSize(),
+                                error = if (isCoverPending) null else fallbackPainter,
+                                fallback = if (isCoverPending) null else fallbackPainter,
+                            )
+                        } else {
+                            Image(
+                                painter = fallbackPainter,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                colorFilter = coverColorFilter,
+                                modifier = Modifier.matchParentSize(),
+                            )
+                        }
                     }
                 }
 

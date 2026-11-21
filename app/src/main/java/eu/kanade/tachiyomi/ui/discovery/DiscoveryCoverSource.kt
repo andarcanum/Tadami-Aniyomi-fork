@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.discovery
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -7,6 +8,9 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import eu.kanade.presentation.components.buildAuroraCoverImageRequestOrNull
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.data.discovery.DiscoverySdkBindingAuthority
@@ -228,39 +232,123 @@ internal fun discoveryCoverDataWithPolicy(
     return coverModel(primary, fallback, resolved)
 }
 
+@Immutable
+internal sealed interface DiscoveryCoverResolution {
+    data class Ready(val model: Any) : DiscoveryCoverResolution
+    data class PendingCacheOnly(val model: AuroraPosterRequest) : DiscoveryCoverResolution
+    data object Unavailable : DiscoveryCoverResolution
+}
+
+internal fun resolveDiscoveryCoverWithPolicy(
+    item: DiscoverySuggestion,
+    recoveryUrl: String? = null,
+    policy: DiscoverySourcePolicy,
+): DiscoveryCoverResolution {
+    discoveryCoverDataWithPolicy(item, recoveryUrl, policy)?.let {
+        return DiscoveryCoverResolution.Ready(it)
+    }
+    if (!policy.inventoryComplete && item.sourceId != null && item.mediaType == policy.mediaType) {
+        val primary = item.coverUrl?.takeIf { it.isNotBlank() } ?: recoveryUrl?.takeIf { it.isNotBlank() }
+        if (primary != null) {
+            val fallback = recoveryUrl?.takeIf {
+                it.isNotBlank() && it != primary && !item.coverUrl.isNullOrBlank()
+            }
+            return DiscoveryCoverResolution.PendingCacheOnly(
+                AuroraPosterRequest(primaryUrl = primary, fallbackUrl = fallback),
+            )
+        }
+    }
+    return DiscoveryCoverResolution.Unavailable
+}
+
+internal fun buildDiscoveryCoverImageRequest(
+    context: Context,
+    resolution: DiscoveryCoverResolution,
+    configure: ImageRequest.Builder.() -> Unit = {},
+): ImageRequest? = when (resolution) {
+    is DiscoveryCoverResolution.Ready -> buildAuroraCoverImageRequestOrNull(
+        context = context,
+        data = resolution.model,
+        configure = configure,
+    )
+    is DiscoveryCoverResolution.PendingCacheOnly -> buildAuroraCoverImageRequestOrNull(
+        context = context,
+        data = resolution.model,
+    ) {
+        configure()
+        diskCachePolicy(CachePolicy.READ_ONLY)
+        networkCachePolicy(CachePolicy.DISABLED)
+    }
+    DiscoveryCoverResolution.Unavailable -> null
+}
+
 /** Shared lifecycle-aware cover model for Discovery cards across Home and Feed. */
 @Composable
 internal fun rememberDiscoveryCoverData(item: DiscoverySuggestion, recoveryUrl: String? = null): Any? {
-    val localContext = LocalDiscoveryCoverContext.current
-    if (localContext != null && localContext.mediaType == item.mediaType) {
-        val sourceId = item.sourceId?.takeIf { it > 0L }
-        val sourceVersion = if (sourceId != null) localContext.sourceIdentities[sourceId] ?: 0 else 0
-        return remember(
-            item.mediaType,
-            item.sourceId,
-            item.sourceUrl,
-            item.provider,
-            item.rowType,
-            item.coverUrl,
-            recoveryUrl,
-            localContext.policy.revision,
-            localContext.policy.inventoryComplete,
-            sourceVersion,
-        ) {
-            discoveryCoverDataWithPolicy(item, recoveryUrl, localContext.policy)
-        }
+    val (policy, sourceVersion) = rememberCoverPolicyAndVersion(item)
+    return remember(
+        item.mediaType,
+        item.sourceId,
+        item.sourceUrl,
+        item.provider,
+        item.rowType,
+        item.coverUrl,
+        recoveryUrl,
+        policy.revision,
+        policy.inventoryComplete,
+        sourceVersion,
+    ) {
+        discoveryCoverDataWithPolicy(item, recoveryUrl, policy)
     }
-    return rememberFallbackDiscoveryCoverData(item, recoveryUrl)
+}
+
+/**
+ * Resolves either an authorized cover request ([DiscoveryCoverResolution.Ready]) or a strict
+ * cache-only request ([DiscoveryCoverResolution.PendingCacheOnly]) while sources cold-boot, so
+ * cached posters appear on frame 0 instead of flashing "loading" placeholder art.
+ */
+@Composable
+internal fun rememberDiscoveryCoverResolution(
+    item: DiscoverySuggestion,
+    recoveryUrl: String? = null,
+): DiscoveryCoverResolution {
+    val (policy, sourceVersion) = rememberCoverPolicyAndVersion(item)
+    return remember(
+        item.mediaType,
+        item.sourceId,
+        item.sourceUrl,
+        item.provider,
+        item.rowType,
+        item.coverUrl,
+        recoveryUrl,
+        policy.revision,
+        policy.inventoryComplete,
+        sourceVersion,
+    ) {
+        resolveDiscoveryCoverWithPolicy(item, recoveryUrl, policy)
+    }
 }
 
 @Composable
-private fun rememberFallbackDiscoveryCoverData(item: DiscoverySuggestion, recoveryUrl: String? = null): Any? {
+private fun rememberCoverPolicyAndVersion(item: DiscoverySuggestion): Pair<DiscoverySourcePolicy, Int> {
+    val localContext = LocalDiscoveryCoverContext.current
+    val sourceId = item.sourceId?.takeIf { it > 0L }
+    if (localContext != null && localContext.mediaType == item.mediaType) {
+        val sourceVersion = if (sourceId != null) localContext.sourceIdentities[sourceId] ?: 0 else 0
+        return localContext.policy to sourceVersion
+    }
+    return rememberFallbackCoverPolicyAndVersion(item.mediaType, sourceId)
+}
+
+@Composable
+private fun rememberFallbackCoverPolicyAndVersion(
+    mediaType: DiscoveryMediaType,
+    sourceId: Long?,
+): Pair<DiscoverySourcePolicy, Int> {
     val provider = remember { Injekt.get<DiscoverySourcePolicyProvider>() }
-    val mediaType = item.mediaType
     val policyFlow = remember(provider, mediaType) { provider.observe(mediaType) }
     val initialPolicy = remember(provider, mediaType) { provider.current(mediaType) }
     val policy by policyFlow.collectAsStateWithLifecycle(initialValue = initialPolicy)
-    val sourceId = item.sourceId?.takeIf { it > 0L }
     val sourceVersionFlow = remember(mediaType, sourceId, policy.inventoryComplete) {
         if (sourceId == null || !policy.inventoryComplete) {
             flowOf(0)
@@ -281,20 +369,7 @@ private fun rememberFallbackDiscoveryCoverData(item: DiscoverySuggestion, recove
         }
     }
     val sourceVersion by sourceVersionFlow.collectAsStateWithLifecycle(initialValue = 0)
-    return remember(
-        mediaType,
-        item.sourceId,
-        item.sourceUrl,
-        item.provider,
-        item.rowType,
-        item.coverUrl,
-        recoveryUrl,
-        policy.revision,
-        policy.inventoryComplete,
-        sourceVersion,
-    ) {
-        discoveryCoverDataWithPolicy(item, recoveryUrl, policy)
-    }
+    return policy to sourceVersion
 }
 
 /** Legacy unbound callers never receive native credentials inferred from a display name. */

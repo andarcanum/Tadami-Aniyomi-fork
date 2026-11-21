@@ -251,6 +251,50 @@ class DiscoveryCoverSourceTest {
         return java.lang.ref.WeakReference(temporary)
     }
 
+    @Test
+    fun `resolveDiscoveryCoverWithPolicy returns pending cache-only without client while booting`() {
+        val fixture = fixture()
+        try {
+            val incompletePolicy = policy().let { p ->
+                DiscoverySourcePolicy(
+                    mediaType = p.mediaType,
+                    revision = p.revision,
+                    inventoryComplete = false,
+                    allowedPluginKeys = p.allowedPluginKeys,
+                    pluginMembers = p.pluginMembers,
+                )
+            }
+            val pending = resolveDiscoveryCoverWithPolicy(
+                item = item(),
+                recoveryUrl = "https://fixture.invalid/recovery.jpg",
+                policy = incompletePolicy,
+            ) as DiscoveryCoverResolution.PendingCacheOnly
+            pending.model.primaryUrl shouldBe "https://fixture.invalid/page.jpg"
+            pending.model.fallbackUrl shouldBe "https://fixture.invalid/recovery.jpg"
+            pending.model.client shouldBe null
+            pending.model.headers shouldBe null
+            pending.model.refererUrl shouldBe null
+
+            resolveDiscoveryCoverWithPolicy(
+                item = item().copy(coverUrl = null),
+                policy = incompletePolicy,
+            ) shouldBe DiscoveryCoverResolution.Unavailable
+
+            resolveDiscoveryCoverWithPolicy(
+                item = item(),
+                policy = policy(selected = emptySet()),
+            ) shouldBe DiscoveryCoverResolution.Unavailable
+
+            val ready = resolveDiscoveryCoverWithPolicy(
+                item = item(),
+                policy = policy(),
+            ) as DiscoveryCoverResolution.Ready
+            (ready.model is AuroraPosterRequest) shouldBe true
+        } finally {
+            fixture.close()
+        }
+    }
+
     private fun policy(selected: Set<String> = setOf("extension.a")) = DiscoverySourcePolicy(
         mediaType = DiscoveryMediaType.MANGA,
         revision = "fixture",

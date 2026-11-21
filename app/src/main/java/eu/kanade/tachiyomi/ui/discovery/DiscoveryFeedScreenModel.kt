@@ -17,7 +17,10 @@ import eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver
 import eu.kanade.tachiyomi.data.discovery.DiscoveryTrendingSource
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.META_PREFETCH_COUNT
+import eu.kanade.tachiyomi.data.discovery.RequiredEnforcement
+import eu.kanade.tachiyomi.data.discovery.RequiredMatchMode
 import eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder
+import eu.kanade.tachiyomi.data.discovery.UnknownGenrePolicy
 import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.interleaveMix
 import eu.kanade.tachiyomi.data.discovery.recoverMissingCovers
@@ -119,6 +122,36 @@ internal fun countBlacklistImpact(items: List<DiscoverySuggestion>, tag: String)
 }
 
 internal enum class FeedSignalTab { MIX, SIMILAR, TASTE, FRESH, SOURCE }
+
+internal data class WarmDiscoveryFeedSeed(
+    val snapshot: DiscoveryPublicationSnapshot,
+    val hidden: Set<String> = emptySet(),
+    val blacklistedTags: Set<String> = emptySet(),
+    val failedCsv: String = "",
+    val failedSourceCount: Int = 0,
+    val lastGenerationStatus: String = "",
+)
+
+internal object DiscoveryFeedWarmCache {
+    private val seeds = ConcurrentHashMap<Pair<Int, DiscoveryMediaType>, WarmDiscoveryFeedSeed>()
+
+    fun put(
+        repository: DiscoveryRepository,
+        mediaType: DiscoveryMediaType,
+        seed: WarmDiscoveryFeedSeed,
+    ) {
+        seeds[System.identityHashCode(repository) to mediaType] = seed
+    }
+
+    fun get(
+        repository: DiscoveryRepository,
+        mediaType: DiscoveryMediaType,
+    ): WarmDiscoveryFeedSeed? = seeds[System.identityHashCode(repository) to mediaType]
+
+    fun clear(repository: DiscoveryRepository, mediaType: DiscoveryMediaType) {
+        seeds.remove(System.identityHashCode(repository) to mediaType)
+    }
+}
 
 internal fun FeedSignalTab.rowType(): DiscoveryRowType? = when (this) {
     FeedSignalTab.MIX -> null
@@ -347,6 +380,7 @@ internal class DiscoveryFeedScreenModel(
 
     private val sourcePolicies by lazy { sourcePolicyProvider ?: Injekt.get<DiscoverySourcePolicyProvider>() }
     private var observeJob: Job? = null
+    private var refreshingJob: Job? = null
     private var progressJob: Job? = null
     private var failureJob: Job? = null
     private var visibleTabsJob: Job? = null
@@ -358,11 +392,76 @@ internal class DiscoveryFeedScreenModel(
     private var lastObservedPriorityGenres: Set<String>? = null
     private var lastObservedInventoryComplete: Boolean? = null
     private var lastObservedUsedProvisionalColdStart: Boolean = false
+
+    @Volatile
+    private var lastProjection: ProjectionCacheEntry? = null
     private val optimisticExcludedTitles: MutableSet<Pair<DiscoveryMediaType, String>> = ConcurrentHashMap.newKeySet()
 
+    init {
+        seedFromWarmCache(initialMedia)
+    }
+
     fun start() {
+        if (observeJob?.isActive == true) return
         observeMedia(state.value.mediaType)
         observeVisibleTabs()
+    }
+
+    private fun seedFromWarmCache(mediaType: DiscoveryMediaType) {
+        val seed = DiscoveryFeedWarmCache.get(repository, mediaType) ?: return
+        val sources = sourcePolicies.current(mediaType)
+        val policy = DiscoveryCandidatePolicy(
+            spec = preferences.genreFilterSpec(mediaType),
+            blacklistedTags = seed.blacklistedTags,
+        )
+        val visibleTabs = buildSet {
+            add(FeedSignalTab.MIX)
+            if (preferences.rowLikeEnabled().get()) add(FeedSignalTab.SIMILAR)
+            if (preferences.rowTasteEnabled().get()) add(FeedSignalTab.TASTE)
+            if (preferences.rowTrendEnabled().get() && preferences.externalProvidersEnabled().get()) {
+                add(FeedSignalTab.FRESH)
+            }
+            if (preferences.rowSourceEnabled().get()) add(FeedSignalTab.SOURCE)
+        }
+        val key = buildProjectionInputKey(
+            mediaType = mediaType,
+            snapshot = seed.snapshot,
+            hidden = seed.hidden,
+            failedCsv = seed.failedCsv,
+            policy = policy,
+            sources = sources,
+            failedSourceCount = seed.failedSourceCount,
+            lastGenStatus = seed.lastGenerationStatus,
+            inventoryFailure = null,
+        )
+        val mix = applyFeedProjection(
+            mediaType = mediaType,
+            snapshot = seed.snapshot,
+            hidden = seed.hidden,
+            failedCsv = seed.failedCsv,
+            policy = policy,
+            sources = sources,
+            failedSourceCount = seed.failedSourceCount,
+            lastGenStatus = seed.lastGenerationStatus,
+            inventoryFailure = null,
+            visibleTabsOverride = visibleTabs,
+        )
+        lastProjection = ProjectionCacheEntry(key, seed.snapshot, mix)
+    }
+
+    private fun observeRefreshing(mediaType: DiscoveryMediaType) {
+        refreshingJob?.cancel()
+        refreshingJob = screenModelScope.launchIO {
+            refreshingFlow(mediaType).collectLatest { refreshing ->
+                mutableState.update { current ->
+                    if (current.mediaType == mediaType) {
+                        current.copy(isRefreshing = refreshing)
+                    } else {
+                        current
+                    }
+                }
+            }
+        }
     }
 
     private fun observeProgress(mediaType: DiscoveryMediaType) {
@@ -409,10 +508,8 @@ internal class DiscoveryFeedScreenModel(
     }
 
     private fun observeMedia(mediaType: DiscoveryMediaType) {
-        lastObservedPriorityGenres = null
-        lastObservedInventoryComplete = null
-        lastObservedUsedProvisionalColdStart = false
         observeProgress(mediaType)
+        observeRefreshing(mediaType)
         failureJob?.cancel()
         failureJob = screenModelScope.launchIO {
             manualRefreshWorkInfoFlow(context.workManager, preferences, mediaType).collectLatest { workInfo ->
@@ -430,7 +527,6 @@ internal class DiscoveryFeedScreenModel(
                 ?: flowOf(null)
             combine(
                 repository.observePublication(mediaType),
-                refreshingFlow(mediaType),
                 repository.subscribeHidden(mediaType),
                 preferences.lastFailedRows(mediaType).changes(),
                 combine(
@@ -454,10 +550,9 @@ internal class DiscoveryFeedScreenModel(
                         statusTriple,
                     )
                 },
-            ) { snapshot, refreshing, hidden, failedCsv, policyTriple ->
+            ) { snapshot, hidden, failedCsv, policyTriple ->
                 FeedSources(
                     snapshot = snapshot,
-                    refreshing = refreshing,
                     hidden = hidden,
                     failedCsv = failedCsv,
                     policy = policyTriple.first,
@@ -470,7 +565,6 @@ internal class DiscoveryFeedScreenModel(
                 .collectLatest { feedSources ->
                     val (
                         snapshot,
-                        refreshing,
                         hidden,
                         failedCsv,
                         policy,
@@ -479,103 +573,50 @@ internal class DiscoveryFeedScreenModel(
                         lastGenStatus,
                         inventoryFailure,
                     ) = feedSources
-                    val priorityChanged = lastObservedPriorityGenres != null &&
-                        lastObservedPriorityGenres != policy.priorityGenres
-                    lastObservedPriorityGenres = policy.priorityGenres
-                    val wasProvisionalColdStart = lastObservedUsedProvisionalColdStart
-                    val inventoryJustCompleted =
-                        lastObservedInventoryComplete == false && sources.inventoryComplete
-                    lastObservedInventoryComplete = sources.inventoryComplete
-                    val allowProvisionalNative = !sources.inventoryComplete && snapshot.generation > 0L
-                    val resetWindows = priorityChanged || (inventoryJustCompleted && !wasProvisionalColdStart)
-                    val eligible = selectColdStartVisibleCandidates(snapshot, sources)
-                        .filterNot { (mediaType to it.cleanTitle) in optimisticExcludedTitles }
-                    val isProvisionalColdStart = allowProvisionalNative && eligible.any { it.sourceId != null }
-                    lastObservedUsedProvisionalColdStart = isProvisionalColdStart
-                    val visible = projectCandidates(eligible, policy, sources, allowProvisionalNative)
-                    val rows = groupFeedRows(visible)
-                    // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
-                    val mixTotal = DiscoveryMixQuotas().total
-                    val mix = if (policy.priorityGenres.isNotEmpty()) {
-                        val (boosted, normal) = visible.partition { policy.hasPriorityBoost(it) }
-                        if (boosted.isNotEmpty() && normal.isNotEmpty()) {
-                            val boostedMix = interleaveTier(boosted, mixTotal)
-                            val remaining = (mixTotal - boostedMix.size).coerceAtLeast(0)
-                            val normalMix = if (remaining > 0) interleaveTier(normal, remaining) else emptyList()
-                            boostedMix + normalMix
-                        } else {
-                            interleaveTier(visible, mixTotal)
-                        }
-                    } else {
-                        interleaveTier(visible, mixTotal)
-                    }
-                    mutableState.update { current ->
-                        if (current.mediaType != mediaType) return@update current
-                        val liveAllowProvisional = isProvisionalColdStart && !sources.inventoryComplete
-                        val liveMix = mix.filter {
-                            allowsColdStartDisplay(it, sources, liveAllowProvisional) &&
-                                (mediaType to it.cleanTitle) !in optimisticExcludedTitles
-                        }
-                        val liveRows = rows.mapValues { (_, row) ->
-                            row.filter {
-                                allowsColdStartDisplay(it, sources, liveAllowProvisional) &&
-                                    (mediaType to it.cleanTitle) !in optimisticExcludedTitles
-                            }
-                        }.filterValues {
-                            it.isNotEmpty()
-                        }
-                        val currentWindows = current.activeWindows
-                        val updatedWindows = if (currentWindows.isEmpty() ||
-                            currentWindows[FeedSignalTab.MIX].isNullOrEmpty()
-                        ) {
-                            if (liveMix.isNotEmpty()) {
-                                mapOf(FeedSignalTab.MIX to liveMix)
-                            } else {
-                                emptyMap()
-                            }
-                        } else if (resetWindows) {
-                            currentWindows.mapValues { (tab, _) ->
-                                if (tab == FeedSignalTab.MIX) liveMix else liveRows[tab.rowType()].orEmpty()
-                            }
-                        } else {
-                            currentWindows.mapValues { (tab, currentWindow) ->
-                                val pool = if (tab == FeedSignalTab.MIX) liveMix else liveRows[tab.rowType()].orEmpty()
-                                reconcileFeedWindow(
-                                    currentWindow = currentWindow,
-                                    pool = pool,
-                                    targetSize = pool.size,
-                                )
-                            }
-                        }
-                        val snapshotPendingSync = snapshot.sourcePolicyRevision.isNotEmpty() &&
-                            snapshot.sourcePolicyRevision != sources.revision
-                        val waitingInventory = liveMix.isEmpty() && (
-                            (!sources.inventoryComplete && inventoryFailure == null) ||
-                                snapshotPendingSync
-                            )
-                        val effectiveStatus = if (
-                            inventoryFailure != null && !sources.inventoryComplete && liveMix.isEmpty()
-                        ) {
-                            "FAILED"
-                        } else {
-                            lastGenStatus
-                        }
-                        current.copy(
-                            rows = liveRows,
-                            mix = liveMix,
+                    DiscoveryFeedWarmCache.put(
+                        repository = repository,
+                        mediaType = mediaType,
+                        seed = WarmDiscoveryFeedSeed(
+                            snapshot = snapshot,
                             hidden = hidden,
-                            lastUpdatedAt = snapshot.suggestions.maxOfOrNull { s -> s.createdAt }
-                                ?: snapshot.committedAt.takeIf { it > 0L },
-                            isRefreshing = refreshing,
-                            isLoading = waitingInventory,
-                            isProvisionalColdStart = liveAllowProvisional && liveMix.isNotEmpty(),
-                            failedRows = parseFailedRows(failedCsv),
-                            poolSize = visible.size,
+                            blacklistedTags = policy.blacklistedTags,
+                            failedCsv = failedCsv,
                             failedSourceCount = failedSourceCount,
-                            lastGenerationStatus = effectiveStatus,
-                            tabOffsets = if (resetWindows) emptyMap() else current.tabOffsets,
-                            activeWindows = updatedWindows,
-                        )
+                            lastGenerationStatus = lastGenStatus,
+                        ),
+                    )
+                    val key = buildProjectionInputKey(
+                        mediaType = mediaType,
+                        snapshot = snapshot,
+                        hidden = hidden,
+                        failedCsv = failedCsv,
+                        policy = policy,
+                        sources = sources,
+                        failedSourceCount = failedSourceCount,
+                        lastGenStatus = lastGenStatus,
+                        inventoryFailure = inventoryFailure,
+                    )
+                    val cached = lastProjection
+                    val mix = if (
+                        cached != null &&
+                        cached.key == key &&
+                        (cached.snapshot === snapshot || cached.snapshot == snapshot)
+                    ) {
+                        cached.mix
+                    } else {
+                        applyFeedProjection(
+                            mediaType = mediaType,
+                            snapshot = snapshot,
+                            hidden = hidden,
+                            failedCsv = failedCsv,
+                            policy = policy,
+                            sources = sources,
+                            failedSourceCount = failedSourceCount,
+                            lastGenStatus = lastGenStatus,
+                            inventoryFailure = inventoryFailure,
+                        ).also { computedMix ->
+                            lastProjection = ProjectionCacheEntry(key, snapshot, computedMix)
+                        }
                     }
                     prefetchJob?.cancel()
                     prefetchJob = screenModelScope.launchIO {
@@ -592,6 +633,119 @@ internal class DiscoveryFeedScreenModel(
                     }
                 }
         }
+    }
+
+    private fun applyFeedProjection(
+        mediaType: DiscoveryMediaType,
+        snapshot: DiscoveryPublicationSnapshot,
+        hidden: Set<String>,
+        failedCsv: String,
+        policy: DiscoveryCandidatePolicy,
+        sources: DiscoverySourcePolicy,
+        failedSourceCount: Int,
+        lastGenStatus: String,
+        inventoryFailure: Throwable?,
+        visibleTabsOverride: Set<FeedSignalTab>? = null,
+    ): List<DiscoverySuggestion> {
+        val priorityChanged = lastObservedPriorityGenres != null &&
+            lastObservedPriorityGenres != policy.priorityGenres
+        lastObservedPriorityGenres = policy.priorityGenres
+        val wasProvisionalColdStart = lastObservedUsedProvisionalColdStart
+        val inventoryJustCompleted =
+            lastObservedInventoryComplete == false && sources.inventoryComplete
+        lastObservedInventoryComplete = sources.inventoryComplete
+        val allowProvisionalNative = !sources.inventoryComplete && snapshot.generation > 0L
+        val resetWindows = priorityChanged || (inventoryJustCompleted && !wasProvisionalColdStart)
+        val eligible = selectColdStartVisibleCandidates(snapshot, sources)
+            .filterNot { (mediaType to it.cleanTitle) in optimisticExcludedTitles }
+        val isProvisionalColdStart = allowProvisionalNative && eligible.any { it.sourceId != null }
+        lastObservedUsedProvisionalColdStart = isProvisionalColdStart
+        val visible = projectCandidates(eligible, policy, sources, allowProvisionalNative)
+        val rows = groupFeedRows(visible)
+        // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
+        val mixTotal = DiscoveryMixQuotas().total
+        val mix = if (policy.priorityGenres.isNotEmpty()) {
+            val (boosted, normal) = visible.partition { policy.hasPriorityBoost(it) }
+            if (boosted.isNotEmpty() && normal.isNotEmpty()) {
+                val boostedMix = interleaveTier(boosted, mixTotal)
+                val remaining = (mixTotal - boostedMix.size).coerceAtLeast(0)
+                val normalMix = if (remaining > 0) interleaveTier(normal, remaining) else emptyList()
+                boostedMix + normalMix
+            } else {
+                interleaveTier(visible, mixTotal)
+            }
+        } else {
+            interleaveTier(visible, mixTotal)
+        }
+        mutableState.update { current ->
+            if (current.mediaType != mediaType) return@update current
+            val liveAllowProvisional = isProvisionalColdStart && !sources.inventoryComplete
+            val liveMix = mix.filter {
+                allowsColdStartDisplay(it, sources, liveAllowProvisional) &&
+                    (mediaType to it.cleanTitle) !in optimisticExcludedTitles
+            }
+            val liveRows = rows.mapValues { (_, row) ->
+                row.filter {
+                    allowsColdStartDisplay(it, sources, liveAllowProvisional) &&
+                        (mediaType to it.cleanTitle) !in optimisticExcludedTitles
+                }
+            }.filterValues {
+                it.isNotEmpty()
+            }
+            val currentWindows = current.activeWindows
+            val updatedWindows = if (currentWindows.isEmpty() ||
+                currentWindows[FeedSignalTab.MIX].isNullOrEmpty()
+            ) {
+                if (liveMix.isNotEmpty()) {
+                    mapOf(FeedSignalTab.MIX to liveMix)
+                } else {
+                    emptyMap()
+                }
+            } else if (resetWindows) {
+                currentWindows.mapValues { (tab, _) ->
+                    if (tab == FeedSignalTab.MIX) liveMix else liveRows[tab.rowType()].orEmpty()
+                }
+            } else {
+                currentWindows.mapValues { (tab, currentWindow) ->
+                    val pool = if (tab == FeedSignalTab.MIX) liveMix else liveRows[tab.rowType()].orEmpty()
+                    reconcileFeedWindow(
+                        currentWindow = currentWindow,
+                        pool = pool,
+                        targetSize = pool.size,
+                    )
+                }
+            }
+            val snapshotPendingSync = snapshot.sourcePolicyRevision.isNotEmpty() &&
+                snapshot.sourcePolicyRevision != sources.revision
+            val waitingInventory = liveMix.isEmpty() && (
+                (!sources.inventoryComplete && inventoryFailure == null) ||
+                    snapshotPendingSync
+                )
+            val effectiveStatus = if (
+                inventoryFailure != null && !sources.inventoryComplete && liveMix.isEmpty()
+            ) {
+                "FAILED"
+            } else {
+                lastGenStatus
+            }
+            current.copy(
+                rows = liveRows,
+                mix = liveMix,
+                hidden = hidden,
+                lastUpdatedAt = snapshot.suggestions.maxOfOrNull { s -> s.createdAt }
+                    ?: snapshot.committedAt.takeIf { it > 0L },
+                isLoading = waitingInventory,
+                isProvisionalColdStart = liveAllowProvisional && liveMix.isNotEmpty(),
+                failedRows = parseFailedRows(failedCsv),
+                poolSize = visible.size,
+                failedSourceCount = failedSourceCount,
+                lastGenerationStatus = effectiveStatus,
+                visibleTabs = visibleTabsOverride ?: current.visibleTabs,
+                tabOffsets = if (resetWindows) emptyMap() else current.tabOffsets,
+                activeWindows = updatedWindows,
+            )
+        }
+        return mix
     }
 
     private fun interleaveTier(items: List<DiscoverySuggestion>, total: Int): List<DiscoverySuggestion> {
@@ -625,7 +779,6 @@ internal class DiscoveryFeedScreenModel(
 
     private data class FeedSources(
         val snapshot: DiscoveryPublicationSnapshot,
-        val refreshing: Boolean,
         val hidden: Set<String>,
         val failedCsv: String,
         val policy: DiscoveryCandidatePolicy,
@@ -633,6 +786,70 @@ internal class DiscoveryFeedScreenModel(
         val failedSourceCount: Int,
         val lastGenerationStatus: String,
         val inventoryFailure: Throwable? = null,
+    )
+
+    private data class ProjectionInputKey(
+        val mediaType: DiscoveryMediaType,
+        val generation: Long,
+        val committedAt: Long,
+        val sourcePolicyRevision: String,
+        val suggestionCount: Int,
+        val firstCleanTitle: String?,
+        val lastCleanTitle: String?,
+        val hidden: Set<String>,
+        val failedCsv: String,
+        val blacklistedTags: Set<String>,
+        val ignoredGenres: Set<String>,
+        val requiredGenres: Set<String>,
+        val priorityGenres: Set<String>,
+        val requiredMatchMode: RequiredMatchMode,
+        val requiredEnforcement: RequiredEnforcement,
+        val unknownGenrePolicy: UnknownGenrePolicy,
+        val sourcesRevision: String,
+        val inventoryComplete: Boolean,
+        val failedSourceCount: Int,
+        val lastGenStatus: String,
+        val hasInventoryFailure: Boolean,
+    )
+
+    private data class ProjectionCacheEntry(
+        val key: ProjectionInputKey,
+        val snapshot: DiscoveryPublicationSnapshot,
+        val mix: List<DiscoverySuggestion>,
+    )
+
+    private fun buildProjectionInputKey(
+        mediaType: DiscoveryMediaType,
+        snapshot: DiscoveryPublicationSnapshot,
+        hidden: Set<String>,
+        failedCsv: String,
+        policy: DiscoveryCandidatePolicy,
+        sources: DiscoverySourcePolicy,
+        failedSourceCount: Int,
+        lastGenStatus: String,
+        inventoryFailure: Throwable?,
+    ) = ProjectionInputKey(
+        mediaType = mediaType,
+        generation = snapshot.generation,
+        committedAt = snapshot.committedAt,
+        sourcePolicyRevision = snapshot.sourcePolicyRevision,
+        suggestionCount = snapshot.suggestions.size,
+        firstCleanTitle = snapshot.suggestions.firstOrNull()?.cleanTitle,
+        lastCleanTitle = snapshot.suggestions.lastOrNull()?.cleanTitle,
+        hidden = hidden,
+        failedCsv = failedCsv,
+        blacklistedTags = policy.blacklistedTags,
+        ignoredGenres = policy.ignoredGenres,
+        requiredGenres = policy.requiredGenres,
+        priorityGenres = policy.priorityGenres,
+        requiredMatchMode = policy.requiredMatchMode,
+        requiredEnforcement = policy.requiredEnforcement,
+        unknownGenrePolicy = policy.unknownGenrePolicy,
+        sourcesRevision = sources.revision,
+        inventoryComplete = sources.inventoryComplete,
+        failedSourceCount = failedSourceCount,
+        lastGenStatus = lastGenStatus,
+        hasInventoryFailure = inventoryFailure != null,
     )
 
     private fun DiscoverySuggestion.toRowItem() = DiscoveryRowItem(
@@ -710,6 +927,7 @@ internal class DiscoveryFeedScreenModel(
     ) {
         val cleanTitle = removed.cleanTitle
         if (cleanTitle.isBlank()) return
+        lastProjection = null
         val exclusionKey = removed.mediaType to cleanTitle
         optimisticExcludedTitles += exclusionKey
         val mediaOptimisticTitles = optimisticExcludedTitles
@@ -783,6 +1001,7 @@ internal class DiscoveryFeedScreenModel(
         val item = lastHidden ?: return
         val tab = lastHiddenTab
         lastHidden = null
+        lastProjection = null
         optimisticExcludedTitles -= (item.mediaType to item.cleanTitle)
         hideUndoOperations.enqueue {
             repository.undoHide(item.mediaType, item.cleanTitle)

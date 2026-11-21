@@ -308,6 +308,17 @@ internal class HomeDiscoveryController(
                 )
             }.collectLatest { obs ->
                 mutex.withLock {
+                    eu.kanade.tachiyomi.ui.discovery.DiscoveryFeedWarmCache.put(
+                        repository = repository,
+                        mediaType = mediaType,
+                        seed = eu.kanade.tachiyomi.ui.discovery.WarmDiscoveryFeedSeed(
+                            snapshot = obs.snapshot,
+                            blacklistedTags = obs.policy.blacklistedTags,
+                            failedCsv = obs.failedCsv,
+                            failedSourceCount = obs.sourceFailureCount,
+                            lastGenerationStatus = obs.lastStatus,
+                        ),
+                    )
                     val previousPriorityGenres = cachedPolicy.priorityGenres
                     val hadObservedPolicy = hasObservedPolicy
                     val wasProvisionalColdStart = lastObservedUsedProvisionalColdStart

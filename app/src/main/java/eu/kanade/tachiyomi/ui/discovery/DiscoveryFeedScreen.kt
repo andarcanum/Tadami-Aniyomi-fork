@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.discovery
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -87,7 +88,6 @@ import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.manga.interactor.GetEnabledMangaSources
 import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
@@ -232,256 +232,280 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
         val density = LocalDensity.current
         val topBarHeightDp = with(density) { topBarHeightPx.toDp() }
 
-        Box(Modifier.fillMaxSize().background(colors.background)) {
-            // Выбранный таб могли скрыть в настройках после открытия экрана — контент
-            // и табы показывают effectiveTab (fallback MIX), чтобы не было пустого разрыва.
-            val effectiveTab = if (tab in state.visibleTabs) tab else FeedSignalTab.MIX
-            var selectedGenre by rememberSaveable { mutableStateOf<String?>(null) }
-            LaunchedEffect(effectiveTab, provider) {
-                selectedGenre = null
-            }
-            val availableGenres = remember(state, effectiveTab, provider) {
-                screenModel.availableGenres(effectiveTab, provider)
-            }
-            val feedItems = remember(state, effectiveTab, provider, selectedGenre) {
-                screenModel.displayedItems(effectiveTab, provider, selectedGenre)
-            }
-            FeedBody(
-                state = state,
-                hazeState = hazeState,
-                items = feedItems,
-                availableGenres = availableGenres,
-                selectedGenre = selectedGenre,
-                onGenreSelect = { selectedGenre = it },
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = if (topBarHeightDp > 0.dp) topBarHeightDp + 8.dp else 140.dp,
-                    bottom = 24.dp,
-                ),
-                exposureTracker = exposureTracker,
-                isResumed = isResumed,
-                // Прямое открытие plugin-bound карточки; guard от повторного тапа
-                // на время резолва, fallback в шторку при неполной привязке/ошибке.
-                onItemClick = { item ->
-                    if (state.openingItem != item) {
-                        // Taste Engine: клик = слабый позитивный сигнал (guard исключает двойную запись).
-                        screenModel.recordClick(item)
-                        scope.launch {
-                            screenModel.setOpenPending(item)
-                            // finally: pending сбрасывается и при отмене (rotation/back),
-                            // иначе guard залипнет на пережившем config change ScreenModel.
-                            val entryId = try {
-                                screenModel.resolveEntryId(item)
-                            } finally {
-                                screenModel.setOpenPending(null)
-                            }
-                            if (entryId != null) {
-                                navigator.push(
-                                    when (item.mediaType) {
-                                        DiscoveryMediaType.ANIME -> AnimeScreen(entryId, fromSource = true)
-                                        DiscoveryMediaType.MANGA -> MangaScreen(entryId, fromSource = true)
-                                        DiscoveryMediaType.NOVEL -> NovelScreen(entryId, fromSource = true)
-                                    },
-                                )
-                            } else {
-                                sheetItem = item
+        ProvideDiscoveryCoverContext(mediaType = state.mediaType) {
+            Box(Modifier.fillMaxSize().background(colors.background)) {
+                // Выбранный таб могли скрыть в настройках после открытия экрана — контент
+                // и табы показывают effectiveTab (fallback MIX), чтобы не было пустого разрыва.
+                val effectiveTab = if (tab in state.visibleTabs) tab else FeedSignalTab.MIX
+                var selectedGenre by rememberSaveable { mutableStateOf<String?>(null) }
+                LaunchedEffect(effectiveTab, provider) {
+                    selectedGenre = null
+                }
+                val availableGenres = remember(
+                    state.rows,
+                    state.mix,
+                    state.isProvisionalColdStart,
+                    effectiveTab,
+                    provider,
+                ) {
+                    screenModel.availableGenres(effectiveTab, provider)
+                }
+                val feedItems = remember(
+                    state.activeWindows,
+                    state.rows,
+                    state.mix,
+                    state.isProvisionalColdStart,
+                    effectiveTab,
+                    provider,
+                    selectedGenre,
+                ) {
+                    screenModel.displayedItems(effectiveTab, provider, selectedGenre)
+                }
+                FeedBody(
+                    state = state,
+                    hazeState = hazeState,
+                    items = feedItems,
+                    availableGenres = availableGenres,
+                    selectedGenre = selectedGenre,
+                    onGenreSelect = { selectedGenre = it },
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = if (topBarHeightDp > 0.dp) topBarHeightDp + 8.dp else 140.dp,
+                        bottom = 24.dp,
+                    ),
+                    exposureTracker = exposureTracker,
+                    isResumed = isResumed,
+                    // Прямое открытие plugin-bound карточки; guard от повторного тапа
+                    // на время резолва, fallback в шторку при неполной привязке/ошибке.
+                    onItemClick = { item ->
+                        if (state.openingItem != item) {
+                            // Taste Engine: клик = слабый позитивный сигнал (guard исключает двойную запись).
+                            screenModel.recordClick(item)
+                            scope.launch {
+                                screenModel.setOpenPending(item)
+                                // finally: pending сбрасывается и при отмене (rotation/back),
+                                // иначе guard залипнет на пережившем config change ScreenModel.
+                                val entryId = try {
+                                    screenModel.resolveEntryId(item)
+                                } finally {
+                                    screenModel.setOpenPending(null)
+                                }
+                                if (entryId != null) {
+                                    navigator.push(
+                                        when (item.mediaType) {
+                                            DiscoveryMediaType.ANIME -> AnimeScreen(entryId, fromSource = true)
+                                            DiscoveryMediaType.MANGA -> MangaScreen(entryId, fromSource = true)
+                                            DiscoveryMediaType.NOVEL -> NovelScreen(entryId, fromSource = true)
+                                        },
+                                    )
+                                } else {
+                                    sheetItem = item
+                                }
                             }
                         }
-                    }
-                },
-                onItemLongClick = { longPressItem = it },
-                onItemAdd = { screenModel.addToLibrary(it) },
-                onRetry = { screenModel.refreshNow() },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .auroraCenteredMaxWidth(contentMaxWidthDp),
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .onSizeChanged { topBarHeightPx = it.height }
-                    .then(
-                        if (colors.isEInk) {
-                            Modifier
-                                .background(colors.surface)
-                                .border(1.dp, colors.divider)
-                        } else {
-                            Modifier.hazeBlur(
-                                input = HazeInput.Sources(hazeState),
-                                style = HazeBlurStyle {
-                                    backgroundColor(colors.background)
-                                    colorEffects(
-                                        listOf(
-                                            HazeColorEffect.tint(
-                                                colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f),
-                                            ),
-                                        ),
-                                    )
-                                    blurRadius(22.dp)
-                                    noiseFactor(0.10f)
-                                },
-                            )
-                        },
-                    )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {},
-                    ),
-            ) {
+                    },
+                    onItemLongClick = { longPressItem = it },
+                    onItemAdd = { screenModel.addToLibrary(it) },
+                    onRetry = { screenModel.refreshNow() },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .auroraCenteredMaxWidth(contentMaxWidthDp),
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .auroraCenteredMaxWidth(contentMaxWidthDp),
-                ) {
-                    FeedToolbar(
-                        state = state,
-                        onBack = { navigator.pop() },
-                        onRefresh = {
-                            if (state.isRefreshing) {
-                                screenModel.cancelRefresh()
-                                context.toast(context.contextStringResource(MR.strings.action_cancel))
+                        .align(Alignment.TopCenter)
+                        .onSizeChanged { topBarHeightPx = it.height }
+                        .then(
+                            if (colors.isEInk) {
+                                Modifier
+                                    .background(colors.surface)
+                                    .border(1.dp, colors.divider)
                             } else {
-                                val cooldown = screenModel.rotateOrRefreshFeed(effectiveTab)
-                                if (cooldown > 0L) {
-                                    context.toast(
-                                        context.contextStringResource(AYMR.strings.for_you_refresh_cooldown, cooldown),
-                                    )
-                                }
-                            }
-                        },
-                    )
-                    val poolStatusLabel = if (
-                        state.poolSize in 1 until eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET
-                    ) {
-                        stringResource(
-                            AYMR.strings.for_you_pool_status,
-                            state.poolSize,
-                            eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET,
+                                Modifier.hazeBlur(
+                                    input = HazeInput.Sources(hazeState),
+                                    style = HazeBlurStyle {
+                                        backgroundColor(colors.background)
+                                        colorEffects(
+                                            listOf(
+                                                HazeColorEffect.tint(
+                                                    colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f),
+                                                ),
+                                            ),
+                                        )
+                                        blurRadius(22.dp)
+                                        noiseFactor(0.10f)
+                                    },
+                                )
+                            },
                         )
-                    } else {
-                        null
-                    }
-                    val sourcesUnavailableLabel = if (state.failedSourceCount > 0) {
-                        stringResource(AYMR.strings.for_you_sources_unavailable, state.failedSourceCount)
-                    } else {
-                        null
-                    }
-                    val rowsFailedLabel = if (state.failedRows.isNotEmpty()) {
-                        stringResource(AYMR.strings.for_you_failed_banner)
-                    } else {
-                        null
-                    }
-                    val statusBannerText = listOfNotNull(
-                        poolStatusLabel,
-                        sourcesUnavailableLabel,
-                        rowsFailedLabel,
-                    ).joinToString(" · ")
-                    if (statusBannerText.isNotEmpty()) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {},
+                        ),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .auroraCenteredMaxWidth(contentMaxWidthDp),
+                    ) {
+                        FeedToolbar(
+                            state = state,
+                            onBack = { navigator.pop() },
+                            onRefresh = {
+                                if (state.isRefreshing) {
+                                    screenModel.cancelRefresh()
+                                    context.toast(context.contextStringResource(MR.strings.action_cancel))
+                                } else {
+                                    val cooldown = screenModel.rotateOrRefreshFeed(effectiveTab)
+                                    if (cooldown > 0L) {
+                                        context.toast(
+                                            context.contextStringResource(
+                                                AYMR.strings.for_you_refresh_cooldown,
+                                                cooldown,
+                                            ),
+                                        )
+                                    }
+                                }
+                            },
+                        )
+                        val poolStatusLabel = if (
+                            state.poolSize in 1 until eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET
                         ) {
-                            Icon(
-                                Icons.Outlined.Warning,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(14.dp),
+                            stringResource(
+                                AYMR.strings.for_you_pool_status,
+                                state.poolSize,
+                                eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET,
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                statusBannerText,
-                                color = colors.textSecondary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                        } else {
+                            null
                         }
+                        val sourcesUnavailableLabel = if (state.failedSourceCount > 0) {
+                            stringResource(AYMR.strings.for_you_sources_unavailable, state.failedSourceCount)
+                        } else {
+                            null
+                        }
+                        val rowsFailedLabel = if (state.failedRows.isNotEmpty()) {
+                            stringResource(AYMR.strings.for_you_failed_banner)
+                        } else {
+                            null
+                        }
+                        val statusBannerText = listOfNotNull(
+                            poolStatusLabel,
+                            sourcesUnavailableLabel,
+                            rowsFailedLabel,
+                        ).joinToString(" · ")
+                        if (statusBannerText.isNotEmpty()) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Warning,
+                                    contentDescription = null,
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    statusBannerText,
+                                    color = colors.textSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                        val tabCounts = remember(state.rows, state.mix) {
+                            FeedSignalTab.entries.associateWith { itemsForTab(state, it).size }
+                        }
+                        // tab здесь — effectiveTab (fallback MIX вычислен выше, в Content).
+                        FeedTabs(
+                            tab = effectiveTab,
+                            counts = tabCounts,
+                            onTab = {
+                                tab = it
+                                screenModel.onTabSelected(it)
+                            },
+                            visibleTabs = state.visibleTabs,
+                        )
+                        val feedProviderOptions = remember(state.rows) { providerOptions(state) }
+                        FeedProviderChips(
+                            options = feedProviderOptions,
+                            selected = provider,
+                            onSelect = { provider = it },
+                        )
+                        Spacer(Modifier.height(8.dp))
                     }
-                    val tabCounts = remember(state) {
-                        FeedSignalTab.entries.associateWith { itemsForTab(state, it).size }
-                    }
-                    // tab здесь — effectiveTab (fallback MIX вычислен выше, в Content).
-                    FeedTabs(
-                        tab = effectiveTab,
-                        counts = tabCounts,
-                        onTab = {
-                            tab = it
-                            screenModel.onTabSelected(it)
-                        },
-                        visibleTabs = state.visibleTabs,
-                    )
-                    FeedProviderChips(
-                        options = providerOptions(state),
-                        selected = provider,
-                        onSelect = { provider = it },
-                    )
-                    Spacer(Modifier.height(8.dp))
                 }
-            }
-            FeedSnackbar(
-                state = state,
-                onUndo = { screenModel.undoHide() },
-                onDismissHidden = { screenModel.dismissHiddenSnackbar() },
-                onDismissAdded = { screenModel.dismissAddedSnackbar() },
-                onUndoTag = { screenModel.undoBlacklistTag() },
-                onDismissTag = { screenModel.dismissTagSnackbar() },
-            )
-            // «+» промахнулся (внешний провайдер или нет точного совпадения в источнике
-            // рекомендации): уходим в каталог источника/глобальный поиск вместо тупика.
-            LaunchedEffect(state.searchFallbackItem) {
-                val item = state.searchFallbackItem ?: return@LaunchedEffect
-                screenModel.dismissSearchFallback()
-                context.toast(context.contextStringResource(AYMR.strings.for_you_select_source_to_read))
-                navigateFor(item)
-            }
-            sheetItem?.let { item ->
-                DiscoveryPreviewSheet(
-                    item = item,
-                    meta = sheetMeta,
-                    isMetaLoading = sheetMetaLoading,
-                    coverMediaType = state.mediaType,
-                    onDismiss = { sheetItem = null },
-                    onAdd = {
-                        screenModel.addToLibrary(item)
-                        sheetItem = null
-                    },
-                    onFind = {
-                        sheetItem = null
-                        navigateFor(item)
-                    },
-                    onHide = {
-                        screenModel.hide(item, effectiveTab)
-                        sheetItem = null
-                    },
-                    hazeState = hazeState,
+                FeedSnackbar(
+                    state = state,
+                    onUndo = { screenModel.undoHide() },
+                    onDismissHidden = { screenModel.dismissHiddenSnackbar() },
+                    onDismissAdded = { screenModel.dismissAddedSnackbar() },
+                    onUndoTag = { screenModel.undoBlacklistTag() },
+                    onDismissTag = { screenModel.dismissTagSnackbar() },
                 )
-            }
-            longPressItem?.let { lpItem ->
-                eu.kanade.tachiyomi.ui.home.DiscoveryHideOptionsSheet(
-                    itemTitle = lpItem.title,
-                    tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(lpItem.genres, lpItem.rowType, lpItem.reason),
-                    onHide = {
-                        screenModel.hide(lpItem, effectiveTab)
-                        longPressItem = null
-                    },
-                    onBlacklistTag = { tag ->
-                        screenModel.blacklistTag(tag)
-                        longPressItem = null
-                    },
-                    onDismiss = { longPressItem = null },
-                    onMoreLikeThis = {
-                        longPressItem = null
-                        screenModel.recordLike(lpItem)
-                    },
-                    onMarkConsumed = {
-                        longPressItem = null
-                        screenModel.recordConsumed(lpItem, effectiveTab)
-                    },
-                )
+                // «+» промахнулся (внешний провайдер или нет точного совпадения в источнике
+                // рекомендации): уходим в каталог источника/глобальный поиск вместо тупика.
+                LaunchedEffect(state.searchFallbackItem) {
+                    val item = state.searchFallbackItem ?: return@LaunchedEffect
+                    screenModel.dismissSearchFallback()
+                    context.toast(context.contextStringResource(AYMR.strings.for_you_select_source_to_read))
+                    navigateFor(item)
+                }
+                sheetItem?.let { item ->
+                    DiscoveryPreviewSheet(
+                        item = item,
+                        meta = sheetMeta,
+                        isMetaLoading = sheetMetaLoading,
+                        coverMediaType = state.mediaType,
+                        onDismiss = { sheetItem = null },
+                        onAdd = {
+                            screenModel.addToLibrary(item)
+                            sheetItem = null
+                        },
+                        onFind = {
+                            sheetItem = null
+                            navigateFor(item)
+                        },
+                        onHide = {
+                            screenModel.hide(item, effectiveTab)
+                            sheetItem = null
+                        },
+                        hazeState = hazeState,
+                    )
+                }
+                longPressItem?.let { lpItem ->
+                    eu.kanade.tachiyomi.ui.home.DiscoveryHideOptionsSheet(
+                        itemTitle = lpItem.title,
+                        tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(
+                            lpItem.genres,
+                            lpItem.rowType,
+                            lpItem.reason,
+                        ),
+                        onHide = {
+                            screenModel.hide(lpItem, effectiveTab)
+                            longPressItem = null
+                        },
+                        onBlacklistTag = { tag ->
+                            screenModel.blacklistTag(tag)
+                            longPressItem = null
+                        },
+                        onDismiss = { longPressItem = null },
+                        onMoreLikeThis = {
+                            longPressItem = null
+                            screenModel.recordLike(lpItem)
+                        },
+                        onMarkConsumed = {
+                            longPressItem = null
+                            screenModel.recordConsumed(lpItem, effectiveTab)
+                        },
+                    )
+                }
             }
         }
     }
@@ -1020,14 +1044,18 @@ private fun FeedCard(
     val context = LocalContext.current
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Portrait)
     val coverReloadTick = rememberCoverReloadTick()
-    val coverModel = rememberDiscoveryCoverData(item, DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle))
-    val coverRequest = remember(context, coverModel, coverReloadTick, coverRecoveryTick) {
-        buildAuroraCoverImageRequest(context, coverModel) {
+    val coverResolution = rememberDiscoveryCoverResolution(
+        item,
+        DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle),
+    )
+    val coverRequest = remember(context, coverResolution, coverReloadTick, coverRecoveryTick) {
+        buildDiscoveryCoverImageRequest(context, coverResolution) {
             size(CoilSize(360, 540))
             precision(Precision.INEXACT)
             crossfade(false)
         }
     }
+    val isCoverPending = coverResolution is DiscoveryCoverResolution.PendingCacheOnly
     val containerShape = remember { RoundedCornerShape(18.dp) }
     val posterShape = remember { RoundedCornerShape(16.dp) }
 
@@ -1064,15 +1092,26 @@ private fun FeedCard(
                 .clip(posterShape)
                 .background(colors.cardBackground),
         ) {
-            AsyncImage(
-                model = coverRequest,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                colorFilter = rememberAuroraPosterColorFilter(),
-                modifier = Modifier.fillMaxSize(),
-                error = fallbackPainter,
-                fallback = fallbackPainter,
-            )
+            val coverColorFilter = rememberAuroraPosterColorFilter()
+            if (coverRequest != null) {
+                AsyncImage(
+                    model = coverRequest,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = coverColorFilter,
+                    modifier = Modifier.fillMaxSize(),
+                    error = if (isCoverPending) null else fallbackPainter,
+                    fallback = if (isCoverPending) null else fallbackPainter,
+                )
+            } else {
+                Image(
+                    painter = fallbackPainter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = coverColorFilter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)

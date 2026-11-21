@@ -240,8 +240,15 @@ class DiscoveryFeedSourceAdmissionTest {
         val pool = MutableStateFlow(items)
         val hidden = MutableStateFlow(emptySet<String>())
         val poolEmissions = AtomicInteger()
+        val publicationSubscriptions = AtomicInteger()
         val undoEntered = CompletableDeferred<Unit>()
         var undoGate: CompletableDeferred<Unit>? = null
+        override fun observePublication(
+            media: DiscoveryMediaType,
+        ): Flow<tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot> {
+            publicationSubscriptions.incrementAndGet()
+            return super.observePublication(media)
+        }
         override fun subscribe(
             mediaType: DiscoveryMediaType,
         ): Flow<List<DiscoverySuggestion>> = pool.onEach { poolEmissions.incrementAndGet() }
@@ -304,6 +311,107 @@ class DiscoveryFeedSourceAdmissionTest {
 
         fixture.model.onTabSelected(FeedSignalTab.TASTE)
         fixture.model.displayedItems(FeedSignalTab.TASTE, null).size shouldBe 25
+    }
+
+    @Test
+    fun `warm cache seeds DiscoveryFeedScreenModel synchronously without loading skeleton`(): Unit = runBlocking {
+        val warmCard = card("Warm Cached Card", "Action").copy(rowType = DiscoveryRowType.TASTE)
+        val fixture = fixture(listOf(warmCard))
+        DiscoveryFeedWarmCache.put(
+            repository = fixture.repository,
+            mediaType = DiscoveryMediaType.ANIME,
+            seed = WarmDiscoveryFeedSeed(
+                snapshot = tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot(
+                    mediaType = DiscoveryMediaType.ANIME,
+                    generation = 1L,
+                    projectionVersion = 1L,
+                    configurationKey = "",
+                    desiredConfigurationKey = "",
+                    publishedByRequestId = null,
+                    committedAt = 1_000L,
+                    outcome = null,
+                    suggestions = listOf(warmCard),
+                    eligibleSuggestions = listOf(warmCard),
+                    homeBatchKeys = emptyList(),
+                    homeBatchVersion = 0L,
+                    issuedKeys = emptySet(),
+                    traversal = tachiyomi.domain.discovery.model.DiscoveryTraversalState.VALID,
+                    cursors = emptyList(),
+                ),
+            ),
+        )
+        try {
+            val holderKey = "feed-warm-" + java.util.UUID.randomUUID()
+            val warmModel = ScreenModelStore.getOrPut<DiscoveryFeedScreenModel>(holderKey, null) {
+                DiscoveryFeedScreenModel(
+                    initialMedia = DiscoveryMediaType.ANIME,
+                    context = mockk(relaxed = true),
+                    repository = fixture.repository,
+                    adder = fixture.adder,
+                    preferences = fixture.preferences,
+                    trendingSource = mockk(relaxed = true),
+                    networkToLocalManga = mockk(),
+                    networkToLocalAnime = mockk(),
+                    networkToLocalNovel = mockk(),
+                    sourcePolicyProvider = fixture.policies,
+                )
+            }
+            try {
+                warmModel.state.value.isLoading shouldBe false
+                warmModel.state.value.mix.map { it.cleanTitle } shouldBe listOf(warmCard.cleanTitle)
+            } finally {
+                ScreenModelStore.onDisposeNavigator(holderKey)
+            }
+        } finally {
+            DiscoveryFeedWarmCache.clear(fixture.repository, DiscoveryMediaType.ANIME)
+        }
+    }
+
+    @Test
+    fun `slow WorkManager refresh flow does not block initial feed emission`(): Unit = runBlocking {
+        val card = card("Non Blocking Card", "Fantasy")
+        val fixture = fixture(listOf(card))
+        val context = mockk<Context>(relaxed = true)
+        val workManager = mockk<WorkManager>(relaxed = true)
+        every { context.workManager } returns workManager
+        every { workManager.isRunningOrEnqueuedFlow(any()) } returns kotlinx.coroutines.flow.emptyFlow()
+        val holderKey = "feed-wm-" + java.util.UUID.randomUUID()
+        val model = ScreenModelStore.getOrPut<DiscoveryFeedScreenModel>(holderKey, null) {
+            DiscoveryFeedScreenModel(
+                initialMedia = DiscoveryMediaType.ANIME,
+                context = context,
+                repository = fixture.repository,
+                adder = fixture.adder,
+                preferences = fixture.preferences,
+                trendingSource = mockk(relaxed = true),
+                networkToLocalManga = mockk(),
+                networkToLocalAnime = mockk(),
+                networkToLocalNovel = mockk(),
+                sourcePolicyProvider = fixture.policies,
+            )
+        }
+        try {
+            model.start()
+            withTimeout(2_000L) {
+                model.state.first { !it.isLoading && it.mix.map { c -> c.cleanTitle } == listOf(card.cleanTitle) }
+            }
+        } finally {
+            ScreenModelStore.onDisposeNavigator(holderKey)
+        }
+    }
+
+    @Test
+    fun `calling start while already active does not resubscribe to observePublication`(): Unit = runBlocking {
+        val card = card("Idempotent Card", "Action")
+        val fixture = fixture(listOf(card))
+        fixture.model.start()
+        withTimeout(2_000L) {
+            fixture.model.state.first { !it.isLoading && it.mix.size == 1 }
+        }
+        fixture.repository.publicationSubscriptions.get() shouldBe 1
+        fixture.model.start()
+        fixture.repository.publicationSubscriptions.get() shouldBe 1
+        fixture.repository.poolEmissions.get() shouldBe 1
     }
 
     private fun card(title: String, genre: String) = DiscoverySuggestion(
