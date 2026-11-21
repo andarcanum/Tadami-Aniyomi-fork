@@ -514,7 +514,7 @@ fun ReelsPlayerView(
                         pendingSeekPositionMs = -1L
                         currentOnSeekPositionConsumed()
                     } else if (pendingSeekFraction >= 0f && effectiveDurationMs > 0L) {
-                        owner.seekTo((pendingSeekFraction * effectiveDurationMs).toLong())
+                        owner.seekTo(resolveReelSeekPositionMs(pendingSeekFraction, effectiveDurationMs))
                         pendingSeekFraction = -1f
                     }
                 }
@@ -830,7 +830,7 @@ fun ReelsPlayerView(
             p.setSeekParameters(if (req.liveScrub) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT)
             val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
             if (effectiveDurationMs > 0L) {
-                p.seekTo((frac * effectiveDurationMs).toLong())
+                p.seekTo(resolveReelSeekPositionMs(frac, effectiveDurationMs))
             } else if (!req.liveScrub) {
                 pendingSeekFraction = frac
             }
@@ -844,7 +844,7 @@ fun ReelsPlayerView(
                 p.setSeekParameters(SeekParameters.DEFAULT)
                 val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
                 if (effectiveDurationMs > 0L) {
-                    p.seekTo((frac.coerceIn(0f, 1f) * effectiveDurationMs).toLong())
+                    p.seekTo(resolveReelSeekPositionMs(frac, effectiveDurationMs))
                 } else {
                     pendingSeekFraction = frac.coerceIn(0f, 1f)
                 }
@@ -1271,6 +1271,29 @@ internal fun resolveReelDurationMs(
         return (fallbackDurationSec * 1000f).toLong().coerceAtLeast(1L)
     }
     return 0L
+}
+
+/**
+ * Converts a normalized seek [fraction] (`0f..1f`) into a safe target position in milliseconds.
+ *
+ * Clamps the upper bound [eofMarginMs] before the exact end of the container (`effectiveDurationMs`)
+ * whenever the clip is longer than [eofMarginMs], so rapid `+10s` double-tap seeks or 100% scrubs
+ * never seek to exact byte EOF (`offset == fileSize`), avoiding empty HTTP ranges and C++ stream
+ * downloader assertions at the end boundary.
+ */
+internal fun resolveReelSeekPositionMs(
+    fraction: Float,
+    effectiveDurationMs: Long,
+    eofMarginMs: Long = 250L,
+): Long {
+    if (effectiveDurationMs <= 0L) return 0L
+    val clampedFraction = fraction.coerceIn(0f, 1f)
+    val maxPositionMs = if (effectiveDurationMs > eofMarginMs) {
+        effectiveDurationMs - eofMarginMs
+    } else {
+        effectiveDurationMs
+    }
+    return (clampedFraction * effectiveDurationMs).toLong().coerceIn(0L, maxPositionMs)
 }
 
 /**

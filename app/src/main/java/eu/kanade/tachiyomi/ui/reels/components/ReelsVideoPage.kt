@@ -463,7 +463,13 @@ fun ReelsVideoPage(
         val activeDurationSec = currentDurationSec
         if (activeDurationSec <= 0f) return
         val currentSec = progressState.floatValue * activeDurationSec
-        val target = ((currentSec + deltaSec) / activeDurationSec).coerceIn(0f, 1f)
+        val maxTargetSec = if (deltaSec > 0f && activeDurationSec > 0.5f) {
+            (activeDurationSec - 0.5f).coerceAtLeast(currentSec)
+        } else {
+            activeDurationSec
+        }
+        val targetSec = (currentSec + deltaSec).coerceIn(0f, maxTargetSec)
+        val target = (targetSec / activeDurationSec).coerceIn(0f, 1f)
         requestSeek(target, liveScrub = false)
         if (showNotice) {
             // The caption reports what the player really moved, so a tap near the ends

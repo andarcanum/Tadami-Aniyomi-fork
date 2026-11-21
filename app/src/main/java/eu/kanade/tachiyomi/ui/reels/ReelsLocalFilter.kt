@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.reels
 
 import androidx.compose.runtime.Immutable
+import eu.kanade.tachiyomi.animesource.model.AnimeFilter
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.FeedCategory
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import kotlinx.collections.immutable.ImmutableList
@@ -257,4 +259,80 @@ internal fun applyNichesFilterAndSort(
         )
     }
     return sorted.toImmutableList()
+}
+
+/**
+ * Synchronizes server-side category filters ([AnimeCategoryFeedOrderSource.categoryFilters]) with
+ * the user's [ReelsLocalFilterState] duration and sort selection so order-capable plugins (such as
+ * Telegram Reels) filter directly inside their backend scan instead of returning unfiltered batches.
+ *
+ * Returns `true` when at least one [AnimeFilter.Select] state was changed.
+ */
+internal fun syncCategoryFiltersWithLocalFilter(
+    filters: AnimeFilterList,
+    localFilter: ReelsLocalFilterState,
+): Boolean {
+    if (filters.isEmpty()) return false
+    var changed = false
+    for (filter in filters) {
+        if (filter !is AnimeFilter.Select<*>) continue
+        val nameLower = filter.name.lowercase()
+        val labels = filter.values.map { it.toString().lowercase() }
+        if (labels.isEmpty()) continue
+
+        val isDuration = nameLower.contains("длительн") || nameLower.contains("duration")
+        val isOrder = nameLower.contains("сортиров") ||
+            nameLower.contains("режим") ||
+            nameLower.contains("sort") ||
+            nameLower.contains("order")
+
+        if (isDuration) {
+            val targetIndex = when (localFilter.duration) {
+                ReelsDurationFilter.All -> labels.indexOfFirst {
+                    it.contains("без огранич") || it.contains("любая") || it == "все" ||
+                        it.contains("unbounded") || it.contains("all") || it.contains("any")
+                }
+                ReelsDurationFilter.Short -> labels.indexOfFirst {
+                    it.contains("до 1 мин") || it.contains("< 1") || it.contains("short")
+                }
+                ReelsDurationFilter.Medium -> {
+                    val exact = labels.indexOfFirst {
+                        it.contains("1 до 5") || it.contains("1-5") || it.contains("1–5") || it.contains("medium")
+                    }
+                    if (exact >= 0) {
+                        exact
+                    } else {
+                        labels.indexOfFirst { it.contains("до 5 мин") || it.contains("<= 5") }
+                    }
+                }
+                ReelsDurationFilter.Long -> labels.indexOfFirst {
+                    it.contains("от 5 мин") || it.contains("> 5") || it.contains("5+") || it.contains("long")
+                }
+            }
+            if (targetIndex >= 0 && filter.state != targetIndex) {
+                filter.state = targetIndex
+                changed = true
+            }
+        } else if (isOrder) {
+            val targetIndex = when (localFilter.sort) {
+                ReelsVideoSort.Popular -> labels.indexOfFirst {
+                    it.contains("популяр") || it.contains("топ") || it.contains("просмотр") ||
+                        it.contains("popular") || it.contains("top") || it.contains("views")
+                }
+                ReelsVideoSort.Default,
+                ReelsVideoSort.Newest,
+                ReelsVideoSort.Longest,
+                ReelsVideoSort.Shortest,
+                -> labels.indexOfFirst {
+                    it.contains("свеж") || it.contains("нов") || it.contains("хронолог") ||
+                        it.contains("new") || it.contains("latest") || it.contains("date")
+                }.takeIf { it >= 0 } ?: 0
+            }
+            if (targetIndex >= 0 && filter.state != targetIndex) {
+                filter.state = targetIndex
+                changed = true
+            }
+        }
+    }
+    return changed
 }

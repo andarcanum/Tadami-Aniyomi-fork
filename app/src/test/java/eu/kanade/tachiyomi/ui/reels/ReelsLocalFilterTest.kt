@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.reels
 
+import eu.kanade.tachiyomi.animesource.model.AnimeFilter
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.FeedCategory
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import io.kotest.matchers.collections.shouldContainExactly
@@ -190,5 +192,74 @@ class ReelsLocalFilterTest {
         ReelsLocalFilterState.deserializePersistent("garbage|duration=invalid") shouldBe ReelsLocalFilterState()
         ReelsNichesSort.fromStored("MostVideos") shouldBe ReelsNichesSort.MostVideos
         ReelsNichesSort.fromStored("unknown") shouldBe ReelsNichesSort.Default
+    }
+
+    private class TestSelectFilter(
+        name: String,
+        values: Array<String>,
+        defaultIndex: Int = 0,
+    ) : AnimeFilter.Select<String>(name, values, defaultIndex)
+
+    @Test
+    fun `syncCategoryFiltersWithLocalFilter maps duration and sort into plugin category filters`() {
+        val orderFilter = TestSelectFilter(
+            "Сортировка",
+            arrayOf("Свежие (как в Telegram)", "Популярное (Топ просмотров)", "В разнобой (Shuffle)"),
+            defaultIndex = 0,
+        )
+        val durationFilter = TestSelectFilter(
+            "Длительность",
+            arrayOf(
+                "До 1 мин (Shorts)",
+                "До 3 мин (Стандарт)",
+                "До 5 мин",
+                "От 1 до 5 мин",
+                "От 5 мин",
+                "Без ограничений",
+            ),
+            defaultIndex = 5,
+        )
+        val filters = AnimeFilterList(orderFilter, durationFilter)
+
+        val changedToLongPopular = syncCategoryFiltersWithLocalFilter(
+            filters,
+            ReelsLocalFilterState(
+                duration = ReelsDurationFilter.Long,
+                sort = ReelsVideoSort.Popular,
+            ),
+        )
+        changedToLongPopular shouldBe true
+        durationFilter.state shouldBe 4 // "От 5 мин"
+        orderFilter.state shouldBe 1 // "Популярное (Топ просмотров)"
+
+        // Calling again with the same state is a no-op.
+        syncCategoryFiltersWithLocalFilter(
+            filters,
+            ReelsLocalFilterState(
+                duration = ReelsDurationFilter.Long,
+                sort = ReelsVideoSort.Popular,
+            ),
+        ) shouldBe false
+
+        // Medium maps to "От 1 до 5 мин", Short to "До 1 мин", All to "Без ограничений".
+        syncCategoryFiltersWithLocalFilter(
+            filters,
+            ReelsLocalFilterState(duration = ReelsDurationFilter.Medium, sort = ReelsVideoSort.Newest),
+        ) shouldBe true
+        durationFilter.state shouldBe 3
+        orderFilter.state shouldBe 0
+
+        syncCategoryFiltersWithLocalFilter(
+            filters,
+            ReelsLocalFilterState(duration = ReelsDurationFilter.Short),
+        ) shouldBe true
+        durationFilter.state shouldBe 0
+
+        syncCategoryFiltersWithLocalFilter(
+            filters,
+            ReelsLocalFilterState(),
+        ) shouldBe true
+        durationFilter.state shouldBe 5
+        orderFilter.state shouldBe 0
     }
 }

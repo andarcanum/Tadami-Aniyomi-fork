@@ -104,4 +104,12 @@ class ReelsDurationProgressTest {
         isLoopbackReelUrl("https://cdn.example.com/video.mp4") shouldBe false
         isLoopbackReelUrl("not a url") shouldBe false
     }
+
+    @Test
+    fun `resolveReelSeekPositionMs clamps 100 percent seeks slightly before EOF to prevent empty range crash`() {
+        resolveReelSeekPositionMs(fraction = 1.0f, effectiveDurationMs = 600_000L) shouldBe 599_750L
+        resolveReelSeekPositionMs(fraction = 0.5f, effectiveDurationMs = 600_000L) shouldBe 300_000L
+        resolveReelSeekPositionMs(fraction = 0.0f, effectiveDurationMs = 600_000L) shouldBe 0L
+        resolveReelSeekPositionMs(fraction = 1.0f, effectiveDurationMs = 0L) shouldBe 0L
+    }
 }

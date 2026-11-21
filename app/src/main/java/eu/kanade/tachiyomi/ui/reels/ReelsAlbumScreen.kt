@@ -111,6 +111,9 @@ data class ReelsAlbumScreen(
         // constraint; beyond the cap the user pulls more pages explicitly, so a miss cannot chain
         // request after request through the whole album.
         var searchAutoPages by remember(query, state.localFilter) { mutableIntStateOf(0) }
+        var targetFilteredCount by remember(query, state.localFilter) {
+            mutableIntStateOf(ALBUM_FILTER_MIN_VISIBLE_ITEMS)
+        }
         LaunchedEffect(
             hasLocalConstraint,
             filtered.size,
@@ -119,10 +122,12 @@ data class ReelsAlbumScreen(
             state.isLoading,
             query,
             state.localFilter,
+            targetFilteredCount,
+            searchAutoPages,
         ) {
             if (
                 hasLocalConstraint &&
-                filtered.size < ALBUM_FILTER_MIN_VISIBLE_ITEMS &&
+                filtered.size < targetFilteredCount &&
                 state.canLoadMore &&
                 !state.isLoading &&
                 searchAutoPages < ALBUM_SEARCH_AUTO_PAGES
@@ -280,8 +285,13 @@ data class ReelsAlbumScreen(
                 ) {
                     if (hasLocalConstraint) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
+                            val headerText = if (filtered.size != state.items.size) {
+                                "${filtered.size} / ${stringResource(MR.strings.reels_album_search_loaded, state.items.size)}"
+                            } else {
+                                stringResource(MR.strings.reels_album_search_loaded, filtered.size)
+                            }
                             Text(
-                                text = stringResource(MR.strings.reels_album_search_loaded, state.items.size),
+                                text = headerText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -351,7 +361,13 @@ data class ReelsAlbumScreen(
                                     modifier = Modifier.fillMaxWidth().padding(4.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    TextButton(onClick = screenModel::loadMore) {
+                                    TextButton(
+                                        onClick = {
+                                            targetFilteredCount = filtered.size + ALBUM_FILTER_MIN_VISIBLE_ITEMS
+                                            searchAutoPages = 0
+                                            screenModel.loadMore()
+                                        },
+                                    ) {
                                         Text(stringResource(MR.strings.reels_album_search_load_more))
                                     }
                                 }
@@ -501,5 +517,5 @@ data class ReelsAlbumScreen(
 }
 
 // F03: pages auto-appended per local-search/filter constraint before the explicit "load more" action.
-private const val ALBUM_SEARCH_AUTO_PAGES = 10
-private const val ALBUM_FILTER_MIN_VISIBLE_ITEMS = 12
+private const val ALBUM_SEARCH_AUTO_PAGES = 15
+private const val ALBUM_FILTER_MIN_VISIBLE_ITEMS = 21

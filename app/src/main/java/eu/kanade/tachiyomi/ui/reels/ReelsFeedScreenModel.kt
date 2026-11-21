@@ -260,8 +260,8 @@ class ReelsFeedScreenModel(
         // F07: ceiling on the SILENT deep-link seek (a missing target must not drain an
         // endless feed); manual pagination past the budget stays available.
         const val RESUME_SEEK_MAX_PAGES = 50
-        const val NICHE_FILTER_MIN_ITEMS = 6
-        const val NICHE_FILTER_REFILL_MAX_PAGES = 10
+        const val NICHE_FILTER_MIN_ITEMS = 20
+        const val NICHE_FILTER_REFILL_MAX_PAGES = 15
 
         // Forward quality window. The player preload (+1) and the head-prewarm loop (+2..+4)
         // can only warm reels whose quality binding already exists; this window matches that span.
@@ -2394,6 +2394,8 @@ class ReelsFeedScreenModel(
             }
             if (mode == FeedMode.GLOBAL) {
                 restoreFilters(filters, sourcePreferences.lastReelsFilter(sourceId).get())
+            } else if (mode == FeedMode.NICHE) {
+                syncCategoryFiltersWithLocalFilter(filters, state.value.nicheLocalFilter)
             }
 
             // Round-robin is selected AFTER the frozen filters and BEFORE the legacy v27
@@ -4403,6 +4405,20 @@ class ReelsFeedScreenModel(
         sourcePreferences.reelsNicheLocalFilter().set(
             filter.copy(watchFilter = existingWatch).serializePersistent(),
         )
+        val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.filters, filter)
+        if (syncedChanged) {
+            rawNicheItems = emptyList()
+            nicheFilterRefillPages = 0
+            mutableState.update { current ->
+                current.copy(
+                    nicheLocalFilter = filter,
+                    filters = AnimeFilterList(current.filters.list),
+                    isNicheFilterSheetOpen = false,
+                )
+            }
+            loadFeedInternal(reset = true)
+            return
+        }
         val filtered = if (filter.isActive) {
             applyReelsLocalFilter(rawNicheItems, filter)
         } else {
@@ -4434,11 +4450,26 @@ class ReelsFeedScreenModel(
 
     fun resetNicheLocalFilter() {
         if (mode != FeedMode.NICHE) return
+        val reset = ReelsLocalFilterState()
         sourcePreferences.reelsNicheLocalFilter().set("")
+        val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.filters, reset)
+        if (syncedChanged) {
+            rawNicheItems = emptyList()
+            nicheFilterRefillPages = 0
+            mutableState.update { current ->
+                current.copy(
+                    nicheLocalFilter = reset,
+                    filters = AnimeFilterList(current.filters.list),
+                    isNicheFilterSheetOpen = false,
+                )
+            }
+            loadFeedInternal(reset = true)
+            return
+        }
         val filtered = rawNicheItems.toImmutableList()
         mutableState.update { current ->
             current.copy(
-                nicheLocalFilter = ReelsLocalFilterState(),
+                nicheLocalFilter = reset,
                 isNicheFilterSheetOpen = false,
                 items = filtered,
                 feedGeneration = current.feedGeneration + 1,

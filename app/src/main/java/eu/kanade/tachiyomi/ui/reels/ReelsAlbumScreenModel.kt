@@ -111,6 +111,7 @@ class ReelsAlbumScreenModel(
         if (orderCapable != null) {
             screenModelScope.launch(ioDispatcher) {
                 val filters = runCatching { orderCapable.categoryFilters() }.getOrDefault(AnimeFilterList())
+                syncCategoryFiltersWithLocalFilter(filters, state.value.localFilter)
                 mutableState.update {
                     it.copy(
                         isCategoryOrderCapable = filters.isNotEmpty(),
@@ -126,13 +127,31 @@ class ReelsAlbumScreenModel(
 
     fun setLocalFilter(filter: ReelsLocalFilterState) {
         sourcePreferences?.reelsNicheLocalFilter()?.set(filter.serializePersistent())
-        mutableState.update { it.copy(localFilter = filter) }
+        val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.sourceFilters, filter)
+        mutableState.update {
+            it.copy(
+                localFilter = filter,
+                sourceFilters = AnimeFilterList(it.sourceFilters.list),
+            )
+        }
+        if (syncedChanged) {
+            reloadFromStart()
+        }
     }
 
     fun resetLocalFilter() {
         val reset = ReelsLocalFilterState()
         sourcePreferences?.reelsNicheLocalFilter()?.set(reset.serializePersistent())
-        mutableState.update { it.copy(localFilter = reset) }
+        val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.sourceFilters, reset)
+        mutableState.update {
+            it.copy(
+                localFilter = reset,
+                sourceFilters = AnimeFilterList(it.sourceFilters.list),
+            )
+        }
+        if (syncedChanged) {
+            reloadFromStart()
+        }
     }
 
     fun setSourceFilters(filters: AnimeFilterList) {
