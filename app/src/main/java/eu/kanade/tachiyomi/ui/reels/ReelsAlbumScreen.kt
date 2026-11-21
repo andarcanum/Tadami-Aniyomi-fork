@@ -111,6 +111,26 @@ data class ReelsAlbumScreen(
         // constraint; beyond the cap the user pulls more pages explicitly, so a miss cannot chain
         // request after request through the whole album.
         var searchAutoPages by remember(query, state.localFilter) { mutableIntStateOf(0) }
+        LaunchedEffect(
+            hasLocalConstraint,
+            filtered.size,
+            state.items.size,
+            state.canLoadMore,
+            state.isLoading,
+            query,
+            state.localFilter,
+        ) {
+            if (
+                hasLocalConstraint &&
+                filtered.size < ALBUM_FILTER_MIN_VISIBLE_ITEMS &&
+                state.canLoadMore &&
+                !state.isLoading &&
+                searchAutoPages < ALBUM_SEARCH_AUTO_PAGES
+            ) {
+                searchAutoPages++
+                screenModel.loadMore()
+            }
+        }
         LaunchedEffect(gridState, state.items.size, filtered.size, query, state.localFilter) {
             snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
                 .collect { lastVisible ->
@@ -480,5 +500,6 @@ data class ReelsAlbumScreen(
     }
 }
 
-// F03: pages auto-appended per local-search query before the explicit "search more" action.
-private const val ALBUM_SEARCH_AUTO_PAGES = 2
+// F03: pages auto-appended per local-search/filter constraint before the explicit "load more" action.
+private const val ALBUM_SEARCH_AUTO_PAGES = 10
+private const val ALBUM_FILTER_MIN_VISIBLE_ITEMS = 12

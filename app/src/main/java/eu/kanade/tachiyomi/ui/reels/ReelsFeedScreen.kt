@@ -138,8 +138,8 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsContentPreferencesSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsCustomFeedsSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsEmptySearchState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
-import eu.kanade.tachiyomi.ui.reels.components.ReelsLocalFilterSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsFeedSkeletonShimmer
+import eu.kanade.tachiyomi.ui.reels.components.ReelsLocalFilterSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsLoginDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsNextPageLoader
 import eu.kanade.tachiyomi.ui.reels.components.ReelsQualityDialogMode
@@ -961,6 +961,32 @@ data class ReelsFeedScreen(
                             ),
                             modifier = Modifier.fillMaxSize(),
                         )
+                    } else if (
+                        state.mode == ReelsFeedScreenModel.FeedMode.NICHE &&
+                        state.nicheLocalFilter.isActive
+                    ) {
+                        val resetAction = EmptyScreenAction(
+                            stringRes = MR.strings.action_reset,
+                            icon = Icons.Filled.Refresh,
+                            onClick = screenModel::resetNicheLocalFilter,
+                        )
+                        val actions = if (state.canLoadMore) {
+                            persistentListOf(
+                                EmptyScreenAction(
+                                    stringRes = MR.strings.reels_album_search_load_more,
+                                    icon = Icons.Filled.PlayArrow,
+                                    onClick = screenModel::continueNicheFilterScan,
+                                ),
+                                resetAction,
+                            )
+                        } else {
+                            persistentListOf(resetAction)
+                        }
+                        EmptyScreen(
+                            stringRes = MR.strings.reels_album_search_empty,
+                            actions = actions,
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     } else {
                         // Audit H11: "No source found" was semantically wrong — the source IS
                         // there, it just served nothing (or everything is filtered/hidden).
@@ -1316,7 +1342,7 @@ data class ReelsFeedScreen(
                                 isCropMode = state.isCropMode,
                                 chromeVisible = chromeVisible && (
                                     page == pagerState.settledPage || page == pagerState.currentPage
-                                ),
+                                    ),
                                 isLandscape = windowIsLandscape,
                                 showSearch = state.supportsSearch &&
                                     state.supportsTags &&

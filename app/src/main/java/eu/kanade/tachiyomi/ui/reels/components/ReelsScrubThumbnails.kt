@@ -442,7 +442,9 @@ internal fun ReelsScrubPreviewOverlay(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(bottom = effectiveBottomOffset + pinHeightDp + if (showStandaloneTrack) 18.dp else 4.dp)
+                        .padding(
+                            bottom = effectiveBottomOffset + pinHeightDp + if (showStandaloneTrack) 18.dp else 4.dp,
+                        )
                         .offset {
                             IntOffset(
                                 x = (clampedCardCenterPx - halfCardPx).roundToInt(),

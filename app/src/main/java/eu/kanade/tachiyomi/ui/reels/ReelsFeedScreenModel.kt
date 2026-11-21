@@ -260,6 +260,8 @@ class ReelsFeedScreenModel(
         // F07: ceiling on the SILENT deep-link seek (a missing target must not drain an
         // endless feed); manual pagination past the budget stays available.
         const val RESUME_SEEK_MAX_PAGES = 50
+        const val NICHE_FILTER_MIN_ITEMS = 6
+        const val NICHE_FILTER_REFILL_MAX_PAGES = 10
 
         // Forward quality window. The player preload (+1) and the head-prewarm loop (+2..+4)
         // can only warm reels whose quality binding already exists; this window matches that span.
@@ -287,6 +289,7 @@ class ReelsFeedScreenModel(
     }
 
     private var source: AnimeFeedSource? = null
+
     // Unfiltered items loaded for the current FeedMode.NICHE session so client-side filters
     // (duration, newest/sort, tags) can be toggled or reset without re-fetching from the network.
     private var rawNicheItems: List<ShortVideoItem> = emptyList()
@@ -352,6 +355,7 @@ class ReelsFeedScreenModel(
     // Pages appended by the SILENT seek so far (main-confined). The budget bounds the
     // background fan-out; reaching it leaves the already-loaded feed untouched.
     private var resumeSeekPages = 0
+    private var nicheFilterRefillPages = 0
 
     // sourceId per offline playlist SLOT (index-aligned with the items list): a videoId is only
     // unique PER SOURCE, so a videoId-keyed map would misattribute likes of same-id favorites
@@ -1577,11 +1581,15 @@ class ReelsFeedScreenModel(
             followingStreams = emptyList()
             hiddenSnapshot = emptySet<String>() to emptySet<String>()
             lastHide = null
-            // Every feed mode restores its own last browsing position (B3.1): GLOBAL keeps the
-            // plain per-source key, the other modes get a mode-scoped suffix.
-            pendingRestorePosition =
+            // Global feed restores its last browsing position; NICHE and CREATOR start at
+            // the newest video at index 0 (unless an explicit resumeVideoId / album seed target
+            // is requested) so opening a channel never jumps past its latest posts.
+            pendingRestorePosition = if (mode == FeedMode.GLOBAL) {
                 sourcePreferences.lastReelsPosition(newSourceId, positionSuffix).get().coerceAtLeast(0)
-            restorePositionPending = true
+            } else {
+                0
+            }
+            restorePositionPending = mode == FeedMode.GLOBAL
             // The creator page and the FOLLOWING aggregation have no search/filter surface
             // and must never touch the saved global query or filters.
             val savedQuery = if (mode == FeedMode.GLOBAL) sourcePreferences.lastReelsQuery(newSourceId).get() else ""
@@ -2049,6 +2057,7 @@ class ReelsFeedScreenModel(
             runway.reset()
             lastPagerPage = 0
             unseenRefillPages = 0
+            nicheFilterRefillPages = 0
         }
 
         mutableState.update { current ->
@@ -3344,6 +3353,7 @@ class ReelsFeedScreenModel(
             runway.reset()
             lastPagerPage = 0
             unseenRefillPages = 0
+            nicheFilterRefillPages = 0
         }
 
         // Set synchronously before the coroutine is dispatched: two rapid
@@ -3638,6 +3648,19 @@ class ReelsFeedScreenModel(
                         loadFeed(reset = false)
                     } else {
                         mutableState.update { it.copy(unseenScanStopped = true) }
+                    }
+                } else if (
+                    mode == FeedMode.NICHE &&
+                    state.value.nicheLocalFilter.isActive &&
+                    state.value.items.size < NICHE_FILTER_MIN_ITEMS &&
+                    state.value.canLoadMore
+                ) {
+                    // When a local duration/tag filter in NICHE mode filters out most of the page,
+                    // keep scanning subsequent pages (bounded) so the user does not land on an
+                    // empty or 1-video feed when matching videos exist deeper in the channel.
+                    if (nicheFilterRefillPages < NICHE_FILTER_REFILL_MAX_PAGES) {
+                        nicheFilterRefillPages++
+                        loadFeed(reset = false)
                     }
                 } else if (appended > 0 && lastPagerPage > pageAtLoadStart) {
                     // The fling crossed at least one page while this page was in flight:
@@ -4395,7 +4418,16 @@ class ReelsFeedScreenModel(
                 activeIndex = 0,
             )
         }
-        if (filtered.size < 3 && state.value.canLoadMore && !state.value.isLoading) {
+        nicheFilterRefillPages = 0
+        if (filtered.size < NICHE_FILTER_MIN_ITEMS && state.value.canLoadMore && !state.value.isLoading) {
+            loadFeedInternal(reset = false)
+        }
+    }
+
+    fun continueNicheFilterScan() {
+        if (mode != FeedMode.NICHE) return
+        nicheFilterRefillPages = 0
+        if (state.value.canLoadMore && !state.value.isLoading) {
             loadFeedInternal(reset = false)
         }
     }

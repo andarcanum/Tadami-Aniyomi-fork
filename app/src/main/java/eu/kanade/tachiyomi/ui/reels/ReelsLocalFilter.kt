@@ -91,15 +91,18 @@ data class ReelsLocalFilterState(
                 val key = token.substring(0, idx).trim()
                 val value = token.substring(idx + 1).trim()
                 when (key) {
-                    "duration" -> duration = ReelsDurationFilter.entries
-                        .firstOrNull { it.name.equals(value, ignoreCase = true) }
-                        ?: ReelsDurationFilter.All
-                    "sort" -> sort = ReelsVideoSort.entries
-                        .firstOrNull { it.name.equals(value, ignoreCase = true) }
-                        ?: ReelsVideoSort.Default
-                    "watch" -> watch = ReelsWatchFilter.entries
-                        .firstOrNull { it.name.equals(value, ignoreCase = true) }
-                        ?: ReelsWatchFilter.All
+                    "duration" ->
+                        duration = ReelsDurationFilter.entries
+                            .firstOrNull { it.name.equals(value, ignoreCase = true) }
+                            ?: ReelsDurationFilter.All
+                    "sort" ->
+                        sort = ReelsVideoSort.entries
+                            .firstOrNull { it.name.equals(value, ignoreCase = true) }
+                            ?: ReelsVideoSort.Default
+                    "watch" ->
+                        watch = ReelsWatchFilter.entries
+                            .firstOrNull { it.name.equals(value, ignoreCase = true) }
+                            ?: ReelsWatchFilter.All
                 }
             }
             return ReelsLocalFilterState(

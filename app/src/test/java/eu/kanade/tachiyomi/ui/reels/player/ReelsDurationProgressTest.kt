@@ -25,7 +25,8 @@ class ReelsDurationProgressTest {
         resolveReelDurationMs(playerDurationMs = C.TIME_UNSET, fallbackDurationSec = 0f) shouldBe 0L
         resolveReelDurationMs(playerDurationMs = C.TIME_UNSET, fallbackDurationSec = -10f) shouldBe 0L
         resolveReelDurationMs(playerDurationMs = C.TIME_UNSET, fallbackDurationSec = Float.NaN) shouldBe 0L
-        resolveReelDurationMs(playerDurationMs = C.TIME_UNSET, fallbackDurationSec = Float.POSITIVE_INFINITY) shouldBe 0L
+        resolveReelDurationMs(playerDurationMs = C.TIME_UNSET, fallbackDurationSec = Float.POSITIVE_INFINITY) shouldBe
+            0L
     }
 
     @Test

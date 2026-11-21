@@ -138,7 +138,8 @@ internal fun formatGesturePercent(level: Float): String {
  * Falls back to `Settings.System.SCREEN_BRIGHTNESS` when the window has no per-window override.
  */
 internal fun readCurrentScreenBrightness(activity: Activity?): Float {
-    val attrBrightness = activity?.window?.attributes?.screenBrightness ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+    val attrBrightness =
+        activity?.window?.attributes?.screenBrightness ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
     if (attrBrightness in 0f..1f) {
         return attrBrightness.coerceIn(LANDSCAPE_MIN_BRIGHTNESS, 1f)
     }
