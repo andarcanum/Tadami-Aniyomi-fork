@@ -372,10 +372,15 @@ internal object AnimeExtensionLoader {
             return AnimeLoadResult.Error
         }
 
-        // Validate lib version
-        val rawLibVersion = appInfo.metaData?.getDouble(METADATA_EXTENSION_LIB)?.takeUnless { it == 0.0 }
-            ?: appInfo.metaData?.getFloat(METADATA_EXTENSION_LIB)?.toDouble()?.takeUnless { it == 0.0 }
-            ?: versionName.substringBeforeLast('.').toDoubleOrNull()
+        // Validate lib version. MetaData values can be stored as Float, Double or String
+        // depending on how the extension manifest declares them; typed Bundle getters throw
+        // (and log a warning) on a mismatch, so read the raw value and convert explicitly.
+        @Suppress("DEPRECATION") // Bundle.get(String) is deprecated in API 33; no raw-value replacement exists
+        val rawLibVersion = when (val value = appInfo.metaData?.get(METADATA_EXTENSION_LIB)) {
+            is Number -> value.toDouble().takeUnless { it == 0.0 }
+            is String -> value.toDoubleOrNull()?.takeUnless { it == 0.0 }
+            else -> null
+        } ?: versionName.substringBeforeLast('.').toDoubleOrNull()
         val libVersion = if (rawLibVersion != null) kotlin.math.round(rawLibVersion * 100.0) / 100.0 else null
         if (libVersion == null || libVersion !in SUPPORTED_LIB_VERSIONS) {
             logcat(LogPriority.WARN) {

@@ -150,7 +150,15 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     @SuppressLint("LaunchActivityFromNotification")
     @OptIn(DelicateCoilApi::class)
     override fun onCreate() {
-        LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
+        val minLogPriority = if (
+            BuildConfig.DEBUG ||
+            runCatching { networkPreferences.verboseLogging().get() }.getOrDefault(false)
+        ) {
+            LogPriority.VERBOSE
+        } else {
+            LogPriority.WARN
+        }
+        LogcatLogger.install(AndroidLogcatLogger(minLogPriority))
         super<Application>.onCreate()
 
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
@@ -477,12 +485,12 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             }
         }
 
-        if (!LogcatLogger.isInstalled && networkPreferences.verboseLogging().get()) {
-            LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
-        }
-
         if (isMainProcess) {
-            BackupCreateJob.clearStaleProgressNotification(this)
+            applicationScope.launch(Dispatchers.IO) {
+                runCatching {
+                    BackupCreateJob.clearStaleProgressNotification(this@App)
+                }
+            }
         }
 
         if (isMainProcess) {
