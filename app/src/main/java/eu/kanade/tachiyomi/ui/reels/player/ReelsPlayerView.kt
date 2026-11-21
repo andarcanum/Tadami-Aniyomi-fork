@@ -46,6 +46,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -60,6 +61,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
@@ -132,6 +134,8 @@ fun ReelsPlayerView(
     mediaIdentity: String? = null,
     // TalkBack description of the playing video (title/author from the item).
     videoDescription: String? = null,
+    // Feed metadata duration in seconds, used as fallback when ExoPlayer reports C.TIME_UNSET.
+    knownDurationSec: Float = 0f,
     onDurationKnown: (Float) -> Unit = {},
     // Fired from onVideoSizeChanged once real dimensions are known: true for
     // landscape reels (the only ones offered the landscape-fullscreen affordance).
@@ -203,6 +207,7 @@ fun ReelsPlayerView(
     val currentOnProgressUpdate by rememberUpdatedState(onProgressUpdate)
     val currentOnBufferUpdate by rememberUpdatedState(onBufferUpdate)
     val currentOnVideoCompleted by rememberUpdatedState(onVideoCompleted)
+    val currentKnownDurationSec by rememberUpdatedState(knownDurationSec)
     val currentOnDurationKnown by rememberUpdatedState(onDurationKnown)
     val currentOnVideoLandscapeKnown by rememberUpdatedState(onVideoLandscapeKnown)
     val currentOnVideoSizeKnown by rememberUpdatedState(onVideoSizeKnown)
@@ -426,16 +431,29 @@ fun ReelsPlayerView(
             OkHttpDataSource.Factory(networkClient)
                 .setDefaultRequestProperties(requestHeaders),
         )
-        val dataSourceFactory = CacheDataSource.Factory()
-            .setCache(getReelsVideoCache(context.applicationContext))
-            .setUpstreamDataSourceFactory(upstream)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        // Loopback streaming proxies (e.g. local TDLib HTTP server on 127.0.0.1) already manage
+        // their own disk cache; wrapping them in SimpleCache duplicates disk I/O and adds lock
+        // contention without saving any network traffic.
+        val dataSourceFactory = if (isLoopbackReelUrl(url)) {
+            upstream
+        } else {
+            CacheDataSource.Factory()
+                .setCache(getReelsVideoCache(context.applicationContext))
+                .setUpstreamDataSourceFactory(upstream)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        }
         val isProgressiveContainer = isProgressiveReelUrl(url)
         val mediaItem = MediaItem.Builder()
             .setUri(url)
-            .apply { if (key != null && isProgressiveContainer) setCustomCacheKey(key) }
+            .apply {
+                if (key != null && isProgressiveContainer && !isLoopbackReelUrl(url)) {
+                    setCustomCacheKey(key)
+                }
+            }
             .build()
-        DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(mediaItem)
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
+        DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory).createMediaSource(mediaItem)
     }
 
     // Player lifecycle: acquire from pool for active or preloaded pages, return to pool otherwise.
@@ -444,7 +462,7 @@ fun ReelsPlayerView(
         if (!needed) {
             dwellClock.stop(SystemClock.elapsedRealtime())
             pooledPlayer?.let { entry ->
-                if (entry.player.duration > 0) restorePositionMs = entry.player.currentPosition
+                if (entry.player.currentPosition > 0L) restorePositionMs = entry.player.currentPosition
                 ReelsPlayerPool.release(entry, attachedListener)
             }
             pooledPlayer = null
@@ -472,6 +490,40 @@ fun ReelsPlayerView(
             val exoPlayer = entry.player
             val owner = exoPlayer
             val listener = object : Player.Listener {
+                private var lastReportedDurationMs = C.TIME_UNSET
+
+                private fun syncDurationAndPendingSeeks() {
+                    val playerDurationMs = owner.duration
+                    if (playerDurationMs > 0L && playerDurationMs != lastReportedDurationMs) {
+                        lastReportedDurationMs = playerDurationMs
+                        currentOnDurationKnown(playerDurationMs.toFloat() / 1000f)
+                    }
+                    if (owner.playbackState != Player.STATE_READY) return
+                    val effectiveDurationMs = resolveReelDurationMs(playerDurationMs, currentKnownDurationSec)
+                    if (restorePositionMs > 0L) {
+                        val targetPos = if (effectiveDurationMs > 0L) {
+                            restorePositionMs.coerceIn(0L, effectiveDurationMs)
+                        } else {
+                            restorePositionMs
+                        }
+                        owner.seekTo(targetPos)
+                        restorePositionMs = 0L
+                    }
+                    if (pendingSeekPositionMs >= 0L && effectiveDurationMs > 0L) {
+                        owner.seekTo(pendingSeekPositionMs.coerceIn(0L, effectiveDurationMs))
+                        pendingSeekPositionMs = -1L
+                        currentOnSeekPositionConsumed()
+                    } else if (pendingSeekFraction >= 0f && effectiveDurationMs > 0L) {
+                        owner.seekTo((pendingSeekFraction * effectiveDurationMs).toLong())
+                        pendingSeekFraction = -1f
+                    }
+                }
+
+                override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                    if (pooledPlayer?.player !== owner) return
+                    syncDurationAndPendingSeeks()
+                }
+
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (pooledPlayer?.player !== owner) return
                     currentOnBufferingChanged(playbackState == Player.STATE_BUFFERING)
@@ -482,30 +534,12 @@ fun ReelsPlayerView(
                             if (owner.currentPosition > 0) {
                                 lastSafePositionMs = owner.currentPosition
                             }
-                            val durSec = owner.duration.toFloat() / 1000f
-                            if (durSec > 0) currentOnDurationKnown(durSec)
-                            if (restorePositionMs > 0) {
-                                val targetPos = if (owner.duration > 0) {
-                                    restorePositionMs.coerceIn(0L, owner.duration)
-                                } else {
-                                    restorePositionMs
-                                }
-                                owner.seekTo(targetPos)
-                                restorePositionMs = 0L
-                            }
-                            if (pendingSeekPositionMs >= 0L && owner.duration > 0) {
-                                owner.seekTo(pendingSeekPositionMs.coerceIn(0L, owner.duration))
-                                pendingSeekPositionMs = -1L
-                                currentOnSeekPositionConsumed()
-                            } else if (pendingSeekFraction >= 0f && owner.duration > 0) {
-                                owner.seekTo((pendingSeekFraction * owner.duration).toLong())
-                                pendingSeekFraction = -1f
-                            }
+                            syncDurationAndPendingSeeks()
                         }
                         Player.STATE_ENDED -> {
                             val dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime())
                             val hold = reelsEndHold(
-                                durationMs = owner.duration.coerceAtLeast(0L),
+                                durationMs = resolveReelDurationMs(owner.duration, currentKnownDurationSec),
                                 dwellMs = dwellMs,
                                 minDwellMs = REELS_MIN_DWELL_MS,
                             )
@@ -770,8 +804,9 @@ fun ReelsPlayerView(
         val bitmap = runCatching { tv.getBitmap(targetW, targetH) }.getOrNull() ?: return
         lastScrubCaptureAtMs = now
         val p = pooledPlayer?.player
-        val capturedFraction = if (p != null && p.duration > 0L) {
-            (p.currentPosition.toFloat() / p.duration.toFloat()).coerceIn(0f, 1f)
+        val effectiveDurationMs = p?.let { resolveReelDurationMs(it.duration, currentKnownDurationSec) } ?: 0L
+        val capturedFraction = if (p != null && effectiveDurationMs > 0L) {
+            (p.currentPosition.toFloat() / effectiveDurationMs.toFloat()).coerceIn(0f, 1f)
         } else {
             lastRequestedScrubFraction
         }
@@ -793,8 +828,9 @@ fun ReelsPlayerView(
         }
         player?.let { p ->
             p.setSeekParameters(if (req.liveScrub) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT)
-            if (p.duration > 0) {
-                p.seekTo((frac * p.duration).toLong())
+            val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+            if (effectiveDurationMs > 0L) {
+                p.seekTo((frac * effectiveDurationMs).toLong())
             } else if (!req.liveScrub) {
                 pendingSeekFraction = frac
             }
@@ -806,8 +842,9 @@ fun ReelsPlayerView(
         seekToFraction?.let { frac ->
             player?.let { p ->
                 p.setSeekParameters(SeekParameters.DEFAULT)
-                if (p.duration > 0) {
-                    p.seekTo((frac.coerceIn(0f, 1f) * p.duration).toLong())
+                val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                if (effectiveDurationMs > 0L) {
+                    p.seekTo((frac.coerceIn(0f, 1f) * effectiveDurationMs).toLong())
                 } else {
                     pendingSeekFraction = frac.coerceIn(0f, 1f)
                 }
@@ -818,8 +855,9 @@ fun ReelsPlayerView(
     LaunchedEffect(seekToPositionMs, player) {
         seekToPositionMs?.let { ms ->
             player?.let { p ->
-                if (p.playbackState == Player.STATE_READY && p.duration > 0) {
-                    p.seekTo(ms.coerceIn(0L, p.duration))
+                val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                if (p.playbackState == Player.STATE_READY && effectiveDurationMs > 0L) {
+                    p.seekTo(ms.coerceIn(0L, effectiveDurationMs))
                     currentOnSeekPositionConsumed()
                 } else {
                     pendingSeekPositionMs = ms
@@ -928,16 +966,24 @@ fun ReelsPlayerView(
             val p = player
             val isActivelyRunning = p?.isPlaying == true
             if (p != null) {
-                val duration = p.duration
-                if (duration > 0) {
+                val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                if (effectiveDurationMs > 0L) {
                     if (isActivelyRunning && p.currentPosition > 0) {
                         lastSafePositionMs = p.currentPosition
                     }
-                    currentOnProgressUpdate((p.currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
-                    currentOnBufferUpdate((p.bufferedPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
-                } else if (isFirstFrameRendered) {
-                    val dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime())
-                    currentOnProgressUpdate((dwellMs.toFloat() / REELS_MIN_DWELL_MS).coerceIn(0f, 1f))
+                    currentOnBufferUpdate(
+                        (p.bufferedPosition.toFloat() / effectiveDurationMs.toFloat()).coerceIn(0f, 1f),
+                    )
+                }
+                val progress = resolveReelPlaybackProgress(
+                    currentPositionMs = p.currentPosition,
+                    effectiveDurationMs = effectiveDurationMs,
+                    isFirstFrameRendered = isFirstFrameRendered,
+                    isEndedOrHolding = endHold != null || p.playbackState == Player.STATE_ENDED,
+                    dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime()),
+                )
+                if (progress != null) {
+                    currentOnProgressUpdate(progress)
                 }
             }
             if (isActivelyRunning) {
@@ -953,7 +999,7 @@ fun ReelsPlayerView(
         onDispose {
             dwellClock.stop(SystemClock.elapsedRealtime())
             pooledPlayer?.let { entry ->
-                if (entry.player.duration > 0) restorePositionMs = entry.player.currentPosition
+                if (entry.player.currentPosition > 0L) restorePositionMs = entry.player.currentPosition
                 ReelsPlayerPool.release(entry, attachedListener)
             }
             pooledPlayer = null
@@ -1208,6 +1254,50 @@ internal fun reelsEndHold(durationMs: Long, dwellMs: Long, minDwellMs: Long = RE
     return ReelsEndHold(remainingMs = remainingMs, loop = durationMs > 0)
 }
 
+/**
+ * Resolves the effective playback duration in milliseconds.
+ *
+ * ExoPlayer's [playerDurationMs] is authoritative whenever positive (not [C.TIME_UNSET] or 0).
+ * When ExoPlayer cannot determine duration upfront (e.g. fragmented/streamed long videos without
+ * header duration), falls back to the feed item's [fallbackDurationSec] so progress and seeking
+ * remain functional instead of dropping into the 5-second still-dwell timer.
+ */
+internal fun resolveReelDurationMs(
+    playerDurationMs: Long,
+    fallbackDurationSec: Float,
+): Long {
+    if (playerDurationMs > 0L) return playerDurationMs
+    if (fallbackDurationSec.isFinite() && fallbackDurationSec > 0f) {
+        return (fallbackDurationSec * 1000f).toLong().coerceAtLeast(1L)
+    }
+    return 0L
+}
+
+/**
+ * Computes normalized `[0f, 1f]` progress for the seekbar.
+ *
+ * Only falls back to `dwellMs / minDwellMs` when duration is unknown AND the clip has ended or
+ * is holding minimum dwell; an actively playing video with unknown duration stays at `0f`
+ * instead of racing the bar to 100% in 5 seconds.
+ */
+internal fun resolveReelPlaybackProgress(
+    currentPositionMs: Long,
+    effectiveDurationMs: Long,
+    isFirstFrameRendered: Boolean,
+    isEndedOrHolding: Boolean,
+    dwellMs: Long,
+    minDwellMs: Long = REELS_MIN_DWELL_MS,
+): Float? {
+    if (effectiveDurationMs > 0L) {
+        return (currentPositionMs.coerceAtLeast(0L).toFloat() / effectiveDurationMs.toFloat())
+            .coerceIn(0f, 1f)
+    }
+    if (isFirstFrameRendered && isEndedOrHolding && minDwellMs > 0L) {
+        return (dwellMs.coerceAtLeast(0L).toFloat() / minDwellMs.toFloat()).coerceIn(0f, 1f)
+    }
+    return if (isFirstFrameRendered) 0f else null
+}
+
 /** P01: a real background stop clears the play intent; PiP is the only exempt stop state. */
 internal fun reelsShouldPauseOnStop(inPictureInPicture: Boolean): Boolean = !inPictureInPicture
 
@@ -1352,6 +1442,16 @@ internal fun isReelImageUrl(url: String): Boolean =
 
 private val STILL_IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif")
 
+/** Detects local loopback proxy URLs (127.0.0.1 / localhost / ::1) that manage their own cache. */
+internal fun isLoopbackReelUrl(url: String): Boolean {
+    val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: return false
+    return host == "localhost" ||
+        host == "127.0.0.1" ||
+        host.startsWith("127.") ||
+        host == "::1" ||
+        host == "[::1]"
+}
+
 /** Head-prewarm chunk: how many leading bytes of a reel are warmed ahead of the player window. */
 internal const val HEAD_PREWARM_BYTES = 512L * 1024L
 
@@ -1370,6 +1470,9 @@ internal fun prewarmReelHead(
     isCancelled: () -> Boolean = { false },
 ) {
     if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) return
+    // Never prewarm local streaming proxies (e.g. TDLib on 127.0.0.1): background head pulls
+    // compete directly with the active video's download slots and hold proxy cache leases.
+    if (isLoopbackReelUrl(url)) return
     val appContext = context.applicationContext
     val resolvedHeaders = reelsRequestHeaders(headers, webUrl)
 

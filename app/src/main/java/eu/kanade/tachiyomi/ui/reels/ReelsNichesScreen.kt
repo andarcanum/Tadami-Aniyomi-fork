@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -139,6 +141,46 @@ data class ReelsNichesScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                         )
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                        ) {
+                            item {
+                                FilterChip(
+                                    selected = state.sort == ReelsNichesSort.Default,
+                                    onClick = { model.onSortChange(ReelsNichesSort.Default) },
+                                    label = { Text(stringResource(MR.strings.reels_niches_sort_default)) },
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = state.sort == ReelsNichesSort.Name,
+                                    onClick = { model.onSortChange(ReelsNichesSort.Name) },
+                                    label = { Text(stringResource(MR.strings.reels_niches_sort_name)) },
+                                )
+                            }
+                            if (state.hasItemCounts) {
+                                item {
+                                    FilterChip(
+                                        selected = state.sort == ReelsNichesSort.MostVideos,
+                                        onClick = { model.onSortChange(ReelsNichesSort.MostVideos) },
+                                        label = { Text(stringResource(MR.strings.reels_niches_sort_count)) },
+                                    )
+                                }
+                            }
+                            if (state.savedAlbumIds.isNotEmpty() || state.savedOnly) {
+                                item {
+                                    FilterChip(
+                                        selected = state.savedOnly,
+                                        onClick = model::onToggleSavedOnly,
+                                        label = { Text(stringResource(MR.strings.reels_niches_filter_saved)) },
+                                    )
+                                }
+                            }
+                        }
                         if (visible.isEmpty()) {
                             EmptyScreen(
                                 stringRes = MR.strings.reels_niches_search_empty,

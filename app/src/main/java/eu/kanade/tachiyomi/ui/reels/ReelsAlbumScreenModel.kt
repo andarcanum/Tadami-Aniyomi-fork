@@ -3,7 +3,10 @@ package eu.kanade.tachiyomi.ui.reels
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.animesource.AnimeCategoryFeedOrderSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -11,6 +14,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -23,6 +27,7 @@ import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * One saved album's content (device feature, sign-off prototype): paged items of the source's
@@ -39,7 +44,14 @@ class ReelsAlbumScreenModel(
     private val watchRepository: ReelsWatchRepository = Injekt.get(),
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : StateScreenModel<ReelsAlbumScreenModel.State>(State()) {
+    private val sourcePreferences: SourcePreferences? = runCatching { Injekt.get<SourcePreferences>() }.getOrNull(),
+) : StateScreenModel<ReelsAlbumScreenModel.State>(
+    ReelsAlbumScreenModel.State(
+        localFilter = sourcePreferences?.reelsNicheLocalFilter()?.get()
+            ?.let(ReelsLocalFilterState::deserializePersistent)
+            ?: ReelsLocalFilterState(),
+    ),
+) {
 
     @Immutable
     data class State(
@@ -59,9 +71,14 @@ class ReelsAlbumScreenModel(
         val progress: Map<String, Float> = emptyMap(),
         // Report fix: the AppBar save toggle observes the collection reactively.
         val isAlbumSaved: Boolean = false,
+        val localFilter: ReelsLocalFilterState = ReelsLocalFilterState(),
+        val isCategoryOrderCapable: Boolean = false,
+        val sourceFilters: AnimeFilterList = AnimeFilterList(),
     )
 
     private val seenIds = mutableSetOf<String>()
+    private val loadGeneration = AtomicInteger(0)
+    private var loadJob: Job? = null
 
     init {
         screenModelScope.launch {
@@ -90,6 +107,67 @@ class ReelsAlbumScreenModel(
                 mutableState.update { it.copy(progress = progress) }
             }
         }
+        val orderCapable = sourceManager.get(sourceId) as? AnimeCategoryFeedOrderSource
+        if (orderCapable != null) {
+            screenModelScope.launch(ioDispatcher) {
+                val filters = runCatching { orderCapable.categoryFilters() }.getOrDefault(AnimeFilterList())
+                mutableState.update {
+                    it.copy(
+                        isCategoryOrderCapable = filters.isNotEmpty(),
+                        sourceFilters = filters,
+                    )
+                }
+                loadMore()
+            }
+        } else {
+            loadMore()
+        }
+    }
+
+    fun setLocalFilter(filter: ReelsLocalFilterState) {
+        sourcePreferences?.reelsNicheLocalFilter()?.set(filter.serializePersistent())
+        mutableState.update { it.copy(localFilter = filter) }
+    }
+
+    fun resetLocalFilter() {
+        val reset = ReelsLocalFilterState()
+        sourcePreferences?.reelsNicheLocalFilter()?.set(reset.serializePersistent())
+        mutableState.update { it.copy(localFilter = reset) }
+    }
+
+    fun setSourceFilters(filters: AnimeFilterList) {
+        mutableState.update { it.copy(sourceFilters = filters) }
+    }
+
+    fun applySourceFilters() {
+        reloadFromStart()
+    }
+
+    fun resetSourceFilters() {
+        val orderCapable = sourceManager.get(sourceId) as? AnimeCategoryFeedOrderSource ?: return
+        screenModelScope.launch(ioDispatcher) {
+            val fresh = runCatching { orderCapable.categoryFilters() }.getOrDefault(AnimeFilterList())
+            mutableState.update { it.copy(sourceFilters = fresh) }
+            reloadFromStart()
+        }
+    }
+
+    private fun reloadFromStart() {
+        loadGeneration.incrementAndGet()
+        loadJob?.cancel()
+        seenIds.clear()
+        mutableState.update {
+            it.copy(
+                items = persistentListOf(),
+                isLoading = false,
+                canLoadMore = true,
+                error = null,
+                pageError = null,
+                nextPage = 1,
+                nextCursor = null,
+                cursorMode = false,
+            )
+        }
         loadMore()
     }
 
@@ -104,15 +182,26 @@ class ReelsAlbumScreenModel(
             }
             return
         }
+        val generation = loadGeneration.incrementAndGet()
         mutableState.update { it.copy(isLoading = true, error = null) }
-        screenModelScope.launch(ioDispatcher) {
+        loadJob = screenModelScope.launch(ioDispatcher) {
             try {
                 // Contract v17: the token is authoritative only once cursor mode is locked;
                 // before that the source always receives a null cursor.
                 val cursor = if (snapshot.cursorMode) snapshot.nextCursor else null
-                val page = browse.getCategoryFeed(albumId, snapshot.nextPage, cursor)
+                val page = when (browse) {
+                    is AnimeCategoryFeedOrderSource -> browse.getCategoryFeed(
+                        albumId,
+                        snapshot.nextPage,
+                        cursor,
+                        snapshot.sourceFilters,
+                    )
+                    else -> browse.getCategoryFeed(albumId, snapshot.nextPage, cursor)
+                }
+                if (loadGeneration.get() != generation) return@launch
                 val fresh = page.videos.distinctBy { it.id }.filter { seenIds.add(it.id) }
                 mutableState.update { current ->
+                    if (loadGeneration.get() != generation) return@update current
                     val step = ReelsPagination(
                         nextPage = current.nextPage,
                         nextCursor = current.nextCursor,
@@ -138,8 +227,10 @@ class ReelsAlbumScreenModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
+                if (loadGeneration.get() != generation) return@launch
                 logcat(LogPriority.ERROR, throwable = t) { "Failed to load album $albumId page ${snapshot.nextPage}" }
                 mutableState.update { current ->
+                    if (loadGeneration.get() != generation) return@update current
                     // Pagination inputs were not advanced, so a retry repeats this page/cursor.
                     if (current.items.isEmpty()) {
                         current.copy(isLoading = false, error = t.localizedMessage.orEmpty())

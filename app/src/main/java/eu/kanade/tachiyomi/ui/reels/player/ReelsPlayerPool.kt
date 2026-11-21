@@ -9,6 +9,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import eu.kanade.tachiyomi.network.NetworkHelper
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -34,10 +35,19 @@ internal object ReelsPlayerPool {
     private val idle = ArrayDeque<PooledReelsPlayer>()
     private var activeScreens = 0
 
-    /** Shared cache-less OkHttpClient for all reel players (never rebuilt per card). */
+    /**
+     * Shared cache-less OkHttpClient for all reel players (never rebuilt per card).
+     * Uses a dedicated Dispatcher with a higher per-host cap so player streams to a local proxy
+     * (127.0.0.1) or single CDN host never queue behind Coil thumbnail requests.
+     */
     val sharedNetworkClient: OkHttpClient by lazy {
+        val playerDispatcher = Dispatcher().apply {
+            maxRequests = 64
+            maxRequestsPerHost = 16
+        }
         Injekt.get<NetworkHelper>().client.newBuilder()
             .cache(null)
+            .dispatcher(playerDispatcher)
             .build()
     }
 

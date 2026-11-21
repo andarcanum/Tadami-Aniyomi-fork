@@ -19,6 +19,8 @@ data class ReelsAlbumFeedSeed(
     val cursorMode: Boolean = false,
     val canLoadMore: Boolean = true,
     val sourceId: Long? = null,
+    val rawItems: ImmutableList<ShortVideoItem>? = null,
+    val localFilter: ReelsLocalFilterState = ReelsLocalFilterState(),
 )
 
 object ReelsAlbumFeedSeedStore {

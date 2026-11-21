@@ -200,6 +200,12 @@ class ReelsFeedScreenModel(
         currentSourceId = initialSourceId,
         customFeedName = customFeedName,
         nicheName = nicheName,
+        nicheLocalFilter = if (nicheId != null) {
+            ReelsLocalFilterState.deserializePersistent(sourcePreferences.reelsNicheLocalFilter().get())
+                .copy(watchFilter = ReelsWatchFilter.All)
+        } else {
+            ReelsLocalFilterState()
+        },
         resumeVideoId = resumeVideoId,
         isAutoAdvance = sourcePreferences.autoAdvanceReels().get(),
         isCropMode = sourcePreferences.reelsCropMode().get(),
@@ -281,6 +287,9 @@ class ReelsFeedScreenModel(
     }
 
     private var source: AnimeFeedSource? = null
+    // Unfiltered items loaded for the current FeedMode.NICHE session so client-side filters
+    // (duration, newest/sort, tags) can be toggled or reset without re-fetching from the network.
+    private var rawNicheItems: List<ShortVideoItem> = emptyList()
 
     private val qualityController = ReelsQualityController(sourcePreferences)
     private var qualitySessionJob: Job? = null
@@ -3276,16 +3285,26 @@ class ReelsFeedScreenModel(
                 resumeNavPending = false
                 rateLimitRetries = 0
 
+                val rawSeed = seed.rawItems ?: seed.items
+                rawNicheItems = rawSeed
+                val initialFilter = seed.localFilter
+                val seededItems = if (initialFilter.isActive) {
+                    applyReelsLocalFilter(rawSeed, initialFilter)
+                } else {
+                    seed.items
+                }
                 val targetIndex = if (seed.targetVideoId != null) {
-                    seed.items.indexOfFirst { it.id == seed.targetVideoId }.coerceAtLeast(0)
+                    seededItems.indexOfFirst { it.id == seed.targetVideoId }.coerceAtLeast(0)
                 } else {
                     0
                 }
 
                 mutableState.update { current ->
                     current.copy(
-                        items = seed.items,
-                        seenIds = seed.items.map { it.id }.toImmutableSet(),
+                        items = seededItems,
+                        seenIds = rawSeed.map { it.id }.toImmutableSet(),
+                        nicheLocalFilter = initialFilter,
+                        nicheAvailableTags = extractAvailableTags(rawSeed),
                         isLoading = false,
                         error = null,
                         errorRes = null,
@@ -3512,6 +3531,20 @@ class ReelsFeedScreenModel(
                         backlog.isEmpty() -> newItems
                         else -> (newItems + backlog).distinctBy { it.id }
                     }
+                    val displayedItems = if (mode == FeedMode.NICHE) {
+                        rawNicheItems = if (reset) {
+                            merged
+                        } else {
+                            (rawNicheItems + newItems).distinctBy { it.id }
+                        }
+                        if (current.nicheLocalFilter.isActive) {
+                            applyReelsLocalFilter(rawNicheItems, current.nicheLocalFilter)
+                        } else {
+                            rawNicheItems.toImmutableList()
+                        }
+                    } else {
+                        merged.toImmutableList()
+                    }
                     // Sticky cursor mode (contract v17), shared with every other host surface:
                     // the first non-null token locks the generation, and losing the token while
                     // more pages are claimed is a protocol violation that stops pagination.
@@ -3527,7 +3560,12 @@ class ReelsFeedScreenModel(
                         }
                     }
                     current.copy(
-                        items = merged.toImmutableList(),
+                        items = displayedItems,
+                        nicheAvailableTags = if (mode == FeedMode.NICHE) {
+                            extractAvailableTags(rawNicheItems)
+                        } else {
+                            current.nicheAvailableTags
+                        },
                         seenIds = if (reset) {
                             merged.map { it.id }.toImmutableSet()
                         } else {
@@ -4326,6 +4364,56 @@ class ReelsFeedScreenModel(
     fun toggleFilterDialog(open: Boolean) {
         if (open && state.value.isMixMode) return
         mutableState.update { it.copy(isFilterDialogOpen = open) }
+    }
+
+    fun toggleNicheFilterSheet(open: Boolean) {
+        if (mode != FeedMode.NICHE) return
+        mutableState.update { it.copy(isNicheFilterSheetOpen = open) }
+    }
+
+    fun applyNicheLocalFilter(filter: ReelsLocalFilterState) {
+        if (mode != FeedMode.NICHE) return
+        // Preserve any album watch-status preference while persisting duration/sort from NICHE mode.
+        val existingWatch = ReelsLocalFilterState
+            .deserializePersistent(sourcePreferences.reelsNicheLocalFilter().get())
+            .watchFilter
+        sourcePreferences.reelsNicheLocalFilter().set(
+            filter.copy(watchFilter = existingWatch).serializePersistent(),
+        )
+        val filtered = if (filter.isActive) {
+            applyReelsLocalFilter(rawNicheItems, filter)
+        } else {
+            rawNicheItems.toImmutableList()
+        }
+        mutableState.update { current ->
+            current.copy(
+                nicheLocalFilter = filter,
+                isNicheFilterSheetOpen = false,
+                items = filtered,
+                feedGeneration = current.feedGeneration + 1,
+                targetPageIndex = 0,
+                activeIndex = 0,
+            )
+        }
+        if (filtered.size < 3 && state.value.canLoadMore && !state.value.isLoading) {
+            loadFeedInternal(reset = false)
+        }
+    }
+
+    fun resetNicheLocalFilter() {
+        if (mode != FeedMode.NICHE) return
+        sourcePreferences.reelsNicheLocalFilter().set("")
+        val filtered = rawNicheItems.toImmutableList()
+        mutableState.update { current ->
+            current.copy(
+                nicheLocalFilter = ReelsLocalFilterState(),
+                isNicheFilterSheetOpen = false,
+                items = filtered,
+                feedGeneration = current.feedGeneration + 1,
+                targetPageIndex = 0,
+                activeIndex = 0,
+            )
+        }
     }
 
     fun toggleSearchBar(open: Boolean) {
@@ -5712,6 +5800,9 @@ class ReelsFeedScreenModel(
         val sourceHeaders: ImmutableMap<String, String> = persistentHashMapOf(),
         val filters: AnimeFilterList = AnimeFilterList(),
         val isFilterDialogOpen: Boolean = false,
+        val nicheLocalFilter: ReelsLocalFilterState = ReelsLocalFilterState(),
+        val isNicheFilterSheetOpen: Boolean = false,
+        val nicheAvailableTags: ImmutableList<String> = persistentListOf(),
         val isSearchBarOpen: Boolean = false,
         val isSourcePickerOpen: Boolean = false,
         val isLoginDialogOpen: Boolean = false,

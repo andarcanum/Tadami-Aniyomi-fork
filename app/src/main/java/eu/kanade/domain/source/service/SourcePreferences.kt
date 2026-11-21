@@ -215,6 +215,11 @@ class SourcePreferences(
         true,
     )
 
+    // Persisted local filter/sort preferences for Reels albums and niches.
+    fun reelsNicheLocalFilter() = preferenceStore.getString("pref_reels_niche_local_filter", "")
+    fun reelsNichesSort() = preferenceStore.getString("pref_reels_niches_sort", "")
+    fun reelsNichesSavedOnly() = preferenceStore.getBoolean("pref_reels_niches_saved_only", false)
+
     // Reels owns its incognito: the global switch, the NSFW auto policy and the per-extension
     // incognito set deliberately do NOT apply inside the feed (product decision) — this
     // reels-only toggle is the single source of truth for history/position/last-source writes

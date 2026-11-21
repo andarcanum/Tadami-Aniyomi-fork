@@ -138,6 +138,7 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsContentPreferencesSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsCustomFeedsSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsEmptySearchState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
+import eu.kanade.tachiyomi.ui.reels.components.ReelsLocalFilterSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsFeedSkeletonShimmer
 import eu.kanade.tachiyomi.ui.reels.components.ReelsLoginDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsNextPageLoader
@@ -1019,16 +1020,21 @@ data class ReelsFeedScreen(
                     // decoders competed for bandwidth). Same gate as the player preload and the
                     // same cache-key scheme as the page; a key mismatch (a quality toggle
                     // mid-flight) can only cost a cache miss, never corrupt.
+                    var firstFrameReadyVideoId by remember { mutableStateOf<String?>(null) }
+                    val activePageReady = state.items.getOrNull(pagerState.settledPage)?.id
+                        ?.let { it == firstFrameReadyVideoId } == true
+
                     LaunchedEffect(
                         pagerState.settledPage,
                         state.items,
                         preloadAllowed,
+                        activePageReady,
                         effectiveHd,
                         state.qualityState?.selectionRevision,
                         state.qualityState?.items?.values?.count { it.actual != null },
                         state.mixQualityStates,
                     ) {
-                        if (!preloadAllowed) return@LaunchedEffect
+                        if (!preloadAllowed || !activePageReady) return@LaunchedEffect
                         val settled = pagerState.settledPage
                         val items = state.items
                         val offline = state.isOffline
@@ -1276,8 +1282,13 @@ data class ReelsFeedScreen(
                                 // fast flings or when another screen is pushed above, players must
                                 // not keep running.
                                 isActive = isTopScreen && (page == pagerState.settledPage),
-                                // Preload only the forward neighbor on the top screen.
-                                isPreload = isTopScreen && preloadAllowed && page == pagerState.settledPage + 1,
+                                // Preload only the forward neighbor on the top screen, AFTER the
+                                // active video has rendered its first frame so preload never
+                                // competes with the active stream on startup.
+                                isPreload = isTopScreen &&
+                                    preloadAllowed &&
+                                    activePageReady &&
+                                    page == pagerState.settledPage + 1,
                                 isPlaying = state.isPlaying,
                                 isMuted = state.isMuted,
                                 isLiked = state.isLiked(item.id, page),
@@ -1509,7 +1520,10 @@ data class ReelsFeedScreen(
                                 },
                                 onScrubStart = { chromeVisible = true },
                                 onVisitStarted = pageCallbacks::onVisitStarted,
-                                onFirstFramePresented = pageCallbacks::onFirstFramePresented,
+                                onFirstFramePresented = { videoId ->
+                                    firstFrameReadyVideoId = videoId
+                                    pageCallbacks.onFirstFramePresented(videoId)
+                                },
                                 onPlaybackSample = pageCallbacks::onPlaybackSample,
                                 onVisitEnded = pageCallbacks::onVisitEnded,
                                 onVisitSuspendedForConfiguration = screenModel::onVisitSuspendedForConfiguration,
@@ -1756,7 +1770,7 @@ data class ReelsFeedScreen(
                     !windowIsLandscape &&
                     (
                         chromeVisible || moreMenuOpen ||
-                            state.isSearchBarOpen || state.isFilterDialogOpen ||
+                            state.isSearchBarOpen || state.isFilterDialogOpen || state.isNicheFilterSheetOpen ||
                             state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen ||
                             state.isWebLoginDialogOpen
                         ),
@@ -1817,10 +1831,8 @@ data class ReelsFeedScreen(
                     showSearch = state.supportsSearch &&
                         state.supportsTags &&
                         state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
-                    showFilter = state.supportsFilter && (
-                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL ||
-                            (state.mode == ReelsFeedScreenModel.FeedMode.NICHE && state.isCategoryOrderCapable)
-                        ),
+                    showFilter = (state.supportsFilter && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL) ||
+                        state.mode == ReelsFeedScreenModel.FeedMode.NICHE,
                     // Source-supplied chips for the search bar (contract v19 addendum);
                     // no chips when the source supplies none.
                     searchHints = state.searchHints,
@@ -1950,7 +1962,13 @@ data class ReelsFeedScreen(
                         }
                     },
                     onToggleSearchBar = { screenModel.toggleSearchBar(!state.isSearchBarOpen) },
-                    onOpenFilterDialog = { screenModel.toggleFilterDialog(true) },
+                    onOpenFilterDialog = {
+                        if (state.mode == ReelsFeedScreenModel.FeedMode.NICHE) {
+                            screenModel.toggleNicheFilterSheet(true)
+                        } else {
+                            screenModel.toggleFilterDialog(true)
+                        }
+                    },
                     onOpenFavorites = { navigator.push(ReelsFavoritesScreen()) },
                     onOpenHistory = { navigator.push(ReelsWatchHistoryScreen()) },
                     onOpenHidden = { navigator.push(ReelsHiddenScreen()) },
@@ -2002,6 +2020,23 @@ data class ReelsFeedScreen(
                     onReset = screenModel::resetFilters,
                     onFilter = screenModel::applyFilters,
                     onUpdate = screenModel::setFilters,
+                )
+            }
+
+            // Niche/Album local filter & sort sheet (with optional bridge to source server filters)
+            if (state.isNicheFilterSheetOpen) {
+                ReelsLocalFilterSheet(
+                    currentFilter = state.nicheLocalFilter,
+                    availableTags = state.nicheAvailableTags,
+                    showWatchFilter = false,
+                    showSourceFiltersAction = state.isCategoryOrderCapable && state.filters.isNotEmpty(),
+                    onOpenSourceFilters = {
+                        screenModel.toggleNicheFilterSheet(false)
+                        screenModel.toggleFilterDialog(true)
+                    },
+                    onApply = screenModel::applyNicheLocalFilter,
+                    onReset = screenModel::resetNicheLocalFilter,
+                    onDismiss = { screenModel.toggleNicheFilterSheet(false) },
                 )
             }
 

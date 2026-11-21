@@ -1108,6 +1108,7 @@ fun ReelsVideoPage(
             onVideoCompleted = onVideoCompleted,
             // The player-reported duration is authoritative; the server value is only a
             // placeholder until STATE_READY (wrong server durations must not stick).
+            knownDurationSec = item.durationSec ?: 0f,
             onDurationKnown = { durationSec = it },
             onVideoLandscapeKnown = { landscape ->
                 isLandscapeVideo = landscape
