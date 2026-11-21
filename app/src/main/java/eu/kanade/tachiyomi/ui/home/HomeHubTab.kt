@@ -48,9 +48,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -656,6 +658,7 @@ internal enum class NicknameEffectPreset(val key: String) {
     }
 }
 
+@Immutable
 internal data class NicknameStyle(
     val font: NicknameFontPreset,
     val fontSize: Int,
@@ -667,6 +670,7 @@ internal data class NicknameStyle(
     val customColorHex: String,
 )
 
+@Immutable
 internal data class GreetingStyle(
     val font: NicknameFontPreset,
     val color: NicknameColorPreset,
@@ -1134,8 +1138,8 @@ object HomeHubTab : Tab {
         }
 
         // Do not persist collapsed header position across app relaunches.
-        var headerOffsetPx by remember { mutableStateOf(0f) }
-        var headerHeightPx by remember { mutableIntStateOf(0) }
+        val headerOffsetPxState = remember { mutableFloatStateOf(0f) }
+        val headerHeightPxState = remember { mutableIntStateOf(0) }
         var scrollResetToken by rememberSaveable { mutableIntStateOf(0) }
 
         val currentDisableHeaderScrollHide by rememberUpdatedState(disableHomeHeaderScrollHide)
@@ -1143,10 +1147,10 @@ object HomeHubTab : Tab {
         val onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit = remember {
             { section, deltaY, atTop ->
                 if (!currentDisableHeaderScrollHide && section == currentSelectedSection) {
-                    headerOffsetPx = resolveHomeHubHeaderOffset(
-                        currentOffsetPx = headerOffsetPx,
+                    headerOffsetPxState.floatValue = resolveHomeHubHeaderOffset(
+                        currentOffsetPx = headerOffsetPxState.floatValue,
                         deltaY = deltaY,
-                        maxOffsetPx = headerHeightPx.toFloat(),
+                        maxOffsetPx = headerHeightPxState.intValue.toFloat(),
                         isAtTop = atTop,
                     )
                 }
@@ -1308,7 +1312,7 @@ object HomeHubTab : Tab {
                 ) {
                     if (shouldResetHomeHubScroll(previousPage, settledPage)) {
                         scrollResetToken += 1
-                        headerOffsetPx = 0f
+                        headerOffsetPxState.floatValue = 0f
                     }
                     previousPage = settledPage
                     pendingTabTargetPage = null
@@ -1354,6 +1358,44 @@ object HomeHubTab : Tab {
             lastIndex = sections.lastIndex,
         )
         val appHaptics = LocalAppHaptics.current
+        val headerOffsetPxProvider: () -> Float = remember(headerOffsetPxState) {
+            { headerOffsetPxState.floatValue }
+        }
+        val onHeaderHeightMeasured: (Int) -> Unit = remember(headerHeightPxState, headerOffsetPxState) {
+            { measuredHeight ->
+                if (measuredHeight > 0 && headerHeightPxState.intValue != measuredHeight) {
+                    headerHeightPxState.intValue = measuredHeight
+                    val clamped = headerOffsetPxState.floatValue.coerceIn(0f, measuredHeight.toFloat())
+                    if (headerOffsetPxState.floatValue != clamped) {
+                        headerOffsetPxState.floatValue = clamped
+                    }
+                }
+            }
+        }
+        val onHeaderAvatarClick: () -> Unit = remember(appHaptics, photoPickerLauncher) {
+            {
+                appHaptics.tap()
+                photoPickerLauncher.launch("image/*")
+            }
+        }
+        val onHeaderNameClick: () -> Unit = remember(appHaptics) {
+            {
+                appHaptics.tap()
+                showNameDialog = true
+            }
+        }
+        val onHeaderGreetingClick: () -> Unit = remember(appHaptics) {
+            {
+                appHaptics.tap()
+                showGreetingDialog = true
+            }
+        }
+        val onHeaderStreakClick: () -> Unit = remember(appHaptics) {
+            {
+                appHaptics.tap()
+                showStreakStyleDialog = true
+            }
+        }
 
         // Stack: home content (render-effect blurred while the nickname editor is open)
         // followed by the nickname editor overlay. The blur is applied directly to the
@@ -1384,14 +1426,8 @@ object HomeHubTab : Tab {
                     beyondViewportPageCount = beyondViewportPageCount,
                     extraHeaderContent = {
                         HomeHubPinnedHeader(
-                            headerOffsetPx = headerOffsetPx,
-                            onHeightMeasured = { measuredHeight ->
-                                if (measuredHeight <= 0) return@HomeHubPinnedHeader
-                                if (headerHeightPx != measuredHeight) {
-                                    headerHeightPx = measuredHeight
-                                    headerOffsetPx = headerOffsetPx.coerceIn(0f, measuredHeight.toFloat())
-                                }
-                            },
+                            headerOffsetPxProvider = headerOffsetPxProvider,
+                            onHeightMeasured = onHeaderHeightMeasured,
                             greeting = headerGreeting,
                             userName = headerDisplayUserName,
                             userAvatar = headerUserAvatar,
@@ -1411,22 +1447,10 @@ object HomeHubTab : Tab {
                             tabs = tabs,
                             selectedIndex = displayedTabIndex,
                             onTabSelected = onSectionSelected,
-                            onAvatarClick = {
-                                appHaptics.tap()
-                                photoPickerLauncher.launch("image/*")
-                            },
-                            onNameClick = {
-                                appHaptics.tap()
-                                showNameDialog = true
-                            },
-                            onGreetingClick = {
-                                appHaptics.tap()
-                                showGreetingDialog = true
-                            },
-                            onStreakClick = {
-                                appHaptics.tap()
-                                showStreakStyleDialog = true
-                            },
+                            onAvatarClick = onHeaderAvatarClick,
+                            onNameClick = onHeaderNameClick,
+                            onGreetingClick = onHeaderGreetingClick,
+                            onStreakClick = onHeaderStreakClick,
                         )
                     },
                 )

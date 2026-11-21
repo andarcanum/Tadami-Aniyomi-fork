@@ -86,7 +86,7 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun HomeHubPinnedHeader(
-    headerOffsetPx: Float,
+    headerOffsetPxProvider: () -> Float,
     onHeightMeasured: (Int) -> Unit,
     greeting: dev.icerock.moko.resources.StringResource,
     userName: String,
@@ -173,7 +173,7 @@ internal fun HomeHubPinnedHeader(
             if (fullHeight > 0) {
                 onHeightMeasured(fullHeight)
             }
-            val collapsedHeight = headerOffsetPx.roundToInt().coerceIn(0, fullHeight)
+            val collapsedHeight = headerOffsetPxProvider().roundToInt().coerceIn(0, fullHeight)
             val visibleHeight = (fullHeight - collapsedHeight).coerceAtLeast(0)
             layout(placeable.width, visibleHeight) {
                 placeable.placeRelative(x = 0, y = -collapsedHeight)
@@ -225,7 +225,9 @@ private fun HomeHubProfileHeaderCanvas(
     // Use the classic (phone) header layout on tablets too.
     val isTabletHeaderLayout = false
     val elementSizes = remember { defaultHomeHeaderElementPixelSizes() }
-    val greetingFontFamily = greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
+    val greetingFontFamily = remember(greetingStyle.font.fontRes) {
+        greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
+    }
     val decoratedGreetingText = remember(greetingText, greetingStyle.decoration) {
         decorateGreetingText(greetingText, greetingStyle.decoration)
     }

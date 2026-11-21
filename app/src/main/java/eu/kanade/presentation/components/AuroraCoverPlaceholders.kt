@@ -74,6 +74,19 @@ fun buildAuroraCoverImageRequest(
         .build()
 }
 
+fun buildAuroraCoverImageRequestOrNull(
+    context: Context,
+    data: Any?,
+    configure: ImageRequest.Builder.() -> Unit = {},
+): ImageRequest? {
+    val resolved = resolveAuroraCoverModel(data) ?: return null
+    return ImageRequest.Builder(context)
+        .data(resolved)
+        .placeholderMemoryCacheKey(resolveAuroraCoverPlaceholderMemoryCacheKey(data))
+        .apply(configure)
+        .build()
+}
+
 @DrawableRes
 fun themeAwareCoverFallbackResId(
     isAuroraTheme: Boolean,

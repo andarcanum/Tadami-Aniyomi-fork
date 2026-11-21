@@ -94,7 +94,9 @@ import eu.kanade.tachiyomi.ui.history.HistoriesTab
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -185,12 +187,17 @@ internal fun AnimeHomeHub(
         mutableLongStateOf(screenModel.getLastUsedAnimeSourceId())
     }
     var lastSourceName by remember(screenModel) {
-        mutableStateOf(screenModel.getLastUsedAnimeSourceName())
+        mutableStateOf<String?>(null)
     }
-    LaunchedEffect(isAnimeActive, screenModel) {
+    LaunchedEffect(isAnimeActive, screenModel, state.availableSources) {
         if (isAnimeActive) {
-            val latestId = screenModel.getLastUsedAnimeSourceId()
-            val latestName = screenModel.getLastUsedAnimeSourceName()
+            val latestId = withContext(Dispatchers.IO) { screenModel.getLastUsedAnimeSourceId() }
+            val fromAvailable = state.availableSources.firstOrNull { it.id == latestId }?.name
+            val latestName = fromAvailable ?: if (latestId != -1L) {
+                withContext(Dispatchers.IO) { screenModel.getLastUsedAnimeSourceName() }
+            } else {
+                null
+            }
             if (lastSourceId != latestId) lastSourceId = latestId
             if (lastSourceName != latestName) lastSourceName = latestName
         }
@@ -324,12 +331,17 @@ internal fun MangaHomeHub(
         mutableLongStateOf(screenModel.getLastUsedMangaSourceId())
     }
     var lastSourceName by remember(screenModel) {
-        mutableStateOf(screenModel.getLastUsedMangaSourceName())
+        mutableStateOf<String?>(null)
     }
-    LaunchedEffect(isMangaActive, screenModel) {
+    LaunchedEffect(isMangaActive, screenModel, state.availableSources) {
         if (isMangaActive) {
-            val latestId = screenModel.getLastUsedMangaSourceId()
-            val latestName = screenModel.getLastUsedMangaSourceName()
+            val latestId = withContext(Dispatchers.IO) { screenModel.getLastUsedMangaSourceId() }
+            val fromAvailable = state.availableSources.firstOrNull { it.id == latestId }?.name
+            val latestName = fromAvailable ?: if (latestId != -1L) {
+                withContext(Dispatchers.IO) { screenModel.getLastUsedMangaSourceName() }
+            } else {
+                null
+            }
             if (lastSourceId != latestId) lastSourceId = latestId
             if (lastSourceName != latestName) lastSourceName = latestName
         }
@@ -465,12 +477,17 @@ internal fun NovelHomeHub(
         mutableLongStateOf(screenModel.getLastUsedNovelSourceId())
     }
     var lastSourceName by remember(screenModel) {
-        mutableStateOf(screenModel.getLastUsedNovelSourceName())
+        mutableStateOf<String?>(null)
     }
-    LaunchedEffect(isNovelActive, screenModel) {
+    LaunchedEffect(isNovelActive, screenModel, state.availableSources) {
         if (isNovelActive) {
-            val latestId = screenModel.getLastUsedNovelSourceId()
-            val latestName = screenModel.getLastUsedNovelSourceName()
+            val latestId = withContext(Dispatchers.IO) { screenModel.getLastUsedNovelSourceId() }
+            val fromAvailable = state.availableSources.firstOrNull { it.id == latestId }?.name
+            val latestName = fromAvailable ?: if (latestId != -1L) {
+                withContext(Dispatchers.IO) { screenModel.getLastUsedNovelSourceName() }
+            } else {
+                null
+            }
             if (lastSourceId != latestId) lastSourceId = latestId
             if (lastSourceName != latestName) lastSourceName = latestName
         }
@@ -915,6 +932,7 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
+                                isSectionActive = isSectionActive,
                                 onItemFocused = { item ->
                                     exposureTracker.recordStageFocus(item, isSectionActive, isResumed)
                                 },

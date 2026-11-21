@@ -1,6 +1,9 @@
 package eu.kanade.tachiyomi.ui.discovery
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -20,6 +23,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.source.anime.model.StubAnimeSource
@@ -150,6 +154,57 @@ object DiscoveryCoverSource {
     internal fun resolve(mediaType: DiscoveryMediaType, provider: String?): Resolved? = null
 }
 
+@Immutable
+internal data class DiscoveryCoverContext(
+    val mediaType: DiscoveryMediaType,
+    val policy: DiscoverySourcePolicy,
+    val sourceIdentities: Map<Long, Int>,
+)
+
+internal val LocalDiscoveryCoverContext = compositionLocalOf<DiscoveryCoverContext?> { null }
+
+/** Hoists policy & catalogue-source identity observation once per discovery section. */
+@Composable
+internal fun ProvideDiscoveryCoverContext(
+    mediaType: DiscoveryMediaType,
+    content: @Composable () -> Unit,
+) {
+    val provider = remember { Injekt.get<DiscoverySourcePolicyProvider>() }
+    val policyFlow = remember(provider, mediaType) { provider.observe(mediaType) }
+    val initialPolicy = remember(provider, mediaType) { provider.current(mediaType) }
+    val policy by policyFlow.collectAsStateWithLifecycle(initialValue = initialPolicy)
+    val sourceIdentitiesFlow = remember(mediaType, policy.inventoryComplete) {
+        if (!policy.inventoryComplete) {
+            flowOf(emptyMap())
+        } else {
+            runCatching {
+                when (mediaType) {
+                    DiscoveryMediaType.ANIME -> Injekt.get<AnimeSourceManager>().catalogueSources.map { sources ->
+                        sources.associate { it.id to System.identityHashCode(it) }
+                    }
+                    DiscoveryMediaType.MANGA -> Injekt.get<MangaSourceManager>().catalogueSources.map { sources ->
+                        sources.associate { it.id to System.identityHashCode(it) }
+                    }
+                    DiscoveryMediaType.NOVEL -> Injekt.get<NovelSourceManager>().catalogueSources.map { sources ->
+                        sources.associate { it.id to System.identityHashCode(it) }
+                    }
+                }.catch { emit(emptyMap()) }
+            }.getOrElse { flowOf(emptyMap()) }
+        }
+    }
+    val sourceIdentities by sourceIdentitiesFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val coverContext = remember(mediaType, policy, sourceIdentities) {
+        DiscoveryCoverContext(
+            mediaType = mediaType,
+            policy = policy,
+            sourceIdentities = sourceIdentities,
+        )
+    }
+    CompositionLocalProvider(LocalDiscoveryCoverContext provides coverContext) {
+        content()
+    }
+}
+
 /** Source-bound cover model. Recovery retains the existing primary/fallback URL semantics. */
 internal fun discoveryCoverData(item: DiscoverySuggestion, recoveryUrl: String? = null): Any? {
     if (!DiscoveryCoverSource.isAllowed(item)) return null
@@ -160,16 +215,54 @@ internal fun discoveryCoverData(item: DiscoverySuggestion, recoveryUrl: String? 
     return coverModel(primary, fallback, resolved)
 }
 
+internal fun discoveryCoverDataWithPolicy(
+    item: DiscoverySuggestion,
+    recoveryUrl: String? = null,
+    policy: DiscoverySourcePolicy,
+): Any? {
+    if (!policy.allows(item)) return null
+    val primary = item.coverUrl?.takeIf { it.isNotBlank() } ?: recoveryUrl ?: return null
+    val fallback = recoveryUrl?.takeIf { it.isNotBlank() && it != primary && !item.coverUrl.isNullOrBlank() }
+    val resolved = if (item.sourceId != null) DiscoveryCoverSource.resolve(item) else null
+    if (item.sourceId != null && resolved == null) return null
+    return coverModel(primary, fallback, resolved)
+}
+
 /** Shared lifecycle-aware cover model for Discovery cards across Home and Feed. */
 @Composable
 internal fun rememberDiscoveryCoverData(item: DiscoverySuggestion, recoveryUrl: String? = null): Any? {
+    val localContext = LocalDiscoveryCoverContext.current
+    if (localContext != null && localContext.mediaType == item.mediaType) {
+        val sourceId = item.sourceId?.takeIf { it > 0L }
+        val sourceVersion = if (sourceId != null) localContext.sourceIdentities[sourceId] ?: 0 else 0
+        return remember(
+            item.mediaType,
+            item.sourceId,
+            item.sourceUrl,
+            item.provider,
+            item.rowType,
+            item.coverUrl,
+            recoveryUrl,
+            localContext.policy.revision,
+            localContext.policy.inventoryComplete,
+            sourceVersion,
+        ) {
+            discoveryCoverDataWithPolicy(item, recoveryUrl, localContext.policy)
+        }
+    }
+    return rememberFallbackDiscoveryCoverData(item, recoveryUrl)
+}
+
+@Composable
+private fun rememberFallbackDiscoveryCoverData(item: DiscoverySuggestion, recoveryUrl: String? = null): Any? {
     val provider = remember { Injekt.get<DiscoverySourcePolicyProvider>() }
     val mediaType = item.mediaType
     val policyFlow = remember(provider, mediaType) { provider.observe(mediaType) }
-    val policy by policyFlow.collectAsStateWithLifecycle(initialValue = provider.current(mediaType))
+    val initialPolicy = remember(provider, mediaType) { provider.current(mediaType) }
+    val policy by policyFlow.collectAsStateWithLifecycle(initialValue = initialPolicy)
     val sourceId = item.sourceId?.takeIf { it > 0L }
-    val sourceVersionFlow = remember(mediaType, sourceId) {
-        if (sourceId == null) {
+    val sourceVersionFlow = remember(mediaType, sourceId, policy.inventoryComplete) {
+        if (sourceId == null || !policy.inventoryComplete) {
             flowOf(0)
         } else {
             runCatching {
@@ -197,9 +290,10 @@ internal fun rememberDiscoveryCoverData(item: DiscoverySuggestion, recoveryUrl: 
         item.coverUrl,
         recoveryUrl,
         policy.revision,
+        policy.inventoryComplete,
         sourceVersion,
     ) {
-        discoveryCoverData(item, recoveryUrl)
+        discoveryCoverDataWithPolicy(item, recoveryUrl, policy)
     }
 }
 

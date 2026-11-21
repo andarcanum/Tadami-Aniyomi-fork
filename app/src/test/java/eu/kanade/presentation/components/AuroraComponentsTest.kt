@@ -1,5 +1,7 @@
 package eu.kanade.presentation.components
 
+import androidx.compose.ui.geometry.Offset
+import io.kotest.matchers.floats.plusOrMinus
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -74,5 +76,34 @@ class AuroraComponentsTest {
             animate = false,
             staticFallbackSeconds = 20f,
         ) shouldBe 20f
+    }
+
+    @Test
+    fun `aurora ping pong oscillates smoothly between endpoints`() {
+        auroraPingPong(timeMillis = 0L, durationMillis = 1000L, from = -0.1f, to = 0.2f) shouldBe
+            (-0.1f plusOrMinus 1e-5f)
+        auroraPingPong(timeMillis = 1000L, durationMillis = 1000L, from = -0.1f, to = 0.2f) shouldBe
+            (0.2f plusOrMinus 1e-5f)
+        auroraPingPong(timeMillis = 2000L, durationMillis = 1000L, from = -0.1f, to = 0.2f) shouldBe
+            (-0.1f plusOrMinus 1e-5f)
+        auroraPingPong(timeMillis = 500L, durationMillis = 1000L, from = 0f, to = 1f) shouldBe (0.5f plusOrMinus 1e-5f)
+    }
+
+    @Test
+    fun `ambient blob circle center aligns with gradient center and transform`() {
+        val radius = 240f
+        val aspectX = 1.35f
+        val aspectY = 0.8f
+        val targetCenterX = 300f
+        val targetCenterY = 180f
+
+        val circleCenter = resolveAuroraAmbientBlobCircleCenter(radius)
+        circleCenter shouldBe Offset(radius, radius)
+
+        // Transform applies translate(targetCenter - radius * aspect) then scale(aspect, pivot = Zero).
+        val transformedX = (targetCenterX - radius * aspectX) + circleCenter.x * aspectX
+        val transformedY = (targetCenterY - radius * aspectY) + circleCenter.y * aspectY
+        transformedX shouldBe (targetCenterX plusOrMinus 1e-4f)
+        transformedY shouldBe (targetCenterY plusOrMinus 1e-4f)
     }
 }

@@ -592,8 +592,7 @@ class MainActivity : BaseActivity() {
         val startTime = System.currentTimeMillis()
         splashScreen?.setKeepOnScreenCondition {
             val elapsed = System.currentTimeMillis() - startTime
-            elapsed <= SPLASH_MIN_DURATION ||
-                ((!ready || !migrationReady.value) && elapsed <= SPLASH_MAX_DURATION)
+            (!ready || !migrationReady.value) && elapsed <= SPLASH_MAX_DURATION
         }
         setSplashScreenExitAnimation(splashScreen)
 
@@ -693,6 +692,8 @@ class MainActivity : BaseActivity() {
     override fun onStop() {
         super.onStop()
         eu.kanade.tachiyomi.ui.home.HomeHubScreenModel.saveOnExit()
+        eu.kanade.tachiyomi.ui.home.MangaHomeHubScreenModel.saveOnExit()
+        eu.kanade.tachiyomi.ui.home.NovelHomeHubScreenModel.saveOnExit()
     }
 
     override fun onProvideAssistContent(outContent: AssistContent) {
@@ -1139,7 +1140,6 @@ internal fun resolveMainActivityWindowBackgroundArgb(
 }
 
 // Splash screen
-private const val SPLASH_MIN_DURATION = 500 // ms
 private const val SPLASH_MAX_DURATION = 5000 // ms
 private const val SPLASH_EXIT_ANIM_DURATION = 400L // ms
 private const val MIGRATION_STARTUP_TIMEOUT = 15_000L // ms

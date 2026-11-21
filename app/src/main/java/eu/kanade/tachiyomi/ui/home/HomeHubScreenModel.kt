@@ -1,18 +1,19 @@
 package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
-import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.ui.main.MainActivity
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.yield
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
@@ -28,70 +29,41 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 
-internal class HomeHubScreenModel(
-    context: android.content.Context = Injekt.get<android.app.Application>(),
-    userProfilePreferences: UserProfilePreferences = Injekt.get(),
-    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences = Injekt.get(),
+internal class HomeHubScreenModel private constructor(
+    context: android.content.Context,
+    userProfilePreferences: UserProfilePreferences,
+    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences,
+    private val fastCache: HomeHubFastCache,
+    cached: CachedHomeState,
 ) : BaseHomeHubScreenModel(
     context = context,
-    initialState = run {
-        val tempCache = HomeHubFastCache(context, HomeHubSection.Anime)
-        val cached = tempCache.loadCachedState()
-        val hadCache = !cached.isEmpty || cached.isInitialized
-        if (hadCache) {
-            HomeHubUiState(
-                hero = cached.hero?.let { h ->
-                    HomeHubHero(
-                        entryId = h.entryId,
-                        title = h.title,
-                        progressNumber = h.progressNumber,
-                        coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
-                    )
-                },
-                history = cached.history.map { h ->
-                    HomeHubHistory(
-                        entryId = h.entryId,
-                        title = h.title,
-                        progressNumber = h.progressNumber,
-                        coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
-                        section = HomeHubSection.Anime,
-                    )
-                },
-                recommendations = cached.recommendations.map { r ->
-                    HomeHubRecommendation(
-                        entryId = r.entryId,
-                        title = r.title,
-                        coverData = AnimeCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
-                        section = HomeHubSection.Anime,
-                        progressNumerator = r.progressNumerator,
-                        progressDenominator = r.totalCount,
-                    )
-                },
-                userName = cached.userName,
-                userAvatar = cached.userAvatar,
-                greeting = GreetingProvider.getInitialGreeting(userProfilePreferences),
-                greetingReady = true,
-                isLoading = false,
-                showWelcome = !cached.isInitialized && cached.isEmpty,
-                showFilteredEmpty = cached.isInitialized && cached.isEmpty,
-            )
-        } else {
-            HomeHubUiState(
-                userName = userProfilePreferences.name().get(),
-                userAvatar = userProfilePreferences.avatarUrl().get(),
-                greeting = AYMR.strings.aurora_welcome_back,
-                greetingReady = false,
-                isLoading = true,
-                showWelcome = true,
-            )
-        }.withInitialDiscoveryPreferences(
-            preferences = discoveryPreferences,
-            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
-            cachedDiscovery = cached.discovery,
-        )
-    },
+    initialState = createAnimeInitialState(cached, userProfilePreferences, discoveryPreferences),
     userProfilePreferences = userProfilePreferences,
 ) {
+
+    constructor(
+        context: android.content.Context = Injekt.get<android.app.Application>(),
+        userProfilePreferences: UserProfilePreferences = Injekt.get(),
+        discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences = Injekt.get(),
+    ) : this(
+        context = context,
+        userProfilePreferences = userProfilePreferences,
+        discoveryPreferences = discoveryPreferences,
+        fastCache = HomeHubFastCache(context, HomeHubSection.Anime),
+    )
+
+    private constructor(
+        context: android.content.Context,
+        userProfilePreferences: UserProfilePreferences,
+        discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences,
+        fastCache: HomeHubFastCache,
+    ) : this(
+        context = context,
+        userProfilePreferences = userProfilePreferences,
+        discoveryPreferences = discoveryPreferences,
+        fastCache = fastCache,
+        cached = fastCache.loadCachedState(),
+    )
 
     private val getAnimeHistory: GetAnimeHistory by injectLazy()
     private val getNextEpisodes: GetNextEpisodes by injectLazy()
@@ -100,7 +72,6 @@ internal class HomeHubScreenModel(
     private val getEnabledAnimeSources: GetEnabledAnimeSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: AnimeSourceManager by injectLazy()
-    private val animeExtensionManager: AnimeExtensionManager by injectLazy()
     private val userProfileManager: tachiyomi.data.achievement.UserProfileManager by injectLazy()
     private val streakChecker: tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker by injectLazy()
     private val activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository by injectLazy()
@@ -125,16 +96,19 @@ internal class HomeHubScreenModel(
 
     override val avatarFileName: String = "user_avatar.jpg"
 
-    private val fastCache = HomeHubFastCache(context, HomeHubSection.Anime)
-
     @Volatile
     private var liveUpdatesStarted = false
 
     @Volatile
     private var fastCacheInitialized = false
 
+    @Volatile
     private var heroEpisode: Episode? = null
+
+    @Volatile
     private var originalHeroEpisodeId: Long? = null
+
+    private var heroLoadJob: Job? = null
 
     override fun updateCacheUserName(name: String) {
         fastCache.updateUserName(name)
@@ -159,77 +133,21 @@ internal class HomeHubScreenModel(
     }
 
     init {
-        val cached = fastCache.load()
         fastCacheInitialized = cached.isInitialized
         val hadCache = !cached.isEmpty || cached.isInitialized
 
         if (hadCache) {
             originalHeroEpisodeId = cached.hero?.subId
-            mutableState.update {
-                it.copy(
-                    hero = cached.hero?.let { h ->
-                        HomeHubHero(
-                            entryId = h.entryId,
-                            title = h.title,
-                            progressNumber = h.progressNumber,
-                            coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
-                        )
-                    },
-                    history = cached.history.map { h ->
-                        HomeHubHistory(
-                            entryId = h.entryId,
-                            title = h.title,
-                            progressNumber = h.progressNumber,
-                            coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
-                            section = HomeHubSection.Anime,
-                        )
-                    },
-                    recommendations = cached.recommendations.map { r ->
-                        HomeHubRecommendation(
-                            entryId = r.entryId,
-                            title = r.title,
-                            coverData = AnimeCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
-                            section = HomeHubSection.Anime,
-                            progressNumerator = r.progressNumerator,
-                            progressDenominator = r.totalCount,
-                        )
-                    },
-                    userName = cached.userName,
-                    userAvatar = cached.userAvatar,
-                    isLoading = false,
-                    showWelcome = !cached.isInitialized && cached.isEmpty,
-                    showFilteredEmpty = cached.isInitialized && cached.isEmpty,
-                )
-            }
         }
 
         // PERF: Defer expensive DB work (library + history + streaks + greeting) until after first frame.
-        // Cached UI is already shown synchronously above.
+        // Cached UI is already shown synchronously via initialState above.
         initializeGreetingDeferred()
 
         cached.hero?.let { hero ->
-            screenModelScope.launchIO {
+            heroLoadJob?.cancel()
+            heroLoadJob = screenModelScope.launchIO {
                 loadHeroEpisode(hero.entryId, hero.subId)
-            }
-        }
-
-        // Enabled (installed) anime sources for the Home source picker — mirrors Browse's logic.
-        // Feed (Reels) sources are excluded: they are not catalogue sources and cannot be
-        // browsed/searched from the Home picker; they are opened via the dedicated Reels screen.
-        screenModelScope.launchIO {
-            getEnabledAnimeSources.subscribe().conflate().collectLatest { sources ->
-                val mappedSources = sources.filterNot { s -> s.isFeedSource }.distinctBy { it.id }.map { s ->
-                    HomeSourceItem(
-                        id = s.id,
-                        name = s.name,
-                        lang = s.lang,
-                        isLocal = s.id == tachiyomi.source.local.entries.anime.LocalAnimeSource.ID,
-                        iconBitmap = animeExtensionManager.getAppIconForSource(
-                            s.id,
-                        )?.toBitmap()?.asImageBitmap(),
-                    )
-                }
-                mutableState.update { it.copy(availableSources = mappedSources) }
             }
         }
 
@@ -243,6 +161,23 @@ internal class HomeHubScreenModel(
     fun startLiveUpdates() {
         if (liveUpdatesStarted) return
         liveUpdatesStarted = true
+
+        // PERF: Defer extension-backed source enumeration until this section is active and
+        // past the first frame so cold start does not load all installed APKs during composeInitial.
+        screenModelScope.launchIO {
+            yield()
+            getEnabledAnimeSources.subscribe().conflate().collectLatest { sources ->
+                val mappedSources = sources.filterNot { s -> s.isFeedSource }.distinctBy { it.id }.map { s ->
+                    HomeSourceItem(
+                        id = s.id,
+                        name = s.name,
+                        lang = s.lang,
+                        isLocal = s.id == tachiyomi.source.local.entries.anime.LocalAnimeSource.ID,
+                    )
+                }
+                mutableState.update { it.copy(availableSources = mappedSources) }
+            }
+        }
 
         screenModelScope.launchIO {
             combine(
@@ -361,8 +296,25 @@ internal class HomeHubScreenModel(
                     fastCache.markInitialized()
                 }
 
-                if (hero != null && hero.animeId != previousHero?.entryId) {
-                    loadHeroEpisode(hero.animeId, hero.episodeId)
+                if (hero == null) {
+                    heroLoadJob?.cancel()
+                    heroLoadJob = null
+                    heroEpisode = null
+                } else if (
+                    shouldReloadAnimeHomeHeroEpisode(
+                        previousHeroAnimeId = previousHero?.entryId,
+                        previousHeroEpisodeId = previousHeroEpisodeId,
+                        currentHeroAnimeId = hero.animeId,
+                        currentHeroEpisodeId = hero.episodeId,
+                    )
+                ) {
+                    if (hero.animeId != previousHero?.entryId) {
+                        heroEpisode = null
+                    }
+                    heroLoadJob?.cancel()
+                    heroLoadJob = screenModelScope.launchIO {
+                        loadHeroEpisode(hero.animeId, hero.episodeId)
+                    }
                 }
 
                 saveCache()
@@ -372,8 +324,13 @@ internal class HomeHubScreenModel(
 
     private suspend fun loadHeroEpisode(animeId: Long, episodeId: Long) {
         val nextEpisodes = getNextEpisodes.await(animeId, episodeId, onlyUnseen = true)
-        heroEpisode = nextEpisodes.firstOrNull()
+        currentCoroutineContext().ensureActive()
+        val resolved = nextEpisodes.firstOrNull()
             ?: getNextEpisodes.await(animeId, episodeId, onlyUnseen = false).firstOrNull()
+        currentCoroutineContext().ensureActive()
+        if (state.value.hero?.entryId == animeId) {
+            heroEpisode = resolved
+        }
     }
 
     fun playHeroEpisode(context: Context) {
@@ -474,4 +431,73 @@ internal class HomeHubScreenModel(
             instance = model
         }
     }
+}
+
+internal fun shouldReloadAnimeHomeHeroEpisode(
+    previousHeroAnimeId: Long?,
+    previousHeroEpisodeId: Long?,
+    currentHeroAnimeId: Long,
+    currentHeroEpisodeId: Long,
+): Boolean {
+    return previousHeroAnimeId != currentHeroAnimeId ||
+        previousHeroEpisodeId != currentHeroEpisodeId
+}
+
+private fun createAnimeInitialState(
+    cached: CachedHomeState,
+    userProfilePreferences: UserProfilePreferences,
+    discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences,
+): HomeHubUiState {
+    val hadCache = !cached.isEmpty || cached.isInitialized
+    return if (hadCache) {
+        HomeHubUiState(
+            hero = cached.hero?.let { h ->
+                HomeHubHero(
+                    entryId = h.entryId,
+                    title = h.title,
+                    progressNumber = h.progressNumber,
+                    coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
+                )
+            },
+            history = cached.history.map { h ->
+                HomeHubHistory(
+                    entryId = h.entryId,
+                    title = h.title,
+                    progressNumber = h.progressNumber,
+                    coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
+                    section = HomeHubSection.Anime,
+                )
+            },
+            recommendations = cached.recommendations.map { r ->
+                HomeHubRecommendation(
+                    entryId = r.entryId,
+                    title = r.title,
+                    coverData = AnimeCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
+                    section = HomeHubSection.Anime,
+                    progressNumerator = r.progressNumerator,
+                    progressDenominator = r.totalCount,
+                )
+            },
+            userName = cached.userName,
+            userAvatar = cached.userAvatar,
+            greeting = GreetingProvider.getInitialGreeting(userProfilePreferences),
+            greetingReady = true,
+            isLoading = false,
+            showWelcome = !cached.isInitialized && cached.isEmpty,
+            showFilteredEmpty = cached.isInitialized && cached.isEmpty,
+        )
+    } else {
+        HomeHubUiState(
+            userName = userProfilePreferences.name().get(),
+            userAvatar = userProfilePreferences.avatarUrl().get(),
+            greeting = AYMR.strings.aurora_welcome_back,
+            greetingReady = false,
+            isLoading = true,
+            showWelcome = true,
+        )
+    }.withInitialDiscoveryPreferences(
+        preferences = discoveryPreferences,
+        mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
+        cachedDiscovery = cached.discovery,
+    )
 }

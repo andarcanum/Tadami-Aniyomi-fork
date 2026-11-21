@@ -1,21 +1,20 @@
 package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.manga.interactor.GetEnabledMangaSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
-import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.yield
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
@@ -31,70 +30,41 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 
-internal class MangaHomeHubScreenModel(
-    context: android.content.Context = Injekt.get<android.app.Application>(),
-    userProfilePreferences: UserProfilePreferences = Injekt.get(),
-    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences = Injekt.get(),
+internal class MangaHomeHubScreenModel private constructor(
+    context: android.content.Context,
+    userProfilePreferences: UserProfilePreferences,
+    private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences,
+    private val fastCache: HomeHubFastCache,
+    cached: CachedHomeState,
 ) : BaseHomeHubScreenModel(
     context = context,
-    initialState = run {
-        val tempCache = HomeHubFastCache(context, HomeHubSection.Manga)
-        val cached = tempCache.loadCachedState()
-        val hadCache = !cached.isEmpty || cached.isInitialized
-        if (hadCache) {
-            HomeHubUiState(
-                hero = cached.hero?.let { h ->
-                    HomeHubHero(
-                        entryId = h.entryId,
-                        title = h.title,
-                        progressNumber = h.progressNumber,
-                        coverData = MangaCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
-                    )
-                },
-                history = cached.history.map { h ->
-                    HomeHubHistory(
-                        entryId = h.entryId,
-                        title = h.title,
-                        progressNumber = h.progressNumber,
-                        coverData = MangaCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
-                        section = HomeHubSection.Manga,
-                    )
-                },
-                recommendations = cached.recommendations.map { r ->
-                    HomeHubRecommendation(
-                        entryId = r.entryId,
-                        title = r.title,
-                        coverData = MangaCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
-                        section = HomeHubSection.Manga,
-                        progressNumerator = r.progressNumerator,
-                        progressDenominator = r.totalCount,
-                    )
-                },
-                userName = cached.userName,
-                userAvatar = cached.userAvatar,
-                greeting = GreetingProvider.getInitialGreeting(userProfilePreferences),
-                greetingReady = true,
-                isLoading = false,
-                showWelcome = !cached.isInitialized && cached.isEmpty,
-                showFilteredEmpty = cached.isInitialized && cached.isEmpty,
-            )
-        } else {
-            HomeHubUiState(
-                userName = userProfilePreferences.name().get(),
-                userAvatar = userProfilePreferences.avatarUrl().get(),
-                greeting = tachiyomi.i18n.aniyomi.AYMR.strings.aurora_welcome_back,
-                greetingReady = false,
-                isLoading = true,
-                showWelcome = true,
-            )
-        }.withInitialDiscoveryPreferences(
-            preferences = discoveryPreferences,
-            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
-            cachedDiscovery = cached.discovery,
-        )
-    },
+    initialState = createMangaInitialState(cached, userProfilePreferences, discoveryPreferences),
     userProfilePreferences = userProfilePreferences,
 ) {
+
+    constructor(
+        context: android.content.Context = Injekt.get<android.app.Application>(),
+        userProfilePreferences: UserProfilePreferences = Injekt.get(),
+        discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences = Injekt.get(),
+    ) : this(
+        context = context,
+        userProfilePreferences = userProfilePreferences,
+        discoveryPreferences = discoveryPreferences,
+        fastCache = HomeHubFastCache(context, HomeHubSection.Manga),
+    )
+
+    private constructor(
+        context: android.content.Context,
+        userProfilePreferences: UserProfilePreferences,
+        discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences,
+        fastCache: HomeHubFastCache,
+    ) : this(
+        context = context,
+        userProfilePreferences = userProfilePreferences,
+        discoveryPreferences = discoveryPreferences,
+        fastCache = fastCache,
+        cached = fastCache.loadCachedState(),
+    )
 
     private val getMangaHistory: GetMangaHistory by injectLazy()
     private val getManga: GetManga by injectLazy()
@@ -104,7 +74,6 @@ internal class MangaHomeHubScreenModel(
     private val getEnabledMangaSources: GetEnabledMangaSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: MangaSourceManager by injectLazy()
-    private val mangaExtensionManager: MangaExtensionManager by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
 
     override val discoveryController: HomeDiscoveryController by lazy {
@@ -126,16 +95,19 @@ internal class MangaHomeHubScreenModel(
 
     override val avatarFileName: String = "user_avatar_manga.jpg"
 
-    private val fastCache = HomeHubFastCache(context, HomeHubSection.Manga)
-
     @Volatile
     private var liveUpdatesStarted = false
 
     @Volatile
     private var fastCacheInitialized = false
 
+    @Volatile
     private var heroChapter: Chapter? = null
+
+    @Volatile
     private var originalHeroChapterId: Long? = null
+
+    private var heroLoadJob: Job? = null
 
     override fun updateCacheUserName(name: String) {
         fastCache.updateUserName(name)
@@ -151,29 +123,15 @@ internal class MangaHomeHubScreenModel(
         // PERF: Defer expensive DB work until after first frame
         initializeGreetingDeferred()
 
-        val cached = fastCache.load()
         fastCacheInitialized = cached.isInitialized
-        cached.hero?.let { hero ->
-            screenModelScope.launchIO {
-                loadHeroChapter(hero.entryId, hero.subId)
-            }
+        val hadCache = !cached.isEmpty || cached.isInitialized
+        if (hadCache) {
+            originalHeroChapterId = cached.hero?.subId
         }
-
-        // Enabled (installed) manga sources for the Home source picker — mirrors Browse's logic
-        screenModelScope.launchIO {
-            getEnabledMangaSources.subscribe().conflate().collectLatest { sources ->
-                val mappedSources = sources.distinctBy { it.id }.map { s ->
-                    HomeSourceItem(
-                        id = s.id,
-                        name = s.name,
-                        lang = s.lang,
-                        isLocal = s.id == tachiyomi.source.local.entries.manga.LocalMangaSource.ID,
-                        iconBitmap = mangaExtensionManager.getAppIconForSource(
-                            s.id,
-                        )?.toBitmap()?.asImageBitmap(),
-                    )
-                }
-                mutableState.update { it.copy(availableSources = mappedSources) }
+        cached.hero?.let { hero ->
+            heroLoadJob?.cancel()
+            heroLoadJob = screenModelScope.launchIO {
+                loadHeroChapter(hero.entryId, hero.subId)
             }
         }
 
@@ -187,6 +145,23 @@ internal class MangaHomeHubScreenModel(
     fun startLiveUpdates() {
         if (liveUpdatesStarted) return
         liveUpdatesStarted = true
+
+        // PERF: Defer extension-backed source enumeration until this section is active and
+        // past the first frame so cold start does not load all installed APKs during composeInitial.
+        screenModelScope.launchIO {
+            yield()
+            getEnabledMangaSources.subscribe().conflate().collectLatest { sources ->
+                val mappedSources = sources.distinctBy { it.id }.map { s ->
+                    HomeSourceItem(
+                        id = s.id,
+                        name = s.name,
+                        lang = s.lang,
+                        isLocal = s.id == tachiyomi.source.local.entries.manga.LocalMangaSource.ID,
+                    )
+                }
+                mutableState.update { it.copy(availableSources = mappedSources) }
+            }
+        }
 
         screenModelScope.launchIO {
             combine(
@@ -305,8 +280,11 @@ internal class MangaHomeHubScreenModel(
                     fastCache.markInitialized()
                 }
 
-                if (
-                    hero != null &&
+                if (hero == null) {
+                    heroLoadJob?.cancel()
+                    heroLoadJob = null
+                    heroChapter = null
+                } else if (
                     shouldReloadMangaHomeHeroChapter(
                         previousHeroMangaId = previousHero?.entryId,
                         previousHeroChapterId = previousHeroChapterId,
@@ -314,7 +292,13 @@ internal class MangaHomeHubScreenModel(
                         currentHeroChapterId = hero.chapterId,
                     )
                 ) {
-                    loadHeroChapter(hero.mangaId, hero.chapterId)
+                    if (hero.mangaId != previousHero?.entryId) {
+                        heroChapter = null
+                    }
+                    heroLoadJob?.cancel()
+                    heroLoadJob = screenModelScope.launchIO {
+                        loadHeroChapter(hero.mangaId, hero.chapterId)
+                    }
                 }
 
                 saveCache()
@@ -326,11 +310,17 @@ internal class MangaHomeHubScreenModel(
         val manga = getManga.await(mangaId)
         currentCoroutineContext().ensureActive()
         if (manga == null) {
-            heroChapter = null
+            if (state.value.hero?.entryId == mangaId) {
+                heroChapter = null
+            }
             return
         }
         val chapters = getMangaWithChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
-        heroChapter = resolveMangaResumeChapter(manga, chapters, chapterId)
+        currentCoroutineContext().ensureActive()
+        val resolved = resolveMangaResumeChapter(manga, chapters, chapterId)
+        if (state.value.hero?.entryId == mangaId) {
+            heroChapter = resolved
+        }
     }
 
     fun readHeroChapter(context: Context) {
@@ -438,4 +428,63 @@ internal fun shouldReloadMangaHomeHeroChapter(
 ): Boolean {
     return previousHeroMangaId != currentHeroMangaId ||
         previousHeroChapterId != currentHeroChapterId
+}
+
+private fun createMangaInitialState(
+    cached: CachedHomeState,
+    userProfilePreferences: UserProfilePreferences,
+    discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences,
+): HomeHubUiState {
+    val hadCache = !cached.isEmpty || cached.isInitialized
+    return if (hadCache) {
+        HomeHubUiState(
+            hero = cached.hero?.let { h ->
+                HomeHubHero(
+                    entryId = h.entryId,
+                    title = h.title,
+                    progressNumber = h.progressNumber,
+                    coverData = MangaCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
+                )
+            },
+            history = cached.history.map { h ->
+                HomeHubHistory(
+                    entryId = h.entryId,
+                    title = h.title,
+                    progressNumber = h.progressNumber,
+                    coverData = MangaCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
+                    section = HomeHubSection.Manga,
+                )
+            },
+            recommendations = cached.recommendations.map { r ->
+                HomeHubRecommendation(
+                    entryId = r.entryId,
+                    title = r.title,
+                    coverData = MangaCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
+                    section = HomeHubSection.Manga,
+                    progressNumerator = r.progressNumerator,
+                    progressDenominator = r.totalCount,
+                )
+            },
+            userName = cached.userName,
+            userAvatar = cached.userAvatar,
+            greeting = GreetingProvider.getInitialGreeting(userProfilePreferences),
+            greetingReady = true,
+            isLoading = false,
+            showWelcome = !cached.isInitialized && cached.isEmpty,
+            showFilteredEmpty = cached.isInitialized && cached.isEmpty,
+        )
+    } else {
+        HomeHubUiState(
+            userName = userProfilePreferences.name().get(),
+            userAvatar = userProfilePreferences.avatarUrl().get(),
+            greeting = tachiyomi.i18n.aniyomi.AYMR.strings.aurora_welcome_back,
+            greetingReady = false,
+            isLoading = true,
+            showWelcome = true,
+        )
+    }.withInitialDiscoveryPreferences(
+        preferences = discoveryPreferences,
+        mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
+        cachedDiscovery = cached.discovery,
+    )
 }
