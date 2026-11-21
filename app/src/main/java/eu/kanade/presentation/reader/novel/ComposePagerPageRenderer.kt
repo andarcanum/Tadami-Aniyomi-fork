@@ -14,6 +14,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +22,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -559,29 +561,67 @@ internal fun ComposePagerPageRenderer(
                 contentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
             }
         }
-        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
         val isSplitBookFlipMode = transitionStyle == NovelPageTransitionStyle.BOOK_FLIP
-        val splitSpec = if (isSplitBookFlipMode) resolveBookFlipSplitSpec(pageOffset) else null
         val pageLayer = if (isSplitBookFlipMode) rememberGraphicsLayer() else null
-        val isPageSettledCurrent = page == pagerState.currentPage && abs(pageOffset) < 0.001f
-        val transitionSpec = if (splitSpec != null) {
-            ComposePagerTransitionSpec(
-                alpha = if (splitSpec.visible) 1f else 0f,
-                cancelPagerMotion = true,
-                zIndex = splitSpec.zIndex,
-            )
-        } else {
-            resolveComposePagerTransitionSpec(
-                style = transitionStyle,
-                pageOffset = pageOffset,
-            )
-        }
         val spineShadowWidthPx = with(LocalDensity.current) { 14.dp.toPx() }
+        val isPageSettledCurrent by remember(pagerState, page) {
+            derivedStateOf {
+                page == pagerState.currentPage && abs(pagerState.currentPageOffsetFraction) < 0.001f
+            }
+        }
+        val itemZIndex by remember(pagerState, page, transitionStyle, isSplitBookFlipMode) {
+            derivedStateOf {
+                val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                when {
+                    isSplitBookFlipMode -> resolveBookFlipSplitSpec(offset).zIndex
+                    transitionStyle == NovelPageTransitionStyle.BOOK ||
+                        transitionStyle == NovelPageTransitionStyle.CURL -> {
+                        if (offset > 0f && offset <= 1f) 1f else 0f
+                    }
+                    else -> 0f
+                }
+            }
+        }
+        val showBookFlipFlap by remember(pagerState, page, isSplitBookFlipMode) {
+            derivedStateOf {
+                if (!isSplitBookFlipMode) {
+                    false
+                } else {
+                    val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                    val spec = resolveBookFlipSplitSpec(offset)
+                    spec.active && spec.flapVisible
+                }
+            }
+        }
+        val showBackside by remember(pagerState, page, transitionStyle, isSplitBookFlipMode) {
+            derivedStateOf {
+                if (isSplitBookFlipMode) {
+                    false
+                } else {
+                    val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                    abs(resolveComposePagerTransitionSpec(transitionStyle, offset).rotationY) > 90f
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(transitionSpec.zIndex)
+                .zIndex(itemZIndex)
                 .graphicsLayer {
+                    val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                    val transitionSpec = if (isSplitBookFlipMode) {
+                        val splitSpec = resolveBookFlipSplitSpec(pageOffset)
+                        ComposePagerTransitionSpec(
+                            alpha = if (splitSpec.visible) 1f else 0f,
+                            cancelPagerMotion = true,
+                            zIndex = splitSpec.zIndex,
+                        )
+                    } else {
+                        resolveComposePagerTransitionSpec(
+                            style = transitionStyle,
+                            pageOffset = pageOffset,
+                        )
+                    }
                     val densityLayer = this
                     alpha = if (transitionSpec.hideOffscreenPages && abs(pageOffset) > 0.5f) {
                         0f
@@ -600,20 +640,26 @@ internal fun ComposePagerPageRenderer(
                     }
                 },
         ) {
-            val baseLayerModifier = if (splitSpec != null && splitSpec.active && pageLayer != null) {
+            val baseLayerModifier = if (isSplitBookFlipMode && pageLayer != null) {
                 Modifier
                     .fillMaxSize()
                     .drawWithContent {
-                        pageLayer.record {
-                            this@drawWithContent.drawContent()
-                        }
-                        if (splitSpec.visible) {
-                            drawBookFlipHalfFromLayer(
-                                pageLayer = pageLayer,
-                                half = splitSpec.staticHalf,
-                                shadowAlpha = splitSpec.staticShadowAlpha,
-                                spineShadowWidthPx = spineShadowWidthPx,
-                            )
+                        val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                        val splitSpec = resolveBookFlipSplitSpec(pageOffset)
+                        if (splitSpec.active) {
+                            pageLayer.record {
+                                this@drawWithContent.drawContent()
+                            }
+                            if (splitSpec.visible) {
+                                drawBookFlipHalfFromLayer(
+                                    pageLayer = pageLayer,
+                                    half = splitSpec.staticHalf,
+                                    shadowAlpha = splitSpec.staticShadowAlpha,
+                                    spineShadowWidthPx = spineShadowWidthPx,
+                                )
+                            }
+                        } else {
+                            drawContent()
                         }
                     }
             } else {
@@ -746,28 +792,34 @@ internal fun ComposePagerPageRenderer(
                 }
             }
 
-            if (splitSpec != null && splitSpec.active && splitSpec.flapVisible && pageLayer != null) {
+            if (showBookFlipFlap && pageLayer != null) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
+                            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                            val splitSpec = resolveBookFlipSplitSpec(pageOffset)
                             val densityLayer = this
                             rotationY = splitSpec.flapRotationY
                             cameraDistance = 18f * densityLayer.density
                             transformOrigin = TransformOrigin(0.5f, 0.5f)
                         }
                         .drawWithContent {
-                            drawBookFlipHalfFromLayer(
-                                pageLayer = pageLayer,
-                                half = splitSpec.flapHalf,
-                                shadowAlpha = splitSpec.flapShadowAlpha,
-                                spineShadowWidthPx = spineShadowWidthPx,
-                            )
+                            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                            val splitSpec = resolveBookFlipSplitSpec(pageOffset)
+                            if (splitSpec.active && splitSpec.flapVisible) {
+                                drawBookFlipHalfFromLayer(
+                                    pageLayer = pageLayer,
+                                    half = splitSpec.flapHalf,
+                                    shadowAlpha = splitSpec.flapShadowAlpha,
+                                    spineShadowWidthPx = spineShadowWidthPx,
+                                )
+                            }
                         },
                 )
             }
 
-            if (abs(transitionSpec.rotationY) > 90f) {
+            if (showBackside) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -791,11 +843,26 @@ internal fun ComposePagerPageRenderer(
                 }
             }
 
-            if (transitionSpec.shadowAlpha > 0f) {
+            if (
+                !isSplitBookFlipMode &&
+                (
+                    transitionStyle == NovelPageTransitionStyle.BOOK ||
+                        transitionStyle == NovelPageTransitionStyle.CURL
+                    )
+            ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = transitionSpec.shadowAlpha)),
+                        .drawBehind {
+                            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                            val shadowAlpha = resolveComposePagerTransitionSpec(
+                                style = transitionStyle,
+                                pageOffset = pageOffset,
+                            ).shadowAlpha
+                            if (shadowAlpha > 0f) {
+                                drawRect(Color.Black.copy(alpha = shadowAlpha))
+                            }
+                        },
                 )
             }
         }

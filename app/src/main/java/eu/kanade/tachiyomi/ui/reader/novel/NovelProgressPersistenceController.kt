@@ -4,8 +4,12 @@ import android.app.Application
 import eu.kanade.domain.source.novel.interactor.GetNovelIncognitoState
 import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -113,6 +117,11 @@ internal class NovelProgressPersistenceController(
     @Volatile
     private var progressPersistenceScheduled = false
 
+    @Volatile
+    private var isDisposed = false
+
+    private val disposalFlushScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val resolvedHistoryRepository by lazy {
         historyRepository ?: runCatching { Injekt.get<NovelHistoryRepository>() }.getOrNull()
     }
@@ -157,9 +166,17 @@ internal class NovelProgressPersistenceController(
             queueHistoryReadDuration(update.chapterId, update.sessionReadDurationMs)
         }
         progressPersistenceScheduled = true
+        val targetScope = if (!isDisposed && host.progressScope.isActive) {
+            host.progressScope
+        } else {
+            disposalFlushScope
+        }
+        val novelSnapshot = host.progressCurrentNovel()
         // NonCancellable must wrap the block via withContext — passing it to launch() is
         // deprecated and breaks structured concurrency (will become an error).
-        host.progressScope.launch {
+        // UNDISPATCHED ensures the coroutine enters withContext(NonCancellable) synchronously
+        // before a subsequent onDispose() cancels host.progressScope.
+        targetScope.launch(start = CoroutineStart.UNDISPATCHED) {
             withContext(NonCancellable) {
                 progressPersistenceMutex.withLock {
                     pendingProgressPersistenceByChapterId[update.chapterId] =
@@ -167,10 +184,15 @@ internal class NovelProgressPersistenceController(
                     if (progressPersistenceJob?.isActive == true) {
                         return@withLock
                     }
-                    progressPersistenceJob = host.progressScope.launch {
+                    val flushTargetScope = if (!isDisposed && host.progressScope.isActive) {
+                        host.progressScope
+                    } else {
+                        disposalFlushScope
+                    }
+                    progressPersistenceJob = flushTargetScope.launch(start = CoroutineStart.UNDISPATCHED) {
                         withContext(NonCancellable) {
                             try {
-                                flushPendingProgressPersistence()
+                                flushPendingProgressPersistence(novelSnapshot)
                             } finally {
                                 progressPersistenceMutex.withLock {
                                     progressPersistenceJob = null
@@ -200,7 +222,7 @@ internal class NovelProgressPersistenceController(
                 activeJob.join()
                 continue
             }
-            if (!progressPersistenceScheduled) return
+            if (!progressPersistenceScheduled || isDisposed || !host.progressScope.isActive) return
             yield()
         }
     }
@@ -236,7 +258,9 @@ internal class NovelProgressPersistenceController(
      * flushes at most [MAX_PENDING_PROGRESS_FLUSH_PER_RUN] chapters and lets the caller reschedule
      * the tail (see [scheduleProgressPersistenceFlush]).
      */
-    private suspend fun flushPendingProgressPersistence() {
+    private suspend fun flushPendingProgressPersistence(
+        novelSnapshot: Novel? = host.progressCurrentNovel(),
+    ) {
         var flushed = 0
         while (flushed < MAX_PENDING_PROGRESS_FLUSH_PER_RUN) {
             val nextUpdate = progressPersistenceMutex.withLock {
@@ -248,7 +272,7 @@ internal class NovelProgressPersistenceController(
             }
             flushed += 1
 
-            val currentNovel = host.progressCurrentNovel()
+            val currentNovel = host.progressCurrentNovel() ?: novelSnapshot
             if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
                 return
             }
@@ -314,10 +338,16 @@ internal class NovelProgressPersistenceController(
         progressPersistenceMutex.withLock {
             if (progressPersistenceJob?.isActive == true) return
             if (pendingProgressPersistenceByChapterId.isEmpty()) return
-            progressPersistenceJob = host.progressScope.launch {
+            val targetScope = if (!isDisposed && host.progressScope.isActive) {
+                host.progressScope
+            } else {
+                disposalFlushScope
+            }
+            val novelSnapshot = host.progressCurrentNovel()
+            progressPersistenceJob = targetScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 withContext(NonCancellable) {
                     try {
-                        flushPendingProgressPersistence()
+                        flushPendingProgressPersistence(novelSnapshot)
                     } finally {
                         progressPersistenceMutex.withLock {
                             progressPersistenceJob = null
@@ -332,8 +362,12 @@ internal class NovelProgressPersistenceController(
         }
     }
 
-    suspend fun saveHistorySnapshot(chapterId: Long, sessionReadDurationMs: Long) {
-        val currentNovel = host.progressCurrentNovel()
+    suspend fun saveHistorySnapshot(
+        chapterId: Long,
+        sessionReadDurationMs: Long,
+        novelSnapshot: Novel? = host.progressCurrentNovel(),
+    ) {
+        val currentNovel = host.progressCurrentNovel() ?: novelSnapshot
         if (getIncognitoState.shouldPauseHistory(currentNovel?.source, currentNovel?.favorite == true)) {
             return
         }
@@ -401,13 +435,43 @@ internal class NovelProgressPersistenceController(
         novelDownloadManager?.deleteChapters(novel, deletable.mapTo(mutableSetOf()) { it.id })
     }
 
-    /** Cancels the flush pipeline and drops pending writes (screen model disposal). */
+    /** Flushes any remaining pending progress & history writes on a non-cancellable IO scope during disposal. */
     fun dispose() {
-        progressPersistenceJob?.cancel()
-        pendingProgressPersistenceByChapterId.clear()
-        progressPersistenceScheduled = false
-        synchronized(historyDurationLock) {
-            pendingHistoryDurationByChapterId.clear()
+        isDisposed = true
+        val novelSnapshot = host.progressCurrentNovel()
+        val finalChapterId = host.progressCurrentChapterId()
+        if (finalChapterId != null) {
+            val finalDurationMs = takeSessionReadDurationMs()
+            if (finalDurationMs > 0L) {
+                queueHistoryReadDuration(finalChapterId, finalDurationMs)
+            }
+        }
+        val existingJob = progressPersistenceJob
+        disposalFlushScope.launch {
+            withContext(NonCancellable) {
+                existingJob?.join()
+                while (true) {
+                    val hasPending = progressPersistenceMutex.withLock {
+                        pendingProgressPersistenceByChapterId.isNotEmpty()
+                    }
+                    if (!hasPending) break
+                    flushPendingProgressPersistence(novelSnapshot)
+                }
+                progressPersistenceMutex.withLock {
+                    progressPersistenceJob = null
+                    progressPersistenceScheduled = false
+                }
+                val residual = synchronized(historyDurationLock) {
+                    val copy = HashMap(pendingHistoryDurationByChapterId)
+                    pendingHistoryDurationByChapterId.clear()
+                    copy
+                }
+                residual.forEach { (chapId, duration) ->
+                    if (duration > 0L) {
+                        saveHistorySnapshot(chapId, duration, novelSnapshot)
+                    }
+                }
+            }
         }
     }
 

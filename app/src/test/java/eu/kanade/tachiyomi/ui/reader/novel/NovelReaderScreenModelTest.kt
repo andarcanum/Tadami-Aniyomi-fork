@@ -3059,7 +3059,8 @@ class NovelReaderScreenModelTest {
         override suspend fun getScanlatorsByNovelId(novelId: Long) = chaptersByNovel.mapNotNull { it.scanlator }
         override fun getScanlatorsByNovelIdAsFlow(novelId: Long): Flow<List<String>> = MutableStateFlow(emptyList())
         override suspend fun getBookmarkedChaptersByNovelId(novelId: Long) = emptyList<NovelChapter>()
-        override suspend fun getChapterById(id: Long): NovelChapter? = chapter?.takeIf { it.id == id }
+        override suspend fun getChapterById(id: Long): NovelChapter? =
+            chapter?.takeIf { it.id == id } ?: chaptersByNovel.firstOrNull { it.id == id }
         override fun getChapterByNovelIdAsFlow(
             novelId: Long,
             applyScanlatorFilter: Boolean,
@@ -3106,7 +3107,8 @@ class NovelReaderScreenModelTest {
 
         override suspend fun getBookmarkedChaptersByNovelId(novelId: Long): List<NovelChapter> = emptyList()
 
-        override suspend fun getChapterById(id: Long): NovelChapter? = chapter?.takeIf { it.id == id }
+        override suspend fun getChapterById(id: Long): NovelChapter? =
+            chapter?.takeIf { it.id == id }
 
         override fun getChapterByNovelIdAsFlow(
             novelId: Long,
@@ -4302,5 +4304,116 @@ class NovelReaderScreenModelTest {
         checkEnableJs(ttsEnabled = true, followAlong = true, highlightMode = NovelTtsHighlightMode.OFF) shouldBe true
         checkEnableJs(ttsEnabled = true, followAlong = false, highlightMode = NovelTtsHighlightMode.EXACT) shouldBe true
         checkEnableJs(ttsEnabled = true, followAlong = false, highlightMode = NovelTtsHighlightMode.OFF) shouldBe false
+    }
+
+    @Test
+    fun `retryCurrentChapter recovers from initial load error`() = runBlocking {
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Retry Novel")
+        val chapter = NovelChapter.create().copy(
+            id = 5L,
+            novelId = 1L,
+            name = "Chapter 1",
+            url = "https://example.org/ch1",
+        )
+        var attempts = 0
+        val screenModel = trackedNovelReaderScreenModel(
+            chapterId = chapter.id,
+            novelChapterRepository = FakeNovelChapterRepository(chapter),
+            getNovel = GetNovel(FakeNovelRepository(novel)),
+            sourceManager = FakeNovelSourceManager(
+                sourceId = novel.source,
+                chapterHtml = "<p>Recovered body</p>",
+                onGetChapterText = {
+                    attempts += 1
+                    if (attempts == 1) {
+                        throw IllegalStateException("Transient network error")
+                    }
+                },
+            ),
+            pluginAssetBindings = emptyPluginAssetBindings(),
+            novelReaderPreferences = createNovelReaderPreferences(),
+            isSystemDark = { false },
+        )
+
+        withTimeout(5_000) {
+            while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                yield()
+            }
+        }
+        screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Error>()
+
+        screenModel.retryCurrentChapter()
+        withTimeout(5_000) {
+            while (screenModel.state.value !is NovelReaderScreenModel.State.Success) {
+                yield()
+            }
+        }
+        val recovered = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        recovered.html.contains("Recovered body") shouldBe true
+    }
+
+    @Test
+    fun `seamless backtrack uses latest chapter progress instead of stale snapshot index`() = runBlocking {
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Seamless Novel")
+        val chapter1 = NovelChapter.create().copy(
+            id = 11L,
+            novelId = 1L,
+            name = "Chapter 1",
+            url = "https://example.org/ch1",
+            sourceOrder = 0L,
+            lastPageRead = 0L,
+        )
+        val chapter2 = NovelChapter.create().copy(
+            id = 12L,
+            novelId = 1L,
+            name = "Chapter 2",
+            url = "https://example.org/ch2",
+            sourceOrder = 1L,
+            lastPageRead = 0L,
+        )
+        val prefs = createNovelReaderPreferences().also {
+            it.seamlessChapterTransition().set(true)
+        }
+        val screenModel = trackedNovelReaderScreenModel(
+            chapterId = chapter1.id,
+            novelChapterRepository = FakeNovelChapterRepository(
+                chapter = chapter1,
+                chaptersByNovel = listOf(chapter1, chapter2),
+            ),
+            getNovel = GetNovel(FakeNovelRepository(novel)),
+            sourceManager = FakeNovelSourceManager(
+                sourceId = novel.source,
+                chapterHtml = "<p>One</p><p>Two</p><p>Three</p><p>Four</p>",
+                chapterHtmlByUrl = mapOf(
+                    chapter1.url to "<p>Ch1 P0</p><p>Ch1 P1</p><p>Ch1 P2</p><p>Ch1 P3</p>",
+                    chapter2.url to "<p>Ch2 P0</p><p>Ch2 P1</p>",
+                ),
+            ),
+            pluginAssetBindings = emptyPluginAssetBindings(),
+            novelReaderPreferences = prefs,
+            isSystemDark = { false },
+        )
+
+        withTimeout(5_000) {
+            while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                yield()
+            }
+        }
+        screenModel.updateReadingProgress(currentIndex = 2, totalItems = 4)
+        screenModel.openChapterInPlace(chapter2.id) shouldBe true
+        withTimeout(5_000) {
+            while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.chapter?.id != chapter2.id) {
+                yield()
+            }
+        }
+
+        screenModel.openChapterInPlace(chapter1.id) shouldBe true
+        withTimeout(5_000) {
+            while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.chapter?.id != chapter1.id) {
+                yield()
+            }
+        }
+        val restored = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        restored.lastSavedIndex shouldBe 2
     }
 }

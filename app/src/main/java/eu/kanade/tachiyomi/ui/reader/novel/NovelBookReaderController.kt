@@ -6,9 +6,14 @@ import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToNativeBloc
 import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,6 +79,7 @@ internal class NovelBookReaderController(
     private val getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState = Injekt.get(),
     private val setNovelBookProgress: SetNovelBookProgress = Injekt.get(),
     internal val clock: () -> Long = System::currentTimeMillis,
+    private val mainDispatcher: CoroutineDispatcher? = null,
 ) {
 
     /**
@@ -1049,19 +1055,26 @@ internal class NovelBookReaderController(
         bookPreparedChapterCount = 0
         bookPrepareRunning = true
         refreshBookModeState()
+        val targetMainDispatcher = mainDispatcher ?: Dispatchers.Main.immediate
         bookPrepareJob = host.bookScope.launch(Dispatchers.IO) {
             try {
                 sections.forEach { section ->
+                    currentCoroutineContext().ensureActive()
                     runCatching { bookModeRuntime.prepareSection(section.loaderKey) }
                         .onFailure { error ->
+                            if (error is CancellationException) throw error
                             logBookModeFailure("prepare section ${section.index}", error)
                         }
                     bookPreparedChapterCount += 1
-                    refreshBookModeState()
+                    withContext(targetMainDispatcher) {
+                        refreshBookModeState()
+                    }
                 }
             } finally {
-                bookPrepareRunning = false
-                refreshBookModeState()
+                withContext(NonCancellable + targetMainDispatcher) {
+                    bookPrepareRunning = false
+                    refreshBookModeState()
+                }
             }
         }
     }

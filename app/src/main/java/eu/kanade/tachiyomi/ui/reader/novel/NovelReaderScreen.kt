@@ -5,9 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -76,10 +79,12 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackService
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.util.system.isNightMode
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -244,10 +249,48 @@ class NovelReaderScreen(
             }
             is NovelReaderScreenModel.State.Error -> {
                 val message = currentState.message ?: stringResource(MR.strings.unknown_error)
-                EmptyScreen(message = message)
+                EmptyScreen(
+                    message = message,
+                    actions = persistentListOf(
+                        EmptyScreenAction(
+                            stringRes = MR.strings.action_retry,
+                            icon = Icons.Outlined.Refresh,
+                            onClick = screenModel::retryCurrentChapter,
+                        ),
+                    ),
+                )
             }
             is NovelReaderScreenModel.State.Success -> {
                 val successState = currentState
+                var isExiting by remember { mutableStateOf(false) }
+                val exitReader: () -> Unit = {
+                    if (!isExiting) {
+                        isExiting = true
+                        coroutineScope.launch {
+                            try {
+                                // Leaving the reader is a flush point: the debounced book position
+                                // is written through before this screen goes away.
+                                screenModel.flushBookModeProgress()
+                                screenModel.persistCurrentChapterExitState()
+                                // A true exit (unlike an internal chapter replace) ends playback:
+                                // the session goes IDLE, which is the emission the foreground
+                                // service self-stops on. Without it the service, media session
+                                // and an ongoing "playing" notification outlive the dead engine.
+                                screenModel.stopTtsPlaybackAndAwait()
+                            } finally {
+                                isExiting = false
+                                navigator.pop()
+                            }
+                        }
+                    }
+                }
+                BackHandler {
+                    if (showReaderUi) {
+                        showReaderUi = false
+                    } else {
+                        exitReader()
+                    }
+                }
                 DisposableEffect(successState.chapter.id, successState.readerSettings.ttsEnabled) {
                     var isBound = false
                     val connection = object : ServiceConnection {
@@ -323,20 +366,7 @@ class NovelReaderScreen(
                             nativeBookBlocksForSection = screenModel::nativeBookBlocksForSection,
                             onSetShowReaderUi = { showReaderUi = it },
                             onOpenBottomSheet = screenModel::loadFullChapterOrderList,
-                            onBack = {
-                                coroutineScope.launch {
-                                    // Leaving the reader is a flush point: the debounced book position
-                                    // is written through before this screen goes away.
-                                    screenModel.flushBookModeProgress()
-                                    screenModel.persistCurrentChapterExitState()
-                                    // A true exit (unlike an internal chapter replace) ends playback:
-                                    // the session goes IDLE, which is the emission the foreground
-                                    // service self-stops on. Without it the service, media session
-                                    // and an ongoing "playing" notification outlive the dead engine.
-                                    screenModel.stopTtsPlayback()
-                                    navigator.pop()
-                                }
-                            },
+                            onBack = exitReader,
                             onReadingProgress = screenModel::updateReadingProgressForChapter,
                             onSeekBookModeProgress = screenModel::seekBookModeToProgress,
                             onToggleBookmark = screenModel::toggleChapterBookmark,
@@ -562,10 +592,7 @@ class NovelReaderScreen(
                         reducedMotion = eu.kanade.presentation.theme.AuroraTheme.colors.isEInk,
                         onBackToNovel = {
                             screenModel.clearFinale()
-                            // Same reader-exit semantics as onBack: end TTS so the foreground
-                            // service self-stops on the IDLE emission.
-                            screenModel.stopTtsPlayback()
-                            navigator.pop()
+                            exitReader()
                         },
                         onStay = screenModel::clearFinale,
                     )
@@ -596,12 +623,8 @@ class NovelReaderScreen(
                         SeriesInterstitialOverlay(
                             state = seriesInterstitialState,
                             onBackToSeries = {
-                                coroutineScope.launch {
-                                    screenModel.persistCurrentChapterExitState()
-                                    screenModel.clearSeriesInterstitial()
-                                    screenModel.stopTtsPlayback()
-                                    navigator.pop()
-                                }
+                                screenModel.clearSeriesInterstitial()
+                                exitReader()
                             },
                             onContinue = continueAction,
                             onDismissRequest = screenModel::clearSeriesInterstitial,

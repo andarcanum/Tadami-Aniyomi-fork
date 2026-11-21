@@ -45,6 +45,8 @@ import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -749,12 +751,26 @@ internal class NovelTtsController(
         ttsPlaybackRequestJob?.cancel()
         ttsPlaybackRequestJob = null
         host.ttsScope.launch {
-            ttsWordProgressJob?.cancel()
-            ttsWordProgressJob = null
-            cancelTtsSleepTimer()
-            ttsAudioFocusManager.abandonPlaybackFocus()
-            ttsSessionController.stop()
+            withContext(NonCancellable) {
+                stopTtsPlaybackInternal()
+            }
         }
+    }
+
+    suspend fun stopTtsPlaybackAndAwait() {
+        ttsPlaybackRequestJob?.cancel()
+        ttsPlaybackRequestJob = null
+        withContext(NonCancellable) {
+            stopTtsPlaybackInternal()
+        }
+    }
+
+    private suspend fun stopTtsPlaybackInternal() {
+        ttsWordProgressJob?.cancel()
+        ttsWordProgressJob = null
+        cancelTtsSleepTimer()
+        ttsAudioFocusManager.abandonPlaybackFocus()
+        ttsSessionController.stop()
     }
 
     /** Arms the session sleep timer countdown; [seconds] below 1 turns an armed timer off. */
@@ -1111,9 +1127,13 @@ internal class NovelTtsController(
         ttsWordProgressJob?.cancel()
         ttsWordProgressJob = null
         pendingTtsStartRequest = null
+        cancelTtsSleepTimer()
         ttsAudioFocusManager.abandonPlaybackFocus()
         ttsEngine.shutdown()
         initializedTtsEnginePackage = null
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { ttsSessionController.stop() }
+        }
     }
 
     /** Resets TTS state that must not survive a chapter switch. */

@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -1032,7 +1033,9 @@ internal fun PageTurnPageRenderer(
                     val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
                     val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
                     val pageSurfaceColor = Color.Transparent
-                    val isCurlSettled = abs(pageCurlState.progress) < 0.001f
+                    val isCurlSettled by remember(pageCurlState) {
+                        derivedStateOf { abs(pageCurlState.progress) < 0.001f }
+                    }
                     val isInteractiveCurrentPage =
                         isCurlSettled &&
                             page == currentPage &&

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -252,6 +253,24 @@ internal fun SpreadPageTurnPageRenderer(
             val tapInteraction = remember(rendererConfig) {
                 createPageTurnTapInteraction(rendererConfig)
             }
+            val spreadDragInteraction = remember(rendererConfig) {
+                // The library's own drag-success target (dragTargetReachFraction) is tuned for a
+                // full-width single page (it can sit well past the halfway point). Each spread surface is
+                // only half that width, so the fold's release target has to be the spine itself — the
+                // reach a drag needs to travel to at most doubles compared to a full-width page.
+                val spineReach = 0.5f
+                PageCurlConfig.StartEndDragInteraction(
+                    pointerBehavior = rendererConfig.dragPointerBehavior,
+                    backward = PageCurlConfig.StartEndDragInteraction.Config(
+                        start = Rect(0f, 0f, 0f, 1f),
+                        end = Rect(0f, 0f, 0f, 1f),
+                    ),
+                    forward = PageCurlConfig.StartEndDragInteraction.Config(
+                        start = Rect(1f - rendererConfig.dragActivationEdgeFraction, 0f, 1f, 1f),
+                        end = Rect(0f, 0f, spineReach, 1f),
+                    ),
+                )
+            }
 
             val latestRequestedPage by rememberUpdatedState(requestedPage)
             val latestRequestedPageConsumed by rememberUpdatedState({ generation.publish(onRequestedPageConsumed) })
@@ -389,11 +408,6 @@ internal fun SpreadPageTurnPageRenderer(
                 leftPageCurlConfig.shadowAlpha = rendererConfig.preset.shadowAlpha
                 leftPageCurlConfig.shadowRadius = rendererConfig.shadowRadiusDp.dp
                 leftPageCurlConfig.shadowOffset = DpOffset(rendererConfig.shadowOffsetXDp.dp, 0.dp)
-                // The library's own drag-success target (dragTargetReachFraction) is tuned for a
-                // full-width single page (it can sit well past the halfway point). Each spread surface is
-                // only half that width, so the fold's release target has to be the spine itself — the
-                // reach a drag needs to travel to at most doubles compared to a full-width page.
-                val spineReach = 0.5f
                 // The left surface is mirrored (see SpreadColumnCurl), so the library's own forward
                 // mechanism — which always references size.width internally — is what turnBackward() drives
                 // here; the fold still lives at the outer (left) edge of the screen once un-mirrored. The
@@ -407,17 +421,7 @@ internal fun SpreadPageTurnPageRenderer(
                     canMoveInDirection = currentSpreadSlot > 0,
                 )
                 leftPageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
-                leftPageCurlConfig.dragInteraction = PageCurlConfig.StartEndDragInteraction(
-                    pointerBehavior = rendererConfig.dragPointerBehavior,
-                    backward = PageCurlConfig.StartEndDragInteraction.Config(
-                        start = Rect(0f, 0f, 0f, 1f),
-                        end = Rect(0f, 0f, 0f, 1f),
-                    ),
-                    forward = PageCurlConfig.StartEndDragInteraction.Config(
-                        start = Rect(1f - rendererConfig.dragActivationEdgeFraction, 0f, 1f, 1f),
-                        end = Rect(0f, 0f, spineReach, 1f),
-                    ),
-                )
+                leftPageCurlConfig.dragInteraction = spreadDragInteraction
                 leftPageCurlConfig.tapInteraction = tapInteraction
 
                 rightPageCurlConfig.backPageColor = rendererConfig.backPageColor
@@ -436,17 +440,7 @@ internal fun SpreadPageTurnPageRenderer(
                     canMoveInDirection = currentSpreadSlot < spreadSlotCount - 1,
                 )
                 rightPageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
-                rightPageCurlConfig.dragInteraction = PageCurlConfig.StartEndDragInteraction(
-                    pointerBehavior = rendererConfig.dragPointerBehavior,
-                    backward = PageCurlConfig.StartEndDragInteraction.Config(
-                        start = Rect(0f, 0f, 0f, 1f),
-                        end = Rect(0f, 0f, 0f, 1f),
-                    ),
-                    forward = PageCurlConfig.StartEndDragInteraction.Config(
-                        start = Rect(1f - rendererConfig.dragActivationEdgeFraction, 0f, 1f, 1f),
-                        end = Rect(0f, 0f, spineReach, 1f),
-                    ),
-                )
+                rightPageCurlConfig.dragInteraction = spreadDragInteraction
                 rightPageCurlConfig.tapInteraction = tapInteraction
             }
 
@@ -644,10 +638,19 @@ internal fun SpreadPageTurnPageRenderer(
                     pageEdgeShadowAlpha = pageEdgeShadowAlpha,
                     backgroundImageModel = backgroundImageModel,
                 )
-                val isSpreadSettled =
-                    abs(leftCurlState.progress) < 0.001f &&
-                        abs(rightCurlState.progress) < 0.001f &&
-                        !latestSuppressBoundaryNavigation
+                val isSpreadSettled by remember(leftCurlState, rightCurlState) {
+                    derivedStateOf {
+                        abs(leftCurlState.progress) < 0.001f &&
+                            abs(rightCurlState.progress) < 0.001f &&
+                            !latestSuppressBoundaryNavigation
+                    }
+                }
+                val leftZIndex by remember(leftCurlState) {
+                    derivedStateOf { if (leftCurlState.progress > 0f) 1f else 0f }
+                }
+                val rightZIndex by remember(rightCurlState) {
+                    derivedStateOf { if (rightCurlState.progress > 0f) 1f else 0f }
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -656,7 +659,7 @@ internal fun SpreadPageTurnPageRenderer(
                     SpreadColumnCurl(
                         modifier = Modifier
                             .fillMaxWidth(0.5f)
-                            .zIndex(if (leftCurlState.progress > 0f) 1f else 0f),
+                            .zIndex(leftZIndex),
                         mirrored = true,
                         invertPage = true,
                         columnOffset = 0,
@@ -708,7 +711,7 @@ internal fun SpreadPageTurnPageRenderer(
                     SpreadColumnCurl(
                         modifier = Modifier
                             .fillMaxWidth(1f)
-                            .zIndex(if (rightCurlState.progress > 0f) 1f else 0f),
+                            .zIndex(rightZIndex),
                         mirrored = false,
                         invertPage = false,
                         columnOffset = 1,

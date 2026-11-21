@@ -145,11 +145,38 @@ class NovelTtsPlaybackService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        val currentState = runtime?.playbackState()?.value?.playbackState
+        if (currentState != NovelTtsPlaybackState.PLAYING) {
+            stateCollectionJob?.cancel()
+            stateCollectionJob = null
+            runtime = null
+            stopForegroundPlayback()
+        }
+        return super.onUnbind(intent)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         handleIntent(mediaSession, intent)
-        resolveTransportAction(intent?.action)?.let(::dispatchTransportAction)
+        val action = resolveTransportAction(intent?.action)
+        action?.let(::dispatchTransportAction)
         startForeground(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
-        return START_STICKY
+        val currentState = runtime?.playbackState()?.value?.playbackState
+        if (
+            action != NovelTtsTransportAction.PLAY &&
+            (currentState == NovelTtsPlaybackState.IDLE || currentState == NovelTtsPlaybackState.COMPLETED)
+        ) {
+            stopForegroundPlayback()
+        }
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stateCollectionJob?.cancel()
+        stateCollectionJob = null
+        runtime = null
+        stopForegroundPlayback()
+        super.onTaskRemoved(rootIntent)
     }
 
     fun bindRuntime(runtime: NovelTtsPlaybackServiceRuntime) {
@@ -174,6 +201,9 @@ class NovelTtsPlaybackService : Service() {
 
     override fun onDestroy() {
         stateCollectionJob?.cancel()
+        stateCollectionJob = null
+        runtime = null
+        mediaSession.isActive = false
         mediaSession.release()
         serviceJob.cancel()
         super.onDestroy()

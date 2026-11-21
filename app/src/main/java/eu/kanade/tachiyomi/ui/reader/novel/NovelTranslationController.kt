@@ -110,6 +110,7 @@ internal class NovelTranslationController(
     private var queueProgressJob: Job? = null
     private var subscribedChapterId: Long? = null
     private var googleTranslationJob: Job? = null
+    private val googleTranslationEpoch = AtomicLong()
     private val cacheRestoreEpoch = AtomicLong()
     private var cacheRestoreJob: Job? = null
     private var autoStartAfterRestoreJob: Job? = null
@@ -293,31 +294,31 @@ internal class NovelTranslationController(
 
     private fun updateState(transform: (NovelTranslationState) -> NovelTranslationState) {
         // Google onLog/onProgress callbacks arrive from up to three parallel IO chunks while the
-        // main thread updates the same state; the read-modify-write must be atomic or concurrent
-        // updates clobber each other through stale copies.
-        val snapshot = synchronized(stateLock) {
-            state = transform(state)
-            state
+        // main thread updates the same state; keep state mutation and Flow publication under the
+        // same lock so concurrent threads cannot publish snapshots out of order.
+        synchronized(stateLock) {
+            val snapshot = transform(state)
+            state = snapshot
+            host.translationApplyTranslationState(
+                gemini = NovelReaderScreenModel.State.ReaderGeminiState(
+                    isGeminiTranslating = snapshot.isGeminiTranslating,
+                    geminiTranslationProgress = snapshot.geminiTranslationProgress,
+                    isGeminiTranslationVisible = snapshot.isGeminiTranslationVisible,
+                    hasGeminiTranslationCache = snapshot.hasGeminiTranslationCache,
+                    geminiLogs = snapshot.geminiLogs,
+                    chapterProgress = snapshot.chapterProgress,
+                ),
+                google = NovelReaderScreenModel.State.ReaderGoogleState(
+                    isGoogleTranslating = snapshot.isGoogleTranslating,
+                    googleTranslationProgress = snapshot.googleTranslationProgress,
+                    isGoogleTranslationVisible = snapshot.isGoogleTranslationVisible,
+                    hasGoogleTranslationCache = snapshot.hasGoogleTranslationCache,
+                    googleLogs = snapshot.googleLogs,
+                    translationPhase = snapshot.translationPhase,
+                    isRateLimited = snapshot.googleRateLimited,
+                ),
+            )
         }
-        host.translationApplyTranslationState(
-            gemini = NovelReaderScreenModel.State.ReaderGeminiState(
-                isGeminiTranslating = snapshot.isGeminiTranslating,
-                geminiTranslationProgress = snapshot.geminiTranslationProgress,
-                isGeminiTranslationVisible = snapshot.isGeminiTranslationVisible,
-                hasGeminiTranslationCache = snapshot.hasGeminiTranslationCache,
-                geminiLogs = snapshot.geminiLogs,
-                chapterProgress = snapshot.chapterProgress,
-            ),
-            google = NovelReaderScreenModel.State.ReaderGoogleState(
-                isGoogleTranslating = snapshot.isGoogleTranslating,
-                googleTranslationProgress = snapshot.googleTranslationProgress,
-                isGoogleTranslationVisible = snapshot.isGoogleTranslationVisible,
-                hasGoogleTranslationCache = snapshot.hasGoogleTranslationCache,
-                googleLogs = snapshot.googleLogs,
-                translationPhase = snapshot.translationPhase,
-                isRateLimited = snapshot.googleRateLimited,
-            ),
-        )
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -776,18 +777,25 @@ internal class NovelTranslationController(
         }
         host.translationUpdateContent(settings)
 
+        val epoch = googleTranslationEpoch.incrementAndGet()
         googleTranslationJob = host.translationScope.launch {
             try {
                 val baseTextBlocks = host.translationSourceTextBlocks(translationChapterId)
+                if (!isActive || epoch != googleTranslationEpoch.get()) return@launch
                 if (baseTextBlocks.isEmpty()) {
-                    addGoogleLog("Nothing to translate: chapter=$translationChapterId has no text.")
-                    updateState {
-                        it.copy(
-                            isGoogleTranslating = false,
-                            translationPhase = TranslationPhase.IDLE,
-                        )
+                    withContext(Dispatchers.Main.immediate) {
+                        if (!isActive || epoch != googleTranslationEpoch.get()) return@withContext
+                        addGoogleLog("Nothing to translate: chapter=$translationChapterId has no text.")
+                        updateState {
+                            it.copy(
+                                isGoogleTranslating = false,
+                                translationPhase = TranslationPhase.IDLE,
+                            )
+                        }
+                        if (translationChapterId == overlayChapterId()) {
+                            host.translationUpdateContent(settings)
+                        }
                     }
-                    host.translationUpdateContent(settings)
                     return@launch
                 }
                 addGoogleLog(
@@ -805,26 +813,23 @@ internal class NovelTranslationController(
                     texts = baseTextBlocks,
                     params = params,
                     onLog = { log ->
-                        addGoogleLog(log)
-                        // Rebuilding the whole reader state for every diagnostic line floods the
-                        // main thread with recompositions, so only refresh when the progress the
-                        // user can actually see moved.
-                        val progressBefore = state.googleTranslationProgress
-                        updateGoogleProgressFromLog(log)
-                        if (state.googleTranslationProgress != progressBefore) {
-                            host.translationUpdateContent(settings)
+                        if (epoch == googleTranslationEpoch.get()) {
+                            addGoogleLog(log)
+                            updateGoogleProgressFromLog(log)
                         }
                     },
-                    onProgress = onProgress@{ phase, percent ->
-                        updateState {
-                            it.copy(
-                                translationPhase = phase,
-                                googleTranslationProgress = percent,
-                            )
+                    onProgress = { phase, percent ->
+                        if (epoch == googleTranslationEpoch.get()) {
+                            updateState {
+                                it.copy(
+                                    translationPhase = phase,
+                                    googleTranslationProgress = percent,
+                                )
+                            }
                         }
-                        host.translationUpdateContent(settings)
                     },
                 )
+                if (!isActive || epoch != googleTranslationEpoch.get()) return@launch
                 val results = response.translatedByIndex
                     .filterKeys { index -> index in baseTextBlocks.indices }
                     .filterValues { translated -> translated.isNotBlank() }
@@ -833,52 +838,81 @@ internal class NovelTranslationController(
                 // Resume can then heal the gaps instead of the session cache pinning a
                 // half-translated chapter as done.
                 val isComplete = results.size >= baseTextBlocks.size
-                addGoogleLog(
-                    "Finished: translatedSegments=${results.size}/" +
-                        "${baseTextBlocks.size}, rateLimited=${response.rateLimited}",
-                )
-                host.translationHolderPut("google", results)
-                googleSessionCache.put(
-                    chapterId = translationChapterId,
-                    sourceLang = params.sourceLang,
-                    targetLang = params.targetLang,
-                    translatedByIndex = results,
-                )
-                updateState {
-                    it.copy(
-                        hasGoogleTranslationCache = isComplete,
-                        isGoogleTranslating = false,
-                        googleTranslationProgress = 100,
-                        translationPhase = TranslationPhase.IDLE,
-                        googleRateLimited = response.rateLimited && !isComplete,
-                        isGoogleTranslationVisible = if (results.isNotEmpty()) {
-                            true
-                        } else {
-                            it.isGoogleTranslationVisible
-                        },
+                withContext(Dispatchers.Main.immediate) {
+                    if (!isActive || epoch != googleTranslationEpoch.get()) return@withContext
+                    if (translationChapterId != overlayChapterId()) {
+                        addGoogleLog(
+                            "Ignored Google translation result for stale chapter=$translationChapterId " +
+                                "(active=${overlayChapterId()})",
+                        )
+                        updateState {
+                            it.copy(
+                                isGoogleTranslating = false,
+                                translationPhase = TranslationPhase.IDLE,
+                            )
+                        }
+                        return@withContext
+                    }
+                    addGoogleLog(
+                        "Finished: translatedSegments=${results.size}/" +
+                            "${baseTextBlocks.size}, rateLimited=${response.rateLimited}",
                     )
+                    host.translationHolderPut("google", results)
+                    googleSessionCache.put(
+                        chapterId = translationChapterId,
+                        sourceLang = params.sourceLang,
+                        targetLang = params.targetLang,
+                        translatedByIndex = results,
+                    )
+                    updateState {
+                        it.copy(
+                            hasGoogleTranslationCache = isComplete,
+                            isGoogleTranslating = false,
+                            googleTranslationProgress = 100,
+                            translationPhase = TranslationPhase.IDLE,
+                            googleRateLimited = response.rateLimited && !isComplete,
+                            isGoogleTranslationVisible = if (results.isNotEmpty()) {
+                                true
+                            } else {
+                                it.isGoogleTranslationVisible
+                            },
+                        )
+                    }
+                    host.translationUpdateContent(settings)
+                    // `updateContent` only rebuilds the chapter HTML, which book mode does not render.
+                    if (results.isNotEmpty()) host.translationRefreshBookModeSection(translationChapterId)
                 }
-                host.translationUpdateContent(settings)
-                // `updateContent` only rebuilds the chapter HTML, which book mode does not render.
-                if (results.isNotEmpty()) host.translationRefreshBookModeSection(translationChapterId)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                addGoogleLog("Google translation failed: ${error.message ?: error::class.java.simpleName}")
-                updateState {
-                    it.copy(
-                        googleRateLimited = false,
-                        isGoogleTranslating = false,
-                        googleTranslationProgress = 0,
-                        translationPhase = TranslationPhase.IDLE,
-                    )
+                withContext(Dispatchers.Main.immediate) {
+                    if (epoch != googleTranslationEpoch.get()) return@withContext
+                    if (translationChapterId == overlayChapterId()) {
+                        addGoogleLog("Google translation failed: ${error.message ?: error::class.java.simpleName}")
+                        updateState {
+                            it.copy(
+                                googleRateLimited = false,
+                                isGoogleTranslating = false,
+                                googleTranslationProgress = 0,
+                                translationPhase = TranslationPhase.IDLE,
+                            )
+                        }
+                        host.translationUpdateContent(settings)
+                    } else {
+                        updateState {
+                            it.copy(
+                                isGoogleTranslating = false,
+                                translationPhase = TranslationPhase.IDLE,
+                            )
+                        }
+                    }
                 }
-                host.translationUpdateContent(settings)
             }
         }
     }
 
     fun stopGoogleTranslation() {
+        googleTranslationEpoch.incrementAndGet()
         googleTranslationJob?.cancel()
         googleTranslationJob = null
         updateState { it.copy(isGoogleTranslating = false) }
@@ -903,6 +937,7 @@ internal class NovelTranslationController(
 
     fun clearGoogleTranslation() {
         val chapterId = targetTranslationChapterId() ?: return
+        googleTranslationEpoch.incrementAndGet()
         googleTranslationJob?.cancel()
         googleTranslationJob = null
         host.translationHolderClear("google")
@@ -980,13 +1015,25 @@ internal class NovelTranslationController(
         autoStartAfterRestoreJob?.cancel()
         autoStartAfterRestoreJob = null
         cacheRestoreJob?.cancel()
+        cacheRestoreJob = null
         overlayChapterId()?.let { suppressedCompletions.add(it) }
+        host.translationHolderClear("gemini")
+        updateState {
+            it.copy(
+                hasGeminiTranslationCache = false,
+                isGeminiTranslationVisible = false,
+                geminiTranslationProgress = if (it.isGeminiTranslating) {
+                    it.geminiTranslationProgress
+                } else {
+                    0
+                },
+            )
+        }
         translationQueueManager.clearArtifacts()
         addAiTranslationLog("🗑️ Clear ALL cache")
-        val chapterId = targetTranslationChapterId() ?: return
-        if (NovelReaderTranslationDiskCacheStore.get(chapterId) == null) {
-            updateState { it.copy(hasGeminiTranslationCache = false) }
-        }
+        host.translationRefreshBookModeTranslationVariant()
+        val settings = host.translationReaderSettings() ?: return
+        host.translationUpdateContent(settings)
     }
 
     private fun addGoogleLog(message: String) {
@@ -1015,6 +1062,7 @@ internal class NovelTranslationController(
     /** Resets translation state that must not survive a chapter switch. */
     fun resetTransientState() {
         cacheRestoreEpoch.incrementAndGet()
+        googleTranslationEpoch.incrementAndGet()
         autoStartAfterRestoreJob?.cancel()
         autoStartAfterRestoreJob = null
         cacheRestoreJob?.cancel()

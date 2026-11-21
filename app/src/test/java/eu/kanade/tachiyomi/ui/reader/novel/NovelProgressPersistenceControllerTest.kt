@@ -12,8 +12,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.achievement.handler.AchievementEventBus
@@ -543,5 +545,100 @@ class NovelProgressPersistenceControllerTest {
 
         val totalHistory = historyUpdates.filter { it.chapterId == 1L }.sumOf { it.sessionReadDuration }
         totalHistory shouldBe 50L
+    }
+
+    @Test
+    fun `awaitPendingProgressPersistence exits promptly when progressScope is cancelled`() = runTest {
+        val chapterRepository = mockk<NovelChapterRepository>(relaxed = true)
+        val activityDataRepository = mockk<ActivityDataRepository>(relaxed = true)
+        val historyRepository = mockk<NovelHistoryRepository>(relaxed = true)
+        val incognitoState = mockk<GetNovelIncognitoState> {
+            coEvery { shouldPauseHistory(any(), any()) } returns false
+        }
+        val hostScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        val host = TestHost(progressScope = hostScope, currentChapterId = 1L)
+        val controller = NovelProgressPersistenceController(
+            host = host,
+            novelChapterRepository = chapterRepository,
+            getIncognitoState = incognitoState,
+            eventBus = null,
+            activityDataRepository = activityDataRepository,
+            historyRepository = historyRepository,
+            downloadPreferences = downloadPreferences,
+            getNovelCategories = getNovelCategories,
+        )
+
+        hostScope.cancel()
+        withTimeout(1_000) {
+            controller.awaitPendingProgressPersistence()
+        }
+    }
+
+    @Test
+    fun `dispose drains pending progress and residual history on non-cancellable IO scope`() = runTest {
+        var testClock = 0L
+        val writeGate = CompletableDeferred<Unit>()
+        val updatedChapters = mutableListOf<NovelChapterUpdate>()
+        val chapterRepository = mockk<NovelChapterRepository> {
+            coEvery { updateChapter(any()) } coAnswers {
+                writeGate.await()
+                val update = firstArg<NovelChapterUpdate>()
+                synchronized(updatedChapters) { updatedChapters.add(update) }
+            }
+        }
+        val activityDataRepository = mockk<ActivityDataRepository>(relaxed = true)
+        val historyUpdates = mutableListOf<NovelHistoryUpdate>()
+        val historyRepository = mockk<NovelHistoryRepository> {
+            coEvery { upsertNovelHistory(any()) } answers {
+                val update = firstArg<NovelHistoryUpdate>()
+                synchronized(historyUpdates) { historyUpdates.add(update) }
+            }
+        }
+        val incognitoState = mockk<GetNovelIncognitoState> {
+            coEvery { shouldPauseHistory(any(), any()) } returns false
+        }
+        val hostScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        val host = TestHost(progressScope = hostScope, currentChapterId = 1L)
+        val controller = NovelProgressPersistenceController(
+            host = host,
+            novelChapterRepository = chapterRepository,
+            getIncognitoState = incognitoState,
+            eventBus = null,
+            activityDataRepository = activityDataRepository,
+            historyRepository = historyRepository,
+            downloadPreferences = downloadPreferences,
+            getNovelCategories = getNovelCategories,
+            clockMs = { testClock },
+        )
+
+        testClock = 75L
+        val duration = controller.takeSessionReadDurationMs()
+        controller.enqueueProgressPersistence(
+            PendingProgressPersistence(
+                chapterId = 1L,
+                novelId = 42L,
+                chapterNumber = 1,
+                read = false,
+                lastPageRead = 99L,
+                emitReadEvent = false,
+                emitNovelCompleted = false,
+                sessionReadDurationMs = duration,
+            ),
+        )
+        testClock = 100L
+        controller.dispose()
+        hostScope.cancel()
+        writeGate.complete(Unit)
+
+        withTimeout(2_000) {
+            while (
+                synchronized(updatedChapters) { updatedChapters.isEmpty() } ||
+                synchronized(historyUpdates) { historyUpdates.isEmpty() }
+            ) {
+                kotlinx.coroutines.delay(10)
+            }
+        }
+        updatedChapters.last().lastPageRead shouldBe 99L
+        historyUpdates.sumOf { it.sessionReadDuration } shouldBe 100L
     }
 }

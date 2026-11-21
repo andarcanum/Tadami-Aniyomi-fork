@@ -103,6 +103,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectionAnchor
 import eu.kanade.tachiyomi.ui.reader.novel.SelectedTextAction
+import eu.kanade.tachiyomi.ui.reader.novel.resolveNovelHighlightsForRange
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import tachiyomi.i18n.MR
@@ -397,6 +398,9 @@ internal fun applyNovelPageReaderTextViewMetrics(
     textView: TextView,
     metrics: NovelPageReaderTextViewMetrics,
 ) {
+    if (textView is NovelPageReaderTextView && textView.appliedMetrics == metrics) {
+        return
+    }
     textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, metrics.textSizePx)
     textView.setLineSpacing(0f, metrics.lineSpacingMultiplier)
     textView.typeface = metrics.typeface
@@ -454,6 +458,9 @@ internal fun applyNovelPageReaderTextViewMetrics(
     textView.paint.flags = textView.paint.flags or Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG
     textView.paint.isAntiAlias = true
     textView.paint.isSubpixelText = true
+    if (textView is NovelPageReaderTextView) {
+        textView.appliedMetrics = metrics
+    }
 }
 
 internal fun combineTypefaceStyles(
@@ -598,6 +605,15 @@ internal class NovelPageReaderTextView constructor(
     private var selectionPromotedByLongPress = false
     private var selectionInteractionEnabled = selectionInteractionEnabled
     var renderedTextSignature: Int? = null
+    var appliedMetrics: NovelPageReaderTextViewMetrics? = null
+    var appliedTextColorArgb: Int? = null
+
+    fun applyTextColorIfChanged(colorArgb: Int) {
+        if (appliedTextColorArgb != colorArgb) {
+            appliedTextColorArgb = colorArgb
+            setTextColor(colorArgb)
+        }
+    }
 
     /**
      * Standalone StaticLayout height (px) the paginator predicted for this view's text, or 0 when
@@ -1936,7 +1952,7 @@ internal fun NovelPageReaderTextBlock(
                 // Keep bottom font padding enabled so descenders (y, g, p) at small font sizes
                 // have full fontMetrics.bottom clearance and are not clipped by TextView.onDraw.
                 includeFontPadding = true
-                setTextColor(blockTextColor.toArgb())
+                applyTextColorIfChanged(blockTextColor.toArgb())
                 applyNovelPageReaderTextViewMetrics(textView = this, metrics = blockTextViewMetrics)
             }
         },
@@ -1957,7 +1973,9 @@ internal fun NovelPageReaderTextBlock(
                 selectableLayoutEnabled = selectionConfigured,
             )
             val glyphPadBottom = resolvePageReaderGlyphOverflowPaddingPx(blockTextSizePx)
-            textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
+            if (textView.paddingBottom != glyphPadBottom) {
+                textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
+            }
             applyNovelPageReaderTextViewMetrics(textView = textView, metrics = blockTextViewMetrics)
             val renderedTextSignature = resolveNovelPageReaderRenderedTextSignature(
                 text = text,
@@ -2046,7 +2064,7 @@ internal fun NovelPageReaderTextBlock(
                 }
                 textView.renderedTextSignature = renderedTextSignature
             }
-            textView.setTextColor(blockTextColor.toArgb())
+            textView.applyTextColorIfChanged(blockTextColor.toArgb())
         },
         // Dropping a focused interop view makes the framework search the hierarchy for a new focus
         // target, which can re-enter Compose layout while changes are still being applied. Giving
@@ -2436,133 +2454,190 @@ private fun NovelPageReaderMergedTextBlock(
     val quoteStripeWidthPx = with(density) { 2.dp.toPx() }
     val quoteStripeOffsetPx = with(density) { 3.dp.toPx() }
     val quoteStripeColor = textColor.copy(alpha = 0.28f).toArgb()
-    val preparedInputs = blocks.mapNotNull { block ->
-        when (block) {
-            is NovelPageContentBlock.Plain -> {
-                val baseText = if (readerSettings.bionicReading) {
-                    toBionicText(
-                        block.text,
+    val chapterHighlights = LocalNovelChapterHighlights.current
+    val preparedInputs = remember(
+        blocks,
+        pageIndex,
+        readerSettings.bionicReading,
+        readerSettings.textAlign,
+        preserveSourceAlign,
+        bodyTextSizePx,
+        forcedSettingsStyle,
+        textTypeface,
+        chapterTitleTypeface,
+        textColor,
+        chapterTitleTextColor,
+        hyphenationEnabled,
+        ttsHighlightState,
+        ttsHighlightColor,
+        selectionAnchorChapterId,
+        chapterHighlights,
+        density.density,
+    ) {
+        blocks.mapNotNull { block ->
+            when (block) {
+                is NovelPageContentBlock.Plain -> {
+                    val baseText = if (readerSettings.bionicReading) {
+                        toBionicText(
+                            block.text,
+                        )
+                    } else {
+                        AnnotatedString(block.text)
+                    }
+                    val ttsText = applyNovelReaderTtsHighlight(
+                        text = baseText,
+                        blockText = block.text,
+                        sourceBlockIndex = block.sourceBlockIndex,
+                        pageIndex = pageIndex,
+                        pageBlockTextStart = block.sourceTextStart,
+                        pageBlockTextEndExclusive = block.sourceTextEndExclusive,
+                        highlightState = ttsHighlightState,
+                        highlightColor = ttsHighlightColor,
                     )
-                } else {
-                    AnnotatedString(block.text)
+                    val sliceStart = block.sourceTextStart ?: 0
+                    val highlightedText = if (selectionAnchorChapterId == null || chapterHighlights.isEmpty()) {
+                        ttsText
+                    } else {
+                        applyNovelHighlights(
+                            text = ttsText,
+                            blockIndex = block.sourceBlockIndex,
+                            resolved = resolveNovelHighlightsForRange(
+                                highlights = chapterHighlights,
+                                chapterId = selectionAnchorChapterId,
+                                blockIndex = block.sourceBlockIndex,
+                                rangeStart = sliceStart,
+                                rangeEndExclusive = sliceStart + ttsText.length,
+                                rangeText = ttsText.text,
+                            ),
+                        )
+                    }
+                    val fontSizeMultiplier = if (block.isChapterTitle) {
+                        PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
+                    } else {
+                        1f
+                    }
+                    val lineHeightMultiplier = if (block.isChapterTitle) {
+                        PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
+                    } else {
+                        1f
+                    }
+                    val blockSizePx = bodyTextSizePx * fontSizeMultiplier
+                    val blockTypeface = if (block.isChapterTitle) chapterTitleTypeface ?: textTypeface else textTypeface
+                    PreparedMergedBlockInput(
+                        sourceBlockIndex = block.sourceBlockIndex,
+                        sourceTextStartInBlock = sliceStart,
+                        highlightedText = highlightedText,
+                        spacingBeforePx = block.spacingBeforePx,
+                        firstLineIndentPx = resolveNovelPageReaderFirstLineIndentPx(
+                            block.firstLineIndentEm,
+                            blockSizePx,
+                        ),
+                        forcedTypefaceStyle = combineTypefaceStyles(
+                            first = if (block.isChapterTitle) Typeface.BOLD else Typeface.NORMAL,
+                            second = forcedSettingsStyle,
+                        ),
+                        textAlign = baseBodyTextAlign,
+                        fontSizeMultiplier = fontSizeMultiplier,
+                        lineHeightMultiplier = lineHeightMultiplier,
+                        typeface = blockTypeface,
+                        textColor = if (block.isChapterTitle) chapterTitleTextColor else textColor,
+                        isBlockQuote = false,
+                        startIndentPx = 0,
+                        textLocale = if (hyphenationEnabled) {
+                            resolveNovelReaderTextLocale(
+                                highlightedText.text,
+                            )
+                        } else {
+                            null
+                        },
+                    )
                 }
-                val ttsText = applyNovelReaderTtsHighlight(
-                    text = baseText,
-                    blockText = block.text,
-                    sourceBlockIndex = block.sourceBlockIndex,
-                    pageIndex = pageIndex,
-                    pageBlockTextStart = block.sourceTextStart,
-                    pageBlockTextEndExclusive = block.sourceTextEndExclusive,
-                    highlightState = ttsHighlightState,
-                    highlightColor = ttsHighlightColor,
-                )
-                val sliceStart = block.sourceTextStart ?: 0
-                val highlightedText = paintNovelSliceHighlights(
-                    text = ttsText,
-                    chapterId = selectionAnchorChapterId,
-                    blockIndex = block.sourceBlockIndex,
-                    sliceStart = sliceStart,
-                    sliceEndExclusive = sliceStart + ttsText.length,
-                )
-                val fontSizeMultiplier = if (block.isChapterTitle) {
-                    PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
-                } else {
-                    1f
+                is NovelPageContentBlock.Rich -> {
+                    val ttsText = applyNovelReaderTtsHighlight(
+                        text = block.text,
+                        blockText = block.text.text,
+                        sourceBlockIndex = block.sourceBlockIndex,
+                        pageIndex = pageIndex,
+                        pageBlockTextStart = block.sourceTextStart,
+                        pageBlockTextEndExclusive = block.sourceTextEndExclusive,
+                        highlightState = ttsHighlightState,
+                        highlightColor = ttsHighlightColor,
+                    )
+                    val sliceStart = block.sourceTextStart ?: 0
+                    val highlightedText = if (selectionAnchorChapterId == null || chapterHighlights.isEmpty()) {
+                        ttsText
+                    } else {
+                        applyNovelHighlights(
+                            text = ttsText,
+                            blockIndex = block.sourceBlockIndex,
+                            resolved = resolveNovelHighlightsForRange(
+                                highlights = chapterHighlights,
+                                chapterId = selectionAnchorChapterId,
+                                blockIndex = block.sourceBlockIndex,
+                                rangeStart = sliceStart,
+                                rangeEndExclusive = sliceStart + ttsText.length,
+                                rangeText = ttsText.text,
+                            ),
+                        )
+                    }
+                    val fontSizeMultiplier = if (block.isChapterTitle) {
+                        PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
+                    } else {
+                        block.fontSizeMultiplier
+                    }
+                    val lineHeightMultiplier = if (block.isChapterTitle) {
+                        PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
+                    } else {
+                        block.lineHeightMultiplier
+                    }
+                    val blockSizePx = bodyTextSizePx * fontSizeMultiplier
+                    val blockTypeface = if (block.isChapterTitle) chapterTitleTypeface ?: textTypeface else textTypeface
+                    val isQuote = block.isBlockQuote && !block.isChapterTitle
+                    val startIndentPx = if (isQuote && block.startIndentDp > 0) {
+                        with(density) { block.startIndentDp.dp.roundToPx() }
+                    } else {
+                        0
+                    }
+                    val blockColor = when {
+                        isQuote -> textColor.copy(alpha = 0.90f)
+                        block.isChapterTitle -> chapterTitleTextColor
+                        else -> textColor
+                    }
+                    PreparedMergedBlockInput(
+                        sourceBlockIndex = block.sourceBlockIndex,
+                        sourceTextStartInBlock = sliceStart,
+                        highlightedText = highlightedText,
+                        spacingBeforePx = block.spacingBeforePx,
+                        firstLineIndentPx = resolveNovelPageReaderFirstLineIndentPx(
+                            block.firstLineIndentEm,
+                            blockSizePx,
+                        ),
+                        forcedTypefaceStyle = combineTypefaceStyles(
+                            first = if (block.isChapterTitle) Typeface.BOLD else block.baseTypefaceStyle,
+                            second = forcedSettingsStyle,
+                        ),
+                        textAlign = resolveNativeReaderTextAlign(
+                            globalTextAlign = readerSettings.textAlign,
+                            preserveSourceTextAlignInNative = preserveSourceAlign,
+                            sourceTextAlign = block.sourceTextAlign,
+                        ),
+                        fontSizeMultiplier = fontSizeMultiplier,
+                        lineHeightMultiplier = lineHeightMultiplier,
+                        typeface = blockTypeface,
+                        textColor = blockColor,
+                        isBlockQuote = isQuote,
+                        startIndentPx = startIndentPx,
+                        textLocale = if (hyphenationEnabled) {
+                            resolveNovelReaderTextLocale(
+                                highlightedText.text,
+                            )
+                        } else {
+                            null
+                        },
+                    )
                 }
-                val lineHeightMultiplier = if (block.isChapterTitle) {
-                    PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
-                } else {
-                    1f
-                }
-                val blockSizePx = bodyTextSizePx * fontSizeMultiplier
-                val blockTypeface = if (block.isChapterTitle) chapterTitleTypeface ?: textTypeface else textTypeface
-                PreparedMergedBlockInput(
-                    sourceBlockIndex = block.sourceBlockIndex,
-                    sourceTextStartInBlock = sliceStart,
-                    highlightedText = highlightedText,
-                    spacingBeforePx = block.spacingBeforePx,
-                    firstLineIndentPx = resolveNovelPageReaderFirstLineIndentPx(block.firstLineIndentEm, blockSizePx),
-                    forcedTypefaceStyle = combineTypefaceStyles(
-                        first = if (block.isChapterTitle) Typeface.BOLD else Typeface.NORMAL,
-                        second = forcedSettingsStyle,
-                    ),
-                    textAlign = baseBodyTextAlign,
-                    fontSizeMultiplier = fontSizeMultiplier,
-                    lineHeightMultiplier = lineHeightMultiplier,
-                    typeface = blockTypeface,
-                    textColor = if (block.isChapterTitle) chapterTitleTextColor else textColor,
-                    isBlockQuote = false,
-                    startIndentPx = 0,
-                    textLocale = if (hyphenationEnabled) resolveNovelReaderTextLocale(highlightedText.text) else null,
-                )
+                is NovelPageContentBlock.Image -> null
             }
-            is NovelPageContentBlock.Rich -> {
-                val ttsText = applyNovelReaderTtsHighlight(
-                    text = block.text,
-                    blockText = block.text.text,
-                    sourceBlockIndex = block.sourceBlockIndex,
-                    pageIndex = pageIndex,
-                    pageBlockTextStart = block.sourceTextStart,
-                    pageBlockTextEndExclusive = block.sourceTextEndExclusive,
-                    highlightState = ttsHighlightState,
-                    highlightColor = ttsHighlightColor,
-                )
-                val sliceStart = block.sourceTextStart ?: 0
-                val highlightedText = paintNovelSliceHighlights(
-                    text = ttsText,
-                    chapterId = selectionAnchorChapterId,
-                    blockIndex = block.sourceBlockIndex,
-                    sliceStart = sliceStart,
-                    sliceEndExclusive = sliceStart + ttsText.length,
-                )
-                val fontSizeMultiplier = if (block.isChapterTitle) {
-                    PAGE_READER_CHAPTER_TITLE_FONT_SIZE_MULTIPLIER
-                } else {
-                    block.fontSizeMultiplier
-                }
-                val lineHeightMultiplier = if (block.isChapterTitle) {
-                    PAGE_READER_CHAPTER_TITLE_LINE_HEIGHT_MULTIPLIER
-                } else {
-                    block.lineHeightMultiplier
-                }
-                val blockSizePx = bodyTextSizePx * fontSizeMultiplier
-                val blockTypeface = if (block.isChapterTitle) chapterTitleTypeface ?: textTypeface else textTypeface
-                val isQuote = block.isBlockQuote && !block.isChapterTitle
-                val startIndentPx = if (isQuote && block.startIndentDp > 0) {
-                    with(density) { block.startIndentDp.dp.roundToPx() }
-                } else {
-                    0
-                }
-                val blockColor = when {
-                    isQuote -> textColor.copy(alpha = 0.90f)
-                    block.isChapterTitle -> chapterTitleTextColor
-                    else -> textColor
-                }
-                PreparedMergedBlockInput(
-                    sourceBlockIndex = block.sourceBlockIndex,
-                    sourceTextStartInBlock = sliceStart,
-                    highlightedText = highlightedText,
-                    spacingBeforePx = block.spacingBeforePx,
-                    firstLineIndentPx = resolveNovelPageReaderFirstLineIndentPx(block.firstLineIndentEm, blockSizePx),
-                    forcedTypefaceStyle = combineTypefaceStyles(
-                        first = if (block.isChapterTitle) Typeface.BOLD else block.baseTypefaceStyle,
-                        second = forcedSettingsStyle,
-                    ),
-                    textAlign = resolveNativeReaderTextAlign(
-                        globalTextAlign = readerSettings.textAlign,
-                        preserveSourceTextAlignInNative = preserveSourceAlign,
-                        sourceTextAlign = block.sourceTextAlign,
-                    ),
-                    fontSizeMultiplier = fontSizeMultiplier,
-                    lineHeightMultiplier = lineHeightMultiplier,
-                    typeface = blockTypeface,
-                    textColor = blockColor,
-                    isBlockQuote = isQuote,
-                    startIndentPx = startIndentPx,
-                    textLocale = if (hyphenationEnabled) resolveNovelReaderTextLocale(highlightedText.text) else null,
-                )
-            }
-            is NovelPageContentBlock.Image -> null
         }
     }
     if (preparedInputs.isEmpty()) return
@@ -2727,7 +2802,7 @@ private fun NovelPageReaderMergedTextBlock(
             ).apply {
                 setPadding(0, 0, 0, glyphPadBottom)
                 includeFontPadding = true
-                setTextColor(textColor.toArgb())
+                applyTextColorIfChanged(textColor.toArgb())
                 applyNovelPageReaderTextViewMetrics(textView = this, metrics = bodyMetrics)
             }
         },
@@ -2743,7 +2818,9 @@ private fun NovelPageReaderMergedTextBlock(
                 enabled = selectionInteractionEnabled,
                 selectableLayoutEnabled = selectionConfigured,
             )
-            textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
+            if (textView.paddingBottom != glyphPadBottom) {
+                textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
+            }
             applyNovelPageReaderTextViewMetrics(textView = textView, metrics = bodyMetrics)
             if (textView.renderedTextSignature != mergedSignature) {
                 val resolvedWidth = (availableWidthPx - textView.compoundPaddingLeft - textView.compoundPaddingRight)
@@ -2782,7 +2859,7 @@ private fun NovelPageReaderMergedTextBlock(
                 textView.text = mergedContent.spannable
                 textView.renderedTextSignature = mergedSignature
             }
-            textView.setTextColor(textColor.toArgb())
+            textView.applyTextColorIfChanged(textColor.toArgb())
         },
         onRelease = { textView ->
             textView.clearFocus()

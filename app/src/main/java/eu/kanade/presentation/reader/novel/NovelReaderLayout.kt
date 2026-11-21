@@ -1813,7 +1813,9 @@ private fun paginateCharSequencePageBlocks(
     preferDynamicLayout: Boolean,
     hyphenationEnabled: Boolean,
     logPrefix: String,
+    maxPages: Int? = null,
 ): List<List<PaginatedTextSlice>> {
+    if (maxPages != null && maxPages <= 0) return emptyList()
     val safeHeight = resolvePageReaderSafeHeightPx(
         heightPx = heightPx,
         textSizePx = textSizePx,
@@ -1870,7 +1872,10 @@ private fun paginateCharSequencePageBlocks(
         remainingHeight = safeHeight
     }
 
+    fun hasReachedMaxPages(): Boolean = maxPages != null && pages.size >= maxPages
+
     blocks.forEach { block ->
+        if (hasReachedMaxPages()) return pages
         val plainText = block.annotatedText.text
         if (plainText.isBlank()) return@forEach
         val glyphPadPx = resolvePageReaderGlyphOverflowPaddingPx(block.metrics.textSizePx)
@@ -1931,6 +1936,7 @@ private fun paginateCharSequencePageBlocks(
                 }
                 if (remainingHeight <= spacingBefore) {
                     flushPage()
+                    if (hasReachedMaxPages()) return pages
                     continue
                 }
                 val range = resolveApproximateTextRangeForHeight(
@@ -1941,6 +1947,7 @@ private fun paginateCharSequencePageBlocks(
                     allowOversizedFirstLine = currentPage.isEmpty(),
                 ) ?: run {
                     flushPage()
+                    if (hasReachedMaxPages()) return pages
                     continue
                 }
                 val sliceHeight = measureApproximateTextHeight(
@@ -1958,6 +1965,7 @@ private fun paginateCharSequencePageBlocks(
                 isFirstSliceOfBlock = false
                 if (remainingHeight <= 0 || start < plainText.length) {
                     flushPage()
+                    if (hasReachedMaxPages()) return pages
                 }
             }
             return@forEach
@@ -1984,6 +1992,7 @@ private fun paginateCharSequencePageBlocks(
 
             if (remainingHeight <= spacingBefore) {
                 flushPage()
+                if (hasReachedMaxPages()) return pages
                 continue
             }
 
@@ -2028,6 +2037,7 @@ private fun paginateCharSequencePageBlocks(
                 }
             } ?: run {
                 flushPage()
+                if (hasReachedMaxPages()) return pages
                 continue
             }
 
@@ -2084,6 +2094,7 @@ private fun paginateCharSequencePageBlocks(
             // TextViews with missing inter-line spacing between penultimate and final lines).
             if (remainingHeight <= 0 || startLine < activeLayout.lineCount) {
                 flushPage()
+                if (hasReachedMaxPages()) return pages
             }
         }
     }
@@ -2111,7 +2122,9 @@ internal fun paginatePlainPageBlocks(
     measurementPaint: TextPaint? = null,
     preferDynamicLayout: Boolean = false,
     hyphenationEnabled: Boolean = false,
+    maxPages: Int? = null,
 ): List<List<PlainPageSlice>> {
+    if (maxPages != null && maxPages <= 0) return emptyList()
     val safeWidthPx = widthPx.coerceAtLeast(1)
     val preparedBlocks = textBlocks.mapNotNull { block ->
         if (block.text.isBlank()) return@mapNotNull null
@@ -2165,6 +2178,7 @@ internal fun paginatePlainPageBlocks(
         preferDynamicLayout = preferDynamicLayout,
         hyphenationEnabled = hyphenationEnabled,
         logPrefix = "page",
+        maxPages = maxPages,
     ).map { page ->
         page.map { slice ->
             PlainPageSlice.Text(
@@ -2213,7 +2227,9 @@ internal fun paginatePlainPageBlocksWithImages(
     measurementPaint: TextPaint? = null,
     preferDynamicLayout: Boolean = false,
     hyphenationEnabled: Boolean = false,
+    maxPages: Int? = null,
 ): List<List<PlainPageSlice>> {
+    if (maxPages != null && maxPages <= 0) return emptyList()
     if (imageBlocks.isEmpty()) {
         return paginatePlainPageBlocks(
             textBlocks = textBlocks,
@@ -2234,6 +2250,7 @@ internal fun paginatePlainPageBlocksWithImages(
             measurementPaint = measurementPaint,
             preferDynamicLayout = preferDynamicLayout,
             hyphenationEnabled = hyphenationEnabled,
+            maxPages = maxPages,
         )
     }
 
@@ -2249,6 +2266,11 @@ internal fun paginatePlainPageBlocksWithImages(
 
     fun flushText() {
         if (pendingText.isEmpty()) return
+        val remainingPages = maxPages?.let { (it - pages.size).coerceAtLeast(0) }
+        if (remainingPages == 0) {
+            pendingText.clear()
+            return
+        }
         pages += paginatePlainPageBlocks(
             textBlocks = pendingText.toList(),
             paragraphSpacingPx = paragraphSpacingPx,
@@ -2268,6 +2290,7 @@ internal fun paginatePlainPageBlocksWithImages(
             measurementPaint = measurementPaint,
             preferDynamicLayout = preferDynamicLayout,
             hyphenationEnabled = hyphenationEnabled,
+            maxPages = remainingPages,
         )
         pendingText.clear()
     }
@@ -2311,19 +2334,64 @@ internal fun paginatePlainPageBlocksWithImages(
         imageBlocks.forEach { image ->
             if (image.sourceBlockIndex < block.sourceBlockIndex && emittedImages.add(image.sourceBlockIndex)) {
                 flushText()
+                if (maxPages != null && pages.size >= maxPages) {
+                    val lastPageAttachable = pages.lastOrNull()?.let { page ->
+                        val imageSpacingPx = resolvePageReaderInterBlockSpacingPx(
+                            paragraphSpacingPx = paragraphSpacingPx,
+                            textSizePx = textSizePx,
+                            lineHeightMultiplier = lineHeightMultiplier,
+                        )
+                        resolvePlainInlineImageMaxHeightPx(
+                            page = page,
+                            textBySourceBlockIndex = textBySourceBlockIndex,
+                            chapterTitle = chapterTitle,
+                            imageSpacingPx = imageSpacingPx,
+                            safeHeightPx = safeHeightPx,
+                            pageHeightPx = heightPx,
+                            textSizePx = textSizePx,
+                            lineHeightMultiplier = lineHeightMultiplier,
+                            density = density,
+                        ) != null
+                    } ?: false
+                    if (!lastPageAttachable) return pages.take(maxPages)
+                }
                 appendImage(image)
+                if (maxPages != null && pages.size > maxPages) return pages.take(maxPages)
             }
         }
+        if (maxPages != null && pages.size >= maxPages) return pages.take(maxPages)
         pendingText += block
     }
     imageBlocks.forEach { image ->
         if (emittedImages.add(image.sourceBlockIndex)) {
             flushText()
+            if (maxPages != null && pages.size >= maxPages) {
+                val lastPageAttachable = pages.lastOrNull()?.let { page ->
+                    val imageSpacingPx = resolvePageReaderInterBlockSpacingPx(
+                        paragraphSpacingPx = paragraphSpacingPx,
+                        textSizePx = textSizePx,
+                        lineHeightMultiplier = lineHeightMultiplier,
+                    )
+                    resolvePlainInlineImageMaxHeightPx(
+                        page = page,
+                        textBySourceBlockIndex = textBySourceBlockIndex,
+                        chapterTitle = chapterTitle,
+                        imageSpacingPx = imageSpacingPx,
+                        safeHeightPx = safeHeightPx,
+                        pageHeightPx = heightPx,
+                        textSizePx = textSizePx,
+                        lineHeightMultiplier = lineHeightMultiplier,
+                        density = density,
+                    ) != null
+                } ?: false
+                if (!lastPageAttachable) return pages.take(maxPages)
+            }
             appendImage(image)
+            if (maxPages != null && pages.size > maxPages) return pages.take(maxPages)
         }
     }
     flushText()
-    return pages
+    return if (maxPages != null && pages.size > maxPages) pages.take(maxPages) else pages
 }
 
 private fun resolvePlainInlineImageMaxHeightPx(
@@ -2508,7 +2576,9 @@ internal fun paginateRichPageBlocks(
     measurementPaint: TextPaint? = null,
     preferDynamicLayout: Boolean = false,
     hyphenationEnabled: Boolean = false,
+    maxPages: Int? = null,
 ): List<List<RichPageSlice.Text>> {
+    if (maxPages != null && maxPages <= 0) return emptyList()
     val preparedBlocks = blockTexts.mapIndexedNotNull { fallbackIndex, blockText ->
         val blockIndex = resolveRichPageBlockIndex(blockText.sourceBlockIndex, fallbackIndex)
         if (blockText.text.text.isBlank()) return@mapIndexedNotNull null
@@ -2577,6 +2647,7 @@ internal fun paginateRichPageBlocks(
         preferDynamicLayout = preferDynamicLayout,
         hyphenationEnabled = hyphenationEnabled,
         logPrefix = "richPage",
+        maxPages = maxPages,
     ).map { page ->
         page.map { slice ->
             RichPageSlice.Text(
@@ -2613,7 +2684,11 @@ internal fun paginateMixedRichPageBlocks(
     measurementPaint: TextPaint? = null,
     preferDynamicLayout: Boolean = false,
     hyphenationEnabled: Boolean = false,
+    maxPages: Int? = null,
 ): MixedRichPagePagination {
+    if (maxPages != null && maxPages <= 0) {
+        return MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
+    }
     val safeHeightPx = resolvePageReaderSafeHeightPx(
         heightPx = heightPx,
         textSizePx = textSizePx,
@@ -2628,6 +2703,12 @@ internal fun paginateMixedRichPageBlocks(
 
     fun flushCurrentChunk() {
         if (currentChunkTexts.isEmpty()) return
+        val remainingPages = maxPages?.let { (it - pages.size).coerceAtLeast(0) }
+        if (remainingPages == 0) {
+            currentChunkTexts.clear()
+            currentChunkCanUseChapterTitle = false
+            return
+        }
         lastChunkUsedChapterTitle = currentChunkCanUseChapterTitle
         pages += paginateRichPageBlocks(
             blockTexts = currentChunkTexts.toList(),
@@ -2648,6 +2729,7 @@ internal fun paginateMixedRichPageBlocks(
             measurementPaint = measurementPaint,
             preferDynamicLayout = preferDynamicLayout,
             hyphenationEnabled = hyphenationEnabled,
+            maxPages = remainingPages,
         )
         currentChunkTexts.clear()
         currentChunkCanUseChapterTitle = false
@@ -2690,6 +2772,33 @@ internal fun paginateMixedRichPageBlocks(
         when (block) {
             is NovelRichContentBlock.Image -> {
                 flushCurrentChunk()
+                if (maxPages != null && pages.size >= maxPages) {
+                    val lastPageAttachable = pages.lastOrNull()?.let { page ->
+                        val imageSpacingPx = resolvePageReaderInterBlockSpacingPx(
+                            paragraphSpacingPx = paragraphSpacingPx,
+                            textSizePx = textSizePx,
+                            lineHeightMultiplier = lineHeightMultiplier,
+                        )
+                        resolveRichInlineImageMaxHeightPx(
+                            page = page,
+                            blockTexts = allBlockTexts,
+                            chapterTitle = chapterTitle,
+                            lastChunkUsedChapterTitle = lastChunkUsedChapterTitle,
+                            imageSpacingPx = imageSpacingPx,
+                            safeHeightPx = safeHeightPx,
+                            pageHeightPx = heightPx,
+                            textSizePx = textSizePx,
+                            lineHeightMultiplier = lineHeightMultiplier,
+                            density = density,
+                        ) != null
+                    } ?: false
+                    if (!lastPageAttachable) {
+                        return MixedRichPagePagination(
+                            blockTexts = allBlockTexts,
+                            pages = pages.take(maxPages),
+                        )
+                    }
+                }
                 appendImagePage(
                     RichPageSlice.Image(
                         sourceBlockIndex = sourceBlockIndex,
@@ -2697,9 +2806,21 @@ internal fun paginateMixedRichPageBlocks(
                         contentDescription = block.alt,
                     ),
                 )
+                if (maxPages != null && pages.size > maxPages) {
+                    return MixedRichPagePagination(
+                        blockTexts = allBlockTexts,
+                        pages = pages.take(maxPages),
+                    )
+                }
                 sawRenderableSourceBlock = true
             }
             else -> {
+                if (maxPages != null && pages.size >= maxPages) {
+                    return MixedRichPagePagination(
+                        blockTexts = allBlockTexts,
+                        pages = pages.take(maxPages),
+                    )
+                }
                 val blockText = buildRichPageReaderBlockText(
                     block = block,
                     sourceBlockIndex = sourceBlockIndex,
@@ -2721,7 +2842,7 @@ internal fun paginateMixedRichPageBlocks(
     flushCurrentChunk()
     return MixedRichPagePagination(
         blockTexts = allBlockTexts,
-        pages = pages,
+        pages = if (maxPages != null && pages.size > maxPages) pages.take(maxPages) else pages,
     )
 }
 

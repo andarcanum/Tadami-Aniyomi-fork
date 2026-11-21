@@ -182,7 +182,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.WebViewTtsNavigator
 import eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -193,6 +195,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import tachiyomi.domain.book.novel.model.NovelHighlight
 import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -206,6 +209,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -1118,11 +1122,15 @@ internal fun NovelReaderContentHost(
         state.readerSettings.textSelectionEnabled ||
             state.readerSettings.selectedTextTranslationEnabled ||
             state.readerSettings.novelDictionaryEnabled
-    val pageReaderPages: List<List<PlainPageSlice>> = remember(
+    var plainPaginationState by remember {
+        mutableStateOf(PlainPagePaginationResult())
+    }
+    LaunchedEffect(
         state.chapter.id,
         pageReaderTextBlocks,
         pageReaderImageBlocks,
         showPageChapterTitle,
+        state.chapter.name,
         shouldPaginatePlainForPageReader,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
@@ -1149,84 +1157,118 @@ internal fun NovelReaderContentHost(
         pageReaderTextSelectable,
         state.readerSettings.hyphenationEnabled,
     ) {
+        val targetChapterId = state.chapter.id
         if (!shouldPaginatePlainForPageReader || (pageReaderTextBlocks.isEmpty() && pageReaderImageBlocks.isEmpty())) {
-            emptyList()
-        } else {
-            val budget = resolveNovelPageReaderPageBudget(
-                screenWidthPx = effectivePageViewportSize.width,
-                screenHeightPx = effectivePageViewportSize.height,
-                density = density,
-                fontSize = state.readerSettings.fontSize,
-                lineHeight = state.readerSettings.lineHeight,
-                marginDp = state.readerSettings.margin,
-                contentPaddingDp = contentPaddingPx,
-                spreadContentPaddingPx = spreadContentPaddingPx,
-                statusBarTopPaddingDp = pageReaderStatusBarTopPadding,
-                navigationBarHeightPx = pageReaderNavigationBarHeightPx,
-                spreadColumns = novelSpreadColumns,
-                cutoutLeftPx = spreadCutoutLeftPx,
-                cutoutRightPx = spreadCutoutRightPx,
+            plainPaginationState = PlainPagePaginationResult(
+                chapterId = targetChapterId,
+                pages = emptyList(),
+                completed = true,
             )
-            // Debug-only pagination-input snapshot: the fullscreen/inset state this budget was
-            // computed from. Correlates with the per-page and per-view logs on device.
-            if (BuildConfig.DEBUG) {
-                Log.d(
-                    PLAIN_PAGE_PAGINATION_LOG_TAG,
-                    buildString {
-                        append("input")
-                        append(" full=").append(isReaderFullScreen)
-                        append(" viewport=").append(effectivePageViewportSize.width)
-                            .append('x').append(effectivePageViewportSize.height)
-                        append(" width=").append(budget.widthPx)
-                        append(" spread=").append(novelSpreadColumns)
-                        append(" top=").append(budget.topPaddingPx)
-                        append(" bottom=").append(budget.bottomPaddingPx)
-                        append(" bookInset=").append(budget.bookBottomInsetPx)
-                        append(" fitSafety=0")
-                        append(" navbar=").append(pageReaderNavigationBarHeightPx)
-                        append(" cutoutBottom=").append(pageReaderCutoutBottomPx)
-                        append(" budget=").append(budget.heightPx)
-                        append(" textSizePx=").append(with(density) { state.readerSettings.fontSize.sp.toPx() })
-                        append(" density=").append(density.density)
-                        append(" fontScale=").append(density.fontScale)
-                        append(" bionic=").append(state.readerSettings.bionicReading)
-                        append(" forceBold=").append(state.readerSettings.forceBoldText)
-                        append(" forceItalic=").append(state.readerSettings.forceItalicText)
-                        append(" selectable=").append(pageReaderTextSelectable)
-                        append(" hyphen=").append(state.readerSettings.hyphenationEnabled)
-                    },
-                )
-            }
-            paginatePlainPageBlocksWithImages(
+            return@LaunchedEffect
+        }
+        // Clear stale pages from a different chapter immediately, but retain the last valid
+        // pagination result for the same chapter while reflow runs on rotation/font changes.
+        if (plainPaginationState.chapterId != targetChapterId) {
+            plainPaginationState = PlainPagePaginationResult()
+        }
+        val budget = resolveNovelPageReaderPageBudget(
+            screenWidthPx = effectivePageViewportSize.width,
+            screenHeightPx = effectivePageViewportSize.height,
+            density = density,
+            fontSize = state.readerSettings.fontSize,
+            lineHeight = state.readerSettings.lineHeight,
+            marginDp = state.readerSettings.margin,
+            contentPaddingDp = contentPaddingPx,
+            spreadContentPaddingPx = spreadContentPaddingPx,
+            statusBarTopPaddingDp = pageReaderStatusBarTopPadding,
+            navigationBarHeightPx = pageReaderNavigationBarHeightPx,
+            spreadColumns = novelSpreadColumns,
+            cutoutLeftPx = spreadCutoutLeftPx,
+            cutoutRightPx = spreadCutoutRightPx,
+        )
+        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
+        val textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() }
+        val lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f)
+        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
+        val chapterTitle = if (showPageChapterTitle) state.chapter.name else null
+        val bionicReadingEnabled = state.readerSettings.bionicReading
+        val forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
+            forceBoldText = state.readerSettings.forceBoldText,
+            forceItalicText = state.readerSettings.forceItalicText,
+        )
+        val densityScale = density.density
+        val hyphenationEnabled = state.readerSettings.hyphenationEnabled
+        val paintTemplate = TextPaint(baseMeasurementTextPaint)
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                PLAIN_PAGE_PAGINATION_LOG_TAG,
+                buildString {
+                    append("input")
+                    append(" full=").append(isReaderFullScreen)
+                    append(" viewport=").append(effectivePageViewportSize.width)
+                        .append('x').append(effectivePageViewportSize.height)
+                    append(" width=").append(budget.widthPx)
+                    append(" spread=").append(novelSpreadColumns)
+                    append(" top=").append(budget.topPaddingPx)
+                    append(" bottom=").append(budget.bottomPaddingPx)
+                    append(" bookInset=").append(budget.bookBottomInsetPx)
+                    append(" fitSafety=0")
+                    append(" navbar=").append(pageReaderNavigationBarHeightPx)
+                    append(" cutoutBottom=").append(pageReaderCutoutBottomPx)
+                    append(" budget=").append(budget.heightPx)
+                    append(" textSizePx=").append(textSizePx)
+                    append(" density=").append(densityScale)
+                    append(" fontScale=").append(density.fontScale)
+                    append(" bionic=").append(bionicReadingEnabled)
+                    append(" forceBold=").append(state.readerSettings.forceBoldText)
+                    append(" forceItalic=").append(state.readerSettings.forceItalicText)
+                    append(" selectable=").append(pageReaderTextSelectable)
+                    append(" hyphen=").append(hyphenationEnabled)
+                },
+            )
+        }
+        val computedPages = withContext(Dispatchers.Default) {
+            coroutineContext.ensureActive()
+            val workerPaint = TextPaint(paintTemplate)
+            val result = paginatePlainPageBlocksWithImages(
                 textBlocks = pageReaderTextBlocks,
                 imageBlocks = pageReaderImageBlocks,
-                paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
+                paragraphSpacingPx = paragraphSpacingPx,
                 widthPx = budget.widthPx,
                 heightPx = budget.heightPx,
-                textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
-                lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
+                textSizePx = textSizePx,
+                lineHeightMultiplier = lineHeightMultiplier,
                 typeface = composeTypeface,
                 chapterTitleTypeface = chapterTitleTypeface,
                 textAlign = pageReaderLayoutTextAlign,
-                forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
-                bionicReadingEnabled = state.readerSettings.bionicReading,
-                forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
-                    forceBoldText = state.readerSettings.forceBoldText,
-                    forceItalicText = state.readerSettings.forceItalicText,
-                ),
-                density = density.density,
-                measurementPaint = baseMeasurementTextPaint,
+                forceParagraphIndent = forceParagraphIndent,
+                chapterTitle = chapterTitle,
+                bionicReadingEnabled = bionicReadingEnabled,
+                forcedTypefaceStyle = forcedTypefaceStyle,
+                density = densityScale,
+                measurementPaint = workerPaint,
                 preferDynamicLayout = pageReaderTextSelectable,
-                hyphenationEnabled = state.readerSettings.hyphenationEnabled,
+                hyphenationEnabled = hyphenationEnabled,
             )
+            coroutineContext.ensureActive()
+            result
         }
+        plainPaginationState = PlainPagePaginationResult(
+            chapterId = targetChapterId,
+            pages = computedPages,
+            completed = true,
+        )
     }
-    val richPageReaderPagination = remember(
+
+    var richPaginationState by remember {
+        mutableStateOf(RichPagePaginationResult())
+    }
+    LaunchedEffect(
         state.chapter.id,
         pageReaderRichBlocks,
         shouldPaginateRichForPageReader,
         showPageChapterTitle,
+        state.chapter.name,
         state.readerSettings.fontSize,
         state.readerSettings.lineHeight,
         state.readerSettings.margin,
@@ -1251,71 +1293,115 @@ internal fun NovelReaderContentHost(
         pageReaderTextSelectable,
         state.readerSettings.hyphenationEnabled,
     ) {
+        val targetChapterId = state.chapter.id
         if (!shouldPaginateRichForPageReader) {
-            MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
-        } else {
-            val budget = resolveNovelPageReaderPageBudget(
-                screenWidthPx = effectivePageViewportSize.width,
-                screenHeightPx = effectivePageViewportSize.height,
-                density = density,
-                fontSize = state.readerSettings.fontSize,
-                lineHeight = state.readerSettings.lineHeight,
-                marginDp = state.readerSettings.margin,
-                contentPaddingDp = contentPaddingPx,
-                spreadContentPaddingPx = spreadContentPaddingPx,
-                statusBarTopPaddingDp = pageReaderStatusBarTopPadding,
-                navigationBarHeightPx = pageReaderNavigationBarHeightPx,
-                spreadColumns = novelSpreadColumns,
-                cutoutLeftPx = spreadCutoutLeftPx,
-                cutoutRightPx = spreadCutoutRightPx,
+            richPaginationState = RichPagePaginationResult(
+                chapterId = targetChapterId,
+                pagination = MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList()),
+                completed = true,
             )
-            if (BuildConfig.DEBUG) {
-                Log.d(
-                    PLAIN_PAGE_PAGINATION_LOG_TAG,
-                    buildString {
-                        append("richInput")
-                        append(" blocks=").append(pageReaderRichBlocks.size)
-                        append(" full=").append(isReaderFullScreen)
-                        append(" viewport=").append(effectivePageViewportSize.width)
-                            .append('x').append(effectivePageViewportSize.height)
-                        append(" width=").append(budget.widthPx)
-                        append(" budget=").append(budget.heightPx)
-                        append(" textSizePx=").append(with(density) { state.readerSettings.fontSize.sp.toPx() })
-                        append(" selectable=").append(pageReaderTextSelectable)
-                        append(" hyphen=").append(state.readerSettings.hyphenationEnabled)
-                    },
-                )
-            }
-            paginateMixedRichPageBlocks(
-                richBlocks = pageReaderRichBlocks,
-                paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
-                widthPx = budget.widthPx,
-                heightPx = budget.heightPx,
-                textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
-                lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
-                typeface = composeTypeface,
-                chapterTitleTypeface = chapterTitleTypeface,
-                textAlign = state.readerSettings.textAlign,
-                preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative,
-                forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
-                forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
-                    forceBoldText = state.readerSettings.forceBoldText,
-                    forceItalicText = state.readerSettings.forceItalicText,
-                ),
-                density = density.density,
-                measurementPaint = baseMeasurementTextPaint,
-                preferDynamicLayout = pageReaderTextSelectable,
-                hyphenationEnabled = state.readerSettings.hyphenationEnabled,
+            return@LaunchedEffect
+        }
+        if (richPaginationState.chapterId != targetChapterId) {
+            richPaginationState = RichPagePaginationResult()
+        }
+        val budget = resolveNovelPageReaderPageBudget(
+            screenWidthPx = effectivePageViewportSize.width,
+            screenHeightPx = effectivePageViewportSize.height,
+            density = density,
+            fontSize = state.readerSettings.fontSize,
+            lineHeight = state.readerSettings.lineHeight,
+            marginDp = state.readerSettings.margin,
+            contentPaddingDp = contentPaddingPx,
+            spreadContentPaddingPx = spreadContentPaddingPx,
+            statusBarTopPaddingDp = pageReaderStatusBarTopPadding,
+            navigationBarHeightPx = pageReaderNavigationBarHeightPx,
+            spreadColumns = novelSpreadColumns,
+            cutoutLeftPx = spreadCutoutLeftPx,
+            cutoutRightPx = spreadCutoutRightPx,
+        )
+        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
+        val textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() }
+        val lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f)
+        val textAlign = state.readerSettings.textAlign
+        val preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative
+        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
+        val chapterTitle = if (showPageChapterTitle) state.chapter.name else null
+        val forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
+            forceBoldText = state.readerSettings.forceBoldText,
+            forceItalicText = state.readerSettings.forceItalicText,
+        )
+        val densityScale = density.density
+        val hyphenationEnabled = state.readerSettings.hyphenationEnabled
+        val paintTemplate = TextPaint(baseMeasurementTextPaint)
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                PLAIN_PAGE_PAGINATION_LOG_TAG,
+                buildString {
+                    append("richInput")
+                    append(" blocks=").append(pageReaderRichBlocks.size)
+                    append(" full=").append(isReaderFullScreen)
+                    append(" viewport=").append(effectivePageViewportSize.width)
+                        .append('x').append(effectivePageViewportSize.height)
+                    append(" width=").append(budget.widthPx)
+                    append(" budget=").append(budget.heightPx)
+                    append(" textSizePx=").append(textSizePx)
+                    append(" selectable=").append(pageReaderTextSelectable)
+                    append(" hyphen=").append(hyphenationEnabled)
+                },
             )
         }
+        val computedPagination = withContext(Dispatchers.Default) {
+            coroutineContext.ensureActive()
+            val workerPaint = TextPaint(paintTemplate)
+            val result = paginateMixedRichPageBlocks(
+                richBlocks = pageReaderRichBlocks,
+                paragraphSpacingPx = paragraphSpacingPx,
+                widthPx = budget.widthPx,
+                heightPx = budget.heightPx,
+                textSizePx = textSizePx,
+                lineHeightMultiplier = lineHeightMultiplier,
+                typeface = composeTypeface,
+                chapterTitleTypeface = chapterTitleTypeface,
+                textAlign = textAlign,
+                preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
+                forceParagraphIndent = forceParagraphIndent,
+                chapterTitle = chapterTitle,
+                forcedTypefaceStyle = forcedTypefaceStyle,
+                density = densityScale,
+                measurementPaint = workerPaint,
+                preferDynamicLayout = pageReaderTextSelectable,
+                hyphenationEnabled = hyphenationEnabled,
+            )
+            coroutineContext.ensureActive()
+            result
+        }
+        richPaginationState = RichPagePaginationResult(
+            chapterId = targetChapterId,
+            pagination = computedPagination,
+            completed = true,
+        )
+    }
+
+    val pageReaderPages: List<List<PlainPageSlice>> = if (plainPaginationState.chapterId == state.chapter.id) {
+        plainPaginationState.pages
+    } else {
+        emptyList()
+    }
+    val richPageReaderPagination = if (richPaginationState.chapterId == state.chapter.id) {
+        richPaginationState.pagination
+    } else {
+        MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
     }
     val richPageReaderBlockTexts = richPageReaderPagination.blockTexts
     val richPageReaderPages = richPageReaderPagination.pages
+    val isPageReaderPaginationCompleted = if (shouldPaginateRichForPageReader) {
+        richPaginationState.chapterId == state.chapter.id && richPaginationState.completed
+    } else {
+        plainPaginationState.chapterId == state.chapter.id && plainPaginationState.completed
+    }
     val usePageReader = shouldPaginatePageReader &&
-        (
-            pageReaderPages.isNotEmpty() || richPageReaderPages.isNotEmpty()
-            )
+        (!isPageReaderPaginationCompleted || pageReaderPages.isNotEmpty() || richPageReaderPages.isNotEmpty())
     val useRichPageReader = usePageReader && richPageReaderPages.isNotEmpty()
     val pageReaderCharacterCounts = remember(
         useRichPageReader,
@@ -1343,6 +1429,7 @@ internal fun NovelReaderContentHost(
         state.readerSettings.paragraphSpacing,
         state.readerSettings.forceParagraphIndent,
         showPageChapterTitle,
+        state.chapter.name,
     ) {
         normalizePageReaderContentPages(
             useRichPageReader = useRichPageReader,
@@ -1358,45 +1445,35 @@ internal fun NovelReaderContentHost(
     fun paginateAdjacentPreviewSlice(
         preview: NovelReaderScreenModel.AdjacentChapterPreview?,
         takeLastSpread: Boolean,
+        budget: NovelPageReaderPageBudget,
+        paragraphSpacingPx: Int,
+        textSizePx: Float,
+        lineHeightMultiplier: Float,
+        textAlign: TextAlign,
+        preserveSourceTextAlignInNative: Boolean,
+        forceParagraphIndent: Boolean,
+        bionicReadingEnabled: Boolean,
+        forcedTypefaceStyle: Int,
+        richNativeRendererExperimental: Boolean,
+        hyphenationEnabled: Boolean,
+        showPageFooter: Boolean,
+        measurementPaint: TextPaint,
     ): SeamlessAdjacentPagesSlice {
-        if (preview == null || !usePageReader || !seamlessChapterTransitionEnabled || isBookMode) {
-            return SeamlessAdjacentPagesSlice()
-        }
+        if (preview == null) return SeamlessAdjacentPagesSlice()
         val previewScrollBlocks = preview.contentBlocks
         if (previewScrollBlocks.isEmpty()) return SeamlessAdjacentPagesSlice()
-        val budget = resolveNovelPageReaderPageBudget(
-            screenWidthPx = effectivePageViewportSize.width,
-            screenHeightPx = effectivePageViewportSize.height,
-            density = density,
-            fontSize = state.readerSettings.fontSize,
-            lineHeight = state.readerSettings.lineHeight,
-            marginDp = state.readerSettings.margin,
-            contentPaddingDp = contentPaddingPx,
-            spreadContentPaddingPx = spreadContentPaddingPx,
-            statusBarTopPaddingDp = pageReaderStatusBarTopPadding,
-            navigationBarHeightPx = pageReaderNavigationBarHeightPx,
-            spreadColumns = novelSpreadColumns,
-            cutoutLeftPx = spreadCutoutLeftPx,
-            cutoutRightPx = spreadCutoutRightPx,
-        )
         val useRichForPreview = shouldUseRichNativePageRenderer(
-            richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
+            richNativeRendererExperimentalEnabled = richNativeRendererExperimental,
             pageReaderEnabled = true,
-            bionicReadingEnabled = state.readerSettings.bionicReading,
+            bionicReadingEnabled = bionicReadingEnabled,
             richContentBlocks = preview.richContentBlocks,
             richContentUnsupportedFeaturesDetected = preview.richContentUnsupportedFeaturesDetected,
-        )
-        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
-        val textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() }
-        val lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f)
-        val forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
-            forceBoldText = state.readerSettings.forceBoldText,
-            forceItalicText = state.readerSettings.forceItalicText,
         )
         val titleForFiltering = resolvePageReaderChapterTitleForFiltering(
             showPageChapterTitle = showPageChapterTitle,
             chapterTitle = preview.chapterName,
         )
+        val maxPreviewPages = if (!takeLastSpread && !showPageFooter) novelSpreadColumns else null
         val previewPages = if (useRichForPreview) {
             val filteredRich = stripPageReaderChapterTitleRichBlocks(
                 richBlocks = preview.richContentBlocks.withIndex().toList(),
@@ -1411,15 +1488,16 @@ internal fun NovelReaderContentHost(
                 lineHeightMultiplier = lineHeightMultiplier,
                 typeface = composeTypeface,
                 chapterTitleTypeface = chapterTitleTypeface,
-                textAlign = state.readerSettings.textAlign,
-                preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative,
-                forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+                textAlign = textAlign,
+                preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
+                forceParagraphIndent = forceParagraphIndent,
                 chapterTitle = if (showPageChapterTitle) preview.chapterName else null,
                 forcedTypefaceStyle = forcedTypefaceStyle,
                 density = density.density,
-                measurementPaint = baseMeasurementTextPaint,
+                measurementPaint = measurementPaint,
                 preferDynamicLayout = pageReaderTextSelectable,
-                hyphenationEnabled = state.readerSettings.hyphenationEnabled,
+                hyphenationEnabled = hyphenationEnabled,
+                maxPages = maxPreviewPages,
             )
             normalizePageReaderContentPages(
                 useRichPageReader = true,
@@ -1428,7 +1506,7 @@ internal fun NovelReaderContentHost(
                 plainTextBlocks = emptyList(),
                 richBlockTexts = richPagination.blockTexts,
                 paragraphSpacingPx = paragraphSpacingPx,
-                forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+                forceParagraphIndent = forceParagraphIndent,
                 chapterTitle = if (showPageChapterTitle) preview.chapterName else null,
             )
         } else {
@@ -1463,14 +1541,15 @@ internal fun NovelReaderContentHost(
                     typeface = composeTypeface,
                     chapterTitleTypeface = chapterTitleTypeface,
                     textAlign = pageReaderLayoutTextAlign,
-                    forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+                    forceParagraphIndent = forceParagraphIndent,
                     chapterTitle = if (showPageChapterTitle) preview.chapterName else null,
-                    bionicReadingEnabled = state.readerSettings.bionicReading,
+                    bionicReadingEnabled = bionicReadingEnabled,
                     forcedTypefaceStyle = forcedTypefaceStyle,
                     density = density.density,
-                    measurementPaint = baseMeasurementTextPaint,
+                    measurementPaint = measurementPaint,
                     preferDynamicLayout = pageReaderTextSelectable,
-                    hyphenationEnabled = state.readerSettings.hyphenationEnabled,
+                    hyphenationEnabled = hyphenationEnabled,
+                    maxPages = maxPreviewPages,
                 )
                 normalizePageReaderContentPages(
                     useRichPageReader = false,
@@ -1479,7 +1558,7 @@ internal fun NovelReaderContentHost(
                     plainTextBlocks = plainTextBlocks,
                     richBlockTexts = emptyList(),
                     paragraphSpacingPx = paragraphSpacingPx,
-                    forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+                    forceParagraphIndent = forceParagraphIndent,
                     chapterTitle = if (showPageChapterTitle) preview.chapterName else null,
                 )
             }
@@ -1500,8 +1579,12 @@ internal fun NovelReaderContentHost(
             totalPages = previewPages.size,
         )
     }
-    val nextChapterSeamlessPreview = remember(
-        state.nextChapterPreview,
+    val activeNextPreview = state.nextChapterPreview?.takeIf { it.chapterId == state.nextChapterId }
+    var nextSeamlessPreviewState by remember {
+        mutableStateOf(SeamlessPreviewPaginationResult())
+    }
+    LaunchedEffect(
+        activeNextPreview,
         usePageReader,
         seamlessChapterTransitionEnabled,
         isBookMode,
@@ -1518,6 +1601,7 @@ internal fun NovelReaderContentHost(
         state.readerSettings.forceItalicText,
         state.readerSettings.richNativeRendererExperimental,
         state.readerSettings.hyphenationEnabled,
+        state.readerSettings.showPageFooter,
         composeTypeface,
         chapterTitleTypeface,
         effectivePageViewportSize,
@@ -1530,13 +1614,92 @@ internal fun NovelReaderContentHost(
         spreadCutoutRightPx,
         pageReaderTextSelectable,
     ) {
-        paginateAdjacentPreviewSlice(
-            preview = state.nextChapterPreview?.takeIf { it.chapterId == state.nextChapterId },
-            takeLastSpread = false,
+        if (
+            activeNextPreview == null ||
+            !usePageReader ||
+            !seamlessChapterTransitionEnabled ||
+            isBookMode ||
+            activeNextPreview.contentBlocks.isEmpty()
+        ) {
+            nextSeamlessPreviewState = SeamlessPreviewPaginationResult()
+            return@LaunchedEffect
+        }
+        if (nextSeamlessPreviewState.chapterId != activeNextPreview.chapterId) {
+            nextSeamlessPreviewState = SeamlessPreviewPaginationResult()
+        }
+        val budget = resolveNovelPageReaderPageBudget(
+            screenWidthPx = effectivePageViewportSize.width,
+            screenHeightPx = effectivePageViewportSize.height,
+            density = density,
+            fontSize = state.readerSettings.fontSize,
+            lineHeight = state.readerSettings.lineHeight,
+            marginDp = state.readerSettings.margin,
+            contentPaddingDp = contentPaddingPx,
+            spreadContentPaddingPx = spreadContentPaddingPx,
+            statusBarTopPaddingDp = pageReaderStatusBarTopPadding,
+            navigationBarHeightPx = pageReaderNavigationBarHeightPx,
+            spreadColumns = novelSpreadColumns,
+            cutoutLeftPx = spreadCutoutLeftPx,
+            cutoutRightPx = spreadCutoutRightPx,
+        )
+        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
+        val textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() }
+        val lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f)
+        val textAlign = state.readerSettings.textAlign
+        val preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative
+        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
+        val bionicReading = state.readerSettings.bionicReading
+        val forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
+            forceBoldText = state.readerSettings.forceBoldText,
+            forceItalicText = state.readerSettings.forceItalicText,
+        )
+        val richNativeRendererExperimental = state.readerSettings.richNativeRendererExperimental
+        val hyphenationEnabled = state.readerSettings.hyphenationEnabled
+        val showPageFooter = state.readerSettings.showPageFooter
+        val paintTemplate = TextPaint(baseMeasurementTextPaint)
+        val slice = withContext(Dispatchers.Default) {
+            coroutineContext.ensureActive()
+            val workerPaint = TextPaint(paintTemplate)
+            val result = paginateAdjacentPreviewSlice(
+                preview = activeNextPreview,
+                takeLastSpread = false,
+                budget = budget,
+                paragraphSpacingPx = paragraphSpacingPx,
+                textSizePx = textSizePx,
+                lineHeightMultiplier = lineHeightMultiplier,
+                textAlign = textAlign,
+                preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
+                forceParagraphIndent = forceParagraphIndent,
+                bionicReadingEnabled = bionicReading,
+                forcedTypefaceStyle = forcedTypefaceStyle,
+                richNativeRendererExperimental = richNativeRendererExperimental,
+                hyphenationEnabled = hyphenationEnabled,
+                showPageFooter = showPageFooter,
+                measurementPaint = workerPaint,
+            )
+            coroutineContext.ensureActive()
+            result
+        }
+        nextSeamlessPreviewState = SeamlessPreviewPaginationResult(
+            chapterId = activeNextPreview.chapterId,
+            slice = slice,
         )
     }
-    val previousChapterSeamlessPreview = remember(
-        state.previousChapterPreview,
+    val nextChapterSeamlessPreview = if (
+        activeNextPreview != null &&
+        nextSeamlessPreviewState.chapterId == activeNextPreview.chapterId
+    ) {
+        nextSeamlessPreviewState.slice
+    } else {
+        SeamlessAdjacentPagesSlice()
+    }
+
+    val activePrevPreview = state.previousChapterPreview?.takeIf { it.chapterId == state.previousChapterId }
+    var prevSeamlessPreviewState by remember {
+        mutableStateOf(SeamlessPreviewPaginationResult())
+    }
+    LaunchedEffect(
+        activePrevPreview,
         usePageReader,
         seamlessChapterTransitionEnabled,
         isBookMode,
@@ -1553,6 +1716,7 @@ internal fun NovelReaderContentHost(
         state.readerSettings.forceItalicText,
         state.readerSettings.richNativeRendererExperimental,
         state.readerSettings.hyphenationEnabled,
+        state.readerSettings.showPageFooter,
         composeTypeface,
         chapterTitleTypeface,
         effectivePageViewportSize,
@@ -1565,10 +1729,84 @@ internal fun NovelReaderContentHost(
         spreadCutoutRightPx,
         pageReaderTextSelectable,
     ) {
-        paginateAdjacentPreviewSlice(
-            preview = state.previousChapterPreview?.takeIf { it.chapterId == state.previousChapterId },
-            takeLastSpread = true,
+        if (
+            activePrevPreview == null ||
+            !usePageReader ||
+            !seamlessChapterTransitionEnabled ||
+            isBookMode ||
+            activePrevPreview.contentBlocks.isEmpty()
+        ) {
+            prevSeamlessPreviewState = SeamlessPreviewPaginationResult()
+            return@LaunchedEffect
+        }
+        if (prevSeamlessPreviewState.chapterId != activePrevPreview.chapterId) {
+            prevSeamlessPreviewState = SeamlessPreviewPaginationResult()
+        }
+        val budget = resolveNovelPageReaderPageBudget(
+            screenWidthPx = effectivePageViewportSize.width,
+            screenHeightPx = effectivePageViewportSize.height,
+            density = density,
+            fontSize = state.readerSettings.fontSize,
+            lineHeight = state.readerSettings.lineHeight,
+            marginDp = state.readerSettings.margin,
+            contentPaddingDp = contentPaddingPx,
+            spreadContentPaddingPx = spreadContentPaddingPx,
+            statusBarTopPaddingDp = pageReaderStatusBarTopPadding,
+            navigationBarHeightPx = pageReaderNavigationBarHeightPx,
+            spreadColumns = novelSpreadColumns,
+            cutoutLeftPx = spreadCutoutLeftPx,
+            cutoutRightPx = spreadCutoutRightPx,
         )
+        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
+        val textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() }
+        val lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f)
+        val textAlign = state.readerSettings.textAlign
+        val preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative
+        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
+        val bionicReading = state.readerSettings.bionicReading
+        val forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
+            forceBoldText = state.readerSettings.forceBoldText,
+            forceItalicText = state.readerSettings.forceItalicText,
+        )
+        val richNativeRendererExperimental = state.readerSettings.richNativeRendererExperimental
+        val hyphenationEnabled = state.readerSettings.hyphenationEnabled
+        val showPageFooter = state.readerSettings.showPageFooter
+        val paintTemplate = TextPaint(baseMeasurementTextPaint)
+        val slice = withContext(Dispatchers.Default) {
+            coroutineContext.ensureActive()
+            val workerPaint = TextPaint(paintTemplate)
+            val result = paginateAdjacentPreviewSlice(
+                preview = activePrevPreview,
+                takeLastSpread = true,
+                budget = budget,
+                paragraphSpacingPx = paragraphSpacingPx,
+                textSizePx = textSizePx,
+                lineHeightMultiplier = lineHeightMultiplier,
+                textAlign = textAlign,
+                preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
+                forceParagraphIndent = forceParagraphIndent,
+                bionicReadingEnabled = bionicReading,
+                forcedTypefaceStyle = forcedTypefaceStyle,
+                richNativeRendererExperimental = richNativeRendererExperimental,
+                hyphenationEnabled = hyphenationEnabled,
+                showPageFooter = showPageFooter,
+                measurementPaint = workerPaint,
+            )
+            coroutineContext.ensureActive()
+            result
+        }
+        prevSeamlessPreviewState = SeamlessPreviewPaginationResult(
+            chapterId = activePrevPreview.chapterId,
+            slice = slice,
+        )
+    }
+    val previousChapterSeamlessPreview = if (
+        activePrevPreview != null &&
+        prevSeamlessPreviewState.chapterId == activePrevPreview.chapterId
+    ) {
+        prevSeamlessPreviewState.slice
+    } else {
+        SeamlessAdjacentPagesSlice()
     }
     val pageReaderRendererRoute = remember(usePageReader, activePageTransitionStyle) {
         resolvePageReaderRendererRoute(
@@ -2221,7 +2459,7 @@ internal fun NovelReaderContentHost(
         pageReaderProgressPageIndex,
         pageReaderPages,
         richPageReaderPages,
-        textListState.firstVisibleItemIndex,
+        textListState,
         scrollContentBlocks.size,
         richScrollBlocks.size,
         webProgressPercent,
@@ -2389,8 +2627,7 @@ internal fun NovelReaderContentHost(
         nativeScrollItemsCount,
         pageReaderItemsCount,
         pageReaderProgressPageIndex,
-        textListState.firstVisibleItemIndex,
-        textListState.canScrollForward,
+        textListState,
         usePageReader,
         isBookMode,
         state.bookMode.bookProgressFraction,
@@ -3095,10 +3332,22 @@ internal fun NovelReaderContentHost(
                         }
                     } else {
                         LaunchedEffect(
+                            state.chapter.id,
+                            textListState,
                             textListState.firstVisibleItemIndex,
                             textListState.canScrollForward,
                             nativeScrollItemsCount,
                         ) {
+                            if (
+                                !shouldTrackNativeScrollProgress(
+                                    totalItemsCount = textListState.layoutInfo.totalItemsCount,
+                                    hasVisibleItems = textListState.layoutInfo.visibleItemsInfo.isNotEmpty(),
+                                    restoredChapterId = appliedNativeScrollRestoreChapterId[0],
+                                    currentChapterId = state.chapter.id,
+                                )
+                            ) {
+                                return@LaunchedEffect
+                            }
                             val (progressIndex, progressTotal) = resolveNativeScrollProgressForTracking(
                                 firstVisibleItemIndex = textListState.firstVisibleItemIndex,
                                 textBlocksCount = nativeScrollItemsCount,
@@ -3114,8 +3363,18 @@ internal fun NovelReaderContentHost(
                                 ),
                             )
                         }
-                        DisposableEffect(textListState, textListState.canScrollForward, nativeScrollItemsCount) {
+                        DisposableEffect(state.chapter.id, textListState, nativeScrollItemsCount) {
                             onDispose {
+                                if (
+                                    !shouldTrackNativeScrollProgress(
+                                        totalItemsCount = textListState.layoutInfo.totalItemsCount,
+                                        hasVisibleItems = textListState.layoutInfo.visibleItemsInfo.isNotEmpty(),
+                                        restoredChapterId = appliedNativeScrollRestoreChapterId[0],
+                                        currentChapterId = state.chapter.id,
+                                    )
+                                ) {
+                                    return@onDispose
+                                }
                                 val (progressIndex, progressTotal) = resolveNativeScrollProgressForTracking(
                                     firstVisibleItemIndex = textListState.firstVisibleItemIndex,
                                     textBlocksCount = nativeScrollItemsCount,
@@ -3129,7 +3388,6 @@ internal fun NovelReaderContentHost(
                                         offsetPx = textListState.firstVisibleItemScrollOffset,
                                         totalItems = nativeScrollItemsCount,
                                     ),
-                                    flashDisplay = true,
                                 )
                             }
                         }
@@ -3304,6 +3562,10 @@ internal fun NovelReaderContentHost(
                             contentPaddingBottom = contentPaddingPx,
                             bookRendererDecision = bookRendererDecision,
                         )
+                    } else if (usePageReader && pageReaderItemsCount == 0) {
+                        // Clean matching backdrop is already painted by NovelAtmosphereBackground
+                        // while background pagination finishes on Dispatchers.Default.
+                        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
                     } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
                         ComposePagerPageRenderer(
                             pagerState = pagerState,
@@ -3580,32 +3842,38 @@ internal fun NovelReaderContentHost(
                         }
                     }
 
-                    val initialWebReaderPaddingPx = with(density) { 4.dp.roundToPx() }
-                    val initialMaxWebViewStatusInsetPx = with(density) { 16.dp.roundToPx() }
-                    val initialPaddingTop = resolveWebViewPaddingTopPx(
+                    val webReaderPaddingPx = with(density) { 4.dp.roundToPx() }
+                    val maxWebViewStatusInsetPx = with(density) { 16.dp.roundToPx() }
+                    val paddingTop = resolveWebViewPaddingTopPx(
                         statusBarHeightPx = statusBarHeight,
                         showReaderUi = showReaderUi,
                         appBarHeightPx = appBarHeight,
-                        basePaddingPx = initialWebReaderPaddingPx,
-                        maxStatusBarInsetPx = initialMaxWebViewStatusInsetPx,
+                        basePaddingPx = webReaderPaddingPx,
+                        maxStatusBarInsetPx = maxWebViewStatusInsetPx,
                     )
-                    val initialPaddingBottom = resolveWebViewPaddingBottomPx(
+                    val paddingBottom = resolveWebViewPaddingBottomPx(
                         navigationBarHeightPx = navigationBarHeight,
                         showReaderUi = showReaderUi,
                         bottomBarHeightPx = bottomBarHeight,
-                        basePaddingPx = initialWebReaderPaddingPx,
+                        basePaddingPx = webReaderPaddingPx,
                     )
                     // Canonical CSS unit for the chapter WebView is the density-independent px
                     // (CSS px == dp under the WebView viewport), the same unit fontSize is passed
                     // in on every path. Passing density-multiplied physical px here made the
                     // horizontal margin ~density-times too wide and, for paragraph spacing,
                     // visibly jump when onPageFinished re-applied the raw-dp value.
-                    val initialPaddingHorizontal = state.readerSettings.margin
-                    val initialCssTextAlign = resolveWebViewTextAlignCss(state.readerSettings.textAlign)
-                    val initialCssFirstLineIndent = resolveWebViewFirstLineIndentCss(
+                    val paddingHorizontal = state.readerSettings.margin
+                    val cssTextAlign = resolveWebViewTextAlignCss(state.readerSettings.textAlign)
+                    val cssFirstLineIndent = resolveWebViewFirstLineIndentCss(
                         forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                     )
-                    val initialTextShadowCss = resolveWebReaderTextShadowCss(
+                    val selectedFontFamily = selectedReaderFont.id.takeIf { it.isNotBlank() }
+                    val fontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
+                    val currentTextColorCss = colorToCssHex(textColor)
+                    val currentBackgroundCss = colorToCssHex(textBackground)
+                    val currentCustomCss = state.readerSettings.customCSS
+                    val currentCustomJs = state.readerSettings.customJS
+                    val currentTextShadowCss = resolveWebReaderTextShadowCss(
                         textShadowEnabled = state.readerSettings.textShadow,
                         textShadowColor = state.readerSettings.textShadowColor,
                         textShadowBlur = state.readerSettings.textShadowBlur,
@@ -3614,8 +3882,88 @@ internal fun NovelReaderContentHost(
                         textColor = textColor,
                         backgroundColor = textBackground,
                     )
-                    val initialSelectedFontFamily = selectedReaderFont.id.takeIf { it.isNotBlank() }
-                    val initialFontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
+                    val paragraphSpacingCssUnits = state.readerSettings.paragraphSpacing
+                    val styleFingerprint = buildWebReaderCssFingerprint(
+                        chapterId = state.chapter.id,
+                        paddingTop = paddingTop,
+                        paddingBottom = paddingBottom,
+                        paddingHorizontal = paddingHorizontal,
+                        fontSizePx = state.readerSettings.fontSize,
+                        lineHeightMultiplier = state.readerSettings.lineHeight,
+                        paragraphSpacingPx = paragraphSpacingCssUnits,
+                        textAlignCss = cssTextAlign,
+                        firstLineIndentCss = cssFirstLineIndent,
+                        textColorHex = currentTextColorCss,
+                        backgroundHex = currentBackgroundCss,
+                        appearanceMode = appearanceMode,
+                        backgroundTexture = activeBackgroundTexture,
+                        oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                        backgroundImageIdentity = if (isBackgroundMode) backgroundModeIdentity else null,
+                        fontFamilyName = selectedFontFamily,
+                        customCss = currentCustomCss,
+                        textShadowCss = currentTextShadowCss,
+                        forceBoldText = state.readerSettings.forceBoldText,
+                        forceItalicText = state.readerSettings.forceItalicText,
+                        bionicReadingEnabled = state.readerSettings.bionicReading,
+                    )
+                    val webClientConfig = WebReaderClientConfig(
+                        chapterId = state.chapter.id,
+                        shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html),
+                        shouldHideWebViewUntilReveal = shouldHideWebViewUntilReveal,
+                        backgroundSelection = backgroundSelection,
+                        selectedReaderFont = selectedReaderFont,
+                        fontFaceCss = fontFaceCss,
+                        paddingTop = paddingTop,
+                        paddingBottom = paddingBottom,
+                        paddingHorizontal = paddingHorizontal,
+                        fontSize = state.readerSettings.fontSize,
+                        lineHeight = state.readerSettings.lineHeight,
+                        paragraphSpacing = paragraphSpacingCssUnits,
+                        cssTextAlign = cssTextAlign,
+                        cssFirstLineIndent = cssFirstLineIndent,
+                        textColorCss = currentTextColorCss,
+                        backgroundColorCss = currentBackgroundCss,
+                        appearanceMode = appearanceMode,
+                        activeBackgroundTexture = activeBackgroundTexture,
+                        oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                        backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                        selectedFontFamily = selectedFontFamily,
+                        customCss = currentCustomCss,
+                        customJs = currentCustomJs,
+                        textShadowCss = currentTextShadowCss,
+                        forceBoldText = state.readerSettings.forceBoldText,
+                        forceItalicText = state.readerSettings.forceItalicText,
+                        bionicReading = state.readerSettings.bionicReading,
+                        styleFingerprint = styleFingerprint,
+                        restoreProgressPercent = initialWebRestoreProgressPercent,
+                        chapterHighlights = chapterHighlightList,
+                    )
+                    val clientConfigRef = remember { AtomicReference(webClientConfig) }
+                    SideEffect {
+                        clientConfigRef.set(webClientConfig)
+                    }
+                    val latestNextSelectionSessionId by rememberUpdatedState(nextSelectedTextSelectionSessionId)
+                    val latestOnSelectedTextSelectionChanged by rememberUpdatedState(onSelectedTextSelectionChanged)
+                    val latestOnHighlightClicked by rememberUpdatedState<(Long) -> Unit> { highlightId ->
+                        editingHighlightId = highlightId
+                    }
+                    val latestSwipeGesturesEnabled by rememberUpdatedState(state.readerSettings.swipeGestures)
+                    val latestSwipeToNextChapter by rememberUpdatedState(state.readerSettings.swipeToNextChapter)
+                    val latestSwipeToPrevChapter by rememberUpdatedState(state.readerSettings.swipeToPrevChapter)
+                    val latestHasPreviousChapter by rememberUpdatedState(state.previousChapterId != null)
+                    val latestHasNextChapter by rememberUpdatedState(state.nextChapterId != null)
+                    val latestMinWebSwipeDistancePx by rememberUpdatedState(minVerticalChapterSwipeDistancePx)
+                    val latestWebSwipeHorizontalTolerancePx by rememberUpdatedState(
+                        verticalChapterSwipeHorizontalTolerancePx,
+                    )
+                    val latestMinWebSwipeHoldDurationMillis by rememberUpdatedState(
+                        minVerticalChapterSwipeHoldDurationMillis,
+                    )
+                    val latestOnSetShowReaderUi by rememberUpdatedState(onSetShowReaderUi)
+                    val latestMoveBackward by rememberUpdatedState<suspend () -> Unit> { moveBackwardByReaderAction() }
+                    val latestMoveForward by rememberUpdatedState<suspend () -> Unit> { moveForwardByReaderAction() }
+                    val latestOpenPreviousChapter by rememberUpdatedState { openPreviousChapterFromReader() }
+                    val latestOpenNextChapter by rememberUpdatedState { openNextChapterFromReader() }
                     val latestShouldRestoreWebScroll by rememberUpdatedState(shouldRestoreWebScroll)
                     val latestWebViewPageReady by rememberUpdatedState(webViewPageReadyForAutoScroll)
                     val latestWebScrollProgressHandler by rememberUpdatedState<
@@ -3663,59 +4011,69 @@ internal fun NovelReaderContentHost(
                     val webReaderDocumentTag: Any = state.html
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
-                        factory = { context ->
+                        factory = { factoryContext ->
                             val initialFactoryWebViewHtml = buildInitialWebReaderHtml(
                                 rawHtml = state.html,
                                 readerCss = buildWebReaderCssText(
-                                    fontFaceCss = initialFontFaceCss,
-                                    paddingTop = initialPaddingTop,
-                                    paddingBottom = initialPaddingBottom,
-                                    paddingHorizontal = initialPaddingHorizontal,
+                                    fontFaceCss = fontFaceCss,
+                                    paddingTop = paddingTop,
+                                    paddingBottom = paddingBottom,
+                                    paddingHorizontal = paddingHorizontal,
                                     fontSizePx = state.readerSettings.fontSize,
                                     lineHeightMultiplier = state.readerSettings.lineHeight,
-                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                                    textAlignCss = initialCssTextAlign,
-                                    firstLineIndentCss = initialCssFirstLineIndent,
-                                    textColorHex = colorToCssHex(textColor),
-                                    backgroundHex = colorToCssHex(textBackground),
+                                    paragraphSpacingPx = paragraphSpacingCssUnits,
+                                    textAlignCss = cssTextAlign,
+                                    firstLineIndentCss = cssFirstLineIndent,
+                                    textColorHex = currentTextColorCss,
+                                    backgroundHex = currentBackgroundCss,
                                     appearanceMode = appearanceMode,
                                     backgroundTexture = activeBackgroundTexture,
                                     oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                     backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                                    fontFamilyName = initialSelectedFontFamily,
-                                    customCss = state.readerSettings.customCSS,
-                                    textShadowCss = initialTextShadowCss,
+                                    fontFamilyName = selectedFontFamily,
+                                    customCss = currentCustomCss,
+                                    textShadowCss = currentTextShadowCss,
                                     forceBoldText = state.readerSettings.forceBoldText,
                                     forceItalicText = state.readerSettings.forceItalicText,
                                 ),
                                 hideUntilReveal = shouldHideWebViewUntilReveal,
                             )
-                            val factoryShouldEarlyReveal = shouldUseEarlyWebViewReveal(state.html)
-                            val factoryWebViewClient = object : WebViewClient() {
+                            val singleWebViewClient = object : WebViewClient() {
                                 private var hasEarlyRevealedPage = false
+
+                                override fun onPageStarted(
+                                    view: WebView?,
+                                    url: String?,
+                                    favicon: android.graphics.Bitmap?,
+                                ) {
+                                    super.onPageStarted(view, url, favicon)
+                                    hasEarlyRevealedPage = false
+                                }
 
                                 override fun onPageCommitVisible(view: WebView?, url: String?) {
                                     super.onPageCommitVisible(view, url)
-                                    if (!factoryShouldEarlyReveal || hasEarlyRevealedPage) return
+                                    val config = clientConfigRef.get()
+                                    if (!config.shouldEarlyRevealWebView || hasEarlyRevealedPage) return
                                     hasEarlyRevealedPage = true
-                                    view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
+                                    view?.revealReaderDocumentAndWebView(config.shouldHideWebViewUntilReveal)
                                 }
 
                                 override fun shouldInterceptRequest(
                                     view: WebView?,
                                     request: WebResourceRequest?,
                                 ): WebResourceResponse? {
+                                    val config = clientConfigRef.get()
                                     val requestUrl = request?.url?.toString().orEmpty()
                                     resolveReaderBackgroundWebResourceResponse(
                                         requestUrl = requestUrl,
-                                        context = context,
-                                        selection = backgroundSelection,
+                                        context = factoryContext,
+                                        selection = config.backgroundSelection,
                                     )?.let { response ->
                                         return response
                                     }
                                     resolveReaderFontWebResourceResponse(
                                         requestUrl = requestUrl,
-                                        selectedFont = selectedReaderFont,
+                                        selectedFont = config.selectedReaderFont,
                                     )?.let { response ->
                                         return response
                                     }
@@ -3733,70 +4091,64 @@ internal fun NovelReaderContentHost(
                                 }
 
                                 override fun onPageFinished(view: WebView?, url: String?) {
+                                    val config = clientConfigRef.get()
                                     webViewPageReadyForAutoScroll = true
                                     view?.applyReaderCss(
-                                        fontFaceCss = initialFontFaceCss,
-                                        paddingTop = initialPaddingTop,
-                                        paddingBottom = initialPaddingBottom,
-                                        paddingHorizontal = initialPaddingHorizontal,
-                                        fontSizePx = state.readerSettings.fontSize,
-                                        lineHeightMultiplier = state.readerSettings.lineHeight,
-                                        paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                                        textAlignCss = initialCssTextAlign,
-                                        firstLineIndentCss = initialCssFirstLineIndent,
-                                        textColorHex = colorToCssHex(textColor),
-                                        backgroundHex = colorToCssHex(textBackground),
-                                        appearanceMode = appearanceMode,
-                                        backgroundTexture = activeBackgroundTexture,
-                                        oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                                        backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                                        fontFamilyName = initialSelectedFontFamily,
-                                        customCss = state.readerSettings.customCSS,
-                                        textShadowCss = initialTextShadowCss,
-                                        forceBoldText = state.readerSettings.forceBoldText,
-                                        forceItalicText = state.readerSettings.forceItalicText,
-                                        bionicReadingEnabled = state.readerSettings.bionicReading,
+                                        fontFaceCss = config.fontFaceCss,
+                                        paddingTop = config.paddingTop,
+                                        paddingBottom = config.paddingBottom,
+                                        paddingHorizontal = config.paddingHorizontal,
+                                        fontSizePx = config.fontSize,
+                                        lineHeightMultiplier = config.lineHeight,
+                                        paragraphSpacingPx = config.paragraphSpacing,
+                                        textAlignCss = config.cssTextAlign,
+                                        firstLineIndentCss = config.cssFirstLineIndent,
+                                        textColorHex = config.textColorCss,
+                                        backgroundHex = config.backgroundColorCss,
+                                        appearanceMode = config.appearanceMode,
+                                        backgroundTexture = config.activeBackgroundTexture,
+                                        oledEdgeGradient = config.oledEdgeGradient,
+                                        backgroundImageUrl = config.backgroundImageUrl,
+                                        fontFamilyName = config.selectedFontFamily,
+                                        customCss = config.customCss,
+                                        textShadowCss = config.textShadowCss,
+                                        forceBoldText = config.forceBoldText,
+                                        forceItalicText = config.forceItalicText,
+                                        bionicReadingEnabled = config.bionicReading,
                                     )
-                                    appliedWebCssFingerprint = buildWebReaderCssFingerprint(
-                                        chapterId = state.chapter.id,
-                                        paddingTop = initialPaddingTop,
-                                        paddingBottom = initialPaddingBottom,
-                                        paddingHorizontal = initialPaddingHorizontal,
-                                        fontSizePx = state.readerSettings.fontSize,
-                                        lineHeightMultiplier = state.readerSettings.lineHeight,
-                                        paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                                        textAlignCss = initialCssTextAlign,
-                                        firstLineIndentCss = initialCssFirstLineIndent,
-                                        textColorHex = colorToCssHex(textColor),
-                                        backgroundHex = colorToCssHex(textBackground),
-                                        appearanceMode = appearanceMode,
-                                        backgroundTexture = activeBackgroundTexture,
-                                        oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                                        backgroundImageIdentity = if (isBackgroundMode) backgroundModeIdentity else null,
-                                        fontFamilyName = initialSelectedFontFamily,
-                                        customCss = state.readerSettings.customCSS,
-                                        textShadowCss = initialTextShadowCss,
-                                        forceBoldText = state.readerSettings.forceBoldText,
-                                        forceItalicText = state.readerSettings.forceItalicText,
-                                        bionicReadingEnabled = state.readerSettings.bionicReading,
-                                    )
+                                    appliedWebCssFingerprint = config.styleFingerprint
 
-                                    view?.applyNovelHighlightsToPage(chapterHighlightList)
+                                    view?.applyNovelHighlightsToPage(config.chapterHighlights)
 
-                                    if (state.readerSettings.customJS.isNotEmpty()) {
+                                    if (config.customJs.isNotEmpty()) {
                                         view?.evaluateJavascript(
                                             """
                                         (function() {
-                                            ${state.readerSettings.customJS}
+                                            ${config.customJs}
                                         })();
                                             """.trimIndent(),
                                             null,
                                         )
                                     }
 
-                                    if (shouldRestoreWebScroll) {
+                                    val targetRestorePercent = when {
+                                        scrollTargetPercentAfterReload[0] >= 0 -> {
+                                            // Restore to the live scroll percent that was current before
+                                            // WebView reload when only settings/content of the same chapter
+                                            // changed. Uses restoreWebViewScroll so it waits for Blink layout
+                                            // (up to 14 attempts), reveals only after positioning, and reports
+                                            // progress — avoiding the 0-clamp, flashing and desync bugs.
+                                            val target = scrollTargetPercentAfterReload[0]
+                                            scrollTargetPercentAfterReload[0] = -1
+                                            target
+                                        }
+                                        shouldRestoreWebScroll -> config.restoreProgressPercent
+                                        else -> null
+                                    }
+
+                                    if (targetRestorePercent != null) {
                                         view?.restoreWebViewScroll(
-                                            progressPercent = initialWebRestoreProgressPercent,
+                                            progressPercent = targetRestorePercent,
                                             onComplete = { restored ->
                                                 shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
                                                 if (restored) {
@@ -3828,7 +4180,7 @@ internal fun NovelReaderContentHost(
                                                         )
                                                     }
                                                 }
-                                                view.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
+                                                view.revealReaderDocumentAndWebView(config.shouldHideWebViewUntilReveal)
                                             },
                                         )
                                     } else {
@@ -3860,12 +4212,12 @@ internal fun NovelReaderContentHost(
                                                 encodeWebScrollProgressPercent(settledProgress),
                                             )
                                         }
-                                        view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
+                                        view?.revealReaderDocumentAndWebView(config.shouldHideWebViewUntilReveal)
                                     }
                                 }
                             }
 
-                            createNovelReaderWebView(context).apply {
+                            createNovelReaderWebView(factoryContext).apply {
                                 webViewInstance = this
                                 setBackgroundColor(backgroundColor)
                                 alpha = if (shouldHideWebViewUntilReveal) 0f else 1f
@@ -3877,12 +4229,149 @@ internal fun NovelReaderContentHost(
                                 )
                                 settings.domStorageEnabled = false
                                 registerWebReaderSelectionBridge(
-                                    selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
-                                    onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                    onHighlightClicked = { highlightId -> editingHighlightId = highlightId },
+                                    selectionSessionIdProvider = { latestNextSelectionSessionId() },
+                                    onSelectedTextSelectionChanged = { selection ->
+                                        latestOnSelectedTextSelectionChanged(selection)
+                                    },
+                                    onHighlightClicked = { highlightId ->
+                                        latestOnHighlightClicked(highlightId)
+                                    },
                                 )
 
-                                webViewClient = factoryWebViewClient
+                                var touchStartX = 0f
+                                var touchStartY = 0f
+                                var touchStartEventTime = 0L
+                                var wasNearChapterEndAtDown = false
+                                var wasNearChapterStartAtDown = false
+                                var horizontalSwipeHandled = false
+                                val gestureDetector = GestureDetector(
+                                    factoryContext,
+                                    object : GestureDetector.SimpleOnGestureListener() {
+                                        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                                            // Let the WebView open links itself: a tap on an anchor must
+                                            // not also run the configured tap zone action.
+                                            val hitResultType = hitTestResult?.type
+                                            if (
+                                                hitResultType == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
+                                                hitResultType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
+                                            ) {
+                                                return false
+                                            }
+                                            val viewWidth = width.takeIf { it > 0 } ?: return false
+                                            val viewHeight = height.takeIf { it > 0 } ?: return false
+                                            return when (
+                                                resolveConfiguredNovelReaderTapAction(
+                                                    tapX = e.x,
+                                                    tapY = e.y,
+                                                    width = viewWidth.toFloat(),
+                                                    height = viewHeight.toFloat(),
+                                                    customTapZonesEnabled = latestCustomTapZonesEnabled,
+                                                    tapZoneActions = latestTapZoneActions,
+                                                    tapToScrollEnabled = latestTapToScrollEnabled,
+                                                )
+                                            ) {
+                                                NovelReaderTapZoneAction.TOGGLE_UI -> {
+                                                    latestOnSetShowReaderUi(!latestShowReaderUi)
+                                                    true
+                                                }
+                                                NovelReaderTapZoneAction.BACKWARD -> {
+                                                    coroutineScope.launch { latestMoveBackward() }
+                                                    true
+                                                }
+                                                NovelReaderTapZoneAction.FORWARD -> {
+                                                    coroutineScope.launch { latestMoveForward() }
+                                                    true
+                                                }
+                                                NovelReaderTapZoneAction.NEXT_CHAPTER -> {
+                                                    latestOpenNextChapter()
+                                                    true
+                                                }
+                                                NovelReaderTapZoneAction.PREV_CHAPTER -> {
+                                                    latestOpenPreviousChapter()
+                                                    true
+                                                }
+                                                NovelReaderTapZoneAction.NONE -> true
+                                            }
+                                        }
+                                    },
+                                )
+                                setOnTouchListener { _, event ->
+                                    when (event.actionMasked) {
+                                        MotionEvent.ACTION_DOWN -> {
+                                            touchStartX = event.x
+                                            touchStartY = event.y
+                                            touchStartEventTime = event.eventTime
+                                            wasNearChapterEndAtDown = !canScrollVertically(1)
+                                            wasNearChapterStartAtDown = !canScrollVertically(-1)
+                                            horizontalSwipeHandled = false
+                                        }
+                                        MotionEvent.ACTION_UP -> {
+                                            if (!latestShowReaderUi && !horizontalSwipeHandled) {
+                                                when (
+                                                    resolveHorizontalChapterSwipeAction(
+                                                        swipeGesturesEnabled = latestSwipeGesturesEnabled,
+                                                        deltaX = event.x - touchStartX,
+                                                        deltaY = event.y - touchStartY,
+                                                        thresholdPx = 160f,
+                                                        hasPreviousChapter = latestHasPreviousChapter,
+                                                        hasNextChapter = latestHasNextChapter,
+                                                    )
+                                                ) {
+                                                    HorizontalChapterSwipeAction.PREVIOUS -> {
+                                                        horizontalSwipeHandled = true
+                                                        latestOpenPreviousChapter()
+                                                    }
+                                                    HorizontalChapterSwipeAction.NEXT -> {
+                                                        horizontalSwipeHandled = true
+                                                        latestOpenNextChapter()
+                                                    }
+                                                    HorizontalChapterSwipeAction.NONE -> Unit
+                                                }
+                                            }
+                                            if (!latestShowReaderUi && !horizontalSwipeHandled) {
+                                                val deltaX = event.x - touchStartX
+                                                val deltaY = event.y - touchStartY
+                                                val gestureDurationMillis = (event.eventTime - touchStartEventTime)
+                                                    .coerceAtLeast(0L)
+                                                val isNearChapterEnd =
+                                                    wasNearChapterEndAtDown && !canScrollVertically(1)
+                                                val isNearChapterStart =
+                                                    wasNearChapterStartAtDown && !canScrollVertically(-1)
+
+                                                when (
+                                                    resolveWebViewVerticalChapterSwipeAction(
+                                                        swipeToNextChapter = latestSwipeToNextChapter,
+                                                        swipeToPrevChapter = latestSwipeToPrevChapter,
+                                                        deltaX = deltaX,
+                                                        deltaY = deltaY,
+                                                        minSwipeDistancePx = latestMinWebSwipeDistancePx,
+                                                        horizontalTolerancePx = latestWebSwipeHorizontalTolerancePx,
+                                                        gestureDurationMillis = gestureDurationMillis,
+                                                        minHoldDurationMillis = latestMinWebSwipeHoldDurationMillis,
+                                                        wasNearChapterEndAtDown = wasNearChapterEndAtDown,
+                                                        wasNearChapterStartAtDown = wasNearChapterStartAtDown,
+                                                        isNearChapterEnd = isNearChapterEnd,
+                                                        isNearChapterStart = isNearChapterStart,
+                                                    )
+                                                ) {
+                                                    VerticalChapterSwipeAction.NEXT -> {
+                                                        latestOpenNextChapter()
+                                                    }
+                                                    VerticalChapterSwipeAction.PREVIOUS -> {
+                                                        latestOpenPreviousChapter()
+                                                    }
+                                                    VerticalChapterSwipeAction.NONE -> Unit
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (!horizontalSwipeHandled) {
+                                        gestureDetector.onTouchEvent(event)
+                                    }
+                                    false
+                                }
+
+                                webViewClient = singleWebViewClient
                                 setOnScrollChangeListener { view, _, scrollY, _, _ ->
                                     val webView = view as? WebView ?: return@setOnScrollChangeListener
                                     latestWebScrollProgressHandler(webView, scrollY)
@@ -3934,391 +4423,19 @@ internal fun NovelReaderContentHost(
                         },
                         update = { webView ->
                             webViewInstance = webView
+                            clientConfigRef.set(webClientConfig)
                             if (webView is NovelReaderWebView) {
                                 webView.isDictionaryEnabled = state.novelDictionaryEnabled
                                 webView.isTranslationEnabled = state.readerSettings.selectedTextTranslationEnabled
                             }
                             webView.setBackgroundColor(backgroundColor)
                             // Chapter WebView only; book mode never reaches this update block.
-                            webView.settings.javaScriptEnabled = shouldEnableJavaScriptInReaderWebView(
+                            val jsEnabled = shouldEnableJavaScriptInReaderWebView(
                                 pluginRequestsJavaScript = state.enableJs,
                                 bookModeEnabled = false,
                             )
-                            webView.registerWebReaderSelectionBridge(
-                                selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
-                                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
-                                onHighlightClicked = { highlightId -> editingHighlightId = highlightId },
-                            )
-                            val minWebSwipeDistancePx = minVerticalChapterSwipeDistancePx
-                            val webSwipeHorizontalTolerancePx = verticalChapterSwipeHorizontalTolerancePx
-                            val minWebSwipeHoldDurationMillis = minVerticalChapterSwipeHoldDurationMillis
-                            var touchStartX = 0f
-                            var touchStartY = 0f
-                            var touchStartEventTime = 0L
-                            var wasNearChapterEndAtDown = false
-                            var wasNearChapterStartAtDown = false
-                            var horizontalSwipeHandled = false
-                            val gestureDetector = GestureDetector(
-                                webView.context,
-                                object : GestureDetector.SimpleOnGestureListener() {
-                                    override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                                        // Let the WebView open links itself: a tap on an anchor must
-                                        // not also run the configured tap zone action.
-                                        val hitResultType = webView.hitTestResult?.type
-                                        if (
-                                            hitResultType == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
-                                            hitResultType == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
-                                        ) {
-                                            return false
-                                        }
-                                        val viewWidth = webView.width.takeIf { it > 0 } ?: return false
-                                        val viewHeight = webView.height.takeIf { it > 0 } ?: return false
-                                        return when (
-                                            resolveConfiguredNovelReaderTapAction(
-                                                tapX = e.x,
-                                                tapY = e.y,
-                                                width = viewWidth.toFloat(),
-                                                height = viewHeight.toFloat(),
-                                                customTapZonesEnabled = latestCustomTapZonesEnabled,
-                                                tapZoneActions = latestTapZoneActions,
-                                                tapToScrollEnabled = latestTapToScrollEnabled,
-                                            )
-                                        ) {
-                                            NovelReaderTapZoneAction.TOGGLE_UI -> {
-                                                onSetShowReaderUi(!latestShowReaderUi)
-                                                true
-                                            }
-                                            NovelReaderTapZoneAction.BACKWARD -> {
-                                                coroutineScope.launch { moveBackwardByReaderAction() }
-                                                true
-                                            }
-                                            NovelReaderTapZoneAction.FORWARD -> {
-                                                coroutineScope.launch { moveForwardByReaderAction() }
-                                                true
-                                            }
-                                            NovelReaderTapZoneAction.NEXT_CHAPTER -> {
-                                                openNextChapterFromReader()
-                                                true
-                                            }
-                                            NovelReaderTapZoneAction.PREV_CHAPTER -> {
-                                                openPreviousChapterFromReader()
-                                                true
-                                            }
-                                            NovelReaderTapZoneAction.NONE -> true
-                                        }
-                                    }
-                                },
-                            )
-                            webView.setOnTouchListener { _, event ->
-                                when (event.actionMasked) {
-                                    MotionEvent.ACTION_DOWN -> {
-                                        touchStartX = event.x
-                                        touchStartY = event.y
-                                        touchStartEventTime = event.eventTime
-                                        wasNearChapterEndAtDown = !webView.canScrollVertically(1)
-                                        wasNearChapterStartAtDown = !webView.canScrollVertically(-1)
-                                        horizontalSwipeHandled = false
-                                    }
-                                    MotionEvent.ACTION_UP -> {
-                                        if (!latestShowReaderUi && !horizontalSwipeHandled) {
-                                            when (
-                                                resolveHorizontalChapterSwipeAction(
-                                                    swipeGesturesEnabled = state.readerSettings.swipeGestures,
-                                                    deltaX = event.x - touchStartX,
-                                                    deltaY = event.y - touchStartY,
-                                                    thresholdPx = 160f,
-                                                    hasPreviousChapter = state.previousChapterId != null,
-                                                    hasNextChapter = state.nextChapterId != null,
-                                                )
-                                            ) {
-                                                HorizontalChapterSwipeAction.PREVIOUS -> {
-                                                    horizontalSwipeHandled = true
-                                                    openPreviousChapterFromReader()
-                                                }
-                                                HorizontalChapterSwipeAction.NEXT -> {
-                                                    horizontalSwipeHandled = true
-                                                    openNextChapterFromReader()
-                                                }
-                                                HorizontalChapterSwipeAction.NONE -> Unit
-                                            }
-                                        }
-                                        if (!latestShowReaderUi && !horizontalSwipeHandled) {
-                                            val deltaX = event.x - touchStartX
-                                            val deltaY = event.y - touchStartY
-                                            val gestureDurationMillis = (event.eventTime - touchStartEventTime)
-                                                .coerceAtLeast(0L)
-                                            val isNearChapterEnd =
-                                                wasNearChapterEndAtDown && !webView.canScrollVertically(1)
-                                            val isNearChapterStart =
-                                                wasNearChapterStartAtDown && !webView.canScrollVertically(-1)
-
-                                            when (
-                                                resolveWebViewVerticalChapterSwipeAction(
-                                                    swipeToNextChapter = state.readerSettings.swipeToNextChapter,
-                                                    swipeToPrevChapter = state.readerSettings.swipeToPrevChapter,
-                                                    deltaX = deltaX,
-                                                    deltaY = deltaY,
-                                                    minSwipeDistancePx = minWebSwipeDistancePx,
-                                                    horizontalTolerancePx = webSwipeHorizontalTolerancePx,
-                                                    gestureDurationMillis = gestureDurationMillis,
-                                                    minHoldDurationMillis = minWebSwipeHoldDurationMillis,
-                                                    wasNearChapterEndAtDown = wasNearChapterEndAtDown,
-                                                    wasNearChapterStartAtDown = wasNearChapterStartAtDown,
-                                                    isNearChapterEnd = isNearChapterEnd,
-                                                    isNearChapterStart = isNearChapterStart,
-                                                )
-                                            ) {
-                                                VerticalChapterSwipeAction.NEXT -> {
-                                                    openNextChapterFromReader()
-                                                }
-                                                VerticalChapterSwipeAction.PREVIOUS -> {
-                                                    openPreviousChapterFromReader()
-                                                }
-                                                VerticalChapterSwipeAction.NONE -> Unit
-                                            }
-                                        }
-                                    }
-                                }
-                                if (!horizontalSwipeHandled) {
-                                    gestureDetector.onTouchEvent(event)
-                                }
-                                false
-                            }
-
-                            val webReaderPaddingPx = with(density) { 4.dp.roundToPx() }
-                            val maxWebViewStatusInsetPx = with(density) { 16.dp.roundToPx() }
-                            val paddingTop = resolveWebViewPaddingTopPx(
-                                statusBarHeightPx = statusBarHeight,
-                                showReaderUi = showReaderUi,
-                                appBarHeightPx = appBarHeight,
-                                basePaddingPx = webReaderPaddingPx,
-                                maxStatusBarInsetPx = maxWebViewStatusInsetPx,
-                            )
-                            val paddingBottom = resolveWebViewPaddingBottomPx(
-                                navigationBarHeightPx = navigationBarHeight,
-                                showReaderUi = showReaderUi,
-                                bottomBarHeightPx = bottomBarHeight,
-                                basePaddingPx = webReaderPaddingPx,
-                            )
-                            // Raw dp: the canonical CSS unit of the chapter WebView (see
-                            // initialPaddingHorizontal).
-                            val paddingHorizontal = state.readerSettings.margin
-                            val cssTextAlign = resolveWebViewTextAlignCss(state.readerSettings.textAlign)
-                            val cssFirstLineIndent = resolveWebViewFirstLineIndentCss(
-                                forceParagraphIndent = state.readerSettings.forceParagraphIndent,
-                            )
-                            val selectedFontFamily = selectedReaderFont.id.takeIf { it.isNotBlank() }
-                            val fontFaceCss = buildNovelReaderFontFaceCss(selectedReaderFont)
-                            val currentTextColorCss = colorToCssHex(textColor)
-                            val currentBackgroundCss = colorToCssHex(textBackground)
-                            // The legacy chapter WebView is not mounted in book mode (the book engine
-                            // owns its own document), so no book section styles are needed here.
-                            val currentCustomCss = state.readerSettings.customCSS
-                            val currentCustomJs = state.readerSettings.customJS
-                            val currentTextShadowCss = resolveWebReaderTextShadowCss(
-                                textShadowEnabled = state.readerSettings.textShadow,
-                                textShadowColor = state.readerSettings.textShadowColor,
-                                textShadowBlur = state.readerSettings.textShadowBlur,
-                                textShadowX = state.readerSettings.textShadowX,
-                                textShadowY = state.readerSettings.textShadowY,
-                                textColor = textColor,
-                                backgroundColor = textBackground,
-                            )
-                            // Raw dp, matching what applyReaderCss below receives: the fingerprint
-                            // must describe the styles that are actually applied or it never
-                            // compares equal and the CSS gets re-applied on every pass.
-                            val paragraphSpacingCssUnits = state.readerSettings.paragraphSpacing
-                            val styleFingerprint = buildWebReaderCssFingerprint(
-                                chapterId = state.chapter.id,
-                                paddingTop = paddingTop,
-                                paddingBottom = paddingBottom,
-                                paddingHorizontal = paddingHorizontal,
-                                fontSizePx = state.readerSettings.fontSize,
-                                lineHeightMultiplier = state.readerSettings.lineHeight,
-                                paragraphSpacingPx = paragraphSpacingCssUnits,
-                                textAlignCss = cssTextAlign,
-                                firstLineIndentCss = cssFirstLineIndent,
-                                textColorHex = colorToCssHex(textColor),
-                                backgroundHex = colorToCssHex(textBackground),
-                                appearanceMode = appearanceMode,
-                                backgroundTexture = activeBackgroundTexture,
-                                oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                                backgroundImageIdentity = if (isBackgroundMode) backgroundModeIdentity else null,
-                                fontFamilyName = selectedFontFamily,
-                                customCss = state.readerSettings.customCSS,
-                                textShadowCss = currentTextShadowCss,
-                                forceBoldText = state.readerSettings.forceBoldText,
-                                forceItalicText = state.readerSettings.forceItalicText,
-                                bionicReadingEnabled = state.readerSettings.bionicReading,
-                            )
-                            val currentFontSize = state.readerSettings.fontSize
-                            val currentLineHeight = state.readerSettings.lineHeight
-                            val currentRestoreProgress = initialWebRestoreProgressPercent
-                            val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
-                            webView.webViewClient = object : WebViewClient() {
-                                private var hasEarlyRevealedPage = false
-
-                                override fun onPageCommitVisible(view: WebView?, url: String?) {
-                                    super.onPageCommitVisible(view, url)
-                                    if (!shouldEarlyRevealWebView || hasEarlyRevealedPage) return
-                                    hasEarlyRevealedPage = true
-                                    view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
-                                }
-
-                                override fun shouldInterceptRequest(
-                                    view: WebView?,
-                                    request: WebResourceRequest?,
-                                ): WebResourceResponse? {
-                                    val requestUrl = request?.url?.toString().orEmpty()
-                                    resolveReaderBackgroundWebResourceResponse(
-                                        requestUrl = requestUrl,
-                                        context = webView.context,
-                                        selection = backgroundSelection,
-                                    )?.let { response ->
-                                        return response
-                                    }
-                                    resolveReaderFontWebResourceResponse(
-                                        requestUrl = requestUrl,
-                                        selectedFont = selectedReaderFont,
-                                    )?.let { response ->
-                                        return response
-                                    }
-                                    if (!NovelPluginImage.isSupported(requestUrl)) {
-                                        return super.shouldInterceptRequest(view, request)
-                                    }
-
-                                    val image = NovelPluginImageResolver.resolveBlocking(requestUrl)
-                                        ?: return super.shouldInterceptRequest(view, request)
-                                    return WebResourceResponse(
-                                        image.mimeType,
-                                        null,
-                                        ByteArrayInputStream(image.bytes),
-                                    )
-                                }
-
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    webViewPageReadyForAutoScroll = true
-                                    view?.applyReaderCss(
-                                        fontFaceCss = fontFaceCss,
-                                        paddingTop = paddingTop,
-                                        paddingBottom = paddingBottom,
-                                        paddingHorizontal = paddingHorizontal,
-                                        fontSizePx = currentFontSize,
-                                        lineHeightMultiplier = currentLineHeight,
-                                        paragraphSpacingPx = state.readerSettings.paragraphSpacing,
-                                        textAlignCss = cssTextAlign,
-                                        firstLineIndentCss = cssFirstLineIndent,
-                                        textColorHex = currentTextColorCss,
-                                        backgroundHex = currentBackgroundCss,
-                                        appearanceMode = appearanceMode,
-                                        backgroundTexture = activeBackgroundTexture,
-                                        oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                                        backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                                        fontFamilyName = selectedFontFamily,
-                                        customCss = currentCustomCss,
-                                        textShadowCss = currentTextShadowCss,
-                                        forceBoldText = state.readerSettings.forceBoldText,
-                                        forceItalicText = state.readerSettings.forceItalicText,
-                                        bionicReadingEnabled = state.readerSettings.bionicReading,
-                                    )
-                                    appliedWebCssFingerprint = styleFingerprint
-
-                                    view?.applyNovelHighlightsToPage(chapterHighlightList)
-
-                                    if (currentCustomJs.isNotEmpty()) {
-                                        view?.evaluateJavascript(
-                                            """
-                                        (function() {
-                                            $currentCustomJs
-                                        })();
-                                            """.trimIndent(),
-                                            null,
-                                        )
-                                    }
-
-                                    val targetRestorePercent = when {
-                                        scrollTargetPercentAfterReload[0] >= 0 -> {
-                                            // Restore to the live scroll percent that was current before
-                                            // WebView reload when only settings/content of the same chapter
-                                            // changed. Uses restoreWebViewScroll so it waits for Blink layout
-                                            // (up to 14 attempts), reveals only after positioning, and reports
-                                            // progress — avoiding the 0-clamp, flashing and desync bugs.
-                                            val target = scrollTargetPercentAfterReload[0]
-                                            scrollTargetPercentAfterReload[0] = -1
-                                            target
-                                        }
-                                        shouldRestoreWebScroll -> currentRestoreProgress
-                                        else -> null
-                                    }
-
-                                    if (targetRestorePercent != null) {
-                                        view?.restoreWebViewScroll(
-                                            progressPercent = targetRestorePercent,
-                                            onComplete = { restored ->
-                                                shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
-                                                if (restored) {
-                                                    if (view != null) {
-                                                        anchoredWebViewWidthPx[0] = view.width
-                                                        val total = resolveWebViewTotalScrollablePx(
-                                                            contentHeightPx = view.resolveWebViewContentHeightPx(),
-                                                            viewHeightPx = view.height,
-                                                        )
-                                                        lastWebScrollFraction[0] = if (total > 0) {
-                                                            (view.scrollY.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                                                        } else {
-                                                            0f
-                                                        }
-                                                    }
-                                                    val settledProgress = view.resolveCurrentWebViewProgressPercent()
-                                                    if (shouldDispatchWebProgressUpdate(
-                                                            false,
-                                                            settledProgress,
-                                                            webProgressPercent,
-                                                        )
-                                                    ) {
-                                                        webProgressPercent = settledProgress
-                                                        webAutoScrollNearEnd = settledProgress >= 100
-                                                        reportReadingProgress(
-                                                            settledProgress,
-                                                            100,
-                                                            encodeWebScrollProgressPercent(settledProgress),
-                                                        )
-                                                    }
-                                                }
-                                                view.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
-                                            },
-                                        )
-                                    } else {
-                                        if (view != null) {
-                                            anchoredWebViewWidthPx[0] = view.width
-                                            val total = resolveWebViewTotalScrollablePx(
-                                                contentHeightPx = view.resolveWebViewContentHeightPx(),
-                                                viewHeightPx = view.height,
-                                            )
-                                            lastWebScrollFraction[0] = if (total > 0) {
-                                                (view.scrollY.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                                            } else {
-                                                0f
-                                            }
-                                        }
-                                        val settledProgress = view?.resolveCurrentWebViewProgressPercent()
-                                            ?: webProgressPercent
-                                        if (shouldDispatchWebProgressUpdate(
-                                                false,
-                                                settledProgress,
-                                                webProgressPercent,
-                                            )
-                                        ) {
-                                            webProgressPercent = settledProgress
-                                            reportReadingProgress(
-                                                settledProgress,
-                                                100,
-                                                encodeWebScrollProgressPercent(settledProgress),
-                                            )
-                                        }
-                                        view?.revealReaderDocumentAndWebView(shouldHideWebViewUntilReveal)
-                                    }
-                                }
+                            if (webView.settings.javaScriptEnabled != jsEnabled) {
+                                webView.settings.javaScriptEnabled = jsEnabled
                             }
 
                             if (webView.tag != webReaderDocumentTag) {
@@ -4336,9 +4453,9 @@ internal fun NovelReaderContentHost(
                                     paddingTop = paddingTop,
                                     paddingBottom = paddingBottom,
                                     paddingHorizontal = paddingHorizontal,
-                                    fontSizePx = currentFontSize,
-                                    lineHeightMultiplier = currentLineHeight,
-                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                    fontSizePx = state.readerSettings.fontSize,
+                                    lineHeightMultiplier = state.readerSettings.lineHeight,
+                                    paragraphSpacingPx = paragraphSpacingCssUnits,
                                     textAlignCss = cssTextAlign,
                                     firstLineIndentCss = cssFirstLineIndent,
                                     textColorHex = currentTextColorCss,
@@ -4358,7 +4475,6 @@ internal fun NovelReaderContentHost(
                                     readerCss = currentReaderCss,
                                     hideUntilReveal = shouldHideWebViewUntilReveal && !seamlessInstantSwap,
                                 )
-                                val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
                                 if (isSeamlessChapterSwap) {
                                     // Chapter switch — restore the saved progress position.
                                     scrollTargetPercentAfterReload[0] = -1
@@ -4389,14 +4505,14 @@ internal fun NovelReaderContentHost(
                                     paragraphSpacingPx = paragraphSpacingCssUnits,
                                     textAlignCss = cssTextAlign,
                                     firstLineIndentCss = cssFirstLineIndent,
-                                    textColorHex = colorToCssHex(textColor),
-                                    backgroundHex = colorToCssHex(textBackground),
+                                    textColorHex = currentTextColorCss,
+                                    backgroundHex = currentBackgroundCss,
                                     appearanceMode = appearanceMode,
                                     backgroundTexture = activeBackgroundTexture,
                                     oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                     backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
                                     fontFamilyName = selectedFontFamily,
-                                    customCss = state.readerSettings.customCSS,
+                                    customCss = currentCustomCss,
                                     textShadowCss = currentTextShadowCss,
                                     forceBoldText = state.readerSettings.forceBoldText,
                                     forceItalicText = state.readerSettings.forceItalicText,
@@ -5392,3 +5508,62 @@ private fun NovelNativeScrollReaderContent(
         }
     }
 }
+
+internal fun shouldTrackNativeScrollProgress(
+    totalItemsCount: Int,
+    hasVisibleItems: Boolean,
+    restoredChapterId: Long,
+    currentChapterId: Long,
+): Boolean {
+    return totalItemsCount > 0 && hasVisibleItems && restoredChapterId == currentChapterId
+}
+
+private data class PlainPagePaginationResult(
+    val chapterId: Long = -1L,
+    val pages: List<List<PlainPageSlice>> = emptyList(),
+    val completed: Boolean = false,
+)
+
+private data class RichPagePaginationResult(
+    val chapterId: Long = -1L,
+    val pagination: MixedRichPagePagination = MixedRichPagePagination(emptyList(), emptyList()),
+    val completed: Boolean = false,
+)
+
+private data class SeamlessPreviewPaginationResult(
+    val chapterId: Long = -1L,
+    val slice: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
+)
+
+private data class WebReaderClientConfig(
+    val chapterId: Long,
+    val shouldEarlyRevealWebView: Boolean,
+    val shouldHideWebViewUntilReveal: Boolean,
+    val backgroundSelection: ReaderBackgroundSelection,
+    val selectedReaderFont: NovelReaderFontOption,
+    val fontFaceCss: String,
+    val paddingTop: Int,
+    val paddingBottom: Int,
+    val paddingHorizontal: Int,
+    val fontSize: Int,
+    val lineHeight: Float,
+    val paragraphSpacing: Int,
+    val cssTextAlign: String?,
+    val cssFirstLineIndent: String?,
+    val textColorCss: String,
+    val backgroundColorCss: String,
+    val appearanceMode: NovelReaderAppearanceMode,
+    val activeBackgroundTexture: NovelReaderBackgroundTexture,
+    val oledEdgeGradient: Boolean,
+    val backgroundImageUrl: String?,
+    val selectedFontFamily: String?,
+    val customCss: String,
+    val customJs: String,
+    val textShadowCss: String?,
+    val forceBoldText: Boolean,
+    val forceItalicText: Boolean,
+    val bionicReading: Boolean,
+    val styleFingerprint: String,
+    val restoreProgressPercent: Int,
+    val chapterHighlights: List<NovelHighlight>,
+)

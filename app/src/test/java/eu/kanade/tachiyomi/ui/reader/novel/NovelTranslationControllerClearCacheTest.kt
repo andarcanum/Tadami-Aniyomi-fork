@@ -12,6 +12,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
@@ -92,6 +93,61 @@ class NovelTranslationControllerClearCacheTest {
             // The explicit "clear cache" action still deletes it.
             controller.clearGeminiTranslation()
             NovelReaderTranslationDiskCacheStore.get(7L) shouldBe null
+        } finally {
+            NovelReaderTranslationDiskCacheStore.clear()
+        }
+    }
+
+    @Test
+    fun `clearAllGeminiTranslationCache clears holder visibility and refreshes UI immediately`() {
+        ensureStoreDependencies()
+        NovelReaderTranslationDiskCacheStore.clear()
+        try {
+            NovelReaderTranslationDiskCacheStore.put(
+                GeminiTranslationCacheEntry(
+                    chapterId = 7L,
+                    translatedByIndex = mapOf(0 to "translated"),
+                    model = "model",
+                    sourceLang = "English",
+                    targetLang = "Russian",
+                    promptMode = GeminiPromptMode.ADULT_18,
+                ),
+            )
+            val settings = mockk<NovelReaderSettings>(relaxed = true)
+            val host = mockk<NovelTranslationHost>(relaxed = true)
+            every { host.translationScope } returns CoroutineScope(Dispatchers.Unconfined)
+            every { host.translationReaderSettings() } returns settings
+            every { host.translationActiveChapterId() } returns 7L
+
+            // Simulate async queue artifact clearing that has not finished yet when clearAll returns.
+            val queueManager = mockk<TranslationQueueManager>(relaxed = true)
+
+            val controller = NovelTranslationController(
+                host = host,
+                application = mockk(relaxed = true),
+                novelReaderPreferences = mockk<NovelReaderPreferences>(relaxed = true),
+                googleTranslationService = mockk<GoogleTranslationService>(relaxed = true),
+                translationQueueManager = queueManager,
+            )
+            controller.restoreFromReaderState(
+                gemini = NovelReaderScreenModel.State.ReaderGeminiState(
+                    hasGeminiTranslationCache = true,
+                    isGeminiTranslationVisible = true,
+                    geminiTranslationProgress = 100,
+                ),
+                google = NovelReaderScreenModel.State.ReaderGoogleState(),
+            )
+
+            controller.clearAllGeminiTranslationCache()
+
+            verify(exactly = 1) { host.translationHolderClear("gemini") }
+            verify(exactly = 1) { host.translationRefreshBookModeTranslationVariant() }
+            verify(exactly = 1) { host.translationUpdateContent(settings) }
+            verify(exactly = 1) { queueManager.clearArtifacts(null) }
+            val state = controller.snapshot()
+            state.hasGeminiTranslationCache shouldBe false
+            state.isGeminiTranslationVisible shouldBe false
+            state.geminiTranslationProgress shouldBe 0
         } finally {
             NovelReaderTranslationDiskCacheStore.clear()
         }

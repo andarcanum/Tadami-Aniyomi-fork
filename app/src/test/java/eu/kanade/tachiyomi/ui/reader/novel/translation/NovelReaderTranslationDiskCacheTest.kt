@@ -9,6 +9,8 @@ import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class NovelReaderTranslationDiskCacheTest {
     @TempDir
@@ -224,5 +226,83 @@ class NovelReaderTranslationDiskCacheTest {
 
         meta15.readText(Charsets.UTF_8).contains("\"schemaVersion\":1") shouldBe true
         reader.has(15L, "Russian") shouldBe true
+    }
+
+    @Test
+    fun `concurrent put during rebuildIndex does not drop newly added chapterId`() {
+        val writer = NovelReaderTranslationDiskCache(tempDir, json)
+        writer.put(cacheEntry(chapterId = 1L, translatedByIndex = mapOf(0 to "one")))
+
+        val scanFinished = CountDownLatch(1)
+        val putFinished = CountDownLatch(1)
+        val cache = NovelReaderTranslationDiskCache(tempDir, json)
+        cache.onRebuildScanForTest = {
+            scanFinished.countDown()
+            putFinished.await(5, TimeUnit.SECONDS)
+        }
+
+        // Start background rebuildIndex (sees only chapter 1).
+        cache.has(1L) shouldBe true
+        scanFinished.await(5, TimeUnit.SECONDS) shouldBe true
+
+        // Publish chapter 2 while rebuildIndex is between scan and commit.
+        cache.onRebuildScanForTest = null
+        cache.put(cacheEntry(chapterId = 2L, translatedByIndex = mapOf(0 to "two")))
+        putFinished.countDown()
+
+        // Allow the subsequent rebuild to finish (1.meta is materialized once indexBuilt=true)
+        // and verify chapter 2 is visible both via has() and chapterIds().
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (!File(tempDir, "1.meta").isFile && System.nanoTime() < deadline) {
+            cache.has(2L) shouldBe true
+            cache.chapterIds() shouldContainExactly setOf(1L, 2L)
+            Thread.sleep(10)
+        }
+        File(tempDir, "1.meta").isFile shouldBe true
+
+        cache.has(2L) shouldBe true
+        cache.chapterIds() shouldContainExactly setOf(1L, 2L)
+    }
+
+    @Test
+    fun `trimToTargetBytes preserves tmp files and removes evicted chapters from index`() {
+        val writer = NovelReaderTranslationDiskCache(tempDir, json)
+        writer.put(cacheEntry(chapterId = 1L, translatedByIndex = mapOf(0 to "oldest")))
+        writer.put(cacheEntry(chapterId = 2L, translatedByIndex = mapOf(0 to "newest")))
+
+        // Warm index + sidecar meta files from disk in a fresh cache instance.
+        val cache = NovelReaderTranslationDiskCache(tempDir, json)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while ((!File(tempDir, "1.meta").isFile || !File(tempDir, "2.meta").isFile) && System.nanoTime() < deadline) {
+            cache.chapterIds()
+            Thread.sleep(10)
+        }
+        File(tempDir, "1.meta").isFile shouldBe true
+        File(tempDir, "2.meta").isFile shouldBe true
+
+        val json1 = File(tempDir, "1.json")
+        val meta1 = File(tempDir, "1.meta")
+        val json2 = File(tempDir, "2.json")
+        val meta2 = File(tempDir, "2.meta")
+        json1.setLastModified(1_000L)
+        meta1.setLastModified(1_000L)
+        json2.setLastModified(10_000L)
+        meta2.setLastModified(10_000L)
+
+        // Simulate an in-flight temporary file with oldest mtime; trim must never delete .tmp files.
+        val tmpFile = File(tempDir, ".99-in-flight.tmp").apply {
+            writeText("partial", Charsets.UTF_8)
+            setLastModified(500L)
+        }
+
+        cache.trimToTargetBytes(targetBytes = json2.length() + meta2.length() + 10L)
+
+        tmpFile.exists() shouldBe true
+        json1.exists() shouldBe false
+        meta1.exists() shouldBe false
+        json2.exists() shouldBe true
+        cache.has(1L) shouldBe false
+        cache.has(2L) shouldBe true
+        cache.chapterIds() shouldContainExactly setOf(2L)
     }
 }

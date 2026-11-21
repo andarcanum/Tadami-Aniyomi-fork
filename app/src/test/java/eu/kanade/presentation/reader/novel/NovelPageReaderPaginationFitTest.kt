@@ -10,6 +10,8 @@ import android.widget.TextView
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
+import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import org.junit.Test
@@ -19,6 +21,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.math.roundToInt
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -517,5 +520,170 @@ class NovelPageReaderPaginationFitTest {
         assertEquals(0, selection.selectionAnchors[0].blockIndex)
         assertEquals(1, selection.selectionAnchors[1].blockIndex)
         assertEquals(4, selection.selectionAnchors[1].charStart)
+    }
+
+    @Test
+    fun `paginatePlainPageBlocksWithImages with maxPages matches full prefix`() {
+        val textBlocks = (0 until 20).map { index ->
+            PlainPageReaderTextBlock(
+                sourceBlockIndex = index * 2,
+                text = "Paragraph $index line one",
+            )
+        }
+        val imageBlocks = listOf(
+            PlainPageImageBlock(
+                sourceBlockIndex = 1,
+                imageUrl = "https://example.com/1.jpg",
+                contentDescription = null,
+            ),
+            PlainPageImageBlock(
+                sourceBlockIndex = 15,
+                imageUrl = "https://example.com/2.jpg",
+                contentDescription = null,
+            ),
+        )
+        val fullPages = paginatePlainPageBlocksWithImages(
+            textBlocks = textBlocks,
+            imageBlocks = imageBlocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = 220,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+        )
+        assertTrue(fullPages.size > 2, "expected multiple pages, got ${fullPages.size}")
+
+        val limitedOne = paginatePlainPageBlocksWithImages(
+            textBlocks = textBlocks,
+            imageBlocks = imageBlocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = 220,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+            maxPages = 1,
+        )
+        assertEquals(fullPages.take(1), limitedOne)
+
+        val limitedTwo = paginatePlainPageBlocksWithImages(
+            textBlocks = textBlocks,
+            imageBlocks = imageBlocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = 220,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+            maxPages = 2,
+        )
+        assertEquals(fullPages.take(2), limitedTwo)
+    }
+
+    @Test
+    fun `paginateMixedRichPageBlocks with maxPages matches full prefix`() {
+        val richBlocks = (0 until 18).map { index ->
+            IndexedValue(
+                index = index,
+                value = if (index == 1) {
+                    NovelRichContentBlock.Image(url = "https://example.com/rich.png", alt = null)
+                } else {
+                    NovelRichContentBlock.Paragraph(
+                        segments = listOf(NovelRichTextSegment("Rich paragraph $index content")),
+                    )
+                },
+            )
+        }
+        val fullPagination = paginateMixedRichPageBlocks(
+            richBlocks = richBlocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = 220,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+            forceParagraphIndent = false,
+        )
+        assertTrue(fullPagination.pages.size > 2, "expected multiple rich pages, got ${fullPagination.pages.size}")
+
+        val limitedTwo = paginateMixedRichPageBlocks(
+            richBlocks = richBlocks,
+            paragraphSpacingPx = paragraphSpacingPx,
+            widthPx = widthPx,
+            heightPx = 220,
+            textSizePx = textSizePx,
+            lineHeightMultiplier = lineHeightMultiplier,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+            forceParagraphIndent = false,
+            maxPages = 2,
+        )
+        assertEquals(fullPagination.pages.take(2), limitedTwo.pages)
+    }
+
+    @Test
+    fun `shouldTrackNativeScrollProgress blocks unmeasured layout and chapter mismatch`() {
+        assertFalse(
+            shouldTrackNativeScrollProgress(
+                totalItemsCount = 0,
+                hasVisibleItems = false,
+                restoredChapterId = 10L,
+                currentChapterId = 10L,
+            ),
+        )
+        assertFalse(
+            shouldTrackNativeScrollProgress(
+                totalItemsCount = 5,
+                hasVisibleItems = false,
+                restoredChapterId = 10L,
+                currentChapterId = 10L,
+            ),
+        )
+        assertFalse(
+            shouldTrackNativeScrollProgress(
+                totalItemsCount = 5,
+                hasVisibleItems = true,
+                restoredChapterId = 9L,
+                currentChapterId = 10L,
+            ),
+        )
+        assertTrue(
+            shouldTrackNativeScrollProgress(
+                totalItemsCount = 5,
+                hasVisibleItems = true,
+                restoredChapterId = 10L,
+                currentChapterId = 10L,
+            ),
+        )
+    }
+
+    @Test
+    fun `NovelPageReaderTextView caches appliedMetrics and textColor`() {
+        val textView = NovelPageReaderTextView(
+            context = ApplicationProvider.getApplicationContext(),
+            selectionRenderer = NovelSelectedTextRenderer.PAGE_READER,
+            selectionSessionIdProvider = { 1L },
+            onSelectedTextSelectionChanged = {},
+            onPlainTap = null,
+            touchHandlingEnabled = true,
+            selectionInteractionEnabled = false,
+        )
+        val metrics = resolveNovelPageReaderTextViewMetrics(
+            textSizePx = textSizePx,
+            lineSpacingMultiplier = lineHeightMultiplier,
+            typeface = null,
+            textAlign = TextAlign.LEFT,
+            shadow = null,
+            isPageMode = true,
+        )
+        applyNovelPageReaderTextViewMetrics(textView, metrics)
+        assertEquals(metrics, textView.appliedMetrics)
+        textView.applyTextColorIfChanged(android.graphics.Color.BLACK)
+        assertEquals(android.graphics.Color.BLACK, textView.appliedTextColorArgb)
     }
 }

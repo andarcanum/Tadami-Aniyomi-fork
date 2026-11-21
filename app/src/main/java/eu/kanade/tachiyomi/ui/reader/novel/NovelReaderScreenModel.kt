@@ -1118,12 +1118,26 @@ class NovelReaderScreenModel(
         ignoreUnknownKeys = true
         isLenient = true
     }
+    private var loadChapterJob: Job? = null
+
     init {
         ttsController.attach()
-        screenModelScope.launch {
+        loadChapterJob = screenModelScope.launch {
             loadChapter()
         }
     }
+
+    fun retryCurrentChapter() {
+        if (loadChapterJob?.isActive == true) return
+        val loadingSettings = currentNovel?.let { novel ->
+            novelReaderPreferences.resolveSettings(novel.source)
+        }
+        mutableState.value = State.Loading(loadingSettings)
+        loadChapterJob = screenModelScope.launch {
+            loadChapter(targetChapterId = currentSessionChapterId)
+        }
+    }
+
     private suspend fun loadChapter(
         targetChapterId: Long = currentSessionChapterId,
         seamless: Boolean = false,
@@ -1138,11 +1152,19 @@ class NovelReaderScreenModel(
             val latestChapter = fullChapterOrderList.firstOrNull { it.id == targetChapterId }
                 ?: chapterOrderList.firstOrNull { it.id == targetChapterId }
                 ?: cachedSnapshot.chapter
-            cachedSnapshot.copy(chapter = latestChapter)
+            val progressFields = resolveSnapshotProgressFields(latestChapter.lastPageRead)
+            cachedSnapshot.copy(
+                chapter = latestChapter,
+                lastSavedIndex = progressFields.lastSavedIndex,
+                lastSavedScrollOffsetPx = progressFields.lastSavedScrollOffsetPx,
+                lastSavedWebProgressPercent = progressFields.lastSavedWebProgressPercent,
+                lastSavedPageReaderProgress = progressFields.lastSavedPageReaderProgress,
+            )
         } else {
             try {
                 ttsChapterRepository.loadChapterSnapshot(targetChapterId)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 if (seamless) {
                     NovelReaderChapterHandoffPolicy.clear()
                 }
@@ -1383,15 +1405,51 @@ class NovelReaderScreenModel(
         val outgoingChapter = currentChapter ?: outgoingState.chapter
         val outgoingSnapshot = currentChapterSnapshot
         if (outgoingSnapshot != null && outgoingSnapshot.chapter.id == outgoingChapter.id) {
+            val progressFields = resolveSnapshotProgressFields(outgoingChapter.lastPageRead)
             putSeamlessSnapshotCache(
                 outgoingSnapshot.copy(
                     chapter = outgoingChapter,
                     contentBlocks = outgoingState.contentBlocks,
                     richContentBlocks = outgoingState.richContentBlocks,
                     richContentUnsupportedFeaturesDetected = outgoingState.richContentUnsupportedFeaturesDetected,
+                    lastSavedIndex = progressFields.lastSavedIndex,
+                    lastSavedScrollOffsetPx = progressFields.lastSavedScrollOffsetPx,
+                    lastSavedWebProgressPercent = progressFields.lastSavedWebProgressPercent,
+                    lastSavedPageReaderProgress = progressFields.lastSavedPageReaderProgress,
                 ),
             )
         }
+    }
+
+    private data class SnapshotProgressFields(
+        val lastSavedIndex: Int,
+        val lastSavedScrollOffsetPx: Int,
+        val lastSavedWebProgressPercent: Int,
+        val lastSavedPageReaderProgress: PageReaderProgress?,
+    )
+
+    private fun resolveSnapshotProgressFields(lastPageRead: Long): SnapshotProgressFields {
+        val decodedNativeProgress = decodeNativeScrollProgress(lastPageRead)
+        val decodedWebProgressPercent = decodeWebScrollProgressPercent(lastPageRead)
+        val decodedPageReaderProgress = decodePageReaderProgress(lastPageRead)
+        val lastSavedIndex = when {
+            decodedNativeProgress != null -> decodedNativeProgress.index
+            decodedPageReaderProgress != null -> decodedPageReaderProgress.index
+            decodedWebProgressPercent != null -> decodedWebProgressPercent
+            else -> lastPageRead.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+        val lastSavedScrollOffsetPx = decodedNativeProgress?.offsetPx ?: 0
+        val lastSavedWebProgressPercent = when {
+            decodedWebProgressPercent != null -> decodedWebProgressPercent
+            decodedNativeProgress != null || decodedPageReaderProgress != null -> 0
+            else -> lastPageRead.coerceIn(0L, 100L).toInt()
+        }
+        return SnapshotProgressFields(
+            lastSavedIndex = lastSavedIndex,
+            lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
+            lastSavedWebProgressPercent = lastSavedWebProgressPercent,
+            lastSavedPageReaderProgress = decodedPageReaderProgress,
+        )
     }
 
     private fun putSeamlessSnapshotCache(
@@ -1562,9 +1620,12 @@ class NovelReaderScreenModel(
                 if (prefetched && state.readerSettings.seamlessChapterTransition &&
                     !bookController.isBookRuntimeActive()
                 ) {
-                    scheduleSeamlessAdjacentPreload(novel, currentChapter, state.readerSettings)
+                    withContext(Dispatchers.Main.immediate) {
+                        scheduleSeamlessAdjacentPreload(novel, currentChapter, state.readerSettings)
+                    }
                 }
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 logcat(LogPriority.WARN, error) { "Failed to prefetch next novel chapter" }
             }
         }
@@ -2131,6 +2192,8 @@ class NovelReaderScreenModel(
 
     fun stopTtsPlayback() = ttsController.stopTtsPlayback()
 
+    suspend fun stopTtsPlaybackAndAwait() = ttsController.stopTtsPlaybackAndAwait()
+
     fun skipToNextTtsSegment() = ttsController.skipToNextTtsSegment()
 
     fun skipToPreviousTtsSegment() = ttsController.skipToPreviousTtsSegment()
@@ -2379,6 +2442,7 @@ class NovelReaderScreenModel(
     override fun onDispose() {
         // Fire-and-forget cancellation — no blocking cancelAndJoin calls.
         // Each job is independently cancelled; cleanup happens in clearChapterTransientState().
+        loadChapterJob?.cancel()
         settingsJob?.cancel()
         nextChapterPrefetchJob?.cancel()
         seamlessAdjacentPreloadJob?.cancel()
@@ -2387,11 +2451,10 @@ class NovelReaderScreenModel(
         translationBatchExecutor.cancelNextChapterGeminiPrefetchJob()
         adjacentJaomixPageJob?.cancel()
         selectionTranslationController.dispose()
-        progressPersistenceController.dispose()
-        // Flush the debounced book-mode position before the jobs die: leaving the reader mid-section
-        // would otherwise lose up to one debounce window of reading progress, and chapters the reader
-        // scrolled past would never be marked read.
+        // Flush the debounced book-mode position BEFORE disposing the persistence controller so the
+        // flushed update enters the pending queue and drains on a non-cancellable IO scope.
         bookController.flushAndStop()
+        progressPersistenceController.dispose()
         ttsController.shutdown()
         incognitoObservationJob?.cancel()
         NovelReaderIncognitoState.set(false)

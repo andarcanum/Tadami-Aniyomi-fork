@@ -2,11 +2,15 @@ package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 import eu.kanade.presentation.entries.translation.googleTranslationLanguageCodeFor
 import eu.kanade.tachiyomi.extension.novel.normalizeNovelLang
+import eu.kanade.tachiyomi.network.await
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -57,13 +61,14 @@ class GoogleTranslationService(
         var lastFailure: Throwable? = null
         var hitRateLimit = false
         repeat(retryCount) { attempt ->
+            currentCoroutineContext().ensureActive()
             try {
                 val request = buildSingleTranslationRequest(
                     text = text,
                     sourceLanguage = normalizedSource,
                     targetLanguage = normalizedTarget,
                 )
-                client.newCall(request).execute().use { response ->
+                client.newCall(request).await().use { response ->
                     val body = response.body.string()
                     if (!response.isSuccessful || body.isBlank()) {
                         lastFailure = IllegalStateException("HTTP ${response.code}")
@@ -90,6 +95,8 @@ class GoogleTranslationService(
                         }
                     }
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 lastFailure = error
             }
@@ -137,8 +144,10 @@ class GoogleTranslationService(
             chunks.withIndex()
                 .chunked(DEFAULT_MAX_PARALLEL_CHUNKS)
                 .forEach { chunkGroup ->
+                    currentCoroutineContext().ensureActive()
                     chunkGroup.map { (chunkIndex, chunk) ->
                         async {
+                            currentCoroutineContext().ensureActive()
                             val percent = ((chunkIndex + 1) * 100) / chunks.size
                             onProgress?.invoke(TranslationPhase.TRANSLATING, percent)
                             val chunkChars = chunk.sumOf { it.second.length }
@@ -171,6 +180,7 @@ class GoogleTranslationService(
 
                             var applied = 0
                             chunk.forEach { (index, original) ->
+                                currentCoroutineContext().ensureActive()
                                 val markerRegex = Regex(
                                     pattern = """^\[\s*$index\s*\.?\]\s*\n?(.*?)(?=\n*\[\s*\d+\s*\.?\]|\z)""",
                                     options = setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.MULTILINE),
@@ -219,6 +229,7 @@ class GoogleTranslationService(
         rateLimited: java.util.concurrent.atomic.AtomicBoolean,
     ) {
         chunk.forEach { (index, original) ->
+            currentCoroutineContext().ensureActive()
             val result = translateSingleDetailed(
                 text = original,
                 sourceLanguage = sourceLanguage,
