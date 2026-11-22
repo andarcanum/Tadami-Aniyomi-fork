@@ -1,23 +1,32 @@
 package eu.kanade.presentation.more.settings.translation
 
 import android.content.ClipData
+import android.os.Build
+import android.view.Gravity
+import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,10 +39,12 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +55,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,13 +72,20 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.components.AuroraFrostCancel
 import eu.kanade.presentation.components.AuroraFrostConfirm
@@ -83,6 +103,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.translation.profile.PresetFlavor
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import kotlin.math.abs
 
 /** Shared generation sampling preset across both legacy-free reader sheet and fallback setup dialog. */
@@ -282,7 +303,7 @@ internal fun AiTranslationOutlinedTextField(
         keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
         trailingIcon = trailingIcon,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = aurora.textPrimary,
             unfocusedTextColor = aurora.textPrimary,
@@ -497,9 +518,9 @@ internal fun <T> AiTranslationPickerField(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .clickable(enabled = canOpen, onClick = { open = true }),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             color = resolveAuroraTranslationGlassContainerColor(aurora, subtle = true),
             border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(aurora)),
             shadowElevation = 0.dp,
@@ -508,8 +529,8 @@ internal fun <T> AiTranslationPickerField(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .heightIn(min = 50.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -546,22 +567,27 @@ internal fun <T> AiTranslationPickerField(
         }
     }
     if (open) {
-        AuroraFrostDialog(
+        AiTranslationDockedSheet(
             onDismiss = { open = false },
             title = label,
             closeLabel = stringResource(AYMR.strings.ai_translation_close),
-            contentSpacing = 12.dp,
+            contentSpacing = 10.dp,
             footer = {
-                AuroraFrostCancel(stringResource(AYMR.strings.ai_translation_cancel)) {
-                    open = false
-                }
                 if (options.isEmpty() && emptyActionLabel != null && onEmptyAction != null) {
-                    AuroraFrostConfirm(
-                        label = emptyActionLabel,
-                        onClick = {
+                    AiTranslationDockedFooter(
+                        cancelLabel = stringResource(AYMR.strings.ai_translation_cancel),
+                        confirmLabel = emptyActionLabel,
+                        onCancel = { open = false },
+                        onConfirm = {
                             open = false
                             onEmptyAction()
                         },
+                    )
+                } else {
+                    AiTranslationSecondaryButton(
+                        text = stringResource(AYMR.strings.ai_translation_cancel),
+                        onClick = { open = false },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     )
                 }
             },
@@ -611,9 +637,9 @@ internal fun AiTranslationOptionCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         color = resolveAuroraTranslationGlassContainerColor(aurora, selected = selected, subtle = true),
         border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(aurora, selected = selected)),
         shadowElevation = 0.dp,
@@ -753,6 +779,7 @@ internal fun AiTranslationPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     icon: ImageVector? = null,
+    compact: Boolean = false,
 ) {
     val aurora = AuroraTheme.colors
     val container = when (aurora.eInkProfile) {
@@ -763,11 +790,25 @@ internal fun AiTranslationPrimaryButton(
         EInkProfile.MONOCHROME -> aurora.background
         EInkProfile.COLOR, EInkProfile.OFF -> aurora.textOnAccent
     }
+    val disabledContainer = when {
+        aurora.isEInk -> resolveAuroraControlContainerColor(aurora)
+        aurora.isDark -> aurora.accent.copy(alpha = 0.16f)
+        else -> aurora.accent.copy(alpha = 0.12f)
+    }
+    val disabledContent = when {
+        aurora.isEInk -> aurora.textSecondary
+        else -> aurora.accent.copy(alpha = 0.72f)
+    }
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 44.dp),
-        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.heightIn(min = if (compact) 40.dp else 48.dp),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = if (compact) {
+            PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+        } else {
+            PaddingValues(horizontal = 18.dp, vertical = 10.dp)
+        },
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
@@ -778,14 +819,21 @@ internal fun AiTranslationPrimaryButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = container,
             contentColor = content,
+            disabledContainerColor = disabledContainer,
+            disabledContentColor = disabledContent,
         ),
     ) {
         if (icon != null) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(if (compact) 16.dp else 18.dp),
+            )
             Spacer(Modifier.size(6.dp))
         }
         Text(
             text = text,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -806,12 +854,12 @@ internal fun AiTranslationSecondaryButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = if (compact) 38.dp else 44.dp),
-        shape = RoundedCornerShape(if (compact) 12.dp else 14.dp),
+        modifier = modifier.heightIn(min = if (compact) 40.dp else 46.dp),
+        shape = RoundedCornerShape(if (compact) 10.dp else 12.dp),
         contentPadding = if (compact) {
-            PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+            PaddingValues(horizontal = 14.dp, vertical = 8.dp)
         } else {
-            ButtonDefaults.ContentPadding
+            PaddingValues(horizontal = 16.dp, vertical = 10.dp)
         },
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
@@ -830,7 +878,7 @@ internal fun AiTranslationSecondaryButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(if (compact) 16.dp else 18.dp),
                 tint = aurora.textPrimary,
             )
             Spacer(Modifier.size(6.dp))
@@ -838,7 +886,8 @@ internal fun AiTranslationSecondaryButton(
         Text(
             text = text,
             color = aurora.textPrimary,
-            style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -1022,11 +1071,17 @@ internal fun AiTranslationDangerButton(
 ) {
     val aurora = AuroraTheme.colors
     val danger = if (aurora.isEInk) aurora.textPrimary else aurora.error
+    val container = if (aurora.isEInk) {
+        resolveAuroraTranslationGlassContainerColor(aurora, subtle = true)
+    } else {
+        danger.copy(alpha = if (aurora.isDark) 0.12f else 0.08f)
+    }
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 44.dp),
-        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.heightIn(min = 46.dp),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
@@ -1035,12 +1090,19 @@ internal fun AiTranslationDangerButton(
             disabledElevation = 0.dp,
         ),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = resolveAuroraTranslationGlassContainerColor(aurora, subtle = true),
+            containerColor = container,
             contentColor = danger,
         ),
-        border = BorderStroke(1.dp, danger.copy(alpha = if (aurora.isEInk) 0.7f else 0.4f)),
+        border = BorderStroke(1.dp, danger.copy(alpha = if (aurora.isEInk) 0.7f else 0.28f)),
     ) {
-        Text(text = text, color = danger, fontWeight = FontWeight.Medium)
+        Text(
+            text = text,
+            color = danger,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -1162,8 +1224,19 @@ internal fun AiTranslationLanguagePairRow(
             Surface(
                 onClick = onSwap,
                 shape = RoundedCornerShape(12.dp),
-                color = resolveAuroraTranslationGlassContainerColor(aurora, subtle = true),
-                border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(aurora)),
+                color = if (aurora.isEInk) {
+                    resolveAuroraTranslationGlassContainerColor(aurora, subtle = true)
+                } else {
+                    aurora.accent.copy(alpha = if (aurora.isDark) 0.14f else 0.10f)
+                },
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (aurora.isEInk) {
+                        resolveAuroraBorderColor(aurora, false)
+                    } else {
+                        aurora.accent.copy(alpha = 0.45f)
+                    },
+                ),
                 shadowElevation = 0.dp,
                 tonalElevation = 0.dp,
                 modifier = Modifier.size(44.dp),
@@ -1192,6 +1265,483 @@ internal fun AiTranslationLanguagePairRow(
                 color = aurora.error,
                 modifier = Modifier.padding(start = 4.dp),
             )
+        }
+    }
+}
+/**
+ * Full-width bottom-anchored Aurora frosted sheet (Variant A) for AI Translator editors.
+ * Provides +40dp horizontal width over centered 92% modals, a 44x44dp close hitbox,
+ * hairline dividers, IME-safe sticky footer, and full E-Ink compatibility.
+ */
+@Composable
+internal fun AiTranslationDockedSheet(
+    onDismiss: () -> Unit,
+    title: String,
+    closeLabel: String,
+    subtitle: String? = null,
+    contentSpacing: Dp = 12.dp,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val sheetBackground = when {
+        colors.isEInk -> MaterialTheme.colorScheme.surfaceContainerHigh
+        colors.isDark && colors.isAmoled -> Color(0xFF0A0B10).copy(alpha = 0.94f)
+        colors.isDark -> Color(0xFF13161D).copy(alpha = 0.94f)
+        else -> Color(0xFFFDFEFF).copy(alpha = 0.96f)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        DisposableEffect(dialogWindow) {
+            val window = dialogWindow ?: return@DisposableEffect onDispose {}
+            val previousSoftInput = window.attributes.softInputMode
+            @Suppress("DEPRECATION")
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            onDispose {
+                window.setSoftInputMode(previousSoftInput)
+            }
+        }
+        SideEffect {
+            dialogWindow?.setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+            if (!colors.isEInk && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dialogWindow?.let { w ->
+                    runCatching { w.setBackgroundBlurRadius(48) }
+                    val lp = w.attributes
+                    lp.blurBehindRadius = 28
+                    lp.flags = lp.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                    w.attributes = lp
+                }
+            }
+            @Suppress("DEPRECATION")
+            dialogWindow?.setDimAmount(if (colors.isDark) 0.45f else 0.42f)
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp)
+                    .heightIn(max = 760.dp)
+                    .padding(top = 24.dp)
+                    .clip(sheetShape)
+                    .border(
+                        width = 1.dp,
+                        brush = if (colors.isEInk) {
+                            SolidColor(resolveAuroraBorderColor(colors, false))
+                        } else {
+                            auroraMenuRimLightBrush(colors)
+                        },
+                        shape = sheetShape,
+                    )
+                    .background(sheetBackground, sheetShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    ),
+            ) {
+                // Drag handle & sheet header
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(bottom = 10.dp)
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (colors.isEInk) {
+                                    colors.divider
+                                } else {
+                                    colors.textSecondary.copy(alpha = 0.35f)
+                                },
+                            ),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = colors.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (!subtitle.isNullOrBlank()) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    appHaptics.tap()
+                                    onDismiss()
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        resolveAuroraTranslationGlassContainerColor(colors, subtle = true),
+                                        RoundedCornerShape(10.dp),
+                                    )
+                                    .border(
+                                        1.dp,
+                                        resolveAuroraTranslationGlassBorderBrush(colors),
+                                        RoundedCornerShape(10.dp),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = closeLabel,
+                                    tint = colors.textSecondary,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = colors.divider.copy(alpha = if (colors.isEInk) 1f else 0.65f))
+
+                // Scrollable body
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                ) {
+                    content()
+                }
+
+                // Sticky hairline-separated footer
+                if (footer != null) {
+                    HorizontalDivider(color = colors.divider.copy(alpha = if (colors.isEInk) 1f else 0.65f))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        content = footer,
+                    )
+                } else {
+                    Spacer(Modifier.navigationBarsPadding())
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Balanced 48dp equal-height sticky footer (1 : 1.5 width ratio, unified 12dp radius).
+ * Stacks vertically automatically at large accessibility font scales (>= 1.3f).
+ */
+@Composable
+internal fun AiTranslationDockedFooter(
+    cancelLabel: String,
+    confirmLabel: String,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+    confirmEnabled: Boolean = true,
+) {
+    if (LocalDensity.current.fontScale >= 1.3f) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AiTranslationPrimaryButton(
+                text = confirmLabel,
+                onClick = onConfirm,
+                enabled = confirmEnabled,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            )
+            AiTranslationSecondaryButton(
+                text = cancelLabel,
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            )
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AiTranslationSecondaryButton(
+                text = cancelLabel,
+                onClick = onCancel,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+            )
+            AiTranslationPrimaryButton(
+                text = confirmLabel,
+                onClick = onConfirm,
+                enabled = confirmEnabled,
+                modifier = Modifier.weight(1.5f).heightIn(min = 48.dp),
+            )
+        }
+    }
+}
+
+/** Grouped inset card (16dp radius) for logically separating editor sections. */
+@Composable
+internal fun AiTranslationSectionCard(
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    headerAction: (@Composable () -> Unit)? = null,
+    contentSpacing: Dp = 12.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val aurora = AuroraTheme.colors
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = resolveAuroraTranslationGlassContainerColor(aurora, subtle = true),
+        border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(aurora)),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(contentSpacing),
+        ) {
+            if (!title.isNullOrBlank() || headerAction != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (!title.isNullOrBlank()) {
+                        Text(
+                            text = title.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = aurora.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    headerAction?.invoke()
+                }
+            }
+            content()
+        }
+    }
+}
+
+/**
+ * Compact inline action button for section headers (+ Add key) and diagnostic rows (Test).
+ * Keeps a clean 36dp visual silhouette wrapped inside a compliant 44dp touch hitbox.
+ */
+@Composable
+internal fun AiTranslationInlineActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null,
+    accented: Boolean = false,
+) {
+    val aurora = AuroraTheme.colors
+    val contentAlpha = if (enabled) 1f else 0.45f
+    val containerColor = when {
+        aurora.isEInk -> resolveAuroraControlContainerColor(aurora)
+        accented -> aurora.accent.copy(alpha = if (aurora.isDark) 0.16f else 0.11f)
+        else -> resolveAuroraTranslationGlassContainerColor(aurora, subtle = true)
+    }
+    val borderBrush = when {
+        aurora.isEInk -> SolidColor(resolveAuroraBorderColor(aurora, false))
+        accented -> SolidColor(aurora.accent.copy(alpha = 0.55f))
+        else -> resolveAuroraTranslationGlassBorderBrush(aurora)
+    }
+    val contentColor = when {
+        aurora.isEInk -> aurora.textPrimary
+        accented -> aurora.accent
+        else -> aurora.textPrimary
+    }
+
+    Box(
+        modifier = modifier
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = containerColor,
+            border = BorderStroke(1.dp, borderBrush),
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+            modifier = Modifier.heightIn(min = 36.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = contentColor.copy(alpha = contentAlpha),
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor.copy(alpha = contentAlpha),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Clean single-row segmented control track (12dp outer / 8dp inner radius) for 2..4 options.
+ * Automatically falls back to wrapping chip flow at large accessibility font scales or >4 items.
+ */
+@Composable
+internal fun <T> AiTranslationSegmentedGroup(
+    label: String,
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val fontScale = LocalDensity.current.fontScale
+    if (options.size !in 2..4 || fontScale >= 1.35f) {
+        AiTranslationChipGroup(
+            label = label,
+            options = options,
+            selected = selected,
+            onSelect = onSelect,
+            modifier = modifier,
+        )
+        return
+    }
+    val aurora = AuroraTheme.colors
+    val trackColor = when {
+        aurora.isEInk -> resolveAuroraControlContainerColor(aurora)
+        aurora.isDark -> Color(0xFF0C0E13)
+        else -> Color(0xFFE8EEF5)
+    }
+    val activeContainer = when {
+        aurora.eInkProfile == EInkProfile.MONOCHROME -> aurora.textPrimary
+        aurora.eInkProfile == EInkProfile.COLOR -> aurora.accent
+        aurora.isDark -> Color(0xFF212632)
+        else -> Color.White
+    }
+    val activeText = when {
+        aurora.eInkProfile == EInkProfile.MONOCHROME -> aurora.background
+        aurora.eInkProfile == EInkProfile.COLOR -> aurora.textOnAccent
+        else -> aurora.accent
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = aurora.textSecondary,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = trackColor,
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (aurora.isEInk) resolveAuroraBorderColor(aurora, false) else aurora.divider,
+            ),
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                options.forEach { (value, title) ->
+                    val isSelected = value == selected
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) activeContainer else Color.Transparent)
+                            .clickable(role = Role.RadioButton) { onSelect(value) }
+                            .padding(horizontal = 6.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) activeText else aurora.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
         }
     }
 }

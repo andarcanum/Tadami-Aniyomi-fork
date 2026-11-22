@@ -3747,6 +3747,15 @@
     <string name="ai_translation_target_short">Перевод</string>
     <string name="ai_translation_open_full_settings">Все настройки AI-переводчика</string>
     <string name="ai_translation_open_full_settings_summary">Профили, подключения, ключи и общие лимиты</string>
+    <string name="ai_translation_section_server">Основные параметры</string>
+    <string name="ai_translation_section_basic">Базовая настройка</string>
+    <string name="ai_translation_connection_editor_subtitle">Сервер API и локальный пул ключей</string>
+    <string name="ai_translation_profile_editor_subtitle">Модель, языковая пара и стиль текста</string>
+    <string name="ai_translation_protocol_openai_short">OpenAI Chat</string>
+    <string name="ai_translation_protocol_gemini_short">Gemini API</string>
+    <string name="ai_translation_protocol_ollama_short">Ollama</string>
+    <string name="ai_translation_priority_mode_short">По приоритету</string>
+    <string name="ai_translation_round_robin_short">Равномерно</string>
 
     <string name="pref_edge_tap_guard">Защита краёв от случайных касаний</string>
     <string name="pref_edge_tap_guard_off">Выкл</string>

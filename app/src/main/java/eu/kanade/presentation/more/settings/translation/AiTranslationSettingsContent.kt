@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -69,7 +68,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AuroraFrostCancel
-import eu.kanade.presentation.components.AuroraFrostConfirm
 import eu.kanade.presentation.components.AuroraFrostDialog
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
@@ -386,6 +384,8 @@ private fun CentreToolbar(state: AiTranslationUiState, onAction: (AiTranslationA
             AiTranslationPrimaryButton(
                 text = stringResource(AYMR.strings.ai_translation_add),
                 icon = Icons.Default.Add,
+                compact = true,
+                modifier = Modifier.heightIn(min = 44.dp),
                 onClick = {
                     onAction(
                         if (state.tab == AiTranslationTab.PROFILES) {
@@ -795,51 +795,26 @@ private fun EditorDialog(
     enabled: Boolean,
     save: () -> Unit,
     confirmLabel: String = stringResource(AYMR.strings.ai_translation_save),
+    subtitle: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    AuroraFrostDialog(
+    AiTranslationDockedSheet(
         onDismiss = dismiss,
         title = title,
+        subtitle = subtitle,
         closeLabel = stringResource(AYMR.strings.ai_translation_close),
         contentSpacing = 12.dp,
-        footer = { EditorFooter(dismiss, save, enabled, confirmLabel) },
+        footer = {
+            AiTranslationDockedFooter(
+                cancelLabel = stringResource(AYMR.strings.ai_translation_cancel),
+                confirmLabel = confirmLabel,
+                onCancel = dismiss,
+                onConfirm = save,
+                confirmEnabled = enabled,
+            )
+        },
         content = content,
     )
-}
-
-@Composable
-private fun RowScope.EditorFooter(
-    dismiss: () -> Unit,
-    save: () -> Unit,
-    enabled: Boolean,
-    confirmLabel: String = stringResource(AYMR.strings.ai_translation_save),
-) {
-    if (LocalDensity.current.fontScale >= 1.3f) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(Modifier.fillMaxWidth()) {
-                AuroraFrostConfirm(
-                    confirmLabel,
-                    save,
-                    enabled,
-                    Modifier.fillMaxWidth().heightIn(min = 44.dp),
-                )
-            }
-            Row(Modifier.fillMaxWidth()) {
-                AuroraFrostCancel(stringResource(AYMR.strings.ai_translation_cancel), dismiss)
-            }
-        }
-    } else {
-        AuroraFrostCancel(stringResource(AYMR.strings.ai_translation_cancel), dismiss)
-        AuroraFrostConfirm(
-            confirmLabel,
-            save,
-            enabled,
-            Modifier.heightIn(min = 44.dp),
-        )
-    }
 }
 
 @Composable
@@ -919,300 +894,306 @@ private fun ConnectionEditor(
     }
     val result = draft.toDomainOrNull()
     val errors = draft.errors()
-    EditorDialog(stringResource(AYMR.strings.ai_translation_connection_editor), close, result != null, {
-        result?.let { onAction(AiTranslationAction.SaveConnection(it)) }
-    }) {
-        Field(
-            stringResource(AYMR.strings.ai_translation_name),
-            draft.name,
-            { changed(draft.copy(name = it)) },
-            AiTranslationFormError.NAME in errors,
-        )
-        AiTranslationPickerField(
-            label = stringResource(AYMR.strings.ai_translation_flavor),
-            value = flavorTitle(draft.presetFlavor),
-            options = PresetFlavor.entries.map { it to flavorTitle(it) },
-            selectedOption = draft.presetFlavor,
-            onSelect = { flavor ->
-                changed(
-                    when (flavor) {
-                        PresetFlavor.NONE -> draft.copy(presetFlavor = PresetFlavor.NONE)
-                        PresetFlavor.GEMINI_PRIVATE -> draft.copy(
-                            presetFlavor = flavor,
-                            protocol = TranslationProtocol.GEMINI_GENERATE,
-                            baseUrl = "https://generativelanguage.googleapis.com/v1beta",
-                            auth = ProfileAuth.X_GOOG_API_KEY,
+    EditorDialog(
+        title = stringResource(AYMR.strings.ai_translation_connection_editor),
+        subtitle = stringResource(AYMR.strings.ai_translation_connection_editor_subtitle),
+        dismiss = close,
+        enabled = result != null,
+        save = { result?.let { onAction(AiTranslationAction.SaveConnection(it)) } },
+    ) {
+        val colors = AuroraTheme.colors
+        AiTranslationSectionCard(
+            title = stringResource(AYMR.strings.ai_translation_section_server),
+        ) {
+            Field(
+                stringResource(AYMR.strings.ai_translation_name),
+                draft.name,
+                { changed(draft.copy(name = it)) },
+                AiTranslationFormError.NAME in errors,
+            )
+            AiTranslationPickerField(
+                label = stringResource(AYMR.strings.ai_translation_flavor),
+                value = flavorTitle(draft.presetFlavor),
+                options = PresetFlavor.entries.map { it to flavorTitle(it) },
+                selectedOption = draft.presetFlavor,
+                onSelect = { flavor ->
+                    changed(
+                        when (flavor) {
+                            PresetFlavor.NONE -> draft.copy(presetFlavor = PresetFlavor.NONE)
+                            PresetFlavor.GEMINI_PRIVATE -> draft.copy(
+                                presetFlavor = flavor,
+                                protocol = TranslationProtocol.GEMINI_GENERATE,
+                                baseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                                auth = ProfileAuth.X_GOOG_API_KEY,
+                                allowInsecureLocalHTTP = false,
+                            )
+                            PresetFlavor.OPENROUTER -> draft.copy(
+                                presetFlavor = flavor,
+                                protocol = TranslationProtocol.OPENAI_CHAT,
+                                baseUrl = "https://openrouter.ai/api/v1",
+                                auth = ProfileAuth.BEARER,
+                                allowInsecureLocalHTTP = false,
+                            )
+                            PresetFlavor.DEEPSEEK -> draft.copy(
+                                presetFlavor = flavor,
+                                protocol = TranslationProtocol.OPENAI_CHAT,
+                                baseUrl = "https://api.deepseek.com",
+                                auth = ProfileAuth.BEARER,
+                                allowInsecureLocalHTTP = false,
+                            )
+                            PresetFlavor.MISTRAL -> draft.copy(
+                                presetFlavor = flavor,
+                                protocol = TranslationProtocol.OPENAI_CHAT,
+                                baseUrl = "https://api.mistral.ai/v1",
+                                auth = ProfileAuth.BEARER,
+                                allowInsecureLocalHTTP = false,
+                            )
+                            PresetFlavor.NVIDIA -> draft.copy(
+                                presetFlavor = flavor,
+                                protocol = TranslationProtocol.OPENAI_CHAT,
+                                baseUrl = "https://integrate.api.nvidia.com/v1",
+                                auth = ProfileAuth.BEARER,
+                                allowInsecureLocalHTTP = false,
+                            )
+                            PresetFlavor.OLLAMA -> draft.copy(
+                                presetFlavor = flavor,
+                                protocol = TranslationProtocol.OLLAMA_NATIVE,
+                                baseUrl = "https://ollama.com/api",
+                                auth = ProfileAuth.BEARER,
+                                allowInsecureLocalHTTP = false,
+                            )
+                        },
+                    )
+                },
+            )
+            AiTranslationSegmentedGroup(
+                label = stringResource(AYMR.strings.ai_translation_protocol),
+                options = TranslationProtocol.entries.map { it to protocolShortTitle(it) },
+                selected = draft.protocol,
+                onSelect = { protocol ->
+                    val root = when (protocol) {
+                        TranslationProtocol.GEMINI_GENERATE -> "https://generativelanguage.googleapis.com/v1beta"
+                        TranslationProtocol.OPENAI_CHAT -> "https://api.example.com/v1"
+                        TranslationProtocol.OLLAMA_NATIVE -> "http://127.0.0.1:11434/api"
+                    }
+                    changed(
+                        draft.copy(
+                            protocol = protocol,
+                            baseUrl = root,
+                            presetFlavor = PresetFlavor.NONE,
                             allowInsecureLocalHTTP = false,
-                        )
-                        PresetFlavor.OPENROUTER -> draft.copy(
-                            presetFlavor = flavor,
-                            protocol = TranslationProtocol.OPENAI_CHAT,
-                            baseUrl = "https://openrouter.ai/api/v1",
-                            auth = ProfileAuth.BEARER,
-                            allowInsecureLocalHTTP = false,
-                        )
-                        PresetFlavor.DEEPSEEK -> draft.copy(
-                            presetFlavor = flavor,
-                            protocol = TranslationProtocol.OPENAI_CHAT,
-                            baseUrl = "https://api.deepseek.com",
-                            auth = ProfileAuth.BEARER,
-                            allowInsecureLocalHTTP = false,
-                        )
-                        PresetFlavor.MISTRAL -> draft.copy(
-                            presetFlavor = flavor,
-                            protocol = TranslationProtocol.OPENAI_CHAT,
-                            baseUrl = "https://api.mistral.ai/v1",
-                            auth = ProfileAuth.BEARER,
-                            allowInsecureLocalHTTP = false,
-                        )
-                        PresetFlavor.NVIDIA -> draft.copy(
-                            presetFlavor = flavor,
-                            protocol = TranslationProtocol.OPENAI_CHAT,
-                            baseUrl = "https://integrate.api.nvidia.com/v1",
-                            auth = ProfileAuth.BEARER,
-                            allowInsecureLocalHTTP = false,
-                        )
-                        PresetFlavor.OLLAMA -> draft.copy(
-                            presetFlavor = flavor,
-                            protocol = TranslationProtocol.OLLAMA_NATIVE,
-                            baseUrl = "https://ollama.com/api",
-                            auth = ProfileAuth.BEARER,
-                            allowInsecureLocalHTTP = false,
+                            auth = if (protocol == TranslationProtocol.GEMINI_GENERATE) {
+                                ProfileAuth.X_GOOG_API_KEY
+                            } else if (protocol == TranslationProtocol.OLLAMA_NATIVE) {
+                                ProfileAuth.NONE
+                            } else {
+                                ProfileAuth.BEARER
+                            },
+                        ),
+                    )
+                },
+            )
+            Field(
+                stringResource(AYMR.strings.ai_translation_api_root),
+                draft.baseUrl,
+                { changed(draft.copy(baseUrl = it)) },
+                AiTranslationFormError.ENDPOINT in errors,
+            )
+            EditorHelperCaption(stringResource(AYMR.strings.ai_translation_root_hint))
+            AiTranslationPickerField(
+                label = stringResource(AYMR.strings.ai_translation_auth),
+                value = authTitle(draft.auth),
+                options = ProfileAuth.entries.map { it to authTitle(it) },
+                selectedOption = draft.auth,
+                onSelect = { changed(draft.copy(auth = it)) },
+            )
+            AiTranslationSegmentedGroup(
+                label = stringResource(AYMR.strings.ai_translation_parallelism),
+                options = listOf(1, 2, 4, 8).map { it to it.toString() },
+                selected = draft.maxConcurrency,
+                onSelect = { changed(draft.copy(maxConcurrency = it)) },
+            )
+            AiTranslationToggleRow(
+                label = stringResource(AYMR.strings.ai_translation_allow_http),
+                checked = draft.allowInsecureLocalHTTP,
+                onClick = { changed(draft.copy(allowInsecureLocalHTTP = !draft.allowInsecureLocalHTTP)) },
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp),
+            )
+            if (draft.allowInsecureLocalHTTP) {
+                TranslationNotice(stringResource(AYMR.strings.ai_translation_http_warning))
+            }
+        }
+
+        AiTranslationSectionCard(
+            title = stringResource(AYMR.strings.ai_translation_keys),
+            headerAction = {
+                AiTranslationInlineActionButton(
+                    text = stringResource(AYMR.strings.ai_translation_add_key),
+                    icon = Icons.Default.Add,
+                    accented = true,
+                    onClick = {
+                        onAction(
+                            AiTranslationAction.EditorChanged(
+                                AiTranslationEditor.Credential(null, "", draft.id, draft, editor.returnTo),
+                            ),
                         )
                     },
                 )
             },
-        )
-        AiTranslationChipGroup(
-            label = stringResource(AYMR.strings.ai_translation_protocol),
-            options = TranslationProtocol.entries.map { it to protocolTitle(it) },
-            selected = draft.protocol,
-            onSelect = { protocol ->
-                val root = when (protocol) {
-                    TranslationProtocol.GEMINI_GENERATE -> "https://generativelanguage.googleapis.com/v1beta"
-                    TranslationProtocol.OPENAI_CHAT -> "https://api.example.com/v1"
-                    TranslationProtocol.OLLAMA_NATIVE -> "http://127.0.0.1:11434/api"
+        ) {
+            draft.bindings.forEach { binding ->
+                val metadata = state.credentials.firstOrNull { it.id == binding.credentialId }
+                val waitMinutes = aiTranslationWaitMinutes(metadata?.notBeforeAt, state.nowMillis)
+                val healthLabel = when {
+                    metadata?.healthStatus == CredentialHealthStatus.NEEDS_ACTION ->
+                        stringResource(AYMR.strings.ai_translation_key_needs_action)
+                    waitMinutes != null ->
+                        stringResource(AYMR.strings.ai_translation_key_cooldown, waitMinutes)
+                    metadata?.healthStatus == CredentialHealthStatus.READY ->
+                        stringResource(AYMR.strings.ai_translation_key_ready)
+                    else -> null
                 }
-                changed(
-                    draft.copy(
-                        protocol = protocol,
-                        baseUrl = root,
-                        presetFlavor = PresetFlavor.NONE,
-                        allowInsecureLocalHTTP = false,
-                        auth = if (protocol == TranslationProtocol.GEMINI_GENERATE) {
-                            ProfileAuth.X_GOOG_API_KEY
-                        } else if (protocol == TranslationProtocol.OLLAMA_NATIVE) {
-                            ProfileAuth.NONE
-                        } else {
-                            ProfileAuth.BEARER
-                        },
-                    ),
-                )
-            },
-        )
-        Field(
-            stringResource(AYMR.strings.ai_translation_api_root),
-            draft.baseUrl,
-            { changed(draft.copy(baseUrl = it)) },
-            AiTranslationFormError.ENDPOINT in errors,
-        )
-        EditorHelperCaption(stringResource(AYMR.strings.ai_translation_root_hint))
-        AiTranslationChipGroup(
-            label = stringResource(AYMR.strings.ai_translation_auth),
-            options = ProfileAuth.entries.map { it to authTitle(it) },
-            selected = draft.auth,
-            onSelect = { changed(draft.copy(auth = it)) },
-        )
-        AiTranslationChipGroup(
-            label = stringResource(AYMR.strings.ai_translation_parallelism),
-            options = listOf(1, 2, 4, 8).map { it to it.toString() },
-            selected = draft.maxConcurrency,
-            onSelect = { changed(draft.copy(maxConcurrency = it)) },
-        )
-        AiTranslationToggleRow(
-            label = stringResource(AYMR.strings.ai_translation_allow_http),
-            checked = draft.allowInsecureLocalHTTP,
-            onClick = { changed(draft.copy(allowInsecureLocalHTTP = !draft.allowInsecureLocalHTTP)) },
-            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp),
-        )
-        if (draft.allowInsecureLocalHTTP) TranslationNotice(stringResource(AYMR.strings.ai_translation_http_warning))
-        Text(
-            text = stringResource(AYMR.strings.ai_translation_keys),
-            style = MaterialTheme.typography.titleSmall,
-            color = AuroraTheme.colors.textPrimary,
-        )
-        val colors = AuroraTheme.colors
-        draft.bindings.forEach { binding ->
-            val metadata = state.credentials.firstOrNull { it.id == binding.credentialId }
-            val waitMinutes = aiTranslationWaitMinutes(metadata?.notBeforeAt, state.nowMillis)
-            val healthLabel = when {
-                metadata?.healthStatus == CredentialHealthStatus.NEEDS_ACTION ->
-                    stringResource(AYMR.strings.ai_translation_key_needs_action)
-                waitMinutes != null ->
-                    stringResource(AYMR.strings.ai_translation_key_cooldown, waitMinutes)
-                metadata?.healthStatus == CredentialHealthStatus.READY ->
-                    stringResource(AYMR.strings.ai_translation_key_ready)
-                else -> null
-            }
-            val healthTint = when {
-                metadata?.healthStatus == CredentialHealthStatus.NEEDS_ACTION -> colors.error
-                waitMinutes != null -> colors.warning
-                metadata?.healthStatus == CredentialHealthStatus.READY -> colors.success
-                else -> colors.textSecondary
-            }
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = resolveAuroraTranslationGlassContainerColor(colors, subtle = true),
-                border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(colors)),
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                val healthTint = when {
+                    metadata?.healthStatus == CredentialHealthStatus.NEEDS_ACTION -> colors.error
+                    waitMinutes != null -> colors.warning
+                    metadata?.healthStatus == CredentialHealthStatus.READY -> colors.success
+                    else -> colors.textSecondary
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = resolveAuroraTranslationGlassContainerColor(colors, subtle = true),
+                    border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(colors)),
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = (metadata?.alias.orEmpty()) + " · •••• " + metadata?.maskedSuffix.orEmpty(),
-                                color = colors.textPrimary,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            if (healthLabel != null) {
-                                AiTranslationStatusChip(label = healthLabel, tint = healthTint)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = (metadata?.alias.orEmpty()) + " · •••• " + metadata?.maskedSuffix.orEmpty(),
+                                    color = colors.textPrimary,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (healthLabel != null) {
+                                    AiTranslationStatusChip(label = healthLabel, tint = healthTint)
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    onAction(
+                                        AiTranslationAction.EditorChanged(
+                                            AiTranslationEditor.Credential(
+                                                binding.credentialId,
+                                                metadata?.alias.orEmpty(),
+                                                draft.id,
+                                                draft,
+                                                editor.returnTo,
+                                            ),
+                                        ),
+                                    )
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    stringResource(AYMR.strings.ai_translation_edit),
+                                    tint = colors.textSecondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    changed(
+                                        draft.copy(
+                                            bindings = draft.bindings.filterNot { it.credentialId == binding.credentialId },
+                                        ),
+                                    )
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    stringResource(AYMR.strings.ai_translation_unlink_key),
+                                    tint = colors.textSecondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
                             }
                         }
-                        IconButton(
-                            onClick = {
-                                onAction(
-                                    AiTranslationAction.EditorChanged(
-                                        AiTranslationEditor.Credential(
-                                            binding.credentialId,
-                                            metadata?.alias.orEmpty(),
-                                            draft.id,
-                                            draft,
-                                            editor.returnTo,
-                                        ),
-                                    ),
-                                )
-                            },
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.Settings,
-                                stringResource(AYMR.strings.ai_translation_edit),
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                        IconButton(
+                        AiTranslationToggleRow(
+                            label = stringResource(AYMR.strings.ai_translation_enabled),
+                            checked = binding.enabled,
                             onClick = {
                                 changed(
                                     draft.copy(
-                                        bindings = draft.bindings.filterNot { it.credentialId == binding.credentialId },
+                                        bindings = draft.bindings.map {
+                                            if (it.credentialId == binding.credentialId) {
+                                                it.copy(enabled = !binding.enabled)
+                                            } else {
+                                                it
+                                            }
+                                        },
                                     ),
                                 )
                             },
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                stringResource(AYMR.strings.ai_translation_unlink_key),
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(20.dp),
+                            contentPadding = PaddingValues(vertical = 4.dp),
+                        )
+                        Field(stringResource(AYMR.strings.ai_translation_priority), binding.priority, { value ->
+                            changed(
+                                draft.copy(
+                                    bindings = draft.bindings.map {
+                                        if (it.credentialId == binding.credentialId) it.copy(priority = value) else it
+                                    },
+                                ),
                             )
-                        }
-                    }
-                    AiTranslationToggleRow(
-                        label = stringResource(AYMR.strings.ai_translation_enabled),
-                        checked = binding.enabled,
-                        onClick = {
+                        }, binding.toDomainOrNull() == null, numeric = true)
+                        Field(stringResource(AYMR.strings.ai_translation_quota_group), binding.quotaGroupLabel, { value ->
                             changed(
                                 draft.copy(
                                     bindings = draft.bindings.map {
                                         if (it.credentialId == binding.credentialId) {
-                                            it.copy(enabled = !binding.enabled)
+                                            it.copy(quotaGroupLabel = value)
                                         } else {
                                             it
                                         }
                                     },
                                 ),
                             )
-                        },
-                        contentPadding = PaddingValues(vertical = 4.dp),
-                    )
-                    Field(stringResource(AYMR.strings.ai_translation_priority), binding.priority, { value ->
-                        changed(
-                            draft.copy(
-                                bindings = draft.bindings.map {
-                                    if (it.credentialId == binding.credentialId) it.copy(priority = value) else it
-                                },
-                            ),
-                        )
-                    }, binding.toDomainOrNull() == null, numeric = true)
-                    Field(stringResource(AYMR.strings.ai_translation_quota_group), binding.quotaGroupLabel, { value ->
-                        changed(
-                            draft.copy(
-                                bindings = draft.bindings.map {
-                                    if (it.credentialId ==
-                                        binding.credentialId
-                                    ) {
-                                        it.copy(quotaGroupLabel = value)
-                                    } else {
-                                        it
-                                    }
-                                },
-                            ),
-                        )
-                    })
+                        })
+                    }
                 }
             }
+            EditorHelperCaption(stringResource(AYMR.strings.ai_translation_group_hint))
+            AiTranslationSegmentedGroup(
+                label = stringResource(AYMR.strings.ai_translation_distribution),
+                options = CredentialRoutingMode.entries.map { it to routingShortTitle(it) },
+                selected = draft.routingMode,
+                onSelect = { changed(draft.copy(routingMode = it)) },
+            )
         }
-        AiTranslationSecondaryButton(
-            text = stringResource(AYMR.strings.ai_translation_add_key),
-            icon = Icons.Default.Add,
-            onClick = {
-                onAction(
-                    AiTranslationAction.EditorChanged(
-                        AiTranslationEditor.Credential(null, "", draft.id, draft, editor.returnTo),
-                    ),
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        EditorHelperCaption(stringResource(AYMR.strings.ai_translation_group_hint))
-        AiTranslationChipGroup(
-            label = stringResource(AYMR.strings.ai_translation_distribution),
-            options = CredentialRoutingMode.entries.map { it to routingTitle(it) },
-            selected = draft.routingMode,
-            onSelect = { changed(draft.copy(routingMode = it)) },
-        )
+
         val probeStatus = state.probeStates[draft.id]
         val diagnosticsTint = probeTint(probeStatus, colors)
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = resolveAuroraTranslationGlassContainerColor(colors, subtle = true),
-            border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(colors)),
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        AiTranslationSectionCard(contentSpacing = 8.dp) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -1226,22 +1207,24 @@ private fun ConnectionEditor(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    AiTranslationSecondaryButton(
-                        text = stringResource(AYMR.strings.ai_translation_test_short),
-                        onClick = { onAction(AiTranslationAction.TestConnection(draft.id)) },
-                        enabled = result != null && probeStatus != AiTranslationProbeStatus.RUNNING,
-                        compact = true,
+                    Text(
+                        text = stringResource(AYMR.strings.ai_translation_probe_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.textSecondary,
                     )
                 }
-                Text(
-                    text = stringResource(AYMR.strings.ai_translation_probe_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textSecondary,
+                AiTranslationInlineActionButton(
+                    text = stringResource(AYMR.strings.ai_translation_test_short),
+                    onClick = { onAction(AiTranslationAction.TestConnection(draft.id)) },
+                    enabled = result != null && probeStatus != AiTranslationProbeStatus.RUNNING,
                 )
             }
         }
+
         if (state.connections.any { it.id == draft.id }) {
             EditorDangerZone(
                 label = stringResource(AYMR.strings.ai_translation_delete),
@@ -1272,113 +1255,127 @@ private fun ProfileEditor(
     val connection = state.connections.firstOrNull { it.id == draft.connectionId }
     var connectionPickerTrigger by remember { mutableIntStateOf(0) }
     EditorDialog(
-        stringResource(AYMR.strings.ai_translation_profile_editor),
-        dismiss,
-        result != null && !state.editorSaving,
-        {
+        title = stringResource(AYMR.strings.ai_translation_profile_editor),
+        subtitle = stringResource(AYMR.strings.ai_translation_profile_editor_subtitle),
+        dismiss = dismiss,
+        enabled = result != null && !state.editorSaving,
+        save = {
             result?.let {
                 onAction(AiTranslationAction.SaveProfile(it, draft.pendingParallelism))
             }
         },
     ) {
-        Field(
-            stringResource(AYMR.strings.ai_translation_name),
-            draft.name,
-            { changed(draft.copy(name = it)) },
-            AiTranslationFormError.NAME in errors,
-        )
-        AiTranslationPickerField(
-            label = stringResource(AYMR.strings.ai_translation_connection),
-            value = connection?.name.orEmpty(),
-            options = state.connections.map { it.id to it.name },
-            selectedOption = draft.connectionId.takeIf { it.isNotBlank() },
-            emptyText = stringResource(AYMR.strings.ai_translation_empty_connections),
-            emptyActionLabel = stringResource(AYMR.strings.ai_translation_add),
-            onEmptyAction = { onAction(AiTranslationAction.EditConnection(null, returnTo = draft)) },
-            openSignal = connectionPickerTrigger,
-            onSelect = {
-                changed(
-                    draft.copy(
-                        connectionId = it,
-                        model = null,
-                        discoveredReasoningContract = null,
-                        reasoning = ReasoningChoice.ApiDefault,
-                        reasoningBudget = "",
-                        supportedFields = emptySet(),
-                    ),
-                )
-            },
-        )
         val aurora = AuroraTheme.colors
         val modelDisplayText = if (draft.connectionId.isNotBlank()) {
             draft.model?.exactModelId ?: stringResource(AYMR.strings.ai_translation_select_model_placeholder)
         } else {
             stringResource(AYMR.strings.ai_translation_select_connection_first)
         }
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .clickable {
-                    when {
-                        draft.connectionId.isNotBlank() ->
-                            onAction(AiTranslationAction.EditorChanged(AiTranslationEditor.Models(draft)))
-                        state.connections.isNotEmpty() -> connectionPickerTrigger += 1
-                        else -> onAction(AiTranslationAction.EditConnection(null, returnTo = draft))
-                    }
-                },
-            shape = RoundedCornerShape(16.dp),
-            color = resolveAuroraTranslationGlassContainerColor(aurora, subtle = true),
-            border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(aurora)),
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp,
+
+        AiTranslationSectionCard(
+            title = stringResource(AYMR.strings.ai_translation_section_basic),
         ) {
-            Row(
+            Field(
+                stringResource(AYMR.strings.ai_translation_name),
+                draft.name,
+                { changed(draft.copy(name = it)) },
+                AiTranslationFormError.NAME in errors,
+            )
+            AiTranslationPickerField(
+                label = stringResource(AYMR.strings.ai_translation_connection),
+                value = connection?.name.orEmpty(),
+                options = state.connections.map { it.id to it.name },
+                selectedOption = draft.connectionId.takeIf { it.isNotBlank() },
+                emptyText = stringResource(AYMR.strings.ai_translation_empty_connections),
+                emptyActionLabel = stringResource(AYMR.strings.ai_translation_add),
+                onEmptyAction = { onAction(AiTranslationAction.EditConnection(null, returnTo = draft)) },
+                openSignal = connectionPickerTrigger,
+                onSelect = {
+                    changed(
+                        draft.copy(
+                            connectionId = it,
+                            model = null,
+                            discoveredReasoningContract = null,
+                            reasoning = ReasoningChoice.ApiDefault,
+                            reasoningBudget = "",
+                            supportedFields = emptySet(),
+                        ),
+                    )
+                },
+            )
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        when {
+                            draft.connectionId.isNotBlank() ->
+                                onAction(AiTranslationAction.EditorChanged(AiTranslationEditor.Models(draft)))
+                            state.connections.isNotEmpty() -> connectionPickerTrigger += 1
+                            else -> onAction(AiTranslationAction.EditConnection(null, returnTo = draft))
+                        }
+                    },
+                shape = RoundedCornerShape(12.dp),
+                color = resolveAuroraTranslationGlassContainerColor(aurora, subtle = true),
+                border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(aurora)),
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = stringResource(AYMR.strings.ai_translation_model_picker),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = aurora.textSecondary,
-                    )
-                    Text(
-                        text = modelDisplayText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = aurora.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 50.dp)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = stringResource(AYMR.strings.ai_translation_model_picker),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = aurora.textSecondary,
+                        )
+                        Text(
+                            text = modelDisplayText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = aurora.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = aurora.textSecondary,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = aurora.textSecondary,
-                )
             }
         }
-        AiTranslationLanguagePairRow(
-            sourceValue = draft.sourceLanguage,
-            onSourceChange = { changed(draft.copy(sourceLanguage = it)) },
-            targetValue = draft.targetLanguage,
-            onTargetChange = { changed(draft.copy(targetLanguage = it)) },
-            onSwap = {
-                changed(
-                    draft.copy(
-                        sourceLanguage = draft.targetLanguage,
-                        targetLanguage = draft.sourceLanguage,
-                    ),
-                )
-            },
-            isError = AiTranslationFormError.LANGUAGE in errors,
-        )
-        TranslationNotice(stringResource(AYMR.strings.ai_translation_profile_reader_hint))
+
+        AiTranslationSectionCard(
+            title = stringResource(AYMR.strings.ai_translation_languages),
+            contentSpacing = 10.dp,
+        ) {
+            AiTranslationLanguagePairRow(
+                sourceValue = draft.sourceLanguage,
+                onSourceChange = { changed(draft.copy(sourceLanguage = it)) },
+                targetValue = draft.targetLanguage,
+                onTargetChange = { changed(draft.copy(targetLanguage = it)) },
+                onSwap = {
+                    changed(
+                        draft.copy(
+                            sourceLanguage = draft.targetLanguage,
+                            targetLanguage = draft.sourceLanguage,
+                        ),
+                    )
+                },
+                isError = AiTranslationFormError.LANGUAGE in errors,
+            )
+            EditorHelperCaption(stringResource(AYMR.strings.ai_translation_profile_reader_hint))
+        }
+
         var showAdvanced by remember(draft.id) { mutableStateOf(false) }
         LaunchedEffect(errors) {
             if (AiTranslationFormError.GENERATION in errors) {
@@ -1390,7 +1387,6 @@ private fun ProfileEditor(
             label = "advanced_chevron",
         )
         Surface(
-            onClick = { showAdvanced = !showAdvanced },
             shape = RoundedCornerShape(16.dp),
             color = resolveAuroraTranslationGlassContainerColor(aurora, subtle = true),
             border = BorderStroke(1.dp, resolveAuroraTranslationGlassBorderBrush(aurora)),
@@ -1398,147 +1394,157 @@ private fun ProfileEditor(
             tonalElevation = 0.dp,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = stringResource(AYMR.strings.ai_translation_advanced_defaults),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = aurora.textPrimary,
-                    )
-                    Text(
-                        text = stringResource(AYMR.strings.ai_translation_advanced_defaults_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = aurora.textSecondary,
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 54.dp)
+                        .clickable { showAdvanced = !showAdvanced }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = stringResource(AYMR.strings.ai_translation_advanced_defaults),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = aurora.textPrimary,
+                        )
+                        Text(
+                            text = stringResource(AYMR.strings.ai_translation_advanced_defaults_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = aurora.textSecondary,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = aurora.textSecondary,
+                        modifier = Modifier.rotate(arrowRotation),
                     )
                 }
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = aurora.textSecondary,
-                    modifier = Modifier.rotate(arrowRotation),
-                )
+                AnimatedVisibility(visible = showAdvanced) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        HorizontalDivider(color = aurora.divider.copy(alpha = if (aurora.isEInk) 1f else 0.65f))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            AiTranslationChipGroup(
+                                label = stringResource(AYMR.strings.ai_translation_style),
+                                options = listOf("PROFESSIONAL", "LITERARY", "CONVERSATIONAL", "VULGAR_18", "MINIMAL").map {
+                                    it to styleTitle(it)
+                                },
+                                selected = draft.styleId,
+                                onSelect = { changed(draft.copy(styleId = it)) },
+                            )
+                            AiTranslationSegmentedGroup(
+                                label = stringResource(AYMR.strings.ai_translation_prompt_mode),
+                                options = listOf(
+                                    "CLASSIC" to stringResource(AYMR.strings.ai_translation_mode_classic),
+                                    "ADULT_18" to stringResource(AYMR.strings.ai_translation_mode_adult),
+                                ),
+                                selected = draft.modeId,
+                                onSelect = { changed(draft.copy(modeId = it)) },
+                            )
+                            AiTranslationReasoningSelector(
+                                contract = draft.model?.reasoningContract,
+                                discoveredContract = draft.discoveredReasoningContract ?: draft.model?.reasoningContract,
+                                reasoning = draft.reasoning,
+                                budgetInput = draft.reasoningBudget,
+                                allowBudget = connection == null ||
+                                    connection.protocol == TranslationProtocol.GEMINI_GENERATE ||
+                                    connection.presetFlavor == PresetFlavor.OPENROUTER,
+                                allowOverride = draft.model != null && connection?.presetFlavor != PresetFlavor.NVIDIA,
+                                onSelect = { contract, reasoning, budget ->
+                                    changed(
+                                        draft.copy(
+                                            model = draft.model?.copy(
+                                                reasoningContract = contract,
+                                                generation = draft.model.generation.copy(reasoning = reasoning),
+                                            ),
+                                            reasoning = reasoning,
+                                            reasoningBudget = budget,
+                                        ),
+                                    )
+                                },
+                                onBudgetInputChange = { changed(draft.copy(reasoningBudget = it)) },
+                            )
+                            if (AiGenerationField.TEMPERATURE in draft.supportedFields) {
+                                Field(
+                                    stringResource(AYMR.strings.ai_translation_temperature),
+                                    draft.temperature,
+                                    { changed(draft.copy(temperature = it)) },
+                                    AiTranslationFormError.GENERATION in errors,
+                                    numeric = true,
+                                )
+                            }
+                            if (AiGenerationField.TOP_P in draft.supportedFields) {
+                                Field(
+                                    stringResource(AYMR.strings.ai_translation_top_p),
+                                    draft.topP,
+                                    { changed(draft.copy(topP = it)) },
+                                    numeric = true,
+                                )
+                            }
+                            if (AiGenerationField.TOP_K in draft.supportedFields) {
+                                Field(
+                                    stringResource(AYMR.strings.ai_translation_top_k),
+                                    draft.topK,
+                                    { changed(draft.copy(topK = it)) },
+                                    numeric = true,
+                                )
+                            }
+                            if (AiGenerationField.OUTPUT_TOKENS in draft.supportedFields) {
+                                Field(
+                                    stringResource(AYMR.strings.ai_translation_output_tokens),
+                                    draft.maxOutputTokens,
+                                    { changed(draft.copy(maxOutputTokens = it)) },
+                                    numeric = true,
+                                )
+                            }
+                            Field(
+                                stringResource(AYMR.strings.ai_translation_modifiers),
+                                draft.modifiersText,
+                                { changed(draft.copy(modifiersText = it)) },
+                            )
+                            Field(
+                                stringResource(AYMR.strings.ai_translation_custom_prompt),
+                                draft.customText,
+                                { changed(draft.copy(customText = it)) },
+                                multiline = true,
+                            )
+                            AiTranslationSecondaryButton(
+                                text = stringResource(AYMR.strings.ai_translation_recovery_editor),
+                                onClick = {
+                                    onAction(
+                                        AiTranslationAction.EditorChanged(
+                                            AiTranslationEditor.Recovery(
+                                                draft.id,
+                                                draft.connectionId,
+                                                AiRecoveryDraft(
+                                                    draft.execution,
+                                                    parallelism = draft.pendingParallelism ?: connection?.maxConcurrency ?: 2,
+                                                ),
+                                                draft,
+                                            ),
+                                        ),
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            EditorHelperCaption(stringResource(AYMR.strings.ai_translation_profile_hint))
+                        }
+                    }
+                }
             }
         }
-        AnimatedVisibility(visible = showAdvanced) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                AiTranslationChipGroup(
-                    label = stringResource(AYMR.strings.ai_translation_style),
-                    options = listOf("PROFESSIONAL", "LITERARY", "CONVERSATIONAL", "VULGAR_18", "MINIMAL").map {
-                        it to styleTitle(it)
-                    },
-                    selected = draft.styleId,
-                    onSelect = { changed(draft.copy(styleId = it)) },
-                )
-                AiTranslationChipGroup(
-                    label = stringResource(AYMR.strings.ai_translation_prompt_mode),
-                    options = listOf(
-                        "CLASSIC" to stringResource(AYMR.strings.ai_translation_mode_classic),
-                        "ADULT_18" to stringResource(AYMR.strings.ai_translation_mode_adult),
-                    ),
-                    selected = draft.modeId,
-                    onSelect = { changed(draft.copy(modeId = it)) },
-                )
-                AiTranslationReasoningSelector(
-                    contract = draft.model?.reasoningContract,
-                    discoveredContract = draft.discoveredReasoningContract ?: draft.model?.reasoningContract,
-                    reasoning = draft.reasoning,
-                    budgetInput = draft.reasoningBudget,
-                    allowBudget = connection == null ||
-                        connection.protocol == TranslationProtocol.GEMINI_GENERATE ||
-                        connection.presetFlavor == PresetFlavor.OPENROUTER,
-                    allowOverride = draft.model != null && connection?.presetFlavor != PresetFlavor.NVIDIA,
-                    onSelect = { contract, reasoning, budget ->
-                        changed(
-                            draft.copy(
-                                model = draft.model?.copy(
-                                    reasoningContract = contract,
-                                    generation = draft.model.generation.copy(reasoning = reasoning),
-                                ),
-                                reasoning = reasoning,
-                                reasoningBudget = budget,
-                            ),
-                        )
-                    },
-                    onBudgetInputChange = { changed(draft.copy(reasoningBudget = it)) },
-                )
-                if (AiGenerationField.TEMPERATURE in draft.supportedFields) {
-                    Field(
-                        stringResource(AYMR.strings.ai_translation_temperature),
-                        draft.temperature,
-                        { changed(draft.copy(temperature = it)) },
-                        AiTranslationFormError.GENERATION in errors,
-                        numeric = true,
-                    )
-                }
-                if (AiGenerationField.TOP_P in draft.supportedFields) {
-                    Field(
-                        stringResource(AYMR.strings.ai_translation_top_p),
-                        draft.topP,
-                        { changed(draft.copy(topP = it)) },
-                        numeric = true,
-                    )
-                }
-                if (AiGenerationField.TOP_K in draft.supportedFields) {
-                    Field(
-                        stringResource(AYMR.strings.ai_translation_top_k),
-                        draft.topK,
-                        { changed(draft.copy(topK = it)) },
-                        numeric = true,
-                    )
-                }
-                if (AiGenerationField.OUTPUT_TOKENS in draft.supportedFields) {
-                    Field(
-                        stringResource(AYMR.strings.ai_translation_output_tokens),
-                        draft.maxOutputTokens,
-                        { changed(draft.copy(maxOutputTokens = it)) },
-                        numeric = true,
-                    )
-                }
-                Field(
-                    stringResource(AYMR.strings.ai_translation_modifiers),
-                    draft.modifiersText,
-                    { changed(draft.copy(modifiersText = it)) },
-                )
-                Field(
-                    stringResource(AYMR.strings.ai_translation_custom_prompt),
-                    draft.customText,
-                    { changed(draft.copy(customText = it)) },
-                    multiline = true,
-                )
-                AiTranslationSecondaryButton(
-                    text = stringResource(AYMR.strings.ai_translation_recovery_editor),
-                    onClick = {
-                        onAction(
-                            AiTranslationAction.EditorChanged(
-                                AiTranslationEditor.Recovery(
-                                    draft.id,
-                                    draft.connectionId,
-                                    AiRecoveryDraft(
-                                        draft.execution,
-                                        parallelism = draft.pendingParallelism ?: connection?.maxConcurrency ?: 2,
-                                    ),
-                                    draft,
-                                ),
-                            ),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                EditorHelperCaption(stringResource(AYMR.strings.ai_translation_profile_hint))
-            }
-        }
+
         if (state.profiles.any { it.id == draft.id }) {
             EditorDangerZone(
                 label = stringResource(AYMR.strings.ai_translation_delete),
@@ -1635,7 +1641,7 @@ internal fun AiTranslationReasoningSelector(
         if (contract == ReasoningContract.Unknown) return
     }
     when (contract) {
-        ReasoningContract.Toggle -> AiTranslationChipGroup(
+        ReasoningContract.Toggle -> AiTranslationSegmentedGroup(
             label = stringResource(AYMR.strings.ai_translation_reasoning),
             options = listOf(
                 ReasoningChoice.ApiDefault to apiDefault,
@@ -1659,7 +1665,7 @@ internal fun AiTranslationReasoningSelector(
                 contract.canUseDynamic -> -1
                 else -> contract.minimum.coerceAtLeast(1)
             }
-            AiTranslationChipGroup(
+            AiTranslationSegmentedGroup(
                 label = stringResource(AYMR.strings.ai_translation_reasoning),
                 options = listOf(
                     false to apiDefault,
@@ -1733,17 +1739,27 @@ private fun ModelEditor(
             onAction(AiTranslationAction.RefreshModels(editor.profile.connectionId))
         }
     }
-    AuroraFrostDialog(
-        onDismiss = {
-            if (editor.applyImmediately) {
-                dismiss()
-            } else {
-                onAction(AiTranslationAction.EditorChanged(AiTranslationEditor.Profile(editor.profile)))
-            }
-        },
+    val closeModels = {
+        if (editor.applyImmediately) {
+            dismiss()
+        } else {
+            onAction(AiTranslationAction.EditorChanged(AiTranslationEditor.Profile(editor.profile)))
+        }
+    }
+    AiTranslationDockedSheet(
+        onDismiss = closeModels,
         title = stringResource(AYMR.strings.ai_translation_model_picker),
         closeLabel = stringResource(AYMR.strings.ai_translation_close),
-        contentSpacing = 12.dp,
+        contentSpacing = 10.dp,
+        footer = {
+            AiTranslationDockedFooter(
+                cancelLabel = stringResource(AYMR.strings.ai_translation_close),
+                confirmLabel = stringResource(AYMR.strings.ai_translation_refresh_models),
+                onCancel = closeModels,
+                onConfirm = { onAction(AiTranslationAction.RefreshModels(editor.profile.connectionId)) },
+                confirmEnabled = editor.profile.connectionId.isNotBlank() && !state.catalogLoading,
+            )
+        },
     ) {
         Field(
             stringResource(AYMR.strings.ai_translation_model_search),
@@ -1807,12 +1823,6 @@ private fun ModelEditor(
             )
             TranslationNotice(stringResource(AYMR.strings.ai_translation_unknown_model))
         }
-        AiTranslationPrimaryButton(
-            text = stringResource(AYMR.strings.ai_translation_refresh_models),
-            onClick = { onAction(AiTranslationAction.RefreshModels(editor.profile.connectionId)) },
-            enabled = editor.profile.connectionId.isNotBlank() && !state.catalogLoading,
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -1939,7 +1949,7 @@ private fun RecoveryEditor(
             { changed(draft.copy(maxReservedTokens = it)) },
             numeric = true,
         )
-        AiTranslationChipGroup(
+        AiTranslationSegmentedGroup(
             label = stringResource(AYMR.strings.ai_translation_parallelism),
             options = listOf(1, 2, 4, 8).map { it to it.toString() },
             selected = draft.parallelism,
@@ -1977,6 +1987,13 @@ internal fun protocolTitle(protocol: TranslationProtocol): String = when (protoc
 }
 
 @Composable
+private fun protocolShortTitle(protocol: TranslationProtocol): String = when (protocol) {
+    TranslationProtocol.OPENAI_CHAT -> stringResource(AYMR.strings.ai_translation_protocol_openai_short)
+    TranslationProtocol.GEMINI_GENERATE -> stringResource(AYMR.strings.ai_translation_protocol_gemini_short)
+    TranslationProtocol.OLLAMA_NATIVE -> stringResource(AYMR.strings.ai_translation_protocol_ollama_short)
+}
+
+@Composable
 private fun authTitle(auth: ProfileAuth): String = when (auth) {
     ProfileAuth.BEARER -> stringResource(AYMR.strings.ai_translation_auth_bearer)
     ProfileAuth.X_GOOG_API_KEY -> stringResource(AYMR.strings.ai_translation_auth_google)
@@ -1989,6 +2006,15 @@ internal fun routingTitle(mode: CredentialRoutingMode): String = stringResource(
         AYMR.strings.ai_translation_priority_mode
     } else {
         AYMR.strings.ai_translation_round_robin
+    },
+)
+
+@Composable
+private fun routingShortTitle(mode: CredentialRoutingMode): String = stringResource(
+    if (mode == CredentialRoutingMode.PRIORITY) {
+        AYMR.strings.ai_translation_priority_mode_short
+    } else {
+        AYMR.strings.ai_translation_round_robin_short
     },
 )
 

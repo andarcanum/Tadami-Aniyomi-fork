@@ -3708,6 +3708,15 @@
     <string name="ai_translation_target_short">Target</string>
     <string name="ai_translation_open_full_settings">Full AI translator settings</string>
     <string name="ai_translation_open_full_settings_summary">Profiles, connections, API keys &amp; global limits</string>
+    <string name="ai_translation_section_server">Core parameters</string>
+    <string name="ai_translation_section_basic">Basic setup</string>
+    <string name="ai_translation_connection_editor_subtitle">API server and local key pool</string>
+    <string name="ai_translation_profile_editor_subtitle">Model, language pair and style</string>
+    <string name="ai_translation_protocol_openai_short">OpenAI Chat</string>
+    <string name="ai_translation_protocol_gemini_short">Gemini API</string>
+    <string name="ai_translation_protocol_ollama_short">Ollama</string>
+    <string name="ai_translation_priority_mode_short">By priority</string>
+    <string name="ai_translation_round_robin_short">Round-robin</string>
 
     <string name="pref_edge_tap_guard">Bezel edge-tap guard</string>
     <string name="pref_edge_tap_guard_off">Off</string>
