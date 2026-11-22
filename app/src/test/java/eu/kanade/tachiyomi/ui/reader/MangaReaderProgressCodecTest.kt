@@ -199,4 +199,43 @@ class MangaReaderProgressCodecTest {
         settle.settled shouldBe true
         settle.canClearPending shouldBe true
     }
+
+    @Test
+    fun `pending restore waits for minimum ready duration on high refresh rate displays`() {
+        val tooEarlyAt144Hz = evaluateWebtoonRestoreSettle(
+            currentOffsetPx = 340,
+            targetOffsetPx = 340,
+            currentPageHeightPx = 6800,
+            previousPageHeightPx = 6800,
+            previousStableHeightFrames = 2,
+            isPageReady = true,
+            imageDecoded = false,
+            previousReadyFrames = 29,
+            minStableHeightFrames = 2,
+            offsetTolerancePx = 2,
+            minReadyFramesFallback = 30,
+            readyElapsedMs = 210L,
+            minReadyDurationMsFallback = 600L,
+        )
+        tooEarlyAt144Hz.settled shouldBe true
+        tooEarlyAt144Hz.canClearPending shouldBe false
+
+        val elapsedEnough = evaluateWebtoonRestoreSettle(
+            currentOffsetPx = 340,
+            targetOffsetPx = 340,
+            currentPageHeightPx = 6800,
+            previousPageHeightPx = 6800,
+            previousStableHeightFrames = 2,
+            isPageReady = true,
+            imageDecoded = false,
+            previousReadyFrames = 85,
+            minStableHeightFrames = 2,
+            offsetTolerancePx = 2,
+            minReadyFramesFallback = 30,
+            readyElapsedMs = 600L,
+            minReadyDurationMsFallback = 600L,
+        )
+        elapsedEnough.settled shouldBe true
+        elapsedEnough.canClearPending shouldBe true
+    }
 }

@@ -313,11 +313,24 @@ internal class NovelProgressPersistenceController(
                 )
                 if (Injekt.get<eu.kanade.domain.track.service.TrackPreferences>().autoUpdateTrack().get()) {
                     val context = Injekt.get<Application>()
-                    Injekt.get<TrackNovelChapter>().await(
-                        context,
-                        nextUpdate.novelId,
-                        nextUpdate.chapterNumber.toDouble(),
-                    )
+                    val novelId = nextUpdate.novelId
+                    val chapterNumber = nextUpdate.chapterNumber.toDouble()
+                    // Dispatch remote tracker HTTP sync off the local DB/exit persistence path so
+                    // exiting the reader or seamless chapter switches never stall on slow networks.
+                    disposalFlushScope.launch {
+                        runCatching {
+                            Injekt.get<TrackNovelChapter>().await(
+                                context,
+                                novelId,
+                                chapterNumber,
+                            )
+                        }.onFailure { error ->
+                            if (error is kotlinx.coroutines.CancellationException) throw error
+                            logcat(LogPriority.WARN, error) {
+                                "Failed to sync novel chapter track novelId=$novelId chapter=$chapterNumber"
+                            }
+                        }
+                    }
                 }
             } else if (sessionDuration > 0L) {
                 activityDataRepository.recordReading(

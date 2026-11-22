@@ -493,6 +493,7 @@ internal fun resolveInitialNativeReaderIndex(
     savedPageReaderProgress: PageReaderProgress?,
     itemCount: Int,
     chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+    savedWebProgressPercent: Int? = null,
 ): Int {
     val safeItemCount = itemCount.coerceAtLeast(1)
     val lastItemIndex = safeItemCount - 1
@@ -501,22 +502,48 @@ internal fun resolveInitialNativeReaderIndex(
         NovelReaderPageReaderHandoffTarget.END -> return lastItemIndex
         NovelReaderPageReaderHandoffTarget.SAVED -> Unit
     }
-    val savedProgress = savedPageReaderProgress ?: return nativeLastSavedIndex.coerceIn(0, lastItemIndex)
-    if (safeItemCount == 1 || savedProgress.totalItems <= 1) return 0
-    val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
-    val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
-    return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+    savedPageReaderProgress?.let { savedProgress ->
+        if (safeItemCount == 1 || savedProgress.totalItems <= 1) return 0
+        val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
+        val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
+        return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+    }
+    if (nativeLastSavedIndex <= 0 && savedWebProgressPercent != null && savedWebProgressPercent > 0) {
+        if (safeItemCount == 1) return 0
+        val normalizedProgress = savedWebProgressPercent.coerceIn(0, 100) / 100f
+        return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+    }
+    return nativeLastSavedIndex.coerceIn(0, lastItemIndex)
 }
 
 internal fun resolveInitialWebViewProgressPercent(
     savedWebProgressPercent: Int,
     chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+    savedRawProgress: Long? = null,
 ): Int {
-    return when (chapterHandoffTarget) {
-        NovelReaderPageReaderHandoffTarget.START -> 0
-        NovelReaderPageReaderHandoffTarget.END -> 100
-        NovelReaderPageReaderHandoffTarget.SAVED -> savedWebProgressPercent.coerceIn(0, 100)
+    when (chapterHandoffTarget) {
+        NovelReaderPageReaderHandoffTarget.START -> return 0
+        NovelReaderPageReaderHandoffTarget.END -> return 100
+        NovelReaderPageReaderHandoffTarget.SAVED -> Unit
     }
+    if (savedWebProgressPercent > 0 || savedRawProgress == null) {
+        return savedWebProgressPercent.coerceIn(0, 100)
+    }
+    decodeWebScrollProgressPercent(savedRawProgress)?.let { return it.coerceIn(0, 100) }
+    decodePageReaderProgress(savedRawProgress)?.let { saved ->
+        if (saved.totalItems <= 1) return 0
+        return ((saved.index.toFloat() / (saved.totalItems - 1).toFloat()) * 100f)
+            .roundToInt()
+            .coerceIn(0, 100)
+    }
+    decodeNativeScrollProgress(savedRawProgress)?.let { saved ->
+        val totalItems = saved.totalItems ?: return 0
+        if (totalItems <= 1) return 0
+        return ((saved.index.toFloat() / (totalItems - 1).toFloat()) * 100f)
+            .roundToInt()
+            .coerceIn(0, 100)
+    }
+    return savedWebProgressPercent.coerceIn(0, 100)
 }
 
 internal fun shouldUseRichNativeScrollRenderer(

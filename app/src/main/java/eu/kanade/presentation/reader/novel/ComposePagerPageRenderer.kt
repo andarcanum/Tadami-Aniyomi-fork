@@ -397,17 +397,28 @@ internal fun ComposePagerPageRenderer(
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val pageAtGestureStart = pagerState.currentPage
                 var currentPosition = down.position
+                var endedWithRelease = false
+                var consumedByChild = down.isConsumed
 
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Final)
                     val change = event.changes.firstOrNull { it.id == down.id }
                         ?: event.changes.firstOrNull()
                         ?: break
+                    if (change.isConsumed) {
+                        consumedByChild = true
+                    }
                     currentPosition = change.position
-                    if (!change.pressed) break
+                    if (!change.pressed) {
+                        endedWithRelease =
+                            event.type == androidx.compose.ui.input.pointer.PointerEventType.Release
+                        break
+                    }
                 }
 
-                if (latestSuppressBoundaryNavigation) return@awaitEachGesture
+                if (!endedWithRelease || consumedByChild || latestSuppressBoundaryNavigation) {
+                    return@awaitEachGesture
+                }
 
                 when (
                     resolvePageReaderBoundaryChapterSwipeAction(

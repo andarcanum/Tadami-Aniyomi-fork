@@ -110,6 +110,45 @@ class ChapterHeadingNormalizerTest {
     }
 
     @Test
+    fun `merges split number-only heading and subtitle paragraph without dropping chapter number`() {
+        val html = "<h1>Глава 5</h1><p>Пробуждение древнего дракона</p><p>Текст главы.</p>"
+
+        val result = prependChapterHeadingIfMissing(
+            rawHtml = html,
+            chapterName = "Глава 5: Пробуждение древнего дракона",
+        )
+        val body = Jsoup.parseBodyFragment(result).body()
+
+        body.select("h1").map { it.text() } shouldBe listOf("Глава 5: Пробуждение древнего дракона")
+        body.select("p").map { it.text() } shouldBe listOf("Текст главы.")
+    }
+
+    @Test
+    fun `does not delete short opening paragraph when heading already has full title`() {
+        val html = "<h1>Глава 5: Тишина</h1><p>Тишина.</p><p>Ни звука вокруг.</p>"
+
+        val result = prependChapterHeadingIfMissing(
+            rawHtml = html,
+            chapterName = "Глава 5: Тишина",
+        )
+        val body = Jsoup.parseBodyFragment(result).body()
+
+        body.select("h1").map { it.text() } shouldBe listOf("Глава 5: Тишина")
+        body.select("p").map { it.text() } shouldBe listOf("Тишина.", "Ни звука вокруг.")
+    }
+
+    @Test
+    fun `injectIntoHtml preserves dollar signs and backslashes in CSS and JS`() {
+        val html = "<html><head></head><body><p>Body</p></body></html>"
+        val injection = """<style>p::before { content: "\2014"; }</style><script>const x = ${'$'}1;</script>"""
+
+        val result = injectIntoHtml(html, injection)
+
+        result.contains("""content: "\2014"""") shouldBe true
+        result.contains("const x = \$1;") shouldBe true
+    }
+
+    @Test
     fun `native chapter title matcher handles normalized punctuation and volume prefix`() {
         isNativeChapterTitleText("Глава 12: Начало", "Том 1 Гл. 12 — Начало") shouldBe true
         isNativeChapterTitleText("12. Начало", "Глава 12: Начало") shouldBe true

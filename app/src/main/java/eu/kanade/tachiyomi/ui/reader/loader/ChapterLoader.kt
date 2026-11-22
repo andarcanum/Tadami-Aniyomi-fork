@@ -74,8 +74,12 @@ class ChapterLoader(
         }
         if (!startedHere) {
             // Someone else is loading this chapter right now: wait for their result so the
-            // caller never proceeds with a page-less Loading chapter.
-            chapter.stateFlow.first { it !is ReaderChapter.State.Loading }
+            // caller never proceeds with a page-less Loading chapter, and propagate errors
+            // instead of swapping an errored chapter into the active viewer.
+            val settled = chapter.stateFlow.first { it !is ReaderChapter.State.Loading }
+            if (settled is ReaderChapter.State.Error) {
+                throw settled.error
+            }
             return
         }
 

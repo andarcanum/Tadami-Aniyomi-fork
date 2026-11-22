@@ -586,20 +586,30 @@ internal fun NovelReaderContentHost(
     val initialWebRestoreProgressPercent = resolveInitialWebViewProgressPercent(
         savedWebProgressPercent = state.lastSavedWebProgressPercent,
         chapterHandoffTarget = chapterHandoffTarget,
+        savedRawProgress = state.lastSavedRawProgress,
     )
     val shouldHideWebViewUntilReveal = state.enableJs
-    var webProgressPercent by remember(state.chapter.id) {
+    // Keep WebView progress/restore holders at composition lifetime (not keyed on state.chapter.id)
+    // because the AndroidView factory reuses a single WebViewClient and layout listener across
+    // seamless in-place chapter switches.
+    var webProgressPercent by remember {
         mutableIntStateOf(initialWebRestoreProgressPercent)
     }
-    var webAutoScrollNearEnd by remember(state.chapter.id) { mutableStateOf(false) }
-    var shouldRestoreWebScroll by remember(state.chapter.id) { mutableStateOf(true) }
+    var webAutoScrollNearEnd by remember { mutableStateOf(false) }
+    val shouldRestoreWebScrollRef = remember { booleanArrayOf(true) }
 
     /** Relative scroll percent (0-100) to restore after WebView reload when only settings/content of the same chapter changed (no chapter switch). -1 = no restore needed. Stored in a plain int array instead of Compose state because it is written from the AndroidView update block, where a snapshot state write would schedule recomposition during a layout pass. */
-    val scrollTargetPercentAfterReload = remember(state.chapter.id) { intArrayOf(-1) }
+    val scrollTargetPercentAfterReload = remember { intArrayOf(-1) }
     val lastWebScrollFraction = remember { floatArrayOf(-1f) }
     val anchoredWebViewWidthPx = remember { intArrayOf(0) }
-    var webViewPageReadyForAutoScroll by remember(state.chapter.id) { mutableStateOf(false) }
-    var appliedWebCssFingerprint by remember(state.chapter.id) { mutableStateOf<String?>(null) }
+    var webViewPageReadyForAutoScroll by remember { mutableStateOf(false) }
+    val appliedWebCssFingerprintRef = remember { arrayOfNulls<String>(1) }
+    LaunchedEffect(state.chapter.id) {
+        webProgressPercent = initialWebRestoreProgressPercent
+        webAutoScrollNearEnd = false
+        webViewPageReadyForAutoScroll = false
+        lastWebScrollFraction[0] = -1f
+    }
     // Deliberately a plain holder instead of Compose state: it has to survive an in-place chapter
     // switch (so it cannot be keyed on the chapter id) and it is written from the AndroidView update
     // block, where a snapshot state write would schedule recomposition during a layout pass.
@@ -1148,6 +1158,7 @@ internal fun NovelReaderContentHost(
         spreadCutoutLeftPx = spreadCutoutLeftPx,
         spreadCutoutRightPx = spreadCutoutRightPx,
         densityScale = density.density,
+        fontScale = density.fontScale,
         textSelectable = pageReaderTextSelectable,
     )
     val chapterPaginationCache = remember { NovelPagePaginationCache() }
@@ -1165,7 +1176,11 @@ internal fun NovelReaderContentHost(
         baseMeasurementTextPaint,
     ) {
         val targetChapterId = state.chapter.id
-        if (!shouldPaginatePlainForPageReader || (pageReaderTextBlocks.isEmpty() && pageReaderImageBlocks.isEmpty())) {
+        if (!shouldPaginatePlainForPageReader) {
+            plainPaginationState = PlainPagePaginationResult()
+            return@LaunchedEffect
+        }
+        if (pageReaderTextBlocks.isEmpty() && pageReaderImageBlocks.isEmpty()) {
             plainPaginationState = PlainPagePaginationResult(
                 chapterId = targetChapterId,
                 pages = emptyList(),
@@ -1190,7 +1205,7 @@ internal fun NovelReaderContentHost(
         }
         // Clear stale pages from a different chapter immediately, but retain the last valid
         // pagination result for the same chapter while reflow runs on rotation/font changes.
-        if (plainPaginationState.chapterId != targetChapterId) {
+        if (plainPaginationState.chapterId != targetChapterId || plainPaginationState.pages.isEmpty()) {
             plainPaginationState = PlainPagePaginationResult()
         }
         val budget = resolveNovelPageReaderPageBudget(
@@ -1305,11 +1320,7 @@ internal fun NovelReaderContentHost(
     ) {
         val targetChapterId = state.chapter.id
         if (!shouldPaginateRichForPageReader) {
-            richPaginationState = RichPagePaginationResult(
-                chapterId = targetChapterId,
-                pagination = MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList()),
-                completed = true,
-            )
+            richPaginationState = RichPagePaginationResult()
             return@LaunchedEffect
         }
         val cachedRich = chapterPaginationCache.getRich(
@@ -1326,7 +1337,7 @@ internal fun NovelReaderContentHost(
             )
             return@LaunchedEffect
         }
-        if (richPaginationState.chapterId != targetChapterId) {
+        if (richPaginationState.chapterId != targetChapterId || richPaginationState.pagination.pages.isEmpty()) {
             richPaginationState = RichPagePaginationResult()
         }
         val budget = resolveNovelPageReaderPageBudget(
@@ -2178,7 +2189,7 @@ internal fun NovelReaderContentHost(
     }
     // Wait for real viewport layout before restoring or committing initial progress, and never
     // re-run initial restore once applied for the active chapter.
-    val appliedPagerRestoreChapterId = remember { longArrayOf(-1L) }
+    var appliedPagerRestoreChapterId by remember { mutableLongStateOf(-1L) }
     var pageTurnChapterNavigationRequest by remember(state.chapter.id) {
         mutableStateOf<PageTurnChapterNavigationRequest?>(null)
     }
@@ -2217,16 +2228,16 @@ internal fun NovelReaderContentHost(
         expectedInitialRestoredPage,
     ) {
         if (!usePageReader) {
-            if (appliedPagerRestoreChapterId[0] == state.chapter.id) {
-                appliedPagerRestoreChapterId[0] = -1L
+            if (appliedPagerRestoreChapterId == state.chapter.id) {
+                appliedPagerRestoreChapterId = -1L
             }
             return@LaunchedEffect
         }
-        if (appliedPagerRestoreChapterId[0] == state.chapter.id) return@LaunchedEffect
+        if (appliedPagerRestoreChapterId == state.chapter.id) return@LaunchedEffect
         // Book mode is one continuous document: the current chapter changes while reading and the
         // pager position must never be reset under the reader.
         if (isBookMode) {
-            appliedPagerRestoreChapterId[0] = state.chapter.id
+            appliedPagerRestoreChapterId = state.chapter.id
             return@LaunchedEffect
         }
         // Wait for measured viewport + pages so fallback frame-1 dimensions never lock in page 0.
@@ -2249,9 +2260,9 @@ internal fun NovelReaderContentHost(
             }
             if (!restoreWon) {
                 currentPageAnchor = capturePageReaderAnchor(pageReaderContentPages, settledRealPage)
-                isInitialPositionRestored = true
             }
             pageTurnCurrentPage = settledRealPage
+            isInitialPositionRestored = true
         } else {
             val needsPageTurnSnap = pageTurnCurrentPage != expectedInitialRestoredPage
             pageTurnCurrentPage = expectedInitialRestoredPage
@@ -2261,7 +2272,7 @@ internal fun NovelReaderContentHost(
                 isInitialPositionRestored = true
             }
         }
-        appliedPagerRestoreChapterId[0] = state.chapter.id
+        appliedPagerRestoreChapterId = state.chapter.id
         acknowledgedPagedLayoutIdentity = pagedLayoutIdentity
         anchoredSpreadColumns = novelSpreadColumns
         anchoredRendererRoute = pageReaderRendererRoute
@@ -2271,7 +2282,19 @@ internal fun NovelReaderContentHost(
     // lazy list state of the previous chapter and stays near its end instead of jumping to the new
     // chapter's saved position. The pager route above resets itself the same way.
     val appliedNativeScrollRestoreChapterId = remember { longArrayOf(-1L) }
-    LaunchedEffect(state.chapter.id, nativeScrollItemsCount, chapterHandoffTarget) {
+    LaunchedEffect(
+        state.chapter.id,
+        usePageReader,
+        showWebView,
+        nativeScrollItemsCount,
+        chapterHandoffTarget,
+    ) {
+        if (usePageReader || showWebView) {
+            if (appliedNativeScrollRestoreChapterId[0] == state.chapter.id) {
+                appliedNativeScrollRestoreChapterId[0] = -1L
+            }
+            return@LaunchedEffect
+        }
         if (appliedNativeScrollRestoreChapterId[0] == state.chapter.id) return@LaunchedEffect
         // Book mode is one continuous document: the current chapter changes while reading and the
         // list position must never be reset under the reader.
@@ -2286,10 +2309,12 @@ internal fun NovelReaderContentHost(
             savedPageReaderProgress = state.lastSavedPageReaderProgress,
             itemCount = nativeScrollItemsCount,
             chapterHandoffTarget = chapterHandoffTarget,
+            savedWebProgressPercent = state.lastSavedWebProgressPercent,
         ).coerceIn(0, (nativeScrollItemsCount - 1).coerceAtLeast(0))
         val targetOffset = if (
             chapterHandoffTarget != NovelReaderPageReaderHandoffTarget.SAVED ||
-            state.lastSavedPageReaderProgress != null
+            state.lastSavedPageReaderProgress != null ||
+            (state.lastSavedIndex <= 0 && state.lastSavedWebProgressPercent > 0)
         ) {
             0
         } else {
@@ -2395,7 +2420,7 @@ internal fun NovelReaderContentHost(
         !isBookMode &&
         hasCompletedInitialReaderLayout &&
         isInitialPositionRestored &&
-        appliedPagerRestoreChapterId[0] == state.chapter.id &&
+        appliedPagerRestoreChapterId == state.chapter.id &&
         pageReaderItemsCount > 0 &&
         (
             acknowledgedPagedLayoutIdentity !== pagedLayoutIdentity ||
@@ -2431,7 +2456,7 @@ internal fun NovelReaderContentHost(
         if (
             !hasCompletedInitialReaderLayout ||
             !isInitialPositionRestored ||
-            appliedPagerRestoreChapterId[0] != state.chapter.id ||
+            appliedPagerRestoreChapterId != state.chapter.id ||
             pageReaderItemsCount <= 0
         ) {
             return@LaunchedEffect
@@ -2502,6 +2527,7 @@ internal fun NovelReaderContentHost(
 
     LaunchedEffect(
         state.chapter.id,
+        appliedPagerRestoreChapterId,
         hasCompletedInitialReaderLayout,
         pageReaderItemsCount,
         expectedInitialRestoredPage,
@@ -2510,7 +2536,7 @@ internal fun NovelReaderContentHost(
     ) {
         if (
             hasCompletedInitialReaderLayout &&
-            appliedPagerRestoreChapterId[0] == state.chapter.id &&
+            appliedPagerRestoreChapterId == state.chapter.id &&
             pageReaderItemsCount > 0 &&
             pageTurnRequestedPage < 0 &&
             pageReaderProgressPageIndex == expectedInitialRestoredPage
@@ -3230,11 +3256,16 @@ internal fun NovelReaderContentHost(
                 currentPageIndex = { pageReaderProgressPageIndex },
                 pageCount = { pageReaderItemsCount },
                 characterCount = {
-                    pageReaderCharacterCounts.getOrNull(pageReaderProgressPageIndex) ?: 0
+                    val endExclusive = (pageReaderProgressPageIndex + novelSpreadColumns)
+                        .coerceAtMost(pageReaderCharacterCounts.size)
+                    (pageReaderProgressPageIndex until endExclusive).sumOf { index ->
+                        pageReaderCharacterCounts.getOrElse(index) { 0 }
+                    }
                 },
                 onStepPage = {
                     moveForwardByReaderActionWithAnimation(bookFlipPageAnimationDurationMillis)
                 },
+                spreadColumns = { novelSpreadColumns },
             )
             else -> LazyListAutoScrollTarget(
                 listState = textListState,
@@ -3515,6 +3546,46 @@ internal fun NovelReaderContentHost(
                                 ),
                             )
                         }
+                        // Persist intra-block scroll offsets once scrolling settles so ON_STOP or
+                        // seamless chapter switches never drop mid-paragraph scroll positions.
+                        LaunchedEffect(state.chapter.id, textListState, nativeScrollItemsCount) {
+                            snapshotFlow {
+                                Triple(
+                                    textListState.isScrollInProgress,
+                                    textListState.firstVisibleItemIndex,
+                                    textListState.firstVisibleItemScrollOffset,
+                                )
+                            }
+                                .distinctUntilChanged()
+                                .collectLatest { (isScrolling, itemIndex, scrollOffsetPx) ->
+                                    if (isScrolling) return@collectLatest
+                                    delay(250L)
+                                    if (
+                                        !shouldTrackNativeScrollProgress(
+                                            totalItemsCount = textListState.layoutInfo.totalItemsCount,
+                                            hasVisibleItems = textListState.layoutInfo.visibleItemsInfo.isNotEmpty(),
+                                            restoredChapterId = appliedNativeScrollRestoreChapterId[0],
+                                            currentChapterId = state.chapter.id,
+                                        )
+                                    ) {
+                                        return@collectLatest
+                                    }
+                                    val (progressIndex, progressTotal) = resolveNativeScrollProgressForTracking(
+                                        firstVisibleItemIndex = itemIndex,
+                                        textBlocksCount = nativeScrollItemsCount,
+                                        canScrollForward = textListState.canScrollForward,
+                                    )
+                                    reportReadingProgress(
+                                        progressIndex,
+                                        progressTotal,
+                                        encodeNativeScrollProgress(
+                                            index = itemIndex,
+                                            offsetPx = scrollOffsetPx,
+                                            totalItems = nativeScrollItemsCount,
+                                        ),
+                                    )
+                                }
+                        }
                         DisposableEffect(state.chapter.id, textListState, nativeScrollItemsCount) {
                             onDispose {
                                 if (
@@ -3654,6 +3725,11 @@ internal fun NovelReaderContentHost(
                         { url -> activeImageActionsUrl = url }
                     }
 
+                    val stableReaderShortTapHandler = remember {
+                        { tapX: Float, tapY: Float, width: Float, height: Float ->
+                            latestReaderShortTapHandler(tapX, tapY, width, height)
+                        }
+                    }
                     if (isBookMode) {
                         NovelBookContentHost(
                             state = state,
@@ -3775,9 +3851,7 @@ internal fun NovelReaderContentHost(
                                 openPreviousChapterFromReader()
                             },
                             onOpenNextChapter = { openNextChapterFromReader() },
-                            onTextTap = { tapX, tapY, width, height ->
-                                latestReaderShortTapHandler(tapX, tapY, width, height)
-                            },
+                            onTextTap = stableReaderShortTapHandler,
                             onImageClick = onReaderImageClick,
                             onImageLongClick = onReaderImageLongClick,
                             onUrlClick = onReaderUrlClick,
@@ -3834,7 +3908,12 @@ internal fun NovelReaderContentHost(
                             boundaryChapterHint = stringResource(MR.strings.reader_boundary_release_to_open),
                             onToggleUi = { onSetShowReaderUi(!showReaderUi) },
                             requestedPage = pageTurnRequestedPage,
-                            onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
+                            onRequestedPageConsumed = {
+                                pageTurnRequestedPage = -1
+                                if (appliedPagerRestoreChapterId == state.chapter.id && !isInitialPositionRestored) {
+                                    isInitialPositionRestored = true
+                                }
+                            },
                             onCurrentPageChange = { pageTurnCurrentPage = it },
                             onOpenPreviousChapter = {
                                 openPreviousChapterFromReader()
@@ -3844,9 +3923,7 @@ internal fun NovelReaderContentHost(
                             onChapterNavigationRequestConsumed = {
                                 pageTurnChapterNavigationRequest = null
                             },
-                            onTextTap = { tapX, tapY, width, height ->
-                                latestReaderShortTapHandler(tapX, tapY, width, height)
-                            },
+                            onTextTap = stableReaderShortTapHandler,
                             onImageClick = onReaderImageClick,
                             onImageLongClick = onReaderImageLongClick,
                             onUrlClick = onReaderUrlClick,
@@ -3897,7 +3974,12 @@ internal fun NovelReaderContentHost(
                             boundaryChapterHint = stringResource(MR.strings.reader_boundary_release_to_open),
                             onToggleUi = { onSetShowReaderUi(!showReaderUi) },
                             requestedPage = pageTurnRequestedPage,
-                            onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
+                            onRequestedPageConsumed = {
+                                pageTurnRequestedPage = -1
+                                if (appliedPagerRestoreChapterId == state.chapter.id && !isInitialPositionRestored) {
+                                    isInitialPositionRestored = true
+                                }
+                            },
                             onCurrentPageChange = { pageTurnCurrentPage = it },
                             onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
                             onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
@@ -3909,9 +3991,7 @@ internal fun NovelReaderContentHost(
                             onChapterNavigationRequestConsumed = {
                                 pageTurnChapterNavigationRequest = null
                             },
-                            onTextTap = { tapX, tapY, width, height ->
-                                latestReaderShortTapHandler(tapX, tapY, width, height)
-                            },
+                            onTextTap = stableReaderShortTapHandler,
                             onImageClick = onReaderImageClick,
                             onImageLongClick = onReaderImageLongClick,
                             onUrlClick = onReaderUrlClick,
@@ -4116,7 +4196,15 @@ internal fun NovelReaderContentHost(
                     val latestMoveForward by rememberUpdatedState<suspend () -> Unit> { moveForwardByReaderAction() }
                     val latestOpenPreviousChapter by rememberUpdatedState { openPreviousChapterFromReader() }
                     val latestOpenNextChapter by rememberUpdatedState { openNextChapterFromReader() }
-                    val latestShouldRestoreWebScroll by rememberUpdatedState(shouldRestoreWebScroll)
+                    val latestReportWebReadingProgress by rememberUpdatedState<
+                        (Int, Int, Long?) -> Unit,
+                        > { currentIndex, totalItems, persistedProgress ->
+                        reportReadingProgress(
+                            currentIndex = currentIndex,
+                            totalItems = totalItems,
+                            persistedProgress = persistedProgress,
+                        )
+                    }
                     val latestWebViewPageReady by rememberUpdatedState(webViewPageReadyForAutoScroll)
                     val latestWebScrollProgressHandler by rememberUpdatedState<
                         (
@@ -4124,7 +4212,7 @@ internal fun NovelReaderContentHost(
                             Int,
                         ) -> Unit,
                         > { webView, scrollY ->
-                        if (!shouldTrackWebViewProgress(latestShouldRestoreWebScroll)) {
+                        if (!shouldTrackWebViewProgress(shouldRestoreWebScrollRef[0])) {
                             return@rememberUpdatedState
                         }
                         val totalScrollable = resolveWebViewTotalScrollablePx(
@@ -4146,13 +4234,13 @@ internal fun NovelReaderContentHost(
                         val newPercent = webView.resolveCurrentWebViewProgressPercent(scrollYOverride = scrollY)
                         if (
                             shouldDispatchWebProgressUpdate(
-                                latestShouldRestoreWebScroll,
+                                shouldRestoreWebScrollRef[0],
                                 newPercent,
                                 webProgressPercent,
                             )
                         ) {
                             webProgressPercent = newPercent
-                            reportReadingProgress(
+                            latestReportWebReadingProgress(
                                 newPercent,
                                 100,
                                 encodeWebScrollProgressPercent(newPercent),
@@ -4160,7 +4248,7 @@ internal fun NovelReaderContentHost(
                         }
                     }
 
-                    val webReaderDocumentTag: Any = state.html
+                    val webReaderDocumentTag: Any = state.chapter.id to state.html
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { factoryContext ->
@@ -4268,7 +4356,7 @@ internal fun NovelReaderContentHost(
                                         forceItalicText = config.forceItalicText,
                                         bionicReadingEnabled = config.bionicReading,
                                     )
-                                    appliedWebCssFingerprint = config.styleFingerprint
+                                    appliedWebCssFingerprintRef[0] = config.styleFingerprint
 
                                     view?.applyNovelHighlightsToPage(config.chapterHighlights)
 
@@ -4294,7 +4382,7 @@ internal fun NovelReaderContentHost(
                                             scrollTargetPercentAfterReload[0] = -1
                                             target
                                         }
-                                        shouldRestoreWebScroll -> config.restoreProgressPercent
+                                        shouldRestoreWebScrollRef[0] -> config.restoreProgressPercent
                                         else -> null
                                     }
 
@@ -4302,7 +4390,7 @@ internal fun NovelReaderContentHost(
                                         view?.restoreWebViewScroll(
                                             progressPercent = targetRestorePercent,
                                             onComplete = { restored ->
-                                                shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
+                                                shouldRestoreWebScrollRef[0] = resolveWebViewRestoreGate(restored)
                                                 if (restored) {
                                                     if (view != null) {
                                                         anchoredWebViewWidthPx[0] = view.width
@@ -4325,7 +4413,7 @@ internal fun NovelReaderContentHost(
                                                     ) {
                                                         webProgressPercent = settledProgress
                                                         webAutoScrollNearEnd = settledProgress >= 100
-                                                        reportReadingProgress(
+                                                        latestReportWebReadingProgress(
                                                             settledProgress,
                                                             100,
                                                             encodeWebScrollProgressPercent(settledProgress),
@@ -4358,7 +4446,7 @@ internal fun NovelReaderContentHost(
                                         ) {
                                             webProgressPercent = settledProgress
                                             webAutoScrollNearEnd = settledProgress >= 100
-                                            reportReadingProgress(
+                                            latestReportWebReadingProgress(
                                                 settledProgress,
                                                 100,
                                                 encodeWebScrollProgressPercent(settledProgress),
@@ -4537,7 +4625,7 @@ internal fun NovelReaderContentHost(
                                         newWidth <= 0 ||
                                         newWidth == oldWidth ||
                                         !latestWebViewPageReady ||
-                                        latestShouldRestoreWebScroll
+                                        shouldRestoreWebScrollRef[0]
                                     ) {
                                         return@addOnLayoutChangeListener
                                     }
@@ -4630,7 +4718,7 @@ internal fun NovelReaderContentHost(
                                 if (isSeamlessChapterSwap) {
                                     // Chapter switch — restore the saved progress position.
                                     scrollTargetPercentAfterReload[0] = -1
-                                    shouldRestoreWebScroll = true
+                                    shouldRestoreWebScrollRef[0] = true
                                 } else {
                                     // Only settings/content of the same chapter changed: save the
                                     // current live scroll percent and restore it after loading via
@@ -4638,40 +4726,78 @@ internal fun NovelReaderContentHost(
                                     // (rubber-band scroll bug). Relative percent survives translation
                                     // and reflow that change the document's pixel height.
                                     scrollTargetPercentAfterReload[0] = webProgressPercent
-                                    shouldRestoreWebScroll = false
+                                    shouldRestoreWebScrollRef[0] = false
                                 }
-                                appliedWebCssFingerprint = null
+                                appliedWebCssFingerprintRef[0] = null
                                 webView.animate().cancel()
                                 webView.alpha = if (shouldHideWebViewUntilReveal && !seamlessInstantSwap) 0f else 1f
                                 webView.cancelReaderScrollRestore()
                                 webView.loadDataWithBaseURL(baseUrl, initialWebViewHtml, "text/html", "utf-8", null)
                                 webView.tag = webReaderDocumentTag
-                            } else if (appliedWebCssFingerprint != styleFingerprint) {
-                                webView.applyReaderCss(
-                                    fontFaceCss = fontFaceCss,
-                                    paddingTop = paddingTop,
-                                    paddingBottom = paddingBottom,
-                                    paddingHorizontal = paddingHorizontal,
-                                    fontSizePx = state.readerSettings.fontSize,
-                                    lineHeightMultiplier = state.readerSettings.lineHeight,
-                                    paragraphSpacingPx = paragraphSpacingCssUnits,
-                                    textAlignCss = cssTextAlign,
-                                    firstLineIndentCss = cssFirstLineIndent,
-                                    textColorHex = currentTextColorCss,
-                                    backgroundHex = currentBackgroundCss,
-                                    appearanceMode = appearanceMode,
-                                    backgroundTexture = activeBackgroundTexture,
-                                    oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
-                                    backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
-                                    fontFamilyName = selectedFontFamily,
-                                    customCss = currentCustomCss,
-                                    textShadowCss = currentTextShadowCss,
-                                    forceBoldText = state.readerSettings.forceBoldText,
-                                    forceItalicText = state.readerSettings.forceItalicText,
-                                    bionicReadingEnabled = state.readerSettings.bionicReading,
-                                    preserveScrollFraction = webViewPageReadyForAutoScroll && !shouldRestoreWebScroll,
-                                )
-                                appliedWebCssFingerprint = styleFingerprint
+                            } else if (appliedWebCssFingerprintRef[0] != styleFingerprint) {
+                                if (!webView.settings.javaScriptEnabled) {
+                                    // When JS is disabled, evaluateJavascript() cannot inject live CSS;
+                                    // reload the HTML with rebuilt inline CSS while preserving live scroll %.
+                                    val rebuiltCss = buildWebReaderCssText(
+                                        fontFaceCss = fontFaceCss,
+                                        paddingTop = paddingTop,
+                                        paddingBottom = paddingBottom,
+                                        paddingHorizontal = paddingHorizontal,
+                                        fontSizePx = state.readerSettings.fontSize,
+                                        lineHeightMultiplier = state.readerSettings.lineHeight,
+                                        paragraphSpacingPx = paragraphSpacingCssUnits,
+                                        textAlignCss = cssTextAlign,
+                                        firstLineIndentCss = cssFirstLineIndent,
+                                        textColorHex = currentTextColorCss,
+                                        backgroundHex = currentBackgroundCss,
+                                        appearanceMode = appearanceMode,
+                                        backgroundTexture = activeBackgroundTexture,
+                                        oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                        backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                                        fontFamilyName = selectedFontFamily,
+                                        customCss = currentCustomCss,
+                                        textShadowCss = currentTextShadowCss,
+                                        forceBoldText = state.readerSettings.forceBoldText,
+                                        forceItalicText = state.readerSettings.forceItalicText,
+                                    )
+                                    val rebuiltHtml = buildInitialWebReaderHtml(
+                                        rawHtml = state.html,
+                                        readerCss = rebuiltCss,
+                                        hideUntilReveal = false,
+                                    )
+                                    scrollTargetPercentAfterReload[0] = webProgressPercent
+                                    shouldRestoreWebScrollRef[0] = false
+                                    appliedWebCssFingerprintRef[0] = styleFingerprint
+                                    webView.cancelReaderScrollRestore()
+                                    webView.loadDataWithBaseURL(baseUrl, rebuiltHtml, "text/html", "utf-8", null)
+                                } else {
+                                    webView.applyReaderCss(
+                                        fontFaceCss = fontFaceCss,
+                                        paddingTop = paddingTop,
+                                        paddingBottom = paddingBottom,
+                                        paddingHorizontal = paddingHorizontal,
+                                        fontSizePx = state.readerSettings.fontSize,
+                                        lineHeightMultiplier = state.readerSettings.lineHeight,
+                                        paragraphSpacingPx = paragraphSpacingCssUnits,
+                                        textAlignCss = cssTextAlign,
+                                        firstLineIndentCss = cssFirstLineIndent,
+                                        textColorHex = currentTextColorCss,
+                                        backgroundHex = currentBackgroundCss,
+                                        appearanceMode = appearanceMode,
+                                        backgroundTexture = activeBackgroundTexture,
+                                        oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
+                                        backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
+                                        fontFamilyName = selectedFontFamily,
+                                        customCss = currentCustomCss,
+                                        textShadowCss = currentTextShadowCss,
+                                        forceBoldText = state.readerSettings.forceBoldText,
+                                        forceItalicText = state.readerSettings.forceItalicText,
+                                        bionicReadingEnabled = state.readerSettings.bionicReading,
+                                        preserveScrollFraction = webViewPageReadyForAutoScroll &&
+                                            !shouldRestoreWebScrollRef[0],
+                                    )
+                                    appliedWebCssFingerprintRef[0] = styleFingerprint
+                                }
                             }
                         },
                         onRelease = { webView ->
@@ -5358,7 +5484,9 @@ private fun NovelNativeScrollReaderContent(
                     state.readerSettings.swipeToNextChapter ||
                     state.readerSettings.swipeToPrevChapter
                 ) {
+                    val latestReadingProgressPercent by rememberUpdatedState(readingProgressPercent)
                     Modifier.pointerInput(
+                        state.chapter.id,
                         state.readerSettings.swipeToNextChapter,
                         state.readerSettings.swipeToPrevChapter,
                         usePageReader,
@@ -5373,9 +5501,9 @@ private fun NovelNativeScrollReaderContent(
                             var currentPosition = down.position
                             var gestureEndUptime = down.uptimeMillis
                             val wasNearChapterEndAtDown =
-                                !textListState.canScrollForward || readingProgressPercent > 97
+                                !textListState.canScrollForward || latestReadingProgressPercent > 97
                             val wasNearChapterStartAtDown =
-                                !textListState.canScrollBackward || readingProgressPercent < 3
+                                !textListState.canScrollBackward || latestReadingProgressPercent < 3
 
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Final)
@@ -5398,9 +5526,9 @@ private fun NovelNativeScrollReaderContent(
                             val deltaX = currentPosition.x - down.position.x
                             val deltaY = currentPosition.y - down.position.y
                             val isNearChapterEnd =
-                                !textListState.canScrollForward || readingProgressPercent > 97
+                                !textListState.canScrollForward || latestReadingProgressPercent > 97
                             val isNearChapterStart =
-                                !textListState.canScrollBackward || readingProgressPercent < 3
+                                !textListState.canScrollBackward || latestReadingProgressPercent < 3
                             val gestureDurationMillis = (gestureEndUptime - down.uptimeMillis)
                                 .coerceAtLeast(0L)
                             when (

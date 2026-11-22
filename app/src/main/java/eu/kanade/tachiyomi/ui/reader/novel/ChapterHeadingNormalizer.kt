@@ -86,6 +86,7 @@ internal fun prependChapterHeadingIfMissing(
 internal fun isChapterTitleMatch(
     candidateText: String,
     referenceTitle: String,
+    allowSubtitleOnly: Boolean = true,
 ): Boolean {
     val normalizedCandidate = normalizeTitleWhitespace(candidateText)
     val normalizedReference = normalizeTitleWhitespace(referenceTitle)
@@ -107,9 +108,11 @@ internal fun isChapterTitleMatch(
     if (candidateNoWord.isNotBlank() && candidateNoWord == referenceNoWord) return true
 
     // Subtitle-only candidate when the reference includes a "Chapter N <subtitle>" prefix.
-    val referenceSubtitle = LEADING_CHAPTER_LABEL_WITH_NUMBER_REGEX.replaceFirst(referenceNoVolume, "").trim()
-    if (referenceSubtitle.length >= 3 && candidateNoVolume == referenceSubtitle) {
-        return true
+    if (allowSubtitleOnly) {
+        val referenceSubtitle = LEADING_CHAPTER_LABEL_WITH_NUMBER_REGEX.replaceFirst(referenceNoVolume, "").trim()
+        if (referenceSubtitle.length >= 3 && candidateNoVolume == referenceSubtitle) {
+            return true
+        }
     }
 
     // One side is "Chapter N" and the other side is "Chapter N <short subtitle>".
@@ -132,8 +135,28 @@ private fun deduplicateFollowingTitleBlock(
     val followingText = normalizeTitleWhitespace(followingBlock.text())
     if (followingText.isBlank()) return
 
-    val matchesHeading = headingText.isNotBlank() && isChapterTitleMatch(followingText, headingText)
-    val matchesChapterName = isChapterTitleMatch(followingText, chapterName)
+    val canonicalHeading = stripLeadingVolumePrefix(canonicalizeChapterTitle(headingText))
+    val canonicalChapter = stripLeadingVolumePrefix(canonicalizeChapterTitle(chapterName))
+    val headingIsNumberOnly = CHAPTER_NUMBER_ONLY_REGEX.matches(canonicalHeading)
+    val chapterSubtitle = LEADING_CHAPTER_LABEL_WITH_NUMBER_REGEX.replaceFirst(canonicalChapter, "").trim()
+    val canonicalFollowing = stripLeadingVolumePrefix(canonicalizeChapterTitle(followingText))
+
+    // Split heading: e.g. `<h1>Chapter 5</h1><p>Subtitle</p>` when chapterName is "Chapter 5: Subtitle".
+    if (headingIsNumberOnly && chapterSubtitle.length >= 3 && canonicalFollowing == chapterSubtitle) {
+        headingElement.text(chapterName)
+        followingBlock.remove()
+        return
+    }
+
+    // If the heading already carries the full title (not number-only), never strip a subtitle-only
+    // opening paragraph (e.g. `<h1>Chapter 5: Silence</h1><p>Silence.</p>` could be story prose).
+    val matchesHeading = headingText.isNotBlank() &&
+        isChapterTitleMatch(followingText, headingText, allowSubtitleOnly = false)
+    val matchesChapterName = isChapterTitleMatch(
+        followingText,
+        chapterName,
+        allowSubtitleOnly = headingIsNumberOnly,
+    )
     if (!matchesHeading && !matchesChapterName) return
 
     val preferredTitle = pickMoreSpecificChapterTitle(headingText, followingText)

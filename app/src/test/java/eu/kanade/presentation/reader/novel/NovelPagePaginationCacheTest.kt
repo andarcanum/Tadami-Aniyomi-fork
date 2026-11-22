@@ -18,6 +18,7 @@ class NovelPagePaginationCacheTest {
     private fun layoutKey(
         fontSize: Int = 18,
         showPageChapterTitle: Boolean = true,
+        fontScale: Float = 1f,
     ): PagePaginationLayoutKey {
         return PagePaginationLayoutKey(
             showPageChapterTitle = showPageChapterTitle,
@@ -45,6 +46,7 @@ class NovelPagePaginationCacheTest {
             spreadCutoutLeftPx = 0,
             spreadCutoutRightPx = 0,
             densityScale = 3f,
+            fontScale = fontScale,
             textSelectable = true,
         )
     }
@@ -81,11 +83,18 @@ class NovelPagePaginationCacheTest {
         hit.shouldNotBeNull()
         hit.pages shouldBe pages
 
-        // Layout change must invalidate the cached entry.
+        // Layout change (fontSize or system fontScale) must invalidate the cached entry.
         cache.getPlain(
             chapterId = 20L,
             chapterName = "Глава 2",
             layoutKey = layoutKey(fontSize = 20),
+            textBlocks = textBlocks,
+            imageBlocks = emptyList(),
+        ).shouldBeNull()
+        cache.getPlain(
+            chapterId = 20L,
+            chapterName = "Глава 2",
+            layoutKey = layoutKey(fontScale = 1.3f),
             textBlocks = textBlocks,
             imageBlocks = emptyList(),
         ).shouldBeNull()
@@ -197,5 +206,37 @@ class NovelPagePaginationCacheTest {
         cache.getPlain(1L, "Глава 1", key, emptyList(), emptyList()).shouldBeNull()
         cache.getPlain(2L, "Глава 2", key, emptyList(), emptyList()).shouldNotBeNull()
         cache.getPlain(3L, "Глава 3", key, emptyList(), emptyList()).shouldNotBeNull()
+    }
+
+    @Test
+    fun `page reader auto-scroll stops at final even-page landscape spread`() {
+        val target = PageReaderAutoScrollTarget(
+            currentPageIndex = { 8 },
+            pageCount = { 10 },
+            characterCount = { 420 },
+            onStepPage = {},
+            spreadColumns = { 2 },
+        )
+        target.canScrollForward() shouldBe false
+
+        val earlierSpread = PageReaderAutoScrollTarget(
+            currentPageIndex = { 6 },
+            pageCount = { 10 },
+            characterCount = { 420 },
+            onStepPage = {},
+            spreadColumns = { 2 },
+        )
+        earlierSpread.canScrollForward() shouldBe true
+    }
+
+    @Test
+    fun `native scroll restore decodes saved WebView progress percent proportionally`() {
+        val restored = resolveInitialNativeReaderIndex(
+            nativeLastSavedIndex = 0,
+            savedPageReaderProgress = null,
+            itemCount = 101,
+            savedWebProgressPercent = 50,
+        )
+        restored shouldBe 50
     }
 }

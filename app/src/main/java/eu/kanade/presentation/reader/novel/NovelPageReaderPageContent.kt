@@ -1321,8 +1321,15 @@ internal class NovelPageReaderTextView constructor(
     private fun clearSelection() {
         selectionBoundsInView.setEmpty()
         val spannable = text as? Spannable ?: return
+        val hadSelectionRange = Selection.getSelectionStart(spannable) != Selection.getSelectionEnd(spannable)
+        val hadLocalSelection = localSelection != null
+        if (!hadSelectionRange && !hadLocalSelection) return
         Selection.removeSelection(spannable)
-        onSelectedTextSelectionChanged(null)
+        localSelection = null
+        // Defer via publishSelectionCleared() so AndroidView.update never writes Compose state
+        // synchronously mid-layout (Android 16 crash) and never kills an in-flight Dictionary /
+        // Translate action that already collapsed the TextView selection.
+        publishSelectionCleared()
     }
 
     private fun currentGestureDistancePx(): Float {

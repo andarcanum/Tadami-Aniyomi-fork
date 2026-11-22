@@ -193,6 +193,11 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                 // visible — the webtoon equivalent of swiping into the void.
                 private var scrollStartedAtEndOfChapter = false
 
+                // Accumulated directional scroll distance for menu auto-hide so 120/144Hz
+                // displays (smaller per-frame dy for the same finger speed) hide at the same
+                // physical scroll distance as 60Hz.
+                private var menuHideScrollAccumulator = 0
+
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     // A position-preserving compensation is not a user scroll: the visible content
                     // did not move, so the bookkeeping (and menu hiding) is skipped for it.
@@ -212,16 +217,25 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                         }
                     }
 
-                    if ((dy > threshold || dy < -threshold) && activity.viewModel.state.value.menuVisible) {
-                        // B-M1: navigator-slider jumps (moveToPage -> scrollToPositionWithOffset)
-                        // produce a huge dy and used to hide the menu in the middle of the slider
-                        // gesture. Consume the slider mark for this programmatic scroll burst,
-                        // mirroring the pager's onPageSelected guard.
-                        if (activity.isScrollingThroughPages) {
-                            activity.consumeScrollingThroughPages()
-                        } else {
-                            activity.hideMenu()
+                    if (activity.viewModel.state.value.menuVisible) {
+                        if ((dy > 0 && menuHideScrollAccumulator < 0) || (dy < 0 && menuHideScrollAccumulator > 0)) {
+                            menuHideScrollAccumulator = 0
                         }
+                        menuHideScrollAccumulator += dy
+                        if (menuHideScrollAccumulator > threshold || menuHideScrollAccumulator < -threshold) {
+                            menuHideScrollAccumulator = 0
+                            // B-M1: navigator-slider jumps (moveToPage -> scrollToPositionWithOffset)
+                            // produce a huge dy and used to hide the menu in the middle of the slider
+                            // gesture. Consume the slider mark for this programmatic scroll burst,
+                            // mirroring the pager's onPageSelected guard.
+                            if (activity.isScrollingThroughPages) {
+                                activity.consumeScrollingThroughPages()
+                            } else {
+                                activity.hideMenu()
+                            }
+                        }
+                    } else {
+                        menuHideScrollAccumulator = 0
                     }
 
                     if (dy < 0) {
@@ -270,6 +284,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
                                 lastItem is ChapterTransition.Next && lastItem.to == null
                         }
                         RecyclerView.SCROLL_STATE_IDLE -> {
+                            menuHideScrollAccumulator = 0
                             if (scrollStartedAtEndOfChapter) {
                                 val lastIndex = layoutManager.findLastEndVisibleItemPosition()
                                 val lastItem = adapter.items.getOrNull(lastIndex)
@@ -737,18 +752,34 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
             currentPageHeightPx = pageHeightPx,
         )
         val currentOffsetPx = (-view.top).coerceAtLeast(0)
+        val nowUptimeMs = SystemClock.uptimeMillis()
+        val isPageReady = item.status == Page.State.READY
+        if (isPageReady) {
+            if (pending.readySinceUptimeMs < 0L) {
+                pending.readySinceUptimeMs = nowUptimeMs
+            }
+        } else {
+            pending.readySinceUptimeMs = -1L
+        }
+        val readyElapsedMs = if (pending.readySinceUptimeMs >= 0L) {
+            (nowUptimeMs - pending.readySinceUptimeMs).coerceAtLeast(0L)
+        } else {
+            0L
+        }
         val settle = evaluateWebtoonRestoreSettle(
             currentOffsetPx = currentOffsetPx,
             targetOffsetPx = resolvedOffsetPx,
             currentPageHeightPx = pageHeightPx,
             previousPageHeightPx = pending.lastMeasuredPageHeightPx,
             previousStableHeightFrames = pending.stableHeightFrames,
-            isPageReady = item.status == Page.State.READY,
+            isPageReady = isPageReady,
             imageDecoded = pending.imageDecoded,
             previousReadyFrames = pending.readyFrames,
             minStableHeightFrames = MIN_STABLE_HEIGHT_FRAMES,
             offsetTolerancePx = RESTORE_SETTLE_TOLERANCE_PX,
             minReadyFramesFallback = MIN_READY_STATE_FRAMES_FALLBACK,
+            readyElapsedMs = readyElapsedMs,
+            minReadyDurationMsFallback = MIN_READY_STATE_DURATION_MS_FALLBACK,
         )
         pending.stableHeightFrames = settle.stableHeightFrames
         pending.readyFrames = settle.readyFrames
@@ -1078,6 +1109,7 @@ private data class PendingRelativeRestore(
     var lastMeasuredPageHeightPx: Int = 0,
     var stableHeightFrames: Int = 0,
     var readyFrames: Int = 0,
+    var readySinceUptimeMs: Long = -1L,
     var imageDecoded: Boolean = false,
 )
 
@@ -1088,6 +1120,7 @@ private const val SCROLL_PROGRESS_UPDATE_INTERVAL_MS = 350L
 private const val MIN_STABLE_HEIGHT_FRAMES = 2
 private const val RESTORE_SETTLE_TOLERANCE_PX = 2
 private const val MIN_READY_STATE_FRAMES_FALLBACK = 30
+private const val MIN_READY_STATE_DURATION_MS_FALLBACK = 600L
 
 // How long a programmatic chapter switch suppresses stale boundary reports (capped; ends earlier
 // when the new first page is decoded or the user scrolls).

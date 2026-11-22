@@ -267,6 +267,7 @@ class NovelReaderScreen(
                     if (!isExiting) {
                         isExiting = true
                         coroutineScope.launch {
+                            var completedNormally = false
                             try {
                                 // Leaving the reader is a flush point: the debounced book position
                                 // is written through before this screen goes away.
@@ -277,8 +278,11 @@ class NovelReaderScreen(
                                 // service self-stops on. Without it the service, media session
                                 // and an ongoing "playing" notification outlive the dead engine.
                                 screenModel.stopTtsPlaybackAndAwait()
+                                completedNormally = true
                             } finally {
                                 isExiting = false
+                            }
+                            if (completedNormally) {
                                 navigator.pop()
                             }
                         }
@@ -331,6 +335,8 @@ class NovelReaderScreen(
                         ContextCompat.startForegroundService(context, serviceIntent)
                     } else {
                         context.stopService(serviceIntent)
+                        androidx.core.app.NotificationManagerCompat.from(context)
+                            .cancel(eu.kanade.tachiyomi.data.notification.Notifications.ID_NOVEL_TTS_PLAYBACK)
                     }
                     onDispose { }
                 }

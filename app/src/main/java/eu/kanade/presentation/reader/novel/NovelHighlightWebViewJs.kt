@@ -103,7 +103,7 @@ internal fun buildApplyNovelHighlightsJs(payloadJson: String): String {
                     const span = document.createElement('span');
                     span.className = 'an-hl';
                     span.setAttribute('data-hl-id', String(id));
-                    span.style.backgroundColor = color;
+                    span.style.setProperty('background-color', color, 'important');
                     textNode.parentNode.insertBefore(span, textNode);
                     span.appendChild(textNode);
                 });

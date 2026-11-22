@@ -39,9 +39,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -618,11 +620,13 @@ class ReaderActivity : BaseActivity() {
                     .collectAsStateWithLifecycle()
 
                 if (!state.menuVisible && showPageNumber) {
-                    PageIndicatorText(
-                        currentPage = state.currentPage,
-                        totalPages = state.totalPages,
-                        estimatedMinutesLeft = if (showReadingTimeLeft) state.estimatedMinutesLeft else null,
-                    )
+                    Box(modifier = Modifier.navigationBarsPadding()) {
+                        PageIndicatorText(
+                            currentPage = state.currentPage,
+                            totalPages = state.totalPages,
+                            estimatedMinutesLeft = if (showReadingTimeLeft) state.estimatedMinutesLeft else null,
+                        )
+                    }
                 }
             }
         }
@@ -1059,6 +1063,8 @@ class ReaderActivity : BaseActivity() {
                         dimWhenActive = true,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
+                            .navigationBarsPadding()
+                            .displayCutoutPadding()
                             .padding(16.dp),
                     )
                     if (!state.menuVisible && showThinProgressBar) {
@@ -1067,7 +1073,9 @@ class ReaderActivity : BaseActivity() {
                             totalPages = state.totalPages,
                             isRtl = state.viewer is R2LPagerViewer,
                             sliderColor = navigatorSliderColor,
-                            modifier = Modifier.align(Alignment.BottomCenter),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding(),
                         )
                     }
                 }
@@ -1419,7 +1427,9 @@ class ReaderActivity : BaseActivity() {
         cutoutShort: Boolean,
     ) {
         val insets = when {
-            !fullscreen -> windowInsets?.getInsets(WindowInsetsCompat.Type.systemBars())
+            !fullscreen -> windowInsets?.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
             !cutoutShort -> windowInsets?.getInsets(WindowInsetsCompat.Type.displayCutout())
             else -> null
         }

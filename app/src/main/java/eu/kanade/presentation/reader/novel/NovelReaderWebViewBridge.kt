@@ -371,6 +371,32 @@ internal fun WebView.restoreWebViewScroll(
         novelReaderScrollRestoreRequests.remove(this)
         onComplete?.invoke(restored)
     }
+    fun applyRestoredScroll(attempt: Int, scheduleNext: () -> Unit) {
+        val totalScrollable = resolveWebViewTotalScrollablePx(
+            contentHeightPx = resolveWebViewContentHeightPx(),
+            viewHeightPx = height,
+        )
+        stableSamples = if (totalScrollable == previousHeight && height > 0) stableSamples + 1 else 0
+        previousHeight = totalScrollable
+        if ((height <= 0 || stableSamples < 2) && attempt < maxAttempts.coerceAtLeast(0)) {
+            scheduleNext()
+            return
+        }
+        val targetY = ((progressPercent.coerceIn(0, 100) / 100f) * totalScrollable).roundToInt()
+        // Restoring zero must actively return a reused WebView to the top.
+        scrollTo(0, targetY.coerceIn(0, totalScrollable.coerceAtLeast(0)))
+        finish(height > 0 && (progressPercent <= 0 || totalScrollable > 0))
+    }
+    fun attemptRestoreNative(attempt: Int) {
+        if (!isCurrent() || finished) return
+        if (SystemClock.uptimeMillis() >= deadlineUptimeMs) {
+            finish(false)
+            return
+        }
+        applyRestoredScroll(attempt) {
+            postDelayed({ attemptRestoreNative(attempt + 1) }, 42L)
+        }
+    }
     fun attemptRestore(attempt: Int) {
         if (!isCurrent() || finished) return
         // The height can stay unstable forever on a still-loading page; the deadline guarantees
@@ -390,23 +416,18 @@ internal fun WebView.restoreWebViewScroll(
                 novelReaderScrollRestoreRequests.remove(this)
                 return@evaluateJavascript
             }
-            val totalScrollable = resolveWebViewTotalScrollablePx(
-                contentHeightPx = resolveWebViewContentHeightPx(),
-                viewHeightPx = height,
-            )
-            stableSamples = if (totalScrollable == previousHeight && height > 0) stableSamples + 1 else 0
-            previousHeight = totalScrollable
-            if ((height <= 0 || stableSamples < 2) && attempt < maxAttempts.coerceAtLeast(0)) {
+            applyRestoredScroll(attempt) {
                 postDelayed({ attemptRestore(attempt + 1) }, 42L)
-                return@evaluateJavascript
             }
-            val targetY = ((progressPercent.coerceIn(0, 100) / 100f) * totalScrollable).roundToInt()
-            // Restoring zero must actively return a reused WebView to the top.
-            scrollTo(0, targetY.coerceIn(0, totalScrollable.coerceAtLeast(0)))
-            finish(height > 0 && (progressPercent <= 0 || totalScrollable > 0))
         }
     }
     postDelayed({ finish(false) }, NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS)
+    if (!settings.javaScriptEnabled) {
+        // When JavaScript is disabled, evaluateJavascript returns "null" without running scripts.
+        // Fall back to native content-height polling so scroll position still restores cleanly.
+        post { attemptRestoreNative(0) }
+        return
+    }
     evaluateJavascript(
         """
         (function() {
@@ -587,7 +608,9 @@ internal fun WebView.applyReaderCss(
                         continue;
                     }
                 }
-                node.style.setProperty('background-color', 'transparent', 'important');
+                if (!node.classList.contains('an-hl')) {
+                    node.style.setProperty('background-color', 'transparent', 'important');
+                }
                 node.style.setProperty('color', 'var(--an-reader-fg)', 'important');
                 if (shouldForceAlign) {
                     node.style.setProperty('text-align', 'var(--an-reader-align)', 'important');
@@ -687,8 +710,9 @@ private fun injectHtmlFragmentIntoHead(
     fragment: String,
 ): String {
     val headCloseRegex = Regex("</head>", RegexOption.IGNORE_CASE)
-    if (headCloseRegex.containsMatchIn(rawHtml)) {
-        return headCloseRegex.replaceFirst(rawHtml, "$fragment</head>")
+    val headCloseMatch = headCloseRegex.find(rawHtml)
+    if (headCloseMatch != null) {
+        return rawHtml.replaceRange(headCloseMatch.range, fragment + headCloseMatch.value)
     }
 
     val bodyOpenRegex = Regex("<body[^>]*>", RegexOption.IGNORE_CASE)
@@ -842,7 +866,10 @@ internal fun buildWebReaderCssText(
         )
         append("  margin-top: 0 !important;\n")
         append("}\n")
-        append("body, body *:not(img):not(svg):not(video):not(canvas):not(iframe), body *::before, body *::after {\n")
+        append(
+            "body, body *:not(img):not(svg):not(video):not(canvas):not(iframe):not(.an-hl), " +
+                "body *::before, body *::after {\n",
+        )
         append("  color: var(--an-reader-fg) !important;\n")
         if (!textAlignCss.isNullOrBlank()) {
             append("  text-align: var(--an-reader-align) !important;\n")

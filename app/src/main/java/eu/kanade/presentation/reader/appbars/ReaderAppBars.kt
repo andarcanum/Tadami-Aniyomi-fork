@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -203,7 +204,8 @@ fun ReaderAppBars(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .statusBarsPadding(),
+                            .statusBarsPadding()
+                            .displayCutoutPadding(),
                     ) {
                         AppBar(
                             modifier = Modifier.fillMaxWidth(),
@@ -353,7 +355,9 @@ fun ReaderAppBars(
                 ) + fadeOut(animationSpec = panelFadeSpec),
             ) {
                 Column(
-                    modifier = Modifier.navigationBarsPadding(),
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .displayCutoutPadding(),
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
                 ) {
                     if (showNavigator && bottomBarPosition == ReaderPreferences.BottomBarPosition.BOTTOM) {
@@ -413,7 +417,8 @@ fun ReaderAppBars(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .statusBarsPadding()
-                        .navigationBarsPadding(),
+                        .navigationBarsPadding()
+                        .displayCutoutPadding(),
                 ) {
                     ChapterNavigator(
                         isRtl = isRtl,

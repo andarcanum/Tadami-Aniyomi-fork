@@ -32,6 +32,7 @@ internal data class PagePaginationLayoutKey(
     val spreadCutoutLeftPx: Int,
     val spreadCutoutRightPx: Int,
     val densityScale: Float,
+    val fontScale: Float,
     val textSelectable: Boolean,
 )
 

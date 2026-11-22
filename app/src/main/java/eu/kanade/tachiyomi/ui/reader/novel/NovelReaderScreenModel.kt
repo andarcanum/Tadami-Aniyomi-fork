@@ -1185,7 +1185,11 @@ class NovelReaderScreenModel(
         // Хук на открытие, не на запись истории — работает и в инкогнито.
         markDiscoveryConsumed(novel.title, novel.source)
         currentChapter = chapter
-        fullChapterOrderList = snapshot.chapterOrderList
+        // Preserve the live fullChapterOrderList on seamless cached-snapshot hits so preloaded
+        // snapshots never revert newly-read/bookmarked flags, lastPageRead, or Jaomix pages.
+        if (cachedSnapshot == null || fullChapterOrderList.isEmpty()) {
+            fullChapterOrderList = snapshot.chapterOrderList
+        }
         chapterOrderList = NovelReaderChapterWindow.resolveWindow(
             chapters = fullChapterOrderList,
             currentChapterId = chapter.id,
@@ -1951,25 +1955,31 @@ class NovelReaderScreenModel(
             richContentResult.blocks
         }
         val displayContent = when {
-            geminiVisibleInUi && !translationHolder.isEmpty("gemini") -> normalizeHtml(
-                rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
-                    templateHtml = html,
-                    fallbackBlocks = displayContentBlocks,
-                    translatedByIndex = translationHolder.map("gemini"),
+            geminiVisibleInUi && !translationHolder.isEmpty("gemini") -> annotateNovelBlockAnchors(
+                rawHtml = normalizeHtml(
+                    rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
+                        templateHtml = html,
+                        fallbackBlocks = displayContentBlocks,
+                        translatedByIndex = translationHolder.map("gemini"),
+                    ),
+                    settings = settings,
+                    customCss = pluginCss,
+                    customJs = pluginJs,
                 ),
-                settings = settings,
-                customCss = pluginCss,
-                customJs = pluginJs,
+                chapterId = chapter.id,
             )
-            googleVisibleInUi && !translationHolder.isEmpty("google") -> normalizeHtml(
-                rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
-                    templateHtml = html,
-                    fallbackBlocks = displayContentBlocks,
-                    translatedByIndex = translationHolder.map("google"),
+            googleVisibleInUi && !translationHolder.isEmpty("google") -> annotateNovelBlockAnchors(
+                rawHtml = normalizeHtml(
+                    rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
+                        templateHtml = html,
+                        fallbackBlocks = displayContentBlocks,
+                        translatedByIndex = translationHolder.map("google"),
+                    ),
+                    settings = settings,
+                    customCss = pluginCss,
+                    customJs = pluginJs,
                 ),
-                settings = settings,
-                customCss = pluginCss,
-                customJs = pluginJs,
+                chapterId = chapter.id,
             )
             else -> baseContent
         }
@@ -2306,9 +2316,16 @@ class NovelReaderScreenModel(
         // has to reach it too (same as bookMarkChapterReadInMemory); the DB write arrives
         // asynchronously through the progress pipeline.
         val fullChapterIndex = fullChapterOrderList.indexOfFirst { it.id == chapter.id }
-        if (fullChapterIndex >= 0 && fullChapterOrderList[fullChapterIndex].read != read) {
-            fullChapterOrderList = fullChapterOrderList.toMutableList().also { list ->
-                list[fullChapterIndex] = list[fullChapterIndex].copy(read = read)
+        if (fullChapterIndex >= 0) {
+            val existingFull = fullChapterOrderList[fullChapterIndex]
+            if (existingFull.read != read || existingFull.lastPageRead != progress || existingFull.bookmark != bookmark) {
+                fullChapterOrderList = fullChapterOrderList.toMutableList().also { list ->
+                    list[fullChapterIndex] = existingFull.copy(
+                        read = read,
+                        lastPageRead = progress,
+                        bookmark = bookmark,
+                    )
+                }
             }
         }
         val currentState = mutableState.value
@@ -4308,8 +4325,9 @@ internal fun normalizeHtml(
 
 internal fun injectIntoHtml(rawHtml: String, injection: String): String {
     val headClose = Regex("</head>", RegexOption.IGNORE_CASE)
-    if (headClose.containsMatchIn(rawHtml)) {
-        return rawHtml.replaceFirst(headClose, "$injection</head>")
+    val headCloseMatch = headClose.find(rawHtml)
+    if (headCloseMatch != null) {
+        return rawHtml.replaceRange(headCloseMatch.range, injection + headCloseMatch.value)
     }
     val headOpen = Regex("<head[^>]*>", RegexOption.IGNORE_CASE)
     val headMatch = headOpen.find(rawHtml)
@@ -4317,8 +4335,9 @@ internal fun injectIntoHtml(rawHtml: String, injection: String): String {
         return rawHtml.replaceRange(headMatch.range, headMatch.value + injection)
     }
     val bodyClose = Regex("</body>", RegexOption.IGNORE_CASE)
-    if (bodyClose.containsMatchIn(rawHtml)) {
-        return rawHtml.replaceFirst(bodyClose, "$injection</body>")
+    val bodyCloseMatch = bodyClose.find(rawHtml)
+    if (bodyCloseMatch != null) {
+        return rawHtml.replaceRange(bodyCloseMatch.range, injection + bodyCloseMatch.value)
     }
     return injection + rawHtml
 }
