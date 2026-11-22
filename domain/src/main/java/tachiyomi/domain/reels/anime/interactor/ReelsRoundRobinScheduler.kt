@@ -252,11 +252,17 @@ private class Selection(
         // A migrated head may be anchored before its frame turn is materialized. It is the
         // current card, not a staged tail candidate, so it must never be selected again.
         state.anchor?.itemId?.let(reservedItemIds::add)
+        // Include played/pruned frames in reservedItemIds so consumed historical cards cannot look
+        // like unreserved FILTERED candidates and trigger FILTER_BUDGET on the next round.
+        for (frame in sanitized) {
+            for (member in frame.members) {
+                frame.turns[member]?.itemId?.let(reservedItemIds::add)
+            }
+        }
         for (frame in frames) {
             for (member in frame.members) {
                 val turn = frame.turns[member] ?: continue
                 val itemId = turn.itemId ?: continue
-                reservedItemIds += itemId
                 val entry = entriesById[itemId] ?: continue
                 if (entry.sourceKey == member &&
                     entry.validation == ReelsRoundRobinValidation.ELIGIBLE &&
@@ -525,6 +531,7 @@ private class Selection(
             it.sourceKey == sourceKey &&
                 it.round == null &&
                 it.ordinal == null &&
+                it.candidate.itemId !in reservedItemIds &&
                 it.validation == ReelsRoundRobinValidation.FILTERED
         }
 

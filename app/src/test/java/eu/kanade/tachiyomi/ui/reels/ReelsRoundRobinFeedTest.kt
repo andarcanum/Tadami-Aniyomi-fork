@@ -329,6 +329,8 @@ class ReelsRoundRobinFeedTest {
         @Volatile
         var sessionActive: ReelsActiveCheckpoint? = null
 
+        var activeFilter: (ReelsActiveCheckpoint) -> Boolean = { true }
+
         override suspend fun persistedContext(scope: String, sourceId: Long): String? =
             persistedContextKey
 
@@ -356,8 +358,8 @@ class ReelsRoundRobinFeedTest {
         }
 
         override suspend fun active(handle: ReelsSessionHandle): ReelsActiveCheckpoint? {
-            checkpoints[handle.key]?.takeIf { !it.completed }?.let { return it }
-            return sessionActive?.takeIf { !it.completed }
+            checkpoints[handle.key]?.takeIf { !it.completed && activeFilter(it) }?.let { return it }
+            return sessionActive?.takeIf { !it.completed && activeFilter(it) }
         }
 
         override suspend fun window(
@@ -468,6 +470,7 @@ class ReelsRoundRobinFeedTest {
         var resolveResult: (String) -> FeedReplayItemResult = { itemId ->
             FeedReplayItemResult.Available(item(itemId))
         }
+        var contentKeyFor: (String) -> String? = { null }
 
         fun item(itemId: String): ShortVideoItem = ShortVideoItem(
             id = itemId,
@@ -564,7 +567,7 @@ class ReelsRoundRobinFeedTest {
                     FeedRoundRobinCandidate(
                         item = item(itemId),
                         identity = FeedRoundRobinIdentity(request.sourceKey, (1_000L - count).coerceAtLeast(1L)),
-                        contentKey = null,
+                        contentKey = contentKeyFor(itemId),
                     ),
                 ),
                 checkpoint = "cp-${request.sourceKey}-$count",
@@ -1750,5 +1753,144 @@ class ReelsRoundRobinFeedTest {
             filterFingerprint = ReelsSessionContext.serializeFilters(AnimeFilterList()),
             continuityKey = "tdlib-rr-v1:rr:1",
         )
+    }
+
+    @Test
+    fun `round robin out-of-order incoming visit commits departed card once as skipped`() = roundRobinTest {
+        val h = newHarness()
+        idle()
+        val owner = h.model.state.value.roundRobinOwner!!
+        val first = h.model.state.value.items[0]
+        val second = h.model.state.value.items[1]
+
+        h.model.onRoundRobinVisitStarted(owner, first)
+        h.model.onRoundRobinFirstFrame(owner, first.id)
+        // Incoming card activates BEFORE outgoing card reports onVisitEnded.
+        h.model.onRoundRobinVisitStarted(owner, second)
+        idle()
+
+        h.consumption.skipped shouldContain ("acc:101:acct-a" to first.id)
+        h.consumption.writes shouldBe 1
+
+        // Late onVisitEnded for the departed card must not double-write or overwrite active second visit.
+        h.model.onRoundRobinVisitEnded(owner, first, 200L, 0.05f, 30f)
+        idle()
+        h.consumption.writes shouldBe 1
+    }
+
+    @Test
+    fun `round robin reopen does not resurrect an already consumed anchor card`() = roundRobinTest {
+        val clock = Clock()
+        val consumption = TestConsumptionRepository()
+        val hidden = TestHiddenRepository()
+        val candidates = TestCandidateRepository()
+        val sessions = TestSessionRepository().apply {
+            activeFilter = { cp ->
+                (cp.item.accountScopeId to cp.item.itemId) !in consumption.skipped &&
+                    (cp.item.accountScopeId to cp.item.itemId) !in consumption.watched
+            }
+        }
+        val preferences = SourcePreferences(MapPreferenceStore())
+        val rr = TestRoundRobinRepository(
+            InMemoryReelsRoundRobinRepository(
+                locallyEligible = { candidate ->
+                    candidate.itemId !in consumption.externallyConsumed &&
+                        (candidate.accountScopeId to candidate.itemId) !in consumption.watched &&
+                        (candidate.accountScopeId to candidate.itemId) !in consumption.skipped &&
+                        candidate.itemId !in hidden.hidden
+                },
+            ),
+        )
+        val firstSource = TestRoundRobinSource(101L, clock).also { it.catalogKeys = listOf("a", "b", "c") }
+        val first = newHarness(
+            clock = clock,
+            source = firstSource,
+            consumption = consumption,
+            hidden = hidden,
+            candidates = candidates,
+            sessions = sessions,
+            roundRobin = rr,
+            preferences = preferences,
+        )
+        idle()
+        val firstOwner = first.model.state.value.roundRobinOwner!!
+        val anchored = first.model.state.value.items.first()
+        first.model.onRoundRobinVisitStarted(firstOwner, anchored)
+        clock.now = 200L
+        first.model.onRoundRobinVisitEnded(firstOwner, anchored, 200L, 0.01f, 30f)
+        idle()
+        consumption.skipped shouldContain ("acc:101:acct-a" to anchored.id)
+
+        val secondSource = TestRoundRobinSource(101L, clock).also { it.catalogKeys = listOf("a", "b", "c") }
+        val second = newHarness(
+            clock = clock,
+            source = secondSource,
+            consumption = consumption,
+            hidden = hidden,
+            candidates = candidates,
+            sessions = sessions,
+            roundRobin = rr,
+            preferences = preferences,
+        )
+        idle()
+
+        val items = second.model.state.value.items
+        items.isNotEmpty() shouldBe true
+        items.first().id shouldNotBe anchored.id
+        items.map { it.id } shouldNotContain anchored.id
+    }
+
+    @Test
+    fun `round robin short video completion marks clip watched without waiting for duration threshold`() =
+        roundRobinTest {
+            val h = newHarness()
+            idle()
+            val owner = h.model.state.value.roundRobinOwner!!
+            val first = h.model.state.value.items.first()
+
+            h.model.onRoundRobinVisitStarted(owner, first)
+            h.model.onRoundRobinFirstFrame(owner, first.id)
+            h.clock.now = 400L
+            h.model.onRoundRobinVideoCompleted(owner, first.id)
+            h.model.onRoundRobinVisitEnded(owner, first, 400L, 1.0f, 0.4f)
+            idle()
+
+            h.consumption.watched shouldContain ("acc:101:acct-a" to first.id)
+            h.consumption.skipped.none { it.second == first.id } shouldBe true
+        }
+
+    @Test
+    fun `round robin cross-chat duplicate with consumed contentKey is filtered in session`() = roundRobinTest {
+        val clock = Clock()
+        val source = TestRoundRobinSource(101L, clock).also {
+            it.catalogKeys = listOf("a", "b")
+            it.contentKeyFor = { itemId ->
+                when (itemId) {
+                    "a-0", "b-1" -> "shared-file-unique-id"
+                    else -> "unique-$itemId"
+                }
+            }
+        }
+        val h = newHarness(clock = clock, source = source)
+        idle()
+        val owner = h.model.state.value.roundRobinOwner!!
+        val a0 = h.model.state.value.items.first { it.id == "a-0" }
+
+        // User skips a-0 ("shared-file-unique-id"); b-1 shares the same contentKey and must not appear later.
+        h.model.onRoundRobinVisitStarted(owner, a0)
+        clock.now = 200L
+        h.model.onRoundRobinVisitEnded(owner, a0, 200L, 0.01f, 30f)
+        h.roundRobin.signalEligibility()
+        idle()
+
+        // Advance and pump multiple pages so chat "b" scans past b-0 -> b-1 -> b-2.
+        repeat(6) {
+            h.model.loadFeed(reset = false)
+            idle()
+        }
+
+        val shownIds = h.model.state.value.items.map { it.id }
+        shownIds shouldContain "b-0"
+        shownIds shouldNotContain "b-1"
     }
 }

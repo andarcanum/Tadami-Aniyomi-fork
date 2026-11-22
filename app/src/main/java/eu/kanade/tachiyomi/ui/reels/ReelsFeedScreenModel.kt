@@ -391,8 +391,17 @@ class ReelsFeedScreenModel(
     @Volatile
     private var mixStopJob: Job? = null
 
+    private data class ActiveNonRoundRobinVisit(
+        val slotKey: String,
+        val item: ShortVideoItem,
+        val sourceId: Long,
+    )
+
     @Volatile
     private var activeVisitSlotKey: String? = null
+
+    @Volatile
+    private var activeVisit: ActiveNonRoundRobinVisit? = null
 
     // Modular controllers extracted from ReelsFeedScreenModel (Stage 4 decomposition).
     private val feedEngine = ReelsFeedEngine()
@@ -816,13 +825,44 @@ class ReelsFeedScreenModel(
         if (state.value.isOffline) return
         val slotSourceId = resolveSlotSourceId(itemIndex = itemIndex, fallbackItemId = item.id)
         val visitKey = visitSlotKey(item.id, itemIndex)
-        visitSourceIds[visitKey] = slotSourceId
         // A configuration recreation re-activates the same clip while its visit is still
         // open: resuming must not restart the accumulation or duplicate the continuity entry.
-        if (activeVisitSlotKey == visitKey && interactionTracker.snapshot(item.id) != null) return
+        if (activeVisitSlotKey == visitKey && interactionTracker.snapshot(item.id) != null) {
+            visitSourceIds[visitKey] = slotSourceId
+            return
+        }
+        if (activeVisit != null && activeVisit?.slotKey != visitKey) {
+            finishActiveNonRoundRobinVisit()
+        }
+        visitSourceIds[visitKey] = slotSourceId
         activeVisitSlotKey = visitKey
+        activeVisit = ActiveNonRoundRobinVisit(visitKey, item, slotSourceId)
         interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
         if (isReplaySurface()) sessionContinuity.visitStarted(item, persistEligible = true)
+    }
+
+    private fun finishActiveNonRoundRobinVisit() {
+        val previous = activeVisit ?: return
+        activeVisit = null
+        if (activeVisitSlotKey == previous.slotKey) activeVisitSlotKey = null
+        val trackedSourceId = visitSourceIds.remove(previous.slotKey) ?: previous.sourceId
+        val lastPosition = interactionTracker.snapshot(previous.item.id)?.positionMs ?: 0L
+        if (isReplaySurface()) sessionContinuity.positionBoundary(previous.item.id, lastPosition)
+        val snapshot = interactionTracker.endVisit(previous.item.id, nowMs(), lastPosition) ?: return
+        val durationSec = previous.item.durationSec ?: 0f
+        val positionFraction = if (durationSec > 0f) {
+            (lastPosition / (durationSec * 1000f)).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+        completeNonRoundRobinVisit(
+            item = previous.item,
+            sourceId = trackedSourceId,
+            snapshot = snapshot,
+            positionMs = lastPosition,
+            positionFraction = positionFraction,
+            durationSec = durationSec,
+        )
     }
 
     /**
@@ -894,6 +934,7 @@ class ReelsFeedScreenModel(
             ?: return
         val snapshot = if (endTrackerVisit) {
             if (activeVisitSlotKey == visitKey) activeVisitSlotKey = null
+            if (activeVisit?.slotKey == visitKey) activeVisit = null
             interactionTracker.endVisit(activeItem.id, nowMs(), 0L)
         } else {
             interactionTracker.snapshot(activeItem.id)
@@ -920,6 +961,14 @@ class ReelsFeedScreenModel(
                 feedEngine.tasteEngine.recordRewatch(item)
             } else {
                 feedEngine.tasteEngine.recordCompletion(item)
+            }
+        }
+        if (!state.value.isOffline) {
+            val currentVisit = activeVisit
+            if (currentVisit == null || currentVisit.item.id == itemId) {
+                val slotSourceId = currentVisit?.sourceId
+                    ?: resolveSlotSourceId(fallbackItemId = itemId)
+                commitWatched(itemId, slotSourceId)
             }
         }
     }
@@ -951,12 +1000,31 @@ class ReelsFeedScreenModel(
         val isActiveSlotVisit = itemIndex < 0 || activeVisitSlotKey == null || activeVisitSlotKey == visitKey
         val snapshot = if (isActiveSlotVisit) {
             if (activeVisitSlotKey == visitKey) activeVisitSlotKey = null
+            if (activeVisit?.slotKey == visitKey) activeVisit = null
             interactionTracker.endVisit(item.id, nowMs(), positionMs)
         } else {
             null
         }
         if (snapshot == null) return
         val sourceId = trackedSourceId ?: resolveSlotSourceId(itemIndex = itemIndex, fallbackItemId = item.id)
+        completeNonRoundRobinVisit(
+            item = item,
+            sourceId = sourceId,
+            snapshot = snapshot,
+            positionMs = positionMs,
+            positionFraction = positionFraction,
+            durationSec = durationSec,
+        )
+    }
+
+    private fun completeNonRoundRobinVisit(
+        item: ShortVideoItem,
+        sourceId: Long,
+        snapshot: ReelsInteractionTracker.Snapshot,
+        positionMs: Long,
+        positionFraction: Float,
+        durationSec: Float,
+    ) {
         // Remote personalization (opt-in capability) reports the REAL foreground playback the
         // tracker measured, not the wall time the card spent on screen.
         reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec, sourceId)
@@ -1047,15 +1115,28 @@ class ReelsFeedScreenModel(
         val isMix = state.value.isMixMode
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             val (scope, generation) = if (isMix) ensureForYouScopeMix(sourceId) else ensureForYouScope(sourceId)
-            val ok = reelsConsumptionRepository.markSkipped(
+            val at = wallClock()
+            var ok = reelsConsumptionRepository.markSkipped(
                 scope,
                 sourceId,
                 itemId,
-                wallClock(),
+                at,
                 surface,
                 ReelsForYou.POLICY_VERSION,
                 generation,
             )
+            // Retry once on transient DB failure if the history generation did not change.
+            if (!ok && reelsConsumptionRepository.generation(scope) == generation) {
+                ok = reelsConsumptionRepository.markSkipped(
+                    scope,
+                    sourceId,
+                    itemId,
+                    at,
+                    surface,
+                    ReelsForYou.POLICY_VERSION,
+                    generation,
+                )
+            }
             if (ok) {
                 reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
             } else {
@@ -1909,6 +1990,7 @@ class ReelsFeedScreenModel(
         forYouScopesBySource.clear()
         visitSourceIds.clear()
         activeVisitSlotKey = null
+        activeVisit = null
         val sessionToken = mixSessionSeq.incrementAndGet()
         currentMixSessionToken = sessionToken
         if (state.value.isMixMode || mixFeedStarted || stopCoordinator) {
@@ -2787,7 +2869,7 @@ class ReelsFeedScreenModel(
         val frontier = page.frontierItemId ?: return null
         val items = state.value.items
         if (items.any { it.id == frontier }) return null
-        val anchorId = page.playbackItemId ?: frontier
+        val anchorId = page.playbackItemId ?: return null
         if (items.any { it.id == anchorId }) return null
         if (page.suffix.any { it.id == anchorId }) return null
         // Already restored from the session active checkpoint before the attach: no second
@@ -2932,7 +3014,8 @@ class ReelsFeedScreenModel(
         if (!isCurrentRoundRobinOwner(owner)) return
         val activeVisit = roundRobinVisit
         if (activeVisit != null && activeVisit.owner == owner && activeVisit.item.id == item.id) return
-        if (activeVisit != null && activeVisit.owner != owner) finishRoundRobinVisit(activeVisit.owner)
+        // Commit the previous card even under the same owner when incoming isActive runs before outgoing dispose.
+        if (activeVisit != null) finishRoundRobinVisit(activeVisit.owner)
         interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
         roundRobinVisit = RoundRobinVisit(owner, item)
         // Advances the monotonic frontier and seeds the checkpoint writer for this card.
@@ -2983,6 +3066,7 @@ class ReelsFeedScreenModel(
         val visit = roundRobinVisit
         if (visit != null && (visit.owner != owner || visit.item.id != itemId)) return
         roundRobinCoordinator.videoCompleted(itemId)
+        commitRoundRobinWatched(owner, itemId)
     }
 
     /**
@@ -3071,15 +3155,28 @@ class ReelsFeedScreenModel(
         val generation = owner.historyGeneration
         val surface = currentSurface().key
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val ok = reelsConsumptionRepository.markSkipped(
+            val at = wallClock()
+            var ok = reelsConsumptionRepository.markSkipped(
                 scope,
                 sourceId,
                 itemId,
-                wallClock(),
+                at,
                 surface,
                 ReelsForYou.POLICY_VERSION,
                 generation,
             )
+            // Retry once on transient DB failure if the history generation did not change.
+            if (!ok && reelsConsumptionRepository.generation(scope) == generation) {
+                ok = reelsConsumptionRepository.markSkipped(
+                    scope,
+                    sourceId,
+                    itemId,
+                    at,
+                    surface,
+                    ReelsForYou.POLICY_VERSION,
+                    generation,
+                )
+            }
             if (ok) {
                 reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
             } else {

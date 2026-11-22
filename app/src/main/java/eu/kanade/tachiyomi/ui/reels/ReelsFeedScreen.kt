@@ -30,7 +30,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -102,7 +101,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -1236,6 +1235,10 @@ data class ReelsFeedScreen(
                                 windowIsLandscape,
                             ) {
                                 // Observe-only vertical gesture + Pull-to-Refresh on page 0.
+                                // Runs strictly on Initial pass with unconsumed deltas so
+                                // VerticalPager's inner scrollable never hides manual drags.
+                                val touchSlop = viewConfiguration.touchSlop
+                                val userCanScroll = !touchLocked && !qualityDialogVisible
                                 awaitEachGesture {
                                     val down = awaitFirstDown(
                                         requireUnconsumed = false,
@@ -1247,35 +1250,49 @@ data class ReelsFeedScreen(
                                     var pullArmed = false
                                     val canPullRefresh = !windowIsLandscape &&
                                         !state.isOffline &&
-                                        !touchLocked &&
-                                        !qualityDialogVisible &&
+                                        userCanScroll &&
                                         pagerState.currentPage == 0 &&
                                         pagerState.currentPageOffsetFraction <= 0.01f
-                                    drag(down.id) { change ->
-                                        val delta = change.positionChange()
-                                        if (abs(delta.y) > 0f) dragged = true
-                                        totalDy += delta.y
-                                        totalDx += delta.x
-                                        if (canPullRefresh && totalDy > 0f && totalDy > abs(totalDx) * 1.25f) {
-                                            val damped = (totalDy * 0.55f).coerceIn(0f, pullRefreshThresholdPx * 1.45f)
-                                            pullRefreshOffsetPx = damped
-                                            if (!pullArmed && damped >= pullRefreshThresholdPx) {
-                                                pullArmed = true
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            } else if (pullArmed && damped < pullRefreshThresholdPx) {
+                                    try {
+                                        while (true) {
+                                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                            if (!change.pressed) break
+                                            val delta = change.positionChangeIgnoreConsumed()
+                                            totalDy += delta.y
+                                            totalDx += delta.x
+                                            if (userCanScroll &&
+                                                abs(totalDy) >= touchSlop * 0.5f &&
+                                                abs(totalDy) > abs(totalDx)
+                                            ) {
+                                                dragged = true
+                                                lastUserNavAtMs.set(SystemClock.elapsedRealtime())
+                                            }
+                                            if (canPullRefresh && totalDy > 0f && totalDy > abs(totalDx) * 1.25f) {
+                                                val damped = (totalDy * 0.55f).coerceIn(
+                                                    0f,
+                                                    pullRefreshThresholdPx * 1.45f,
+                                                )
+                                                pullRefreshOffsetPx = damped
+                                                if (!pullArmed && damped >= pullRefreshThresholdPx) {
+                                                    pullArmed = true
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                } else if (pullArmed && damped < pullRefreshThresholdPx) {
+                                                    pullArmed = false
+                                                }
+                                            } else if (pullRefreshOffsetPx > 0f && totalDy <= 0f) {
+                                                pullRefreshOffsetPx = 0f
                                                 pullArmed = false
                                             }
-                                        } else if (pullRefreshOffsetPx > 0f && totalDy <= 0f) {
-                                            pullRefreshOffsetPx = 0f
-                                            pullArmed = false
                                         }
+                                        if (dragged) lastUserNavAtMs.set(SystemClock.elapsedRealtime())
+                                        if (pullArmed) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                            screenModel.refreshFeed()
+                                        }
+                                    } finally {
+                                        pullRefreshOffsetPx = 0f
                                     }
-                                    if (dragged) lastUserNavAtMs.set(SystemClock.elapsedRealtime())
-                                    if (pullArmed) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                        screenModel.refreshFeed()
-                                    }
-                                    pullRefreshOffsetPx = 0f
                                 }
                             }
                             .pointerInput(feedSwipeEnabled, swipeThresholdPx) {

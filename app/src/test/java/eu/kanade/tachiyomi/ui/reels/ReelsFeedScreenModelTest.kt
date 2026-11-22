@@ -2503,6 +2503,7 @@ class ReelsFeedScreenModelTest {
         var generation = 0L
         var writes = 0
         var merges = 0
+        var failNextMarkSkippedCalls = 0
 
         override suspend fun generation(scope: String): Long = generation
 
@@ -2533,6 +2534,10 @@ class ReelsFeedScreenModelTest {
             policyVersion: Int,
             generation: Long,
         ): Boolean {
+            if (failNextMarkSkippedCalls > 0) {
+                failNextMarkSkippedCalls--
+                return false
+            }
             if (generation != this.generation) return false
             writes++
             skipped.putIfAbsent(sourceId to itemId, at)
@@ -4831,4 +4836,65 @@ class ReelsFeedScreenModelTest {
                 ReelsSessionSource.lastSourceId = null
             }
         }
+
+    @Test
+    fun `non round-robin out-of-order incoming visit commits departed card once as skipped`() = runTest(testDispatcher) {
+        val consumption = FakeReelsConsumptionRepository()
+        val source = RecordingFeedSource(983L) {
+            FeedPage(listOf(videoItem("clip-a"), videoItem("clip-b")), hasNextPage = false)
+        }
+        val model = buildModel(
+            sourceId = 983L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+        )
+        try {
+            testDispatcher.scheduler.advanceUntilIdle()
+            val items = model.state.value.items
+            items.map { it.id } shouldBe listOf("clip-a", "clip-b")
+
+            model.onVisitStarted(items[0], itemIndex = 0)
+            // Next card activates BEFORE departed card runs onVisitEnded.
+            model.onVisitStarted(items[1], itemIndex = 1)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            consumption.skipped.keys shouldBe setOf(983L to "clip-a")
+            consumption.writes shouldBe 1
+
+            // Delayed onVisitEnded for departed card must not double-commit or close active card.
+            model.onVisitEnded(items[0], positionMs = 150L, positionFraction = 0.02f, durationSec = 10f, itemIndex = 0)
+            testDispatcher.scheduler.advanceUntilIdle()
+            consumption.writes shouldBe 1
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
+
+    @Test
+    fun `commitSkipped retries once on transient failure when generation matches`() = runTest(testDispatcher) {
+        val consumption = FakeReelsConsumptionRepository().apply {
+            failNextMarkSkippedCalls = 1
+        }
+        val source = RecordingFeedSource(984L) {
+            FeedPage(listOf(videoItem("retry-a"), videoItem("retry-b")), hasNextPage = false)
+        }
+        val model = buildModel(
+            sourceId = 984L,
+            manager = sourceManagerOf(source),
+            consumptionRepository = consumption,
+        )
+        try {
+            testDispatcher.scheduler.advanceUntilIdle()
+            model.onPageChanged(1, ReelsTransitionCause.USER_FORWARD)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            consumption.failNextMarkSkippedCalls shouldBe 0
+            consumption.skipped.keys shouldBe setOf(984L to "retry-a")
+            consumption.writes shouldBe 1
+        } finally {
+            model.onDispose()
+            ReelsSessionSource.lastSourceId = null
+        }
+    }
 }

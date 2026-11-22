@@ -55,6 +55,7 @@ import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
 import tachiyomi.domain.reels.anime.repository.ReelsRoundRobinRepository
 import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
+import java.util.Collections
 import java.util.Date
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -642,6 +643,7 @@ class ReelsRoundRobinCoordinator(
             snapshot.frames.forEach { frame ->
                 frame.turns.values.forEach { turn -> turn.itemId?.let { add(it) } }
             }
+            snapshot.anchor?.itemId?.let { add(it) }
             restoredActive?.item?.itemId?.let { add(it) }
         }
         val consumed = if (request.unseenOnly && knownIds.isNotEmpty()) {
@@ -670,6 +672,8 @@ class ReelsRoundRobinCoordinator(
             pendingSeekPositionMs = null,
         )
         session.lastSnapshot = snapshot
+        session.recordContentKeys(snapshot.entries)
+        session.markConsumedContentKeys(consumed)
         val sameWarmContext = snapshot.sources.any { it.checkpointContext == readiness.context.continuityKey }
         if (snapshot.sources.isNotEmpty() && snapshot.catalogRevision != null && sameWarmContext) {
             session.catalogRevisionApplied = snapshot.catalogRevision
@@ -698,7 +702,7 @@ class ReelsRoundRobinCoordinator(
             return
         }
         val anchorId = snapshot.anchor?.itemId
-        if (anchorId != null) {
+        if (anchorId != null && session.eligibility.allowsId(anchorId, session.unseenOnly)) {
             session.playbackItemId = anchorId
             val candidate = snapshot.entries.firstOrNull { it.candidate.itemId == anchorId }?.candidate
             if (candidate != null) {
@@ -1246,6 +1250,12 @@ class ReelsRoundRobinCoordinator(
         synchronized(session.eligibilityLock) {
             session.eligibility = fresh
         }
+        session.recordContentKeys(snapshot.entries)
+        if ((old.consumed - fresh.consumed).any { it in knownIds }) {
+            session.rebuildConsumedContentKeys(fresh.consumed)
+        } else {
+            session.markConsumedContentKeys(fresh.consumed)
+        }
 
         val entriesById = snapshot.entries.associateBy { it.candidate.itemId }
         val sourceByItem = HashMap<String, String>()
@@ -1318,18 +1328,46 @@ class ReelsRoundRobinCoordinator(
             .mapTo(HashSet()) { it.key }
         unhidden.removeAll(headCheckPending)
 
-        if (affected.isEmpty()) return snapshot
-        var result = mutate(
-            session,
-            snapshot,
-            ReelsRoundRobinMutation.Recheck(affected, nowMs()),
-        ).snapshot
+        val duplicateIds = snapshot.entries
+            .asSequence()
+            .filter { entry ->
+                entry.candidate.itemId != session.playbackItemId &&
+                    entry.validation != ReelsRoundRobinValidation.UNAVAILABLE &&
+                    session.isContentKeyConsumed(entry.contentKey)
+            }
+            .map { it.candidate.itemId }
+            .toList()
+
+        if (affected.isEmpty() && duplicateIds.isEmpty()) return snapshot
+        var result = snapshot
+        if (affected.isNotEmpty()) {
+            result = mutate(
+                session,
+                result,
+                ReelsRoundRobinMutation.Recheck(affected, nowMs()),
+            ).snapshot
+        }
         if (unhidden.isNotEmpty()) {
             val reset = unhidden.map { ReelsRoundRobinUpdate.ResetCursor(it) }
             result = mutate(
                 session,
                 result,
                 ReelsRoundRobinMutation.Pump(reset, PAGE_LIMIT, nowMs()),
+            ).snapshot
+        }
+        if (duplicateIds.isNotEmpty()) {
+            val duplicateUpdates = duplicateIds.map { itemId ->
+                ReelsRoundRobinUpdate.Revalidated(
+                    itemId = itemId,
+                    candidate = null,
+                    validation = ReelsRoundRobinValidation.UNAVAILABLE,
+                    retryAt = null,
+                )
+            }
+            result = mutate(
+                session,
+                result,
+                ReelsRoundRobinMutation.Pump(duplicateUpdates, PAGE_LIMIT, nowMs()),
             ).snapshot
         }
         return result
@@ -1606,12 +1644,19 @@ class ReelsRoundRobinCoordinator(
                     ) {
                         return@mapNotNull null
                     }
+                    session.recordContentKey(candidate.item.id, candidate.contentKey)
+                    if (candidate.item.id in consumed) {
+                        session.markConsumedContentKeys(listOf(candidate.item.id))
+                    }
                     if (!session.eligibility.allows(
                             candidate.item.author,
                             candidate.item.id,
                             session.unseenOnly,
                         )
                     ) {
+                        return@mapNotNull null
+                    }
+                    if (session.isContentKeyConsumed(candidate.contentKey)) {
                         return@mapNotNull null
                     }
                     session.liveItems[candidate.item.id] = candidate.item
@@ -1726,7 +1771,8 @@ class ReelsRoundRobinCoordinator(
                     emptySet()
                 }
                 session.mergeConsumed(consumed)
-                val allowed = session.eligibility.allows(
+                val duplicateContent = session.isContentKeyConsumed(entry.contentKey)
+                val allowed = !duplicateContent && session.eligibility.allows(
                     item.author,
                     item.id,
                     session.unseenOnly,
@@ -1748,11 +1794,11 @@ class ReelsRoundRobinCoordinator(
                     listOf(
                         ReelsRoundRobinUpdate.Revalidated(
                             itemId = need.itemId,
-                            candidate = stored,
-                            validation = if (allowed) {
-                                ReelsRoundRobinValidation.ELIGIBLE
-                            } else {
-                                ReelsRoundRobinValidation.FILTERED
+                            candidate = if (duplicateContent) null else stored,
+                            validation = when {
+                                allowed -> ReelsRoundRobinValidation.ELIGIBLE
+                                duplicateContent -> ReelsRoundRobinValidation.UNAVAILABLE
+                                else -> ReelsRoundRobinValidation.FILTERED
                             },
                             retryAt = null,
                         ),
@@ -1986,6 +2032,7 @@ class ReelsRoundRobinCoordinator(
                 val item = session.liveItems[itemId]
                     ?: with(ReelsCandidateMapper) { entry.candidate.toShortVideoItem() }
                 if (!session.eligibility.allows(item.author, item.id, session.unseenOnly)) continue
+                if (session.isContentKeyConsumed(entry.contentKey)) continue
                 result += item
                 if (result.size >= PAGE_LIMIT) return result
             }
@@ -2298,6 +2345,8 @@ class ReelsRoundRobinCoordinator(
         val liveItems = ConcurrentHashMap<String, ShortVideoItem>()
         val samplePositions = ConcurrentHashMap<String, Long>()
         val retryCounts = ConcurrentHashMap<String, Int>()
+        val contentKeyByItemId = ConcurrentHashMap<String, String>()
+        val consumedContentKeys: MutableSet<String> = Collections.synchronizedSet(HashSet())
 
         @Volatile
         var stopped: Boolean = false
@@ -2349,11 +2398,47 @@ class ReelsRoundRobinCoordinator(
         @Volatile
         var lastPublishedPage: ReelsRoundRobinUiPage? = null
 
+        fun recordContentKey(itemId: String, contentKey: String?) {
+            val key = contentKey?.takeIf { it.isNotBlank() } ?: return
+            contentKeyByItemId[itemId] = key
+        }
+
+        fun recordContentKeys(entries: List<ReelsRoundRobinEntry>) {
+            entries.forEach { recordContentKey(it.candidate.itemId, it.contentKey) }
+        }
+
+        fun contentKeyFor(itemId: String): String? = contentKeyByItemId[itemId]
+
+        fun markConsumedContentKeys(ids: Collection<String>) {
+            if (ids.isEmpty()) return
+            synchronized(consumedContentKeys) {
+                ids.forEach { itemId ->
+                    contentKeyByItemId[itemId]?.let(consumedContentKeys::add)
+                }
+            }
+        }
+
+        fun rebuildConsumedContentKeys(consumedIds: Collection<String>) {
+            synchronized(consumedContentKeys) {
+                consumedContentKeys.clear()
+                consumedIds.forEach { itemId ->
+                    contentKeyByItemId[itemId]?.let(consumedContentKeys::add)
+                }
+            }
+        }
+
+        fun isContentKeyConsumed(contentKey: String?): Boolean {
+            if (!unseenOnly) return false
+            val key = contentKey?.takeIf { it.isNotBlank() } ?: return false
+            return synchronized(consumedContentKeys) { key in consumedContentKeys }
+        }
+
         fun mergeConsumed(ids: Set<String>) {
             if (ids.isEmpty()) return
             synchronized(eligibilityLock) {
                 eligibility = eligibility.copy(consumed = eligibility.consumed + ids)
             }
+            markConsumedContentKeys(ids)
         }
     }
 }
