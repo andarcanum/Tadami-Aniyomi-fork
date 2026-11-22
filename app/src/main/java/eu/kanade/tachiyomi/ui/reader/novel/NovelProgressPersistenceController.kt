@@ -277,71 +277,79 @@ internal class NovelProgressPersistenceController(
                 return
             }
 
-            novelChapterRepository.updateChapter(
-                NovelChapterUpdate(
-                    id = nextUpdate.chapterId,
-                    read = nextUpdate.read,
-                    lastPageRead = nextUpdate.lastPageRead,
-                ),
-            )
-
-            if (nextUpdate.read) {
-                maybeDeleteReadChapterDownloads(nextUpdate)
-            }
-
-            val sessionDuration = nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
-            if (nextUpdate.emitReadEvent) {
-                runCatching {
-                    if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
-                        val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
-                        manager.registerNightAction()
-                    }
-                }
-                eventBus?.tryEmit(
-                    AchievementEvent.NovelChapterRead(
-                        novelId = nextUpdate.novelId,
-                        chapterNumber = nextUpdate.chapterNumber,
+            try {
+                novelChapterRepository.updateChapter(
+                    NovelChapterUpdate(
+                        id = nextUpdate.chapterId,
+                        read = nextUpdate.read,
+                        lastPageRead = nextUpdate.lastPageRead,
                     ),
                 )
-                if (nextUpdate.emitNovelCompleted) {
-                    eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
+
+                if (nextUpdate.read) {
+                    maybeDeleteReadChapterDownloads(nextUpdate)
                 }
-                activityDataRepository.recordReading(
-                    id = nextUpdate.chapterId,
-                    chaptersCount = 1,
-                    durationMs = sessionDuration,
-                )
-                if (Injekt.get<eu.kanade.domain.track.service.TrackPreferences>().autoUpdateTrack().get()) {
-                    val context = Injekt.get<Application>()
-                    val novelId = nextUpdate.novelId
-                    val chapterNumber = nextUpdate.chapterNumber.toDouble()
-                    // Dispatch remote tracker HTTP sync off the local DB/exit persistence path so
-                    // exiting the reader or seamless chapter switches never stall on slow networks.
-                    disposalFlushScope.launch {
-                        runCatching {
-                            Injekt.get<TrackNovelChapter>().await(
-                                context,
-                                novelId,
-                                chapterNumber,
-                            )
-                        }.onFailure { error ->
-                            if (error is kotlinx.coroutines.CancellationException) throw error
-                            logcat(LogPriority.WARN, error) {
-                                "Failed to sync novel chapter track novelId=$novelId chapter=$chapterNumber"
+
+                val sessionDuration = nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
+                if (nextUpdate.emitReadEvent) {
+                    runCatching {
+                        if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
+                            val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+                            manager.registerNightAction()
+                        }
+                    }
+                    eventBus?.tryEmit(
+                        AchievementEvent.NovelChapterRead(
+                            novelId = nextUpdate.novelId,
+                            chapterNumber = nextUpdate.chapterNumber,
+                        ),
+                    )
+                    if (nextUpdate.emitNovelCompleted) {
+                        eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
+                    }
+                    activityDataRepository.recordReading(
+                        id = nextUpdate.chapterId,
+                        chaptersCount = 1,
+                        durationMs = sessionDuration,
+                    )
+                    if (Injekt.get<eu.kanade.domain.track.service.TrackPreferences>().autoUpdateTrack().get()) {
+                        val context = Injekt.get<Application>()
+                        val novelId = nextUpdate.novelId
+                        val chapterNumber = nextUpdate.chapterNumber.toDouble()
+                        // Dispatch remote tracker HTTP sync off the local DB/exit persistence path so
+                        // exiting the reader or seamless chapter switches never stall on slow networks.
+                        disposalFlushScope.launch {
+                            runCatching {
+                                Injekt.get<TrackNovelChapter>().await(
+                                    context,
+                                    novelId,
+                                    chapterNumber,
+                                )
+                            }.onFailure { error ->
+                                if (error is kotlinx.coroutines.CancellationException) throw error
+                                logcat(LogPriority.WARN, error) {
+                                    "Failed to sync novel chapter track novelId=$novelId chapter=$chapterNumber"
+                                }
                             }
                         }
                     }
+                } else if (sessionDuration > 0L) {
+                    activityDataRepository.recordReading(
+                        id = nextUpdate.chapterId,
+                        chaptersCount = 0,
+                        durationMs = sessionDuration,
+                    )
                 }
-            } else if (sessionDuration > 0L) {
-                activityDataRepository.recordReading(
-                    id = nextUpdate.chapterId,
-                    chaptersCount = 0,
-                    durationMs = sessionDuration,
-                )
-            }
 
-            if (nextUpdate.emitReadEvent) {
-                flushPendingHistorySnapshot(nextUpdate.chapterId)
+                if (nextUpdate.emitReadEvent) {
+                    flushPendingHistorySnapshot(nextUpdate.chapterId)
+                }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                logcat(LogPriority.ERROR, error) {
+                    "Failed to persist novel chapter progress chapterId=${nextUpdate.chapterId}"
+                }
             }
         }
     }
@@ -393,6 +401,7 @@ internal class NovelProgressPersistenceController(
                 ),
             )
         }.onFailure { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
             logcat(LogPriority.ERROR, error) { "Failed to save novel history snapshot" }
         }
     }
@@ -459,9 +468,9 @@ internal class NovelProgressPersistenceController(
                 queueHistoryReadDuration(finalChapterId, finalDurationMs)
             }
         }
-        val existingJob = progressPersistenceJob
         disposalFlushScope.launch {
             withContext(NonCancellable) {
+                val existingJob = progressPersistenceMutex.withLock { progressPersistenceJob }
                 existingJob?.join()
                 while (true) {
                     val hasPending = progressPersistenceMutex.withLock {

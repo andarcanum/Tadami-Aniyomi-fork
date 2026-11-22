@@ -67,4 +67,31 @@ class ReaderScrollSmoothnessTest {
         )
         afterTinyDelta shouldBe beforeSpike
     }
+
+    @Test
+    fun `WebtoonLookaheadSmoother produces identical lookahead on 60Hz and 120Hz for equal scroll velocity`() {
+        val smoother60 = WebtoonLookaheadSmoother()
+        val smoother120 = WebtoonLookaheadSmoother()
+
+        repeat(8) { smoother60.onScrollDelta(dy = 120, frameDeltaMs = 16.6667f) }
+        repeat(16) { smoother120.onScrollDelta(dy = 60, frameDeltaMs = 8.3333f) }
+
+        val factor60 = smoother60.computeLookaheadFactor(
+            isSettling = false,
+            flingVelocityY = 0,
+            viewportHeightPx = 2400f,
+            minFactor = 0.5f,
+            maxFactor = 1.0f,
+        )
+        val factor120 = smoother120.computeLookaheadFactor(
+            isSettling = false,
+            flingVelocityY = 0,
+            viewportHeightPx = 2400f,
+            minFactor = 0.5f,
+            maxFactor = 1.0f,
+        )
+
+        factor120 shouldBe factor60
+        factor120 shouldBeGreaterThanOrEqual 0.8f
+    }
 }

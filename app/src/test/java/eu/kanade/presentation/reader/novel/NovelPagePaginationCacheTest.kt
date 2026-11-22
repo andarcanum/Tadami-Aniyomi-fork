@@ -239,4 +239,25 @@ class NovelPagePaginationCacheTest {
         )
         restored shouldBe 50
     }
+
+    @Test
+    fun `character counts resolve slices by sourceBlockIndex when blocks are filtered`() {
+        val plainBlocks = listOf(
+            PlainPageReaderTextBlock(sourceBlockIndex = 2, text = "Hello world"),
+            PlainPageReaderTextBlock(sourceBlockIndex = 5, text = "Second"),
+        )
+        val plainPage = listOf(
+            PlainPageSlice.Text(blockIndex = 2, range = TextPageRange(0, 11)),
+            PlainPageSlice.Text(blockIndex = 5, range = TextPageRange(0, 6)),
+        )
+        plainPageReaderCharacterCount(plainPage, plainBlocks) shouldBe 17
+
+        val richBlocks = listOf(
+            RichPageBlockText(sourceBlockIndex = 3, text = AnnotatedString("Rich block"), firstLineIndentEm = null),
+        )
+        val richPage = listOf(
+            RichPageSlice.Text(blockIndex = 3, range = TextPageRange(0, 10)),
+        )
+        richPageReaderCharacterCount(richPage, richBlocks) shouldBe 10
+    }
 }

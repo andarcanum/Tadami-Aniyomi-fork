@@ -1043,6 +1043,9 @@ internal class NovelPageReaderTextView constructor(
                 if (shouldSchedulePromotion) {
                     scheduleSelectionPromotion()
                 }
+                if (!handledBySuper && resolveClickableSpanAt(event) != null) {
+                    return true
+                }
             }
             MotionEvent.ACTION_MOVE -> {
                 latestX = event.x

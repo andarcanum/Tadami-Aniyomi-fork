@@ -1286,7 +1286,7 @@ public class SubsamplingScaleImageView extends View {
             }
             vTranslateBefore.set(vTranslate);
 
-            long scaleElapsed = System.currentTimeMillis() - anim.time;
+            long scaleElapsed = Math.max(0L, SystemClock.uptimeMillis() - anim.time);
             boolean finished = scaleElapsed > anim.duration;
             scaleElapsed = Math.min(scaleElapsed, anim.duration);
             scale = ease(anim.easing, scaleElapsed, anim.scaleStart, anim.scaleEnd - anim.scaleStart, anim.duration);
@@ -3990,7 +3990,7 @@ public class SubsamplingScaleImageView extends View {
         private boolean interruptible = true; // Whether the anim can be interrupted by a touch
         private int easing = EASE_IN_OUT_QUAD; // Easing style
         private int origin = ORIGIN_ANIM; // Animation origin (API, double tap or fling)
-        private long time = System.currentTimeMillis(); // Start time
+        private long time = SystemClock.uptimeMillis(); // Start time
         private OnAnimationEventListener listener; // Event listener
 
     }
@@ -4193,7 +4193,7 @@ public class SubsamplingScaleImageView extends View {
             anim = new Anim();
             anim.scaleStart = scale;
             anim.scaleEnd = targetScale;
-            anim.time = System.currentTimeMillis();
+            anim.time = SystemClock.uptimeMillis();
             anim.sCenterEndRequested = targetSCenter;
             anim.sCenterStart = getCenter();
             anim.sCenterEnd = targetSCenter;
@@ -4206,7 +4206,7 @@ public class SubsamplingScaleImageView extends View {
             anim.interruptible = interruptible;
             anim.easing = easing;
             anim.origin = origin;
-            anim.time = System.currentTimeMillis();
+            anim.time = SystemClock.uptimeMillis();
             anim.listener = listener;
 
             if (vFocus != null) {

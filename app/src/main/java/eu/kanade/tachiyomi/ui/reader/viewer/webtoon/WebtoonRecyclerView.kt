@@ -66,6 +66,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         get() = if (zoomOutDisabled) DEFAULT_RATE else MIN_RATE
 
     private val lookaheadSmoother = WebtoonLookaheadSmoother()
+    private var lastScrollEventUptimeNanos = 0L
 
     internal val isZoomedIn: Boolean
         get() = currentScale > DEFAULT_RATE
@@ -136,7 +137,16 @@ class WebtoonRecyclerView @JvmOverloads constructor(
             )
         }
         lastScrollDy = dy
-        lookaheadSmoother.onScrollDelta(dy)
+        val nowNanos = System.nanoTime()
+        val frameDeltaMs = if (lastScrollEventUptimeNanos > 0L) {
+            ((nowNanos - lastScrollEventUptimeNanos) / 1_000_000f)
+                .takeIf { it in 1f..200f }
+                ?: WebtoonLookaheadSmoother.DEFAULT_FRAME_DELTA_MS
+        } else {
+            WebtoonLookaheadSmoother.DEFAULT_FRAME_DELTA_MS
+        }
+        lastScrollEventUptimeNanos = nowNanos
+        lookaheadSmoother.onScrollDelta(dy, frameDeltaMs)
         updateChildViewports()
     }
 
@@ -169,6 +179,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
                 lastScrollDy = 0
                 lastFlingVelocityY = 0
                 lookaheadSmoother.reset()
+                lastScrollEventUptimeNanos = 0L
                 updateChildViewports()
             }
             SCROLL_STATE_DRAGGING -> {

@@ -359,7 +359,10 @@ internal class NovelTranslationController(
                             }
                         }
                         TranslationStatus.COMPLETED -> {
-                            if (update.chapterId in suppressedCompletions) return@onEach
+                            if (update.chapterId in suppressedCompletions) {
+                                updateState { it.copy(isGeminiTranslating = false) }
+                                return@onEach
+                            }
                             val settings = host.translationReaderSettings()
                             updateState {
                                 it.copy(
@@ -594,7 +597,10 @@ internal class NovelTranslationController(
                     rules,
                     forceRetranslate = forceRetranslate,
                 )
-                val own = translationQueueManager.repository.getByChapterId(translationChapterId) ?: return@launch
+                val own = translationQueueManager.repository.getByChapterId(translationChapterId) ?: run {
+                    updateState { it.copy(isGeminiTranslating = false) }
+                    return@launch
+                }
                 val terminal = translationQueueManager.repository.observeRuns(
                     own.novelId.takeIf {
                         it > 0
@@ -858,12 +864,14 @@ internal class NovelTranslationController(
                             "${baseTextBlocks.size}, rateLimited=${response.rateLimited}",
                     )
                     host.translationHolderPut("google", results)
-                    googleSessionCache.put(
-                        chapterId = translationChapterId,
-                        sourceLang = params.sourceLang,
-                        targetLang = params.targetLang,
-                        translatedByIndex = results,
-                    )
+                    if (isComplete) {
+                        googleSessionCache.put(
+                            chapterId = translationChapterId,
+                            sourceLang = params.sourceLang,
+                            targetLang = params.targetLang,
+                            translatedByIndex = results,
+                        )
+                    }
                     updateState {
                         it.copy(
                             hasGoogleTranslationCache = isComplete,
@@ -915,7 +923,12 @@ internal class NovelTranslationController(
         googleTranslationEpoch.incrementAndGet()
         googleTranslationJob?.cancel()
         googleTranslationJob = null
-        updateState { it.copy(isGoogleTranslating = false) }
+        updateState {
+            it.copy(
+                isGoogleTranslating = false,
+                translationPhase = TranslationPhase.IDLE,
+            )
+        }
         val settings = host.translationReaderSettings() ?: return
         host.translationUpdateContent(settings)
     }
@@ -1074,6 +1087,7 @@ internal class NovelTranslationController(
             it.copy(
                 isGeminiTranslating = false,
                 isGoogleTranslating = false,
+                translationPhase = TranslationPhase.IDLE,
                 geminiTranslationProgress = 0,
                 googleTranslationProgress = 0,
                 isGeminiTranslationVisible = false,

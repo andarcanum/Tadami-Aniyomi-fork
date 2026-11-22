@@ -214,10 +214,12 @@ internal fun plainPageReaderCharacterCount(
     page: List<PlainPageSlice>,
     textBlocks: List<PlainPageReaderTextBlock>,
 ): Int {
+    if (page.isEmpty() || textBlocks.isEmpty()) return 0
+    val textBySourceBlockIndex = textBlocks.associateBy({ it.sourceBlockIndex }, { it.text })
     return page.sumOf { slice ->
         when (slice) {
             is PlainPageSlice.Text -> {
-                val text = textBlocks.getOrNull(slice.blockIndex)?.text.orEmpty()
+                val text = textBySourceBlockIndex[slice.blockIndex].orEmpty()
                 (slice.range.endExclusive.coerceAtMost(text.length) - slice.range.start.coerceAtLeast(0))
                     .coerceAtLeast(0)
             }
@@ -230,10 +232,15 @@ internal fun richPageReaderCharacterCount(
     page: List<RichPageSlice>,
     blockTexts: List<RichPageBlockText>,
 ): Int {
+    if (page.isEmpty() || blockTexts.isEmpty()) return 0
+    val blockTextBySourceBlockIndex = blockTexts.withIndex().associateBy(
+        keySelector = { resolveRichPageBlockIndex(it.value.sourceBlockIndex, it.index) },
+        valueTransform = { it.value.text.text },
+    )
     return page.sumOf { slice ->
         when (slice) {
             is RichPageSlice.Text -> {
-                val text = blockTexts.getOrNull(slice.blockIndex)?.text?.text.orEmpty()
+                val text = blockTextBySourceBlockIndex[slice.blockIndex].orEmpty()
                 (slice.range.endExclusive.coerceAtMost(text.length) - slice.range.start.coerceAtLeast(0))
                     .coerceAtLeast(0)
             }

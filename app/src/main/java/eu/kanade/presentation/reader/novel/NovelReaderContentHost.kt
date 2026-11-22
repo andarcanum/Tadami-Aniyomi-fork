@@ -3022,7 +3022,9 @@ internal fun NovelReaderContentHost(
                         hasPreviousChapter = composePagerHasPreviousChapter,
                     )
                     pageTurnCurrentPage = resolveSpreadSlotFirstPageIndex(targetSpreadSlot, novelSpreadColumns)
-                    if (pageAnimationDurationMillis != null) {
+                    if (activePageTransitionStyle == NovelPageTransitionStyle.INSTANT) {
+                        pagerState.scrollToPage(targetVirtualPage)
+                    } else if (pageAnimationDurationMillis != null) {
                         pagerState.animateScrollToPage(
                             targetVirtualPage,
                             animationSpec = tween(durationMillis = pageAnimationDurationMillis),
@@ -3080,7 +3082,9 @@ internal fun NovelReaderContentHost(
                         hasPreviousChapter = composePagerHasPreviousChapter,
                     )
                     pageTurnCurrentPage = resolveSpreadSlotFirstPageIndex(targetSpreadSlot, novelSpreadColumns)
-                    if (pageAnimationDurationMillis != null) {
+                    if (activePageTransitionStyle == NovelPageTransitionStyle.INSTANT) {
+                        pagerState.scrollToPage(targetVirtualPage)
+                    } else if (pageAnimationDurationMillis != null) {
                         pagerState.animateScrollToPage(
                             targetVirtualPage,
                             animationSpec = tween(durationMillis = pageAnimationDurationMillis),
@@ -3172,24 +3176,20 @@ internal fun NovelReaderContentHost(
             }
     }
 
+    val latestHandleVolumeKey by rememberUpdatedState(::handleVolumeKey)
     DisposableEffect(
         view,
         state.readerSettings.useVolumeButtons,
-        usePageReader,
-        showWebView,
-        showReaderUi,
-        pageReaderItemsCount,
-        nativeScrollItemsCount,
     ) {
         val listener = ViewCompat.OnUnhandledKeyEventListenerCompat { _, event ->
-            handleVolumeKey(event)
+            latestHandleVolumeKey(event)
         }
         view.isFocusableInTouchMode = true
         // A synchronous focus request here runs a focus search during composition apply,
         // force-remeasuring Lazy subcompositions while the outer composition still has pending
         // modifications — crashing with ComposeRuntimeError. Defer it to the next main-loop pass.
         view.post { view.requestFocus() }
-        view.setOnKeyListener { _, _, event -> handleVolumeKey(event) }
+        view.setOnKeyListener { _, _, event -> latestHandleVolumeKey(event) }
         ViewCompat.addOnUnhandledKeyEventListener(view, listener)
         onDispose {
             view.setOnKeyListener(null)

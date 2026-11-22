@@ -187,7 +187,7 @@ class ReaderActivity : BaseActivity() {
     private var assistUrl: String? = null
     private var seriesId: Long? = null
 
-    private val hasCutout by lazy { hasDisplayCutout() }
+    private fun hasCutout(): Boolean = hasDisplayCutout()
 
     /**
      * Configuration at reader level, like background color or forced orientation.
@@ -487,7 +487,7 @@ class ReaderActivity : BaseActivity() {
             .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
             .maxByOrNull { it.refreshRate }
             ?: return
-        if (fastest.modeId == current.modeId) return
+        if (window.attributes.preferredDisplayModeId == fastest.modeId) return
         if (!hasSavedDisplayMode) {
             savedDisplayModeId = window.attributes.preferredDisplayModeId
             hasSavedDisplayMode = true
@@ -643,7 +643,7 @@ class ReaderActivity : BaseActivity() {
                 val settingsScreenModel = remember {
                     ReaderSettingsScreenModel(
                         readerState = viewModel.state,
-                        hasDisplayCutout = hasCutout,
+                        hasDisplayCutout = hasCutout(),
                         onChangeReadingMode = viewModel::setReadingModePreference,
                         onChangeOrientation = viewModel::setOrientationPreference,
                         onSetSeriesViewerOverride = viewModel::setSeriesViewerOverrideEnabled,
@@ -1152,6 +1152,7 @@ class ReaderActivity : BaseActivity() {
             }
         }
 
+        loadingIndicator?.let(binding.readerContainer::removeView)
         loadingIndicator = ReaderProgressIndicator(this)
         binding.readerContainer.addView(loadingIndicator)
     }
@@ -1593,9 +1594,11 @@ class ReaderActivity : BaseActivity() {
         private fun setCutoutShort(enabled: Boolean) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
 
-            window.attributes.layoutInDisplayCutoutMode = when (enabled) {
-                true -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                false -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = when (enabled) {
+                    true -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    false -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+                }
             }
 
             // Trigger relayout
