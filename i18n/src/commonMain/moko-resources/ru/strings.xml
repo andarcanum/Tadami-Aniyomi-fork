@@ -1829,6 +1829,16 @@
     <string name="reels_menu_section_session">Сессия</string>
     <string name="reels_menu_section_data">Данные</string>
     <string name="reels_menu_section_for_you">Для тебя</string>
+    <string name="reels_menu_unseen_only">Только непросмотренные</string>
+    <string name="reels_menu_reset_history">Сбросить историю «Для тебя»</string>
+    <string name="reels_reset_history_confirm">Снова рекомендовать просмотренные и пропущенные ролики? Скрытые ролики и авторы останутся скрытыми.</string>
+    <string name="reels_feed_empty_unseen">Непросмотренных роликов больше нет</string>
+    <string name="reels_feed_empty_unseen_scanning">Ищем непросмотренные ролики…</string>
+    <string name="reels_feed_show_watched">Показать просмотренные</string>
+    <string name="reels_views_count">%1$s просмотров</string>
+    <string name="reels_feed_action_muted">Без звука</string>
+    <string name="reels_follow_niche">Подписаться на раздел</string>
+    <string name="reels_following_niche">Подписка на раздел</string>
     <string name="reels_on_short">Вкл.</string>
     <string name="reels_off_short">Выкл.</string>
     <string name="reels_incognito">Инкогнито (Reels)</string>

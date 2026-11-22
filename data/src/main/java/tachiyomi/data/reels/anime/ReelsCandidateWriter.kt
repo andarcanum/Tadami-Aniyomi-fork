@@ -37,9 +37,10 @@ object ReelsCandidateWriter {
             }
         }
 
-        val known = queries.existingIds(scope, sourceId, distinct.map { it.itemId })
-            .executeAsList()
-            .toHashSet()
+        val known = HashSet<String>()
+        for (chunk in distinct.map { it.itemId }.chunked(900)) {
+            known += queries.existingIds(scope, sourceId, chunk).executeAsList()
+        }
 
         val currentCount = queries.countForSource(scope, sourceId).executeAsOne()
         val available = (MAX_CANDIDATES_PER_SOURCE - currentCount).coerceAtLeast(0L)

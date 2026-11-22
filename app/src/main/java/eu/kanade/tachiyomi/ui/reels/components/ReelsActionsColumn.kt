@@ -17,10 +17,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.OfflinePin
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,11 +54,15 @@ fun ReelsActionsColumn(
     onToggleLike: () -> Unit,
     onToggleMute: () -> Unit,
     onShare: () -> Unit,
-    // Creator follow slot (contract v18): shown by the caller only when the source is
-    // AnimeCreatorFeedSource and the item has an author.
+    // Deprecated duplicate creator follow params kept only for source compatibility;
+    // follow now lives solely next to the author/channel chip in ReelsBottomMeta.
+    @Suppress("UNUSED_PARAMETER")
     showFollow: Boolean = false,
+    @Suppress("UNUSED_PARAMETER")
     isFollowing: Boolean = false,
+    @Suppress("UNUSED_PARAMETER")
     onToggleFollow: () -> Unit = {},
+    likesCount: Long? = null,
     // B3.2 "more / hide" slot kept for call-site source compatibility until Wave 2 cleanup.
     @Suppress("UNUSED_PARAMETER")
     onOpenHide: (() -> Unit)? = null,
@@ -88,26 +89,22 @@ fun ReelsActionsColumn(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "heart_scale",
     )
-    val scalePerson by animateFloatAsState(
-        targetValue = if (isFollowing) 1.15f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "follow_scale",
-    )
 
     val showLabels = true
 
     @Composable
     fun LikeItem() {
+        val likeLabel = stringResource(
+            if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like,
+        )
+        val visualLabel = likesCount?.takeIf { it > 0L }?.let(::formatCompactCount) ?: likeLabel
         ActionIconItem(
             icon = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-            label = stringResource(
-                if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like,
-            ),
+            label = visualLabel,
+            contentDescription = likeLabel,
             tint = if (isLiked) HeartColor else Color.White,
             modifier = Modifier.scale(scaleHeart),
-            stateDescription = stringResource(
-                if (isLiked) MR.strings.reels_feed_action_liked else MR.strings.reels_feed_action_like,
-            ),
+            stateDescription = likeLabel,
             showLabel = showLabels,
             onClick = onToggleLike,
         )
@@ -156,34 +153,17 @@ fun ReelsActionsColumn(
     }
 
     @Composable
-    fun FollowItem() {
-        // Creator Follow (v18)
-        if (showFollow) {
-            ActionIconItem(
-                icon = if (isFollowing) Icons.Filled.Person else Icons.Filled.PersonAdd,
-                label = if (isFollowing) {
-                    stringResource(MR.strings.reels_following)
-                } else {
-                    stringResource(MR.strings.reels_follow)
-                },
-                tint = if (isFollowing) AuroraTheme.colors.accent else Color.White,
-                modifier = Modifier.scale(scalePerson),
-                showLabel = showLabels,
-                onClick = onToggleFollow,
-            )
-        }
-    }
-
-    @Composable
     fun SoundItem() {
         ActionIconItem(
             icon = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-            label = stringResource(MR.strings.reels_feed_action_sound),
+            label = stringResource(
+                if (isMuted) MR.strings.reels_feed_action_muted else MR.strings.reels_feed_action_sound,
+            ),
             // TalkBack needs the CURRENT state, not only a static label.
             stateDescription = stringResource(
                 if (isMuted) MR.strings.reels_sound_off else MR.strings.reels_sound_on,
             ),
-            tint = Color.White,
+            tint = if (isMuted) Color(0xFFF87171) else Color.White,
             showLabel = showLabels,
             onClick = onToggleMute,
         )
@@ -223,12 +203,11 @@ fun ReelsActionsColumn(
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         LikeItem()
         LandscapeItem()
-        FollowItem()
         DownloadItem()
         ShareItem()
         OfflineItem()
@@ -243,6 +222,7 @@ private fun ActionIconItem(
     tint: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    contentDescription: String = label,
     stateDescription: String? = null,
     showLabel: Boolean = true,
     isLoading: Boolean = false,
@@ -254,10 +234,10 @@ private fun ActionIconItem(
         modifier = modifier,
     ) {
         // Visual circle matches the reels top-bar buttons (36dp/18dp); the outer box keeps
-        // a 44dp touch target — the column sits against the screen edge.
+        // a 48dp minimum a11y touch target along the right edge.
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(48.dp)
                 .semantics {
                     role = Role.Button
                     if (stateDescription != null) this.stateDescription = stateDescription
@@ -289,7 +269,7 @@ private fun ActionIconItem(
                 } else {
                     Icon(
                         imageVector = icon,
-                        contentDescription = label,
+                        contentDescription = contentDescription,
                         tint = tint,
                         modifier = Modifier.size(18.dp),
                     )

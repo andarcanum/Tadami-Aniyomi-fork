@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -1839,6 +1840,40 @@ class ReelsRoundRobinCoordinatorTest {
             reset.fruitlessScan,
         )
         assertNull(reset.nextHeadCheckAt)
+    }
+
+    @Test
+    fun need_input_schedules_fast_wake_when_slice_budget_exhausted() = runTest {
+        val h = harness()
+        val sliceBudgetMs = 8_000L
+        val needInputWakeMs = 250L
+        h.source.catalogKeys = listOf("a")
+        var attempts = 0
+        h.source.scanHandler = { request ->
+            attempts++
+            if (attempts == 1) {
+                delay(sliceBudgetMs + 1_000L)
+            }
+            h.page("a", listOf("a1" to 100L), historyExhausted = true, nextHeadCheckAt = null)
+        }
+
+        h.coordinator.attach(h.source, defaultSourceId, AnimeFilterList(), unseenOnly = true, incognito = false)
+        h.advance(sliceBudgetMs)
+        h.runCurrent()
+
+        assertTrue(
+            "expected NEED_INPUT wake scheduled; debug=${h.coordinator.debugEvents}",
+            h.coordinator.debugWakeAt() != null &&
+                h.coordinator.debugEvents.any { it.contains("stop=NEED_INPUT") },
+        )
+
+        h.advance(needInputWakeMs)
+        h.idle()
+
+        assertTrue(
+            "expected NEED_INPUT wake to recover and publish a1; pages=${h.pages.map { it.suffix.map { i -> i.id } }}",
+            h.pages.any { page -> page.suffix.any { it.id == "a1" } },
+        )
     }
 
     // ---------------------------------------------------------------------------------------

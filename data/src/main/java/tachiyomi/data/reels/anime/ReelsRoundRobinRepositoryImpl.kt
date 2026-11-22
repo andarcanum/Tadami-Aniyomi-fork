@@ -1054,11 +1054,13 @@ class ReelsRoundRobinRepositoryImpl(
 
         val affected = targetKeys + aliases.keys
         if (affected.isNotEmpty()) {
-            db.reels_rr_itemQueries.unreserveForSources(
-                key.accountScopeId,
-                key.sourceId,
-                affected.toList(),
-            )
+            for (chunk in affected.chunked(900)) {
+                db.reels_rr_itemQueries.unreserveForSources(
+                    key.accountScopeId,
+                    key.sourceId,
+                    chunk,
+                )
+            }
         }
         aliases.forEach { (oldKey, canonicalKey) ->
             db.reels_rr_itemQueries.reassignSourceKey(

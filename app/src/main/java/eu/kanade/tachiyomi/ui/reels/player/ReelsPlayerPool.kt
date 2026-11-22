@@ -9,11 +9,13 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import eu.kanade.tachiyomi.network.NetworkHelper
+import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.ArrayDeque
+import java.util.concurrent.TimeUnit
 
 /**
  * Pooled [ExoPlayer] + [ReelsDynamicLoadControl] pair.
@@ -47,6 +49,8 @@ internal object ReelsPlayerPool {
         }
         Injekt.get<NetworkHelper>().client.newBuilder()
             .cache(null)
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .connectionPool(ConnectionPool())
             .dispatcher(playerDispatcher)
             .build()
     }

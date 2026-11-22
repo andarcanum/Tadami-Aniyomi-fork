@@ -172,19 +172,28 @@ class ReelsSessionRepositoryImpl(
             }
 
             val hidden = db.reels_hiddenQueries.getBySource(handle.key.sourceId).executeAsList()
-            val hiddenItems = hidden.filter { it.kind == "item" }.mapTo(HashSet()) { it.hidden_value }
+            val hiddenItems = hidden.filter {
+                it.kind == "video" || it.kind == "item"
+            }.mapTo(HashSet()) { it.hidden_value }
             val hiddenAuthors = hidden.filter { it.kind == "author" }.mapTo(HashSet()) { it.hidden_value }
+
+            val candidateMap = HashMap<String, dataanime.Reels_candidate>(rawItemIds.size)
+            for (chunk in rawItemIds.chunked(SQLITE_IN_CHUNK_SIZE)) {
+                db.reels_candidateQueries.getByItems(
+                    scope = handle.key.accountScopeId,
+                    sourceId = handle.key.sourceId,
+                    itemIds = chunk,
+                ).executeAsList().forEach { row ->
+                    candidateMap[row.item_id] = row
+                }
+            }
 
             for (raw in rawRows) {
                 if (raw.item_id in consumed || raw.item_id in hiddenItems) {
                     continue
                 }
 
-                val candidateRow = db.reels_candidateQueries.getByItem(
-                    scope = handle.key.accountScopeId,
-                    sourceId = handle.key.sourceId,
-                    itemId = raw.item_id,
-                ).executeAsOneOrNull() ?: continue
+                val candidateRow = candidateMap[raw.item_id] ?: continue
 
                 if (candidateRow.author != null && candidateRow.author in hiddenAuthors) {
                     continue
@@ -238,7 +247,9 @@ class ReelsSessionRepositoryImpl(
                 ).executeAsList()
             }
             val hidden = db.reels_hiddenQueries.getBySource(handle.key.sourceId).executeAsList()
-            val hiddenItems = hidden.filter { it.kind == "item" }.mapTo(HashSet()) { it.hidden_value }
+            val hiddenItems = hidden.filter {
+                it.kind == "video" || it.kind == "item"
+            }.mapTo(HashSet()) { it.hidden_value }
             val hiddenAuthors = hidden.filter { it.kind == "author" }.mapTo(HashSet()) { it.hidden_value }
             val eligible = distinct.filter { candidate ->
                 candidate.itemId !in consumed &&

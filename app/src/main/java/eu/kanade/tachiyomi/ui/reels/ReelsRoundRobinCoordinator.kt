@@ -136,6 +136,8 @@ class ReelsRoundRobinCoordinator(
         const val MAX_RETRY_MS = 30L * 60_000L
         const val CATALOG_RETRY_MS = 60_000L
         const val CATALOG_REFRESH_MS = 60_000L
+        const val CATALOG_WARM_RECONCILE_MS = 2_000L
+        const val NEED_INPUT_WAKE_MS = 250L
         const val EMPTY_AUTO_INTERVAL_MS = 30_000L
         const val BACKLOG_SEED_LIMIT = ReelsForYou.BACKLOG_SEED_LIMIT
         const val DEBUG_EVENT_LIMIT = 512
@@ -668,6 +670,11 @@ class ReelsRoundRobinCoordinator(
             pendingSeekPositionMs = null,
         )
         session.lastSnapshot = snapshot
+        val sameWarmContext = snapshot.sources.any { it.checkpointContext == readiness.context.continuityKey }
+        if (snapshot.sources.isNotEmpty() && snapshot.catalogRevision != null && sameWarmContext) {
+            session.catalogRevisionApplied = snapshot.catalogRevision
+            session.catalogWakeAt = nowMs() + CATALOG_WARM_RECONCILE_MS
+        }
         eligibilityGate.session = session
         return PreparedSession(session, snapshot, restoredActive)
     }
@@ -874,7 +881,6 @@ class ReelsRoundRobinCoordinator(
         var recoveryUsed = false
         var explicitWakeAt: Long? = null
         var turns = 0
-        val deadline = nowMs() + SLICE_BUDGET_MS
         var needs: List<ReelsRoundRobinNeed> = emptyList()
         var updates: List<ReelsRoundRobinUpdate> = emptyList()
         var shouldPump = true
@@ -921,6 +927,7 @@ class ReelsRoundRobinCoordinator(
             }
             if (!catalogFenced) {
                 snapshot = importUnmapped(session, snapshot)
+                val deadline = nowMs() + SLICE_BUDGET_MS
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     if (!isCurrent(session, epoch)) return
@@ -2105,6 +2112,13 @@ class ReelsRoundRobinCoordinator(
             ReelsRoundRobinStop.PAUSED -> {
                 if (session.catalogRetryForced || session.catalogRevisionApplied == null) {
                     session.catalogRetryAt?.takeIf { it > now } ?: (now + CATALOG_RETRY_MS)
+                } else {
+                    null
+                }
+            }
+            ReelsRoundRobinStop.NEED_INPUT -> {
+                if (snapshot?.sources?.isNotEmpty() == true) {
+                    now + NEED_INPUT_WAKE_MS
                 } else {
                     null
                 }

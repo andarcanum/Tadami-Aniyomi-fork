@@ -148,6 +148,18 @@ class ReelsQualitySelectorTest {
     }
 
     @Test
+    fun `incompatible source falls back to best compatible alternative when one exists`() {
+        val decision = select(
+            global = ReelsQualityPreference.Source,
+            variants = listOf(source, fullHd, hd720, sd480),
+            compatibleIds = setOf(hd720.id, sd480.id),
+        )
+
+        decision.variant shouldBe hd720
+        decision.fallbackToSource shouldBe false
+    }
+
+    @Test
     fun `equal codecs prefer the smaller known size then stable id`() {
         val smaller = variant("alt:b", width = 720, height = 1280, codec = "h264", size = 10_000_000L)
         val larger = variant("alt:a", width = 720, height = 1280, codec = "h264", size = 20_000_000L)

@@ -130,6 +130,7 @@ fun ReelsLandscapeScrubberDock(
     externalScrubFraction: Float? = null,
     fineScrubEnabled: Boolean = true,
     bufferFraction: Float = 0f,
+    bufferFractionState: androidx.compose.runtime.State<Float>? = null,
     posterUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -285,10 +286,11 @@ fun ReelsLandscapeScrubberDock(
                         .background(Color.White.copy(alpha = 0.22f)),
                 )
 
-                if (bufferFraction > 0f) {
+                val effectiveBufferFraction = (bufferFractionState?.value ?: bufferFraction).coerceIn(0f, 1f)
+                if (effectiveBufferFraction > 0f) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(fraction = bufferFraction.coerceIn(0f, 1f))
+                            .fillMaxWidth(fraction = effectiveBufferFraction)
                             .height(barHeight)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.38f)),

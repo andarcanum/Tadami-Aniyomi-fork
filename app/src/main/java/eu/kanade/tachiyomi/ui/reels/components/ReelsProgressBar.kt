@@ -60,6 +60,7 @@ fun ReelsProgressBar(
     externalScrubFraction: Float? = null,
     chromeVisible: Boolean = true,
     bufferFraction: Float = 0f,
+    bufferFractionState: State<Float>? = null,
     posterUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -216,10 +217,11 @@ fun ReelsProgressBar(
             contentAlignment = Alignment.CenterStart,
         ) {
             // Buffered Progress Fill
-            if (bufferFraction > 0f) {
+            val effectiveBufferFraction = (bufferFractionState?.value ?: bufferFraction).coerceIn(0f, 1f)
+            if (effectiveBufferFraction > 0f) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(fraction = bufferFraction.coerceIn(0f, 1f))
+                        .fillMaxWidth(fraction = effectiveBufferFraction)
                         .height(barHeight)
                         .clip(RoundedCornerShape(barHeight / 2))
                         .background(Color.White.copy(alpha = 0.35f)),

@@ -9,6 +9,11 @@ import eu.kanade.tachiyomi.animesource.model.FeedVideoQualityVariant
  */
 object ReelsQualityCodecSupport {
 
+    private val regularCodecInfos by lazy {
+        runCatching { MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos }
+            .getOrDefault(emptyArray())
+    }
+
     fun isSupported(variant: FeedVideoQualityVariant): Boolean {
         val mime = when (variant.codec?.trim()?.lowercase()) {
             "h264", "avc", "avc1" -> "video/avc"
@@ -16,10 +21,8 @@ object ReelsQualityCodecSupport {
             "av1", "av01" -> "video/av01"
             else -> return false
         }
-        return runCatching {
-            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
-                !info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
-            }
-        }.getOrDefault(false)
+        return regularCodecInfos.any { info ->
+            !info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
+        }
     }
 }

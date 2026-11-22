@@ -32,13 +32,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +55,12 @@ import tachiyomi.presentation.core.i18n.stringResource
 import java.util.Locale
 
 private val MENTION_REGEX = Regex("""@([A-Za-z0-9_]{1,50})""")
+private val META_TEXT_SHADOW = Shadow(color = Color.Black.copy(alpha = 0.75f), offset = Offset(0f, 1f), blurRadius = 4f)
+
+private fun formatReelsAuthorHandle(author: String?): String? {
+    val clean = author?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() } ?: return null
+    return "@$clean"
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -159,85 +168,94 @@ fun ReelsBottomMeta(
                 }
             }
         }
-        // Author Row
+        // Author Row (Avatar + Handle share clickable; Follow pill is isolated)
         Row(
-            modifier = Modifier.then(
-                onAuthorClick?.let { click ->
-                    Modifier.clickable(onClick = click)
-                } ?: Modifier,
-            ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Initial derives from the actual author/title instead of a hardcoded letter;
-            // the "?" glyph is the language-neutral fallback for anonymous items.
-            val initial = (item.author ?: item.title).orEmpty().firstOrNull()?.uppercase() ?: "?"
-            Box(
+            val cleanAuthor = formatReelsAuthorHandle(item.author)
+            val initialSource = cleanAuthor?.removePrefix("@") ?: item.title.orEmpty()
+            val initial = initialSource.firstOrNull()?.uppercase() ?: "?"
+            Row(
                 modifier = Modifier
-                    .size(28.dp)
-                    .background(AuroraTheme.colors.accent, CircleShape),
-                contentAlignment = Alignment.Center,
+                    .weight(1f, fill = false)
+                    .then(
+                        onAuthorClick?.let { click ->
+                            Modifier.clickable(onClick = click)
+                        } ?: Modifier,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = initial,
-                    color = Color.Black,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Text(
-                text =
-                item.author?.let { "@$it" } ?: (item.title ?: stringResource(MR.strings.reels_default_video_title)),
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                // Weighted children measure last: a long name yields width to the badge
-                // instead of squeezing it into a one-letter-per-line vertical strip.
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            if (item.isAuthorVerified) {
-                Icon(
-                    imageVector = Icons.Filled.Verified,
-                    contentDescription = null,
-                    tint = AuroraTheme.colors.accent,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-            if (showFollowAction) {
                 Box(
                     modifier = Modifier
+                        .size(28.dp)
+                        .background(AuroraTheme.colors.accent, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = initial,
+                        color = Color.Black,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    text = cleanAuthor ?: (item.title ?: stringResource(MR.strings.reels_default_video_title)),
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(shadow = META_TEXT_SHADOW),
+                    // Weighted children measure last: a long name yields width to the badge
+                    // instead of squeezing it into a one-letter-per-line vertical strip.
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (item.isAuthorVerified) {
+                    Icon(
+                        imageVector = Icons.Filled.Verified,
+                        contentDescription = null,
+                        tint = AuroraTheme.colors.accent,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+            if (showFollowAction) {
+                val followShape = RoundedCornerShape(999.dp)
+                Box(
+                    modifier = Modifier
+                        .clip(followShape)
                         .background(
                             if (isFollowingCreator) {
-                                AuroraTheme.colors.accent.copy(
-                                    alpha = 0.2f,
-                                )
+                                AuroraTheme.colors.accent.copy(alpha = 0.22f)
                             } else {
-                                Color.White.copy(alpha = 0.16f)
+                                Color.Black.copy(alpha = 0.36f)
                             },
-                            RoundedCornerShape(999.dp),
                         )
                         .border(
                             1.dp,
                             if (isFollowingCreator) {
-                                AuroraTheme.colors.accent.copy(
-                                    alpha = 0.6f,
-                                )
+                                AuroraTheme.colors.accent.copy(alpha = 0.75f)
                             } else {
-                                Color.White.copy(alpha = 0.25f)
+                                Color.White.copy(alpha = 0.42f)
                             },
-                            RoundedCornerShape(999.dp),
+                            followShape,
                         )
                         .clickable(onClick = onToggleFollowCreator)
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (isFollowingCreator) "Вы подписаны" else "+ Подписаться",
+                        text = if (isFollowingCreator) {
+                            stringResource(MR.strings.reels_following)
+                        } else {
+                            "+ ${stringResource(MR.strings.reels_follow)}"
+                        },
                         color = if (isFollowingCreator) AuroraTheme.colors.accent else Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 1,
                     )
                 }
             }
@@ -305,7 +323,7 @@ fun ReelsBottomMeta(
                     fontSize = 13.sp,
                     maxLines = if (isCaptionExpanded) 12 else 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(shadow = META_TEXT_SHADOW),
                     modifier = Modifier.clickable { isCaptionExpanded = !isCaptionExpanded },
                 )
             } else {
@@ -315,7 +333,7 @@ fun ReelsBottomMeta(
                     fontSize = 13.sp,
                     maxLines = if (isCaptionExpanded) 12 else 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(shadow = META_TEXT_SHADOW),
                     modifier = Modifier.clickable { isCaptionExpanded = !isCaptionExpanded },
                 )
             }
@@ -337,7 +355,7 @@ fun ReelsBottomMeta(
             ) {
                 MetricItem(
                     icon = Icons.Filled.PlayArrow,
-                    value = "${formatCompactCount(views)} просмотров",
+                    value = stringResource(MR.strings.reels_views_count, formatCompactCount(views)),
                 )
             }
         }
@@ -389,8 +407,10 @@ private fun ReelsLandscapeCompactMeta(
 ) {
     val auroraColors = AuroraTheme.colors
     val isEInk = auroraColors.isEInk
-    val initial = (item.author ?: item.title).orEmpty().firstOrNull()?.uppercase() ?: "?"
-    val authorLabel = item.author?.let { "@$it" }
+    val cleanAuthor = formatReelsAuthorHandle(item.author)
+    val initialSource = cleanAuthor?.removePrefix("@") ?: item.title.orEmpty()
+    val initial = initialSource.firstOrNull()?.uppercase() ?: "?"
+    val authorLabel = cleanAuthor
         ?: (item.title ?: stringResource(MR.strings.reels_default_video_title))
 
     Column(
@@ -682,9 +702,10 @@ private fun MetricItem(
         )
         Text(
             text = value,
-            color = Color.White.copy(alpha = 0.7f),
+            color = Color.White.copy(alpha = 0.85f),
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
+            style = TextStyle(shadow = META_TEXT_SHADOW),
         )
     }
 }

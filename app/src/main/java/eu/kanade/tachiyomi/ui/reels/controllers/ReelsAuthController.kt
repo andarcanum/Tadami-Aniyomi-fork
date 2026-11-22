@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
 import eu.kanade.tachiyomi.ui.reels.ReelsFeedScreenModel
 import eu.kanade.tachiyomi.ui.reels.components.legacyCookieMap
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -152,10 +153,13 @@ internal class ReelsAuthController(
                 loggedInAccount = loginSource?.takeIf { it.isLoggedIn() }?.loggedInAccount(),
             )
         }
+        onAccountScopeInvalidated()
         if (mutableState.value.isContentPreferencesOpen) loadContentPreferences()
         if (mutableState.value.isBlockedTagsOpen) loadBlockedTags()
-        onStopRoundRobin()
-        onReloadFeed()
+        scope.launch(Dispatchers.Main.immediate) {
+            onStopRoundRobin()
+            onReloadFeed()
+        }
     }
 
     fun login(email: String, password: String) {
@@ -206,7 +210,9 @@ internal class ReelsAuthController(
             }
             mutableState.update { it.copy(loggedInAccount = null, loginError = null, loginRejected = false) }
             onAccountScopeInvalidated()
-            onReloadFeed()
+            withContext(Dispatchers.Main.immediate) {
+                onReloadFeed()
+            }
         }
     }
 
@@ -291,9 +297,15 @@ internal class ReelsAuthController(
             it.copy(isBlockedTagsLoading = true, blockedTagsError = null, blockedTagsSaveFailed = false)
         }
         scope.launch(ioDispatcher) {
-            val result = runCatching { src.getBlockedTags() }
+            val result = try {
+                Result.success(src.getBlockedTags())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                Result.failure(t)
+            }
             val loadedTags = result.getOrNull()
-            if (loadedTags != null) {
+            if (loadedTags != null && mutableState.value.currentSourceId == sourceId) {
                 onBlockedTagsUpdated(loadedTags)
             }
             mutableState.update { current ->

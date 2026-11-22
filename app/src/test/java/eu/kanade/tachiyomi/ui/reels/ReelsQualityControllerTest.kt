@@ -441,7 +441,7 @@ class ReelsQualityControllerTest {
         started.await()
         controller.itemState(item.id)!!.switching shouldBe true
         job.cancelAndJoin()
-        controller.itemState(item.id)!!.switching shouldBe true
+        controller.itemState(item.id)!!.switching shouldBe false
         controller.itemState(item.id)!!.actual shouldBe null
 
         gate.complete(Unit)
@@ -450,6 +450,50 @@ class ReelsQualityControllerTest {
         actual shouldNotBe null
         controller.itemState(item.id)!!.switching shouldBe false
         controller.itemState(item.id)!!.actual shouldBe actual
+    }
+
+    @Test
+    fun `blank account id sets NeedsAuth failure state instead of dropping update`(): Unit = runBlocking {
+        val source = FakeQualitySource(catalog = available(sourceVariant, hd720))
+        val blankAccountOwner = ReelsQualityOwner("owner-blank", 1L, "")
+        val controller = controller()
+        controller.attach(source, blankAccountOwner)
+
+        val actual = controller.prepare(blankAccountOwner, item, forceSd = false, recheckOnActivation = false)
+
+        actual shouldBe null
+        val itemState = controller.itemState(item.id)!!
+        itemState.catalogStatus shouldBe ReelsQualityCatalogStatus.ERROR
+        itemState.failure shouldBe ReelsQualityFailure.NeedsAuth
+        itemState.switching shouldBe false
+    }
+
+    @Test
+    fun `recheckOnActivation bypasses cached binding and resolves fresh url`(): Unit = runBlocking {
+        var generation = 0
+        val source = FakeQualitySource(
+            catalog = available(sourceVariant, hd720),
+            resolve = { id, variantId ->
+                generation++
+                FeedVideoQualityResult.Available(
+                    itemId = id,
+                    accountId = "42",
+                    variant = if (variantId == hd720.id) hd720 else sourceVariant,
+                    videoUrl = "https://cdn.example/v$generation/$variantId.mp4",
+                    cacheIdentity = "id:$variantId",
+                )
+            },
+        )
+        val controller = controller()
+        controller.attach(source, owner)
+        controller.setGlobal(owner, ReelsQualityPreference.Resolution(720))
+
+        val first = controller.prepare(owner, item, forceSd = false, recheckOnActivation = false)!!
+        val cached = controller.prepare(owner, item, forceSd = false, recheckOnActivation = false)!!
+        val refreshed = controller.prepare(owner, item, forceSd = false, recheckOnActivation = true)!!
+
+        first.videoUrl shouldBe cached.videoUrl
+        refreshed.videoUrl shouldNotBe first.videoUrl
     }
 
     private fun controller() = ReelsQualityController(SourcePreferences(MapPreferenceStore())) { true }

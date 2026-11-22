@@ -56,8 +56,18 @@ object ReelsQualitySelector {
         } else {
             global
         }
+        val fallback = if (source.id in compatibleIds) {
+            source
+        } else {
+            variants
+                .asSequence()
+                .filterNot { it.isSource }
+                .filter { it.id in compatibleIds }
+                .minWithOrNull(fallbackVariantOrder)
+                ?: source
+        }
         val selected = when (requested) {
-            ReelsQualityPreference.Source -> source
+            ReelsQualityPreference.Source -> fallback
             is ReelsQualityPreference.Resolution ->
                 variants
                     .asSequence()
@@ -65,7 +75,7 @@ object ReelsQualitySelector {
                     .filter { it.id in compatibleIds }
                     .filter { it.shortEdge() == requested.shortEdge }
                     .minWithOrNull(variantOrder)
-                    ?: source
+                    ?: fallback
         }
         return ReelsQualityDecision(
             requested = requested,
@@ -79,6 +89,10 @@ object ReelsQualitySelector {
         compareBy<FeedVideoQualityVariant> { codecRank(it.codec) }
             .thenBy { it.sizeBytes?.takeIf { size -> size > 0 } ?: Long.MAX_VALUE }
             .thenBy { it.id }
+
+    private val fallbackVariantOrder: Comparator<FeedVideoQualityVariant> =
+        compareByDescending<FeedVideoQualityVariant> { it.shortEdge() ?: 0 }
+            .then(variantOrder)
 
     private fun codecRank(codec: String?): Int =
         when (codec?.trim()?.lowercase()) {

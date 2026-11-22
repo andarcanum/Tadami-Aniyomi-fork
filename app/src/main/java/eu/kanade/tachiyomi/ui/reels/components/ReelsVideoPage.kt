@@ -286,7 +286,7 @@ fun ReelsVideoPage(
     // Key per-page state on item.id so pager slot reuse never leaks stale progress, seek, or
     // overlay state from a previous reel.
     val progressState = remember(item.id) { mutableFloatStateOf(0f) }
-    var bufferFraction by remember(item.id) { mutableFloatStateOf(0f) }
+    val bufferFractionState = remember(item.id) { mutableFloatStateOf(0f) }
     var durationSec by remember(item) { mutableFloatStateOf(item.durationSec ?: 0f) }
     var seekRequest by remember(item.id) { mutableStateOf<ReelsSeekRequest?>(null) }
     var seekSequence by remember(item.id) { mutableLongStateOf(0L) }
@@ -375,9 +375,6 @@ fun ReelsVideoPage(
     }
     val seekNotice = rememberReelsSeekNotice(item.id, isActive, isInPictureInPicture)
     val currentSeekNotice by rememberUpdatedState(seekNotice)
-    // Measured height of the portrait caption block: the action rail's bottom sits at the
-    // author-name horizon (the block's top edge) so no icon drops into the description.
-    var portraitMetaHeightPx by remember { mutableIntStateOf(0) }
 
     val currentIsActive by rememberUpdatedState(isActive)
     // The tap recognizer below is keyed by Unit and survives page rebinds (the pager reuses
@@ -501,11 +498,6 @@ fun ReelsVideoPage(
     // that is really running, no buffering, and a foregrounded screen.
     val watchedEligible = isActive && isPlaying && actuallyPlaying && !isBuffering && isForeground
     val currentWatchedEligible by rememberUpdatedState(watchedEligible)
-
-    // The first presented frame starts the clock: READY/buffering alone never counts.
-    LaunchedEffect(item.id, actuallyPlaying) {
-        if (actuallyPlaying) onFirstFramePresented(item.id)
-    }
 
     // Sparse sampler (4 Hz): monotonic deltas, no per-frame work and never a DB write.
     LaunchedEffect(item.id, isActive) {
@@ -1111,7 +1103,7 @@ fun ReelsVideoPage(
                     progressState.floatValue = it
                 }
             },
-            onBufferUpdate = { bufferFraction = it },
+            onBufferUpdate = { bufferFractionState.floatValue = it },
             onVideoCompleted = onVideoCompleted,
             // The player-reported duration is authoritative; the server value is only a
             // placeholder until STATE_READY (wrong server durations must not stick).
@@ -1330,7 +1322,7 @@ fun ReelsVideoPage(
                         effectiveChromeVisible = effectiveChromeVisible,
                         scrubUiState = scrubUiState,
                         progressState = progressState,
-                        bufferFraction = bufferFraction,
+                        bufferFractionState = bufferFractionState,
                         durationSec = durationSec,
                         sourceName = sourceName,
                         feedSectionLabel = feedSectionLabel,
@@ -1421,10 +1413,8 @@ fun ReelsVideoPage(
                         effectiveChromeVisible = effectiveChromeVisible,
                         scrubUiState = scrubUiState,
                         progressState = progressState,
-                        bufferFraction = bufferFraction,
+                        bufferFractionState = bufferFractionState,
                         durationSec = durationSec,
-                        portraitMetaHeightPx = portraitMetaHeightPx,
-                        onPortraitMetaHeightChanged = { portraitMetaHeightPx = it },
                         isLiked = isLiked,
                         isMuted = isMuted,
                         showFollowAction = showFollowAction,
@@ -1758,7 +1748,7 @@ private fun BoxScope.ReelsLandscapeControlsOverlay(
     effectiveChromeVisible: Boolean,
     scrubUiState: ReelsScrubUiState,
     progressState: State<Float>,
-    bufferFraction: Float,
+    bufferFractionState: State<Float>,
     durationSec: Float,
     sourceName: String,
     feedSectionLabel: String?,
@@ -1911,7 +1901,7 @@ private fun BoxScope.ReelsLandscapeControlsOverlay(
     ) {
         ReelsLandscapeScrubberDock(
             progressState = progressState,
-            bufferFraction = bufferFraction,
+            bufferFractionState = bufferFractionState,
             durationSec = durationSec,
             isMuted = isMuted,
             onToggleMute = onToggleMute,
@@ -2033,10 +2023,8 @@ private fun BoxScope.ReelsPortraitControlsOverlay(
     effectiveChromeVisible: Boolean,
     scrubUiState: ReelsScrubUiState,
     progressState: State<Float>,
-    bufferFraction: Float,
+    bufferFractionState: State<Float>,
     durationSec: Float,
-    portraitMetaHeightPx: Int,
-    onPortraitMetaHeightChanged: (Int) -> Unit,
     isLiked: Boolean,
     isMuted: Boolean,
     showFollowAction: Boolean,
@@ -2069,13 +2057,10 @@ private fun BoxScope.ReelsPortraitControlsOverlay(
     onScrubStateChange: (ReelsScrubUiState) -> Unit,
 ) {
     val hapticFeedback = LocalHapticFeedback.current
-    val density = LocalDensity.current
     val navBarsBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     // Guarantee a safe margin of at least 26.dp even when system gesture bar is hidden (navBars == 0dp)
     val safeBottomInset = maxOf(navBarsBottomPadding, 26.dp)
-    val metaBottomPadding = safeBottomInset + 28.dp
-    val actionsBottomPadding =
-        metaBottomPadding + 6.dp + with(density) { portraitMetaHeightPx.toDp() }
+    val controlsBottomPadding = safeBottomInset + 48.dp
     AnimatedVisibility(
         visible = effectiveChromeVisible,
         enter = fadeIn() + slideInHorizontally { it },
@@ -2092,12 +2077,7 @@ private fun BoxScope.ReelsPortraitControlsOverlay(
             onToggleMute = onToggleMute,
             // B3.6: share carries the current playback second for a timeline URL.
             onShare = { onShare(progressState.value * durationSec.coerceAtLeast(0f)) },
-            showFollow = showFollowAction,
-            isFollowing = isFollowingCreator,
-            onToggleFollow = {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                onToggleFollowCreator()
-            },
+            likesCount = item.likesCount,
             onOpenHide = if (showHideAction) onOpenHideDialog else null,
             onToggleOffline = if (showOfflineAction) onToggleOffline else null,
             isOfflineStored = isOfflineStored,
@@ -2114,7 +2094,7 @@ private fun BoxScope.ReelsPortraitControlsOverlay(
             isPartial = isPartial,
             downloadSizeText = downloadSizeText,
             downloadProgress = downloadProgress,
-            modifier = Modifier.padding(end = 8.dp, bottom = actionsBottomPadding),
+            modifier = Modifier.padding(end = 8.dp, bottom = controlsBottomPadding),
         )
     }
 
@@ -2139,10 +2119,9 @@ private fun BoxScope.ReelsPortraitControlsOverlay(
             modifier = Modifier
                 .padding(
                     start = 16.dp,
-                    end = 76.dp,
-                    bottom = metaBottomPadding,
-                )
-                .onSizeChanged { onPortraitMetaHeightChanged(it.height) },
+                    end = 80.dp,
+                    bottom = controlsBottomPadding,
+                ),
         )
     }
 
@@ -2156,7 +2135,7 @@ private fun BoxScope.ReelsPortraitControlsOverlay(
         ReelsProgressBar(
             progressState = progressState,
             durationSec = durationSec,
-            bufferFraction = bufferFraction,
+            bufferFractionState = bufferFractionState,
             posterUrl = item.posterUrlVertical ?: item.posterUrl,
             chromeVisible = effectiveChromeVisible,
             onSeek = { frac -> onRequestSeek(frac, false) },
@@ -2218,7 +2197,7 @@ private fun BoxScope.ReelsScrubOverlayHost(
 }
 
 @Composable
-private fun ReelsHideVideoDialog(
+internal fun ReelsHideVideoDialog(
     onDismiss: () -> Unit,
     onHideVideo: () -> Unit,
     onHideAuthor: (() -> Unit)?,

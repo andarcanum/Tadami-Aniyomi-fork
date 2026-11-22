@@ -302,6 +302,12 @@ class ReelsFeedScreenModel(
     // overlapping window loops (duplicate Telegram round-trips).
     @Volatile
     private var qualityPrepareJob: Job? = null
+
+    @Volatile
+    private var activeQualityPrepareItemId: String? = null
+
+    @Volatile
+    private var activeQualityPrepareEndIndex: Int = -1
     private var qualityForceSd = false
 
     // Guards against a stale in-flight load completing after a reset/source switch and
@@ -581,7 +587,7 @@ class ReelsFeedScreenModel(
             hiddenRepository = reelsHiddenRepository,
             candidateRepository = reelsCandidateRepository,
             publish = ::publishRoundRobinPage,
-            nowMs = nowMs,
+            nowMs = { wallClock().time },
             wallClock = wallClock,
             // The first publication of a new attach has no owner in State yet; the expected
             // source/incognito pair is the fence that rejects a stale actor from the previous
@@ -1606,6 +1612,8 @@ class ReelsFeedScreenModel(
                 it.copy(
                     currentSourceId = newSourceId,
                     sourceName = rawSource.name,
+                    items = persistentListOf(),
+                    isLoading = true,
                     nicheLocalFilter = scopedNicheFilter ?: it.nicheLocalFilter,
                     isMixMode = false,
                     supportsSearch = true,
@@ -5234,7 +5242,7 @@ class ReelsFeedScreenModel(
         }
         val slotSourceId = current.slotSourceId(itemIndex)
         if (isQualityModeItem(item.id, slotSourceId)) {
-            prepareQualityForIndex(itemIndex)
+            prepareQualityForIndex(itemIndex, forceRecheck = true)
             return true
         }
         val resolver = sourceManager.get(slotSourceId) as? AnimeFeedVideoResolverSource ?: return false
@@ -5480,9 +5488,23 @@ class ReelsFeedScreenModel(
         return controller.rehydrateDownload(snapshot, resumeFrom)
     }
 
+    fun canLazyResolveSlot(itemIndex: Int): Boolean {
+        val current = state.value
+        val item = current.items.getOrNull(itemIndex) ?: return false
+        val slotSourceId = current.slotSourceId(itemIndex)
+        val owner = if (current.isMixMode || current.isOffline) {
+            sourceManager.get(slotSourceId)
+        } else {
+            source
+        }
+        return (owner === source && isReplaySurface() && replayKey != null) ||
+            owner is AnimeFeedVideoResolverSource
+    }
+
     private inline fun withQualityController(
         itemId: String?,
         sourceId: Long?,
+        prepareWindowAfter: Boolean = false,
         block: (ReelsQualityController, ReelsQualityOwner) -> Unit,
     ) {
         val controller = if (state.value.isMixMode) {
@@ -5496,17 +5518,21 @@ class ReelsFeedScreenModel(
         } ?: return
         val owner = controller.state.value.owner ?: return
         block(controller, owner)
-        prepareQualityForIndex(state.value.activeIndex)
+        if (prepareWindowAfter) {
+            prepareQualityWindow(state.value.activeIndex)
+        } else {
+            prepareQualityForIndex(state.value.activeIndex)
+        }
     }
 
     fun setQualityGlobal(value: ReelsQualityPreference) {
-        withQualityController(itemId = null, sourceId = null) { controller, owner ->
+        withQualityController(itemId = null, sourceId = null, prepareWindowAfter = true) { controller, owner ->
             controller.setGlobal(owner, value)
         }
     }
 
     fun setQualityGlobalForSource(value: ReelsQualityPreference, sourceId: Long) {
-        withQualityController(itemId = null, sourceId = sourceId) { controller, owner ->
+        withQualityController(itemId = null, sourceId = sourceId, prepareWindowAfter = true) { controller, owner ->
             controller.setGlobal(owner, value)
         }
     }
@@ -5581,84 +5607,97 @@ class ReelsFeedScreenModel(
         )
     }
 
-    fun prepareQualityForIndex(index: Int) {
+    fun prepareQualityForIndex(index: Int, forceRecheck: Boolean = false) {
         val item = state.value.items.getOrNull(index) ?: return
         val slotId = state.value.itemSourceIds.getOrNull(index)
         val controller = qualityControllerFor(item.id, slotId) ?: return
         val owner = controller.state.value.owner ?: return
         if (!controller.supports(item.id)) return
         qualityPrepareJob?.cancel()
+        activeQualityPrepareItemId = item.id
+        activeQualityPrepareEndIndex = index
         qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
-            controller.prepare(
-                expectedOwner = owner,
-                item = item,
-                forceSd = qualityForceSd,
-                recheckOnActivation = false,
-            )
+            try {
+                controller.prepare(
+                    expectedOwner = owner,
+                    item = item,
+                    forceSd = qualityForceSd,
+                    recheckOnActivation = forceRecheck,
+                )
+            } finally {
+                if (activeQualityPrepareItemId == item.id) {
+                    activeQualityPrepareItemId = null
+                }
+            }
         }
     }
 
     /**
      * Prepares quality bindings for [startIndex] and the [QUALITY_PREPARE_AHEAD] reels after it.
-     *
-     * [skipBoundStart] separates the two callers:
-     * - activation (`onPageChanged`) deliberately passes `false` — the newly active reel must be
-     *   re-evaluated under the current automatic-SD/global verdict even if a neighbor prepared it
-     *   earlier under a different one;
-     * - background refreshes (items/owner changes, owner re-attach) pass `true` — a reel that is
-     *   already playing keeps its actual binding and only the forward window is re-resolved.
      */
     fun prepareQualityWindow(startIndex: Int, skipBoundStart: Boolean = false) {
         val startItem = state.value.items.getOrNull(startIndex)
         val startSlotId = state.value.itemSourceIds.getOrNull(startIndex)
         val boundStart = startItem
             ?.let { qualityControllerFor(it.id, startSlotId)?.playback(it.id) } != null
-        val fromIndex = if (skipBoundStart && boundStart) startIndex + 1 else startIndex
-        prepareQualityRange(fromIndex, startIndex + QUALITY_PREPARE_AHEAD)
-    }
-
-    private fun prepareQualityRange(fromIndex: Int, toIndex: Int) {
-        if (fromIndex < 0 || toIndex < fromIndex) return
-        val current = state.value
-        val items = current.items
-        if (items.isEmpty()) return
-        if (current.isMixMode) {
-            if (mixQualityControllers.isEmpty()) return
-            val slotIds = current.itemSourceIds
-            val end = toIndex.coerceAtMost(items.lastIndex)
-            val perSource = LinkedHashMap<Long, MutableList<ShortVideoItem>>()
-            for (idx in fromIndex..end) {
-                val sid = slotIds.getOrNull(idx) ?: continue
-                if (!mixQualityControllers.containsKey(sid)) continue
-                perSource.getOrPut(sid) { mutableListOf() } += items[idx]
-            }
-            if (perSource.isEmpty()) return
-            qualityPrepareJob?.cancel()
-            qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
-                perSource.forEach { (sid, slotItems) ->
-                    val controller = mixQualityControllers[sid] ?: return@forEach
-                    val owner = controller.state.value.owner ?: return@forEach
-                    controller.prepareWindow(
-                        expectedOwner = owner,
-                        items = slotItems,
-                        fromIndex = 0,
-                        toIndex = slotItems.lastIndex,
-                        forceSd = qualityForceSd,
-                    )
-                }
-            }
+        val targetEnd = startIndex + QUALITY_PREPARE_AHEAD
+        if (
+            skipBoundStart &&
+            startItem != null &&
+            qualityPrepareJob?.isActive == true &&
+            activeQualityPrepareItemId == startItem.id
+        ) {
+            // Do NOT abort the active item's quality resolution just because items.size grew.
+            activeQualityPrepareEndIndex = maxOf(activeQualityPrepareEndIndex, targetEnd)
             return
         }
-        val owner = qualityController.state.value.owner ?: return
+        val fromIndex = if (skipBoundStart && boundStart) startIndex + 1 else startIndex
+        prepareQualityRange(fromIndex, targetEnd, anchorItemId = startItem?.id)
+    }
+
+    private fun prepareQualityRange(
+        fromIndex: Int,
+        toIndex: Int,
+        anchorItemId: String? = state.value.items.getOrNull(fromIndex)?.id,
+    ) {
+        if (fromIndex < 0 || toIndex < fromIndex) return
+        val initialCurrent = state.value
+        if (initialCurrent.items.isEmpty()) return
+        if (initialCurrent.isMixMode && mixQualityControllers.isEmpty()) return
+        if (!initialCurrent.isMixMode && qualityController.state.value.owner == null) return
+
         qualityPrepareJob?.cancel()
+        activeQualityPrepareItemId = anchorItemId
+        activeQualityPrepareEndIndex = toIndex
         qualityPrepareJob = screenModelScope.launch(ioDispatcher) {
-            qualityController.prepareWindow(
-                expectedOwner = owner,
-                items = items,
-                fromIndex = fromIndex,
-                toIndex = toIndex,
-                forceSd = qualityForceSd,
-            )
+            try {
+                var idx = fromIndex
+                while (idx <= activeQualityPrepareEndIndex) {
+                    currentCoroutineContext().ensureActive()
+                    val current = state.value
+                    val item = current.items.getOrNull(idx) ?: break
+                    val sid = current.itemSourceIds.getOrNull(idx)
+                    val controller = if (current.isMixMode) {
+                        sid?.let { mixQualityControllers[it] }
+                    } else {
+                        qualityController
+                    }
+                    val owner = controller?.state?.value?.owner
+                    if (controller != null && owner != null && controller.supports(item.id)) {
+                        controller.prepare(
+                            expectedOwner = owner,
+                            item = item,
+                            forceSd = qualityForceSd,
+                            recheckOnActivation = false,
+                        )
+                    }
+                    idx++
+                }
+            } finally {
+                if (activeQualityPrepareItemId == anchorItemId) {
+                    activeQualityPrepareItemId = null
+                }
+            }
         }
     }
 

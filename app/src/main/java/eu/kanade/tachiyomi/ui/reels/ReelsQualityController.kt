@@ -31,7 +31,9 @@ class ReelsQualityController(
     private val _state = MutableStateFlow(ReelsQualityState())
     val state: StateFlow<ReelsQualityState> = _state.asStateFlow()
 
+    @Volatile
     private var source: AnimeFeedVideoQualitySource? = null
+    private val mapLock = Any()
     private val overrides = mutableMapOf<String, ReelsQualityPreference>()
 
     // Variants that failed hardware decoding on this device during the session: excluded from
@@ -42,8 +44,10 @@ class ReelsQualityController(
         this.source = source
         val current = _state.value.owner
         if (current?.sourceId == owner.sourceId && current.accountId == owner.accountId) return
-        overrides.clear()
-        incompatibleVariantIds.clear()
+        synchronized(mapLock) {
+            overrides.clear()
+            incompatibleVariantIds.clear()
+        }
         val global = ReelsQualitySelector.parseGlobal(
             preferences.reelsVideoQuality(owner.sourceId).get(),
         )
@@ -57,8 +61,10 @@ class ReelsQualityController(
 
     fun detach() {
         source = null
-        overrides.clear()
-        incompatibleVariantIds.clear()
+        synchronized(mapLock) {
+            overrides.clear()
+            incompatibleVariantIds.clear()
+        }
         _state.value = ReelsQualityState(selectionRevision = _state.value.selectionRevision + 1)
     }
 
@@ -75,10 +81,11 @@ class ReelsQualityController(
             ReelsQualitySelector.serializeGlobal(value),
         )
         _state.update { state ->
+            val overrideKeys = synchronized(mapLock) { overrides.keys.toSet() }
             state.copy(
                 global = value,
                 items = state.items.mapValues { (itemId, item) ->
-                    if (overrides.containsKey(itemId)) {
+                    if (itemId in overrideKeys) {
                         item
                     } else {
                         item.copy(
@@ -100,7 +107,7 @@ class ReelsQualityController(
     ) {
         val current = _state.value
         if (current.owner != expectedOwner) return
-        overrides[itemId] = value
+        synchronized(mapLock) { overrides[itemId] = value }
         _state.update { state ->
             val item = state.items[itemId]
             state.copy(
@@ -123,7 +130,7 @@ class ReelsQualityController(
     fun clearOverride(expectedOwner: ReelsQualityOwner, itemId: String) {
         val current = _state.value
         if (current.owner != expectedOwner) return
-        overrides.remove(itemId)
+        synchronized(mapLock) { overrides.remove(itemId) }
         _state.update { state ->
             val item = state.items[itemId]
             state.copy(
@@ -153,7 +160,22 @@ class ReelsQualityController(
         val current = _state.value
         if (current.owner != expectedOwner) return null
         if (expectedOwner.accountId.isNullOrBlank()) {
-            fail(expectedOwner, item.id, (current.items[item.id]?.revision ?: 0L) + 1L, ReelsQualityFailure.NeedsAuth)
+            val prev = current.items[item.id]
+            putItem(
+                ReelsQualityItemState(
+                    owner = expectedOwner,
+                    itemId = item.id,
+                    requested = prev?.requested ?: current.global,
+                    usingGlobal = prev?.usingGlobal ?: true,
+                    catalogStatus = ReelsQualityCatalogStatus.ERROR,
+                    options = prev?.options.orEmpty(),
+                    actual = prev?.actual,
+                    switching = false,
+                    failure = ReelsQualityFailure.NeedsAuth,
+                    revision = (prev?.revision ?: 0L) + 1L,
+                    forceSd = forceSd,
+                ),
+            )
             return null
         }
         if (!source.supportsVideoQuality(item.id)) {
@@ -161,7 +183,7 @@ class ReelsQualityController(
             return null
         }
 
-        val override = overrides[item.id]
+        val override = synchronized(mapLock) { overrides[item.id] }
         val requested = override ?: if (forceSd) {
             ReelsQualityPreference.Resolution(480)
         } else {
@@ -212,6 +234,7 @@ class ReelsQualityController(
             val catalog = try {
                 source.getVideoQualities(item.id, expectedOwner.accountId.orEmpty())
             } catch (e: CancellationException) {
+                clearSwitchingIfCurrent(expectedOwner, item.id, revision)
                 throw e
             } catch (_: Throwable) {
                 fail(expectedOwner, item.id, revision, ReelsQualityFailure.Retry(null))
@@ -265,11 +288,10 @@ class ReelsQualityController(
             }
         }
 
-        val blockedIds = incompatibleVariantIds[item.id].orEmpty()
+        val blockedIds = synchronized(mapLock) { incompatibleVariantIds[item.id]?.toSet().orEmpty() }
         val compatibleIds = options.asSequence()
-            .filterNot { it.isSource }
             .filterNot { it.id in blockedIds }
-            .filter { variant -> runCatching { codecPredicate(variant) }.getOrDefault(false) }
+            .filter { variant -> variant.isSource || runCatching { codecPredicate(variant) }.getOrDefault(false) }
             .map { it.id }
             .toSet()
         val decision = runCatching {
@@ -288,6 +310,7 @@ class ReelsQualityController(
         val resolved = try {
             source.resolveVideoQuality(item.id, decision.variant.id, expectedOwner.accountId.orEmpty())
         } catch (e: CancellationException) {
+            clearSwitchingIfCurrent(expectedOwner, item.id, revision)
             throw e
         } catch (_: Throwable) {
             fail(expectedOwner, item.id, revision, ReelsQualityFailure.Retry(null))
@@ -432,9 +455,11 @@ class ReelsQualityController(
         val item = current.items[itemId] ?: return false
         val actualVariant = item.actual?.decision?.variant ?: return false
         if (item.options.size <= 1) return false
-        val blocked = incompatibleVariantIds.getOrPut(itemId) { mutableSetOf() }
-        if (!blocked.add(actualVariant.id)) return false
-        val hasAlternative = item.options.any { it.id !in blocked }
+        val hasAlternative = synchronized(mapLock) {
+            val blocked = incompatibleVariantIds.getOrPut(itemId) { mutableSetOf() }
+            if (!blocked.add(actualVariant.id)) return false
+            item.options.any { it.id !in blocked }
+        }
         if (!hasAlternative) return false
         putItem(
             item.copy(
@@ -460,7 +485,10 @@ class ReelsQualityController(
                 state.copy(items = filtered)
             }
         }
-        incompatibleVariantIds.keys.retainAll(keepItemIds)
+        synchronized(mapLock) {
+            incompatibleVariantIds.keys.retainAll(keepItemIds)
+            overrides.keys.retainAll(keepItemIds)
+        }
     }
 
     fun onPlaybackFailure(expectedOwner: ReelsQualityOwner, itemId: String, revision: Long) {
@@ -531,6 +559,25 @@ class ReelsQualityController(
                 actual = actual,
                 switching = false,
                 failure = null,
+            ),
+        )
+    }
+
+    private fun clearSwitchingIfCurrent(
+        expectedOwner: ReelsQualityOwner,
+        itemId: String,
+        revision: Long,
+    ) {
+        val item = currentItem(expectedOwner, itemId, revision) ?: return
+        if (!item.switching) return
+        putItem(
+            item.copy(
+                switching = false,
+                catalogStatus = if (item.options.isEmpty() && item.catalogStatus == ReelsQualityCatalogStatus.LOADING) {
+                    ReelsQualityCatalogStatus.ERROR
+                } else {
+                    item.catalogStatus
+                },
             ),
         )
     }
