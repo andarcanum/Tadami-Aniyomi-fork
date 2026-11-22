@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.animesource.AnimeCategoryFeedOrderSource
+import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
@@ -47,7 +48,7 @@ class ReelsAlbumScreenModel(
     private val sourcePreferences: SourcePreferences? = runCatching { Injekt.get<SourcePreferences>() }.getOrNull(),
 ) : StateScreenModel<ReelsAlbumScreenModel.State>(
     ReelsAlbumScreenModel.State(
-        localFilter = sourcePreferences?.reelsNicheLocalFilter()?.get()
+        localFilter = sourcePreferences?.reelsNicheLocalFilter(sourceId, albumId)?.get()
             ?.let(ReelsLocalFilterState::deserializePersistent)
             ?: ReelsLocalFilterState(),
     ),
@@ -126,7 +127,7 @@ class ReelsAlbumScreenModel(
     }
 
     fun setLocalFilter(filter: ReelsLocalFilterState) {
-        sourcePreferences?.reelsNicheLocalFilter()?.set(filter.serializePersistent())
+        sourcePreferences?.reelsNicheLocalFilter(sourceId, albumId)?.set(filter.serializePersistent())
         val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.sourceFilters, filter)
         mutableState.update {
             it.copy(
@@ -141,7 +142,7 @@ class ReelsAlbumScreenModel(
 
     fun resetLocalFilter() {
         val reset = ReelsLocalFilterState()
-        sourcePreferences?.reelsNicheLocalFilter()?.set(reset.serializePersistent())
+        sourcePreferences?.reelsNicheLocalFilter(sourceId, albumId)?.set(reset.serializePersistent())
         val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.sourceFilters, reset)
         mutableState.update {
             it.copy(
@@ -194,8 +195,10 @@ class ReelsAlbumScreenModel(
     fun loadMore() {
         val snapshot = state.value
         if (snapshot.isLoading || !snapshot.canLoadMore || snapshot.unsupported) return
-        val browse = sourceManager.get(sourceId) as? AnimeFeedBrowseSource
-        if (browse == null) {
+        val rawSource = sourceManager.get(sourceId)
+        val browse = rawSource as? AnimeFeedBrowseSource
+        val creatorSource = rawSource as? AnimeCreatorFeedSource
+        if (browse == null && creatorSource == null) {
             mutableState.update {
                 it.copy(isLoading = false, canLoadMore = false, error = null, pageError = null, unsupported = true)
             }
@@ -208,14 +211,28 @@ class ReelsAlbumScreenModel(
                 // Contract v17: the token is authoritative only once cursor mode is locked;
                 // before that the source always receives a null cursor.
                 val cursor = if (snapshot.cursorMode) snapshot.nextCursor else null
-                val page = when (browse) {
+                val categoryPage = when (browse) {
                     is AnimeCategoryFeedOrderSource -> browse.getCategoryFeed(
                         albumId,
                         snapshot.nextPage,
                         cursor,
                         snapshot.sourceFilters,
                     )
+                    null -> null
                     else -> browse.getCategoryFeed(albumId, snapshot.nextPage, cursor)
+                }
+                val page = if (
+                    (categoryPage == null || (categoryPage.videos.isEmpty() && !categoryPage.hasNextPage)) &&
+                    creatorSource != null
+                ) {
+                    val creatorHandle = albumId.removePrefix("channel:").trim()
+                    runCatching { creatorSource.getCreatorFeed(creatorHandle, snapshot.nextPage, cursor) }
+                        .getOrNull()
+                        ?.takeIf { it.videos.isNotEmpty() || it.hasNextPage }
+                        ?: categoryPage
+                        ?: eu.kanade.tachiyomi.animesource.model.FeedPage(emptyList(), hasNextPage = false)
+                } else {
+                    categoryPage ?: eu.kanade.tachiyomi.animesource.model.FeedPage(emptyList(), hasNextPage = false)
                 }
                 if (loadGeneration.get() != generation) return@launch
                 val fresh = page.videos.distinctBy { it.id }.filter { seenIds.add(it.id) }

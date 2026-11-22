@@ -215,8 +215,21 @@ class SourcePreferences(
         true,
     )
 
-    // Persisted local filter/sort preferences for Reels albums and niches.
-    fun reelsNicheLocalFilter() = preferenceStore.getString("pref_reels_niche_local_filter", "")
+    // Persisted local filter/sort preferences for Reels albums, niches, and creator channels
+    // (scoped per sourceId + normalized niche/album/creator key so each niche keeps its own choice).
+    fun reelsNicheLocalFilter(sourceId: Long = 0L, scopeId: String = ""): Preference<String> {
+        val normalized = scopeId.trim()
+            .removePrefix("channel:")
+            .removePrefix("@")
+            .trim()
+            .lowercase()
+        val key = if (normalized.isEmpty()) {
+            "pref_reels_niche_local_filter"
+        } else {
+            "pref_reels_niche_local_filter_${sourceId}_$normalized"
+        }
+        return preferenceStore.getString(key, "")
+    }
     fun reelsNichesSort() = preferenceStore.getString("pref_reels_niches_sort", "")
     fun reelsNichesSavedOnly() = preferenceStore.getBoolean("pref_reels_niches_saved_only", false)
 

@@ -262,4 +262,17 @@ class ReelsLocalFilterTest {
         durationFilter.state shouldBe 5
         orderFilter.state shouldBe 0
     }
+
+    @Test
+    fun `normalizeReelsFilterScopeKey unifies channel niche album and creator handle while separating other niches`() {
+        val fromNiche = normalizeReelsFilterScopeKey("channel:c_-1003708764014")
+        val fromCreator = normalizeReelsFilterScopeKey("@c_-1003708764014")
+        val fromRaw = normalizeReelsFilterScopeKey("C_-1003708764014")
+        val otherNiche = normalizeReelsFilterScopeKey("channel:other_channel")
+
+        fromNiche shouldBe "c_-1003708764014"
+        fromCreator shouldBe fromNiche
+        fromRaw shouldBe fromNiche
+        (fromNiche == otherNiche) shouldBe false
+    }
 }

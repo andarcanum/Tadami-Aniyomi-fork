@@ -39,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -56,6 +57,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -137,6 +139,7 @@ fun ReelsTopBar(
     // query is active; null hides the whole block.
     searchSuggestions: SearchSuggestions? = null,
     showFilter: Boolean = true,
+    isFilterActive: Boolean = false,
     // Favorites keeps a first-class circle (frequent, one-tap local action) — a hub with a
     // single entry would be pure indirection. Account & personal content (custom feeds,
     // Following) live in the account hub, which always has at least two entries.
@@ -507,6 +510,64 @@ fun ReelsTopBar(
                                 if (isFollowingCreator) MR.strings.reels_following else MR.strings.reels_follow,
                             ),
                             tint = if (isFollowingCreator) AuroraTheme.colors.accent else Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+
+                // Direct Filter & Save-Album actions in Niche and Creator (channel/chat) modes.
+                if (!isOffline && nicheAlbumSaved != null) {
+                    if (showFilter) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .reelsGlassSurface(
+                                    active = isFilterActive,
+                                    eInk = AuroraTheme.colors.isEInk,
+                                    eInkColor = AuroraTheme.colors.cardBackground,
+                                )
+                                .clickable {
+                                    onOpenFilterDialog()
+                                    openHub = HubMenu.NONE
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.FilterList,
+                                contentDescription = stringResource(MR.strings.action_filter),
+                                tint = if (isFilterActive) AuroraTheme.colors.accent else Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .reelsGlassSurface(
+                                active = nicheAlbumSaved,
+                                eInk = AuroraTheme.colors.isEInk,
+                                eInkColor = AuroraTheme.colors.cardBackground,
+                            )
+                            .clickable {
+                                onToggleNicheAlbum()
+                                openHub = HubMenu.NONE
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (nicheAlbumSaved) {
+                                Icons.Filled.Bookmark
+                            } else {
+                                Icons.Outlined.BookmarkBorder
+                            },
+                            contentDescription = stringResource(
+                                if (nicheAlbumSaved) {
+                                    MR.strings.reels_album_remove_album
+                                } else {
+                                    MR.strings.reels_album_save
+                                },
+                            ),
+                            tint = if (nicheAlbumSaved) AuroraTheme.colors.accent else Color.White,
                             modifier = Modifier.size(18.dp),
                         )
                     }

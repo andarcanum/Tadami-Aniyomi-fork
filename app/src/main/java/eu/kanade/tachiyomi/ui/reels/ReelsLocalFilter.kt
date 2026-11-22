@@ -119,6 +119,18 @@ data class ReelsLocalFilterState(
 internal const val REELS_DURATION_SHORT_MAX_SEC = 60f
 internal const val REELS_DURATION_MEDIUM_MAX_SEC = 300f
 
+/**
+ * Normalizes a niche, album, or creator identifier (`"channel:foo"`, `"@foo"`, `"foo"`) into a
+ * canonical per-channel key so the same channel shares its filter whether opened from Niches,
+ * Saved Albums, or by tapping `@author` in the feed, while different niches stay independent.
+ */
+internal fun normalizeReelsFilterScopeKey(rawScopeId: String): String =
+    rawScopeId.trim()
+        .removePrefix("channel:")
+        .removePrefix("@")
+        .trim()
+        .lowercase()
+
 internal fun matchesDurationFilter(durationSec: Float?, filter: ReelsDurationFilter): Boolean {
     if (filter == ReelsDurationFilter.All) return true
     val dur = durationSec?.takeIf { it.isFinite() && it > 0f } ?: return false

@@ -962,7 +962,10 @@ data class ReelsFeedScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
                     } else if (
-                        state.mode == ReelsFeedScreenModel.FeedMode.NICHE &&
+                        (
+                            state.mode == ReelsFeedScreenModel.FeedMode.NICHE ||
+                                state.mode == ReelsFeedScreenModel.FeedMode.CREATOR
+                            ) &&
                         state.nicheLocalFilter.isActive
                     ) {
                         val resetAction = EmptyScreenAction(
@@ -1858,7 +1861,12 @@ data class ReelsFeedScreen(
                         state.supportsTags &&
                         state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
                     showFilter = (state.supportsFilter && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL) ||
-                        state.mode == ReelsFeedScreenModel.FeedMode.NICHE,
+                        state.mode == ReelsFeedScreenModel.FeedMode.NICHE ||
+                        state.mode == ReelsFeedScreenModel.FeedMode.CREATOR,
+                    isFilterActive = (
+                        state.mode == ReelsFeedScreenModel.FeedMode.NICHE ||
+                            state.mode == ReelsFeedScreenModel.FeedMode.CREATOR
+                        ) && state.nicheLocalFilter.isActive,
                     // Source-supplied chips for the search bar (contract v19 addendum);
                     // no chips when the source supplies none.
                     searchHints = state.searchHints,
@@ -1989,7 +1997,10 @@ data class ReelsFeedScreen(
                     },
                     onToggleSearchBar = { screenModel.toggleSearchBar(!state.isSearchBarOpen) },
                     onOpenFilterDialog = {
-                        if (state.mode == ReelsFeedScreenModel.FeedMode.NICHE) {
+                        if (
+                            state.mode == ReelsFeedScreenModel.FeedMode.NICHE ||
+                            state.mode == ReelsFeedScreenModel.FeedMode.CREATOR
+                        ) {
                             screenModel.toggleNicheFilterSheet(true)
                         } else {
                             screenModel.toggleFilterDialog(true)
@@ -1999,7 +2010,7 @@ data class ReelsFeedScreen(
                     onOpenHistory = { navigator.push(ReelsWatchHistoryScreen()) },
                     onOpenHidden = { navigator.push(ReelsHiddenScreen()) },
                     onOpenAlbums = { navigator.push(ReelsAlbumsScreen(null)) },
-                    nicheAlbumSaved = if (nicheId != null) nicheId in state.savedAlbumIds else null,
+                    nicheAlbumSaved = screenModel.isCurrentAlbumSaved(),
                     onToggleNicheAlbum = { screenModel.toggleCurrentNicheAlbum() },
                     onOpenFollows = { navigator.push(ReelsFollowsScreen(sourceId = state.currentSourceId)) },
                     onSearch = screenModel::search,

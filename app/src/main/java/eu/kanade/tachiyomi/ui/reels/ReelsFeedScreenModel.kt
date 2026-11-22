@@ -200,12 +200,11 @@ class ReelsFeedScreenModel(
         currentSourceId = initialSourceId,
         customFeedName = customFeedName,
         nicheName = nicheName,
-        nicheLocalFilter = if (nicheId != null) {
-            ReelsLocalFilterState.deserializePersistent(sourcePreferences.reelsNicheLocalFilter().get())
-                .copy(watchFilter = ReelsWatchFilter.All)
-        } else {
-            ReelsLocalFilterState()
-        },
+        nicheLocalFilter = (nicheId ?: creator)?.let { scopeId ->
+            ReelsLocalFilterState.deserializePersistent(
+                sourcePreferences.reelsNicheLocalFilter(initialSourceId, scopeId).get(),
+            ).copy(watchFilter = ReelsWatchFilter.All)
+        } ?: ReelsLocalFilterState(),
         resumeVideoId = resumeVideoId,
         isAutoAdvance = sourcePreferences.autoAdvanceReels().get(),
         isCropMode = sourcePreferences.reelsCropMode().get(),
@@ -1593,6 +1592,11 @@ class ReelsFeedScreenModel(
             // The creator page and the FOLLOWING aggregation have no search/filter surface
             // and must never touch the saved global query or filters.
             val savedQuery = if (mode == FeedMode.GLOBAL) sourcePreferences.lastReelsQuery(newSourceId).get() else ""
+            val scopedNicheFilter = (nicheId ?: creator)?.let { scopeId ->
+                ReelsLocalFilterState.deserializePersistent(
+                    sourcePreferences.reelsNicheLocalFilter(newSourceId, scopeId).get(),
+                ).copy(watchFilter = ReelsWatchFilter.All)
+            }
 
             // The filter list is built and restored off the main thread by
             // buildFiltersAndStartFeed (arbitrary plugin code behind getFilterList); the
@@ -1602,6 +1606,7 @@ class ReelsFeedScreenModel(
                 it.copy(
                     currentSourceId = newSourceId,
                     sourceName = rawSource.name,
+                    nicheLocalFilter = scopedNicheFilter ?: it.nicheLocalFilter,
                     isMixMode = false,
                     supportsSearch = true,
                     supportsFilter = true,
@@ -2388,13 +2393,13 @@ class ReelsFeedScreenModel(
 
             val filters = when (mode) {
                 FeedMode.GLOBAL -> rawSource.getFilterList()
-                FeedMode.NICHE -> (rawSource as? AnimeCategoryFeedOrderSource)?.categoryFilters()
+                FeedMode.NICHE, FeedMode.CREATOR -> (rawSource as? AnimeCategoryFeedOrderSource)?.categoryFilters()
                     ?: AnimeFilterList()
                 else -> AnimeFilterList()
             }
             if (mode == FeedMode.GLOBAL) {
                 restoreFilters(filters, sourcePreferences.lastReelsFilter(sourceId).get())
-            } else if (mode == FeedMode.NICHE) {
+            } else if (mode == FeedMode.NICHE || mode == FeedMode.CREATOR) {
                 syncCategoryFiltersWithLocalFilter(filters, state.value.nicheLocalFilter)
             }
 
@@ -3427,8 +3432,28 @@ class ReelsFeedScreenModel(
                 // just on its own per-stream token space (contract v18). switchSource has
                 // already refused a non-capable source in this mode.
                 val pageData = when {
-                    mode == FeedMode.CREATOR -> (src as AnimeCreatorFeedSource)
-                        .getCreatorFeed(creator.orEmpty(), page, cursor)
+                    mode == FeedMode.CREATOR -> {
+                        val creatorHandle = creator.orEmpty().removePrefix("@").trim()
+                        val orderSource = src as? AnimeCategoryFeedOrderSource
+                        val orderedCategoryPage = if (
+                            orderSource != null &&
+                            state.value.nicheLocalFilter.isActive &&
+                            creatorHandle.isNotBlank()
+                        ) {
+                            runCatching {
+                                orderSource.getCategoryFeed(
+                                    "channel:$creatorHandle",
+                                    page,
+                                    cursor,
+                                    state.value.filters,
+                                )
+                            }.getOrNull()?.takeIf { it.videos.isNotEmpty() || it.hasNextPage }
+                        } else {
+                            null
+                        }
+                        orderedCategoryPage
+                            ?: (src as AnimeCreatorFeedSource).getCreatorFeed(creator.orEmpty(), page, cursor)
+                    }
                     mode == FeedMode.CUSTOM -> (src as AnimeCustomFeedSource)
                         .getCustomFeed(customFeedId.orEmpty(), page, cursor)
                     mode == FeedMode.NICHE -> {
@@ -3543,7 +3568,7 @@ class ReelsFeedScreenModel(
                         backlog.isEmpty() -> newItems
                         else -> (newItems + backlog).distinctBy { it.id }
                     }
-                    val displayedItems = if (mode == FeedMode.NICHE) {
+                    val displayedItems = if (mode == FeedMode.NICHE || mode == FeedMode.CREATOR) {
                         rawNicheItems = if (reset) {
                             merged
                         } else {
@@ -3573,7 +3598,7 @@ class ReelsFeedScreenModel(
                     }
                     current.copy(
                         items = displayedItems,
-                        nicheAvailableTags = if (mode == FeedMode.NICHE) {
+                        nicheAvailableTags = if (mode == FeedMode.NICHE || mode == FeedMode.CREATOR) {
                             extractAvailableTags(rawNicheItems)
                         } else {
                             current.nicheAvailableTags
@@ -3652,7 +3677,7 @@ class ReelsFeedScreenModel(
                         mutableState.update { it.copy(unseenScanStopped = true) }
                     }
                 } else if (
-                    mode == FeedMode.NICHE &&
+                    (mode == FeedMode.NICHE || mode == FeedMode.CREATOR) &&
                     state.value.nicheLocalFilter.isActive &&
                     state.value.items.size < NICHE_FILTER_MIN_ITEMS &&
                     state.value.canLoadMore
@@ -3877,13 +3902,52 @@ class ReelsFeedScreenModel(
     /** Adds/removes an album to/from the collection (search cards, niche save row). */
     fun toggleAlbumSaved(category: FeedCategory) = engagementController.toggleAlbumSaved(category)
 
-    /** Save-row action for NICHE mode: the currently open album/category. */
+    /** Resolves the canonical album identifier for the current NICHE or CREATOR feed. */
+    fun currentAlbumId(): String? = when (mode) {
+        FeedMode.NICHE -> nicheId
+        FeedMode.CREATOR -> {
+            val raw = creator?.trim()?.takeIf { it.isNotBlank() } ?: return null
+            val clean = raw.removePrefix("@").trim()
+            val channelId = "channel:$clean"
+            val saved = state.value.savedAlbumIds
+            when {
+                raw in saved -> raw
+                clean in saved -> clean
+                channelId in saved -> channelId
+                state.value.isBrowseCapable -> channelId
+                else -> raw
+            }
+        }
+        else -> null
+    }
+
+    /** True when the current NICHE or CREATOR channel is saved in the Albums collection; null in other modes. */
+    fun isCurrentAlbumSaved(): Boolean? = when (mode) {
+        FeedMode.NICHE -> nicheId?.let { it in state.value.savedAlbumIds }
+        FeedMode.CREATOR -> {
+            val raw = creator?.trim()?.takeIf { it.isNotBlank() } ?: return null
+            val clean = raw.removePrefix("@").trim()
+            val saved = state.value.savedAlbumIds
+            raw in saved || clean in saved || "channel:$clean" in saved
+        }
+        else -> null
+    }
+
+    /** Save-row action for NICHE and CREATOR modes: saves/removes the currently open album/channel. */
     fun toggleCurrentNicheAlbum() {
-        val id = nicheId ?: return
+        val id = currentAlbumId() ?: return
+        val displayName = when (mode) {
+            FeedMode.NICHE -> nicheName.orEmpty().ifBlank { id }
+            FeedMode.CREATOR -> {
+                val raw = creator.orEmpty().trim()
+                if (raw.startsWith("@")) raw else "@$raw"
+            }
+            else -> return
+        }
         toggleAlbumSaved(
             FeedCategory(
                 id = id,
-                name = nicheName.orEmpty(),
+                name = displayName,
                 imageUrl = state.value.items.firstOrNull()?.posterUrl,
                 itemCount = null,
             ),
@@ -4392,19 +4456,23 @@ class ReelsFeedScreenModel(
     }
 
     fun toggleNicheFilterSheet(open: Boolean) {
-        if (mode != FeedMode.NICHE) return
+        if (mode != FeedMode.NICHE && mode != FeedMode.CREATOR) return
         mutableState.update { it.copy(isNicheFilterSheetOpen = open) }
     }
 
     fun applyNicheLocalFilter(filter: ReelsLocalFilterState) {
-        if (mode != FeedMode.NICHE) return
-        // Preserve any album watch-status preference while persisting duration/sort from NICHE mode.
-        val existingWatch = ReelsLocalFilterState
-            .deserializePersistent(sourcePreferences.reelsNicheLocalFilter().get())
-            .watchFilter
-        sourcePreferences.reelsNicheLocalFilter().set(
-            filter.copy(watchFilter = existingWatch).serializePersistent(),
-        )
+        if (mode != FeedMode.NICHE && mode != FeedMode.CREATOR) return
+        val scopeId = nicheId ?: creator
+        if (scopeId != null) {
+            val pref = sourcePreferences.reelsNicheLocalFilter(state.value.currentSourceId, scopeId)
+            // Preserve any album watch-status preference while persisting duration/sort from feed mode.
+            val existingWatch = ReelsLocalFilterState
+                .deserializePersistent(pref.get())
+                .watchFilter
+            pref.set(
+                filter.copy(watchFilter = existingWatch).serializePersistent(),
+            )
+        }
         val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.filters, filter)
         if (syncedChanged) {
             rawNicheItems = emptyList()
@@ -4441,7 +4509,7 @@ class ReelsFeedScreenModel(
     }
 
     fun continueNicheFilterScan() {
-        if (mode != FeedMode.NICHE) return
+        if (mode != FeedMode.NICHE && mode != FeedMode.CREATOR) return
         nicheFilterRefillPages = 0
         if (state.value.canLoadMore && !state.value.isLoading) {
             loadFeedInternal(reset = false)
@@ -4449,9 +4517,12 @@ class ReelsFeedScreenModel(
     }
 
     fun resetNicheLocalFilter() {
-        if (mode != FeedMode.NICHE) return
+        if (mode != FeedMode.NICHE && mode != FeedMode.CREATOR) return
         val reset = ReelsLocalFilterState()
-        sourcePreferences.reelsNicheLocalFilter().set("")
+        val scopeId = nicheId ?: creator
+        if (scopeId != null) {
+            sourcePreferences.reelsNicheLocalFilter(state.value.currentSourceId, scopeId).set("")
+        }
         val syncedChanged = syncCategoryFiltersWithLocalFilter(state.value.filters, reset)
         if (syncedChanged) {
             rawNicheItems = emptyList()
