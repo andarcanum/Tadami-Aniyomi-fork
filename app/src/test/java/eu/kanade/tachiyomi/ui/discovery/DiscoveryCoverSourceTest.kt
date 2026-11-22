@@ -1,5 +1,10 @@
 package eu.kanade.tachiyomi.ui.discovery
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import coil3.compose.AsyncImagePainter
+import coil3.request.ErrorResult
+import coil3.request.ImageRequest
 import dev.mihon.injekt.patchInjekt
 import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.data.discovery.DiscoverySdkBindingAuthority
@@ -293,6 +298,53 @@ class DiscoveryCoverSourceTest {
         } finally {
             fixture.close()
         }
+    }
+
+    @Test
+    fun `resolveDiscoveryCoverPainterState suppresses stale error painter across pending-to-ready handoff`() {
+        val pendingRequest = mockk<ImageRequest>(relaxed = true)
+        val readyRequest = mockk<ImageRequest>(relaxed = true)
+        val fallbackPainter = ColorPainter(Color.Red)
+
+        val stalePendingError = AsyncImagePainter.State.Error(
+            painter = fallbackPainter,
+            result = ErrorResult(
+                image = null,
+                request = pendingRequest,
+                throwable = IOException("Network fetch disabled by cache policy"),
+            ),
+        )
+        val duringPending = resolveDiscoveryCoverPainterState(
+            state = stalePendingError,
+            activeRequest = pendingRequest,
+            isCoverPending = true,
+            fallbackPainter = fallbackPainter,
+        ) as AsyncImagePainter.State.Error
+        duringPending.painter shouldBe null
+
+        val transitioningToReady = resolveDiscoveryCoverPainterState(
+            state = stalePendingError,
+            activeRequest = readyRequest,
+            isCoverPending = false,
+            fallbackPainter = fallbackPainter,
+        ) as AsyncImagePainter.State.Error
+        transitioningToReady.painter shouldBe null
+
+        val realReadyError = AsyncImagePainter.State.Error(
+            painter = null,
+            result = ErrorResult(
+                image = null,
+                request = readyRequest,
+                throwable = IOException("HTTP 404"),
+            ),
+        )
+        val settledReadyError = resolveDiscoveryCoverPainterState(
+            state = realReadyError,
+            activeRequest = readyRequest,
+            isCoverPending = false,
+            fallbackPainter = fallbackPainter,
+        ) as AsyncImagePainter.State.Error
+        settledReadyError.painter shouldBe fallbackPainter
     }
 
     private fun policy(selected: Set<String> = setOf("extension.a")) = DiscoverySourcePolicy(

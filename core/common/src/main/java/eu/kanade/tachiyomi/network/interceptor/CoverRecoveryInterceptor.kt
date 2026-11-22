@@ -9,7 +9,14 @@ class CoverRecoveryInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         if (!CoverRequestPolicy.isCoverRequest(request)) {
-            return chain.proceed(request)
+            val response = chain.proceed(request)
+            if (response.isSuccessful) {
+                val host = request.url.host
+                if (CoverRequestPolicy.isBlacklisted(host)) {
+                    CoverRequestPolicy.clear(host)
+                }
+            }
+            return response
         }
 
         val host = request.url.host

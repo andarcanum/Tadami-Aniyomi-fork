@@ -32,6 +32,7 @@ import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.aniyomi.AYMR
@@ -46,6 +47,7 @@ fun GlobalAnimeSearchAuroraContent(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    val coverReloadTick = rememberCoverReloadTick()
     // BGS-9: flatten once per items change (was recomputed on EVERY recomposition) and key the
     // grid items below - unkeyed positional items are a latent trap for the deferred РЕШ-13
     // wiring (list changes would reuse cover slots across different anime).
@@ -73,7 +75,7 @@ fun GlobalAnimeSearchAuroraContent(
             }
 
             items(allAnime, key = { it.id }) { anime ->
-                val coverRequest = remember(anime.thumbnailUrl, anime.coverLastModified) {
+                val coverRequest = remember(context, anime.thumbnailUrl, anime.coverLastModified, coverReloadTick) {
                     buildAuroraCoverImageRequest(context, anime.thumbnailUrl)
                 }
                 androidx.compose.foundation.layout.Column(

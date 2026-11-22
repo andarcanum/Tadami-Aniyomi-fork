@@ -255,14 +255,18 @@ internal fun DiscoveryPreviewSheet(
                     ) {
                         val coverColorFilter = rememberAuroraPosterColorFilter()
                         if (coverRequest != null) {
+                            val coverTransform = rememberDiscoveryCoverTransform(
+                                coverRequest = coverRequest,
+                                isCoverPending = isCoverPending,
+                                fallbackPainter = fallbackPainter,
+                            )
                             AsyncImage(
                                 model = coverRequest,
+                                transform = coverTransform,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 colorFilter = coverColorFilter,
                                 modifier = Modifier.matchParentSize(),
-                                error = if (isCoverPending) null else fallbackPainter,
-                                fallback = if (isCoverPending) null else fallbackPainter,
                             )
                         } else {
                             Image(

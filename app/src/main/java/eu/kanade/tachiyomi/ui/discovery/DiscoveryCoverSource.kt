@@ -7,7 +7,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImagePainter
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import eu.kanade.presentation.components.buildAuroraCoverImageRequestOrNull
@@ -15,6 +17,7 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.data.discovery.DiscoverySdkBindingAuthority
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.withCoverTimeouts
 import eu.kanade.tachiyomi.novelsource.online.HttpNovelSource
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -130,7 +133,7 @@ object DiscoveryCoverSource {
             val guardedFactory = synchronized(guardedClientLock) {
                 val byKey = guardedClientCache.getOrPut(source) { HashMap() }
                 byKey.getOrPut(key) {
-                    val guardedClient = delegate.newBuilder().apply {
+                    val guardedClient = delegate.withCoverTimeouts().newBuilder().apply {
                         interceptors().add(
                             0,
                             Interceptor { chain ->
@@ -280,6 +283,43 @@ internal fun buildDiscoveryCoverImageRequest(
         networkCachePolicy(CachePolicy.DISABLED)
     }
     DiscoveryCoverResolution.Unavailable -> null
+}
+
+/**
+ * Prevents stale `State.Error` from an earlier [DiscoveryCoverResolution.PendingCacheOnly]
+ * request from painting [fallbackPainter] on the frame [coverRequest] switches to `Ready`.
+ */
+internal fun resolveDiscoveryCoverPainterState(
+    state: AsyncImagePainter.State,
+    activeRequest: ImageRequest,
+    isCoverPending: Boolean,
+    fallbackPainter: Painter,
+): AsyncImagePainter.State = when (state) {
+    is AsyncImagePainter.State.Error -> {
+        val showFallback = !isCoverPending && state.result.request === activeRequest
+        state.copy(painter = if (showFallback) fallbackPainter else null)
+    }
+    else -> state
+}
+
+@Composable
+internal fun rememberDiscoveryCoverTransform(
+    coverRequest: ImageRequest,
+    isCoverPending: Boolean,
+    fallbackPainter: Painter,
+): (AsyncImagePainter.State) -> AsyncImagePainter.State = remember(
+    coverRequest,
+    isCoverPending,
+    fallbackPainter,
+) {
+    { state ->
+        resolveDiscoveryCoverPainterState(
+            state = state,
+            activeRequest = coverRequest,
+            isCoverPending = isCoverPending,
+            fallbackPainter = fallbackPainter,
+        )
+    }
 }
 
 /** Shared lifecycle-aware cover model for Discovery cards across Home and Feed. */

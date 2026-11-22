@@ -22,6 +22,8 @@ import eu.kanade.tachiyomi.network.withCoverTimeouts
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -66,6 +68,7 @@ class AnimeImageFetcher(
     private val sourceLazy: Lazy<AnimeHttpSource?>,
     private val callFactoryLazy: Lazy<Call.Factory>,
     private val imageLoader: ImageLoader,
+    private val awaitSourceReady: suspend () -> Unit = {},
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult {
@@ -226,6 +229,7 @@ class AnimeImageFetcher(
     }
 
     private suspend fun executeNetworkRequest(url: String): Response {
+        awaitSourceReady()
         val client = (sourceLazy.value?.client ?: callFactoryLazy.value)
             .let { factory ->
                 if (factory is OkHttpClient) factory.withCoverTimeouts() else factory
@@ -450,6 +454,13 @@ class AnimeImageFetcher(
                 sourceLazy = lazy { sourceManager.get(data.source) as? AnimeHttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                awaitSourceReady = {
+                    if (!sourceManager.isInitialized.value) {
+                        withTimeoutOrNull(SOURCE_INIT_WAIT_MS) {
+                            sourceManager.isInitialized.first { it }
+                        }
+                    }
+                },
             )
         }
     }
@@ -478,6 +489,13 @@ class AnimeImageFetcher(
                 sourceLazy = lazy { sourceManager.get(data.sourceId) as? AnimeHttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                awaitSourceReady = {
+                    if (!sourceManager.isInitialized.value) {
+                        withTimeoutOrNull(SOURCE_INIT_WAIT_MS) {
+                            sourceManager.isInitialized.first { it }
+                        }
+                    }
+                },
             )
         }
     }
@@ -494,5 +512,8 @@ class AnimeImageFetcher(
 
         /** Delay between the first failed attempt and the retry. */
         private const val ANIME_COVER_NETWORK_RETRY_DELAY_MS = 500L
+
+        /** Bounded cold-start wait for extension sources before uncached network cover fetches. */
+        private const val SOURCE_INIT_WAIT_MS = 5_000L
     }
 }

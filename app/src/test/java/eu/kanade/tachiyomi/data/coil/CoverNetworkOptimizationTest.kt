@@ -115,14 +115,14 @@ class CoverNetworkOptimizationTest {
         val client = OkHttpClient.Builder()
             .addInterceptor(CoverRecoveryInterceptor())
             .build()
-        // Two consecutive recoverable failures put the host on the blacklist.
+        // Two consecutive host-level failures put the host on the blacklist.
         repeat(2) {
-            server.enqueue(MockResponse().setResponseCode(404).setBody("missing"))
+            server.enqueue(MockResponse().setResponseCode(503).setBody("unavailable"))
             runCatching { fetchMangaCover(client) }
             server.takeRequest() // consume: keeps per-iteration counts aligned
         }
         assertTrue(CoverRequestPolicy.isBlacklisted(server.hostName))
-        server.enqueue(MockResponse().setResponseCode(404).setBody("missing"))
+        server.enqueue(MockResponse().setResponseCode(503).setBody("unavailable"))
 
         runCatching { fetchMangaCover(client) }
 
@@ -131,6 +131,62 @@ class CoverNetworkOptimizationTest {
             server.requestCount - 2,
             "blacklisted hosts must be skipped without a network attempt",
         )
+    }
+
+    @Test
+    fun `repeated 404 cover responses never blacklist healthy covers on the same host`() = runTest {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(CoverRecoveryInterceptor())
+            .build()
+        repeat(3) {
+            server.enqueue(MockResponse().setResponseCode(404).setBody("missing"))
+            runCatching { fetchMangaCover(client) }
+            server.takeRequest()
+        }
+        assertFalse(CoverRequestPolicy.isBlacklisted(server.hostName))
+
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "image/png")
+                .setBody("healthy-cover"),
+        )
+        val result = fetchMangaCover(client)
+        assertEquals(DataSource.NETWORK, result.dataSource)
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `manga cover fetch awaits source readiness before reading source client on disk miss`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "image/png")
+                .setBody("source-authenticated"),
+        )
+        var ready = false
+        val events = mutableListOf<String>()
+        val result = MangaCoverFetcher(
+            url = server.url("/cover.png").toString(),
+            isLibraryManga = false,
+            options = coverOptions(),
+            coverFileProvider = { null },
+            customCoverFileLazy = lazy { File("nonexistent-custom-cover") },
+            diskCacheKeyProvider = { effectiveUrl, _ -> "manga;1;$effectiveUrl;0" },
+            sourceLazy = lazy {
+                events += "source:$ready"
+                null
+            },
+            callFactoryLazy = lazy { OkHttpClient() },
+            imageLoader = imageLoader,
+            awaitSourceReady = {
+                events += "await"
+                ready = true
+            },
+        ).fetch()
+
+        assertTrue(result is SourceFetchResult)
+        assertEquals(listOf("await", "source:true"), events)
     }
 
     @Test

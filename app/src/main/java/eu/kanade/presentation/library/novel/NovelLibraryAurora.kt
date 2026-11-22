@@ -67,6 +67,7 @@ import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.LocalTabState
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
@@ -804,7 +805,8 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                 // sets placeholderMemoryCacheKey, so a cover already in the memory cache is painted
                 // immediately instead of flashing the flat placeholder on every rebind. A raw
                 // AsyncImage(model = ...) carried no such key.
-                val coverRequest = remember(coverData) {
+                val coverReloadTick = rememberCoverReloadTick()
+                val coverRequest = remember(context, coverData, coverReloadTick) {
                     buildAuroraCoverImageRequest(context, coverData)
                 }
                 AsyncImage(

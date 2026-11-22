@@ -77,6 +77,7 @@ import coil3.compose.AsyncImage
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.resolveActiveAuraPalette
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
@@ -934,7 +935,8 @@ private fun GlowContourLibraryCard(
             if (customCover != null) {
                 customCover()
             } else {
-                val coverRequest = remember(coverData) {
+                val coverReloadTick = rememberCoverReloadTick()
+                val coverRequest = remember(context, coverData, coverReloadTick) {
                     buildAuroraCoverImageRequest(context, coverData)
                 }
 

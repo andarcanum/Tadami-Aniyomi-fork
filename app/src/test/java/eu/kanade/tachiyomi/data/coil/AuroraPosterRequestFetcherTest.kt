@@ -287,4 +287,34 @@ class AuroraPosterRequestFetcherTest {
             diskCache.shutdown()
         }
     }
+
+    @Test
+    fun `loadAuroraPosterSource retries single-url transient disconnect once and succeeds`() = runTest {
+        primaryServer.enqueue(
+            MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START),
+        )
+        primaryServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "image/png")
+                .setBody("recovered-after-disconnect"),
+        )
+
+        val client = OkHttpClient.Builder()
+            .addInterceptor(CoverRecoveryInterceptor())
+            .build()
+
+        val result = loadAuroraPosterSource(
+            callFactory = client,
+            fileSystem = FileSystem.SYSTEM,
+            request = AuroraPosterRequest(
+                primaryUrl = primaryServer.url("/single-poster.png").toString(),
+            ),
+            retryDelayMs = 0L,
+        ) as SourceFetchResult
+
+        assertEquals(2, primaryServer.requestCount)
+        assertEquals("recovered-after-disconnect", result.source.use { it.source().readUtf8() })
+        assertFalse(CoverRequestPolicy.isBlacklisted(primaryServer.hostName))
+    }
 }

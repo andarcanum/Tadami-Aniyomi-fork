@@ -21,6 +21,8 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -65,6 +67,7 @@ class MangaCoverFetcher(
     private val sourceLazy: Lazy<HttpSource?>,
     private val callFactoryLazy: Lazy<Call.Factory>,
     private val imageLoader: ImageLoader,
+    private val awaitSourceReady: suspend () -> Unit = {},
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult {
@@ -224,6 +227,7 @@ class MangaCoverFetcher(
     }
 
     private suspend fun executeNetworkRequest(url: String): Response {
+        awaitSourceReady()
         val client = (sourceLazy.value?.client ?: callFactoryLazy.value)
             .let { factory ->
                 if (factory is OkHttpClient) factory.withCoverTimeouts() else factory
@@ -414,6 +418,13 @@ class MangaCoverFetcher(
                 sourceLazy = lazy { sourceManager.get(data.source) as? HttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                awaitSourceReady = {
+                    if (!sourceManager.isInitialized.value) {
+                        withTimeoutOrNull(SOURCE_INIT_WAIT_MS) {
+                            sourceManager.isInitialized.first { it }
+                        }
+                    }
+                },
             )
         }
     }
@@ -442,6 +453,13 @@ class MangaCoverFetcher(
                 sourceLazy = lazy { sourceManager.get(data.sourceId) as? HttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                awaitSourceReady = {
+                    if (!sourceManager.isInitialized.value) {
+                        withTimeoutOrNull(SOURCE_INIT_WAIT_MS) {
+                            sourceManager.isInitialized.first { it }
+                        }
+                    }
+                },
             )
         }
     }
@@ -458,5 +476,8 @@ class MangaCoverFetcher(
 
         /** Delay between the first failed attempt and the retry. */
         private const val COVER_NETWORK_RETRY_DELAY_MS = 500L
+
+        /** Bounded cold-start wait for extension sources before uncached network cover fetches. */
+        private const val SOURCE_INIT_WAIT_MS = 5_000L
     }
 }

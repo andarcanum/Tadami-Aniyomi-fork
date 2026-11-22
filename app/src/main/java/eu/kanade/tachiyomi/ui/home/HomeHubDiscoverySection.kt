@@ -151,6 +151,7 @@ import eu.kanade.tachiyomi.ui.discovery.buildDiscoveryCoverImageRequest
 import eu.kanade.tachiyomi.ui.discovery.buildDiscoverySuggestionItem
 import eu.kanade.tachiyomi.ui.discovery.discoveryCoverData
 import eu.kanade.tachiyomi.ui.discovery.rememberDiscoveryCoverResolution
+import eu.kanade.tachiyomi.ui.discovery.rememberDiscoveryCoverTransform
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -872,14 +873,18 @@ internal fun DiscoveryPosterCard(
                 val isCoverPending = coverResolution is DiscoveryCoverResolution.PendingCacheOnly
                 val posterColorFilter = rememberAuroraPosterColorFilter()
                 if (posterCoverRequest != null) {
+                    val coverTransform = rememberDiscoveryCoverTransform(
+                        coverRequest = posterCoverRequest,
+                        isCoverPending = isCoverPending,
+                        fallbackPainter = fallbackPainter,
+                    )
                     AsyncImage(
                         model = posterCoverRequest,
+                        transform = coverTransform,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         colorFilter = posterColorFilter,
                         modifier = Modifier.fillMaxSize(),
-                        error = if (isCoverPending) null else fallbackPainter,
-                        fallback = if (isCoverPending) null else fallbackPainter,
                     )
                 } else {
                     Image(
@@ -3101,8 +3106,14 @@ private fun BoxScope.StageSlot(
         Box(Modifier.fillMaxSize().background(neutralCoverBrush))
         val stageColorFilter = rememberAuroraPosterColorFilter()
         if (coverRequest != null) {
+            val coverTransform = rememberDiscoveryCoverTransform(
+                coverRequest = coverRequest,
+                isCoverPending = isCoverPending,
+                fallbackPainter = fallbackPainter,
+            )
             AsyncImage(
                 model = coverRequest,
+                transform = coverTransform,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 colorFilter = stageColorFilter,
@@ -3130,8 +3141,6 @@ private fun BoxScope.StageSlot(
                             translationY = 0f
                         }
                     },
-                error = if (isCoverPending) null else fallbackPainter,
-                fallback = if (isCoverPending) null else fallbackPainter,
             )
         } else {
             Image(
@@ -3263,14 +3272,18 @@ private fun CollageTile(
     ) {
         val collageColorFilter = rememberAuroraPosterColorFilter()
         if (coverRequest != null) {
+            val coverTransform = rememberDiscoveryCoverTransform(
+                coverRequest = coverRequest,
+                isCoverPending = isCoverPending,
+                fallbackPainter = fallbackPainter,
+            )
             AsyncImage(
                 model = coverRequest,
+                transform = coverTransform,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 colorFilter = collageColorFilter,
                 modifier = Modifier.fillMaxSize(),
-                error = if (isCoverPending) null else fallbackPainter,
-                fallback = if (isCoverPending) null else fallbackPainter,
             )
         } else {
             Image(
