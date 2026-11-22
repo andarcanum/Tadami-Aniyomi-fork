@@ -1122,6 +1122,36 @@ internal fun NovelReaderContentHost(
         state.readerSettings.textSelectionEnabled ||
             state.readerSettings.selectedTextTranslationEnabled ||
             state.readerSettings.novelDictionaryEnabled
+    val currentPaginationLayoutKey = PagePaginationLayoutKey(
+        showPageChapterTitle = showPageChapterTitle,
+        fontSize = state.readerSettings.fontSize,
+        lineHeight = state.readerSettings.lineHeight,
+        margin = state.readerSettings.margin,
+        textAlign = state.readerSettings.textAlign,
+        preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative,
+        paragraphSpacing = state.readerSettings.paragraphSpacing,
+        forceParagraphIndent = state.readerSettings.forceParagraphIndent,
+        bionicReading = state.readerSettings.bionicReading,
+        forceBoldText = state.readerSettings.forceBoldText,
+        forceItalicText = state.readerSettings.forceItalicText,
+        richNativeRendererExperimental = state.readerSettings.richNativeRendererExperimental,
+        hyphenationEnabled = state.readerSettings.hyphenationEnabled,
+        layoutTextAlign = pageReaderLayoutTextAlign,
+        composeTypeface = composeTypeface,
+        chapterTitleTypeface = chapterTitleTypeface,
+        viewportSize = effectivePageViewportSize,
+        contentPaddingPx = contentPaddingPx,
+        spreadContentPaddingPx = spreadContentPaddingPx,
+        statusBarTopPadding = pageReaderStatusBarTopPadding,
+        navigationBarHeightPx = pageReaderNavigationBarHeightPx,
+        spreadColumns = novelSpreadColumns,
+        spreadCutoutLeftPx = spreadCutoutLeftPx,
+        spreadCutoutRightPx = spreadCutoutRightPx,
+        densityScale = density.density,
+        textSelectable = pageReaderTextSelectable,
+    )
+    val chapterPaginationCache = remember { NovelPagePaginationCache() }
+
     var plainPaginationState by remember {
         mutableStateOf(PlainPagePaginationResult())
     }
@@ -1129,39 +1159,31 @@ internal fun NovelReaderContentHost(
         state.chapter.id,
         pageReaderTextBlocks,
         pageReaderImageBlocks,
-        showPageChapterTitle,
         state.chapter.name,
         shouldPaginatePlainForPageReader,
-        state.readerSettings.fontSize,
-        state.readerSettings.lineHeight,
-        state.readerSettings.margin,
-        state.readerSettings.textAlign,
-        state.readerSettings.paragraphSpacing,
-        state.readerSettings.forceParagraphIndent,
-        state.readerSettings.bionicReading,
-        state.readerSettings.forceBoldText,
-        state.readerSettings.forceItalicText,
-        pageReaderLayoutTextAlign,
-        composeTypeface,
-        chapterTitleTypeface,
-        effectivePageViewportSize,
-        contentPaddingPx,
-        spreadContentPaddingPx,
-        pageReaderStatusBarTopPadding,
-        pageReaderNavigationBarHeightPx,
-        novelSpreadColumns,
-        spreadCutoutLeftPx,
-        spreadCutoutRightPx,
-        density.density,
+        currentPaginationLayoutKey,
         baseMeasurementTextPaint,
-        pageReaderTextSelectable,
-        state.readerSettings.hyphenationEnabled,
     ) {
         val targetChapterId = state.chapter.id
         if (!shouldPaginatePlainForPageReader || (pageReaderTextBlocks.isEmpty() && pageReaderImageBlocks.isEmpty())) {
             plainPaginationState = PlainPagePaginationResult(
                 chapterId = targetChapterId,
                 pages = emptyList(),
+                completed = true,
+            )
+            return@LaunchedEffect
+        }
+        val cachedPlain = chapterPaginationCache.getPlain(
+            chapterId = targetChapterId,
+            chapterName = state.chapter.name,
+            layoutKey = currentPaginationLayoutKey,
+            textBlocks = pageReaderTextBlocks,
+            imageBlocks = pageReaderImageBlocks,
+        )
+        if (cachedPlain != null) {
+            plainPaginationState = PlainPagePaginationResult(
+                chapterId = targetChapterId,
+                pages = cachedPlain.pages,
                 completed = true,
             )
             return@LaunchedEffect
@@ -1253,6 +1275,16 @@ internal fun NovelReaderContentHost(
             coroutineContext.ensureActive()
             result
         }
+        chapterPaginationCache.put(
+            CachedChapterPagePagination.Plain(
+                chapterId = targetChapterId,
+                chapterName = state.chapter.name,
+                layoutKey = currentPaginationLayoutKey,
+                textBlocks = pageReaderTextBlocks,
+                imageBlocks = pageReaderImageBlocks,
+                pages = computedPages,
+            ),
+        )
         plainPaginationState = PlainPagePaginationResult(
             chapterId = targetChapterId,
             pages = computedPages,
@@ -1267,37 +1299,29 @@ internal fun NovelReaderContentHost(
         state.chapter.id,
         pageReaderRichBlocks,
         shouldPaginateRichForPageReader,
-        showPageChapterTitle,
         state.chapter.name,
-        state.readerSettings.fontSize,
-        state.readerSettings.lineHeight,
-        state.readerSettings.margin,
-        state.readerSettings.textAlign,
-        state.readerSettings.preserveSourceTextAlignInNative,
-        state.readerSettings.paragraphSpacing,
-        state.readerSettings.forceParagraphIndent,
-        state.readerSettings.forceBoldText,
-        state.readerSettings.forceItalicText,
-        composeTypeface,
-        chapterTitleTypeface,
-        effectivePageViewportSize,
-        contentPaddingPx,
-        spreadContentPaddingPx,
-        pageReaderStatusBarTopPadding,
-        pageReaderNavigationBarHeightPx,
-        novelSpreadColumns,
-        spreadCutoutLeftPx,
-        spreadCutoutRightPx,
-        density.density,
+        currentPaginationLayoutKey,
         baseMeasurementTextPaint,
-        pageReaderTextSelectable,
-        state.readerSettings.hyphenationEnabled,
     ) {
         val targetChapterId = state.chapter.id
         if (!shouldPaginateRichForPageReader) {
             richPaginationState = RichPagePaginationResult(
                 chapterId = targetChapterId,
                 pagination = MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList()),
+                completed = true,
+            )
+            return@LaunchedEffect
+        }
+        val cachedRich = chapterPaginationCache.getRich(
+            chapterId = targetChapterId,
+            chapterName = state.chapter.name,
+            layoutKey = currentPaginationLayoutKey,
+            richBlocks = pageReaderRichBlocks,
+        )
+        if (cachedRich != null) {
+            richPaginationState = RichPagePaginationResult(
+                chapterId = targetChapterId,
+                pagination = cachedRich.pagination,
                 completed = true,
             )
             return@LaunchedEffect
@@ -1376,6 +1400,15 @@ internal fun NovelReaderContentHost(
             coroutineContext.ensureActive()
             result
         }
+        chapterPaginationCache.put(
+            CachedChapterPagePagination.Rich(
+                chapterId = targetChapterId,
+                chapterName = state.chapter.name,
+                layoutKey = currentPaginationLayoutKey,
+                richBlocks = pageReaderRichBlocks,
+                pagination = computedPagination,
+            ),
+        )
         richPaginationState = RichPagePaginationResult(
             chapterId = targetChapterId,
             pagination = computedPagination,
@@ -1383,22 +1416,52 @@ internal fun NovelReaderContentHost(
         )
     }
 
-    val pageReaderPages: List<List<PlainPageSlice>> = if (plainPaginationState.chapterId == state.chapter.id) {
-        plainPaginationState.pages
+    val promotedPlainPagination = if (
+        shouldPaginatePlainForPageReader &&
+        plainPaginationState.chapterId != state.chapter.id
+    ) {
+        chapterPaginationCache.getPlain(
+            chapterId = state.chapter.id,
+            chapterName = state.chapter.name,
+            layoutKey = currentPaginationLayoutKey,
+            textBlocks = pageReaderTextBlocks,
+            imageBlocks = pageReaderImageBlocks,
+        )
     } else {
-        emptyList()
+        null
     }
-    val richPageReaderPagination = if (richPaginationState.chapterId == state.chapter.id) {
-        richPaginationState.pagination
+    val promotedRichPagination = if (
+        shouldPaginateRichForPageReader &&
+        richPaginationState.chapterId != state.chapter.id
+    ) {
+        chapterPaginationCache.getRich(
+            chapterId = state.chapter.id,
+            chapterName = state.chapter.name,
+            layoutKey = currentPaginationLayoutKey,
+            richBlocks = pageReaderRichBlocks,
+        )
     } else {
-        MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
+        null
+    }
+
+    val pageReaderPages: List<List<PlainPageSlice>> = when {
+        plainPaginationState.chapterId == state.chapter.id -> plainPaginationState.pages
+        promotedPlainPagination != null -> promotedPlainPagination.pages
+        else -> emptyList()
+    }
+    val richPageReaderPagination = when {
+        richPaginationState.chapterId == state.chapter.id -> richPaginationState.pagination
+        promotedRichPagination != null -> promotedRichPagination.pagination
+        else -> MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
     }
     val richPageReaderBlockTexts = richPageReaderPagination.blockTexts
     val richPageReaderPages = richPageReaderPagination.pages
     val isPageReaderPaginationCompleted = if (shouldPaginateRichForPageReader) {
-        richPaginationState.chapterId == state.chapter.id && richPaginationState.completed
+        (richPaginationState.chapterId == state.chapter.id && richPaginationState.completed) ||
+            promotedRichPagination != null
     } else {
-        plainPaginationState.chapterId == state.chapter.id && plainPaginationState.completed
+        (plainPaginationState.chapterId == state.chapter.id && plainPaginationState.completed) ||
+            promotedPlainPagination != null
     }
     val usePageReader = shouldPaginatePageReader &&
         (!isPageReaderPaginationCompleted || pageReaderPages.isNotEmpty() || richPageReaderPages.isNotEmpty())
@@ -1442,9 +1505,113 @@ internal fun NovelReaderContentHost(
             chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
         )
     }
+    fun buildSeamlessAdjacentPagesSlice(
+        previewPages: List<NovelPageContentPage>,
+        takeLastSpread: Boolean,
+    ): SeamlessAdjacentPagesSlice {
+        if (previewPages.isEmpty()) return SeamlessAdjacentPagesSlice()
+        val targetSlot = if (takeLastSpread) {
+            (resolveSpreadSlotCount(previewPages.size, novelSpreadColumns) - 1).coerceAtLeast(0)
+        } else {
+            0
+        }
+        val firstIndex = resolveSpreadSlotFirstPageIndex(targetSlot, novelSpreadColumns)
+        val slicePages = (firstIndex until (firstIndex + novelSpreadColumns)).map { idx ->
+            previewPages.getOrElse(idx) { NovelPageContentPage(emptyList()) }
+        }
+        return SeamlessAdjacentPagesSlice(
+            pages = slicePages,
+            firstPageNumber = firstIndex + 1,
+            totalPages = previewPages.size,
+        )
+    }
+
+    fun tryBuildSeamlessSliceFromCache(
+        preview: NovelReaderScreenModel.AdjacentChapterPreview,
+        takeLastSpread: Boolean,
+        layoutKey: PagePaginationLayoutKey,
+        paragraphSpacingPx: Int,
+        forceParagraphIndent: Boolean,
+    ): SeamlessAdjacentPagesSlice? {
+        val previewScrollBlocks = preview.contentBlocks
+        if (previewScrollBlocks.isEmpty()) return null
+        val useRichForPreview = shouldUseRichNativePageRenderer(
+            richNativeRendererExperimentalEnabled = layoutKey.richNativeRendererExperimental,
+            pageReaderEnabled = true,
+            bionicReadingEnabled = layoutKey.bionicReading,
+            richContentBlocks = preview.richContentBlocks,
+            richContentUnsupportedFeaturesDetected = preview.richContentUnsupportedFeaturesDetected,
+        )
+        val titleForFiltering = resolvePageReaderChapterTitleForFiltering(
+            showPageChapterTitle = layoutKey.showPageChapterTitle,
+            chapterTitle = preview.chapterName,
+        )
+        val chapterTitle = if (layoutKey.showPageChapterTitle) preview.chapterName else null
+        return if (useRichForPreview) {
+            val filteredRich = stripPageReaderChapterTitleRichBlocks(
+                richBlocks = preview.richContentBlocks.withIndex().toList(),
+                chapterTitle = titleForFiltering,
+            )
+            val cached = chapterPaginationCache.getRich(
+                chapterId = preview.chapterId,
+                chapterName = preview.chapterName,
+                layoutKey = layoutKey,
+                richBlocks = filteredRich,
+            ) ?: return null
+            val pages = normalizePageReaderContentPages(
+                useRichPageReader = true,
+                plainPages = emptyList(),
+                richPages = cached.pagination.pages,
+                plainTextBlocks = emptyList(),
+                richBlockTexts = cached.pagination.blockTexts,
+                paragraphSpacingPx = paragraphSpacingPx,
+                forceParagraphIndent = forceParagraphIndent,
+                chapterTitle = chapterTitle,
+            )
+            buildSeamlessAdjacentPagesSlice(pages, takeLastSpread)
+        } else {
+            val plainTextBlocks = stripPageReaderChapterTitleBlocks(
+                textBlocks = previewScrollBlocks.mapIndexedNotNull { index, block ->
+                    val text = (block as? NovelReaderScreenModel.ContentBlock.Text)?.text?.takeIf { it.isNotBlank() }
+                        ?: return@mapIndexedNotNull null
+                    PlainPageReaderTextBlock(sourceBlockIndex = index, text = text)
+                },
+                chapterTitle = titleForFiltering,
+            )
+            val plainImageBlocks = previewScrollBlocks.mapIndexedNotNull { index, block ->
+                (block as? NovelReaderScreenModel.ContentBlock.Image)?.let { image ->
+                    PlainPageImageBlock(
+                        sourceBlockIndex = index,
+                        imageUrl = image.url,
+                        contentDescription = image.alt,
+                    )
+                }
+            }
+            val cached = chapterPaginationCache.getPlain(
+                chapterId = preview.chapterId,
+                chapterName = preview.chapterName,
+                layoutKey = layoutKey,
+                textBlocks = plainTextBlocks,
+                imageBlocks = plainImageBlocks,
+            ) ?: return null
+            val pages = normalizePageReaderContentPages(
+                useRichPageReader = false,
+                plainPages = cached.pages,
+                richPages = emptyList(),
+                plainTextBlocks = plainTextBlocks,
+                richBlockTexts = emptyList(),
+                paragraphSpacingPx = paragraphSpacingPx,
+                forceParagraphIndent = forceParagraphIndent,
+                chapterTitle = chapterTitle,
+            )
+            buildSeamlessAdjacentPagesSlice(pages, takeLastSpread)
+        }
+    }
+
     fun paginateAdjacentPreviewSlice(
         preview: NovelReaderScreenModel.AdjacentChapterPreview?,
         takeLastSpread: Boolean,
+        layoutKey: PagePaginationLayoutKey,
         budget: NovelPageReaderPageBudget,
         paragraphSpacingPx: Int,
         textSizePx: Float,
@@ -1456,12 +1623,11 @@ internal fun NovelReaderContentHost(
         forcedTypefaceStyle: Int,
         richNativeRendererExperimental: Boolean,
         hyphenationEnabled: Boolean,
-        showPageFooter: Boolean,
         measurementPaint: TextPaint,
-    ): SeamlessAdjacentPagesSlice {
-        if (preview == null) return SeamlessAdjacentPagesSlice()
+    ): AdjacentPreviewPaginationOutput {
+        if (preview == null) return AdjacentPreviewPaginationOutput()
         val previewScrollBlocks = preview.contentBlocks
-        if (previewScrollBlocks.isEmpty()) return SeamlessAdjacentPagesSlice()
+        if (previewScrollBlocks.isEmpty()) return AdjacentPreviewPaginationOutput()
         val useRichForPreview = shouldUseRichNativePageRenderer(
             richNativeRendererExperimentalEnabled = richNativeRendererExperimental,
             pageReaderEnabled = true,
@@ -1473,7 +1639,7 @@ internal fun NovelReaderContentHost(
             showPageChapterTitle = showPageChapterTitle,
             chapterTitle = preview.chapterName,
         )
-        val maxPreviewPages = if (!takeLastSpread && !showPageFooter) novelSpreadColumns else null
+        var cachedPagination: CachedChapterPagePagination? = null
         val previewPages = if (useRichForPreview) {
             val filteredRich = stripPageReaderChapterTitleRichBlocks(
                 richBlocks = preview.richContentBlocks.withIndex().toList(),
@@ -1497,7 +1663,14 @@ internal fun NovelReaderContentHost(
                 measurementPaint = measurementPaint,
                 preferDynamicLayout = pageReaderTextSelectable,
                 hyphenationEnabled = hyphenationEnabled,
-                maxPages = maxPreviewPages,
+                maxPages = null,
+            )
+            cachedPagination = CachedChapterPagePagination.Rich(
+                chapterId = preview.chapterId,
+                chapterName = preview.chapterName,
+                layoutKey = layoutKey,
+                richBlocks = filteredRich,
+                pagination = richPagination,
             )
             normalizePageReaderContentPages(
                 useRichPageReader = true,
@@ -1549,7 +1722,15 @@ internal fun NovelReaderContentHost(
                     measurementPaint = measurementPaint,
                     preferDynamicLayout = pageReaderTextSelectable,
                     hyphenationEnabled = hyphenationEnabled,
-                    maxPages = maxPreviewPages,
+                    maxPages = null,
+                )
+                cachedPagination = CachedChapterPagePagination.Plain(
+                    chapterId = preview.chapterId,
+                    chapterName = preview.chapterName,
+                    layoutKey = layoutKey,
+                    textBlocks = plainTextBlocks,
+                    imageBlocks = plainImageBlocks,
+                    pages = plainPages,
                 )
                 normalizePageReaderContentPages(
                     useRichPageReader = false,
@@ -1563,20 +1744,9 @@ internal fun NovelReaderContentHost(
                 )
             }
         }
-        if (previewPages.isEmpty()) return SeamlessAdjacentPagesSlice()
-        val targetSlot = if (takeLastSpread) {
-            (resolveSpreadSlotCount(previewPages.size, novelSpreadColumns) - 1).coerceAtLeast(0)
-        } else {
-            0
-        }
-        val firstIndex = resolveSpreadSlotFirstPageIndex(targetSlot, novelSpreadColumns)
-        val slicePages = (firstIndex until (firstIndex + novelSpreadColumns)).map { idx ->
-            previewPages.getOrElse(idx) { NovelPageContentPage(emptyList()) }
-        }
-        return SeamlessAdjacentPagesSlice(
-            pages = slicePages,
-            firstPageNumber = firstIndex + 1,
-            totalPages = previewPages.size,
+        return AdjacentPreviewPaginationOutput(
+            slice = buildSeamlessAdjacentPagesSlice(previewPages, takeLastSpread),
+            cachedPagination = cachedPagination,
         )
     }
     val activeNextPreview = state.nextChapterPreview?.takeIf { it.chapterId == state.nextChapterId }
@@ -1588,31 +1758,8 @@ internal fun NovelReaderContentHost(
         usePageReader,
         seamlessChapterTransitionEnabled,
         isBookMode,
-        showPageChapterTitle,
-        state.readerSettings.fontSize,
-        state.readerSettings.lineHeight,
-        state.readerSettings.margin,
-        state.readerSettings.textAlign,
-        state.readerSettings.preserveSourceTextAlignInNative,
-        state.readerSettings.paragraphSpacing,
-        state.readerSettings.forceParagraphIndent,
-        state.readerSettings.bionicReading,
-        state.readerSettings.forceBoldText,
-        state.readerSettings.forceItalicText,
-        state.readerSettings.richNativeRendererExperimental,
-        state.readerSettings.hyphenationEnabled,
-        state.readerSettings.showPageFooter,
-        composeTypeface,
-        chapterTitleTypeface,
-        effectivePageViewportSize,
-        contentPaddingPx,
-        spreadContentPaddingPx,
-        pageReaderStatusBarTopPadding,
-        pageReaderNavigationBarHeightPx,
-        novelSpreadColumns,
-        spreadCutoutLeftPx,
-        spreadCutoutRightPx,
-        pageReaderTextSelectable,
+        currentPaginationLayoutKey,
+        baseMeasurementTextPaint,
     ) {
         if (
             activeNextPreview == null ||
@@ -1622,6 +1769,22 @@ internal fun NovelReaderContentHost(
             activeNextPreview.contentBlocks.isEmpty()
         ) {
             nextSeamlessPreviewState = SeamlessPreviewPaginationResult()
+            return@LaunchedEffect
+        }
+        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
+        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
+        val cachedSlice = tryBuildSeamlessSliceFromCache(
+            preview = activeNextPreview,
+            takeLastSpread = false,
+            layoutKey = currentPaginationLayoutKey,
+            paragraphSpacingPx = paragraphSpacingPx,
+            forceParagraphIndent = forceParagraphIndent,
+        )
+        if (cachedSlice != null) {
+            nextSeamlessPreviewState = SeamlessPreviewPaginationResult(
+                chapterId = activeNextPreview.chapterId,
+                slice = cachedSlice,
+            )
             return@LaunchedEffect
         }
         if (nextSeamlessPreviewState.chapterId != activeNextPreview.chapterId) {
@@ -1642,12 +1805,10 @@ internal fun NovelReaderContentHost(
             cutoutLeftPx = spreadCutoutLeftPx,
             cutoutRightPx = spreadCutoutRightPx,
         )
-        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
         val textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() }
         val lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f)
         val textAlign = state.readerSettings.textAlign
         val preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative
-        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
         val bionicReading = state.readerSettings.bionicReading
         val forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
             forceBoldText = state.readerSettings.forceBoldText,
@@ -1655,14 +1816,14 @@ internal fun NovelReaderContentHost(
         )
         val richNativeRendererExperimental = state.readerSettings.richNativeRendererExperimental
         val hyphenationEnabled = state.readerSettings.hyphenationEnabled
-        val showPageFooter = state.readerSettings.showPageFooter
         val paintTemplate = TextPaint(baseMeasurementTextPaint)
-        val slice = withContext(Dispatchers.Default) {
+        val output = withContext(Dispatchers.Default) {
             coroutineContext.ensureActive()
             val workerPaint = TextPaint(paintTemplate)
             val result = paginateAdjacentPreviewSlice(
                 preview = activeNextPreview,
                 takeLastSpread = false,
+                layoutKey = currentPaginationLayoutKey,
                 budget = budget,
                 paragraphSpacingPx = paragraphSpacingPx,
                 textSizePx = textSizePx,
@@ -1674,15 +1835,15 @@ internal fun NovelReaderContentHost(
                 forcedTypefaceStyle = forcedTypefaceStyle,
                 richNativeRendererExperimental = richNativeRendererExperimental,
                 hyphenationEnabled = hyphenationEnabled,
-                showPageFooter = showPageFooter,
                 measurementPaint = workerPaint,
             )
             coroutineContext.ensureActive()
             result
         }
+        output.cachedPagination?.let(chapterPaginationCache::put)
         nextSeamlessPreviewState = SeamlessPreviewPaginationResult(
             chapterId = activeNextPreview.chapterId,
-            slice = slice,
+            slice = output.slice,
         )
     }
     val nextChapterSeamlessPreview = if (
@@ -1703,31 +1864,8 @@ internal fun NovelReaderContentHost(
         usePageReader,
         seamlessChapterTransitionEnabled,
         isBookMode,
-        showPageChapterTitle,
-        state.readerSettings.fontSize,
-        state.readerSettings.lineHeight,
-        state.readerSettings.margin,
-        state.readerSettings.textAlign,
-        state.readerSettings.preserveSourceTextAlignInNative,
-        state.readerSettings.paragraphSpacing,
-        state.readerSettings.forceParagraphIndent,
-        state.readerSettings.bionicReading,
-        state.readerSettings.forceBoldText,
-        state.readerSettings.forceItalicText,
-        state.readerSettings.richNativeRendererExperimental,
-        state.readerSettings.hyphenationEnabled,
-        state.readerSettings.showPageFooter,
-        composeTypeface,
-        chapterTitleTypeface,
-        effectivePageViewportSize,
-        contentPaddingPx,
-        spreadContentPaddingPx,
-        pageReaderStatusBarTopPadding,
-        pageReaderNavigationBarHeightPx,
-        novelSpreadColumns,
-        spreadCutoutLeftPx,
-        spreadCutoutRightPx,
-        pageReaderTextSelectable,
+        currentPaginationLayoutKey,
+        baseMeasurementTextPaint,
     ) {
         if (
             activePrevPreview == null ||
@@ -1737,6 +1875,22 @@ internal fun NovelReaderContentHost(
             activePrevPreview.contentBlocks.isEmpty()
         ) {
             prevSeamlessPreviewState = SeamlessPreviewPaginationResult()
+            return@LaunchedEffect
+        }
+        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
+        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
+        val cachedSlice = tryBuildSeamlessSliceFromCache(
+            preview = activePrevPreview,
+            takeLastSpread = true,
+            layoutKey = currentPaginationLayoutKey,
+            paragraphSpacingPx = paragraphSpacingPx,
+            forceParagraphIndent = forceParagraphIndent,
+        )
+        if (cachedSlice != null) {
+            prevSeamlessPreviewState = SeamlessPreviewPaginationResult(
+                chapterId = activePrevPreview.chapterId,
+                slice = cachedSlice,
+            )
             return@LaunchedEffect
         }
         if (prevSeamlessPreviewState.chapterId != activePrevPreview.chapterId) {
@@ -1757,12 +1911,10 @@ internal fun NovelReaderContentHost(
             cutoutLeftPx = spreadCutoutLeftPx,
             cutoutRightPx = spreadCutoutRightPx,
         )
-        val paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
         val textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() }
         val lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f)
         val textAlign = state.readerSettings.textAlign
         val preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative
-        val forceParagraphIndent = state.readerSettings.forceParagraphIndent
         val bionicReading = state.readerSettings.bionicReading
         val forcedTypefaceStyle = resolveForcedReaderTypefaceStyle(
             forceBoldText = state.readerSettings.forceBoldText,
@@ -1770,14 +1922,14 @@ internal fun NovelReaderContentHost(
         )
         val richNativeRendererExperimental = state.readerSettings.richNativeRendererExperimental
         val hyphenationEnabled = state.readerSettings.hyphenationEnabled
-        val showPageFooter = state.readerSettings.showPageFooter
         val paintTemplate = TextPaint(baseMeasurementTextPaint)
-        val slice = withContext(Dispatchers.Default) {
+        val output = withContext(Dispatchers.Default) {
             coroutineContext.ensureActive()
             val workerPaint = TextPaint(paintTemplate)
             val result = paginateAdjacentPreviewSlice(
                 preview = activePrevPreview,
                 takeLastSpread = true,
+                layoutKey = currentPaginationLayoutKey,
                 budget = budget,
                 paragraphSpacingPx = paragraphSpacingPx,
                 textSizePx = textSizePx,
@@ -1789,15 +1941,15 @@ internal fun NovelReaderContentHost(
                 forcedTypefaceStyle = forcedTypefaceStyle,
                 richNativeRendererExperimental = richNativeRendererExperimental,
                 hyphenationEnabled = hyphenationEnabled,
-                showPageFooter = showPageFooter,
                 measurementPaint = workerPaint,
             )
             coroutineContext.ensureActive()
             result
         }
+        output.cachedPagination?.let(chapterPaginationCache::put)
         prevSeamlessPreviewState = SeamlessPreviewPaginationResult(
             chapterId = activePrevPreview.chapterId,
-            slice = slice,
+            slice = output.slice,
         )
     }
     val previousChapterSeamlessPreview = if (
@@ -5533,6 +5685,11 @@ private data class RichPagePaginationResult(
 private data class SeamlessPreviewPaginationResult(
     val chapterId: Long = -1L,
     val slice: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
+)
+
+private data class AdjacentPreviewPaginationOutput(
+    val slice: SeamlessAdjacentPagesSlice = SeamlessAdjacentPagesSlice(),
+    val cachedPagination: CachedChapterPagePagination? = null,
 )
 
 private data class WebReaderClientConfig(
