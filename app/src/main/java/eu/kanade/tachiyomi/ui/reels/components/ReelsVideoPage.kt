@@ -668,9 +668,10 @@ fun ReelsVideoPage(
         cachePrefix?.let { prefix -> "$prefix:${item.id}:${if (pinnedHd) "hd" else "sd"}" }
     }
     val clipIdentity = if (qualityModeEnabled) {
-        qualityPlayback?.let { "${it.owner.token}:${it.itemId}" }
+        val ownerToken = qualityPlayback?.owner?.token ?: qualityItemState?.owner?.token
+        if (ownerToken != null) "$ownerToken:${item.id}" else item.id
     } else {
-        null
+        item.id
     }
     val mediaIdentity = if (qualityModeEnabled) qualityPlayback?.cacheKey else null
     val qualityEntryLabel = qualityPlayback?.decision?.variant?.let { variant ->

@@ -374,8 +374,9 @@ fun ReelsPlayerView(
     var videoPixelRatio by remember(recoveryScopeKey) { mutableFloatStateOf(1f) }
 
     var restorePositionMs by remember(recoveryScopeKey) { mutableLongStateOf(0L) }
-    var pendingSeekFraction by remember(recoveryScopeKey) { mutableFloatStateOf(-1f) }
-    var pendingSeekPositionMs by remember(recoveryScopeKey) { mutableLongStateOf(-1L) }
+    val seekScopeKey = clipIdentity?.substringAfterLast(':') ?: recoveryScopeKey
+    var pendingSeekFraction by remember(seekScopeKey) { mutableFloatStateOf(-1f) }
+    var pendingSeekPositionMs by remember(seekScopeKey) { mutableLongStateOf(-1L) }
     var createdForUrl by remember { mutableStateOf<String?>(null) }
     var createdForMediaIdentity by remember { mutableStateOf<String?>(null) }
 
@@ -474,6 +475,9 @@ fun ReelsPlayerView(
             endHold = null
             return@LaunchedEffect
         }
+        if (videoUrl.isBlank()) {
+            return@LaunchedEffect
+        }
 
         val existingEntry = pooledPlayer
         if (existingEntry == null) {
@@ -514,8 +518,11 @@ fun ReelsPlayerView(
                         pendingSeekPositionMs = -1L
                         currentOnSeekPositionConsumed()
                     } else if (pendingSeekFraction >= 0f && effectiveDurationMs > 0L) {
-                        owner.seekTo(resolveReelSeekPositionMs(pendingSeekFraction, effectiveDurationMs))
+                        val targetMs = resolveReelSeekPositionMs(pendingSeekFraction, effectiveDurationMs)
                         pendingSeekFraction = -1f
+                        if (kotlin.math.abs(owner.currentPosition - targetMs) > 250L) {
+                            owner.seekTo(targetMs)
+                        }
                     }
                 }
 
@@ -826,13 +833,28 @@ fun ReelsPlayerView(
         if (req.liveScrub) {
             lastRequestedScrubFraction = frac
         }
-        player?.let { p ->
-            p.setSeekParameters(if (req.liveScrub) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT)
-            val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+        val p = player
+        if (p == null) {
+            if (!req.liveScrub) {
+                pendingSeekFraction = frac
+            }
+            return@LaunchedEffect
+        }
+        p.setSeekParameters(if (req.liveScrub) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT)
+        val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+        if (p.playbackState == Player.STATE_READY && effectiveDurationMs > 0L) {
+            pendingSeekFraction = -1f
+            p.seekTo(resolveReelSeekPositionMs(frac, effectiveDurationMs))
+        } else {
+            // While the clip is still loading/buffering (before STATE_READY), keep
+            // pendingSeekFraction armed even if metadata duration is already known:
+            // otherwise an early seek before the container moov/timeline is ready
+            // gets overwritten by 0 when STATE_READY arrives.
+            if (!req.liveScrub) {
+                pendingSeekFraction = frac
+            }
             if (effectiveDurationMs > 0L) {
                 p.seekTo(resolveReelSeekPositionMs(frac, effectiveDurationMs))
-            } else if (!req.liveScrub) {
-                pendingSeekFraction = frac
             }
         }
     }
@@ -840,13 +862,21 @@ fun ReelsPlayerView(
     // Backward-compatible seekToFraction support for callers not using seekRequest.
     LaunchedEffect(seekToFraction, player) {
         seekToFraction?.let { frac ->
-            player?.let { p ->
-                p.setSeekParameters(SeekParameters.DEFAULT)
-                val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+            val clamped = frac.coerceIn(0f, 1f)
+            val p = player
+            if (p == null) {
+                pendingSeekFraction = clamped
+                return@LaunchedEffect
+            }
+            p.setSeekParameters(SeekParameters.DEFAULT)
+            val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+            if (p.playbackState == Player.STATE_READY && effectiveDurationMs > 0L) {
+                pendingSeekFraction = -1f
+                p.seekTo(resolveReelSeekPositionMs(clamped, effectiveDurationMs))
+            } else {
+                pendingSeekFraction = clamped
                 if (effectiveDurationMs > 0L) {
-                    p.seekTo(resolveReelSeekPositionMs(frac, effectiveDurationMs))
-                } else {
-                    pendingSeekFraction = frac.coerceIn(0f, 1f)
+                    p.seekTo(resolveReelSeekPositionMs(clamped, effectiveDurationMs))
                 }
             }
         }
@@ -975,13 +1005,17 @@ fun ReelsPlayerView(
                         (p.bufferedPosition.toFloat() / effectiveDurationMs.toFloat()).coerceIn(0f, 1f),
                     )
                 }
-                val progress = resolveReelPlaybackProgress(
-                    currentPositionMs = p.currentPosition,
-                    effectiveDurationMs = effectiveDurationMs,
-                    isFirstFrameRendered = isFirstFrameRendered,
-                    isEndedOrHolding = endHold != null || p.playbackState == Player.STATE_ENDED,
-                    dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime()),
-                )
+                val progress = if (pendingSeekFraction >= 0f) {
+                    pendingSeekFraction.coerceIn(0f, 1f)
+                } else {
+                    resolveReelPlaybackProgress(
+                        currentPositionMs = p.currentPosition,
+                        effectiveDurationMs = effectiveDurationMs,
+                        isFirstFrameRendered = isFirstFrameRendered,
+                        isEndedOrHolding = endHold != null || p.playbackState == Player.STATE_ENDED,
+                        dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime()),
+                    )
+                }
                 if (progress != null) {
                     currentOnProgressUpdate(progress)
                 }
