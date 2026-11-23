@@ -84,4 +84,113 @@ class MangaDownloadCacheSnapshotTest {
         val restored = ProtoBuf.decodeFromByteArray<RootDirectory>(ProtoBuf.encodeToByteArray(RootDirectory(null)))
         restored.lastSuccessfulScanAt shouldBe 0L
     }
+
+    @Test
+    fun `extractMangaDirId matches canonical suffix ids only`() {
+        extractMangaDirId("Title [5]") shouldBe 5L
+        extractMangaDirId("Title [v2] [42]") shouldBe 42L
+        extractMangaDirId(" [7]") shouldBe 7L
+        extractMangaDirId("Title [05]") shouldBe null
+        extractMangaDirId("Title [+5]") shouldBe null
+        extractMangaDirId("[5]") shouldBe null
+        extractMangaDirId("Title [5] [extra]") shouldBe null
+        extractMangaDirId("Legacy Title") shouldBe null
+    }
+
+    @Test
+    fun `indexed lookup preserves priority and deduplicates matches`() {
+        val scoped = MangaDirectory(null, mutableSetOf("scoped"))
+        val legacy = MangaDirectory(null, mutableSetOf("legacy"))
+        val drifted = MangaDirectory(null, mutableSetOf("drifted"))
+        val source = SourceDirectory(
+            dir = null,
+            mangaDirs = linkedMapOf(
+                "Title [5]" to scoped,
+                "Title" to legacy,
+                "Old Title [5]" to drifted,
+                "Other [6]" to MangaDirectory(null),
+            ),
+        )
+        val snapshot = source.snapshot()
+
+        cachedMangaDirectories(
+            directories = snapshot.byName,
+            scopedName = "Title [5]",
+            legacyName = "Title",
+            mangaId = 5L,
+            byIdIndex = snapshot.byId,
+        ) shouldBe listOf(scoped, legacy, drifted)
+    }
+
+    @Test
+    fun `empty byIdIndex on legacy-only source never falls back to linear scan`() {
+        val backing = mapOf("Legacy One" to MangaDirectory(null), "Legacy Two" to MangaDirectory(null))
+        val noScanMap = object : Map<String, MangaDirectory> by backing {
+            override val entries: Set<Map.Entry<String, MangaDirectory>>
+                get() = throw AssertionError("Unexpected full-map entry scan when byIdIndex is provided")
+            override val keys: Set<String>
+                get() = throw AssertionError("Unexpected full-map key scan when byIdIndex is provided")
+        }
+
+        cachedMangaDirectories(
+            directories = noScanMap,
+            scopedName = "Legacy One [5]",
+            legacyName = "Legacy One",
+            mangaId = 5L,
+            byIdIndex = emptyMap(),
+        ) shouldBe listOf(backing.getValue("Legacy One"))
+
+        cachedMangaDirectories(
+            directories = noScanMap,
+            scopedName = "Missing [99]",
+            legacyName = "Missing",
+            mangaId = 99L,
+            byIdIndex = emptyMap(),
+        ) shouldBe emptyList()
+    }
+
+    @Test
+    fun `source directory mutations update snapshot atomically without mutating prior snapshots`() {
+        val first = MangaDirectory(null, mutableSetOf("c1"))
+        val drifted = MangaDirectory(null, mutableSetOf("c2"))
+        val source = SourceDirectory(null, mapOf("Old Title [5]" to drifted))
+
+        val beforeAdd = source.snapshot()
+        source.addMangaDir("New Title [5]", first)
+        val afterAdd = source.snapshot()
+
+        beforeAdd.byName.keys shouldBe setOf("Old Title [5]")
+        beforeAdd.byId[5L] shouldBe listOf(drifted)
+        afterAdd.byName.keys shouldBe setOf("Old Title [5]", "New Title [5]")
+        afterAdd.byId[5L] shouldBe listOf(drifted, first)
+
+        source.removeMangaDirs(listOf("New Title [5]", "Missing"))
+        val afterRemove = source.snapshot()
+
+        afterAdd.byId[5L] shouldBe listOf(drifted, first)
+        afterRemove.byName.keys shouldBe setOf("Old Title [5]")
+        afterRemove.byId[5L] shouldBe listOf(drifted)
+    }
+
+    @Test
+    fun `protobuf round trip preserves source directory schema and rebuilds id index`() {
+        val original = RootDirectory(
+            dir = null,
+            sourceDirs = mapOf(
+                10L to SourceDirectory(
+                    dir = null,
+                    mangaDirs = mapOf(
+                        "Drifted [5]" to MangaDirectory(null, mutableSetOf("ch1")),
+                        "Legacy Only" to MangaDirectory(null, mutableSetOf("ch2")),
+                    ),
+                ),
+            ),
+            lastSuccessfulScanAt = 999L,
+        )
+        val restored = ProtoBuf.decodeFromByteArray<RootDirectory>(ProtoBuf.encodeToByteArray(original))
+        val snapshot = restored.sourceDirs.getValue(10L).snapshot()
+
+        snapshot.byId[5L]?.map { it.chapterDirs } shouldBe listOf(setOf("ch1"))
+        snapshot.byName["Legacy Only"]?.chapterDirs shouldBe setOf("ch2")
+    }
 }
