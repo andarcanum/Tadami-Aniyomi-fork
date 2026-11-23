@@ -37,6 +37,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 
 /** App-only SDK identity authority. Domain policies never carry runtime SDK objects. */
 interface DiscoverySdkBindingAuthority {
@@ -71,6 +72,11 @@ class DiscoverySourcePolicyResolver(
     )
 
     private data class CachedPolicy(
+        val inventory: DiscoverySourceInventory,
+        val mode: String,
+        val excludedRaw: String,
+        val knownRaw: String,
+        val externals: Map<DiscoveryRowType, Set<DiscoveryExternalProvider>>,
         val revision: String,
         val weights: RetrievalWeights,
         val failureHistory: String,
@@ -133,18 +139,10 @@ class DiscoverySourcePolicyResolver(
     ): Boolean =
         preferences.withSourcePreferencesLock(media) {
             val holder = inventories[media] ?: return@withSourcePreferencesLock false
-            val inventory = holder.current()
             val policy = current(media)
             if (capturedRevision != null && capturedRevision != policy.revision) return@withSourcePreferencesLock false
-            val revision = sourceRevision(
-                media,
-                inventory,
-                preferences.discoverySourceMode(media).get(),
-                parseKeyCsv(preferences.discoverySourceExcluded(media).get()),
-                parseKeyCsv(preferences.discoverySourceKnown(media).get()),
-                externalProviders(media),
-            )
-            policy.revision == revision && policy.allowsNative(sourceId) &&
+            val inventory = holder.current()
+            policy.allowsNative(sourceId) &&
                 holder.matchesSource(sourceId, source, policy.allowedPluginKeys, inventory)
         }
 
@@ -168,12 +166,23 @@ class DiscoverySourcePolicyResolver(
         preferences.withSourcePreferencesLock(mediaType) {
             val inventory = inventories[mediaType]?.current?.invoke() ?: DiscoverySourceInventory.Unavailable
             val mode = preferences.discoverySourceMode(mediaType).get()
-            val excluded = parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
-            val known = parseKeyCsv(preferences.discoverySourceKnown(mediaType).get())
+            val excludedRaw = preferences.discoverySourceExcluded(mediaType).get()
+            val knownRaw = preferences.discoverySourceKnown(mediaType).get()
             val externals = externalProviders(mediaType)
-            val revision = sourceRevision(mediaType, inventory, mode, excluded, known, externals)
             val weights = retrievalChanges.getValue(mediaType).value
             val failureHistory = preferences.sourceFailureHistory(mediaType).get()
+            cached[mediaType]?.takeIf {
+                it.inventory === inventory &&
+                    it.mode == mode &&
+                    it.excludedRaw == excludedRaw &&
+                    it.knownRaw == knownRaw &&
+                    it.externals == externals &&
+                    it.weights == weights &&
+                    it.failureHistory == failureHistory
+            }?.let { return@withSourcePreferencesLock it.policy }
+            val excluded = parseKeyCsv(excludedRaw)
+            val known = parseKeyCsv(knownRaw)
+            val revision = sourceRevision(mediaType, inventory, mode, excluded, known, externals)
             cached[mediaType]?.takeIf {
                 it.revision == revision && it.weights == weights && it.failureHistory == failureHistory
             }?.let { return@withSourcePreferencesLock it.policy }
@@ -231,7 +240,17 @@ class DiscoverySourcePolicyResolver(
                 sourceWeights = ranked.associate { it.representative to it.weight },
                 allowedExternalProviders = externals,
             )
-            cached[mediaType] = CachedPolicy(revision, weights, failureHistory, policy)
+            cached[mediaType] = CachedPolicy(
+                inventory = inventory,
+                mode = mode,
+                excludedRaw = excludedRaw,
+                knownRaw = knownRaw,
+                externals = externals,
+                revision = revision,
+                weights = weights,
+                failureHistory = failureHistory,
+                policy = policy,
+            )
             policy
         }
 
@@ -387,21 +406,20 @@ internal fun bindInventoryWithSourceManager(
     sourceChanges: Flow<Any?> = emptyFlow(),
     getSource: (Long) -> Any?,
 ): DiscoverySourceInventorySource {
+    val lastIncomplete = AtomicReference<Pair<DiscoverySourceInventory, DiscoverySourceInventory>?>(null)
     fun currentInventory(): DiscoverySourceInventory {
         val raw = extensionInventory()
-        val allPluginKeys = raw.plugins.mapTo(HashSet()) { it.key }
         val sourcesReady = raw.complete &&
             sourceInitialized.value &&
             raw.plugins.all { plugin ->
-                plugin.sourceIds.all { sourceId ->
-                    val source = getSource(sourceId)
-                    source != null && matchesExtension(sourceId, source, allPluginKeys, raw)
-                }
+                plugin.sourceIds.all { sourceId -> getSource(sourceId) != null }
             }
-        return if (sourcesReady) {
-            raw
-        } else {
-            DiscoverySourceInventory(complete = false, plugins = raw.plugins)
+        if (sourcesReady) {
+            return raw
+        }
+        lastIncomplete.get()?.takeIf { it.first === raw }?.let { return it.second }
+        return DiscoverySourceInventory(complete = false, plugins = raw.plugins).also { projection ->
+            lastIncomplete.set(raw to projection)
         }
     }
     return DiscoverySourceInventorySource(

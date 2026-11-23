@@ -102,9 +102,17 @@ class AnimeExtensionManager(
         installedExtensionsMapFlow.mapExtensions(scope)
     }
 
+    @Volatile
+    private var cachedDiscoveryInventory: Pair<Map<String, AnimeExtension.Installed>, DiscoverySourceInventory>? = null
+
     /** Raw installed inventory is loaded synchronously before this manager is published. */
-    fun discoverySourceInventory(): DiscoverySourceInventory =
-        discoveryInventory(installedExtensionsMapFlow.value.values)
+    fun discoverySourceInventory(): DiscoverySourceInventory {
+        val currentMap = installedExtensionsMapFlow.value
+        cachedDiscoveryInventory?.takeIf { it.first === currentMap }?.let { return it.second }
+        return discoveryInventory(currentMap.values).also { inventory ->
+            cachedDiscoveryInventory = currentMap to inventory
+        }
+    }
 
     internal fun isDiscoverySourceBinding(
         sourceId: Long,
@@ -112,10 +120,12 @@ class AnimeExtensionManager(
         allowedOwners: Set<String>,
         expected: DiscoverySourceInventory,
     ): Boolean {
-        val current = installedExtensionsMapFlow.value.values
-        val inventory = discoveryInventory(current)
-        return inventory.complete == expected.complete && inventory.plugins.toSet() == expected.plugins.toSet() &&
-            current.any { extension ->
+        val currentMap = installedExtensionsMapFlow.value
+        val inventory = discoverySourceInventory()
+        val matchesExpected = inventory === expected ||
+            (inventory.complete == expected.complete && inventory.plugins == expected.plugins)
+        return matchesExpected &&
+            currentMap.values.any { extension ->
                 extension.pkgName in allowedOwners && extension.sources.any {
                     it is AnimeCatalogueSource && it.id == sourceId && it === source
                 }
@@ -123,7 +133,7 @@ class AnimeExtensionManager(
     }
 
     val discoverySourceInventoryChanges: Flow<DiscoverySourceInventory> = installedExtensionsMapFlow.map {
-        discoveryInventory(it.values)
+        discoverySourceInventory()
     }
 
     private fun discoveryInventory(extensions: Collection<AnimeExtension.Installed>): DiscoverySourceInventory =

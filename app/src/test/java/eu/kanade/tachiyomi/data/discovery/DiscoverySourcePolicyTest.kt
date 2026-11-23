@@ -244,6 +244,7 @@ class DiscoverySourcePolicyTest {
             // before the actual extension sources are published to sourcesMapFlow/catalogueSources.
             val sourceInitialized = MutableStateFlow(true)
             val sourceChanges = MutableStateFlow<List<Any>>(emptyList())
+            var matchesExtensionCalls = 0
             val resolver = DiscoverySourcePolicyResolver(
                 preferences = DiscoveryPreferences(PersistingPreferenceStore()),
                 sourcePreferences = SourcePreferences(PersistingPreferenceStore()),
@@ -253,6 +254,7 @@ class DiscoverySourcePolicyTest {
                             extensionInventory = { extensionFrame.value },
                             extensionChanges = extensionFrame,
                             matchesExtension = { id, source, owners, _ ->
+                                matchesExtensionCalls++
                                 id == 7L && source === sdk && "ext.a" in owners
                             },
                             sourceInitialized = sourceInitialized,
@@ -269,6 +271,7 @@ class DiscoverySourcePolicyTest {
 
             runCurrent()
             resolver.current(DiscoveryMediaType.MANGA).inventoryComplete shouldBe false
+            matchesExtensionCalls shouldBe 0
             resolver.isCurrentSourceBinding(DiscoveryMediaType.MANGA, 7L, sdk) shouldBe false
 
             val awaited = async { resolver.awaitComplete(DiscoveryMediaType.MANGA) }
@@ -280,7 +283,9 @@ class DiscoverySourcePolicyTest {
             runCurrent()
             val policy = withTimeout(1_000L) { awaited.await() }
             policy.inventoryComplete shouldBe true
+            matchesExtensionCalls shouldBe 0
             resolver.isCurrentSourceBinding(DiscoveryMediaType.MANGA, 7L, sdk) shouldBe true
+            matchesExtensionCalls shouldBe 1
         }
 
     private fun resolverFor(
