@@ -9,6 +9,7 @@ import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
+import tachiyomi.domain.library.model.AuroraLibraryListStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 
@@ -48,6 +49,8 @@ class LibraryPreferencesDefaultsTest {
 
         prefs.showContinueViewingButton().get() shouldBe true
         prefs.auroraLibraryCardStyle().get() shouldBe AuroraLibraryCardStyle.GlowContour
+        prefs.auroraLibraryListStyle().get() shouldBe AuroraLibraryListStyle.Banner
+        prefs.auroraLibraryListSize().get() shouldBe 0
 
         prefs.autoUpdateItemRestrictions().get() shouldBe emptySet()
         prefs.autoUpdateWifiAndChargingOnly().get() shouldBe false
@@ -70,5 +73,21 @@ class LibraryPreferencesDefaultsTest {
         cardStylePref.set(AuroraLibraryCardStyle.GlowContour)
 
         cardStylePref.get() shouldBe AuroraLibraryCardStyle.GlowContour
+    }
+
+    @Test
+    fun `aurora library list style and size preferences persist`() {
+        val prefs = LibraryPreferences(InMemoryPreferenceStore())
+        val listStylePref = prefs.auroraLibraryListStyle()
+        val listSizePref = prefs.auroraLibraryListSize()
+
+        listStylePref.set(AuroraLibraryListStyle.Compact)
+        listSizePref.set(3)
+
+        listStylePref.get() shouldBe AuroraLibraryListStyle.Compact
+        listSizePref.get() shouldBe 3
+
+        listStylePref.set(AuroraLibraryListStyle.Comfortable)
+        listStylePref.get() shouldBe AuroraLibraryListStyle.Comfortable
     }
 }

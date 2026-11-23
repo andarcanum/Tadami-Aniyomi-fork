@@ -1138,6 +1138,10 @@
     <string name="pref_aurora_library_card_style">Стиль карточек Aurora</string>
     <string name="pref_aurora_library_card_style_standard">Стандартный</string>
     <string name="pref_aurora_library_card_style_glow_contour">Свечение</string>
+    <string name="pref_aurora_library_list_style">Стиль списка</string>
+    <string name="pref_aurora_library_list_style_banner">Баннер</string>
+    <string name="pref_aurora_library_list_style_comfortable">Комфортный</string>
+    <string name="pref_aurora_library_list_style_compact">Компактный</string>
 
     <!-- Novel reader - AI Translation -->
     <string name="reader_translation_running">Перевод выполняется</string>

@@ -73,6 +73,9 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.library.AURORA_LARGE_GRID_PERFORMANCE_THRESHOLD
+import eu.kanade.presentation.library.components.AuroraLibraryListBadgeData
+import eu.kanade.presentation.library.components.AuroraLibraryListRow
+import eu.kanade.presentation.library.components.AuroraLibraryListRowDivider
 import eu.kanade.presentation.library.components.EntryCompactGridItem
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
@@ -85,8 +88,10 @@ import eu.kanade.presentation.library.components.containsAtLeastMatches
 import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
+import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.presentation.library.novel.components.SeriesStackedCoverCard
 import eu.kanade.presentation.library.novel.resolveNovelLibraryBadgeState
+import eu.kanade.presentation.library.resolveAuroraLibraryListRowMetrics
 import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -95,6 +100,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
+import tachiyomi.domain.library.model.AuroraLibraryListStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.series.model.SeriesCoverMode
@@ -111,7 +117,7 @@ import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.lazy.items as listItems
+import androidx.compose.foundation.lazy.itemsIndexed as listItemsIndexed
 
 @Composable
 fun NovelLibraryAuroraContent(
@@ -162,7 +168,16 @@ fun NovelLibraryAuroraContent(
     }
     val columns by columnPreference.collectAsStateWithLifecycle()
     val safeColumns = columns.coerceAtLeast(0)
-    val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsStateWithLifecycle()
+    val auroraCardStyle by remember(libraryPreferences) { libraryPreferences.auroraLibraryCardStyle() }
+        .collectAsStateWithLifecycle()
+    val auroraListStyle by remember(libraryPreferences) { libraryPreferences.auroraLibraryListStyle() }
+        .collectAsStateWithLifecycle()
+    val auroraListSize by remember(libraryPreferences) { libraryPreferences.auroraLibraryListSize() }
+        .collectAsStateWithLifecycle()
+    val isBannerList = auroraListStyle == AuroraLibraryListStyle.Banner
+    val listRowMetrics = remember(auroraListStyle, auroraListSize) {
+        resolveAuroraLibraryListRowMetrics(style = auroraListStyle, sizeSetting = auroraListSize)
+    }
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val enabledAuras by uiPreferences.enabledAuras().collectAsStateWithLifecycle()
     val useGlowContourCards = auroraCardStyle == AuroraLibraryCardStyle.GlowContour
@@ -252,11 +267,15 @@ fun NovelLibraryAuroraContent(
             FastScrollLazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = contentPadding + PaddingValues(
-                    horizontal = auroraAdaptiveSpec.contentHorizontalPaddingDp.dp,
-                    vertical = 12.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = if (isBannerList) {
+                    contentPadding + PaddingValues(
+                        horizontal = auroraAdaptiveSpec.contentHorizontalPaddingDp.dp,
+                        vertical = 12.dp,
+                    )
+                } else {
+                    contentPadding + PaddingValues(vertical = 8.dp)
+                },
+                verticalArrangement = if (isBannerList) Arrangement.spacedBy(12.dp) else Arrangement.Top,
             ) {
                 if (showInlineHeader) {
                     item {
@@ -275,7 +294,15 @@ fun NovelLibraryAuroraContent(
                             onOpenRandomEntry = onOpenRandomEntry,
                             onImportEpub = onImportEpub,
                             onImportFolder = onImportFolder,
-                            modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                            modifier = Modifier
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
+                                .then(
+                                    if (isBannerList) {
+                                        Modifier
+                                    } else {
+                                        Modifier.padding(horizontal = auroraAdaptiveSpec.contentHorizontalPaddingDp.dp)
+                                    },
+                                ),
                         )
                     }
                 }
@@ -285,7 +312,14 @@ fun NovelLibraryAuroraContent(
                         GlobalSearchItem(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
+                                .then(
+                                    if (isBannerList) {
+                                        Modifier
+                                    } else {
+                                        Modifier.padding(horizontal = auroraAdaptiveSpec.contentHorizontalPaddingDp.dp)
+                                    },
+                                ),
                             searchQuery = searchQuery,
                             onClick = onGlobalSearchClicked,
                         )
@@ -297,16 +331,23 @@ fun NovelLibraryAuroraContent(
                         PinnedSectionHeader(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
+                                .then(
+                                    if (isBannerList) {
+                                        Modifier
+                                    } else {
+                                        Modifier.padding(horizontal = auroraAdaptiveSpec.contentHorizontalPaddingDp.dp)
+                                    },
+                                ),
                         )
                     }
                 }
 
-                listItems(
+                listItemsIndexed(
                     items = items,
-                    key = { it.id },
-                    contentType = { "novel_library_aurora_list_item" },
-                ) { item ->
+                    key = { _, item -> item.id },
+                    contentType = { _, _ -> "novel_library_aurora_list_${auroraListStyle.name}" },
+                ) { index, item ->
                     val badgeState = resolveNovelLibraryBadgeState(
                         item = item,
                         showDownloadBadge = showDownloadBadge,
@@ -315,27 +356,100 @@ fun NovelLibraryAuroraContent(
                         showLanguageBadge = showLanguageBadge,
                         sourceLanguage = item.sourceLanguage,
                     )
-                    NovelLibraryAuroraCard(
-                        item = item,
-                        badgeState = badgeState,
-                        showMetadata = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
-                            .aspectRatio(2.2f),
-                        coverHeightFraction = 0.62f,
-                        onNovelClicked = { onClickNovelItem(item) },
-                        onLongClick = onLongClickNovelItem?.let { { it(item) } },
-                        onClickContinueReading = onContinueReadingClicked?.let { { it(item) } },
-                        isSelected = selectedIds.contains(item.id),
-
-                        cardStyle = AuroraLibraryCardStyle.Standard,
-                        glowDisplayMode = LibraryDisplayMode.List,
-                        gridColumns = null,
-                        onTogglePinned = onTogglePinned,
-                        enabledAuras = enabledAuras,
-                        performanceMode = useLargeGridPerformanceMode,
-                    )
+                    if (isBannerList) {
+                        NovelLibraryAuroraCard(
+                            item = item,
+                            badgeState = badgeState,
+                            showMetadata = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp)
+                                .aspectRatio(2.2f),
+                            coverHeightFraction = 0.62f,
+                            onNovelClicked = { onClickNovelItem(item) },
+                            onLongClick = onLongClickNovelItem?.let { { it(item) } },
+                            onClickContinueReading = onContinueReadingClicked?.let { { it(item) } },
+                            isSelected = selectedIds.contains(item.id),
+                            cardStyle = AuroraLibraryCardStyle.Standard,
+                            glowDisplayMode = LibraryDisplayMode.List,
+                            gridColumns = null,
+                            onTogglePinned = onTogglePinned,
+                            enabledAuras = enabledAuras,
+                            performanceMode = useLargeGridPerformanceMode,
+                        )
+                    } else {
+                        val subtitle = if (item.totalChapters > 0) {
+                            stringResource(
+                                AYMR.strings.novel_series_chapters_progress,
+                                item.readCount,
+                                item.totalChapters,
+                            )
+                        } else {
+                            null
+                        }
+                        val seriesHeaderText = if (item is NovelLibraryItem.Series) {
+                            stringResource(AYMR.strings.series_caption_label)
+                        } else {
+                            null
+                        }
+                        val coverData = remember(item.coverNovel, item.id) {
+                            item.coverNovel?.asNovelCover() ?: NovelCover(
+                                novelId = item.id,
+                                sourceId = 0,
+                                isNovelFavorite = true,
+                                url = null,
+                                lastModified = 0,
+                            )
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                        ) {
+                            if (index > 0) {
+                                AuroraLibraryListRowDivider()
+                            }
+                            AuroraLibraryListRow(
+                                title = item.title,
+                                coverData = coverData,
+                                metrics = listRowMetrics,
+                                seriesHeaderText = seriesHeaderText,
+                                subtitle = subtitle,
+                                progressPercent = if (listRowMetrics.showProgressBar) {
+                                    resolveNovelLibraryCardProgressPercent(
+                                        readCount = item.readCount,
+                                        totalCount = item.totalChapters,
+                                    )
+                                } else {
+                                    null
+                                },
+                                badgeData = AuroraLibraryListBadgeData(
+                                    downloadLabel = if (badgeState.showDownloaded) {
+                                        stringResource(AYMR.strings.aurora_downloaded)
+                                    } else {
+                                        null
+                                    },
+                                    unreadCount = badgeState.unreadCount,
+                                    isLocal = false,
+                                    language = badgeState.language,
+                                ),
+                                isPinned = item.pinned,
+                                isSelected = selectedIds.contains(item.id),
+                                onClick = { onClickNovelItem(item) },
+                                onLongClick = onLongClickNovelItem?.let { { it(item) } },
+                                onClickContinueViewing = if (
+                                    shouldShowContinueViewingAction(
+                                        hasContinueAction = onContinueReadingClicked != null,
+                                        remainingCount = item.unreadCount,
+                                    )
+                                ) {
+                                    { onContinueReadingClicked?.invoke(item) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
                 }
             }
         } else {

@@ -136,6 +136,10 @@
     <string name="pref_aurora_library_card_style">Aurora card style</string>
     <string name="pref_aurora_library_card_style_standard">Standard</string>
     <string name="pref_aurora_library_card_style_glow_contour">Glow contour</string>
+    <string name="pref_aurora_library_list_style">List style</string>
+    <string name="pref_aurora_library_list_style_banner">Banner</string>
+    <string name="pref_aurora_library_list_style_comfortable">Comfortable</string>
+    <string name="pref_aurora_library_list_style_compact">Compact</string>
     <string name="action_display">Display</string>
     <string name="action_display_grid">Compact grid</string>
     <string name="action_display_comfortable_grid">Comfortable grid</string>
