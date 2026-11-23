@@ -162,6 +162,7 @@ fun ReelsPlayerView(
     zoomOffsetX: Float = 0f,
     zoomOffsetY: Float = 0f,
     headers: Map<String, String> = emptyMap(),
+    playbackHeadersProvider: (() -> Map<String, String>)? = null,
     // Item page URL (e.g. https://fikfap.com/post/123): origin used as the Referer fallback
     // when the feed source exposes no headers of its own.
     webUrl: String? = null,
@@ -223,6 +224,7 @@ fun ReelsPlayerView(
     val currentZoomOffsetX by rememberUpdatedState(zoomOffsetX)
     val currentZoomOffsetY by rememberUpdatedState(zoomOffsetY)
     val currentPlaybackSpeed by rememberUpdatedState(playbackSpeed)
+    val currentPlaybackHeadersProvider by rememberUpdatedState(playbackHeadersProvider)
     val currentInPip by rememberUpdatedState(isInPictureInPicture)
     val currentOnSeekPositionConsumed by rememberUpdatedState(onSeekPositionConsumed)
     val currentOnRenderedFirstFrame by rememberUpdatedState(onRenderedFirstFrame)
@@ -431,7 +433,9 @@ fun ReelsPlayerView(
     }
 
     fun buildMediaSource(url: String, key: String?) = run {
-        val requestHeaders = reelsRequestHeaders(headers, webUrl)
+        // Re-read cheap v30 context at media-source construction, after any JIT resolution,
+        // rather than retaining the composition snapshot from before account/UA import.
+        val requestHeaders = reelsRequestHeaders(headers, webUrl, currentPlaybackHeadersProvider)
         val loopback = isLoopbackReelUrl(url)
         val dataSourceFactory: DataSource.Factory = if (loopback) {
             // Tag loopback proxy requests with the reel's live role (active vs preload) so
@@ -1537,8 +1541,13 @@ internal fun clearReelsVideoCache(context: android.content.Context): Long {
     return freed
 }
 
-internal fun reelsRequestHeaders(headers: Map<String, String>, webUrl: String?): Map<String, String> {
-    if (headers.keys.any { it.equals("Referer", ignoreCase = true) }) return headers
+internal fun reelsRequestHeaders(
+    headers: Map<String, String>,
+    webUrl: String?,
+    playbackHeadersProvider: (() -> Map<String, String>)? = null,
+): Map<String, String> {
+    val currentHeaders = playbackHeadersProvider?.invoke() ?: headers
+    if (currentHeaders.keys.any { it.equals("Referer", ignoreCase = true) }) return currentHeaders
     val referer = runCatching {
         val page = Uri.parse(webUrl)
         val host = page.host?.takeIf { it.isNotBlank() }
@@ -1548,8 +1557,8 @@ internal fun reelsRequestHeaders(headers: Map<String, String>, webUrl: String?):
         } else {
             null
         }
-    }.getOrNull() ?: return headers
-    return headers + ("Referer" to referer)
+    }.getOrNull() ?: return currentHeaders
+    return currentHeaders + ("Referer" to referer)
 }
 
 /** The progressive-container whitelist check for a media URL (stable customCacheKey is safe). */

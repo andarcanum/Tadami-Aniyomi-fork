@@ -927,6 +927,29 @@ data class ReelsFeedScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+                state.items.isEmpty() && !state.isLoading && state.canLoadMore && !state.isOffline &&
+                    state.mode != ReelsFeedScreenModel.FeedMode.FOLLOWING &&
+                    !(
+                        state.unseenOnly && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL &&
+                            state.searchQuery.isBlank()
+                        ) &&
+                    !state.nicheLocalFilter.isActive -> {
+                    EmptyScreen(
+                        stringRes = if (state.searchQuery.isNotBlank()) {
+                            MR.strings.reels_album_search_empty
+                        } else {
+                            MR.strings.reels_feed_empty
+                        },
+                        actions = persistentListOf(
+                            EmptyScreenAction(
+                                stringRes = MR.strings.reels_album_search_load_more,
+                                icon = Icons.Filled.PlayArrow,
+                                onClick = screenModel::continueEmptyFeed,
+                            ),
+                        ),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 state.items.isEmpty() && !state.isLoading && state.searchQuery.isNotBlank() -> {
                     ReelsEmptySearchState(
                         onResetSearch = screenModel::clearSearch,
@@ -1104,7 +1127,7 @@ data class ReelsFeedScreen(
                                     url = url,
                                     cacheKey = quality?.cacheKey
                                         ?: "$prefix:${item.id}:${if (effectiveHd) "hd" else "sd"}",
-                                    headers = state.slotHeaders(index),
+                                    headers = screenModel.playbackHeaders(state.slotSourceId(index)),
                                     webUrl = item.webUrl,
                                     isCancelled = { prewarmJob?.isActive == false },
                                 )
@@ -1518,6 +1541,7 @@ data class ReelsFeedScreen(
                                 state.isSlotCreatorCapable(page) && !state.isOffline && item.author != null,
                                 isFollowingCreator = item.author?.let { state.isFollowingCreator(it, page) } == true,
                                 onToggleFollowCreator = { handleFollowToggle(item.author, slotSourceId) },
+                                authorDisplayLabel = screenModel.creatorDisplayLabel(item.author, slotSourceId),
                                 onAuthorClick = if (
                                     state.isSlotCreatorCapable(page) && !state.isOffline && item.author != null &&
                                     // Already on that creator's page: self-push would only stack
@@ -1658,8 +1682,7 @@ data class ReelsFeedScreen(
                                     state.mode == ReelsFeedScreenModel.FeedMode.FOLLOWING ->
                                         stringResource(MR.strings.reels_following_feed)
                                     state.mode == ReelsFeedScreenModel.FeedMode.CREATOR -> {
-                                        val cleanCreator = state.creator.orEmpty().trim().trimStart('@')
-                                        if (cleanCreator.isNotEmpty()) "@$cleanCreator" else ""
+                                        screenModel.creatorDisplayLabel(state.creator).orEmpty()
                                     }
                                     state.mode == ReelsFeedScreenModel.FeedMode.CUSTOM ->
                                         state.customFeedName?.takeIf { it.isNotBlank() }
@@ -1740,7 +1763,8 @@ data class ReelsFeedScreen(
                                     }
                                 },
                                 onToggleChrome = { chromeVisible = !chromeVisible },
-                                headers = state.slotHeaders(page),
+                                headers = screenModel.playbackHeaders(slotSourceId),
+                                playbackHeadersProvider = { screenModel.playbackHeaders(slotSourceId) },
                             )
                         }
                     }
@@ -1863,8 +1887,7 @@ data class ReelsFeedScreen(
                         state.mode == ReelsFeedScreenModel.FeedMode.FOLLOWING ->
                             stringResource(MR.strings.reels_following_feed)
                         state.mode == ReelsFeedScreenModel.FeedMode.CREATOR -> {
-                            val cleanCreator = state.creator.orEmpty().trim().trimStart('@')
-                            if (cleanCreator.isNotEmpty()) "@$cleanCreator" else ""
+                            screenModel.creatorDisplayLabel(state.creator).orEmpty()
                         }
                         state.mode == ReelsFeedScreenModel.FeedMode.CUSTOM ->
                             state.customFeedName.orEmpty()

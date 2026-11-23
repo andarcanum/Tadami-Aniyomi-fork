@@ -255,7 +255,7 @@ class ReelsMultiSourceCoordinator(
             val stream = streams[sourceId] ?: return@withLock
             if (stream.buffer.isEmpty()) return@withLock
             val kept = stream.buffer.filterNot { item ->
-                item.id in hiddenVideoIds || (item.author != null && item.author in hiddenAuthors)
+                item.id in hiddenVideoIds || reelsCreatorIsHidden(stream.source, item.author, hiddenAuthors)
             }
             if (kept.size != stream.buffer.size) {
                 stream.buffer.clear()

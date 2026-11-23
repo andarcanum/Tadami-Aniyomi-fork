@@ -1,10 +1,12 @@
 # Reels Feed Contract
 
-**Current version: 29** (`extensionLib` 12.0–29.0 accepted by the host; v24–v29 are
+**Current version: 30** (`extensionLib` 12.0–30.0 accepted by the host; v24–v30 are
 purely additive) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
+[`AnimeCreatorDisplaySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorDisplaySource.kt),
+[`AnimeFeedPlaybackHeadersSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedPlaybackHeadersSource.kt),
 [`AnimeReelsFeedbackSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeReelsFeedbackSource.kt),
 [`AnimeFeedLoginSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedLoginSource.kt),
 [`AnimeCustomFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCustomFeedSource.kt),
@@ -93,6 +95,39 @@ they simply don't opt in.
   the identical `(page, cursor)` pair.
 - A nonexistent/deleted creator should return an empty `FeedPage`, not throw.
 - Implementing the capability means bumping `extensionLib` to 18.0.
+
+## Creator display and playback headers (v30 additive capabilities)
+
+```kotlin
+interface AnimeCreatorDisplaySource {
+    fun creatorDisplayName(creatorId: String): String?
+}
+
+interface AnimeFeedPlaybackHeadersSource {
+    fun playbackHeaders(): Map<String, String>
+}
+```
+
+Both interfaces are optional and have abstract methods, not new default members on an
+existing interface. Implementing either requires `extensionLib` 30.0 so older hosts reject
+the plugin before class loading; plugins declaring 12.0–29.0 remain accepted unchanged.
+`ShortVideoItem` constructor and storage schema are unchanged.
+
+- `ShortVideoItem.author` remains the opaque source-issued creator ID. New Pornhub video
+  IDs are canonical `/model/<slug>`, `/pornstar/<slug>` or `/channels/<slug>` routes.
+- The display method is a cheap local lookup only (no HTTP or blocking disk reads), returning
+  null for unknown identities. Creator requests, routing, follows and new hidden-author rows
+  always retain the original ID. Unknown legacy IDs remain stored: no migration/deletion
+  or ambiguous alias guessing.
+- For opted-in sources, old display-name hides also match the current cheap local label,
+  preserving their former name-wide collision behavior without resolving names to routes.
+  Canonical route hides remain exact-ID only. This compatibility check never writes rows.
+- Playback headers are a fresh local snapshot of public `User-Agent`, `Origin`, `Referer`
+  context after session/UA changes. The host accepts only those names and rejects CR/LF;
+  never expose cookies, Authorization or session secrets to redirected media requests.
+  Empty provider output is authoritative. An opted-in provider failure fails closed to an
+  empty map, never raw HTTP credentials. Only sources without the capability keep their
+  legacy `AnimeHttpSource.headers` behavior.
 
 ## View & like feedback (v18 capability interface)
 

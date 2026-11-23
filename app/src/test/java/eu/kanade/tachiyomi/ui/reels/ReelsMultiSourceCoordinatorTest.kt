@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reels
 
+import eu.kanade.tachiyomi.animesource.AnimeCreatorDisplaySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -400,6 +401,41 @@ class ReelsMultiSourceCoordinatorTest {
             502L to "shared-42",
         )
         coordinator.stop()
+    }
+
+    @Test
+    fun `buffered Mix purge respects legacy display hides and targeted canonical hides`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val transport = FakeFeedSource(603L) { _, _ ->
+            FeedPage(
+                listOf(item("warmup", "/model/other"), item("one", "/model/one"), item("two", "/channels/two")),
+                hasNextPage = false,
+            )
+        }
+        val source = object : AnimeFeedSource by transport, AnimeCreatorDisplaySource {
+            override fun creatorDisplayName(creatorId: String): String? =
+                if (creatorId == "/model/one" || creatorId == "/channels/two") "Shared Name" else null
+        }
+        suspend fun remaining(hiddenAuthors: Set<String>): List<String> {
+            val coordinator = ReelsMultiSourceCoordinator(
+                ioDispatcher = dispatcher,
+                random = Random(5L),
+                batchSize = 1,
+                nowMonoMs = { testScheduler.currentTime },
+            )
+            coordinator.reset(this@runTest, listOf(source), emptySet(), burst = 1)
+            coordinator.nextBatch(isInitial = true, filterCandidates = passAllFilter()).slots.single().item.id shouldBe
+                "warmup"
+            coordinator.purgeHidden(source.id, emptySet(), hiddenAuthors)
+            coordinator.setBurstSize(3)
+            val kept = coordinator.nextBatch(isInitial = false, filterCandidates = passAllFilter()).slots.map {
+                it.item.id
+            }
+            coordinator.stop()
+            return kept
+        }
+        remaining(setOf("Shared Name")) shouldBe emptyList()
+        remaining(setOf("/model/one")) shouldBe listOf("two")
     }
 
     @Test

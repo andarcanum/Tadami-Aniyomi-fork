@@ -325,12 +325,19 @@ class ReelsAlbumsScreenModelTest {
         }
 
     @Test
-    fun `multi-plugin fanout isolates login precheck and rate-limit errors per source`() =
+    fun `multi-plugin fanout classifies private auth responses and isolates rate-limit errors`() =
         runTest(testDispatcher) {
             val okSource = CatalogSource(id = 7001L, name = "Alpha") { _, _ ->
                 FeedCategoryPage(listOf(category("ok-1")), hasNextPage = false)
             }
-            val authSource = AuthClassifiedSource(id = 7002L, name = "Private", loggedIn = false) { _, _ ->
+            lateinit var authSource: AuthClassifiedSource
+            authSource = AuthClassifiedSource(
+                id = 7002L,
+                name = "Private",
+                loggedIn = false,
+                classifier = { FeedError.AuthRequired },
+            ) { _, _ ->
+                if (!authSource.loggedIn) throw IllegalStateException("private catalog requires auth")
                 FeedCategoryPage(listOf(category("secret-1")), hasNextPage = false)
             }
             val rateLimitedSource = AuthClassifiedSource(
@@ -345,8 +352,8 @@ class ReelsAlbumsScreenModelTest {
             val model = buildModel(okSource, authSource, rateLimitedSource, sourceId = null)
             testDispatcher.scheduler.advanceUntilIdle()
 
-            // Pre-check skipped network call on unauthenticated source
-            authSource.browseCount shouldBe 0
+            // Modern sources are attempted; the classified response, not capability, requires auth.
+            authSource.browseCount shouldBe 1
 
             val byId = model.state.value.remoteGroups.associateBy { it.sourceId }
             byId.getValue(7001L).status shouldBe RemoteSourceStatus.Ready
@@ -364,6 +371,93 @@ class ReelsAlbumsScreenModelTest {
             afterLogin.getValue(7002L).categories.map { it.id } shouldBe listOf("secret-1")
             okSource.requests.size shouldBe 1
         }
+
+    @Test
+    fun `logged out classified public catalog is queried without eager login gate`() = runTest(testDispatcher) {
+        val source = AuthClassifiedSource(id = 7004L, name = "Public", loggedIn = false) { _, _ ->
+            FeedCategoryPage(listOf(category("public-1")), hasNextPage = false)
+        }
+        val model = buildModel(source)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.browseCount shouldBe 1
+        model.state.value.remoteGroups.single().status shouldBe RemoteSourceStatus.Ready
+        model.state.value.remoteGroups.single().categories.map { it.id } shouldBe listOf("public-1")
+    }
+
+    @Test
+    fun `logged out classified private source cannot reuse previous signed in catalog cache`() = runTest(
+        testDispatcher,
+    ) {
+        val cache = ReelsRemoteAlbumsCache()
+        lateinit var source: AuthClassifiedSource
+        source = AuthClassifiedSource(
+            id = 7006L,
+            name = "Private cached",
+            loggedIn = true,
+            classifier = { FeedError.AuthRequired },
+        ) { _, _ ->
+            if (!source.loggedIn) throw IllegalStateException("private catalog requires auth")
+            FeedCategoryPage(listOf(category("private-row")), false)
+        }
+        val authenticated = buildModel(source, remoteCache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        authenticated.state.value.remoteGroups.single().categories.map { it.id } shouldBe listOf("private-row")
+        source.browseCount shouldBe 1
+
+        source.logout()
+        val guest = buildModel(source, remoteCache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.browseCount shouldBe 2
+        guest.state.value.remoteGroups.single().status shouldBe RemoteSourceStatus.NeedsAuth
+        guest.state.value.remoteGroups.single().categories shouldBe emptyList()
+    }
+
+    @Test
+    fun `classified public guest catalog is queried again instead of using account blind cache`() = runTest(
+        testDispatcher,
+    ) {
+        val cache = ReelsRemoteAlbumsCache()
+        val source = AuthClassifiedSource(id = 7007L, name = "Public cached", loggedIn = false) { _, _ ->
+            FeedCategoryPage(listOf(category("public-row")), false)
+        }
+        buildModel(source, remoteCache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val reopened = buildModel(source, remoteCache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.browseCount shouldBe 2
+        reopened.state.value.remoteGroups.single().status shouldBe RemoteSourceStatus.Ready
+        reopened.state.value.remoteGroups.single().categories.map { it.id } shouldBe listOf("public-row")
+    }
+
+    @Test
+    fun `legacy login catalog retains eager gate until logged in`() = runTest(testDispatcher) {
+        val catalog = CatalogSource(id = 7005L) { _, _ ->
+            FeedCategoryPage(listOf(category("legacy-1")), hasNextPage = false)
+        }
+        val source = object : AnimeFeedSource by catalog, AnimeFeedBrowseSource by catalog, AnimeFeedLoginSource {
+            var loggedIn = false
+            override fun isLoggedIn(): Boolean = loggedIn
+            override fun loggedInAccount(): String? = if (loggedIn) "legacy" else null
+            override suspend fun login(email: String, password: String): Boolean {
+                loggedIn = true
+                return true
+            }
+            override suspend fun logout() {
+                loggedIn = false
+            }
+        }
+        val model = buildModel(source)
+        testDispatcher.scheduler.advanceUntilIdle()
+        catalog.requests shouldBe emptyList()
+        model.state.value.remoteGroups.single().status shouldBe RemoteSourceStatus.NeedsAuth
+
+        source.loggedIn = true
+        model.retryRemoteSource(source.id)
+        testDispatcher.scheduler.advanceUntilIdle()
+        catalog.requests shouldBe listOf(1 to null)
+        model.state.value.remoteGroups.single().status shouldBe RemoteSourceStatus.Ready
+    }
 
     @Test
     fun `multi-plugin fanout bounds concurrency to MAX_REMOTE_CONCURRENCY`() = runTest(testDispatcher) {

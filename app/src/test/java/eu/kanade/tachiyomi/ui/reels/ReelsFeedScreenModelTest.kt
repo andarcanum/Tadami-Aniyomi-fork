@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeCategorizedSearchSource
 import eu.kanade.tachiyomi.animesource.AnimeCategorySubscriptionSource
 import eu.kanade.tachiyomi.animesource.AnimeContentPreferencesSource
+import eu.kanade.tachiyomi.animesource.AnimeCreatorDisplaySource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedAccountIdentitySource
@@ -14,6 +15,7 @@ import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedPlaybackHeadersSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedReplaySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
@@ -1305,6 +1307,335 @@ class ReelsFeedScreenModelTest {
         offlineStore = offlineStore,
         sessionSound = sessionSound,
     )
+
+    private class PagedFeedSource(
+        override val id: Long,
+        private val provider: suspend (Int, String?) -> FeedPage,
+    ) : AnimeFeedSource {
+        override val name: String = "Paged Feed $id"
+        override val lang: String = "all"
+        val requests = mutableListOf<Pair<Int, String?>>()
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+            requests += page to cursor
+            return provider(page, cursor)
+        }
+    }
+
+    private fun ordinaryFeedPreferences() = SourcePreferences(MapPreferenceStore()).apply {
+        reelsUnseenOnly().set(false)
+    }
+
+    @Test
+    fun `ordinary empty nonterminal page advances to later content with sticky cursor`() = runTest(testDispatcher) {
+        val source = PagedFeedSource(9251L) { page, _ ->
+            if (page == 1) {
+                FeedPage(emptyList(), true, "next")
+            } else {
+                FeedPage(listOf(videoItem("later")), false)
+            }
+        }
+        val model = buildModel(source.id, sourceManagerOf(source), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.requests shouldBe listOf(1 to null, 2 to "next")
+        model.state.value.items.map { it.id } shouldBe listOf("later")
+        model.state.value.canLoadMore shouldBe false
+    }
+
+    @Test
+    fun `ordinary all empty pages terminate without resetting or extra requests`() = runTest(testDispatcher) {
+        val source = PagedFeedSource(9252L) { page, _ -> FeedPage(emptyList(), page < 3) }
+        val model = buildModel(source.id, sourceManagerOf(source), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.continueEmptyFeed()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.requests shouldBe listOf(1 to null, 2 to null, 3 to null)
+        model.state.value.items.shouldBeEmpty()
+        model.state.value.canLoadMore shouldBe false
+        model.state.value.isLoading shouldBe false
+    }
+
+    @Test
+    fun `ordinary empty scan budget is finite and manual continuation uses advanced cursor`() = runTest(
+        testDispatcher,
+    ) {
+        var supplyContent = false
+        val source = PagedFeedSource(9253L) { page, _ ->
+            if (supplyContent) {
+                FeedPage(listOf(videoItem("manual-later")), false)
+            } else {
+                FeedPage(emptyList(), true, "cursor-$page")
+            }
+        }
+        val model = buildModel(source.id, sourceManagerOf(source), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        val pages = ReelsFeedScreenModel.EMPTY_PAGE_REFILL_MAX_PAGES + 1
+        source.requests.map { it.first } shouldBe (1..pages).toList()
+        model.state.value.items.shouldBeEmpty()
+        model.state.value.canLoadMore shouldBe true
+        model.state.value.isLoading shouldBe false
+
+        supplyContent = true
+        model.continueEmptyFeed()
+        model.continueEmptyFeed()
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.requests.last() shouldBe ((pages + 1) to "cursor-$pages")
+        source.requests.size shouldBe pages + 1
+        model.state.value.items.map { it.id } shouldBe listOf("manual-later")
+    }
+
+    @Test
+    fun `ordinary empty scan does not loop on repeated cursor or cross dropped cursor fence`() = runTest(
+        testDispatcher,
+    ) {
+        val repeated = PagedFeedSource(9254L) { _, _ -> FeedPage(emptyList(), true, "same") }
+        val model = buildModel(repeated.id, sourceManagerOf(repeated), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        repeated.requests.size shouldBe ReelsFeedScreenModel.EMPTY_PAGE_REFILL_MAX_PAGES + 1
+        model.state.value.isLoading shouldBe false
+
+        val dropped = PagedFeedSource(9255L) { page, _ ->
+            FeedPage(emptyList(), true, if (page == 1) "cursor" else null)
+        }
+        val droppedModel = buildModel(dropped.id, sourceManagerOf(dropped), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        dropped.requests shouldBe listOf(1 to null, 2 to "cursor")
+        droppedModel.state.value.canLoadMore shouldBe false
+    }
+
+    @Test
+    fun `ordinary empty continuation failure retries same page and cursor rather than head`() = runTest(
+        testDispatcher,
+    ) {
+        var fail = true
+        val source = PagedFeedSource(9257L) { page, _ ->
+            if (page == 1) {
+                FeedPage(emptyList(), true, "next")
+            } else if (fail) {
+                throw IllegalStateException("offline")
+            } else {
+                FeedPage(listOf(videoItem("recovered")), false)
+            }
+        }
+        val model = buildModel(source.id, sourceManagerOf(source), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.requests shouldBe listOf(1 to null, 2 to "next")
+        model.state.value.error shouldBe "offline"
+        fail = false
+        model.retryFromError() shouldBe true
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.requests shouldBe listOf(1 to null, 2 to "next", 2 to "next")
+        model.state.value.items.map { it.id } shouldBe listOf("recovered")
+        model.state.value.error shouldBe null
+    }
+
+    @Test
+    fun `expired cursor after empty head stops continuation and Retry opens page one`() = runTest(testDispatcher) {
+        var fresh = false
+        val transport = PagedFeedSource(9258L) { page, _ ->
+            when {
+                fresh -> FeedPage(listOf(videoItem("fresh-after-expiry")), false)
+                page == 1 -> FeedPage(emptyList(), true, "expired-C")
+                else -> throw IllegalStateException("cursor expired")
+            }
+        }
+        val source = object : AnimeFeedSource by transport, AnimeFeedErrorClassifierSource {
+            override fun classifyFeedError(error: Throwable): FeedError = FeedError.ExpiredCursor
+        }
+        val model = buildModel(source.id, sourceManagerOf(source), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        transport.requests shouldBe listOf(1 to null, 2 to "expired-C")
+        model.state.value.items.shouldBeEmpty()
+        model.state.value.error shouldBe "cursor expired"
+        model.state.value.canLoadMore shouldBe false
+        model.continueEmptyFeed()
+        testDispatcher.scheduler.advanceUntilIdle()
+        transport.requests shouldBe listOf(1 to null, 2 to "expired-C")
+
+        fresh = true
+        model.retryFromError() shouldBe true
+        testDispatcher.scheduler.advanceUntilIdle()
+        transport.requests shouldBe listOf(1 to null, 2 to "expired-C", 1 to null)
+        model.state.value.items.map { it.id } shouldBe listOf("fresh-after-expiry")
+        model.state.value.error shouldBe null
+    }
+
+    @Test
+    fun `obsolete cancelled empty continuation cannot publish or schedule another page`() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var fresh = false
+        val source = PagedFeedSource(9256L) { page, _ ->
+            if (fresh) {
+                FeedPage(listOf(videoItem("fresh")), false)
+            } else if (page == 1) {
+                FeedPage(emptyList(), true, "old-cursor")
+            } else {
+                withContext(NonCancellable) { gate.await() }
+                FeedPage(emptyList(), true, "obsolete-cursor")
+            }
+        }
+        val model = buildModel(source.id, sourceManagerOf(source), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.runCurrent()
+        source.requests shouldBe listOf(1 to null, 2 to "old-cursor")
+        fresh = true
+        model.loadFeed(reset = true)
+        testDispatcher.scheduler.runCurrent()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.requests shouldBe listOf(1 to null, 2 to "old-cursor", 1 to null)
+        model.state.value.items.map { it.id } shouldBe listOf("fresh")
+        model.state.value.nextCursor shouldBe null
+        model.state.value.canLoadMore shouldBe false
+    }
+
+    @Test
+    fun `creator labels preserve routing follow hide and legacy IDs`() = runTest(testDispatcher) {
+        val creatorId = "/model/a.b"
+        val source = object :
+            AnimeFeedSource,
+            AnimeCreatorFeedSource,
+            AnimeCreatorDisplaySource,
+            AnimeCategorizedSearchSource {
+            override val id: Long = 9230L
+            override val name: String = "Display Source"
+            override val lang: String = "all"
+            val creatorRequests = mutableListOf<String>()
+            override fun creatorDisplayName(creatorId: String): String? =
+                if (creatorId == "/model/a.b") "Human Name" else null
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(listOf(videoItem("canonical").copy(author = creatorId)), false)
+            override suspend fun getCreatorFeed(creator: String, page: Int, cursor: String?): FeedPage {
+                creatorRequests += creator
+                return getFeed(page, cursor, AnimeFilterList())
+            }
+            override suspend fun getCategorizedSearch(query: String): SearchSuggestions = SearchSuggestions(
+                creators = listOf(SearchSuggestion(creatorId, creatorId, SearchSuggestionKind.CREATOR)),
+            )
+        }
+        val follows = FakeReelsFollowRepository()
+        follows.insert(ReelsFollow(source.id, "Unknown legacy", Date(0)))
+        val hidden = FakeReelsHiddenRepository()
+        val manager = sourceManagerOf(source)
+        val model = buildModel(source.id, manager, followRepository = follows, hiddenRepository = hidden)
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.creatorDisplayLabel(creatorId) shouldBe "Human Name"
+        model.state.value.items.single().author shouldBe creatorId
+        model.creatorDisplayLabel("Unknown legacy") shouldBe "@Unknown legacy"
+        model.toggleFollow(creatorId)
+        testDispatcher.scheduler.advanceUntilIdle()
+        follows.follows.keys shouldBe setOf(source.id to "Unknown legacy", source.id to creatorId)
+        model.requestSearchSuggestions("human")
+        testDispatcher.scheduler.advanceUntilIdle()
+        val suggestion = model.state.value.searchSuggestions!!.creators.single()
+        suggestion.id shouldBe creatorId
+        suggestion.label shouldBe "Human Name"
+        val creatorModel = buildModel(source.id, manager, creator = suggestion.id, followRepository = follows)
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.creatorRequests shouldBe listOf(creatorId)
+        creatorModel.state.value.creator shouldBe creatorId
+        model.hideAuthor(creatorId)
+        testDispatcher.scheduler.advanceUntilIdle()
+        hidden.entries.keys shouldBe setOf(Triple(source.id, ReelsHiddenEntry.KIND_AUTHOR, creatorId))
+        follows.follows.keys shouldBe setOf(source.id to "Unknown legacy", source.id to creatorId)
+    }
+
+    @Test
+    fun `ordinary and Following preserve legacy and canonical hide rows`() = runTest(testDispatcher) {
+        val one = "/model/one"
+        val two = "/channels/two"
+        val other = "/pornstar/other"
+        val rows = listOf(one, two, other).map { videoItem(it).copy(author = it) }
+        val transport = RecordingCreatorFeedSource(9260L) { creator, _, _ ->
+            FeedPage(rows.filter { it.author == creator }, false)
+        }
+        val source = object :
+            AnimeFeedSource by transport,
+            AnimeCreatorFeedSource by transport,
+            AnimeCreatorDisplaySource {
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(rows, false)
+            override fun creatorDisplayName(creatorId: String): String? = when (creatorId) {
+                one, two -> "Shared Name"
+                other -> "Other Name"
+                else -> null
+            }
+        }
+        val hidden = FakeReelsHiddenRepository()
+        hidden.insert(ReelsHiddenEntry(source.id, ReelsHiddenEntry.KIND_AUTHOR, "Shared Name", Date(0)))
+        hidden.insert(ReelsHiddenEntry(source.id, ReelsHiddenEntry.KIND_AUTHOR, "Unknown legacy", Date(0)))
+        val originalKeys = hidden.entries.keys.toSet()
+        val manager = sourceManagerOf(source)
+        val ordinary = buildModel(
+            source.id,
+            manager,
+            hiddenRepository = hidden,
+            preferences = ordinaryFeedPreferences(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        ordinary.state.value.items.map { it.author } shouldBe listOf(other)
+
+        val follows = FakeReelsFollowRepository()
+        listOf(one, two, other).forEach { follows.insert(ReelsFollow(source.id, it, Date(0))) }
+        val following = buildModel(
+            source.id,
+            manager,
+            hiddenRepository = hidden,
+            followRepository = follows,
+            followingFeed = true,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        following.state.value.items.map { it.author } shouldBe listOf(other)
+        hidden.entries.keys shouldBe originalKeys
+
+        val targeted = FakeReelsHiddenRepository()
+        targeted.insert(ReelsHiddenEntry(source.id, ReelsHiddenEntry.KIND_AUTHOR, one, Date(0)))
+        val targetedModel =
+            buildModel(source.id, manager, hiddenRepository = targeted, preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        targetedModel.state.value.items.map { it.author }.toSet() shouldBe setOf(two, other)
+        targeted.entries.keys shouldBe setOf(Triple(source.id, ReelsHiddenEntry.KIND_AUTHOR, one))
+    }
+
+    @Test
+    fun `dynamic playback headers refresh owning source after resolution and same source reload`() = runTest(
+        testDispatcher,
+    ) {
+        var ua = "before-login"
+        val source = object : AnimeFeedSource, AnimeFeedPlaybackHeadersSource, AnimeFeedVideoResolverSource {
+            override val id: Long = 9231L
+            override val name: String = "Dynamic Source"
+            override val lang: String = "all"
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(listOf(videoItem("dynamic")), false)
+            override fun playbackHeaders(): Map<String, String> = mapOf("User-Agent" to ua, "Cookie" to "private")
+            override suspend fun resolveVideoUrl(itemId: String, hd: Boolean): String {
+                ua = "after-resolve"
+                return "https://cdn.example.com/resolved.mp4"
+            }
+        }
+        val sibling = object : AnimeFeedSource by source, AnimeFeedPlaybackHeadersSource {
+            override val id: Long = 9232L
+            override fun playbackHeaders(): Map<String, String> = source.playbackHeaders()
+        }
+        val model = buildModel(source.id, sourceManagerOf(source, sibling), preferences = ordinaryFeedPreferences())
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.playbackHeaders(source.id) shouldBe mapOf("User-Agent" to "before-login")
+        model.playbackHeaders(sibling.id) shouldBe mapOf("User-Agent" to "before-login")
+        ua = "after-login"
+        model.playbackHeaders(source.id) shouldBe mapOf("User-Agent" to "after-login")
+        model.playbackHeaders(sibling.id) shouldBe mapOf("User-Agent" to "after-login")
+        model.loadFeed(reset = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.playbackHeaders(source.id)["User-Agent"] shouldBe "after-login"
+        model.resolvePlaybackUrl(model.state.value.items.single(), false, source.id) shouldBe
+            "https://cdn.example.com/resolved.mp4"
+        model.state.value.sourceHeaders["User-Agent"] shouldBe "after-resolve"
+        model.state.value.sourceHeadersBySource[source.id]?.get("User-Agent") shouldBe "after-resolve"
+        model.downloadHeaders(source.id) shouldBe mapOf("User-Agent" to "after-resolve")
+        model.downloadHeaders(sibling.id) shouldBe mapOf("User-Agent" to "after-resolve")
+    }
 
     @Test
     fun `for you delivers only unseen reels and the unwatched rest survives a restart`() = runTest(testDispatcher) {
@@ -4838,7 +5169,9 @@ class ReelsFeedScreenModelTest {
         }
 
     @Test
-    fun `non round-robin out-of-order incoming visit commits departed card once as skipped`() = runTest(testDispatcher) {
+    fun `non round-robin out-of-order incoming visit commits departed card once as skipped`() = runTest(
+        testDispatcher,
+    ) {
         val consumption = FakeReelsConsumptionRepository()
         val source = RecordingFeedSource(983L) {
             FeedPage(listOf(videoItem("clip-a"), videoItem("clip-b")), hasNextPage = false)

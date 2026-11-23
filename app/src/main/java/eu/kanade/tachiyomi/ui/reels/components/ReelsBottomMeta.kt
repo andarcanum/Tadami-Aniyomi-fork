@@ -50,17 +50,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
+import eu.kanade.tachiyomi.ui.reels.reelsCreatorLabel
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import java.util.Locale
 
 private val MENTION_REGEX = Regex("""@([A-Za-z0-9_]{1,50})""")
 private val META_TEXT_SHADOW = Shadow(color = Color.Black.copy(alpha = 0.75f), offset = Offset(0f, 1f), blurRadius = 4f)
-
-private fun formatReelsAuthorHandle(author: String?): String? {
-    val clean = author?.trim()?.trimStart('@')?.takeIf { it.isNotEmpty() } ?: return null
-    return "@$clean"
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -70,6 +66,7 @@ fun ReelsBottomMeta(
     // Non-null (capability- and author-gated by the caller) makes the author chip open the
     // creator's page (contract v18).
     onAuthorClick: (() -> Unit)? = null,
+    authorDisplayLabel: String? = null,
     onCreatorClick: ((String) -> Unit)? = null,
     showFollowAction: Boolean = false,
     isFollowingCreator: Boolean = false,
@@ -90,6 +87,7 @@ fun ReelsBottomMeta(
             onToggleCaptionExpanded = { isCaptionExpanded = !isCaptionExpanded },
             onTagClick = onTagClick,
             onAuthorClick = onAuthorClick,
+            authorDisplayLabel = authorDisplayLabel,
             onCreatorClick = onCreatorClick,
             showFollowAction = showFollowAction,
             isFollowingCreator = isFollowingCreator,
@@ -173,7 +171,7 @@ fun ReelsBottomMeta(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val cleanAuthor = formatReelsAuthorHandle(item.author)
+            val cleanAuthor = authorDisplayLabel ?: reelsCreatorLabel(null, item.author)
             val initialSource = cleanAuthor?.removePrefix("@") ?: item.title.orEmpty()
             val initial = initialSource.firstOrNull()?.uppercase() ?: "?"
             Row(
@@ -395,6 +393,7 @@ private fun ReelsLandscapeCompactMeta(
     onToggleCaptionExpanded: () -> Unit,
     onTagClick: (String) -> Unit,
     onAuthorClick: (() -> Unit)?,
+    authorDisplayLabel: String?,
     onCreatorClick: ((String) -> Unit)?,
     showFollowAction: Boolean,
     isFollowingCreator: Boolean,
@@ -407,7 +406,7 @@ private fun ReelsLandscapeCompactMeta(
 ) {
     val auroraColors = AuroraTheme.colors
     val isEInk = auroraColors.isEInk
-    val cleanAuthor = formatReelsAuthorHandle(item.author)
+    val cleanAuthor = authorDisplayLabel ?: reelsCreatorLabel(null, item.author)
     val initialSource = cleanAuthor?.removePrefix("@") ?: item.title.orEmpty()
     val initial = initialSource.firstOrNull()?.uppercase() ?: "?"
     val authorLabel = cleanAuthor

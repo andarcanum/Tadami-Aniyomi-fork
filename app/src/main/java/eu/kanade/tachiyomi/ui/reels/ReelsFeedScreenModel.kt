@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.animesource.AnimeFeedLoginInstrumentationSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedPlaybackHeadersSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedReplaySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedRoundRobinSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
@@ -46,6 +47,7 @@ import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.FeedReplayContext
 import eu.kanade.tachiyomi.animesource.model.FeedReplayItemResult
 import eu.kanade.tachiyomi.animesource.model.FeedRoundRobinReadiness
+import eu.kanade.tachiyomi.animesource.model.SearchSuggestionKind
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
@@ -262,6 +264,10 @@ class ReelsFeedScreenModel(
         const val NICHE_FILTER_MIN_ITEMS = 20
         const val NICHE_FILTER_REFILL_MAX_PAGES = 15
 
+        // Ordinary feeds can contain gaps. Auto-skip at most three extra pages per empty run;
+        // manual continuation keeps the advanced cursor instead of refreshing page one.
+        const val EMPTY_PAGE_REFILL_MAX_PAGES = 3
+
         // Forward quality window. The player preload (+1) and the head-prewarm loop (+2..+4)
         // can only warm reels whose quality binding already exists; this window matches that span.
         // Metadata/URI only — media bytes stay behind the existing preload switches.
@@ -426,7 +432,10 @@ class ReelsFeedScreenModel(
                 skippedCommitted.clear()
             },
             onStopRoundRobin = { stopRoundRobin(clearProjection = true) },
-            onReloadFeed = { loadFeed(reset = true) },
+            onReloadFeed = {
+                source?.let { refreshPlaybackHeaders(it, state.value.currentSourceId) }
+                loadFeed(reset = true)
+            },
             onBlockedTagsUpdated = { tags -> feedEngine.tasteEngine.setBlockedTags(tags) },
         )
     }
@@ -488,7 +497,7 @@ class ReelsFeedScreenModel(
     /** Future pages never serve hidden reels / authors. */
     private fun List<ShortVideoItem>.filterHidden(): List<ShortVideoItem> {
         val (videos, authors) = hiddenSnapshot
-        return filterNot { it.id in videos || (it.author != null && it.author in authors) }
+        return filterNot { it.id in videos || reelsCreatorIsHidden(source, it.author, authors) }
     }
 
     // ---------------------------------------------------------------------------
@@ -513,6 +522,7 @@ class ReelsFeedScreenModel(
 
     // Pages fetched by the unseen refill loop in the current feed generation (bounded).
     private var unseenRefillPages = 0
+    private var emptyPageRefillPages = 0
 
     @Volatile
     private var replayKey: ReelsSessionKey? = null
@@ -1503,10 +1513,7 @@ class ReelsFeedScreenModel(
                     }.toMap().toImmutableMap()
                     val names = feedSources.associate { it.id to it.name }.toImmutableMap()
                     val headersBySource = feedSources.associate { feedSource ->
-                        val hdrs = (feedSource as? AnimeHttpSource)?.headers
-                            ?.associate { it.first to it.second }
-                            .orEmpty()
-                            .toPersistentHashMap()
+                        val hdrs = reelsPlaybackHeaders(feedSource).toPersistentHashMap()
                         feedSource.id to hdrs
                     }.toImmutableMap()
                     val creatorCapableBySource = feedSources.associate {
@@ -1722,13 +1729,8 @@ class ReelsFeedScreenModel(
                     searchSuggestions = null,
                     // Placeholder: the real filter list replaces it from buildFiltersAndStartFeed.
                     filters = AnimeFilterList(),
-                    // Player request headers come from the (ABI-stable) AnimeHttpSource.headers —
-                    // adding fields to ShortVideoItem would break linkage for extensions compiled
-                    // against an older source-api.
-                    sourceHeaders = (rawSource as? AnimeHttpSource)?.headers
-                        ?.associate { it.first to it.second }
-                        .orEmpty()
-                        .toPersistentHashMap(),
+                    // v30 reads current public playback context; legacy sources retain headers.
+                    sourceHeaders = reelsPlaybackHeaders(rawSource).toPersistentHashMap(),
                     // Likes are stored per (videoId, sourceId) in the DB; likedIds is only the
                     // current source's set. Drop the previous source's likes so a colliding
                     // videoId in the new source doesn't show a phantom heart; the new source's
@@ -2152,6 +2154,7 @@ class ReelsFeedScreenModel(
             runway.reset()
             lastPagerPage = 0
             unseenRefillPages = 0
+            emptyPageRefillPages = 0
             nicheFilterRefillPages = 0
         }
 
@@ -2206,7 +2209,8 @@ class ReelsFeedScreenModel(
                     val (hiddenVideos, hiddenAuthors) = hiddenBySource[slotSourceId]
                         ?: (emptySet<String>() to emptySet())
                     val visible = rawCandidates.filterNot { item ->
-                        item.id in hiddenVideos || (item.author != null && item.author in hiddenAuthors)
+                        item.id in hiddenVideos ||
+                            reelsCreatorIsHidden(sourceManager.get(slotSourceId), item.author, hiddenAuthors)
                     }
                     if (!unseenFilter || visible.isEmpty()) {
                         ReelsMixDiagnosticLog.log(
@@ -2477,6 +2481,7 @@ class ReelsFeedScreenModel(
         loadJob?.cancel()
         val entryGeneration = loadGeneration.incrementAndGet()
         loadJob = screenModelScope.launch(ioDispatcher) {
+            refreshPlaybackHeaders(rawSource, sourceId)
             val account = (rawSource as? AnimeFeedLoginSource)
                 ?.takeIf { it.isLoggedIn() }
                 ?.loggedInAccount()
@@ -3452,6 +3457,7 @@ class ReelsFeedScreenModel(
         }
         if (!reset && loadLocalReplayWindow()) return
         val src = source ?: return
+        if (reset) refreshPlaybackHeaders(src, state.value.currentSourceId)
         if (!reset && state.value.isLoading) return
         // Album-search pagination lives on its own cursor/cap flag (report fix): the feed's
         // canLoadMore must not gate album pages and vice versa.
@@ -3465,6 +3471,7 @@ class ReelsFeedScreenModel(
             runway.reset()
             lastPagerPage = 0
             unseenRefillPages = 0
+            emptyPageRefillPages = 0
             nicheFilterRefillPages = 0
         }
 
@@ -3751,9 +3758,12 @@ class ReelsFeedScreenModel(
                         },
                     )
                 }
+                ensureActive()
+                if (loadGeneration.get() != generation) return@launch
                 runway.onLoadFinished()
                 val itemsAfterAppend = state.value.items.size
                 val appended = if (reset) itemsAfterAppend else itemsAfterAppend - itemsBeforeAppend
+                if (appended > 0) emptyPageRefillPages = 0
                 // Deep-link seek continuation: the tapped clip was not on this page — append
                 // the next page until it surfaces, bounded by RESUME_SEEK_MAX_PAGES so a
                 // missing target cannot drain an endless feed. Natural stops: end of feed,
@@ -3780,6 +3790,16 @@ class ReelsFeedScreenModel(
                         loadFeed(reset = false)
                     } else {
                         mutableState.update { it.copy(unseenScanStopped = true) }
+                    }
+                } else if (
+                    !unseenFilter && candidateItems.isEmpty() && state.value.canLoadMore &&
+                    !state.value.nicheLocalFilter.isActive
+                ) {
+                    // An empty nonterminal source page is not an empty feed. Every request uses
+                    // the just-advanced sticky cursor/page and the normal generation fences.
+                    if (emptyPageRefillPages < EMPTY_PAGE_REFILL_MAX_PAGES) {
+                        emptyPageRefillPages++
+                        loadFeed(reset = false)
                     }
                 } else if (
                     (mode == FeedMode.NICHE || mode == FeedMode.CREATOR) &&
@@ -3814,11 +3834,21 @@ class ReelsFeedScreenModel(
                 // append, an expired cursor only ends this feed session: the usable feed stays,
                 // the dead cursor is never retried, and a refresh starts a fresh generation.
                 val verdict = classifyFeedError(t)
-                if (verdict == FeedError.ExpiredCursor && !reset && state.value.items.isNotEmpty()) {
+                if (verdict == FeedError.ExpiredCursor && !reset) {
                     logcat(LogPriority.WARN) {
                         "Feed ${state.value.currentSourceId} cursor expired; stopping pagination (contract v25)."
                     }
-                    mutableState.update { it.copy(isLoading = false, canLoadMore = false, pageError = null) }
+                    mutableState.update { current ->
+                        if (loadGeneration.get() != generation) return@update current
+                        current.copy(
+                            isLoading = false,
+                            canLoadMore = false,
+                            pageError = null,
+                            // An empty scan still needs a reachable Retry, but the expired
+                            // continuation is dead: Retry must reopen page one, not replay it.
+                            error = if (current.items.isEmpty()) msg else current.error,
+                        )
+                    }
                     return@launch
                 }
                 mutableState.update { current ->
@@ -3844,6 +3874,14 @@ class ReelsFeedScreenModel(
         lastPagerPage = page
         runway.onPage(page)
         maybeLoadMoreForRunway()
+    }
+
+    /** A bounded empty scan resumes from its continuation; it never resets the source stream. */
+    fun continueEmptyFeed() {
+        val current = state.value
+        if (current.isOffline || current.isLoading || !current.canLoadMore || current.items.isNotEmpty()) return
+        emptyPageRefillPages = 0
+        loadFeed(reset = false)
     }
 
     fun loadNextPageIfNeeded(visibleIndex: Int) {
@@ -3893,7 +3931,8 @@ class ReelsFeedScreenModel(
     }
 
     /**
-     * Error-state retry (audit H5). With a live source this is a plain reset reload. With a
+     * Error-state retry (audit H5). Ordinary empty continuation failures retry their advanced
+     * page/cursor; other live-source errors reset. With a
      * rejected source (non-feed / missing capability → source=null) loadFeed would silently
      * no-op: GLOBAL opens the source picker instead, fixed modes answer false so the screen
      * can fall back to a back-navigation.
@@ -3904,7 +3943,14 @@ class ReelsFeedScreenModel(
             return true
         }
         if (source != null) {
-            loadFeed(reset = true)
+            val current = state.value
+            if (current.items.isEmpty() && current.canLoadMore && current.nextPageIndex > 1 &&
+                !filtersUnseen(current.searchQuery) && !isReplaySurface()
+            ) {
+                continueEmptyFeed()
+            } else {
+                loadFeed(reset = true)
+            }
             return true
         }
         if (mode == FeedMode.GLOBAL) {
@@ -4217,7 +4263,7 @@ class ReelsFeedScreenModel(
                         merged
                             .filterNot { (_, item) ->
                                 val (hVideos, hAuthors) = hiddenSnapshot
-                                item.id in hVideos || (item.author != null && item.author in hAuthors)
+                                item.id in hVideos || reelsCreatorIsHidden(src, item.author, hAuthors)
                             }
                             .distinctBy { it.second.id },
                         prevTailAuthor = null,
@@ -4255,7 +4301,7 @@ class ReelsFeedScreenModel(
                             val (hVideos, hAuthors) = hiddenSnapshot
                             item.id in current.seenIds ||
                                 item.id in hVideos ||
-                                (item.author != null && item.author in hAuthors)
+                                reelsCreatorIsHidden(src, item.author, hAuthors)
                         },
                         prevTailAuthor = current.items.lastOrNull()?.author,
                     ).map { it.second }
@@ -4451,7 +4497,8 @@ class ReelsFeedScreenModel(
             }
             return
         }
-        val src = source as? AnimeCategorizedSearchSource
+        val owner = source
+        val src = owner as? AnimeCategorizedSearchSource
         if (src == null || query.isBlank()) {
             mutableState.update { it.copy(searchSuggestions = null) }
             return
@@ -4459,9 +4506,17 @@ class ReelsFeedScreenModel(
         // Debounced: the tabs refresh once the user pauses typing, not per keystroke.
         suggestionsJob = screenModelScope.launch(ioDispatcher) {
             delay(SEARCH_SUGGESTIONS_DEBOUNCE_MS)
-            val suggestions = runCatching { src.getCategorizedSearch(query) }.getOrNull()
+            val suggestions = runCatching { src.getCategorizedSearch(query) }.getOrNull()?.let { result ->
+                result.copy(
+                    creators = result.creators.map { suggestion ->
+                        if (suggestion.kind != SearchSuggestionKind.CREATOR) return@map suggestion
+                        suggestion.copy(label = reelsCreatorLabel(owner, suggestion.id, suggestion.label).orEmpty())
+                    },
+                )
+            }
+            ensureActive()
             mutableState.update { current ->
-                if (suggestionsQuery != query) return@update current
+                if (suggestionsQuery != query || source !== owner) return@update current
                 current.copy(searchSuggestions = suggestions)
             }
         }
@@ -5089,16 +5144,33 @@ class ReelsFeedScreenModel(
         }
     }
 
-    /** Export requests keep the owning source's headers even in a mixed-source playlist. */
-    fun downloadHeaders(sourceId: Long): Map<String, String> =
-        if (!state.value.isOffline && !state.value.isMixMode && sourceId == state.value.currentSourceId) {
+    fun creatorDisplayLabel(creatorId: String?, sourceId: Long = state.value.currentSourceId): String? =
+        reelsCreatorLabel(sourceManager.get(sourceId), creatorId)
+
+    /** Called when constructing/refreshing player requests; v30 context is never a cached UA. */
+    fun playbackHeaders(sourceId: Long): Map<String, String> {
+        val owner = sourceManager.get(sourceId)
+        if (owner is AnimeFeedPlaybackHeadersSource) return reelsPlaybackHeaders(owner)
+        return if (!state.value.isOffline && !state.value.isMixMode && sourceId == state.value.currentSourceId) {
             state.value.sourceHeaders
         } else {
-            state.value.sourceHeadersBySource[sourceId]
-                ?: (sourceManager.get(sourceId) as? AnimeHttpSource)?.headers
-                    ?.associate { it.first to it.second }
-                    .orEmpty()
+            state.value.sourceHeadersBySource[sourceId] ?: reelsPlaybackHeaders(owner)
         }
+    }
+
+    private fun refreshPlaybackHeaders(owner: AnimeSource, sourceId: Long) {
+        if (owner !is AnimeFeedPlaybackHeadersSource || sourceManager.get(sourceId) !== owner) return
+        val headers = reelsPlaybackHeaders(owner).toPersistentHashMap()
+        mutableState.update { current ->
+            current.copy(
+                sourceHeaders = if (current.currentSourceId == sourceId) headers else current.sourceHeaders,
+                sourceHeadersBySource = (current.sourceHeadersBySource + (sourceId to headers)).toImmutableMap(),
+            )
+        }
+    }
+
+    /** Export requests keep the owning source's headers even in a mixed-source playlist. */
+    fun downloadHeaders(sourceId: Long): Map<String, String> = playbackHeaders(sourceId)
 
     // --- B3.3 offline copies ---
 
@@ -5169,12 +5241,16 @@ class ReelsFeedScreenModel(
         val resolver = owner as? AnimeFeedVideoResolverSource ?: return null
         val hdFallback = mediaDescriptor(item, sourceId)?.hdFallback ?: true
         return try {
-            resolver.resolveVideoUrl(item.id, hd)?.takeIf { it.isNotBlank() }
+            val resolved = resolver.resolveVideoUrl(item.id, hd)?.takeIf { it.isNotBlank() }
                 ?: if (hd && hdFallback) {
                     resolver.resolveVideoUrl(item.id, false)?.takeIf { it.isNotBlank() }
                 } else {
                     null
                 }
+            withContext(Dispatchers.Main.immediate) {
+                owner?.let { refreshPlaybackHeaders(it, effectiveSourceId ?: state.value.currentSourceId) }
+            }
+            resolved
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {

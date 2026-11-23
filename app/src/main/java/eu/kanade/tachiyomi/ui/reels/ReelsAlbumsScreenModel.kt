@@ -572,7 +572,7 @@ class ReelsAlbumsScreenModel(
                 ReelsRemoteAlbumsCache.Key(source.id, mode, query)
             }
             val loginRequired = needsLoginPrecheck(source)
-            val cached = if (!forceRefresh && !loginRequired) {
+            val cached = if (!forceRefresh && !loginRequired && canReadRemoteCache(source)) {
                 remoteCache.getIfFresh(cacheKey, nowEpochMs(), cacheTtlMs)
             } else {
                 null
@@ -646,7 +646,7 @@ class ReelsAlbumsScreenModel(
             return base.copy(status = RemoteSourceStatus.NeedsAuth, pagination = ReelsPagination(canLoadMore = false))
         }
 
-        if (!forceRefresh) {
+        if (!forceRefresh && canReadRemoteCache(source)) {
             val cacheKey = if (mode == RemoteSourceKind.Browse && query.isNotEmpty()) {
                 ReelsRemoteAlbumsCache.Key(source.id, RemoteSourceKind.Browse, "")
             } else {
@@ -747,8 +747,24 @@ class ReelsAlbumsScreenModel(
     }
 
     private fun needsLoginPrecheck(source: AnimeFeedSource): Boolean {
+        // Modern sources classify the actual catalog response: login support alone does not
+        // make a public catalog private. Keep the historical eager gate only for legacy plugins.
+        if (source is AnimeFeedErrorClassifierSource) return false
         val loginSource = source as? AnimeFeedLoginSource ?: return false
         return !runCatching { loginSource.isLoggedIn() }.getOrDefault(false)
+    }
+
+    private fun canReadRemoteCache(source: AnimeFeedSource): Boolean {
+        // The shared cache has no account key. Modern guest access must query the source,
+        // not reuse private cards cached by an earlier signed-in session.
+        if (source !is AnimeFeedErrorClassifierSource || source !is AnimeFeedLoginSource) return true
+        return try {
+            source.isLoggedIn()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private fun classifyError(source: AnimeFeedSource, error: Throwable): FeedError? {

@@ -138,6 +138,7 @@ data class ReelsFollowsScreen(val sourceId: Long) : Screen {
                         SwipeToRemoveFollow(
                             follow = follow,
                             sourceName = state.sourceNames[follow.sourceId],
+                            creatorLabel = screenModel.creatorDisplayLabel(follow),
                             onRemove = {
                                 screenModel.removeFollow(follow)
                                 scope.launch {
@@ -167,6 +168,7 @@ data class ReelsFollowsScreen(val sourceId: Long) : Screen {
 private fun SwipeToRemoveFollow(
     follow: ReelsFollow,
     sourceName: String?,
+    creatorLabel: String,
     onRemove: () -> Unit,
     onClick: () -> Unit,
 ) {
@@ -200,14 +202,14 @@ private fun SwipeToRemoveFollow(
             }
         },
     ) {
-        FollowCell(follow = follow, sourceName = sourceName, onClick = onClick)
+        FollowCell(sourceName = sourceName, creatorLabel = creatorLabel, onClick = onClick)
     }
 }
 
 @Composable
 private fun FollowCell(
-    follow: ReelsFollow,
     sourceName: String?,
+    creatorLabel: String,
     onClick: () -> Unit,
 ) {
     Column(
@@ -217,7 +219,7 @@ private fun FollowCell(
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val initial = follow.creator.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+        val initial = creatorLabel.removePrefix("@").firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         Box(
             modifier = Modifier
                 .size(56.dp)
@@ -232,7 +234,7 @@ private fun FollowCell(
             )
         }
         Text(
-            text = "@${follow.creator}",
+            text = creatorLabel,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
