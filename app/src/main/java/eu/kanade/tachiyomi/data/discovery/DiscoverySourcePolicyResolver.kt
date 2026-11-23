@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -348,6 +349,7 @@ private suspend fun loadAppDiscoveryInventorySource(mediaType: DiscoveryMediaTyp
                 extensionChanges = manager.discoverySourceInventoryChanges,
                 matchesExtension = manager::isDiscoverySourceBinding,
                 sourceInitialized = sources.isInitialized,
+                sourceChanges = sources.catalogueSources,
                 getSource = sources::get,
             )
         }
@@ -359,6 +361,7 @@ private suspend fun loadAppDiscoveryInventorySource(mediaType: DiscoveryMediaTyp
                 extensionChanges = manager.discoverySourceInventoryChanges,
                 matchesExtension = manager::isDiscoverySourceBinding,
                 sourceInitialized = sources.isInitialized,
+                sourceChanges = sources.catalogueSources,
                 getSource = sources::get,
             )
         }
@@ -370,6 +373,7 @@ private suspend fun loadAppDiscoveryInventorySource(mediaType: DiscoveryMediaTyp
                 extensionChanges = manager.discoverySourceInventoryChanges,
                 matchesExtension = manager::isDiscoverySourceBinding,
                 sourceInitialized = sources.isInitialized,
+                sourceChanges = sources.catalogueSources,
                 getSource = sources::get,
             )
         }
@@ -380,11 +384,21 @@ internal fun bindInventoryWithSourceManager(
     extensionChanges: Flow<DiscoverySourceInventory>,
     matchesExtension: (Long, Any, Set<String>, DiscoverySourceInventory) -> Boolean,
     sourceInitialized: StateFlow<Boolean>,
+    sourceChanges: Flow<Any?> = emptyFlow(),
     getSource: (Long) -> Any?,
 ): DiscoverySourceInventorySource {
     fun currentInventory(): DiscoverySourceInventory {
         val raw = extensionInventory()
-        return if (raw.complete && sourceInitialized.value) {
+        val allPluginKeys = raw.plugins.mapTo(HashSet()) { it.key }
+        val sourcesReady = raw.complete &&
+            sourceInitialized.value &&
+            raw.plugins.all { plugin ->
+                plugin.sourceIds.all { sourceId ->
+                    val source = getSource(sourceId)
+                    source != null && matchesExtension(sourceId, source, allPluginKeys, raw)
+                }
+            }
+        return if (sourcesReady) {
             raw
         } else {
             DiscoverySourceInventory(complete = false, plugins = raw.plugins)
@@ -392,7 +406,7 @@ internal fun bindInventoryWithSourceManager(
     }
     return DiscoverySourceInventorySource(
         current = ::currentInventory,
-        changes = merge(extensionChanges, sourceInitialized).map { currentInventory() },
+        changes = merge(extensionChanges, sourceInitialized, sourceChanges).map { currentInventory() },
         matchesSource = { sourceId, source, allowedOwners, expected ->
             getSource(sourceId) === source &&
                 matchesExtension(sourceId, source, allowedOwners, expected)

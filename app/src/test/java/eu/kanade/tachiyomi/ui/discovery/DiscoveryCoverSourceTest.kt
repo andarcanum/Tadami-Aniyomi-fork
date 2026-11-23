@@ -9,7 +9,9 @@ import dev.mihon.injekt.patchInjekt
 import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.data.discovery.DiscoverySdkBindingAuthority
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.MangaSource
+import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
@@ -33,9 +35,11 @@ import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.InjektScope
 import uy.kohesive.injekt.api.addSingleton
+import uy.kohesive.injekt.api.get
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
@@ -346,6 +350,100 @@ class DiscoveryCoverSourceTest {
         ) as AsyncImagePainter.State.Error
         settledReadyError.painter shouldBe fallbackPainter
     }
+
+    @Test
+    fun `resolveDiscoveryCoverWithPolicy stays pending cache-only for allowed item while source binding catches up`() {
+        val fixture = fixture()
+        try {
+            val completePolicy = policy()
+            val manager = Injekt.get<MangaSourceManager>()
+            every { manager.get(7L) } returns null
+
+            val pending = resolveDiscoveryCoverWithPolicy(
+                item = item(),
+                recoveryUrl = "https://fixture.invalid/recovery.jpg",
+                policy = completePolicy,
+            ) as DiscoveryCoverResolution.PendingCacheOnly
+            pending.model.primaryUrl shouldBe "https://fixture.invalid/page.jpg"
+            pending.model.fallbackUrl shouldBe "https://fixture.invalid/recovery.jpg"
+            pending.model.client shouldBe null
+            pending.model.headers shouldBe null
+            pending.model.refererUrl shouldBe null
+
+            // Disallowed/excluded items still resolve to Unavailable.
+            resolveDiscoveryCoverWithPolicy(
+                item = item(),
+                policy = policy(selected = emptySet()),
+            ) shouldBe DiscoveryCoverResolution.Unavailable
+
+            // Once SourceManager catches up, the same item promotes cleanly to Ready.
+            every { manager.get(7L) } answers { fixture.currentSource.get() }
+            val ready = resolveDiscoveryCoverWithPolicy(
+                item = item(),
+                policy = completePolicy,
+            ) as DiscoveryCoverResolution.Ready
+            (ready.model is AuroraPosterRequest) shouldBe true
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `NovelSiteSource resolves ascii referer and Origin header for JS novel discovery covers`() {
+        val client = OkHttpClient()
+        try {
+            val network = mockk<NetworkHelper>()
+            every { network.client } returns client
+            Injekt.addSingleton<NetworkHelper>(network)
+
+            val idnSource = mockk<TestNovelSiteSource>().also { source ->
+                every { source.id } returns 99L
+                every { source.name } returns "RanobeRF"
+                every { source.lang } returns "ru"
+                every { source.siteUrl } returns "https://ранобэ.рф/"
+            }
+            val novelManager = mockk<NovelSourceManager>()
+            every { novelManager.get(99L) } returns idnSource
+            Injekt.addSingleton<NovelSourceManager>(novelManager)
+
+            val novelPolicy = DiscoverySourcePolicy(
+                mediaType = DiscoveryMediaType.NOVEL,
+                revision = "novel-fixture",
+                inventoryComplete = true,
+                allowedPluginKeys = setOf("js.ranoberf"),
+                pluginMembers = mapOf("js.ranoberf" to setOf(99L)),
+            )
+            val provider = object : DiscoverySourcePolicyProvider, DiscoverySdkBindingAuthority {
+                override fun isCurrentSourceBinding(
+                    media: DiscoveryMediaType,
+                    sourceId: Long,
+                    source: Any,
+                    capturedRevision: String?,
+                ) = media == DiscoveryMediaType.NOVEL && sourceId == 99L && source === idnSource
+
+                override fun current(mediaType: DiscoveryMediaType) = novelPolicy
+                override fun observe(mediaType: DiscoveryMediaType) = MutableStateFlow(novelPolicy)
+                override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = novelPolicy
+            }
+            Injekt.addSingleton<DiscoverySourcePolicyProvider>(provider)
+
+            val novelItem = item().copy(
+                mediaType = DiscoveryMediaType.NOVEL,
+                sourceId = 99L,
+                provider = "RanobeRF",
+                coverUrl = "https://cover.mangalib.me/uploads/cover/test.jpg",
+            )
+            val model = discoveryCoverData(novelItem) as AuroraPosterRequest
+            model.refererUrl shouldBe "https://xn--80ac9aeh6f.xn--p1ai"
+            model.headers shouldBe mapOf("Origin" to "https://xn--80ac9aeh6f.xn--p1ai")
+            (model.client != null) shouldBe true
+        } finally {
+            client.dispatcher.executorService.shutdownNow()
+            client.connectionPool.evictAll()
+        }
+    }
+
+    private interface TestNovelSiteSource : NovelSource, NovelSiteSource
 
     private fun policy(selected: Set<String> = setOf("extension.a")) = DiscoverySourcePolicy(
         mediaType = DiscoveryMediaType.MANGA,

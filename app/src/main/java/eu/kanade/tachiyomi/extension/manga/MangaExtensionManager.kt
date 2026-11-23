@@ -103,7 +103,9 @@ class MangaExtensionManager(
     private var sourceIdToPackageName = emptyMap<Long, String>()
 
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Installed>())
-    val installedExtensionsFlow = installedExtensionsMapFlow.mapExtensions(scope)
+    val installedExtensionsFlow: StateFlow<List<MangaExtension.Installed>> by lazy {
+        installedExtensionsMapFlow.mapExtensions(scope)
+    }
 
     /** Raw installed inventory is loaded synchronously before this manager is published. */
     fun discoverySourceInventory(): DiscoverySourceInventory =
@@ -150,7 +152,9 @@ class MangaExtensionManager(
     private val availableExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Available>())
 
     private val untrustedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Untrusted>())
-    val untrustedExtensionsFlow = untrustedExtensionsMapFlow.mapExtensions(scope)
+    val untrustedExtensionsFlow: StateFlow<List<MangaExtension.Untrusted>> by lazy {
+        untrustedExtensionsMapFlow.mapExtensions(scope)
+    }
 
     /**
      * Install attempts that failed because the APK is signed with a different key than the

@@ -17,9 +17,11 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.data.discovery.DiscoverySdkBindingAuthority
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.toAsciiUrl
 import eu.kanade.tachiyomi.network.withCoverTimeouts
 import eu.kanade.tachiyomi.novelsource.online.HttpNovelSource
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
+import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
@@ -104,6 +106,19 @@ object DiscoveryCoverSource {
                     (source as? HttpNovelSource)?.client,
                     source.baseUrl,
                 )
+                is NovelSiteSource -> {
+                    val normalizedSite = source.siteUrl
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.trimEnd('/')
+                        ?.toAsciiUrl()
+                        ?.trimEnd('/')
+                    Resolved(
+                        headers = normalizedSite?.let { mapOf("Origin" to it) },
+                        client = null,
+                        referer = normalizedSite,
+                    )
+                }
                 else -> Resolved(null, null, null)
             }
             val delegate = resolved.client as? OkHttpClient ?: Injekt.get<NetworkHelper>().client
@@ -250,7 +265,10 @@ internal fun resolveDiscoveryCoverWithPolicy(
     discoveryCoverDataWithPolicy(item, recoveryUrl, policy)?.let {
         return DiscoveryCoverResolution.Ready(it)
     }
-    if (!policy.inventoryComplete && item.sourceId != null && item.mediaType == policy.mediaType) {
+    val canUsePendingCache = item.sourceId != null &&
+        item.mediaType == policy.mediaType &&
+        (!policy.inventoryComplete || policy.allows(item))
+    if (canUsePendingCache) {
         val primary = item.coverUrl?.takeIf { it.isNotBlank() } ?: recoveryUrl?.takeIf { it.isNotBlank() }
         if (primary != null) {
             val fallback = recoveryUrl?.takeIf {

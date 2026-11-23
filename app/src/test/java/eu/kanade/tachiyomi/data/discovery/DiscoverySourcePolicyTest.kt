@@ -229,6 +229,60 @@ class DiscoverySourcePolicyTest {
         resolver.isCurrentSourceBinding(DiscoveryMediaType.MANGA, 7L, sdk) shouldBe true
     }
 
+    @Test
+    fun `inventory stays incomplete when sourceManager reports initialized before extension sources are registered`() =
+        runTest {
+            val sdk = Any()
+            var registered: Any? = null
+            val extensionFrame = MutableStateFlow(
+                DiscoverySourceInventory(
+                    complete = true,
+                    plugins = listOf(DiscoverySourcePlugin("ext.a", listOf(7L))),
+                ),
+            )
+            // Simulates SourceManager flipping isInitialized=true on an initial empty extensions emission
+            // before the actual extension sources are published to sourcesMapFlow/catalogueSources.
+            val sourceInitialized = MutableStateFlow(true)
+            val sourceChanges = MutableStateFlow<List<Any>>(emptyList())
+            val resolver = DiscoverySourcePolicyResolver(
+                preferences = DiscoveryPreferences(PersistingPreferenceStore()),
+                sourcePreferences = SourcePreferences(PersistingPreferenceStore()),
+                inventorySourceLoader = { media ->
+                    if (media == DiscoveryMediaType.MANGA) {
+                        bindInventoryWithSourceManager(
+                            extensionInventory = { extensionFrame.value },
+                            extensionChanges = extensionFrame,
+                            matchesExtension = { id, source, owners, _ ->
+                                id == 7L && source === sdk && "ext.a" in owners
+                            },
+                            sourceInitialized = sourceInitialized,
+                            sourceChanges = sourceChanges,
+                            getSource = { id -> if (id == 7L) registered else null },
+                        )
+                    } else {
+                        val empty = MutableStateFlow(DiscoverySourceInventory(true, emptyList()))
+                        DiscoverySourceInventorySource({ empty.value }, empty)
+                    }
+                },
+                scope = backgroundScope,
+            )
+
+            runCurrent()
+            resolver.current(DiscoveryMediaType.MANGA).inventoryComplete shouldBe false
+            resolver.isCurrentSourceBinding(DiscoveryMediaType.MANGA, 7L, sdk) shouldBe false
+
+            val awaited = async { resolver.awaitComplete(DiscoveryMediaType.MANGA) }
+            runCurrent()
+            awaited.isCompleted shouldBe false
+
+            registered = sdk
+            sourceChanges.value = listOf(sdk)
+            runCurrent()
+            val policy = withTimeout(1_000L) { awaited.await() }
+            policy.inventoryComplete shouldBe true
+            resolver.isCurrentSourceBinding(DiscoveryMediaType.MANGA, 7L, sdk) shouldBe true
+        }
+
     private fun resolverFor(
         preferences: DiscoveryPreferences,
         sourcePreferences: SourcePreferences,

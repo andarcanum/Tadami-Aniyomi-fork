@@ -98,7 +98,9 @@ class AnimeExtensionManager(
     private var sourceIdToPackageName = emptyMap<Long, String>()
 
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, AnimeExtension.Installed>())
-    val installedExtensionsFlow = installedExtensionsMapFlow.mapExtensions(scope)
+    val installedExtensionsFlow: StateFlow<List<AnimeExtension.Installed>> by lazy {
+        installedExtensionsMapFlow.mapExtensions(scope)
+    }
 
     /** Raw installed inventory is loaded synchronously before this manager is published. */
     fun discoverySourceInventory(): DiscoverySourceInventory =
@@ -189,7 +191,9 @@ class AnimeExtensionManager(
             )
         }
     }
-    val untrustedExtensionsFlow = untrustedExtensionsMapFlow.mapExtensions(scope)
+    val untrustedExtensionsFlow: StateFlow<List<AnimeExtension.Untrusted>> by lazy {
+        untrustedExtensionsMapFlow.mapExtensions(scope)
+    }
 
     init {
         initAnimeExtensions()
