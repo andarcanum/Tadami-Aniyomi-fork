@@ -26,9 +26,11 @@ import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateConcurrency
+import eu.kanade.tachiyomi.data.library.LibraryUpdateEntryIds
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
+import eu.kanade.tachiyomi.data.library.shouldExpandAnimeSeasonsForUpdate
 import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
@@ -139,7 +141,9 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             }
         }
 
-        libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())
+        if (!LibraryUpdateEntryIds.hasTargetedEntryIds(inputData)) {
+            libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())
+        }
 
         val categoryId = if (inputData.keyValueMap.containsKey(KEY_CATEGORY)) {
             inputData.getLong(KEY_CATEGORY, -1L)
@@ -253,9 +257,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      */
     private suspend fun addAnimeToQueue(categoryId: Long) {
         val libraryAnime = getLibraryAnime.await()
-        val targetEntryIds = inputData.getLongArray(KEY_ENTRY_IDS)
-            ?.takeIf { it.isNotEmpty() }
-            ?.toSet()
+        val targetEntryIds = LibraryUpdateEntryIds.consumeEntryIds(inputData, context.cacheDir)
 
         val listToUpdate = if (targetEntryIds != null) {
             libraryAnime
@@ -315,7 +317,10 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                 }
         }
 
-        val includeSeasons = targetEntryIds == null && libraryPreferences.updateSeasonOnLibraryUpdate().get()
+        val includeSeasons = shouldExpandAnimeSeasonsForUpdate(
+            hasTargetedEntryIds = targetEntryIds != null,
+            updateSeasonOnLibraryUpdate = libraryPreferences.updateSeasonOnLibraryUpdate().get(),
+        )
         val lastToUpdateWithSeasons = listToUpdate.flatMap { libAnime ->
             when (libAnime.anime.fetchType) {
                 FetchType.Seasons -> {
@@ -332,7 +337,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                 }
                 FetchType.Episodes -> listOf(libAnime)
             }
-        }
+        }.distinctBy { it.anime.id }
 
         val restrictions = libraryPreferences.autoUpdateItemRestrictions().get().takeIf {
             targetEntryIds == null
@@ -643,7 +648,6 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
          * Key for category to update.
          */
         private const val KEY_CATEGORY = "animeCategory"
-        private const val KEY_ENTRY_IDS = "entryIds"
 
         fun cancelAllWorks(context: Context) {
             context.workManager.cancelAllWorkByTag(TAG)
@@ -673,7 +677,16 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             entryIds: LongArray,
         ): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             if (entryIds.isEmpty()) return@withContext false
-            enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
+            val inputData = LibraryUpdateEntryIds.buildInputData(
+                cacheDir = context.cacheDir,
+                mediaTag = TAG,
+                entryIds = entryIds,
+            )
+            val enqueued = enqueueManualUpdate(context, inputData)
+            if (!enqueued) {
+                LibraryUpdateEntryIds.cleanupSpillFile(inputData, context.cacheDir)
+            }
+            enqueued
         }
 
         private fun enqueueManualUpdate(

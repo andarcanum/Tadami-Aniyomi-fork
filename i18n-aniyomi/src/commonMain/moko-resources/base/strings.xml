@@ -3787,4 +3787,14 @@
     <string name="player_episode_filter_all">All</string>
     <string name="player_episode_filter_unseen">Unseen</string>
     <string name="player_episode_filter_bookmarked">Bookmarked</string>
+
+    <!-- Library multi-selection bulk update & Aurora selection bar -->
+    <string name="action_update_selected">Update</string>
+    <string name="action_update_selected_count">Update (%1$d)</string>
+    <string name="action_update_selected_local_only">Local entries cannot be updated</string>
+    <string name="action_update_selected_local_skipped">%1$d local skipped</string>
+    <string name="library_selection_count">Selected: %1$d</string>
+    <string name="library_selection_category_progress">%1$s: %2$d of %3$d</string>
+    <string name="library_selection_all_short">All</string>
+    <string name="library_selection_clear_short">Clear</string>
 </resources>

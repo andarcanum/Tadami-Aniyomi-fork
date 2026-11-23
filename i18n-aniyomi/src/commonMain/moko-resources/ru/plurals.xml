@@ -59,4 +59,10 @@
         <item quantity="many">И ещё %1$d частей</item>
         <item quantity="other">И ещё %1$d части</item>
     </plurals>
+    <plurals name="updating_selected_entries">
+        <item quantity="one">Обновление %1$d выбранного тайтла</item>
+        <item quantity="few">Обновление %1$d выбранных тайтлов</item>
+        <item quantity="many">Обновление %1$d выбранных тайтлов</item>
+        <item quantity="other">Обновление %1$d выбранных тайтлов</item>
+    </plurals>
 </resources>

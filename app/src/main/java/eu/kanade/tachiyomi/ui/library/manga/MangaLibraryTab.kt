@@ -51,6 +51,7 @@ import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
+import eu.kanade.tachiyomi.ui.library.resolveMangaBulkUpdateSelection
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.series.manga.MangaSeriesScreen
@@ -59,6 +60,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import tachiyomi.core.common.i18n.pluralStringResource
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.model.Category
@@ -218,6 +220,9 @@ data object MangaLibraryTab : Tab {
                 )
             },
             bottomBar = {
+                val bulkUpdateSelection = remember(state.selection) {
+                    resolveMangaBulkUpdateSelection(state.selection)
+                }
                 LibraryBottomActionMenu(
                     visible = state.selectionMode,
                     onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
@@ -236,6 +241,29 @@ data object MangaLibraryTab : Tab {
                                 }
                             }
                         },
+                    onUpdateClicked = if (bulkUpdateSelection.hasUpdatable) {
+                        {
+                            val entryIds = bulkUpdateSelection.updatableIds
+                            scope.launch {
+                                val started = MangaLibraryUpdateJob.startNow(context, entryIds)
+                                if (started) screenModel.clearSelection()
+                                val message = if (started) {
+                                    context.pluralStringResource(
+                                        AYMR.plurals.updating_selected_entries,
+                                        entryIds.size,
+                                        entryIds.size,
+                                    )
+                                } else {
+                                    context.stringResource(MR.strings.update_already_running)
+                                }
+                                snackbarHostState.showSnackbar(message)
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    updatableCount = bulkUpdateSelection.updatableCount,
+                    skippedLocalCount = bulkUpdateSelection.skippedLocalCount,
                     onMigrateClicked = {
                         val selectionIds = state.selection
                             .flatMap { selected ->

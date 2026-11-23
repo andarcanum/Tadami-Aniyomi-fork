@@ -1331,6 +1331,19 @@ class AnimeLibraryScreenModel(
         }
     }
 
+    fun deselectAll(index: Int) {
+        mutableState.update { state ->
+            val categoryId = state.categories.getOrNull(index)?.id ?: return@update state
+            val categoryItemIds = state.getAnimelibItemsByCategoryId(categoryId)
+                ?.mapTo(HashSet()) { it.id }
+                ?: return@update state
+            val newSelection = state.selection.mutate { list ->
+                list.removeAll { it.id in categoryItemIds }
+            }
+            state.copy(selection = newSelection)
+        }
+    }
+
     fun invertSelection(index: Int) {
         mutableState.update { state ->
             // D-M8 (anime port): guard the stale index (selectAll already uses getOrNull; this

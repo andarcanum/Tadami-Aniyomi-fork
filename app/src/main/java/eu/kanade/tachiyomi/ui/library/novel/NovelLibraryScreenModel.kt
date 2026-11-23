@@ -512,6 +512,20 @@ class NovelLibraryScreenModel(
         }
     }
 
+    fun deselectAll(index: Int) {
+        mutableState.update { current ->
+            val targetCategoryId = current.categories.getOrNull(index)?.id
+            val scopeItems = if (targetCategoryId == null) {
+                current.items
+            } else {
+                current.getLibraryItemsByCategoryId(targetCategoryId).orEmpty()
+            }
+            val toRemoveIds = scopeItems.mapTo(HashSet(scopeItems.size)) { it.id }
+            val mutable = current.selection.filterNot { it.id in toRemoveIds }
+            current.copy(selection = persistentListOf<NovelLibraryItem>().addingAll(mutable))
+        }
+    }
+
     fun invertSelection(index: Int) {
         mutableState.update { current ->
             val targetCategoryId = current.categories.getOrNull(index)?.id

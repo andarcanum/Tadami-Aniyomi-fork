@@ -94,11 +94,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
-import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.HazeColorEffect
-import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
@@ -108,7 +104,7 @@ import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
 import eu.kanade.presentation.components.auroraCelestialBar
 import eu.kanade.presentation.components.auroraCelestialHalo
 import eu.kanade.presentation.components.auroraCelestialRail
-import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.auroraGlassBar
 import eu.kanade.presentation.components.latticeCircuitBar
 import eu.kanade.presentation.components.latticeCircuitRail
 import eu.kanade.presentation.components.rememberAuroraCelestialNavbarUnlocked
@@ -891,67 +887,11 @@ object HomeScreen : Screen() {
         colors: AuroraColors,
         shape: Shape,
         hazeState: HazeState?,
-    ): Modifier {
-        val hazeModifier = if (hazeState != null) {
-            val hazeStyle = HazeBlurStyle {
-                backgroundColor(colors.background)
-                colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.65f))))
-                blurRadius(24.dp)
-                noiseFactor(0.12f)
-            }
-            Modifier.hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
-        } else {
-            // Adaptive non-blur glass fallback for API < 31 / low-RAM / Battery Saver.
-            Modifier.background(
-                colors.surface.copy(alpha = if (colors.isDark) 0.88f else 0.92f),
-                shape,
-            )
-        }
-        return if (colors.isDark) {
-            this
-                .shadow(
-                    elevation = 10.dp,
-                    shape = shape,
-                    ambientColor = Color.White.copy(alpha = 0.12f),
-                    spotColor = Color.White.copy(alpha = 0.08f),
-                )
-                .shadow(
-                    elevation = 3.dp,
-                    shape = shape,
-                    ambientColor = Color.White.copy(alpha = 0.18f),
-                    spotColor = Color.White.copy(alpha = 0.12f),
-                )
-                .clip(shape)
-                // Opaque base under the frost: on first frames after navigation
-                // (e.g. popping back to home) the haze layer has not captured
-                // content yet, so without this the bar flashes transparent.
-                .background(colors.background, shape)
-                .then(hazeModifier)
-                .border(
-                    BorderStroke(width = 1.dp, brush = auroraMenuRimLightBrush(colors)),
-                    shape = shape,
-                )
-        } else {
-            this
-                .shadow(elevation = 8.dp, shape = shape)
-                .clip(shape)
-                // Opaque base under the frost (see dark branch comment).
-                .background(colors.background, shape)
-                .then(hazeModifier)
-                .border(
-                    BorderStroke(
-                        width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.80f),
-                                Color.White.copy(alpha = 0.20f),
-                            ),
-                        ),
-                    ),
-                    shape = shape,
-                )
-        }
-    }
+    ): Modifier = auroraGlassBar(
+        colors = colors,
+        shape = shape,
+        hazeState = hazeState,
+    )
 
     @Composable
     private fun AuroraNavigationRail(

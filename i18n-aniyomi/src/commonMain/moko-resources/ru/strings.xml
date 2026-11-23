@@ -3826,5 +3826,15 @@
     <string name="player_episode_filter_all">Все</string>
     <string name="player_episode_filter_unseen">Непросмотренные</string>
     <string name="player_episode_filter_bookmarked">Закладки</string>
+
+    <!-- Library multi-selection bulk update & Aurora selection bar -->
+    <string name="action_update_selected">Обновить</string>
+    <string name="action_update_selected_count">Обновить (%1$d)</string>
+    <string name="action_update_selected_local_only">Локальные тайтлы не обновляются</string>
+    <string name="action_update_selected_local_skipped">Локальных пропущено: %1$d</string>
+    <string name="library_selection_count">Выбрано: %1$d</string>
+    <string name="library_selection_category_progress">%1$s: %2$d из %3$d</string>
+    <string name="library_selection_all_short">Все</string>
+    <string name="library_selection_clear_short">Снять</string>
 </resources>
 
