@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutConfig
 import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
+import eu.kanade.tachiyomi.ui.player.settings.DecoderPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.player.settings.SubtitleJustification
@@ -359,6 +360,7 @@ class PlayerReliabilityFixesTest {
             eventBus = mockk(relaxed = true),
             activityDataRepository = mockk(relaxed = true),
             discoveryRepository = mockk(relaxed = true),
+            decoderPreferences = mockk<DecoderPreferences>(relaxed = true),
         ).also { createdViewModels += it }
 
         return TestContext(

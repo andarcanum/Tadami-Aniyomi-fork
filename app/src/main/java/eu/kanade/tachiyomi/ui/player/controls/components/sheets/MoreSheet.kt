@@ -381,9 +381,13 @@ fun MoreSheet(
                                             selected = activeDecoderPreset == preset,
                                             onClick = {
                                                 val before = DecoderPreset.snapshotFrom(decoderPreferences)
+                                                val beforeZeroCopy = decoderPreferences.useZeroCopyHwdec().get()
                                                 decoderPreferences.decoderPreset().set(preset)
                                                 preset.applyTo(decoderPreferences)
-                                                if (DecoderPreset.snapshotFrom(decoderPreferences) != before) {
+                                                if (
+                                                    beforeZeroCopy ||
+                                                    DecoderPreset.snapshotFrom(decoderPreferences) != before
+                                                ) {
                                                     decoderPresetRestartNeeded = true
                                                 }
                                             },
@@ -400,9 +404,13 @@ fun MoreSheet(
                                             selected = activeDecoderPreset == preset,
                                             onClick = {
                                                 val before = DecoderPreset.snapshotFrom(decoderPreferences)
+                                                val beforeZeroCopy = decoderPreferences.useZeroCopyHwdec().get()
                                                 decoderPreferences.decoderPreset().set(preset)
                                                 preset.applyTo(decoderPreferences)
-                                                if (DecoderPreset.snapshotFrom(decoderPreferences) != before) {
+                                                if (
+                                                    beforeZeroCopy ||
+                                                    DecoderPreset.snapshotFrom(decoderPreferences) != before
+                                                ) {
                                                     decoderPresetRestartNeeded = true
                                                 }
                                             },

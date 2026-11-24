@@ -127,7 +127,13 @@ class PlayerActivity : BaseActivity() {
     val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     private var mediaSession: MediaSession? = null
+
+    @Volatile
     private var didOverrideDisplayMode = false
+    private var baselineDisplayModeId: Int? = null
+
+    @Volatile
+    private var isViewModelReady = false
     private val gesturePreferences: GesturePreferences by lazy { viewModel.gesturePreferences }
     private val playerPreferences: PlayerPreferences by lazy { viewModel.playerPreferences }
     private val playerStartupCoordinator by lazy {
@@ -223,7 +229,7 @@ class PlayerActivity : BaseActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
                 viewModel.pause()
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                updateKeepScreenOnFlag(isPaused = true)
             }
         }
     }
@@ -285,7 +291,7 @@ class PlayerActivity : BaseActivity() {
                 )
                 viewModel.updateIsLoadingHosters(false)
                 viewModel.updateIsLoadingEpisode(false)
-                viewModel.isLoading.update { false }
+                viewModel.updateIsLoading(false)
                 withUIContext {
                     setInitialEpisodeError(exception)
                 }
@@ -319,6 +325,7 @@ class PlayerActivity : BaseActivity() {
 
         setupPlayerMPV()
         viewModel.attachActivity(this)
+        isViewModelReady = true
         setupPlayerAudio()
         setupMediaSession()
         setupPlayerOrientation()
@@ -470,6 +477,12 @@ class PlayerActivity : BaseActivity() {
         viewModel.pause()
         viewModel.saveCurrentEpisodeWatchingProgress()
 
+        if (!isInPictureInPictureMode) {
+            viewModel.cancelInFlightPrefetch()
+            resetDisplayRefreshRateIfNeeded()
+            updateKeepScreenOnFlag(isPaused = true)
+        }
+
         if (isInPictureInPictureMode && powerManager.isInteractive) {
             viewModel.deletePendingEpisodes()
             if (!isFinishing && !isChangingConfigurations) {
@@ -550,7 +563,7 @@ class PlayerActivity : BaseActivity() {
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         )
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        updateKeepScreenOnFlag(isPaused = viewModel.paused.value)
         binding.root.systemUiVisibility =
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
             View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
@@ -888,6 +901,7 @@ class PlayerActivity : BaseActivity() {
     override fun onResume() {
         if (!player.isExiting) {
             super.onResume()
+            syncKeepScreenOnFromPlayer()
             return
         }
 
@@ -898,6 +912,13 @@ class PlayerActivity : BaseActivity() {
             audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).also {
                 if (it < viewModel.maxVolume) viewModel.changeMPVVolumeTo(100)
             }
+        }
+        syncKeepScreenOnFromPlayer()
+        if (!isInPictureInPictureMode &&
+            !viewModel.isLoadingEpisode.value &&
+            viewModel.currentVideo.value != null
+        ) {
+            matchDisplayRefreshRateIfEnabled()
         }
     }
 
@@ -919,7 +940,7 @@ class PlayerActivity : BaseActivity() {
         val fellBack = viewModel.tryFallbackAfterPlaybackError(errorMessage)
         if (!fellBack) {
             viewModel.updateIsLoadingEpisode(false)
-            viewModel.isLoading.update { false }
+            viewModel.updateIsLoading(false)
             toast(errorMessage, Toast.LENGTH_LONG)
         }
     }
@@ -935,7 +956,7 @@ class PlayerActivity : BaseActivity() {
             }
             "demuxer-cache-time" -> viewModel.updateReadAhead(value = value)
             "cache-buffering-state" -> viewModel.updateBufferingPercent(value.toInt())
-            "cache-speed" -> viewModel.updateCacheSpeed(value)
+            "cache-speed" -> if (viewModel.isLoading.value) viewModel.updateCacheSpeed(value)
             "volume" -> viewModel.setMPVVolume(value.toInt())
             "volume-max" -> viewModel.volumeBoostCap = value.toInt() - 100
             // "chapter" -> viewModel.updateChapter(value)
@@ -961,24 +982,21 @@ class PlayerActivity : BaseActivity() {
             "pause" -> {
                 if (value && player.paused == true) {
                     viewModel.pause()
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    updateKeepScreenOnFlag(isPaused = true)
                 } else if (!value && player.paused == false) {
                     viewModel.unpause()
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    updateKeepScreenOnFlag(isPaused = false)
                 }
 
                 updatePipParamsSafely()
             }
 
             "paused-for-cache" -> {
-                viewModel.isLoading.update { value }
-                if (!value) {
-                    viewModel.updateBufferingPercent(null)
-                }
+                viewModel.updateIsLoading(value)
             }
 
             "seeking" -> {
-                viewModel.isLoading.update { value }
+                viewModel.updateIsLoading(value)
             }
 
             "eof-reached" -> {
@@ -1030,7 +1048,7 @@ class PlayerActivity : BaseActivity() {
                 val pausedForCache = withActiveMpv { MPVLib.getPropertyBoolean("paused-for-cache") } == true
                 val seeking = withActiveMpv { MPVLib.getPropertyBoolean("seeking") } == true
                 if (!pausedForCache && !seeking) {
-                    viewModel.isLoading.update { false }
+                    viewModel.updateIsLoading(false)
                 }
             }
         }
@@ -1348,7 +1366,7 @@ class PlayerActivity : BaseActivity() {
                         launchUI { toast(AYMR.strings.no_next_episode) }
                     }
                     viewModel.updateIsLoadingEpisode(false)
-                    viewModel.isLoading.update { _ -> false }
+                    viewModel.updateIsLoading(false)
                 }
 
                 else -> {
@@ -1356,7 +1374,7 @@ class PlayerActivity : BaseActivity() {
                         when {
                             switchMethod.hosterList.isEmpty() -> {
                                 viewModel.updateIsLoadingEpisode(false)
-                                viewModel.isLoading.update { _ -> false }
+                                viewModel.updateIsLoading(false)
                                 setInitialEpisodeError(
                                     PlayerViewModel.ExceptionWithStringResource(
                                         "Hoster list is empty",
@@ -1376,7 +1394,7 @@ class PlayerActivity : BaseActivity() {
                     } else {
                         logcat(LogPriority.ERROR) { "Error getting links" }
                         viewModel.updateIsLoadingEpisode(false)
-                        viewModel.isLoading.update { _ -> false }
+                        viewModel.updateIsLoading(false)
                         launchUI { toast(AYMR.strings.no_hosters) }
                     }
 
@@ -1689,11 +1707,52 @@ class PlayerActivity : BaseActivity() {
         }
     }
 
+    internal fun shouldDispatchCacheSpeed(): Boolean {
+        return isViewModelReady && !player.isExiting && viewModel.shouldObserveCacheSpeed()
+    }
+
+    private fun syncKeepScreenOnFromPlayer() {
+        val isPaused = if (viewModel.currentVideo.value != null) {
+            withActiveMpv { player.paused } ?: viewModel.paused.value
+        } else {
+            viewModel.paused.value
+        }
+        updateKeepScreenOnFlag(isPaused = isPaused)
+    }
+
+    private fun updateKeepScreenOnFlag(isPaused: Boolean) {
+        if (isPaused) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     private fun matchDisplayRefreshRateIfEnabled() {
-        if (player.isExiting || isMpvDestroyed || !decoderPreferences.matchDisplayRefreshRate().get()) return
+        if (player.isExiting || isMpvDestroyed) return
+        if (!decoderPreferences.matchDisplayRefreshRate().get()) {
+            if (didOverrideDisplayMode) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed && !player.isExiting) {
+                        resetDisplayRefreshRateIfNeeded()
+                    }
+                }
+            }
+            return
+        }
         val videoFps = withActiveMpv(requireNotExiting = true) {
             MPVLib.getPropertyDouble("container-fps")
-        } ?: return
+        }
+        if (videoFps == null || videoFps <= 0.0) {
+            if (didOverrideDisplayMode) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed && !player.isExiting) {
+                        resetDisplayRefreshRateIfNeeded()
+                    }
+                }
+            }
+            return
+        }
         runOnUiThread {
             if (isFinishing || isDestroyed || player.isExiting) return@runOnUiThread
             val activeDisplay = runCatching {
@@ -1714,14 +1773,27 @@ class PlayerActivity : BaseActivity() {
                     refreshRate = mode.refreshRate,
                 )
             }
-            val targetModeId = DisplayRefreshRateMatcher.selectBestModeId(
+            val optimalModeId = DisplayRefreshRateMatcher.selectOptimalModeId(
                 videoFps = videoFps,
                 availableModes = modes,
                 currentModeId = currentMode.modeId,
-            ) ?: return@runOnUiThread
+            )
+            if (optimalModeId == null) {
+                resetDisplayRefreshRateIfNeeded()
+                return@runOnUiThread
+            }
+            if (optimalModeId == currentMode.modeId) {
+                return@runOnUiThread
+            }
+            if (!didOverrideDisplayMode) {
+                baselineDisplayModeId = currentMode.modeId
+            } else if (optimalModeId == baselineDisplayModeId) {
+                resetDisplayRefreshRateIfNeeded()
+                return@runOnUiThread
+            }
 
             window.attributes = window.attributes.apply {
-                preferredDisplayModeId = targetModeId
+                preferredDisplayModeId = optimalModeId
             }
             didOverrideDisplayMode = true
         }
@@ -1730,6 +1802,7 @@ class PlayerActivity : BaseActivity() {
     private fun resetDisplayRefreshRateIfNeeded() {
         if (!didOverrideDisplayMode) return
         didOverrideDisplayMode = false
+        baselineDisplayModeId = null
         runCatching {
             window.attributes = window.attributes.apply {
                 preferredDisplayModeId = 0

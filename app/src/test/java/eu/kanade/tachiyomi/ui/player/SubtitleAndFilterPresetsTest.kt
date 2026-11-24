@@ -21,6 +21,9 @@ class SubtitleAndFilterPresetsTest {
     @Test
     fun `DecoderPreset describeFeatureTags summarizes active rendering pipeline`() {
         val midTags = DecoderPreset.describeFeatureTags(DecoderPreset.Mid.expectedSnapshot(supportsGpuNext = true))
-        midTags shouldBe listOf("HW", "GPU-Next", "Deband: GPU", "Anime4K: Balanced", "Motion: Auto")
+        midTags shouldBe listOf("HW", "GPU-Next", "Deband: GPU", "Anime4K: Balanced")
+
+        val highTags = DecoderPreset.describeFeatureTags(DecoderPreset.High.expectedSnapshot(supportsGpuNext = true))
+        highTags shouldBe listOf("HW", "GPU-Next", "Deband: GPU", "Anime4K: Quality", "Motion: Always")
     }
 }

@@ -5,10 +5,12 @@ import android.media.AudioManager
 import android.view.inputmethod.InputMethodManager
 import androidx.lifecycle.SavedStateHandle
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.tachiyomi.ui.player.controls.components.IndexedSegment
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutConfig
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutOrientation
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutRegion
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutSlot
+import eu.kanade.tachiyomi.ui.player.settings.DecoderPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
@@ -120,9 +122,85 @@ class PlayerViewModelRegressionTest {
         }
     }
 
+    @Test
+    fun `updateDecoder persists HWPlus, HW, and SW selections`() {
+        val context = createContext()
+
+        context.viewModel.updateDecoder(Decoder.HWPlus)
+        context.tryHwDecodingFlow.value shouldBe true
+        context.useZeroCopyHwdecFlow.value shouldBe true
+        context.viewModel.currentDecoder.value shouldBe Decoder.HWPlus
+        buildHwdecOption(
+            tryHWDecoding = context.tryHwDecodingFlow.value,
+            preferZeroCopy = context.useZeroCopyHwdecFlow.value,
+        ) shouldBe "mediacodec"
+
+        context.viewModel.updateDecoder(Decoder.HW)
+        context.tryHwDecodingFlow.value shouldBe true
+        context.useZeroCopyHwdecFlow.value shouldBe false
+        context.viewModel.currentDecoder.value shouldBe Decoder.HW
+        buildHwdecOption(
+            tryHWDecoding = context.tryHwDecodingFlow.value,
+            preferZeroCopy = context.useZeroCopyHwdecFlow.value,
+        ) shouldBe "mediacodec-copy"
+
+        context.viewModel.updateDecoder(Decoder.SW)
+        context.tryHwDecodingFlow.value shouldBe false
+        context.useZeroCopyHwdecFlow.value shouldBe false
+        context.viewModel.currentDecoder.value shouldBe Decoder.SW
+        buildHwdecOption(
+            tryHWDecoding = context.tryHwDecodingFlow.value,
+            preferZeroCopy = context.useZeroCopyHwdecFlow.value,
+        ) shouldBe "no"
+    }
+
+    @Test
+    fun `updateCacheSpeed gates on isLoading, throttles within 250ms, and clears when loading ends`() {
+        val context = createContext()
+
+        context.viewModel.isLoading.value = false
+        context.viewModel.updateCacheSpeed(bytesPerSec = 1024L, nowElapsedMs = 1_000L)
+        context.viewModel.cacheSpeedBytesPerSec.value shouldBe null
+
+        context.viewModel.isLoading.value = true
+        context.viewModel.updateCacheSpeed(bytesPerSec = 1_000_000L, nowElapsedMs = 1_000L)
+        context.viewModel.cacheSpeedBytesPerSec.value shouldBe 1_000_000L
+
+        // Within 250ms throttle window -> ignored
+        context.viewModel.updateCacheSpeed(bytesPerSec = 2_000_000L, nowElapsedMs = 1_249L)
+        context.viewModel.cacheSpeedBytesPerSec.value shouldBe 1_000_000L
+
+        // At 250ms boundary -> accepted
+        context.viewModel.updateCacheSpeed(bytesPerSec = 2_000_000L, nowElapsedMs = 1_250L)
+        context.viewModel.cacheSpeedBytesPerSec.value shouldBe 2_000_000L
+
+        // Finishing loading clears cache speed
+        context.viewModel.updateIsLoading(false)
+        context.viewModel.isLoading.value shouldBe false
+        context.viewModel.cacheSpeedBytesPerSec.value shouldBe null
+    }
+
+    @Test
+    fun `getCurrentChapter returns matching chapter index and preserves tie order`() {
+        val context = createContext()
+        context.viewModel.getCurrentChapter(10f) shouldBe null
+
+        val op = IndexedSegment(name = "OP", start = 30f, index = 0)
+        val ep = IndexedSegment(name = "Episode", start = 120f, index = 1)
+        val dup = IndexedSegment(name = "ED", start = 120f, index = 2)
+        context.viewModel.updateChapters(listOf(op, ep, dup))
+
+        context.viewModel.getCurrentChapter(15f) shouldBe null
+        context.viewModel.getCurrentChapter(30f) shouldBe IndexedValue(0, op)
+        context.viewModel.getCurrentChapter(90f) shouldBe IndexedValue(0, op)
+        context.viewModel.getCurrentChapter(150f) shouldBe IndexedValue(1, ep)
+    }
+
     private fun createContext(): TestContext {
         val layoutFlow = MutableStateFlow(PlayerLayoutConfig().toPreferenceValue())
         val showCustomButtonsFlow = MutableStateFlow(false)
+        val tryHwDecodingFlow = MutableStateFlow(true)
+        val useZeroCopyHwdecFlow = MutableStateFlow(false)
         val customButtons = listOf(
             CustomButton(
                 id = 7L,
@@ -165,6 +243,11 @@ class PlayerViewModelRegressionTest {
         val uiPreferences = mockk<UiPreferences> {
             every { relativeTime() } returns booleanPreference(true)
             every { dateFormat() } returns stringFlowPreference(MutableStateFlow(""))
+        }
+
+        val decoderPreferences = mockk<DecoderPreferences>(relaxed = true) {
+            every { tryHWDecoding() } returns mutableBooleanPreference(tryHwDecodingFlow)
+            every { useZeroCopyHwdec() } returns mutableBooleanPreference(useZeroCopyHwdecFlow)
         }
 
         val getCustomButtons = mockk<GetCustomButtons>()
@@ -213,6 +296,7 @@ class PlayerViewModelRegressionTest {
             eventBus = mockk(relaxed = true),
             activityDataRepository = mockk(relaxed = true),
             discoveryRepository = mockk(relaxed = true),
+            decoderPreferences = decoderPreferences,
         )
 
         return TestContext(
@@ -220,6 +304,8 @@ class PlayerViewModelRegressionTest {
             activity = activity,
             layoutFlow = layoutFlow,
             showCustomButtonsFlow = showCustomButtonsFlow,
+            tryHwDecodingFlow = tryHwDecodingFlow,
+            useZeroCopyHwdecFlow = useZeroCopyHwdecFlow,
             customButtons = customButtons,
         )
     }
@@ -240,6 +326,12 @@ class PlayerViewModelRegressionTest {
 
     private fun booleanFlowPreference(flow: MutableStateFlow<Boolean>): Preference<Boolean> = mockk {
         every { get() } answers { flow.value }
+        every { changes() } returns flow
+    }
+
+    private fun mutableBooleanPreference(flow: MutableStateFlow<Boolean>): Preference<Boolean> = mockk {
+        every { get() } answers { flow.value }
+        every { set(any()) } answers { flow.value = firstArg() }
         every { changes() } returns flow
     }
 
@@ -265,6 +357,8 @@ class PlayerViewModelRegressionTest {
         val activity: PlayerActivity,
         val layoutFlow: MutableStateFlow<String>,
         val showCustomButtonsFlow: MutableStateFlow<Boolean>,
+        val tryHwDecodingFlow: MutableStateFlow<Boolean>,
+        val useZeroCopyHwdecFlow: MutableStateFlow<Boolean>,
         val customButtons: List<CustomButton>,
     )
 }

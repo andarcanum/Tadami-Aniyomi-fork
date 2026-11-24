@@ -3757,7 +3757,7 @@
     <string name="player_stats_page_tracks">5 · Tracks</string>
     <string name="player_decoder_preset_device_summary">Automatically adapts GPU renderer and debanding for this device.</string>
     <string name="player_decoder_preset_low_summary">Hardware decoding only without shaders or interpolation. Best for older phones and battery life.</string>
-    <string name="player_decoder_preset_mid_summary">GPU-Next, GPU debanding, balanced Anime4K sharpening, and adaptive frame smoothing.</string>
+    <string name="player_decoder_preset_mid_summary">GPU-Next, GPU debanding, and balanced Anime4K sharpening.</string>
     <string name="player_decoder_preset_high_summary">Maximum quality: GPU-Next, Quality Anime4K shaders, and always-on frame interpolation.</string>
     <string name="player_decoder_preset_custom_summary">Custom combination of decoder, shaders, and display options.</string>
     <string name="player_battery_impact_low">Battery: Low</string>

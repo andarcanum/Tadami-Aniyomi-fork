@@ -15,6 +15,13 @@ class HwdecOptionTest {
     @Test
     fun `hardware decoding disabled resolves to software decoding`() {
         buildHwdecOption(tryHWDecoding = false) shouldBe "no"
+        buildHwdecOption(tryHWDecoding = false, preferZeroCopy = true) shouldBe "no"
+    }
+
+    @Test
+    fun `zero copy preference resolves to mediacodec when hardware decoding is enabled`() {
+        buildHwdecOption(tryHWDecoding = true, preferZeroCopy = true) shouldBe "mediacodec"
+        buildHwdecOption(tryHWDecoding = true, preferZeroCopy = false) shouldBe "mediacodec-copy"
     }
 
     @Test

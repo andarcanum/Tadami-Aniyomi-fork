@@ -12,6 +12,7 @@ class DecoderPreferences(
     private val preferenceStore: PreferenceStore,
 ) {
     fun tryHWDecoding() = preferenceStore.getBoolean("pref_try_hwdec", true)
+    fun useZeroCopyHwdec() = preferenceStore.getBoolean("pref_use_zero_copy_hwdec", false)
     fun decoderPreset() = preferenceStore.getEnum("pref_decoder_preset", DecoderPreset.Device)
     fun gpuNext() = preferenceStore.getBoolean("pref_gpu_next", false)
     fun videoDebanding() = preferenceStore.getEnum("pref_video_debanding", Debanding.None)

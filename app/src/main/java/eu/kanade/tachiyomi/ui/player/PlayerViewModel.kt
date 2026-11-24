@@ -77,6 +77,7 @@ import eu.kanade.tachiyomi.ui.player.controls.components.sheets.getChangedAt
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutConfig
 import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
+import eu.kanade.tachiyomi.ui.player.settings.DecoderPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
@@ -214,6 +215,7 @@ class PlayerViewModel @JvmOverloads constructor(
     private val eventBus: AchievementEventBus = Injekt.get(),
     private val activityDataRepository: ActivityDataRepository = Injekt.get(),
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository = Injekt.get(),
+    private val decoderPreferences: DecoderPreferences = Injekt.get(),
 ) : ViewModel() {
 
     private val appContext: Context = activity.applicationContext
@@ -366,6 +368,7 @@ class PlayerViewModel @JvmOverloads constructor(
     private val isAutoFallingBack = AtomicBoolean(false)
     private val progressPersistencePolicy = PlaybackProgressPersistencePolicy()
     private val nextEpisodePrefetcher = NextEpisodePrefetcher()
+    private val lastCacheSpeedUpdateElapsedMs = AtomicLong(Long.MIN_VALUE)
 
     private var chaptersJob: Job? = null
     private var hosterActionJob: Job? = null
@@ -557,6 +560,11 @@ class PlayerViewModel @JvmOverloads constructor(
             hosterLoadJobs.forEach { it.cancel() }
             hosterLoadJobs.clear()
         }
+        nextEpisodePrefetcher.cancelInFlight()
+    }
+
+    fun cancelInFlightPrefetch() {
+        nextEpisodePrefetcher.cancelInFlight()
     }
 
     /**
@@ -601,6 +609,9 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     fun updateDecoder(decoder: Decoder) {
+        decoderPreferences.tryHWDecoding().set(decoder != Decoder.SW)
+        decoderPreferences.useZeroCopyHwdec().set(decoder == Decoder.HWPlus)
+        _currentDecoder.update { decoder }
         withActiveMpv {
             MPVLib.setPropertyString("hwdec", decoder.value)
         }
@@ -736,7 +747,7 @@ class PlayerViewModel @JvmOverloads constructor(
 
         isLoadingTracks.update { false }
         updateIsLoadingEpisode(false)
-        isLoading.update { false }
+        updateIsLoading(false)
         setPausedState()
     }
 
@@ -1353,8 +1364,43 @@ class PlayerViewModel @JvmOverloads constructor(
         bufferingPercent.update { percent?.coerceIn(0, 100) }
     }
 
-    fun updateCacheSpeed(bytesPerSec: Long) {
+    internal fun shouldObserveCacheSpeed(nowElapsedMs: Long = SystemClock.elapsedRealtime()): Boolean {
+        if (!isLoading.value) return false
+        val lastMs = lastCacheSpeedUpdateElapsedMs.get()
+        return lastMs == Long.MIN_VALUE || nowElapsedMs - lastMs >= CACHE_SPEED_THROTTLE_MS
+    }
+
+    fun updateCacheSpeed(
+        bytesPerSec: Long,
+        nowElapsedMs: Long = SystemClock.elapsedRealtime(),
+    ) {
+        if (!isLoading.value) {
+            clearCacheSpeed()
+            return
+        }
+        val lastMs = lastCacheSpeedUpdateElapsedMs.get()
+        if (lastMs != Long.MIN_VALUE && nowElapsedMs - lastMs < CACHE_SPEED_THROTTLE_MS) {
+            return
+        }
+        if (!lastCacheSpeedUpdateElapsedMs.compareAndSet(lastMs, nowElapsedMs)) {
+            return
+        }
         cacheSpeedBytesPerSec.update { bytesPerSec.takeIf { it > 0L } }
+    }
+
+    fun clearCacheSpeed() {
+        lastCacheSpeedUpdateElapsedMs.set(Long.MIN_VALUE)
+        if (cacheSpeedBytesPerSec.value != null) {
+            cacheSpeedBytesPerSec.value = null
+        }
+    }
+
+    fun updateIsLoading(loading: Boolean) {
+        isLoading.update { loading }
+        if (!loading) {
+            updateBufferingPercent(null)
+            clearCacheSpeed()
+        }
     }
 
     fun setVideoZoom(zoom: Float) {
@@ -1640,6 +1686,8 @@ class PlayerViewModel @JvmOverloads constructor(
         _chapters.update { _ -> emptyList() }
         _currentChapter.update { _ -> null }
         _skipIntroText.update { _ -> null }
+        updateBufferingPercent(null)
+        clearCacheSpeed()
         clearAbLoop()
         _hosterState.update { _ -> emptyList() }
         _hosterList.update { _ -> emptyList() }
@@ -1667,7 +1715,9 @@ class PlayerViewModel @JvmOverloads constructor(
         if (resetQuality) {
             qualityIndex = Pair(-1, -1)
         }
-        isLoading.update { true }
+        updateIsLoading(true)
+        updateBufferingPercent(null)
+        clearCacheSpeed()
         updateIsLoadingEpisode(true)
         isLoadingTracks.update { true }
         synchronized(autoFallbackAttempted) {
@@ -2437,7 +2487,7 @@ class PlayerViewModel @JvmOverloads constructor(
                 logcat(LogPriority.ERROR, e) { "loadHosters failed" }
                 if (episodeSessionId.get() == sessionId) {
                     updateIsLoadingEpisode(false)
-                    isLoading.update { false }
+                    updateIsLoading(false)
                     updateIsLoadingHosters(false)
                     showErrorToast(e)
                 }
@@ -2613,7 +2663,7 @@ class PlayerViewModel @JvmOverloads constructor(
                     )
                     if (!switched && episodeSessionId.get() == sessionId) {
                         updateIsLoadingEpisode(false)
-                        isLoading.update { false }
+                        updateIsLoading(false)
                         withUIContext { showToastMessage(errorMessage) }
                     }
                 } catch (e: CancellationException) {
@@ -2622,7 +2672,7 @@ class PlayerViewModel @JvmOverloads constructor(
                     logcat(LogPriority.ERROR, e) { "Auto-fallback failed after playback error: $errorMessage" }
                     if (episodeSessionId.get() == sessionId) {
                         updateIsLoadingEpisode(false)
-                        isLoading.update { false }
+                        updateIsLoading(false)
                         withUIContext { showToastMessage(errorMessage) }
                     }
                 } finally {
@@ -2699,12 +2749,12 @@ class PlayerViewModel @JvmOverloads constructor(
                     )
                     if (!switched && episodeSessionId.get() == sessionId) {
                         updateIsLoadingEpisode(false)
-                        isLoading.update { false }
+                        updateIsLoading(false)
                         withUIContext { showToastMessage(errorMessage) }
                     }
                 } else if (episodeSessionId.get() == sessionId) {
                     updateIsLoadingEpisode(false)
-                    isLoading.update { false }
+                    updateIsLoading(false)
                     withUIContext { showToastMessage(errorMessage) }
                 }
             } catch (e: CancellationException) {
@@ -2713,7 +2763,7 @@ class PlayerViewModel @JvmOverloads constructor(
                 logcat(LogPriority.ERROR, e) { "On-demand auto-fallback failed after playback error: $errorMessage" }
                 if (episodeSessionId.get() == sessionId) {
                     updateIsLoadingEpisode(false)
-                    isLoading.update { false }
+                    updateIsLoading(false)
                     withUIContext { showToastMessage(errorMessage) }
                 }
             } finally {
@@ -2755,14 +2805,14 @@ class PlayerViewModel @JvmOverloads constructor(
                     }
                 } else {
                     updateIsLoadingEpisode(false)
-                    isLoading.update { false }
+                    updateIsLoading(false)
                 }
             } catch (e: Throwable) {
                 if (e is CancellationException) throw e
                 logcat(LogPriority.ERROR, e) { "onVideoClicked failed" }
                 if (episodeSessionId.get() == sessionId) {
                     updateIsLoadingEpisode(false)
-                    isLoading.update { false }
+                    updateIsLoading(false)
                     updateIsLoadingHosters(false)
                     showErrorToast(e)
                 }
@@ -3510,10 +3560,20 @@ class PlayerViewModel @JvmOverloads constructor(
         }
     }
 
-    private fun getCurrentChapter(position: Float? = null): IndexedValue<IndexedSegment>? {
-        return chapters.value.withIndex()
-            .filter { it.value.start <= (position ?: pos.value) }
-            .maxByOrNull { it.value.start }
+    internal fun getCurrentChapter(position: Float? = null): IndexedValue<IndexedSegment>? {
+        val chapterList = chapters.value
+        if (chapterList.isEmpty()) return null
+        val targetPosition = position ?: pos.value
+        var bestIndex = -1
+        var bestChapter: IndexedSegment? = null
+        for (i in chapterList.indices) {
+            val chapter = chapterList[i]
+            if (chapter.start <= targetPosition && (bestChapter == null || chapter.start > bestChapter.start)) {
+                bestIndex = i
+                bestChapter = chapter
+            }
+        }
+        return bestChapter?.let { IndexedValue(bestIndex, it) }
     }
 
     fun setPrimaryCustomButtonTitle(button: CustomButton) {
@@ -3524,6 +3584,10 @@ class PlayerViewModel @JvmOverloads constructor(
         data class SetArtResult(val result: SetAsArt, val artType: ArtType) : Event()
         data class SavedImage(val result: SaveImageResult) : Event()
         data class ShareImage(val uri: Uri, val seconds: String) : Event()
+    }
+
+    companion object {
+        private const val CACHE_SPEED_THROTTLE_MS = 250L
     }
 }
 

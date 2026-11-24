@@ -8,6 +8,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 
 /**
@@ -19,6 +20,7 @@ internal class NextEpisodePrefetcher(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val ttlMs: Long = DEFAULT_TTL_MS,
     private val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+    private val failureCooldownMs: Long = DEFAULT_FAILURE_COOLDOWN_MS,
 ) {
     private data class CachedHosters(
         val episodeId: Long,
@@ -30,6 +32,8 @@ internal class NextEpisodePrefetcher(
     private var cached: CachedHosters? = null
     private var inFlightEpisodeId: Long? = null
     private var inFlightJob: Deferred<List<Hoster>?>? = null
+    private var lastFailedEpisodeId: Long? = null
+    private var lastFailedAtMs: Long = 0L
 
     fun prefetchIfNeeded(
         scope: CoroutineScope,
@@ -48,6 +52,9 @@ internal class NextEpisodePrefetcher(
             if (inFlightEpisodeId == episodeId && inFlightJob?.isActive == true) {
                 return
             }
+            if (lastFailedEpisodeId == episodeId && (now - lastFailedAtMs) < failureCooldownMs) {
+                return
+            }
             inFlightJob?.cancel()
             inFlightEpisodeId = episodeId
             inFlightJob = scope.async(ioDispatcher) {
@@ -55,6 +62,7 @@ internal class NextEpisodePrefetcher(
                     val result = withTimeout(timeoutMs) {
                         loader()
                     }
+                    ensureActive()
                     if (result.isNotEmpty()) {
                         synchronized(lock) {
                             cached = CachedHosters(
@@ -62,16 +70,34 @@ internal class NextEpisodePrefetcher(
                                 hosters = result,
                                 cachedAtMs = clockMs(),
                             )
+                            if (lastFailedEpisodeId == episodeId) {
+                                lastFailedEpisodeId = null
+                                lastFailedAtMs = 0L
+                            }
                         }
                         result
                     } else {
+                        synchronized(lock) {
+                            lastFailedEpisodeId = episodeId
+                            lastFailedAtMs = clockMs()
+                        }
                         null
                     }
                 } catch (_: TimeoutCancellationException) {
+                    ensureActive()
+                    synchronized(lock) {
+                        lastFailedEpisodeId = episodeId
+                        lastFailedAtMs = clockMs()
+                    }
                     null
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Throwable) {
+                    ensureActive()
+                    synchronized(lock) {
+                        lastFailedEpisodeId = episodeId
+                        lastFailedAtMs = clockMs()
+                    }
                     null
                 } finally {
                     synchronized(lock) {
@@ -118,18 +144,29 @@ internal class NextEpisodePrefetcher(
         return result
     }
 
+    fun cancelInFlight() {
+        synchronized(lock) {
+            inFlightJob?.cancel()
+            inFlightJob = null
+            inFlightEpisodeId = null
+        }
+    }
+
     fun cancelAndClear() {
         synchronized(lock) {
             inFlightJob?.cancel()
             inFlightJob = null
             inFlightEpisodeId = null
             cached = null
+            lastFailedEpisodeId = null
+            lastFailedAtMs = 0L
         }
     }
 
     companion object {
         const val DEFAULT_TTL_MS = 10L * 60L * 1000L
         const val DEFAULT_TIMEOUT_MS = 15_000L
+        const val DEFAULT_FAILURE_COOLDOWN_MS = 120_000L
         const val PREFETCH_PROGRESS_THRESHOLD = 0.75
     }
 }

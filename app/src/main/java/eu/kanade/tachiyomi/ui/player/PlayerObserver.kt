@@ -13,6 +13,7 @@ class PlayerObserver(val activity: PlayerActivity) :
     }
 
     override fun eventProperty(property: String, value: Long) {
+        if (property == "cache-speed" && !activity.shouldDispatchCacheSpeed()) return
         activity.runOnUiThread { activity.onObserverEvent(property, value) }
     }
 

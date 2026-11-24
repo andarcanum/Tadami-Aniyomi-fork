@@ -58,4 +58,60 @@ class DisplayRefreshRateMatcherTest {
         DisplayRefreshRateMatcher.selectBestModeId(23.976, modes, currentModeId = 2) shouldBe null
         DisplayRefreshRateMatcher.selectBestModeId(0.0, modes, currentModeId = 1) shouldBe null
     }
+
+    @Test
+    fun `picks 48hz instead of 120hz for 24fps on 48_60_120hz panel`() {
+        val modes = listOf(
+            DisplayModeInfo(modeId = 1, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 60f),
+            DisplayModeInfo(modeId = 2, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 48f),
+            DisplayModeInfo(modeId = 3, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 120f),
+        )
+
+        DisplayRefreshRateMatcher.selectBestModeId(
+            videoFps = 24.0,
+            availableModes = modes,
+            currentModeId = 1,
+        ) shouldBe 2
+    }
+
+    @Test
+    fun `picks 48hz instead of 24hz or 120hz for 24fps on 24_48_120hz panel`() {
+        val modes = listOf(
+            DisplayModeInfo(modeId = 1, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 24f),
+            DisplayModeInfo(modeId = 2, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 48f),
+            DisplayModeInfo(modeId = 3, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 120f),
+        )
+
+        DisplayRefreshRateMatcher.selectBestModeId(
+            videoFps = 24.0,
+            availableModes = modes,
+            currentModeId = 3,
+        ) shouldBe 2
+    }
+
+    @Test
+    fun `picks 24hz for 24fps on 24_60hz panel when no 48hz+ clean multiple exists`() {
+        val modes = listOf(
+            DisplayModeInfo(modeId = 1, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 60f),
+            DisplayModeInfo(modeId = 2, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 24f),
+        )
+
+        DisplayRefreshRateMatcher.selectBestModeId(
+            videoFps = 24.0,
+            availableModes = modes,
+            currentModeId = 1,
+        ) shouldBe 2
+    }
+
+    @Test
+    fun `selectOptimalModeId preserves locked mode on consecutive matching episodes and returns null on mismatch`() {
+        val modes = listOf(
+            DisplayModeInfo(modeId = 1, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 60f),
+            DisplayModeInfo(modeId = 2, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 48f),
+            DisplayModeInfo(modeId = 3, physicalWidth = 1080, physicalHeight = 2400, refreshRate = 120f),
+        )
+
+        DisplayRefreshRateMatcher.selectOptimalModeId(24.0, modes, currentModeId = 2) shouldBe 2
+        DisplayRefreshRateMatcher.selectOptimalModeId(25.0, modes, currentModeId = 2) shouldBe null
+    }
 }

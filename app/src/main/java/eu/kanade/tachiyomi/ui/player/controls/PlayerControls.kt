@@ -401,11 +401,10 @@ fun PlayerControls(
                     },
                 ) {
                     val showLoadingCircle by playerPreferences.showLoadingCircle().collectAsStateWithLifecycle()
-                    val bufferingPercent by viewModel.bufferingPercent.collectAsStateWithLifecycle()
-                    val cacheSpeedBytesPerSec by viewModel.cacheSpeedBytesPerSec.collectAsStateWithLifecycle()
-                    val bufferingCaption = remember(bufferingPercent, cacheSpeedBytesPerSec, isLoading) {
-                        if (isLoading) formatBufferingCaption(bufferingPercent, cacheSpeedBytesPerSec) else null
-                    }
+                    val bufferingCaption = rememberBufferingCaption(
+                        isLoading = isLoading,
+                        viewModel = viewModel,
+                    )
                     val seekChapterTitle = remember(gestureSeekAmount, chapterSegments) {
                         gestureSeekAmount?.let { (basePos, delta) ->
                             resolveChapterTitleAtPosition(chapterSegments, (basePos + delta).toFloat())
@@ -783,7 +782,11 @@ private fun PlayerSheetsHost(
     val selectedHosterVideoIndex by viewModel.selectedHosterVideoIndex.collectAsStateWithLifecycle()
     val decoder by viewModel.currentDecoder.collectAsStateWithLifecycle()
     val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
-    val sleepTimerTimeRemaining by viewModel.remainingTime.collectAsStateWithLifecycle()
+    val sleepTimerTimeRemaining = if (sheetShown == Sheets.More) {
+        viewModel.remainingTime.collectAsStateWithLifecycle().value
+    } else {
+        0
+    }
     val aspectRatio by playerPreferences.aspectState().collectAsStateWithLifecycle()
     val videoZoom by viewModel.videoZoom.collectAsStateWithLifecycle()
     val repeatEpisode by viewModel.repeatEpisode.collectAsStateWithLifecycle()
@@ -871,6 +874,19 @@ private fun PlayerSheetsHost(
         onDismissRequest = { viewModel.showSheet(Sheets.None) },
         dismissSheet = dismissSheet,
     )
+}
+
+@Composable
+private fun rememberBufferingCaption(
+    isLoading: Boolean,
+    viewModel: PlayerViewModel,
+): String? {
+    if (!isLoading) return null
+    val bufferingPercent by viewModel.bufferingPercent.collectAsStateWithLifecycle()
+    val cacheSpeedBytesPerSec by viewModel.cacheSpeedBytesPerSec.collectAsStateWithLifecycle()
+    return remember(bufferingPercent, cacheSpeedBytesPerSec) {
+        formatBufferingCaption(bufferingPercent, cacheSpeedBytesPerSec)
+    }
 }
 
 fun <T> playerControlsExitAnimationSpec(): FiniteAnimationSpec<T> = tween(

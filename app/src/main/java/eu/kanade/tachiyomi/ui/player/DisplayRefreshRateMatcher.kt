@@ -14,15 +14,17 @@ internal data class DisplayModeInfo(
 internal object DisplayRefreshRateMatcher {
     private const val MAX_CADENCE_ERROR = 0.025
     private const val TIE_EPSILON = 0.003
+    private const val MIN_UI_SMOOTH_REFRESH_HZ = 48f
 
     /**
      * Selects the display mode at the current resolution whose refresh rate is the cleanest
-     * integer multiple of [videoFps] (e.g., 23.976fps -> 120Hz or 48Hz/72Hz instead of 60Hz)
-     * to eliminate 3:2 pulldown judder.
+     * lowest-power smooth integer multiple of [videoFps] (e.g., 24fps -> 48Hz instead of 120Hz,
+     * falling back to 24Hz when no >=48Hz clean multiple exists) to eliminate 3:2 pulldown judder
+     * without locking high-power refresh rates.
      *
-     * Returns null when no better same-resolution mode exists or [videoFps] is invalid.
+     * Returns null when no clean same-resolution mode exists or [videoFps] is invalid.
      */
-    fun selectBestModeId(
+    fun selectOptimalModeId(
         videoFps: Double,
         availableModes: List<DisplayModeInfo>,
         currentModeId: Int,
@@ -52,10 +54,28 @@ internal object DisplayRefreshRateMatcher {
         val bestError = scored.minOf { it.cadenceError }
         val topCandidates = scored.filter { it.cadenceError <= bestError + TIE_EPSILON }
 
-        // Among equally clean multiples (e.g. 48Hz vs 120Hz for 24fps), prefer the highest
-        // refresh rate so overlay animations and UI remain smooth.
-        val chosen = topCandidates.maxByOrNull { it.mode.refreshRate }?.mode ?: return null
-        return chosen.modeId.takeIf { it != currentModeId }
+        val chosen = (
+            topCandidates
+                .filter { it.mode.refreshRate >= MIN_UI_SMOOTH_REFRESH_HZ }
+                .minByOrNull { it.mode.refreshRate }
+                ?: topCandidates.minByOrNull { it.mode.refreshRate }
+            )?.mode ?: return null
+        return chosen.modeId
+    }
+
+    /**
+     * Same as [selectOptimalModeId], returning null when [currentModeId] is already optimal.
+     */
+    fun selectBestModeId(
+        videoFps: Double,
+        availableModes: List<DisplayModeInfo>,
+        currentModeId: Int,
+    ): Int? {
+        return selectOptimalModeId(
+            videoFps = videoFps,
+            availableModes = availableModes,
+            currentModeId = currentModeId,
+        )?.takeIf { it != currentModeId }
     }
 
     private data class ScoredMode(

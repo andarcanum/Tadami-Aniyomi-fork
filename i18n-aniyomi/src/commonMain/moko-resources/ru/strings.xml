@@ -3796,7 +3796,7 @@
     <string name="player_stats_page_tracks">5 · Треки</string>
     <string name="player_decoder_preset_device_summary">Автоматически подбирает GPU-рендерер и дебандинг под это устройство.</string>
     <string name="player_decoder_preset_low_summary">Только аппаратное декодирование без шейдеров и интерполяции. Максимум автономности.</string>
-    <string name="player_decoder_preset_mid_summary">GPU-Next, GPU-дебандинг, сбалансированный Anime4K и авто-интерполяция кадров.</string>
+    <string name="player_decoder_preset_mid_summary">GPU-Next, GPU-дебандинг и сбалансированный Anime4K.</string>
     <string name="player_decoder_preset_high_summary">Максимум качества: GPU-Next, Anime4K Quality и постоянная интерполяция кадров.</string>
     <string name="player_decoder_preset_custom_summary">Пользовательская комбинация параметров декодера, шейдеров и вывода.</string>
     <string name="player_battery_impact_low">Батарея: низкий расход</string>

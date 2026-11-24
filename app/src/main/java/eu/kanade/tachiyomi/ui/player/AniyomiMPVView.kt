@@ -49,6 +49,7 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
     private val advancedPreferences: AdvancedPlayerPreferences by injectLazy()
     private val networkPreferences: NetworkPreferences by injectLazy()
 
+    @Volatile
     var isExiting = false
     internal var stagedAnime4kShaderOption: String? = null
 
@@ -122,7 +123,13 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
         setVo(if (gpuNext) "gpu-next" else "gpu")
         MPVLib.setPropertyBoolean("pause", true)
         MPVLib.setOptionString("profile", "fast")
-        MPVLib.setOptionString("hwdec", buildHwdecOption(decoderPreferences.tryHWDecoding().get()))
+        MPVLib.setOptionString(
+            "hwdec",
+            buildHwdecOption(
+                tryHWDecoding = decoderPreferences.tryHWDecoding().get(),
+                preferZeroCopy = decoderPreferences.useZeroCopyHwdec().get(),
+            ),
+        )
         val debanding = decoderPreferences.videoDebanding().get()
         if (debanding == Debanding.GPU) {
             MPVLib.setOptionString("deband", "yes")

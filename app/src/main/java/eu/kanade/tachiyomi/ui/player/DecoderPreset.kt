@@ -62,8 +62,7 @@ enum class DecoderPreset(
                 High -> Anime4KShaderPreset.Quality
             },
             motionInterpolationMode = when (this) {
-                Device, Low -> MotionInterpolationMode.Off
-                Mid -> MotionInterpolationMode.Auto
+                Device, Low, Mid -> MotionInterpolationMode.Off
                 High -> MotionInterpolationMode.Always
             },
             useYuv420p = false,
@@ -78,6 +77,7 @@ enum class DecoderPreset(
     fun applyTo(decoderPreferences: DecoderPreferences) {
         val target = expectedSnapshot()
         decoderPreferences.tryHWDecoding().set(target.tryHwDecoding)
+        decoderPreferences.useZeroCopyHwdec().set(false)
         decoderPreferences.gpuNext().set(target.gpuNext)
         decoderPreferences.videoDebanding().set(target.videoDebanding)
         decoderPreferences.anime4kShaderPreset().set(target.anime4kShaderPreset)
