@@ -196,6 +196,9 @@ class ReaderViewModel @JvmOverloads constructor(
             page.chapter.notePageRatio(ratio)
             noteSessionPageRatio(ratio)
         },
+        isPageAlreadyBound = { page ->
+            state.value.viewer?.isPageAttached(page) == true
+        },
     )
     private var foregroundIncognitoJob: Job? = null
     private var initJob: Job? = null

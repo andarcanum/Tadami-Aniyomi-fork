@@ -3,14 +3,11 @@ package eu.kanade.presentation.reader.components
 import android.graphics.drawable.ColorDrawable
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
@@ -384,31 +381,32 @@ private fun FinaleRule(
             .background(color),
     ) {
         if (veil) {
-            val transition = rememberInfiniteTransition(label = "finale-rule")
-            val progress by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(FINALE_RULE_SWEEP_PERIOD_MS, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart,
-                ),
-                label = "finale-rule-sweep",
-            )
-            val phase = progress / RULE_SWEEP_DUTY
-            val alpha = if (phase <= 1f) {
-                kotlin.math.sin(phase * kotlin.math.PI).toFloat()
-            } else {
-                0f
+            val phase = remember { Animatable(0f) }
+            LaunchedEffect(veil) {
+                val activeMs = (FINALE_RULE_SWEEP_PERIOD_MS * RULE_SWEEP_DUTY).toInt()
+                val quietMs = (FINALE_RULE_SWEEP_PERIOD_MS - activeMs).toLong()
+                while (true) {
+                    phase.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(activeMs, easing = LinearEasing),
+                    )
+                    phase.snapTo(0f)
+                    delay(quietMs)
+                }
             }
-            Box(
-                modifier = Modifier
-                    .offset(x = -RULE_STRIP_WIDTH + (RULE_WIDTH + RULE_STRIP_WIDTH) * phase.coerceIn(0f, 1f))
-                    .alpha(alpha)
-                    .size(width = RULE_STRIP_WIDTH, height = 1.dp)
-                    .background(
-                        Brush.horizontalGradient(listOf(Color.Transparent, glassColor, Color.Transparent)),
-                    ),
-            )
+            val currentPhase = phase.value
+            if (currentPhase > 0f && currentPhase < 1f) {
+                val alpha = kotlin.math.sin(currentPhase * kotlin.math.PI).toFloat()
+                Box(
+                    modifier = Modifier
+                        .offset(x = -RULE_STRIP_WIDTH + (RULE_WIDTH + RULE_STRIP_WIDTH) * currentPhase)
+                        .alpha(alpha)
+                        .size(width = RULE_STRIP_WIDTH, height = 1.dp)
+                        .background(
+                            Brush.horizontalGradient(listOf(Color.Transparent, glassColor, Color.Transparent)),
+                        ),
+                )
+            }
         }
     }
 }

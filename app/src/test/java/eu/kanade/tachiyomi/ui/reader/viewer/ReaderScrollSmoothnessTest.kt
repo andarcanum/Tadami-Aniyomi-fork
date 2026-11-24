@@ -1,11 +1,128 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
+import android.os.Build
 import io.kotest.matchers.floats.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.floats.shouldBeLessThanOrEqual
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
 class ReaderScrollSmoothnessTest {
+
+    @Test
+    fun `selectScrollBoostModeId returns null on Android 15 and above`() {
+        val modes = listOf(
+            ReaderDisplayModeCandidate(1, 1080, 2400, 60f, floatArrayOf(90f, 120f)),
+            ReaderDisplayModeCandidate(2, 1080, 2400, 90f, floatArrayOf(60f, 120f)),
+            ReaderDisplayModeCandidate(3, 1080, 2400, 120f, floatArrayOf(60f, 90f)),
+        )
+
+        selectScrollBoostModeId(
+            sdkInt = Build.VERSION_CODES.VANILLA_ICE_CREAM,
+            currentModeId = 1,
+            currentWidth = 1080,
+            currentHeight = 2400,
+            currentRefreshRate = 60f,
+            alternativeRefreshRates = floatArrayOf(90f, 120f),
+            supportedModes = modes,
+        ).shouldBeNull()
+
+        selectScrollBoostModeId(
+            sdkInt = Build.VERSION_CODES.VANILLA_ICE_CREAM + 1,
+            currentModeId = 1,
+            currentWidth = 1080,
+            currentHeight = 2400,
+            currentRefreshRate = 60f,
+            alternativeRefreshRates = floatArrayOf(90f, 120f),
+            supportedModes = modes,
+        ).shouldBeNull()
+    }
+
+    @Test
+    fun `selectScrollBoostModeId picks fastest seamless same-resolution mode on Android 12 to 14`() {
+        val modes = listOf(
+            ReaderDisplayModeCandidate(1, 1080, 2400, 60f, floatArrayOf(90f, 120.05f)),
+            ReaderDisplayModeCandidate(2, 1080, 2400, 90f, floatArrayOf(60f, 120.05f)),
+            ReaderDisplayModeCandidate(3, 1080, 2400, 120f, floatArrayOf(60f, 90f)),
+            // 144 Hz is faster but NOT listed in current mode's seamless alternatives.
+            ReaderDisplayModeCandidate(4, 1080, 2400, 144f, floatArrayOf()),
+        )
+
+        selectScrollBoostModeId(
+            sdkInt = Build.VERSION_CODES.S,
+            currentModeId = 1,
+            currentWidth = 1080,
+            currentHeight = 2400,
+            currentRefreshRate = 60f,
+            alternativeRefreshRates = floatArrayOf(90f, 120.05f),
+            supportedModes = modes,
+        ) shouldBe 3
+
+        selectScrollBoostModeId(
+            sdkInt = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+            currentModeId = 1,
+            currentWidth = 1080,
+            currentHeight = 2400,
+            currentRefreshRate = 60f,
+            alternativeRefreshRates = floatArrayOf(90f, 120.05f),
+            supportedModes = modes,
+        ) shouldBe 3
+    }
+
+    @Test
+    fun `selectScrollBoostModeId returns null when faster modes are not seamless`() {
+        val modes = listOf(
+            ReaderDisplayModeCandidate(1, 1080, 2400, 60f, floatArrayOf()),
+            ReaderDisplayModeCandidate(2, 1080, 2400, 120f, floatArrayOf()),
+            ReaderDisplayModeCandidate(3, 1080, 2400, 144f, floatArrayOf()),
+        )
+
+        selectScrollBoostModeId(
+            sdkInt = Build.VERSION_CODES.TIRAMISU,
+            currentModeId = 1,
+            currentWidth = 1080,
+            currentHeight = 2400,
+            currentRefreshRate = 60f,
+            alternativeRefreshRates = floatArrayOf(),
+            supportedModes = modes,
+        ).shouldBeNull()
+    }
+
+    @Test
+    fun `selectScrollBoostModeId returns null on Android 11 and below`() {
+        val modes = listOf(
+            ReaderDisplayModeCandidate(1, 1080, 2400, 60f, floatArrayOf(120f)),
+            ReaderDisplayModeCandidate(2, 1080, 2400, 120f, floatArrayOf(60f)),
+        )
+
+        selectScrollBoostModeId(
+            sdkInt = Build.VERSION_CODES.R,
+            currentModeId = 1,
+            currentWidth = 1080,
+            currentHeight = 2400,
+            currentRefreshRate = 60f,
+            alternativeRefreshRates = floatArrayOf(120f),
+            supportedModes = modes,
+        ).shouldBeNull()
+    }
+
+    @Test
+    fun `selectScrollBoostModeId ignores modes with different physical resolution`() {
+        val modes = listOf(
+            ReaderDisplayModeCandidate(1, 1080, 2400, 60f, floatArrayOf(120f)),
+            ReaderDisplayModeCandidate(2, 1440, 3200, 120f, floatArrayOf(60f)),
+        )
+
+        selectScrollBoostModeId(
+            sdkInt = Build.VERSION_CODES.S,
+            currentModeId = 1,
+            currentWidth = 1080,
+            currentHeight = 2400,
+            currentRefreshRate = 60f,
+            alternativeRefreshRates = floatArrayOf(120f),
+            supportedModes = modes,
+        ).shouldBeNull()
+    }
 
     @Test
     fun `floorFrameContentVelocityForArr lifts slow fling-tail velocity above high refresh threshold`() {

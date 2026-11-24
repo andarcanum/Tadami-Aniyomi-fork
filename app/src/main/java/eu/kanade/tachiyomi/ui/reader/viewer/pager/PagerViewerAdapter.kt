@@ -198,9 +198,11 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         return when (val item = items[position]) {
             is JoinedReaderPage -> JoinedPagerPageHolder(themedContext, viewer, item).apply {
                 setDecodePriorityBoost(viewer.isCurrentItem(item))
+                setViewportVisible(viewer.isCurrentPosition(position))
             }
             is ReaderPage -> PagerPageHolder(themedContext, viewer, item).apply {
                 setDecodePriorityBoost(viewer.isCurrentItem(item))
+                setViewportVisible(viewer.isCurrentPosition(position))
             }
             is ChapterTransition -> PagerTransitionHolder(themedContext, viewer, item)
             else -> throw NotImplementedError("Holder for ${item.javaClass} not implemented")

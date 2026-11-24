@@ -64,12 +64,17 @@ abstract class ViewerConfig(
     var joinDoublePages = false
         protected set
 
+    var pauseShadersOnFling = readerPreferences.pauseShadersOnFling().get()
+        protected set
+
     private var isEInkMode = uiPreferences.eInkProfile().get().isEnabled
 
     abstract var navigator: ViewerNavigation
         protected set
 
     init {
+        readerPreferences.pauseShadersOnFling()
+            .register({ pauseShadersOnFling = it })
         uiPreferences.eInkProfile()
             .changes()
             .onEach {

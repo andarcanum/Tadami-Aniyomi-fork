@@ -88,6 +88,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
 
     var tapListener: ((MotionEvent) -> Unit)? = null
     var longTapListener: ((MotionEvent) -> Boolean)? = null
+    var onScrollActiveChanged: ((Boolean) -> Unit)? = null
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
         halfWidth = MeasureSpec.getSize(widthSpec) / 2
@@ -108,6 +109,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        onScrollActiveChanged?.invoke(false)
         cancelActiveAnimators()
         super.onDetachedFromWindow()
     }
@@ -176,6 +178,7 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         atFirstPosition = firstVisibleItemPosition == 0
         when (state) {
             SCROLL_STATE_IDLE -> {
+                onScrollActiveChanged?.invoke(false)
                 lastScrollDy = 0
                 lastFlingVelocityY = 0
                 lookaheadSmoother.reset()
@@ -183,8 +186,12 @@ class WebtoonRecyclerView @JvmOverloads constructor(
                 updateChildViewports()
             }
             SCROLL_STATE_DRAGGING -> {
+                onScrollActiveChanged?.invoke(true)
                 lastFlingVelocityY = 0
                 updateChildViewports()
+            }
+            SCROLL_STATE_SETTLING -> {
+                onScrollActiveChanged?.invoke(true)
             }
         }
     }
@@ -224,6 +231,18 @@ class WebtoonRecyclerView @JvmOverloads constructor(
     }
 
     private fun pushViewportToHolderChild(child: View, displayScale: Float) {
+        if (child.width > 0 && child.height > 0) {
+            val childLeft = child.left + child.translationX
+            val childTop = child.top + child.translationY
+            val childRight = child.right + child.translationX
+            val childBottom = child.bottom + child.translationY
+            val isChildVisible = !visibleRect.isEmpty &&
+                childBottom > visibleRect.top &&
+                childTop < visibleRect.bottom &&
+                childRight > visibleRect.left &&
+                childLeft < visibleRect.right
+            (findContainingViewHolder(child) as? WebtoonPageHolder)?.setViewportVisible(isChildVisible)
+        }
         val target = when (child) {
             is WebtoonSubsamplingImageView -> child
             is ReaderPageImageView -> child.getImageView() as? WebtoonSubsamplingImageView

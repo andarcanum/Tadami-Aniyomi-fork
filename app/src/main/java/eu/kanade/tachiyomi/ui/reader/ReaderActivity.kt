@@ -112,10 +112,12 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderDisplayModeCandidate
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScrubPreviewLoader
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
+import eu.kanade.tachiyomi.ui.reader.viewer.selectScrollBoostModeId
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.hasDisplayCutout
@@ -421,6 +423,7 @@ class ReaderActivity : BaseActivity() {
     override fun onDestroy() {
         // Allow achievement notifications when exiting reader
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(false)
+        restoreDisplayMode()
         super.onDestroy()
         eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.clear()
         eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache.clear()
@@ -449,9 +452,14 @@ class ReaderActivity : BaseActivity() {
     }
 
     override fun onPause() {
-        (viewModel.state.value.viewer as? WebtoonViewer)?.let(viewModel::saveWebtoonScrollProgressOnExit)
+        val viewer = viewModel.state.value.viewer
+        (viewer as? WebtoonViewer)?.let {
+            viewModel.saveWebtoonScrollProgressOnExit(it)
+            it.pausePendingRelativeRestore()
+        }
         viewModel.flushReadTimer()
         viewModel.pauseAutoScroll()
+        viewer?.stopAutoScroll()
         restoreDisplayMode()
         super.onPause()
     }
@@ -464,46 +472,111 @@ class ReaderActivity : BaseActivity() {
         super.onResume()
         viewModel.restartReadTimer()
         setMenuVisibility(viewModel.state.value.menuVisible)
-        requestMaxRefreshRate()
+        (viewModel.state.value.viewer as? WebtoonViewer)?.resumePendingRelativeRestore()
+        configureRefreshRatePolicy()
     }
 
     /**
-     * Reading is motion-sensitive: OEM refresh-rate policies often cap the app below the panel
-     * maximum, which reads as stepping during fling deceleration (measured on device: bimodal
-     * 11.1/16.7 ms frame deltas while capped vs steady 8.3 ms at the maximum rate). While the
-     * reader is in the foreground prefer the fastest mode with the same physical size; the mode is
-     * picked once per resume, so no switch happens mid-gesture.
+     * Configures refresh-rate policy for the active reading session without locking high refresh
+     * rates while the user is stationary:
+     * - API 35+: enables touch refresh-rate boost so Android Adaptive Refresh Rate (ARR) drops
+     *   to low-power LTPO rates between interactions and boosts on touch/scroll.
+     * - API 31–34: avoids pinning a fixed display mode here; [onWebtoonScrollActive] dynamically
+     *   boosts only to seamless alternatives while actively scrolling/flinging in Webtoon mode.
+     * - API < 31 / E-Ink: leaves display mode untouched.
      */
-    private fun requestMaxRefreshRate() {
-        if (isEInkMode()) return
-        val currentDisplay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display
-        } else {
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay
-        } ?: return
-        val current = currentDisplay.mode
-        val fastest = currentDisplay.supportedModes
-            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
-            .maxByOrNull { it.refreshRate }
-            ?: return
-        if (window.attributes.preferredDisplayModeId == fastest.modeId) return
-        if (!hasSavedDisplayMode) {
-            savedDisplayModeId = window.attributes.preferredDisplayModeId
-            hasSavedDisplayMode = true
+    private fun configureRefreshRatePolicy() {
+        if (isEInkMode()) {
+            restoreDisplayMode()
+            return
         }
-        window.attributes = window.attributes.apply { preferredDisplayModeId = fastest.modeId }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            val attrs = window.attributes
+            if (!hasSavedFrameRateBoostOnTouch) {
+                savedFrameRateBoostOnTouch = attrs.frameRateBoostOnTouchEnabled
+                hasSavedFrameRateBoostOnTouch = true
+            }
+            if (!attrs.frameRateBoostOnTouchEnabled) {
+                window.attributes = attrs.apply { frameRateBoostOnTouchEnabled = true }
+            }
+        }
+    }
+
+    fun onWebtoonScrollActive(active: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+        ) {
+            return
+        }
+        if (::binding.isInitialized) {
+            binding.readerContainer.removeCallbacks(idleRefreshRestoreRunnable)
+        }
+        if (active) {
+            if (isEInkMode()) return
+            val currentDisplay = display ?: return
+            val current = currentDisplay.mode ?: return
+            val supportedModes = currentDisplay.supportedModes.map { mode ->
+                ReaderDisplayModeCandidate(
+                    modeId = mode.modeId,
+                    physicalWidth = mode.physicalWidth,
+                    physicalHeight = mode.physicalHeight,
+                    refreshRate = mode.refreshRate,
+                    alternativeRefreshRates = mode.alternativeRefreshRates,
+                )
+            }
+            val targetModeId = selectScrollBoostModeId(
+                sdkInt = Build.VERSION.SDK_INT,
+                currentModeId = current.modeId,
+                currentWidth = current.physicalWidth,
+                currentHeight = current.physicalHeight,
+                currentRefreshRate = current.refreshRate,
+                alternativeRefreshRates = current.alternativeRefreshRates,
+                supportedModes = supportedModes,
+            ) ?: return
+            if (window.attributes.preferredDisplayModeId == targetModeId) return
+            if (!hasSavedDisplayMode) {
+                savedDisplayModeId = window.attributes.preferredDisplayModeId
+                hasSavedDisplayMode = true
+            }
+            window.attributes = window.attributes.apply { preferredDisplayModeId = targetModeId }
+        } else if (hasSavedDisplayMode && ::binding.isInitialized) {
+            binding.readerContainer.postDelayed(idleRefreshRestoreRunnable, IDLE_REFRESH_RESTORE_DELAY_MS)
+        }
+    }
+
+    private fun restoreWebtoonDisplayMode() {
+        if (::binding.isInitialized) {
+            binding.readerContainer.removeCallbacks(idleRefreshRestoreRunnable)
+        }
+        if (hasSavedDisplayMode) {
+            window.attributes = window.attributes.apply { preferredDisplayModeId = savedDisplayModeId }
+            savedDisplayModeId = 0
+            hasSavedDisplayMode = false
+        }
     }
 
     private fun restoreDisplayMode() {
-        if (!hasSavedDisplayMode) return
-        window.attributes = window.attributes.apply { preferredDisplayModeId = savedDisplayModeId }
-        savedDisplayModeId = 0
-        hasSavedDisplayMode = false
+        restoreWebtoonDisplayMode()
+        if (hasSavedFrameRateBoostOnTouch) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                if (window.attributes.frameRateBoostOnTouchEnabled != savedFrameRateBoostOnTouch) {
+                    window.attributes = window.attributes.apply {
+                        frameRateBoostOnTouchEnabled = savedFrameRateBoostOnTouch
+                    }
+                }
+            }
+            savedFrameRateBoostOnTouch = false
+            hasSavedFrameRateBoostOnTouch = false
+        }
     }
 
     private var savedDisplayModeId = 0
     private var hasSavedDisplayMode = false
+    private var savedFrameRateBoostOnTouch = false
+    private var hasSavedFrameRateBoostOnTouch = false
+    private val idleRefreshRestoreRunnable = Runnable {
+        restoreDisplayMode()
+    }
 
     /**
      * Called when the window focus changes. It sets the menu visibility to the last known state
@@ -1134,6 +1207,9 @@ class ReaderActivity : BaseActivity() {
         if (prevViewer != null) {
             prevViewer.destroy()
             binding.viewerContainer.removeAllViews()
+            if (prevViewer is WebtoonViewer && newViewer !is WebtoonViewer) {
+                restoreWebtoonDisplayMode()
+            }
         }
         setWindowHdrEnabled(false)
         viewModel.onViewerLoaded(newViewer)
@@ -2043,3 +2119,5 @@ internal fun resolveReaderLightStatusBars(
     }
     return defaultLightStatusBars
 }
+
+private const val IDLE_REFRESH_RESTORE_DELAY_MS = 1_500L

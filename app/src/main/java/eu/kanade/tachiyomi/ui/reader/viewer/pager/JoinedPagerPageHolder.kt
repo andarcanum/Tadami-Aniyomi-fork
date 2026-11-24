@@ -64,6 +64,11 @@ class JoinedPagerPageHolder(
         rightPageHolder.setDecodePriorityBoost(boost)
     }
 
+    fun setViewportVisible(visible: Boolean) {
+        leftPageHolder.setViewportVisible(visible)
+        rightPageHolder.setViewportVisible(visible)
+    }
+
     private fun setupZoomSynchronization() {
         leftPageHolder.onScaleChanged = { syncZoom(leftPageHolder, rightPageHolder) }
         leftPageHolder.onCenterChanged = { syncZoom(leftPageHolder, rightPageHolder) }

@@ -47,6 +47,7 @@ internal object ReaderRenderEffects {
     fun setFlingPaused(paused: Boolean, root: View) {
         if (flingPaused == paused) return
         flingPaused = paused
+        if (configuredEffect == null) return
         applyToHierarchy(root)
     }
 

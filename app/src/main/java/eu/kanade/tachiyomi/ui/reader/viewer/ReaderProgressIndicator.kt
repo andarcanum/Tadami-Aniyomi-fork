@@ -45,6 +45,11 @@ class ReaderProgressIndicator @JvmOverloads constructor(
      * reading session, wasting main-thread time on each frame.
      */
     private var effectivelyVisible by mutableStateOf(true)
+    private var inViewportState by mutableStateOf(true)
+
+    fun setInViewport(visible: Boolean) {
+        inViewportState = visible
+    }
 
     override fun onVisibilityAggregated(isVisible: Boolean) {
         super.onVisibilityAggregated(isVisible)
@@ -53,7 +58,7 @@ class ReaderProgressIndicator @JvmOverloads constructor(
 
     @Composable
     override fun Content() {
-        if (!effectivelyVisible) return
+        if (!effectivelyVisible || !inViewportState) return
         TachiyomiTheme {
             CombinedCircularProgressIndicator(progress = { progress })
         }

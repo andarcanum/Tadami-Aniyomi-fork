@@ -80,6 +80,7 @@ class PagerPageHolder(
     private var detectedPanels: List<PanelRect> = emptyList()
     private val guidedPanelController = GuidedPanelController()
     private var pendingGuidedEntryFromEnd: Boolean? = null
+    private var viewportVisible: Boolean = true
 
     init {
         loadJob = scope.launch { loadPageAndProcessStatus() }
@@ -87,6 +88,12 @@ class PagerPageHolder(
             page.isHdr = isHdr
             viewer.updateWindowHdrState()
         }
+    }
+
+    fun setViewportVisible(visible: Boolean) {
+        viewportVisible = visible
+        progressIndicator?.setInViewport(visible)
+        setInViewport(visible)
     }
 
     override fun recycle() {
@@ -99,6 +106,7 @@ class PagerPageHolder(
         detectedPanels = emptyList()
         guidedPanelController.reset()
         pendingGuidedEntryFromEnd = null
+        viewportVisible = true
         super.recycle()
     }
 
@@ -123,7 +131,9 @@ class PagerPageHolder(
 
     private fun initProgressIndicator() {
         if (progressIndicator == null) {
-            progressIndicator = ReaderProgressIndicator(context)
+            progressIndicator = ReaderProgressIndicator(context).apply {
+                setInViewport(viewportVisible)
+            }
             addView(progressIndicator)
         }
     }

@@ -82,6 +82,14 @@ class WebtoonPageHolder(
      */
     private var page: ReaderPage? = null
 
+    internal val boundPage: ReaderPage?
+        get() = page
+
+    fun setViewportVisible(visible: Boolean) {
+        progressIndicator.setInViewport(visible)
+        frame.setInViewport(visible)
+    }
+
     /**
      * The page whose layout has settled after the last [bind]. A height change during the bind
      * itself is the RecyclerView positioning a freshly bound item, not a reflow of the page the
@@ -302,6 +310,7 @@ class WebtoonPageHolder(
 
         removeErrorLayout()
         frame.recycle()
+        setViewportVisible(true)
         progressIndicator.setProgress(0)
         progressContainer.isVisible = true
     }

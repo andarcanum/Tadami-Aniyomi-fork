@@ -53,9 +53,6 @@ class WebtoonConfig(
     var hardwareTilesEnabled = true
         private set
 
-    var pauseShadersOnFling = false
-        private set
-
     var doubleTapZoom = true
         private set
 
@@ -85,9 +82,6 @@ class WebtoonConfig(
 
         readerPreferences.hardwareTilesEnabled()
             .register({ hardwareTilesEnabled = it }, { imagePropertyChangedListener?.invoke() })
-
-        readerPreferences.pauseShadersOnFling()
-            .register({ pauseShadersOnFling = it })
 
         readerPreferences.navigationModeWebtoon()
             .register({ navigationMode = it }, { updateNavigation(it) })

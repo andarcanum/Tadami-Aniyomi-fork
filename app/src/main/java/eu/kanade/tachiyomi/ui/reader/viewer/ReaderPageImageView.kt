@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.annotation.AttrRes
 import androidx.annotation.CallSuper
 import androidx.annotation.StyleRes
@@ -88,6 +89,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
      * marking a healthy page as failed or overwriting the new image.
      */
     private var coilDisposable: Disposable? = null
+    private var isInViewport: Boolean = true
+
+    fun setInViewport(visible: Boolean) {
+        if (isInViewport == visible) return
+        isInViewport = visible
+        val animatable = (pageView as? ImageView)?.drawable as? Animatable ?: return
+        if (visible && isAttachedToWindow) {
+            if (!animatable.isRunning) {
+                animatable.start()
+            }
+        } else if (!visible) {
+            if (animatable.isRunning) {
+                animatable.stop()
+            }
+        }
+    }
 
     private fun cancelCoilRequest() {
         coilDisposable?.dispose()
@@ -102,6 +119,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
         )
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             applyPageRenderEffect(ReaderRenderEffects.currentEffect as? android.graphics.RenderEffect)
+        }
+        if (isInViewport) {
+            val animatable = (pageView as? ImageView)?.drawable as? Animatable
+            if (animatable != null && !animatable.isRunning) {
+                animatable.start()
+            }
         }
         val pending = pendingSmartFit
         if (pending != null && smartFitJob == null) {
@@ -125,6 +148,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
         smartFitJob = null
         cancelCoilRequest()
         cancelLandscapeZoom()
+        val animatable = (pageView as? ImageView)?.drawable as? Animatable
+        if (animatable != null && animatable.isRunning) {
+            animatable.stop()
+        }
     }
 
     private fun cancelLandscapeZoom() {
@@ -322,6 +349,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     open fun recycle() {
+        isInViewport = true
         tileLoadErrorDispatched = false
         pendingSmartFit = null
         pendingAnimatedImage = null
@@ -805,7 +833,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
                         releaseAnimatedDrawable(this)
                     }
                     setImageDrawable(newDrawable)
-                    (newDrawable as? Animatable)?.start()
+                    if (this@ReaderPageImageView.isInViewport) {
+                        (newDrawable as? Animatable)?.start()
+                    }
                     isVisible = true
                     this@ReaderPageImageView.onHdrChanged?.invoke(
                         (newDrawable as? AnimatedNativeDrawable)?.isHdr == true,

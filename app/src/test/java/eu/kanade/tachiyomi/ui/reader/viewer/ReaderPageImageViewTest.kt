@@ -760,4 +760,74 @@ class ReaderPageImageViewTest {
             controller.pause().stop().destroy()
         }
     }
+
+    @Test
+    fun animatedDrawablePausesWhileOffscreenAndStartsWhenEnteringViewport() {
+        class ViewportAnimatableDrawable : Drawable(), Animatable {
+            var running = false
+
+            override fun start() {
+                running = true
+            }
+
+            override fun stop() {
+                running = false
+            }
+
+            override fun isRunning(): Boolean = running
+
+            override fun getIntrinsicWidth(): Int = 16
+
+            override fun getIntrinsicHeight(): Int = 16
+
+            override fun draw(canvas: Canvas) {}
+
+            override fun setAlpha(alpha: Int) {}
+
+            override fun setColorFilter(colorFilter: ColorFilter?) {}
+
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+        }
+
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val root = FrameLayout(activity)
+        val pageView = ReaderPageImageView(activity, isWebtoon = true)
+        root.addView(pageView, FrameLayout.LayoutParams(400, 400))
+        activity.setContentView(root)
+        val canvasBitmap = Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+        val config = ReaderPageImageView.Config(
+            zoomDuration = 100,
+            minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
+        )
+        val drawable = ViewportAnimatableDrawable()
+        var loadedCount = 0
+        pageView.onImageLoaded = { loadedCount++ }
+
+        try {
+            layoutAndDraw(root, 400, 400, canvasBitmap)
+            pageView.setInViewport(false)
+            pageView.setImage(drawable, config)
+
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (loadedCount == 0 && System.nanoTime() < deadline) {
+                layoutAndDraw(root, 400, 400, canvasBitmap)
+                ShadowLooper.idleMainLooper()
+                Thread.sleep(10)
+            }
+            assertEquals(1, loadedCount)
+            assertFalse(drawable.running, "Animated drawable must not start while offscreen")
+
+            pageView.setInViewport(true)
+            assertTrue(drawable.running, "Animated drawable must start once entering viewport")
+
+            pageView.setInViewport(false)
+            assertFalse(drawable.running, "Animated drawable must stop when leaving viewport")
+        } finally {
+            pageView.recycle()
+            canvasBitmap.recycle()
+            controller.pause().stop().destroy()
+        }
+    }
 }

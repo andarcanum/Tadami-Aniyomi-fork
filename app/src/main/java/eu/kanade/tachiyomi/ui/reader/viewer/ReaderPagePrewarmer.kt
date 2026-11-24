@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,6 +29,8 @@ import kotlin.coroutines.coroutineContext
 internal class ReaderPagePrewarmer(
     private val scope: CoroutineScope,
     private val onDimensionsSniffed: (page: ReaderPage, ratio: Float) -> Unit,
+    private val isPageAlreadyBound: (ReaderPage) -> Boolean = { false },
+    private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) {
     // Single-lane IO dispatcher preserves strict reading-direction priority (+1 before +2 before -1)
     // and avoids contending on sequential archive/PDF readers or starving foreground tile decodes.
@@ -47,21 +50,21 @@ internal class ReaderPagePrewarmer(
             ?: currentPages.indexOfFirst { it.index == currentPage.index }
         if (currentIdx < 0) return
 
-        val targets = ArrayList<ReaderPage>(5)
-        currentPages.getOrNull(currentIdx + 1)?.let(targets::add)
-        currentPages.getOrNull(currentIdx + 2)?.let(targets::add)
-        currentPages.getOrNull(currentIdx - 1)?.let(targets::add)
+        val targets = ArrayList<PrewarmTarget>(5)
+        currentPages.getOrNull(currentIdx + 1)?.let { targets.add(PrewarmTarget(it, allowPreviewDecode = true)) }
+        currentPages.getOrNull(currentIdx + 2)?.let { targets.add(PrewarmTarget(it, allowPreviewDecode = true)) }
+        currentPages.getOrNull(currentIdx - 1)?.let { targets.add(PrewarmTarget(it, allowPreviewDecode = false)) }
         if (nextChapterPages != null && currentPages.size - 1 - currentIdx <= NEXT_CHAPTER_PREWARM_THRESHOLD) {
-            nextChapterPages.getOrNull(0)?.let(targets::add)
-            nextChapterPages.getOrNull(1)?.let(targets::add)
+            nextChapterPages.getOrNull(0)?.let { targets.add(PrewarmTarget(it, allowPreviewDecode = true)) }
+            nextChapterPages.getOrNull(1)?.let { targets.add(PrewarmTarget(it, allowPreviewDecode = true)) }
         }
         if (targets.isEmpty()) return
 
         surroundingJob?.cancel()
         surroundingJob = scope.launch(prewarmDispatcher) {
-            for (page in targets) {
+            for (target in targets) {
                 coroutineContext.ensureActive()
-                prewarmPage(page, cropBorders)
+                prewarmPage(target.page, cropBorders, allowPreviewDecode = target.allowPreviewDecode)
             }
         }
     }
@@ -76,7 +79,7 @@ internal class ReaderPagePrewarmer(
         chapterLeadJob = scope.launch(prewarmDispatcher) {
             for (page in leadPages) {
                 coroutineContext.ensureActive()
-                prewarmPage(page, cropBorders)
+                prewarmPage(page, cropBorders, allowPreviewDecode = true)
             }
         }
     }
@@ -88,7 +91,16 @@ internal class ReaderPagePrewarmer(
         chapterLeadJob = null
     }
 
-    private suspend fun prewarmPage(page: ReaderPage, cropBorders: Boolean) {
+    internal suspend fun awaitIdle() {
+        surroundingJob?.join()
+        chapterLeadJob?.join()
+    }
+
+    private suspend fun prewarmPage(
+        page: ReaderPage,
+        cropBorders: Boolean,
+        allowPreviewDecode: Boolean,
+    ) {
         if (page is InsertPage || page.isAnimatedImage) return
         if (page.chapter.pageLoader?.isRecycled == true) return
         val streamFn = page.stream ?: return
@@ -110,7 +122,7 @@ internal class ReaderPagePrewarmer(
                 if (dims != null && dims.width > 0 && dims.height > 0) {
                     page.imageDimensions = dims
                     val ratio = dims.height.toFloat() / dims.width.toFloat()
-                    withContext(Dispatchers.Main.immediate) {
+                    withContext(mainDispatcher) {
                         onDimensionsSniffed(page, ratio)
                     }
                 }
@@ -118,6 +130,8 @@ internal class ReaderPagePrewarmer(
         }
 
         coroutineContext.ensureActive()
+        if (!allowPreviewDecode) return
+        if (withContext(mainDispatcher) { isPageAlreadyBound(page) }) return
 
         val key = ReaderPreviewCache.key(
             chapterId = page.chapter.chapter.id,
@@ -177,6 +191,11 @@ internal class ReaderPagePrewarmer(
             null
         }
     }
+
+    private data class PrewarmTarget(
+        val page: ReaderPage,
+        val allowPreviewDecode: Boolean,
+    )
 
     companion object {
         private const val PREVIEW_MAX_PIXELS = 262_144L

@@ -1,8 +1,83 @@
 package eu.kanade.tachiyomi.ui.reader.viewer
 
+import android.os.Build
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.round
+
+internal data class ReaderDisplayModeCandidate(
+    val modeId: Int,
+    val physicalWidth: Int,
+    val physicalHeight: Int,
+    val refreshRate: Float,
+    val alternativeRefreshRates: FloatArray = floatArrayOf(),
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as ReaderDisplayModeCandidate
+        if (modeId != other.modeId) return false
+        if (physicalWidth != other.physicalWidth) return false
+        if (physicalHeight != other.physicalHeight) return false
+        if (refreshRate != other.refreshRate) return false
+        if (!alternativeRefreshRates.contentEquals(other.alternativeRefreshRates)) return false
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = modeId
+        result = 31 * result + physicalWidth
+        result = 31 * result + physicalHeight
+        result = 31 * result + refreshRate.hashCode()
+        result = 31 * result + alternativeRefreshRates.contentHashCode()
+        return result
+    }
+}
+
+/**
+ * Selects a display mode ID to temporarily boost refresh rate during active Webtoon scrolling
+ * on Android 12–14 (`S..UPSIDE_DOWN_CAKE`).
+ *
+ * - Android 15+ (`VANILLA_ICE_CREAM`+) returns `null` so Adaptive Refresh Rate (ARR),
+ *   `setFrameContentVelocity`, and `frameRateBoostOnTouchEnabled` control refresh rate without
+ *   pinning `preferredDisplayModeId`.
+ * - Android < 12 returns `null` (no `alternativeRefreshRates` seamless-switching guarantee).
+ * - Android 12–14 only selects the fastest same-resolution mode whose refresh rate is strictly
+ *   higher than [currentRefreshRate] and is listed in [alternativeRefreshRates] (within
+ *   [SEAMLESS_REFRESH_EPSILON_HZ]), avoiding black-screen modeset flicker.
+ */
+internal fun selectScrollBoostModeId(
+    sdkInt: Int,
+    currentModeId: Int,
+    currentWidth: Int,
+    currentHeight: Int,
+    currentRefreshRate: Float,
+    alternativeRefreshRates: FloatArray,
+    supportedModes: List<ReaderDisplayModeCandidate>,
+): Int? {
+    if (sdkInt < Build.VERSION_CODES.S || sdkInt >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+        return null
+    }
+    if (!currentRefreshRate.isFinite() || currentRefreshRate <= 0f) return null
+
+    val fastest = supportedModes
+        .asSequence()
+        .filter { mode ->
+            mode.physicalWidth == currentWidth &&
+                mode.physicalHeight == currentHeight &&
+                mode.refreshRate.isFinite() &&
+                mode.refreshRate > currentRefreshRate + SEAMLESS_REFRESH_EPSILON_HZ &&
+                alternativeRefreshRates.any { alt ->
+                    alt.isFinite() && abs(mode.refreshRate - alt) <= SEAMLESS_REFRESH_EPSILON_HZ
+                }
+        }
+        .maxByOrNull { it.refreshRate }
+        ?: return null
+
+    return fastest.modeId.takeIf { it != currentModeId }
+}
+
+private const val SEAMLESS_REFRESH_EPSILON_HZ = 0.1f
 
 /**
  * Floors positive content scroll velocity for Android 15/16 Adaptive Refresh Rate (ARR) so that
