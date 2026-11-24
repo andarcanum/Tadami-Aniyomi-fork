@@ -1876,6 +1876,73 @@ class ReelsRoundRobinCoordinatorTest {
         )
     }
 
+    @Test
+    fun foreground_lost_suspends_periodic_catalog_wake_and_foreground_gained_resumes_it() = runTest {
+        val h = harness()
+        h.source.catalogKeys = listOf("a")
+        h.source.scanHandler = { request ->
+            if (request.checkpoint == null) {
+                h.page("a", listOf("a1" to 100L), historyExhausted = true, nextHeadCheckAt = null)
+            } else {
+                FeedRoundRobinScanResult.Page(emptyList(), "cp-empty", true, null)
+            }
+        }
+
+        h.coordinator.attach(h.source, defaultSourceId, AnimeFilterList(), unseenOnly = true, incognito = false)
+        h.idle()
+        assertEquals(1, h.source.catalogRequests.size)
+        assertNotNull(h.coordinator.debugWakeAt())
+
+        h.coordinator.foregroundLost()
+        h.idle()
+        assertNull(h.coordinator.debugWakeAt())
+
+        h.advance(90_000L)
+        h.idle()
+        assertEquals("catalog wake must not fire while backgrounded", 1, h.source.catalogRequests.size)
+
+        h.coordinator.foregroundGained()
+        h.idle()
+        assertEquals(
+            "overdue catalog wake must fire immediately on foreground return",
+            2,
+            h.source.catalogRequests.size,
+        )
+        assertNotNull(h.coordinator.debugWakeAt())
+    }
+
+    @Test
+    fun foreground_lost_before_future_wake_rearms_remaining_interval_without_early_fire() = runTest {
+        val h = harness()
+        h.source.catalogKeys = listOf("a")
+        h.source.scanHandler = { request ->
+            if (request.checkpoint == null) {
+                h.page("a", listOf("a1" to 100L), historyExhausted = true, nextHeadCheckAt = null)
+            } else {
+                FeedRoundRobinScanResult.Page(emptyList(), "cp-empty", true, null)
+            }
+        }
+
+        h.coordinator.attach(h.source, defaultSourceId, AnimeFilterList(), unseenOnly = true, incognito = false)
+        h.idle()
+        val armedAt = requireNotNull(h.coordinator.debugWakeAt())
+
+        h.coordinator.foregroundLost()
+        h.advance(20_000L)
+        h.idle()
+        assertNull(h.coordinator.debugWakeAt())
+        assertEquals(1, h.source.catalogRequests.size)
+
+        h.coordinator.foregroundGained()
+        h.idle()
+        assertEquals("future wake must not fire early on foreground return", 1, h.source.catalogRequests.size)
+        assertEquals(armedAt, h.coordinator.debugWakeAt())
+
+        h.advance(40_000L)
+        h.idle()
+        assertEquals(2, h.source.catalogRequests.size)
+    }
+
     // ---------------------------------------------------------------------------------------
     // Harness and fakes
     // ---------------------------------------------------------------------------------------

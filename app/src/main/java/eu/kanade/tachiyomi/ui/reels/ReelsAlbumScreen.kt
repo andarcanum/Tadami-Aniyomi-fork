@@ -52,6 +52,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
@@ -107,6 +110,17 @@ data class ReelsAlbumScreen(
         val hasLocalConstraint = query.isNotBlank() || state.localFilter.isActive
 
         val gridState = rememberLazyGridState()
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var isLifecycleStarted by remember(lifecycleOwner) {
+            mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+        }
+        androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                isLifecycleStarted = event.targetState.isAtLeast(Lifecycle.State.STARTED)
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
         // F03: local search/filters must paginate in FILTERED coordinates. Auto-fill is capped per
         // constraint; beyond the cap the user pulls more pages explicitly, so a miss cannot chain
         // request after request through the whole album.
@@ -115,6 +129,7 @@ data class ReelsAlbumScreen(
             mutableIntStateOf(ALBUM_FILTER_MIN_VISIBLE_ITEMS)
         }
         LaunchedEffect(
+            isLifecycleStarted,
             hasLocalConstraint,
             filtered.size,
             state.items.size,
@@ -126,6 +141,7 @@ data class ReelsAlbumScreen(
             searchAutoPages,
         ) {
             if (
+                isLifecycleStarted &&
                 hasLocalConstraint &&
                 filtered.size < targetFilteredCount &&
                 state.canLoadMore &&

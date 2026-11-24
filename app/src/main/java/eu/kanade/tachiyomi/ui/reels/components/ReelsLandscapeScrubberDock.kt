@@ -5,8 +5,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -40,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +49,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -151,10 +154,15 @@ fun ReelsLandscapeScrubberDock(
     val currentFineScrubEnabled by rememberUpdatedState(fineScrubEnabled)
 
     val effectiveDragging = isDragging || externalScrubFraction != null
-    val currentFraction = when {
-        isDragging -> dragProgress
-        externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
-        else -> progressState.value.coerceIn(0f, 1f)
+    val semanticProgress by remember(isDragging, externalScrubFraction) {
+        derivedStateOf {
+            val raw = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            (raw * 100f).roundToInt() / 100f
+        }
     }
     val barHeight by animateDpAsState(
         targetValue = if (effectiveDragging) 6.dp else 4.dp,
@@ -165,9 +173,6 @@ fun ReelsLandscapeScrubberDock(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "landscape_dock_like_scale",
     )
-
-    val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
-    val currentSec = (currentFraction * durationSec).coerceAtLeast(0f).roundToInt()
 
     Column(
         modifier = modifier
@@ -187,7 +192,7 @@ fun ReelsLandscapeScrubberDock(
                     .fillMaxWidth()
                     .height(24.dp)
                     .semantics {
-                        progressBarRangeInfo = ProgressBarRangeInfo(currentFraction, 0f..1f)
+                        progressBarRangeInfo = ProgressBarRangeInfo(semanticProgress, 0f..1f)
                         setProgress { target: Float ->
                             onSeek(target.coerceIn(0f, 1f))
                             true
@@ -278,43 +283,54 @@ fun ReelsLandscapeScrubberDock(
                     },
                 contentAlignment = Alignment.CenterStart,
             ) {
-                Box(
+                Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(barHeight)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.22f)),
-                )
-
-                val effectiveBufferFraction = (bufferFractionState?.value ?: bufferFraction).coerceIn(0f, 1f)
-                if (effectiveBufferFraction > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(fraction = effectiveBufferFraction)
-                            .height(barHeight)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.38f)),
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction = currentFraction)
-                        .height(barHeight)
-                        .clip(CircleShape)
-                        .background(auroraColors.accent),
-                )
-
-                Box(
-                    modifier = Modifier.fillMaxWidth(fraction = currentFraction),
-                    contentAlignment = Alignment.CenterEnd,
+                        .height(barHeight),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(if (effectiveDragging) 15.dp else 11.dp)
-                            .clip(CircleShape)
-                            .background(Color.White, CircleShape)
-                            .border(2.dp, auroraColors.accent, CircleShape),
+                    val corner = CornerRadius(size.height / 2f, size.height / 2f)
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = 0.22f),
+                        cornerRadius = corner,
+                    )
+
+                    val effectiveBufferFraction = (bufferFractionState?.value ?: bufferFraction).coerceIn(0f, 1f)
+                    if (effectiveBufferFraction > 0f) {
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.38f),
+                            size = Size(size.width * effectiveBufferFraction, size.height),
+                            cornerRadius = corner,
+                        )
+                    }
+
+                    val currentFraction = when {
+                        isDragging -> dragProgress
+                        externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                        else -> progressState.value.coerceIn(0f, 1f)
+                    }
+                    if (currentFraction > 0f) {
+                        drawRoundRect(
+                            color = auroraColors.accent,
+                            size = Size(size.width * currentFraction, size.height),
+                            cornerRadius = corner,
+                        )
+                    }
+
+                    val thumbRadius = (if (effectiveDragging) 7.5.dp else 5.5.dp).toPx()
+                    val strokeWidth = 2.dp.toPx()
+                    val centerX = (size.width * currentFraction)
+                        .coerceIn(thumbRadius, (size.width - thumbRadius).coerceAtLeast(thumbRadius))
+                    val center = Offset(centerX, size.height / 2f)
+                    drawCircle(
+                        color = Color.White,
+                        radius = thumbRadius,
+                        center = center,
+                    )
+                    drawCircle(
+                        color = auroraColors.accent,
+                        radius = (thumbRadius - strokeWidth / 2f).coerceAtLeast(0f),
+                        center = center,
+                        style = Stroke(width = strokeWidth),
                     )
                 }
             }
@@ -335,25 +351,14 @@ fun ReelsLandscapeScrubberDock(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Row(
-                    modifier = Modifier.padding(end = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = formatSeconds(currentSec),
-                        color = contentTint,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(fontFeatureSettings = "tnum"),
-                    )
-                    Text(
-                        text = " / ${formatSeconds(totalSec)}",
-                        color = contentTint.copy(alpha = 0.62f),
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        style = TextStyle(fontFeatureSettings = "tnum"),
-                    )
-                }
+                LandscapeDockTimeDisplay(
+                    progressState = progressState,
+                    isDragging = isDragging,
+                    dragProgress = dragProgress,
+                    externalScrubFraction = externalScrubFraction,
+                    durationSec = durationSec,
+                    contentTint = contentTint,
+                )
 
                 if (onToggleCropMode != null) {
                     val aspectLabel = stringResource(
@@ -605,6 +610,47 @@ private fun DockUnifiedIconButton(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LandscapeDockTimeDisplay(
+    progressState: State<Float>,
+    isDragging: Boolean,
+    dragProgress: Float,
+    externalScrubFraction: Float?,
+    durationSec: Float,
+    contentTint: Color,
+) {
+    val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
+    val currentSec by remember(durationSec, isDragging, externalScrubFraction) {
+        derivedStateOf {
+            val frac = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            (frac * durationSec).coerceAtLeast(0f).roundToInt()
+        }
+    }
+    Row(
+        modifier = Modifier.padding(end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = formatSeconds(currentSec),
+            color = contentTint,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Bold,
+            style = TextStyle(fontFeatureSettings = "tnum"),
+        )
+        Text(
+            text = " / ${formatSeconds(totalSec)}",
+            color = contentTint.copy(alpha = 0.62f),
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            style = TextStyle(fontFeatureSettings = "tnum"),
+        )
     }
 }
 

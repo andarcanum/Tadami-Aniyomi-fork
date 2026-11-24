@@ -26,7 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
@@ -157,6 +156,7 @@ fun ReelsPlayerView(
     onRefreshExpiredUrl: (() -> Boolean)? = null,
     onCodecFallback: (() -> Boolean)? = null,
     isInPictureInPicture: Boolean = false,
+    isMeteredNetwork: Boolean = false,
     playbackSpeed: Float = 1f,
     zoomScale: Float = 1f,
     zoomOffsetX: Float = 0f,
@@ -226,6 +226,7 @@ fun ReelsPlayerView(
     val currentPlaybackSpeed by rememberUpdatedState(playbackSpeed)
     val currentPlaybackHeadersProvider by rememberUpdatedState(playbackHeadersProvider)
     val currentInPip by rememberUpdatedState(isInPictureInPicture)
+    val currentIsMeteredNetwork by rememberUpdatedState(isMeteredNetwork)
     val currentOnSeekPositionConsumed by rememberUpdatedState(onSeekPositionConsumed)
     val currentOnRenderedFirstFrame by rememberUpdatedState(onRenderedFirstFrame)
     val currentOnProgressUpdate by rememberUpdatedState(onProgressUpdate)
@@ -266,15 +267,43 @@ fun ReelsPlayerView(
                 Lifecycle.Event.ON_STOP -> {
                     val inPip = currentInPip || (context as? Activity)?.isInPictureInPictureMode == true
                     if (reelsShouldPauseOnStop(inPictureInPicture = inPip)) {
-                        pooledPlayer?.player?.pause()
+                        dwellClock.stop(SystemClock.elapsedRealtime())
+                        pooledPlayer?.loadControl?.isBackgrounded = true
+                        pooledPlayer?.player?.let { p ->
+                            val pos = p.currentPosition
+                            val effDur = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                            if (shouldResetReelRestorePosition(p.playbackState, endHold != null, pos, effDur)) {
+                                restorePositionMs = 0L
+                                lastSafePositionMs = 0L
+                            } else if (pos > 0L) {
+                                lastSafePositionMs = pos
+                                restorePositionMs = pos
+                            }
+                            p.pause()
+                            p.stop()
+                        }
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    pooledPlayer?.player?.playWhenReady = reelsShouldRunPlayback(
-                        isActive = currentIsActive,
-                        isPlaying = currentIsPlaying,
-                        lifecycleStarted = true,
-                    )
+                    pooledPlayer?.loadControl?.isBackgrounded = false
+                    pooledPlayer?.player?.let { p ->
+                        if (p.playbackState == Player.STATE_IDLE && p.mediaItemCount > 0) {
+                            val resumeTargetMs = when {
+                                restorePositionMs > 0L -> restorePositionMs
+                                lastSafePositionMs > 0L -> lastSafePositionMs
+                                else -> 0L
+                            }
+                            if (resumeTargetMs > 0L) {
+                                p.seekTo(resumeTargetMs)
+                            }
+                            p.prepare()
+                        }
+                        p.playWhenReady = reelsShouldRunPlayback(
+                            isActive = currentIsActive,
+                            isPlaying = currentIsPlaying,
+                            lifecycleStarted = true,
+                        )
+                    }
                 }
                 else -> Unit
             }
@@ -353,7 +382,7 @@ fun ReelsPlayerView(
                 val dwellMs = photoClock.elapsedMs(SystemClock.elapsedRealtime())
                 currentOnProgressUpdate((dwellMs.toFloat() / REELS_MIN_DWELL_MS).coerceIn(0f, 1f))
                 if (dwellMs >= REELS_MIN_DWELL_MS) break
-                withFrameNanos { }
+                delay(STILL_PROGRESS_POLL_MS)
             }
             photoClock.stop(SystemClock.elapsedRealtime())
             currentOnProgressUpdate(1f)
@@ -515,6 +544,8 @@ fun ReelsPlayerView(
                 isActive = isActive,
                 isMuted = currentIsMuted,
             )
+            entry.loadControl.isMeteredNetwork = currentIsMeteredNetwork
+            entry.loadControl.isBackgrounded = !(currentLifecycleStarted || currentInPip)
             val exoPlayer = entry.player
             val owner = exoPlayer
             val listener = object : Player.Listener {
@@ -1036,40 +1067,45 @@ fun ReelsPlayerView(
         player?.setPlaybackSpeed(playbackSpeed)
     }
 
-    // Smooth 60fps playback progress tracking while actively playing; 4Hz fallback when idle/paused.
-    LaunchedEffect(isActive, player) {
+    LaunchedEffect(isMeteredNetwork, pooledPlayer) {
+        pooledPlayer?.loadControl?.isMeteredNetwork = isMeteredNetwork
+    }
+
+    // ~30fps playback progress tracking while actively playing in foreground/PiP; 4Hz when paused; completely stopped in background.
+    LaunchedEffect(isActive, player, isLifecycleStarted, isInPictureInPicture) {
+        if (!isActive || player == null || (!isLifecycleStarted && !isInPictureInPicture)) {
+            return@LaunchedEffect
+        }
         while (isActive) {
             val p = player
-            val isActivelyRunning = p?.isPlaying == true
-            if (p != null) {
-                val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
-                if (effectiveDurationMs > 0L) {
-                    if (isActivelyRunning && p.currentPosition > 0) {
-                        lastSafePositionMs = p.currentPosition
-                    }
-                    currentOnBufferUpdate(
-                        (p.bufferedPosition.toFloat() / effectiveDurationMs.toFloat()).coerceIn(0f, 1f),
-                    )
+            val isActivelyRunning = p.isPlaying
+            val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+            if (effectiveDurationMs > 0L) {
+                if (isActivelyRunning && p.currentPosition > 0) {
+                    lastSafePositionMs = p.currentPosition
                 }
-                val progress = if (pendingSeekFraction >= 0f) {
-                    pendingSeekFraction.coerceIn(0f, 1f)
-                } else {
-                    resolveReelPlaybackProgress(
-                        currentPositionMs = p.currentPosition,
-                        effectiveDurationMs = effectiveDurationMs,
-                        isFirstFrameRendered = isFirstFrameRendered,
-                        isEndedOrHolding = endHold != null || p.playbackState == Player.STATE_ENDED,
-                        dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime()),
-                    )
-                }
-                if (progress != null) {
-                    currentOnProgressUpdate(progress)
-                }
+                currentOnBufferUpdate(
+                    (p.bufferedPosition.toFloat() / effectiveDurationMs.toFloat()).coerceIn(0f, 1f),
+                )
+            }
+            val progress = if (pendingSeekFraction >= 0f) {
+                pendingSeekFraction.coerceIn(0f, 1f)
+            } else {
+                resolveReelPlaybackProgress(
+                    currentPositionMs = p.currentPosition,
+                    effectiveDurationMs = effectiveDurationMs,
+                    isFirstFrameRendered = isFirstFrameRendered,
+                    isEndedOrHolding = endHold != null || p.playbackState == Player.STATE_ENDED,
+                    dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime()),
+                )
+            }
+            if (progress != null) {
+                currentOnProgressUpdate(progress)
             }
             if (isActivelyRunning) {
-                withFrameNanos { }
+                delay(ACTIVE_PROGRESS_POLL_MS)
             } else {
-                delay(250)
+                delay(PAUSED_PROGRESS_POLL_MS)
             }
         }
     }
@@ -1775,3 +1811,6 @@ internal fun calculateReelTextureScale(
 }
 
 private const val SCRUB_FRAME_CAPTURE_INTERVAL_MS = 65L
+private const val ACTIVE_PROGRESS_POLL_MS = 33L
+private const val PAUSED_PROGRESS_POLL_MS = 250L
+private const val STILL_PROGRESS_POLL_MS = 50L

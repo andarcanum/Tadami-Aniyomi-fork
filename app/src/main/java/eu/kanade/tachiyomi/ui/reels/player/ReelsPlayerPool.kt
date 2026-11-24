@@ -76,6 +76,8 @@ internal object ReelsPlayerPool {
         val reused = idle.pollFirst()
         if (reused != null) {
             reused.loadControl.isActivePage = isActive
+            reused.loadControl.isBackgrounded = false
+            reused.loadControl.isMeteredNetwork = false
             reused.player.apply {
                 playWhenReady = false
                 setVideoSurface(null)
@@ -105,6 +107,8 @@ internal object ReelsPlayerPool {
 
     fun release(entry: PooledReelsPlayer, listener: Player.Listener?) {
         entry.loadControl.isActivePage = false
+        entry.loadControl.isBackgrounded = false
+        entry.loadControl.isMeteredNetwork = false
         val p = entry.player
         if (listener != null) {
             runCatching { p.removeListener(listener) }

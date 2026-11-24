@@ -641,6 +641,12 @@ class ReelsFeedScreenModel(
     // ready. Cancelled by stop/source switch/dispose and by any new non-retry build.
     private var roundRobinReadinessRetryJob: Job? = null
 
+    @Volatile
+    private var feedInForeground: Boolean = true
+
+    @Volatile
+    private var pendingReadinessRetry: Pair<Long, Long?>? = null
+
     // Restore inputs of the current attach: the anchored card is resolved lazily from these
     // when the first page says its frontier is not in the host projection yet.
     @Volatile
@@ -917,9 +923,14 @@ class ReelsFeedScreenModel(
         commitWatched(event.itemId, slotSourceId)
     }
 
-    /** Foreground loss: persist the latest position of the active visit before it can be lost. */
+    /** Foreground loss: persist the latest position of the active visit and suspend background timers. */
     fun onForegroundLost(isConfigurationChange: Boolean = false) {
-        if (state.value.roundRobinOwner != null) {
+        if (!isConfigurationChange) {
+            feedInForeground = false
+            roundRobinReadinessRetryJob?.cancel()
+            roundRobinReadinessRetryJob = null
+        }
+        if (state.value.roundRobinOwner != null || roundRobinAttached) {
             roundRobinCoordinator.foregroundLost()
             return
         }
@@ -927,6 +938,20 @@ class ReelsFeedScreenModel(
             flushActiveMixVisit(endTrackerVisit = false)
         }
         if (isReplaySurface()) sessionContinuity.flushActiveVisit()
+    }
+
+    /** Foreground return: resume suspended coordinator wakes and pending readiness retries. */
+    fun onForegroundGained() {
+        feedInForeground = true
+        if (state.value.roundRobinOwner != null || roundRobinAttached) {
+            roundRobinCoordinator.foregroundGained()
+        }
+        val pending = pendingReadinessRetry ?: return
+        if (pending.first == state.value.currentSourceId) {
+            scheduleRoundRobinReadinessRetry(pending.first, pending.second)
+        } else {
+            pendingReadinessRetry = null
+        }
     }
 
     /**
@@ -2478,6 +2503,7 @@ class ReelsFeedScreenModel(
         // it never cancels itself here.
         roundRobinReadinessRetryJob?.cancel()
         roundRobinReadinessRetryJob = null
+        pendingReadinessRetry = null
         loadJob?.cancel()
         val entryGeneration = loadGeneration.incrementAndGet()
         loadJob = screenModelScope.launch(ioDispatcher) {
@@ -2749,6 +2775,12 @@ class ReelsFeedScreenModel(
      * to a short default and every wait is capped so recovery stays responsive.
      */
     private fun scheduleRoundRobinReadinessRetry(sourceId: Long, retryAtEpochMillis: Long?) {
+        pendingReadinessRetry = sourceId to retryAtEpochMillis
+        if (!feedInForeground) {
+            roundRobinReadinessRetryJob?.cancel()
+            roundRobinReadinessRetryJob = null
+            return
+        }
         val hintDelay = retryAtEpochMillis?.let { (it - wallClock().time).coerceAtLeast(0L) }
         val delayMs = (hintDelay ?: ROUND_ROBIN_PENDING_RETRY_MS)
             .coerceAtMost(ROUND_ROBIN_PENDING_RETRY_MAX_MS)
@@ -2758,6 +2790,7 @@ class ReelsFeedScreenModel(
             // Release the slot before rebuilding: a still-pending source schedules its next
             // retry from inside buildFiltersAndStartFeed, and that must not cancel this job.
             roundRobinReadinessRetryJob = null
+            pendingReadinessRetry = null
             val currentSource = source ?: return@launch
             if (state.value.currentSourceId != sourceId) return@launch
             buildFiltersAndStartFeed(currentSource, sourceId)
@@ -2772,6 +2805,7 @@ class ReelsFeedScreenModel(
     private fun stopRoundRobin(clearProjection: Boolean) {
         roundRobinReadinessRetryJob?.cancel()
         roundRobinReadinessRetryJob = null
+        pendingReadinessRetry = null
         val coordinatorWasUsed = roundRobinAttached || roundRobinExpectedSourceId != null
         roundRobinAttached = false
         roundRobinExpectedSourceId = null

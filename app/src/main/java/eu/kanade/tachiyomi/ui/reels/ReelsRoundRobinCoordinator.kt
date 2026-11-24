@@ -165,6 +165,7 @@ class ReelsRoundRobinCoordinator(
     private var wakeJob: Job? = null
     private var eligibilityJob: Job? = null
     private var replayContextJob: Job? = null
+    private var isForeground: Boolean = true
 
     private val checkpointWriter = ReelsSessionContinuity(
         scope = scope,
@@ -265,9 +266,14 @@ class ReelsRoundRobinCoordinator(
     }
 
     fun foregroundLost() {
+        commands.trySend(Command.ForegroundLost)
         val session = activeSession ?: return
         if (session.stopped || session.incognito) return
         checkpointWriter.flushActiveVisit()
+    }
+
+    fun foregroundGained() {
+        commands.trySend(Command.ForegroundGained)
     }
 
     fun stop() {
@@ -300,6 +306,8 @@ class ReelsRoundRobinCoordinator(
         data object Refresh : Command
         data class Activate(val itemId: String) : Command
         data object Stop : Command
+        data object ForegroundLost : Command
+        data object ForegroundGained : Command
         data class EligibilityChanged(val session: Session) : Command
         data class ReplayContextChanged(val session: Session, val context: FeedReplayContext?) : Command
         data class Wake(val session: Session, val scheduledAt: Long) : Command
@@ -357,6 +365,35 @@ class ReelsRoundRobinCoordinator(
                 )
             }
             Command.Stop -> stopInternal()
+            Command.ForegroundLost -> {
+                if (isForeground) {
+                    isForeground = false
+                    wakeJob?.cancel()
+                    wakeJob = null
+                    activeSession?.scheduledWakeAt = null
+                }
+            }
+            Command.ForegroundGained -> {
+                if (!isForeground) {
+                    isForeground = true
+                    val session = activeSession
+                    if (session != null && !session.stopped && activeOperation == null) {
+                        val now = nowMs()
+                        val overdueCatalogAt = session.catalogWakeAt?.takeIf { it <= now }
+                        val overdueRetryAt = if (session.catalogRetryForced) {
+                            session.catalogRetryAt?.takeIf { it <= now }
+                        } else {
+                            null
+                        }
+                        val overdueAt = listOfNotNull(overdueCatalogAt, overdueRetryAt).minOrNull()
+                        if (overdueAt != null) {
+                            scheduleWake(session, session.lastSnapshot, session.lastStop, wakeAt = overdueAt)
+                        } else {
+                            scheduleWake(session, session.lastSnapshot, session.lastStop)
+                        }
+                    }
+                }
+            }
             is Command.EligibilityChanged -> {
                 if (command.session === activeSession) {
                     startOperation(
@@ -373,9 +410,10 @@ class ReelsRoundRobinCoordinator(
             is Command.Wake -> {
                 debug(
                     "cmd:${command.scheduledAt}:current=${command.session.scheduledWakeAt}:" +
-                        "stop=${command.session.lastStop}:active=${command.session === activeSession}",
+                        "stop=${command.session.lastStop}:active=${command.session === activeSession}:fg=$isForeground",
                 )
-                if (command.session === activeSession &&
+                if (isForeground &&
+                    command.session === activeSession &&
                     command.session.scheduledWakeAt == command.scheduledAt
                 ) {
                     // The periodic catalog reconciliation may fire while the feed is parked at
@@ -2126,7 +2164,7 @@ class ReelsRoundRobinCoordinator(
         wakeJob?.cancel()
         wakeJob = null
         session.scheduledWakeAt = null
-        if (session.stopped || activeSession !== session) return
+        if (!isForeground || session.stopped || activeSession !== session) return
         val now = nowMs()
         val periodicAt = session.catalogWakeAt?.takeIf { it > now }
         // A deferred catalog (FLOOD_WAIT or a partial window) must keep a wake of its own: a

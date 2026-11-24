@@ -93,7 +93,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -123,6 +122,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.request.transformations
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
@@ -148,6 +150,7 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsTopBar
 import eu.kanade.tachiyomi.ui.reels.components.ReelsVideoPage
 import eu.kanade.tachiyomi.ui.reels.components.ReelsVideoQualityDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsWebLoginDialog
+import eu.kanade.tachiyomi.ui.reels.player.ReelsBlurTransformation
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerPool
 import eu.kanade.tachiyomi.ui.reels.player.clearReelsVideoCache
 import eu.kanade.tachiyomi.ui.reels.player.isLoopbackReelUrl
@@ -308,6 +311,8 @@ data class ReelsFeedScreen(
         var isForeground by remember(lifecycleOwner) {
             mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
         }
+        val isTopScreen = navigator.lastItem.key == this@ReelsFeedScreen.key
+        val effectiveFeedActive = isForeground && isTopScreen
         DisposableEffect(lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
@@ -318,11 +323,26 @@ data class ReelsFeedScreen(
                             isConfigurationChange = activity?.isChangingConfigurations == true,
                         )
                     }
+                    Lifecycle.Event.ON_STOP -> {
+                        val inPip = ReelsPip.isInPictureInPictureMode || activity?.isInPictureInPictureMode == true
+                        if (!inPip && activity?.isChangingConfigurations != true) {
+                            ReelsPlayerPool.drainIdle()
+                        }
+                    }
                     else -> Unit
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        LaunchedEffect(effectiveFeedActive) {
+            if (effectiveFeedActive) {
+                screenModel.onForegroundGained()
+            } else {
+                screenModel.onForegroundLost(
+                    isConfigurationChange = activity?.isChangingConfigurations == true,
+                )
+            }
         }
         // Audit H9: incognito must be VISIBLE — every like/follow/history write for this
         // source is silently suppressed while it is on. Reels owns its incognito: only the
@@ -617,7 +637,7 @@ data class ReelsFeedScreen(
                 cm?.unregisterNetworkCallback(callback)
             }
         }
-        val preloadAllowed = reelsPreloadAllowed(
+        val preloadAllowed = effectiveFeedActive && reelsPreloadAllowed(
             preloadEnabled = state.preloadEnabled,
             preloadWifiOnly = state.preloadWifiOnly,
             onWifi = networkStatus.onWifi,
@@ -1095,11 +1115,12 @@ data class ReelsFeedScreen(
                         pagerState.settledPage,
                         activePageReady,
                         preloadAllowed,
+                        networkStatus.metered,
                         state.feedGeneration,
                         effectiveHd,
                         state.qualityState?.selectionRevision,
                     ) {
-                        if (!preloadAllowed || !activePageReady) return@LaunchedEffect
+                        if (!preloadAllowed || networkStatus.metered || !activePageReady) return@LaunchedEffect
                         val settled = pagerState.settledPage
                         val items = state.items
                         val offline = state.isOffline
@@ -1109,7 +1130,7 @@ data class ReelsFeedScreen(
                             // The effect's job dies on a settled-page/source/quality change; a
                             // prewarm run must stop pulling bytes instead of warming stale pages.
                             val prewarmJob = coroutineContext[Job]
-                            for (index in settled + 2..settled + 4) {
+                            for (index in settled + 2..settled + 3) {
                                 if (prewarmJob?.isActive == false) break
                                 val item = items.getOrNull(index) ?: break
                                 val slotSourceId = state.slotSourceId(index)
@@ -1214,11 +1235,6 @@ data class ReelsFeedScreen(
                         )
                     val swipeThresholdPx = with(LocalDensity.current) { 110.dp.toPx() }
                     var horizontalDragPx by remember { mutableFloatStateOf(0f) }
-
-                    // Voyager stack guarantee: when a new screen (Following, Creator, Album,
-                    // Favorites) is pushed on top of this feed, immediately release this screen's
-                    // active/preload players back to the pool without waiting for Activity ON_PAUSE.
-                    val isTopScreen = navigator.lastItem.key == this@ReelsFeedScreen.key
 
                     // Duplicate-proof page keys: prevents IllegalArgumentException in VerticalPager
                     // if a plugin or multi-source mix serves a duplicate item.id.
@@ -1625,6 +1641,7 @@ data class ReelsFeedScreen(
                                 onVisitEnded = pageCallbacks::onVisitEnded,
                                 onVisitSuspendedForConfiguration = screenModel::onVisitSuspendedForConfiguration,
                                 isForeground = isForeground,
+                                isMeteredNetwork = networkStatus.metered,
                                 onPlayingStateChanged = { playing ->
                                     screenModel.setPlaybackRunning(playing, pageIndex = page)
                                 },
@@ -2478,15 +2495,23 @@ data class ReelsFeedScreen(
                                 .fillMaxWidth()
                                 .height(112.dp),
                         ) {
+                            val previewBlur = remember { ReelsBlurTransformation(radius = 12) }
                             previewCategory?.imageUrl?.let { url ->
                                 AsyncImage(
-                                    model = url,
+                                    model = ImageRequest.Builder(context)
+                                        .data(url)
+                                        .size(
+                                            ReelsBlurTransformation.DEFAULT_MAX_DIMENSION,
+                                            ReelsBlurTransformation.DEFAULT_MAX_DIMENSION,
+                                        )
+                                        .transformations(previewBlur)
+                                        .crossfade(true)
+                                        .build(),
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .graphicsLayer(scaleX = 1.25f, scaleY = 1.25f)
-                                        .blur(30.dp)
                                         .alpha(0.55f),
                                 )
                             }
@@ -2651,6 +2676,8 @@ private fun AlbumSearchResults(
         ReelsEmptySearchState(onResetSearch = onResetSearch, modifier = Modifier.padding(top = topPadding))
         return
     }
+    val context = LocalContext.current
+    val cardBlur = remember { ReelsBlurTransformation() }
     val listState = rememberLazyListState()
     val lastVisible by remember {
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
@@ -2673,8 +2700,8 @@ private fun AlbumSearchResults(
     ) {
         items(state.albumSearchResults, key = { it.id }) { category ->
             val saved = category.id in state.savedAlbumIds
-            // Aurora haze (device sign-off): the album cover blurred as backdrop under a
-            // transparent surface instead of an opaque card.
+            // Aurora haze (device sign-off): the album cover blurred off-thread as backdrop under a
+            // transparent surface instead of an opaque card (zero live GPU RenderEffect overhead).
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2686,12 +2713,18 @@ private fun AlbumSearchResults(
             ) {
                 if (category.imageUrl != null) {
                     AsyncImage(
-                        model = category.imageUrl,
+                        model = ImageRequest.Builder(context)
+                            .data(category.imageUrl)
+                            .size(
+                                ReelsBlurTransformation.DEFAULT_MAX_DIMENSION,
+                                ReelsBlurTransformation.DEFAULT_MAX_DIMENSION,
+                            )
+                            .transformations(cardBlur)
+                            .build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .matchParentSize()
-                            .blur(18.dp)
                             .alpha(0.45f),
                     )
                 }

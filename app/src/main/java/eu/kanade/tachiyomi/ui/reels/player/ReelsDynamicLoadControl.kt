@@ -17,9 +17,11 @@ import androidx.media3.exoplayer.upstream.Allocator
  * - Fast startup: [BUFFER_FOR_PLAYBACK_MS] (600 ms) and [BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS]
  *   (1 200 ms) instead of ExoPlayer's 2.5 s / 5 s defaults so swipes start almost immediately.
  * - Dynamic buffer ceiling: while a player is preloading an adjacent card ([isActivePage] == false),
- *   loading pauses once [PRELOAD_MAX_BUFFER_US] (15 s) is buffered so preload does not waste
- *   bandwidth. The instant the card becomes settled ([isActivePage] == true), the ceiling opens up
- *   to [ACTIVE_MAX_BUFFER_MS] (50 s) without recreating the ExoPlayer instance.
+ *   loading pauses once [PRELOAD_MAX_BUFFER_US] (8 s, or 4 s on metered networks) is buffered so
+ *   preload does not waste bandwidth/battery. When the card becomes settled ([isActivePage] == true),
+ *   the ceiling opens up to [ACTIVE_MAX_BUFFER_MS] (50 s, or 20 s on metered networks) without
+ *   recreating the ExoPlayer instance.
+ * - Background gate: when [isBackgrounded] is true, loading halts immediately.
  */
 @OptIn(UnstableApi::class)
 internal class ReelsDynamicLoadControl(
@@ -28,6 +30,12 @@ internal class ReelsDynamicLoadControl(
 
     @Volatile
     var isActivePage: Boolean = initialActive
+
+    @Volatile
+    var isBackgrounded: Boolean = false
+
+    @Volatile
+    var isMeteredNetwork: Boolean = false
 
     private val delegate: DefaultLoadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(
@@ -59,7 +67,12 @@ internal class ReelsDynamicLoadControl(
         delegate.retainBackBufferFromKeyframe(playerId)
 
     override fun shouldContinueLoading(parameters: LoadControl.Parameters): Boolean {
-        if (!isActivePage && parameters.bufferedDurationUs >= PRELOAD_MAX_BUFFER_US) {
+        if (isBackgrounded) return false
+        val preloadLimitUs = if (isMeteredNetwork) METERED_PRELOAD_MAX_BUFFER_US else PRELOAD_MAX_BUFFER_US
+        if (!isActivePage && parameters.bufferedDurationUs >= preloadLimitUs) {
+            return false
+        }
+        if (isActivePage && isMeteredNetwork && parameters.bufferedDurationUs >= METERED_ACTIVE_MAX_BUFFER_US) {
             return false
         }
         return delegate.shouldContinueLoading(parameters)
@@ -74,15 +87,21 @@ internal class ReelsDynamicLoadControl(
         mediaPeriodId: MediaSource.MediaPeriodId,
         bufferedDurationUs: Long,
     ): Boolean {
-        if (bufferedDurationUs >= PRELOAD_MAX_BUFFER_US) return false
+        if (isBackgrounded) return false
+        val preloadLimitUs = if (isMeteredNetwork) METERED_PRELOAD_MAX_BUFFER_US else PRELOAD_MAX_BUFFER_US
+        if (bufferedDurationUs >= preloadLimitUs) return false
         return delegate.shouldContinuePreloading(playerId, timeline, mediaPeriodId, bufferedDurationUs)
     }
 
     companion object {
         internal const val ACTIVE_MIN_BUFFER_MS = 10_000
         internal const val ACTIVE_MAX_BUFFER_MS = 50_000
-        internal const val PRELOAD_MAX_BUFFER_MS = 15_000
+        internal const val METERED_ACTIVE_MAX_BUFFER_MS = 20_000
+        internal const val METERED_ACTIVE_MAX_BUFFER_US = METERED_ACTIVE_MAX_BUFFER_MS * 1_000L
+        internal const val PRELOAD_MAX_BUFFER_MS = 8_000
         internal const val PRELOAD_MAX_BUFFER_US = PRELOAD_MAX_BUFFER_MS * 1_000L
+        internal const val METERED_PRELOAD_MAX_BUFFER_MS = 4_000
+        internal const val METERED_PRELOAD_MAX_BUFFER_US = METERED_PRELOAD_MAX_BUFFER_MS * 1_000L
         internal const val BUFFER_FOR_PLAYBACK_MS = 600
         internal const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 1_200
         internal const val BACK_BUFFER_DURATION_MS = 10_000

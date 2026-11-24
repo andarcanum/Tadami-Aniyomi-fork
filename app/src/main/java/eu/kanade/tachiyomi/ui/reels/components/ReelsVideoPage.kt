@@ -231,6 +231,7 @@ fun ReelsVideoPage(
     onVisitSuspendedForConfiguration: (itemId: String, positionMs: Long) -> Unit = { _, _ -> },
     // The host screen is in the foreground. Background playback never earns watch credit.
     isForeground: Boolean = true,
+    isMeteredNetwork: Boolean = false,
     // B3.1 resume-seek: when set, the page seeks here once on its first activation.
     initialSeekFraction: Float? = null,
     // Called once when the resume seek above was applied (the model clears the stored target).
@@ -502,8 +503,9 @@ fun ReelsVideoPage(
     val currentWatchedEligible by rememberUpdatedState(watchedEligible)
 
     // Sparse sampler (4 Hz): monotonic deltas, no per-frame work and never a DB write.
-    LaunchedEffect(item.id, isActive) {
-        if (!isActive) return@LaunchedEffect
+    // Stops completely when off-page or backgrounded so idle tabs/screens burn zero main-thread cycles.
+    LaunchedEffect(item.id, isActive, isForeground) {
+        if (!isActive || !isForeground) return@LaunchedEffect
         while (true) {
             delay(ReelsForYou.SAMPLE_INTERVAL_MS)
             val duration = durationSec.coerceAtLeast(0f)
@@ -1153,6 +1155,7 @@ fun ReelsVideoPage(
                 }
             },
             isInPictureInPicture = isInPictureInPicture,
+            isMeteredNetwork = isMeteredNetwork,
             playbackSpeed = heldRate ?: effectivePlaybackSpeed,
             zoomScale = zoomScale.value,
             zoomOffsetX = zoomOffsetX.value,

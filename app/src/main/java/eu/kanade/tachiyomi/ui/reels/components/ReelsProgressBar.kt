@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -15,13 +16,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,7 +30,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -74,12 +77,15 @@ fun ReelsProgressBar(
     val currentOnScrubStateChange by rememberUpdatedState(onScrubStateChange)
 
     val effectiveDragging = isDragging || externalScrubFraction != null
-    // Only this composable reads progressState.value, so the 10Hz updates recompose just the
-    // bar, not the whole video page.
-    val currentFraction = when {
-        isDragging -> dragProgress
-        externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
-        else -> progressState.value.coerceIn(0f, 1f)
+    val semanticProgress by remember(isDragging, externalScrubFraction) {
+        derivedStateOf {
+            val raw = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            (raw * 100f).roundToInt() / 100f
+        }
     }
     val barHeight by animateDpAsState(
         targetValue = if (effectiveDragging) {
@@ -101,7 +107,7 @@ fun ReelsProgressBar(
             .height(48.dp)
             // TalkBack: expose the scrubber as an adjustable progress control.
             .semantics {
-                progressBarRangeInfo = ProgressBarRangeInfo(currentFraction, 0f..1f)
+                progressBarRangeInfo = ProgressBarRangeInfo(semanticProgress, 0f..1f)
                 setProgress { target: Float ->
                     onSeek(target.coerceIn(0f, 1f))
                     true
@@ -177,10 +183,8 @@ fun ReelsProgressBar(
             },
         contentAlignment = Alignment.BottomCenter,
     ) {
-        val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
-        val currentSec = (currentFraction * durationSec).coerceAtLeast(0f).roundToInt()
-
-        // Compact Time Badge when chrome is visible and user is not actively scrubbing
+        // Compact Time Badge when chrome is visible and user is not actively scrubbing.
+        // Recomposes at most once per second (integer-second derivedStateOf) and unmounts when hidden.
         AnimatedVisibility(
             visible = chromeVisible && !effectiveDragging && durationSec > 0f,
             enter = fadeIn() + slideInVertically { it },
@@ -189,70 +193,110 @@ fun ReelsProgressBar(
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 12.dp, end = 12.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "${formatSeconds(currentSec)} / ${formatSeconds(totalSec)}",
-                    color = Color.White.copy(alpha = 0.95f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            ReelsProgressTimeBadge(
+                progressState = progressState,
+                isDragging = isDragging,
+                dragProgress = dragProgress,
+                externalScrubFraction = externalScrubFraction,
+                durationSec = durationSec,
+            )
         }
 
         // Preview card is rendered unclipped by ReelsScrubPreviewOverlay in ReelsVideoPage.
-        // Base Track
-        Box(
+        // Draw-phase track: reads progressState and bufferFractionState strictly in DrawScope
+        // so playback progress updates cause zero Compose recompositions or layout passes.
+        Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(barHeight)
-                .clip(RoundedCornerShape(barHeight / 2))
-                .background(Color.White.copy(alpha = 0.22f)),
-            contentAlignment = Alignment.CenterStart,
+                .height(barHeight),
         ) {
+            val corner = CornerRadius(size.height / 2f, size.height / 2f)
+            // Base Track
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.22f),
+                cornerRadius = corner,
+            )
+
             // Buffered Progress Fill
             val effectiveBufferFraction = (bufferFractionState?.value ?: bufferFraction).coerceIn(0f, 1f)
             if (effectiveBufferFraction > 0f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction = effectiveBufferFraction)
-                        .height(barHeight)
-                        .clip(RoundedCornerShape(barHeight / 2))
-                        .background(Color.White.copy(alpha = 0.35f)),
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.35f),
+                    size = Size(size.width * effectiveBufferFraction, size.height),
+                    cornerRadius = corner,
                 )
             }
 
             // Active Progress Fill (using dynamic Aurora Theme Accent!)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction = currentFraction)
-                    .height(barHeight)
-                    .clip(RoundedCornerShape(barHeight / 2))
-                    .background(accentColor),
-            )
+            val currentFraction = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            if (currentFraction > 0f) {
+                drawRoundRect(
+                    color = accentColor,
+                    size = Size(size.width * currentFraction, size.height),
+                    cornerRadius = corner,
+                )
+            }
 
             // Scrubber Thumb on Drag
             if (effectiveDragging) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction = currentFraction),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .background(Color.White, CircleShape)
-                            .border(2.5.dp, accentColor, CircleShape),
-                    )
-                }
+                val thumbRadius = 7.dp.toPx()
+                val strokeWidth = 2.5.dp.toPx()
+                val centerX = (size.width * currentFraction)
+                    .coerceIn(thumbRadius, (size.width - thumbRadius).coerceAtLeast(thumbRadius))
+                val center = Offset(centerX, size.height / 2f)
+                drawCircle(
+                    color = Color.White,
+                    radius = thumbRadius,
+                    center = center,
+                )
+                drawCircle(
+                    color = accentColor,
+                    radius = (thumbRadius - strokeWidth / 2f).coerceAtLeast(0f),
+                    center = center,
+                    style = Stroke(width = strokeWidth),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun ReelsProgressTimeBadge(
+    progressState: State<Float>,
+    isDragging: Boolean,
+    dragProgress: Float,
+    externalScrubFraction: Float?,
+    durationSec: Float,
+) {
+    val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
+    val currentSec by remember(durationSec, isDragging, externalScrubFraction) {
+        derivedStateOf {
+            val frac = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            (frac * durationSec).coerceAtLeast(0f).roundToInt()
+        }
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "${formatSeconds(currentSec)} / ${formatSeconds(totalSec)}",
+            color = Color.White.copy(alpha = 0.95f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
