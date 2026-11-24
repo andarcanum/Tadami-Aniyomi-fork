@@ -1,9 +1,10 @@
 # Reels Feed Contract
 
-**Current version: 30** (`extensionLib` 12.0–30.0 accepted by the host; v24–v30 are
+**Current version: 31** (`extensionLib` 12.0–31.0 accepted by the host; v24–v31 are
 purely additive) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
+[`AnimeFeedLifecycleSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedLifecycleSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
 [`AnimeCreatorDisplaySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorDisplaySource.kt),
 [`AnimeFeedPlaybackHeadersSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedPlaybackHeadersSource.kt),
@@ -685,6 +686,7 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 31 | Optional capability `AnimeFeedLifecycleSource.onFeedActiveChanged(active: Boolean)`: allows stateful feed plugins (e.g. persistent MTProto/TDLib engines) to suspend background networking and periodic maintenance while Reels is hidden or backgrounded, and resume cleanly when active again. Abstract member, no default methods on existing interfaces. Implementing requires `extensionLib` 31.0; `LIB_VERSION_MAX` becomes 31.0, while older plugins inside `12.0..30.0` keep loading. |
 | 29 | Optional capability `AnimeFeedVideoQualitySource` (`supportsVideoQuality`, `getVideoQualities`, `resolveVideoQuality`): real per-item rendition catalogs and one resolved playback binding, with Source/exact-resolution semantics and byte cache identity. Models `FeedVideoQualityVariant`, `FeedVideoQualitiesResult` (`Available`/`Retry`/`NeedsAuth`/`ContextChanged`/`Unavailable`/`Unsupported`) and `FeedVideoQualityResult`. All members abstract; the v27/v28 descriptors and old models are unchanged. Implementing requires `extensionLib` 29.0; `LIB_VERSION_MAX` becomes 29.0, while older plugins inside `12.0..28.0` keep loading. |
 | 28 | Optional capability `AnimeFeedRoundRobinSource` (`isRoundRobinEnabled`, `prepareRoundRobin`, `identifyRoundRobinItem`, `getRoundRobinCatalog`, `scanRoundRobinSource`): per-chat round-robin scanning with a stable `storageKey` independent from the mutable v27 replay context and bounded 1..2 candidate scans. Models `FeedRoundRobinReadiness` (`SignedOut`/`Pending`/`Ready`), `FeedRoundRobinIdentity`, `FeedRoundRobinSourceRef`, `FeedRoundRobinCatalog`, `FeedRoundRobinCatalogResult`, `FeedRoundRobinCandidate`, `FeedRoundRobinScanRequest`, `FeedRoundRobinDeferral`, `FeedRoundRobinScanResult`. All members abstract, no default members added to existing interfaces; the v27 interfaces and model descriptors are unchanged. Implementing requires `extensionLib` 28.0; `LIB_VERSION_MAX` becomes 28.0, while older plugins inside `12.0..27.0` keep loading. |
 | 27 | Optional capability `AnimeFeedReplaySource` (`replayContextChanges: Flow<FeedReplayContext?>`, `prepareReplay()`, `resolveReplayItem(itemId, expectedContext, filters)`): session continuity and safe item rehydration without process tokens. Models `FeedReplayContext` (accountId, continuityKey) and `FeedReplayItemResult` (`Available`, `FilteredOut`, `Unavailable`, `Deferred`, `ContextChanged`). All members abstract, no default methods on existing interfaces. `LIB_VERSION_MAX` becomes 27.0; older plugins stay inside `12.0..27.0` and keep loading. |

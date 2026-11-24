@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedAccountIdentitySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedLifecycleSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginInstrumentationSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
@@ -644,6 +645,8 @@ class ReelsFeedScreenModel(
     @Volatile
     private var feedInForeground: Boolean = true
 
+    private val activeLifecycleSources = LinkedHashSet<AnimeFeedLifecycleSource>()
+
     @Volatile
     private var pendingReadinessRetry: Pair<Long, Long?>? = null
 
@@ -927,6 +930,7 @@ class ReelsFeedScreenModel(
     fun onForegroundLost(isConfigurationChange: Boolean = false) {
         if (!isConfigurationChange) {
             feedInForeground = false
+            syncFeedLifecycleActive()
             roundRobinReadinessRetryJob?.cancel()
             roundRobinReadinessRetryJob = null
         }
@@ -943,6 +947,7 @@ class ReelsFeedScreenModel(
     /** Foreground return: resume suspended coordinator wakes and pending readiness retries. */
     fun onForegroundGained() {
         feedInForeground = true
+        syncFeedLifecycleActive()
         if (state.value.roundRobinOwner != null || roundRobinAttached) {
             roundRobinCoordinator.foregroundGained()
         }
@@ -952,6 +957,30 @@ class ReelsFeedScreenModel(
         } else {
             pendingReadinessRetry = null
         }
+    }
+
+    private fun syncFeedLifecycleActive(forceInactive: Boolean = false) {
+        val currentState = state.value
+        val desired: Set<AnimeFeedLifecycleSource> = when {
+            forceInactive || !feedInForeground || currentState.isOffline -> emptySet()
+            currentState.isMixMode -> {
+                knownFeedSources
+                    .filterNot { it.id.toString() in currentState.excludedMixSourceIds }
+                    .filterIsInstance<AnimeFeedLifecycleSource>()
+                    .toSet()
+            }
+            else -> listOfNotNull(source as? AnimeFeedLifecycleSource).toSet()
+        }
+        val toDeactivate: List<AnimeFeedLifecycleSource>
+        val toActivate: List<AnimeFeedLifecycleSource>
+        synchronized(activeLifecycleSources) {
+            toDeactivate = activeLifecycleSources.filter { it !in desired }
+            toActivate = desired.filter { it !in activeLifecycleSources }
+            activeLifecycleSources.clear()
+            activeLifecycleSources.addAll(desired)
+        }
+        toDeactivate.forEach { runCatching { it.onFeedActiveChanged(false) } }
+        toActivate.forEach { runCatching { it.onFeedActiveChanged(true) } }
     }
 
     /**
@@ -1507,6 +1536,7 @@ class ReelsFeedScreenModel(
                         multiSourceCoordinator.updateExcludedSources(
                             immutable.mapNotNull { it.toLongOrNull() }.toSet(),
                         )
+                        syncFeedLifecycleActive()
                     }
                 }
             }
@@ -1593,6 +1623,7 @@ class ReelsFeedScreenModel(
                                 else -> {
                                     multiSourceCoordinator.syncSources(feedSources)
                                     syncMixQualitySessions(feedSources)
+                                    syncFeedLifecycleActive()
                                 }
                             }
                         }
@@ -1653,6 +1684,7 @@ class ReelsFeedScreenModel(
             }
             if (missingCapability) {
                 source = null
+                syncFeedLifecycleActive()
                 mutableState.update {
                     it.copy(
                         errorRes = when (mode) {
@@ -1815,6 +1847,7 @@ class ReelsFeedScreenModel(
                     retryAfterSec = 0,
                 )
             }
+            syncFeedLifecycleActive()
             loadPersistedFavorites(newSourceId)
             loadPersistedFollows(newSourceId)
             loadPersistedHidden(newSourceId)
@@ -1823,6 +1856,8 @@ class ReelsFeedScreenModel(
             bindQualitySession(rawSource, newSourceId)
             buildFiltersAndStartFeed(rawSource, newSourceId)
         } else {
+            source = null
+            syncFeedLifecycleActive()
             mutableState.update {
                 it.copy(
                     error = null,
@@ -1993,10 +2028,13 @@ class ReelsFeedScreenModel(
                             errorRes = MR.strings.reels_feed_empty,
                         )
                     }
+                    syncFeedLifecycleActive()
                 }
                 currentSources.size == 1 -> switchSource(currentSources.first().id)
                 else -> startMixFeed(currentSources)
             }
+        } else {
+            syncFeedLifecycleActive()
         }
     }
 
@@ -2050,6 +2088,7 @@ class ReelsFeedScreenModel(
             }}]",
         )
         syncMixQualitySessions(feedSources)
+        syncFeedLifecycleActive()
         loadMixFeed(reset = true, sessionToken = sessionToken)
     }
 
@@ -2444,6 +2483,7 @@ class ReelsFeedScreenModel(
         }
 
         if (state.value.isMixMode) {
+            syncFeedLifecycleActive()
             screenModelScope.launch(ioDispatcher) {
                 multiSourceCoordinator.updateExcludedSources(excludedLongIds)
                 val statuses = multiSourceCoordinator.currentStatuses().toImmutableMap()
@@ -6008,6 +6048,7 @@ class ReelsFeedScreenModel(
      * RR/session state: re-entering the same context resumes the round.
      */
     override fun onDispose() {
+        syncFeedLifecycleActive(forceInactive = true)
         playbackSettingsController.cancelSleepTimer()
         stopQualitySession()
         stopMixSession(stopCoordinator = true, fromDispose = true)

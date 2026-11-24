@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedAccountIdentitySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedLifecycleSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
@@ -5230,4 +5231,58 @@ class ReelsFeedScreenModelTest {
             ReelsSessionSource.lastSourceId = null
         }
     }
+
+    @Test
+    fun `lifecycle feed source receives active changes across foreground, switch, and dispose`() =
+        runTest(testDispatcher) {
+            val events = mutableListOf<Boolean>()
+            val lifecycleSource = object : AnimeFeedSource, AnimeFeedLifecycleSource {
+                override val id: Long = 985L
+                override val name: String = "LifecycleSource"
+                override val lang: String = "all"
+                override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+                    return FeedPage(listOf(videoItem("lc-1")), hasNextPage = false)
+                }
+
+                override fun onFeedActiveChanged(active: Boolean) {
+                    events += active
+                }
+            }
+            val otherSource = RecordingFeedSource(986L) {
+                FeedPage(listOf(videoItem("other-1")), hasNextPage = false)
+            }
+            val model = buildModel(
+                sourceId = 985L,
+                manager = sourceManagerOf(lifecycleSource, otherSource),
+            )
+            try {
+                testDispatcher.scheduler.advanceUntilIdle()
+                events shouldBe listOf(true)
+
+                // Configuration change (rotation) must not put the source to sleep.
+                model.onForegroundLost(isConfigurationChange = true)
+                events shouldBe listOf(true)
+
+                // Genuine background / screen hide puts source to sleep; return wakes it up.
+                model.onForegroundLost(isConfigurationChange = false)
+                events shouldBe listOf(true, false)
+
+                model.onForegroundGained()
+                events shouldBe listOf(true, false, true)
+
+                // Switching to a different source deactivates the previous lifecycle source.
+                model.switchSource(986L)
+                testDispatcher.scheduler.advanceUntilIdle()
+                events shouldBe listOf(true, false, true, false)
+
+                // Switching back reactivates it, and dispose deactivates it.
+                model.switchSource(985L)
+                testDispatcher.scheduler.advanceUntilIdle()
+                events shouldBe listOf(true, false, true, false, true)
+            } finally {
+                model.onDispose()
+                ReelsSessionSource.lastSourceId = null
+            }
+            events shouldBe listOf(true, false, true, false, true, false)
+        }
 }

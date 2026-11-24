@@ -5,13 +5,13 @@ import org.junit.jupiter.api.Test
 
 class AnimeExtensionLoaderVersionTest {
     @Test
-    fun `lib30 is accepted without excluding legacy 12 through 29`() {
+    fun `lib31 is accepted without excluding legacy 12 through 30`() {
         AnimeExtensionLoader.LIB_VERSION_MIN shouldBe 12.0
-        AnimeExtensionLoader.LIB_VERSION_MAX shouldBe 30.0
-        (12..30).forEach { version ->
+        AnimeExtensionLoader.LIB_VERSION_MAX shouldBe 31.0
+        (12..31).forEach { version ->
             (version.toDouble() in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         }
         (11.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
-        (31.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
+        (32.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
     }
 }
