@@ -152,8 +152,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
 
                 override fun onPageScrollStateChanged(state: Int) {
                     ReaderRenderEffects.setFlingPaused(
-                        paused = config.pauseShadersOnFling &&
-                            (state == ViewPager.SCROLL_STATE_DRAGGING || state == ViewPager.SCROLL_STATE_SETTLING),
+                        paused = config.pauseShadersOnFling && state == ViewPager.SCROLL_STATE_SETTLING,
                         root = pager,
                     )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {

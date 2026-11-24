@@ -259,7 +259,7 @@ class ReaderPreferences(
 
     fun rgb565ForGrayscale() = preferenceStore.getBoolean("pref_reader_rgb565_tiles", false)
 
-    fun pauseShadersOnFling() = preferenceStore.getBoolean("pref_reader_pause_shaders_on_fling", true)
+    fun pauseShadersOnFling() = preferenceStore.getBoolean("pref_reader_pause_shaders_on_fling", false)
 
     fun decoderThreadCount() = preferenceStore.getInt("pref_reader_decoder_threads", 0)
 

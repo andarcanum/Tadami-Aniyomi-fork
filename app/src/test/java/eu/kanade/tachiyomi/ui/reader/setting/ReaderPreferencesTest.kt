@@ -19,10 +19,10 @@ class ReaderPreferencesTest {
     }
 
     @Test
-    fun `pause shaders on fling is enabled by default`() {
+    fun `pause shaders on fling is disabled by default`() {
         val prefs = ReaderPreferences(FakePreferenceStore())
 
-        prefs.pauseShadersOnFling().get() shouldBe true
+        prefs.pauseShadersOnFling().get() shouldBe false
     }
 
     @Test

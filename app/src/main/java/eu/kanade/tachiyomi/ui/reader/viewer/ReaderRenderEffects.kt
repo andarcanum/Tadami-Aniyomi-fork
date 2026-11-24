@@ -6,21 +6,30 @@ import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.RequiresApi
+import androidx.annotation.VisibleForTesting
 
 /**
  * Shared holder for the active reader AGSL [RenderEffect] on Android 13+.
- * Built once when sharpening / denoise / binarization sliders change and applied directly
+ * Built once when sharpening / denoise / binarization / levels sliders change and applied directly
  * to each page's inner image view so margins, transitions, and overlays are not shaded.
  */
 internal object ReaderRenderEffects {
+    private class BuiltEffects(
+        val full: RenderEffect?,
+        val fling: RenderEffect?,
+    )
+
     @Volatile
     private var configuredEffect: Any? = null
+
+    @Volatile
+    private var flingEffect: Any? = null
 
     @Volatile
     private var flingPaused: Boolean = false
 
     val currentEffect: Any?
-        get() = if (flingPaused) null else configuredEffect
+        get() = if (flingPaused) flingEffect else configuredEffect
 
     fun update(
         sharpeningVal: Float,
@@ -30,8 +39,8 @@ internal object ReaderRenderEffects {
         gammaContrastVal: Float = 0f,
         blackPointVal: Float = 0f,
     ) {
-        configuredEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Api33.build(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val built = Api33.build(
                 sharpeningVal = sharpeningVal,
                 denoiseVal = denoiseVal,
                 binarizationVal = binarizationVal,
@@ -39,22 +48,40 @@ internal object ReaderRenderEffects {
                 gammaContrastVal = gammaContrastVal,
                 blackPointVal = blackPointVal,
             )
+            configuredEffect = built.full
+            flingEffect = built.fling
         } else {
-            null
+            configuredEffect = null
+            flingEffect = null
         }
     }
 
     fun setFlingPaused(paused: Boolean, root: View) {
         if (flingPaused == paused) return
         flingPaused = paused
-        if (configuredEffect == null) return
+        if (configuredEffect === flingEffect) return
         applyToHierarchy(root)
     }
 
     fun clear() {
         configuredEffect = null
+        flingEffect = null
         flingPaused = false
     }
+
+    @VisibleForTesting
+    internal fun setEffectsForTest(configured: Any?, fling: Any?) {
+        configuredEffect = configured
+        flingEffect = fling
+    }
+
+    @VisibleForTesting
+    internal fun setFlingPausedForTest(paused: Boolean) {
+        flingPaused = paused
+    }
+
+    @VisibleForTesting
+    internal fun hasDistinctFlingEffect(): Boolean = configuredEffect !== flingEffect
 
     fun applyToHierarchy(root: View) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
@@ -213,8 +240,9 @@ internal object ReaderRenderEffects {
             whitePointVal: Float,
             gammaContrastVal: Float,
             blackPointVal: Float,
-        ): RenderEffect? {
+        ): BuiltEffects {
             var effect: RenderEffect? = null
+            var levelsOnlyEffect: RenderEffect? = null
 
             // Pipeline order: Denoise -> Levels -> Sharpen -> Binarization.
             // Denoising first cleans scan/JPEG grain before levels stretch contrast and before
@@ -236,6 +264,7 @@ internal object ReaderRenderEffects {
                 levelsShader.setFloatUniform("whitePoint", wp)
                 levelsShader.setFloatUniform("gammaExp", gammaExp)
                 val levelsEffect = RenderEffect.createRuntimeShaderEffect(levelsShader, "inputShader")
+                levelsOnlyEffect = levelsEffect
                 effect = if (effect != null) {
                     RenderEffect.createChainEffect(levelsEffect, effect)
                 } else {
@@ -265,7 +294,7 @@ internal object ReaderRenderEffects {
                 }
             }
 
-            return effect
+            return BuiltEffects(full = effect, fling = levelsOnlyEffect)
         }
     }
 }

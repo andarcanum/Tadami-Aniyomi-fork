@@ -39,6 +39,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -595,7 +596,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasPageGaps: Boolean = fal
      */
     private fun onPageSelected(page: ReaderPage, allowPreload: Boolean) {
         val pages = page.chapter.pages ?: return
-        logcat { "onPageSelected: ${page.number}/${pages.size}" }
+        logcat(LogPriority.VERBOSE) { "onPageSelected: ${page.number}/${pages.size}" }
         lastCompletionPage = page.takeIf {
             it.status == Page.State.READY && it === pages.lastOrNull()
         }
