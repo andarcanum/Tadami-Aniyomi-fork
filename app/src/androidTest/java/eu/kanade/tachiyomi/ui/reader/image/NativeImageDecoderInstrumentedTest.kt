@@ -22,6 +22,8 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.util.zip.CRC32
+import java.util.zip.Deflater
 
 /**
  * Real JNI acceptance tests, including the shared background boundary; no activity, application DI,
@@ -68,6 +70,55 @@ class NativeImageDecoderInstrumentedTest {
     @Test
     fun png_alpha_tiles_reassemble_odd_sized_full_decode() {
         assertTiledDecode(Bitmap.CompressFormat.PNG, withAlpha = true)
+    }
+
+    @Test
+    fun png_rgb_with_white_trns_decodes_white_pixels_as_opaque_white() {
+        val whiteKeyTrns = byteArrayOf(0x00, 0xFF.toByte(), 0x00, 0xFF.toByte(), 0x00, 0xFF.toByte())
+        val png = buildRgbPngWithTrns(
+            width = 4,
+            height = 2,
+            pixels = intArrayOf(
+                Color.WHITE,
+                Color.rgb(253, 253, 253),
+                Color.BLACK,
+                Color.WHITE,
+                Color.RED,
+                Color.WHITE,
+                Color.rgb(254, 254, 254),
+                Color.BLUE,
+            ),
+            trnsData = whiteKeyTrns,
+        )
+        NativeImageDecoder.open(png.inputStream()).use { decoder ->
+            decoder.decode().useBitmap { full ->
+                assertEquals(Color.WHITE, full.getPixel(0, 0))
+                assertEquals(Color.rgb(253, 253, 253), full.getPixel(1, 0))
+                assertEquals(Color.BLACK, full.getPixel(2, 0))
+                assertEquals(Color.WHITE, full.getPixel(3, 0))
+                assertEquals(Color.RED, full.getPixel(0, 1))
+                assertEquals(Color.WHITE, full.getPixel(1, 1))
+                assertEquals(Color.rgb(254, 254, 254), full.getPixel(2, 1))
+                assertEquals(Color.BLUE, full.getPixel(3, 1))
+            }
+        }
+    }
+
+    @Test
+    fun png_rgb_with_non_white_trns_preserves_chroma_key_transparency() {
+        val greenKeyTrns = byteArrayOf(0x00, 0x00, 0x00, 0xFF.toByte(), 0x00, 0x00)
+        val png = buildRgbPngWithTrns(
+            width = 2,
+            height = 1,
+            pixels = intArrayOf(Color.GREEN, Color.WHITE),
+            trnsData = greenKeyTrns,
+        )
+        NativeImageDecoder.open(png.inputStream()).use { decoder ->
+            decoder.decode().useBitmap { full ->
+                assertEquals(Color.TRANSPARENT, full.getPixel(0, 0))
+                assertEquals(Color.WHITE, full.getPixel(1, 0))
+            }
+        }
     }
 
     @Test
@@ -553,6 +604,67 @@ class NativeImageDecoderInstrumentedTest {
                 output.toByteArray()
             }
         }
+
+    private fun buildRgbPngWithTrns(
+        width: Int,
+        height: Int,
+        pixels: IntArray,
+        trnsData: ByteArray,
+    ): ByteArray {
+        val raw = ByteArrayOutputStream(height * (1 + width * 3))
+        for (y in 0 until height) {
+            raw.write(0)
+            for (x in 0 until width) {
+                val color = pixels[y * width + x]
+                raw.write(Color.red(color))
+                raw.write(Color.green(color))
+                raw.write(Color.blue(color))
+            }
+        }
+        val deflater = Deflater()
+        deflater.setInput(raw.toByteArray())
+        deflater.finish()
+        val idat = ByteArrayOutputStream()
+        val buf = ByteArray(256)
+        while (!deflater.finished()) {
+            idat.write(buf, 0, deflater.deflate(buf))
+        }
+        deflater.end()
+
+        val out = ByteArrayOutputStream()
+        out.write(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+        fun writeBe32(target: ByteArrayOutputStream, value: Int) {
+            target.write((value ushr 24) and 0xFF)
+            target.write((value ushr 16) and 0xFF)
+            target.write((value ushr 8) and 0xFF)
+            target.write(value and 0xFF)
+        }
+        fun writeChunk(type: String, data: ByteArray) {
+            val typeBytes = type.toByteArray(Charsets.US_ASCII)
+            writeBe32(out, data.size)
+            out.write(typeBytes)
+            out.write(data)
+            val crc = CRC32().apply {
+                update(typeBytes)
+                update(data)
+            }.value.toInt()
+            writeBe32(out, crc)
+        }
+        val ihdr = ByteArrayOutputStream(13).apply {
+            writeBe32(this, width)
+            writeBe32(this, height)
+            write(8)
+            write(2) // Truecolor RGB
+            write(0)
+            write(0)
+            write(0)
+        }.toByteArray()
+        writeChunk("IHDR", ihdr)
+        writeChunk("tRNS", trnsData)
+        writeChunk("IDAT", idat.toByteArray())
+        writeChunk("IEND", ByteArray(0))
+        return out.toByteArray()
+    }
 
     private fun withExifOrientation6(jpeg: ByteArray): ByteArray {
         assertTrue("fixture must be JPEG", jpeg.size >= 2)

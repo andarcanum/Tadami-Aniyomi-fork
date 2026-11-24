@@ -277,20 +277,25 @@ class NativeImageDecoder private constructor(
                     val usePlatformLargeDecoder = header != null &&
                         header.format in PLATFORM_LARGE_AXIS_FORMATS &&
                         maxAxis > NATIVE_AXIS_LIMIT
+                    val decodeSource = if (header?.format == ImageHeader.Format.PNG) {
+                        PngWhiteKeyTrnsSanitizer.wrap(source)
+                    } else {
+                        source
+                    }
                     opened = if (usePlatformLargeDecoder) {
                         val large = checkNotNull(header)
                         require(checkNotNull(large.width).toLong() * checkNotNull(large.height) <= MAX_IMAGE_PIXELS) {
                             "Image is too large"
                         }
                         val platform = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            BitmapRegionDecoder.newInstance(source)
+                            BitmapRegionDecoder.newInstance(decodeSource)
                         } else {
                             @Suppress("DEPRECATION")
-                            BitmapRegionDecoder.newInstance(source, false)
+                            BitmapRegionDecoder.newInstance(decodeSource, false)
                         }
                         PlatformRegionDecoder(checkNotNull(platform) { "Failed to open large ${large.format} image" })
                     } else {
-                        NativeRegionDecoder(ImageDecoder.open(source))
+                        NativeRegionDecoder(ImageDecoder.open(decodeSource))
                     }
                 }
                 val decoder = checkNotNull(opened)
