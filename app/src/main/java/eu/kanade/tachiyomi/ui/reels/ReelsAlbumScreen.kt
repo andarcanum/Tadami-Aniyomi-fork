@@ -302,7 +302,10 @@ data class ReelsAlbumScreen(
                     if (hasLocalConstraint) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             val headerText = if (filtered.size != state.items.size) {
-                                "${filtered.size} / ${stringResource(MR.strings.reels_album_search_loaded, state.items.size)}"
+                                "${filtered.size} / ${stringResource(
+                                    MR.strings.reels_album_search_loaded,
+                                    state.items.size,
+                                )}"
                             } else {
                                 stringResource(MR.strings.reels_album_search_loaded, filtered.size)
                             }

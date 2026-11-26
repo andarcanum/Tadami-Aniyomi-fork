@@ -179,6 +179,100 @@ class NovelPageReaderSpannableTextTest {
     }
 
     @Test
+    @Config(sdk = [35])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `performLongClick acquires focus and selects word when text view starts unfocusable`() {
+        val activity = Robolectric.buildActivity(androidx.activity.ComponentActivity::class.java).setup().get()
+        val container = FrameLayout(activity).also { activity.setContentView(it) }
+        val textView = NovelPageReaderTextView(
+            context = activity,
+            selectionRenderer = NovelSelectedTextRenderer.PAGE_READER,
+            selectionSessionIdProvider = { 1L },
+            onSelectedTextSelectionChanged = {},
+            onPlainTap = null,
+            touchHandlingEnabled = true,
+            selectionInteractionEnabled = true,
+        )
+        container.addView(textView)
+        textView.updateSelectionInteractionEnabled(enabled = true, selectableLayoutEnabled = true)
+        textView.text = buildNovelPageReaderSpannableText(AnnotatedString("alpha beta gamma delta"))
+        textView.measure(
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        textView.layout(0, 0, textView.measuredWidth, textView.measuredHeight)
+        val layout = requireNotNull(textView.layout)
+        val tapX = textView.totalPaddingLeft + (layout.getPrimaryHorizontal(7)).coerceAtLeast(4f)
+        val tapY = textView.totalPaddingTop + ((layout.getLineTop(0) + layout.getLineBottom(0)) * 0.5f)
+
+        assertFalse(textView.isFocusable)
+        assertFalse(textView.isFocusableInTouchMode)
+
+        val down = MotionEvent.obtain(0L, 10L, MotionEvent.ACTION_DOWN, tapX, tapY, 0)
+        textView.onTouchEvent(down)
+        down.recycle()
+
+        val handled = textView.performLongClick()
+        assertTrue(handled)
+        assertTrue(textView.hasSelection())
+        assertTrue(textView.isFocused)
+        assertNotNull(textView.currentSelectionForTesting())
+
+        val up = MotionEvent.obtain(0L, 600L, MotionEvent.ACTION_UP, tapX, tapY, 0)
+        textView.onTouchEvent(up)
+        up.recycle()
+        assertTrue(textView.hasSelection())
+        assertNotNull(textView.currentSelectionForTesting())
+
+        textView.clearActiveSelectionAndFocus()
+        assertFalse(textView.isFocusable)
+        assertFalse(textView.isFocusableInTouchMode)
+        assertFalse(textView.isFocused)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `pre-attach measure with disabled touch still allows performLongClick selection after attach and re-enable`() {
+        val activity = Robolectric.buildActivity(androidx.activity.ComponentActivity::class.java).setup().get()
+        val container = FrameLayout(activity).also { activity.setContentView(it) }
+        val textView = NovelPageReaderTextView(
+            context = activity,
+            selectionRenderer = NovelSelectedTextRenderer.PAGE_READER,
+            selectionSessionIdProvider = { 2L },
+            onSelectedTextSelectionChanged = {},
+            onPlainTap = null,
+            touchHandlingEnabled = false,
+            selectionInteractionEnabled = false,
+        )
+        textView.updateTouchHandlingEnabled(false)
+        textView.updateSelectionInteractionEnabled(enabled = false, selectableLayoutEnabled = true)
+        textView.text = buildNovelPageReaderSpannableText(AnnotatedString("alpha beta gamma delta"))
+        textView.measure(
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        textView.layout(0, 0, textView.measuredWidth, textView.measuredHeight)
+
+        container.addView(textView)
+        textView.updateTouchHandlingEnabled(true)
+        textView.updateSelectionInteractionEnabled(enabled = true, selectableLayoutEnabled = true)
+
+        val layout = requireNotNull(textView.layout)
+        val tapX = textView.totalPaddingLeft + (layout.getPrimaryHorizontal(7)).coerceAtLeast(4f)
+        val tapY = textView.totalPaddingTop + ((layout.getLineTop(0) + layout.getLineBottom(0)) * 0.5f)
+        val down = MotionEvent.obtain(0L, 10L, MotionEvent.ACTION_DOWN, tapX, tapY, 0)
+        textView.onTouchEvent(down)
+        down.recycle()
+
+        val handled = textView.performLongClick()
+        assertTrue(handled)
+        assertTrue(textView.hasSelection())
+        assertTrue(textView.isFocused)
+        assertNotNull(textView.currentSelectionForTesting())
+    }
+
+    @Test
     fun `applyNovelPageReaderTextViewMetrics aligns break strategy and fallback spacing for page mode`() {
         val textView = TextView(ApplicationProvider.getApplicationContext())
         val metrics = resolveNovelPageReaderTextViewMetrics(

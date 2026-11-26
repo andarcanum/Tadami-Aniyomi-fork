@@ -705,6 +705,11 @@ internal class NovelPageReaderTextView constructor(
         layoutProbeTextView?.text = ""
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        refreshSelectionControllerIfAttached()
+    }
+
     override fun onDetachedFromWindow() {
         isDetaching = true
         focusReleaseScheduled = false
@@ -917,6 +922,18 @@ internal class NovelPageReaderTextView constructor(
         }
     }
 
+    private fun refreshSelectionControllerIfAttached() {
+        if (!isAttachedToWindow || isDetaching || !isTextSelectable || layout == null) return
+        // Compose AndroidView can measure TextView (makeNewLayout -> prepareCursorControllers)
+        // before attachment to the Activity window, leaving Editor.mSelectionControllerEnabled
+        // false when width does not change on attach. Toggling cursor visibility triggers
+        // TextView.updateCursorVisibleInternal() -> Editor.prepareCursorControllers() without
+        // relayout, text reset, or focus changes.
+        val wasCursorVisible = isCursorVisible
+        isCursorVisible = !wasCursorVisible
+        isCursorVisible = wasCursorVisible
+    }
+
     private fun acquireSelectionFocus() {
         if (!selectionInteractionEnabled || isDetachingFromCompose()) return
         focusReleaseScheduled = false
@@ -1099,6 +1116,23 @@ internal class NovelPageReaderTextView constructor(
             }
         }
         return handledBySuper
+    }
+
+    override fun performLongClick(): Boolean {
+        if (!touchHandlingEnabled || !selectionInteractionEnabled || isDetachingFromCompose()) {
+            return false
+        }
+        clearSelectionPromotion()
+        refreshSelectionControllerIfAttached()
+        acquireSelectionFocus()
+        val handled = super.performLongClick()
+        if (handled && hasActiveSelection()) {
+            selectionPromotedByLongPress = true
+            parent?.requestDisallowInterceptTouchEvent(true)
+        } else if (!hasActiveSelection()) {
+            releaseSelectionFocusIfSafe()
+        }
+        return handled
     }
 
     fun selectWordAt(x: Float, y: Float): Boolean {
@@ -1350,6 +1384,7 @@ internal class NovelPageReaderTextView constructor(
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         // The editor attaches its drag handles only once the view holds focus. Its own action
         // mode surfaces from the registered custom callback - starting ours here would kill it.
+        refreshSelectionControllerIfAttached()
         acquireSelectionFocus()
         return true
     }

@@ -1115,7 +1115,10 @@ private fun ConnectionEditor(
                                 onClick = {
                                     changed(
                                         draft.copy(
-                                            bindings = draft.bindings.filterNot { it.credentialId == binding.credentialId },
+                                            bindings = draft.bindings.filterNot {
+                                                it.credentialId ==
+                                                    binding.credentialId
+                                            },
                                         ),
                                     )
                                 },
@@ -1156,19 +1159,25 @@ private fun ConnectionEditor(
                                 ),
                             )
                         }, binding.toDomainOrNull() == null, numeric = true)
-                        Field(stringResource(AYMR.strings.ai_translation_quota_group), binding.quotaGroupLabel, { value ->
-                            changed(
-                                draft.copy(
-                                    bindings = draft.bindings.map {
-                                        if (it.credentialId == binding.credentialId) {
-                                            it.copy(quotaGroupLabel = value)
-                                        } else {
-                                            it
-                                        }
-                                    },
-                                ),
-                            )
-                        })
+                        Field(
+                            stringResource(
+                                AYMR.strings.ai_translation_quota_group,
+                            ),
+                            binding.quotaGroupLabel,
+                            { value ->
+                                changed(
+                                    draft.copy(
+                                        bindings = draft.bindings.map {
+                                            if (it.credentialId == binding.credentialId) {
+                                                it.copy(quotaGroupLabel = value)
+                                            } else {
+                                                it
+                                            }
+                                        },
+                                    ),
+                                )
+                            },
+                        )
                     }
                 }
             }
@@ -1437,7 +1446,13 @@ private fun ProfileEditor(
                         ) {
                             AiTranslationChipGroup(
                                 label = stringResource(AYMR.strings.ai_translation_style),
-                                options = listOf("PROFESSIONAL", "LITERARY", "CONVERSATIONAL", "VULGAR_18", "MINIMAL").map {
+                                options = listOf(
+                                    "PROFESSIONAL",
+                                    "LITERARY",
+                                    "CONVERSATIONAL",
+                                    "VULGAR_18",
+                                    "MINIMAL",
+                                ).map {
                                     it to styleTitle(it)
                                 },
                                 selected = draft.styleId,
@@ -1454,13 +1469,15 @@ private fun ProfileEditor(
                             )
                             AiTranslationReasoningSelector(
                                 contract = draft.model?.reasoningContract,
-                                discoveredContract = draft.discoveredReasoningContract ?: draft.model?.reasoningContract,
+                                discoveredContract =
+                                draft.discoveredReasoningContract ?: draft.model?.reasoningContract,
                                 reasoning = draft.reasoning,
                                 budgetInput = draft.reasoningBudget,
                                 allowBudget = connection == null ||
                                     connection.protocol == TranslationProtocol.GEMINI_GENERATE ||
                                     connection.presetFlavor == PresetFlavor.OPENROUTER,
-                                allowOverride = draft.model != null && connection?.presetFlavor != PresetFlavor.NVIDIA,
+                                allowOverride = draft.model != null &&
+                                    connection?.presetFlavor != PresetFlavor.NVIDIA,
                                 onSelect = { contract, reasoning, budget ->
                                     changed(
                                         draft.copy(
@@ -1529,7 +1546,8 @@ private fun ProfileEditor(
                                                 draft.connectionId,
                                                 AiRecoveryDraft(
                                                     draft.execution,
-                                                    parallelism = draft.pendingParallelism ?: connection?.maxConcurrency ?: 2,
+                                                    parallelism =
+                                                    draft.pendingParallelism ?: connection?.maxConcurrency ?: 2,
                                                 ),
                                                 draft,
                                             ),

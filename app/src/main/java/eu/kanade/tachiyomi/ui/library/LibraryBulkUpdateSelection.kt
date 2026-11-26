@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:filename")
+
 package eu.kanade.tachiyomi.ui.library
 
 import eu.kanade.presentation.library.novel.NovelLibraryItem

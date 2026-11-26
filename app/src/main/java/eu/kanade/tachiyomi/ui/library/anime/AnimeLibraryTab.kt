@@ -2026,7 +2026,9 @@ data object AnimeLibraryTab : Tab {
                                     Section.Anime -> {
                                         val s = animeStateHolder.value
                                         val activeCat = s.categories.getOrNull(animeCategoryIndex)
-                                        val catItems = activeCat?.let { s.getAnimelibItemsByCategoryId(it.id) }.orEmpty()
+                                        val catItems = activeCat?.let {
+                                            s.getAnimelibItemsByCategoryId(it.id)
+                                        }.orEmpty()
                                         val selInCat = catItems.count { it.id in s.selectedIds }
                                         AuroraLibrarySelectionHeaderState(
                                             selectionCount = s.selection.size,

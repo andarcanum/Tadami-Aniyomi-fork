@@ -7,11 +7,11 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelBlockAnchor
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 class NovelPagePaginationCacheTest {
 

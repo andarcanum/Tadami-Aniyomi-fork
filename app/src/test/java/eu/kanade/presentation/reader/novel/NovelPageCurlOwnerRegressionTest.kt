@@ -7,6 +7,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
+import android.text.Selection
+import android.text.Spannable
 import android.text.SpannableString
 import android.util.TypedValue
 import android.view.View
@@ -152,6 +154,9 @@ class NovelPageCurlOwnerRegressionTest {
         withDrawFixture(this, surface) { fixture ->
             for (forward in listOf(true, false)) {
                 fixture.positionRawAtPage(if (forward) 3 else 1)
+                if (surface == Surface.NATIVE_READER_TEXT) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                }
                 val mountsBefore = fixture.stats.pageMounts
                 val releasesBefore = fixture.stats.pageReleases
                 val drawsBefore = fixture.stats.pageDraws
@@ -176,6 +181,7 @@ class NovelPageCurlOwnerRegressionTest {
                 )
                 assertTrue("real page draw was skipped during animation", fixture.stats.pageDraws > drawsBefore)
                 if (surface == Surface.NATIVE_READER_TEXT) {
+                    shadowOf(Looper.getMainLooper()).idle()
                     assertTrue(
                         "actual native text callback did not run in the active frames",
                         fixture.stats.nativeSelectionCallbacks > callbacksBefore,
@@ -513,7 +519,12 @@ class NovelPageCurlOwnerRegressionTest {
                                     onPlainTap = null,
                                     touchHandlingEnabled = false,
                                     selectionInteractionEnabled = false,
-                                ).apply { configureText(page) }
+                                ).apply {
+                                    configureText(page)
+                                    // Seed a selection range so updateSelectionInteractionEnabled(false) exercises
+                                    // the real deferred clearSelection() -> publishSelectionCleared() callback.
+                                    (text as? Spannable)?.let { Selection.setSelection(it, 0, minOf(4, it.length)) }
+                                }
                             },
                             update = { textView -> textView.updateSelectionInteractionEnabled(false) },
                             onRelease = { textView -> textView.clearFocus() },

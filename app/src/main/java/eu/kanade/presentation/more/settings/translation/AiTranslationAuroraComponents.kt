@@ -1268,6 +1268,7 @@ internal fun AiTranslationLanguagePairRow(
         }
     }
 }
+
 /**
  * Full-width bottom-anchored Aurora frosted sheet (Variant A) for AI Translator editors.
  * Provides +40dp horizontal width over centered 92% modals, a 44x44dp close hitbox,

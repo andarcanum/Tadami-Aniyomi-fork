@@ -2318,7 +2318,9 @@ class NovelReaderScreenModel(
         val fullChapterIndex = fullChapterOrderList.indexOfFirst { it.id == chapter.id }
         if (fullChapterIndex >= 0) {
             val existingFull = fullChapterOrderList[fullChapterIndex]
-            if (existingFull.read != read || existingFull.lastPageRead != progress || existingFull.bookmark != bookmark) {
+            if (existingFull.read != read || existingFull.lastPageRead != progress ||
+                existingFull.bookmark != bookmark
+            ) {
                 fullChapterOrderList = fullChapterOrderList.toMutableList().also { list ->
                     list[fullChapterIndex] = existingFull.copy(
                         read = read,
