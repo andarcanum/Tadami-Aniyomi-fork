@@ -76,7 +76,10 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 @Composable
-internal fun CrystalCollectionSection(modifier: Modifier = Modifier) {
+internal fun CrystalCollectionSection(
+    modifier: Modifier = Modifier,
+    ambientPaused: Boolean = false,
+) {
     val appearance = rememberCrystalAppearance()
     if (!appearance.receipt.isEligible && !appearance.receipt.isGranted) return
     val colors = AuroraTheme.colors
@@ -94,13 +97,17 @@ internal fun CrystalCollectionSection(modifier: Modifier = Modifier) {
                     .windowInsetsTopHeight(WindowInsets.statusBars)
                     .background(colors.surface),
             )
-            CrystalLivingCornerHero(appearance.palette, appearance.reduced, occluded = selected != null)
+            CrystalLivingCornerHero(
+                appearance.palette,
+                appearance.reduced,
+                occluded = selected != null || ambientPaused,
+            )
         }
         Box(Modifier.fillMaxWidth().background(colors.background).padding(top = 14.dp)) {
             if (appearance.receipt.isGranted) {
                 CrystalCollectionWarmTrail(
                     appearance.reduced,
-                    selected != null,
+                    selected != null || ambientPaused,
                     Modifier.matchParentSize(),
                 )
             }

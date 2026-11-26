@@ -96,4 +96,31 @@ class AppUpdateCheckerTest {
             nextPendingPreviousVersionCode = 0,
         )
     }
+
+    @Test
+    fun `defers committing seen version until prompt is shown and dismissed`() {
+        val upgradePrompt = resolveUpdatedChangelogPrompt(
+            currentVersionCode = 221,
+            lastSeenVersionCode = 220,
+            pendingPreviousVersionCode = 0,
+            isDebug = false,
+        )
+        shouldCommitUpdatedChangelogImmediately(upgradePrompt) shouldBe false
+
+        val firstInstall = resolveUpdatedChangelogPrompt(
+            currentVersionCode = 221,
+            lastSeenVersionCode = 0,
+            pendingPreviousVersionCode = 0,
+            isDebug = false,
+        )
+        shouldCommitUpdatedChangelogImmediately(firstInstall) shouldBe true
+
+        val debugUpgrade = resolveUpdatedChangelogPrompt(
+            currentVersionCode = 221,
+            lastSeenVersionCode = 220,
+            pendingPreviousVersionCode = 0,
+            isDebug = true,
+        )
+        shouldCommitUpdatedChangelogImmediately(debugUpgrade) shouldBe true
+    }
 }

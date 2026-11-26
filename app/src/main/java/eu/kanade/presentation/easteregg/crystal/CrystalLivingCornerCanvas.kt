@@ -107,19 +107,23 @@ import kotlin.math.roundToInt
 private data class LivingPainterState(val painter: CrystalLivingCornerPainter? = null, val failed: Boolean = false)
 
 @Composable
-private fun rememberLivingPainter(): State<LivingPainterState> {
+private fun rememberLivingPainter(useHeroCache: Boolean = true): State<LivingPainterState> {
     val assets = LocalContext.current.applicationContext.assets
-    val result = remember(assets) {
+    val result = remember(assets, useHeroCache) {
+        val precompiled = if (useHeroCache) CrystalLivingCornerPainter.cachedHeroOrNull() else null
         mutableStateOf(
-            CrystalLivingArtwork.cachedOrNull()?.let { LivingPainterState(CrystalLivingCornerPainter(it)) }
-                ?: LivingPainterState(),
+            if (precompiled != null) LivingPainterState(precompiled) else LivingPainterState(),
         )
     }
-    LaunchedEffect(assets) {
+    LaunchedEffect(assets, useHeroCache) {
         if (result.value.painter != null) return@LaunchedEffect
         try {
             val painter = withContext(Dispatchers.IO) {
-                CrystalLivingCornerPainter(CrystalLivingArtwork.loadCached(assets))
+                if (useHeroCache) {
+                    CrystalLivingCornerPainter.loadCachedHero(assets)
+                } else {
+                    CrystalLivingCornerPainter(CrystalLivingArtwork.loadCached(assets))
+                }
             }
             result.value = LivingPainterState(painter)
         } catch (cancelled: CancellationException) {
@@ -237,7 +241,7 @@ internal fun CrystalLivingCornerHero(
     val view = LocalView.current
     var visible by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
-    val loaded by rememberLivingPainter()
+    val loaded by rememberLivingPainter(useHeroCache = !labMode)
     val calendarActive = isCrystalLivingViewActive(policy.resumed, focused, visible, top, occluded)
     val liveMoment by rememberLivingMoment(calendarActive)
     val moment = forcedMoment ?: liveMoment
@@ -302,9 +306,13 @@ internal fun CrystalLivingCornerHero(
         frame.value = if (reduced) engine.restingSnapshot() else engine.snapshot()
         if (running) {
             var previous: Float? = null
+            var lastRenderNanos = 0L
             try {
                 while (isActive) {
                     withFrameNanos { now ->
+                        // Cap ambient room redraws to ~60fps so 120Hz panels don't double draw-command load.
+                        if (lastRenderNanos != 0L && now - lastRenderNanos < 15_000_000L) return@withFrameNanos
+                        lastRenderNanos = now
                         val milliseconds = clock.advance(now, true)
                         val delta = previous?.let { (milliseconds - it).coerceAtLeast(0f) / 1000f } ?: 0f
                         previous = milliseconds
@@ -705,7 +713,7 @@ internal fun CrystalLivingCornerPreview(palette: CrystalPalette, modifier: Modif
             colors.eInkProfile == EInkProfile.COLOR,
         )
     }
-    val loaded by rememberLivingPainter()
+    val loaded by rememberLivingPainter(useHeroCache = false)
     val previewAlpha by animateFloatAsState(
         targetValue = if (loaded.painter != null) 1f else 0f,
         animationSpec = if (colors.isEInk || !policy.systemAnimations) snap() else tween(220),

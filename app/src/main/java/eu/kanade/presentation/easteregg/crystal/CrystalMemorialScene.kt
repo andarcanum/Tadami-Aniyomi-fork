@@ -1,7 +1,9 @@
 package eu.kanade.presentation.easteregg.crystal
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -125,12 +127,13 @@ internal fun CrystalMemorialScene(
     val reduced = reduceMotion || !policy.systemAnimations || colors.isEInk
     val total = CrystalTimeline.total(reduced)
     var attempt by remember { mutableIntStateOf(0) }
-    val prepared by produceState<Result<CrystalPortraitPool>?>(null, portrait, front, attempt) {
+    val prepared by produceState<Result<CrystalMemorialRenderer>?>(null, portrait, front, attempt) {
         value = null
         value = try {
             Result.success(
                 withContext(Dispatchers.Default) {
-                    CrystalPortraitPool.prepare(context.resources, portrait, front)
+                    val portraitPool = CrystalPortraitPool.prepare(context.resources, portrait, front)
+                    CrystalMemorialRenderer(portraitPool)
                 },
             )
         } catch (e: CancellationException) {
@@ -139,17 +142,34 @@ internal fun CrystalMemorialScene(
             Result.failure(e)
         }
     }
-    val pool = prepared?.getOrNull()
+    val renderer = prepared?.getOrNull()
     var started by rememberSaveable(portrait, front) { mutableStateOf(false) }
     var finished by rememberSaveable(portrait, front) { mutableStateOf(false) }
+    var entrancePlayed by rememberSaveable(portrait, front) { mutableStateOf(false) }
     val elapsed = rememberSaveable(portrait, front) { mutableFloatStateOf(0f) }
+    val skipEntrance = reduced || colors.isEInk || previewTimeMs != null || entrancePlayed
+    val entranceProgress = remember(portrait, front) { Animatable(if (skipEntrance) 1f else 0f) }
+    LaunchedEffect(renderer, skipEntrance) {
+        if (skipEntrance) {
+            entranceProgress.snapTo(1f)
+            entrancePlayed = true
+        } else if (renderer != null && !entrancePlayed) {
+            // Let the first frame attach cleanly before starting the animation clock.
+            withFrameNanos { }
+            entranceProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = CrystalLunarVeil.DURATION_MS, easing = LinearEasing),
+            )
+            entrancePlayed = true
+        }
+    }
     val sound = soundEnabled
     val onFinaleLatest by rememberUpdatedState(onFinale)
     val audio = remember(context) { CrystalMemorialAudio(context.applicationContext) }
     DisposableEffect(audio) { onDispose { audio.release() } }
     LaunchedEffect(policy.resumed, sound) { if (!policy.resumed || !sound) audio.stop() }
-    LaunchedEffect(started, policy.resumed, reduced, previewTimeMs, pool) {
-        if (!started || finished || !policy.resumed || pool == null || previewTimeMs != null) return@LaunchedEffect
+    LaunchedEffect(started, policy.resumed, reduced, previewTimeMs, renderer) {
+        if (!started || finished || !policy.resumed || renderer == null || previewTimeMs != null) return@LaunchedEffect
         if (!policy.systemAnimations || colors.isEInk) {
             elapsed.floatValue = total
         } else {
@@ -198,7 +218,7 @@ internal fun CrystalMemorialScene(
         label = "ceremonyBlend",
     )
     val begin = {
-        if (pool != null && !started && previewTimeMs == null && policy.resumed) {
+        if (renderer != null && !started && previewTimeMs == null && policy.resumed) {
             haptics.tap()
             started = true
             if (sound) audio.play()
@@ -209,11 +229,17 @@ internal fun CrystalMemorialScene(
         val horizontalArtwork = maxWidth > maxHeight
         val compactLayout = maxHeight < 720.dp || horizontalArtwork || LocalDensity.current.fontScale > 1.3f
         val scriptSize = (maxWidth.value * 0.20f).coerceIn(48f, 80f) / LocalDensity.current.fontScale
+        val uiEntranceAlpha = {
+            if (skipEntrance || started) 1f else CrystalLunarVeil.uiAlpha(entranceProgress.value)
+        }
+        val uiEntranceShiftDp = {
+            if (skipEntrance || started) 0f else CrystalLunarVeil.uiOffsetDp(entranceProgress.value)
+        }
         val idleOpacity = {
             if (!started &&
                 previewTimeMs == null
             ) {
-                1f
+                uiEntranceAlpha()
             } else {
                 CrystalTimeline.epitaphOpacity(previewTimeMs ?: elapsed.floatValue, reduced)
             }
@@ -245,15 +271,16 @@ internal fun CrystalMemorialScene(
                     if (started && !finished && previewTimeMs == null) controlsRequest++
                 }
             }
-        if (pool != null && !compactLayout) {
+        if (renderer != null && !compactLayout) {
             CrystalMemorialCanvas(
-                pool,
+                renderer,
                 { previewTimeMs ?: elapsed.floatValue },
                 { if (previewTimeMs == null) ambient.value else 0f },
                 pointer,
                 reduced,
                 Modifier.fillMaxSize().then(artworkInput),
                 ceremonyBlend = { ceremonyBlend },
+                entranceReveal = { if (skipEntrance) 1f else entranceProgress.value },
             )
         }
         Column(
@@ -261,7 +288,11 @@ internal fun CrystalMemorialScene(
                 WindowInsets.safeDrawing.asPaddingValues(),
             ).padding(horizontal = 22.dp, vertical = 12.dp),
         ) {
-            Box(Modifier.fillMaxWidth().height(48.dp)) {
+            Box(
+                Modifier.fillMaxWidth().height(48.dp).graphicsLayer {
+                    alpha = if (prepared?.isFailure == true) 1f else uiEntranceAlpha()
+                },
+            ) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = showControls,
                     enter = fadeIn(tween(if (reduced) 0 else 240)),
@@ -309,15 +340,16 @@ internal fun CrystalMemorialScene(
                     val compactScript = ((if (horizontalArtwork) areaWidth.value * 0.5f else areaWidth.value) * 0.20f)
                         .coerceIn(40f, 70f) / LocalDensity.current.fontScale
                     val artwork: @Composable (Modifier) -> Unit = { artModifier ->
-                        if (pool != null) {
+                        if (renderer != null) {
                             CrystalMemorialCanvas(
-                                pool,
+                                renderer,
                                 { previewTimeMs ?: elapsed.floatValue },
                                 { if (previewTimeMs == null) ambient.value else 0f },
                                 pointer,
                                 reduced,
                                 artModifier.clip(RoundedCornerShape(24.dp)).clipToBounds().then(artworkInput),
                                 fittedArtwork = true,
+                                entranceReveal = { if (skipEntrance) 1f else entranceProgress.value },
                             )
                         }
                     }
@@ -350,14 +382,6 @@ internal fun CrystalMemorialScene(
                             )
                         }
                     }
-                    if (prepared == null) {
-                        Text(
-                            labels.loading,
-                            Modifier.align(Alignment.Center),
-                            color = colors.textSecondary,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
                     if (prepared?.isFailure ==
                         true
                     ) {
@@ -374,8 +398,8 @@ internal fun CrystalMemorialScene(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     Column(
                         Modifier.align(Alignment.BottomCenter).padding(bottom = 30.dp).graphicsLayer {
-                            alpha =
-                                idleOpacity()
+                            alpha = idleOpacity()
+                            translationY = uiEntranceShiftDp().dp.toPx()
                         }
                             .clearAndSetSemantics {
                                 if (!started) contentDescription = "CRYSTAL. " + labels.dedication
@@ -438,16 +462,6 @@ internal fun CrystalMemorialScene(
                             letterSpacing = 4.sp,
                         )
                     }
-                    if (prepared ==
-                        null
-                    ) {
-                        Text(
-                            labels.loading,
-                            Modifier.align(Alignment.Center),
-                            color = colors.textSecondary,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
                     if (prepared?.isFailure ==
                         true
                     ) {
@@ -463,12 +477,16 @@ internal fun CrystalMemorialScene(
                     if (!finished) {
                         CrystalMemorialTouch(
                             labels,
-                            pool != null,
+                            renderer != null,
                             started,
                             sceneTime,
                             { ambient.value },
                             reduced,
                             begin,
+                            modifier = Modifier.graphicsLayer {
+                                alpha = uiEntranceAlpha()
+                                translationY = uiEntranceShiftDp().dp.toPx()
+                            },
                         )
                     }
                     androidx.compose.animation.AnimatedVisibility(
@@ -500,7 +518,10 @@ internal fun CrystalMemorialScene(
             if (!reduced) {
                 Text(
                     labels.moveHint,
-                    Modifier.fillMaxWidth().padding(top = 10.dp).graphicsLayer { alpha = idleOpacity() }
+                    Modifier.fillMaxWidth().padding(top = 10.dp).graphicsLayer {
+                        alpha = idleOpacity()
+                        translationY = uiEntranceShiftDp().dp.toPx()
+                    }
                         .clearAndSetSemantics { if (!started) contentDescription = labels.moveHint },
                     color = colors.textSecondary,
                     fontSize = 10.sp,

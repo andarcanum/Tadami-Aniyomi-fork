@@ -3412,6 +3412,7 @@
     <string name="crystal_debug_title">Crystal Memorial</string>
     <string name="crystal_debug_description">Preview, reset and test the memorial gift</string>
     <string name="crystal_debug_reset">Reset and start again</string>
+    <string name="crystal_debug_simulate_release">Simulate release flow (Home → What\'s New → Memorial)</string>
     <string name="crystal_debug_replay">Replay without resetting rewards</string>
     <string name="crystal_debug_reset_failed">Reset failed. No new scene has been started.</string>
     <string name="crystal_debug_release">Target release</string>

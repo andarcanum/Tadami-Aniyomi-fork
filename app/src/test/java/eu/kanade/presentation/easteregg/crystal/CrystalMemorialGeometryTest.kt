@@ -152,4 +152,57 @@ class CrystalMemorialGeometryTest {
         c.advance(100_000_000_000L, true)
         check(c.elapsedMs == 0f)
     }
+
+    @Test
+    fun lunarIrisOriginAlignsWithCrystalStarlitNoseInCeremony() {
+        val (cx, cy) = CrystalSceneGeometry.constellationIrisCenter(390f, 844f, ceremonyBlend = 1f)
+        val nose = CrystalSceneGeometry.projectFace(
+            CrystalSceneGeometry.NOSE_STAR_INDEX,
+            390f,
+            844f,
+            ceremonyBlend = 1f,
+        )
+        check(abs(cx - nose.x) < 0.001f && abs(cy - nose.y) < 0.001f)
+        check(cx in 0f..390f && cy in 120f..300f) {
+            "Cat-face iris origin should sit in the upper sky constellation: ($cx, $cy)"
+        }
+        val maxR = CrystalLunarIris.maxCornerRadius(cx, cy, 390f, 844f)
+        check(maxR > 600f && maxR.isFinite())
+    }
+
+    @Test
+    fun slowLunarVeilAndIrisCurvesStartAndSettleCleanly() {
+        check(CrystalLunarVeil.DURATION_MS >= 1800)
+        check(CrystalLunarVeil.portraitAlpha(0f) == 0f)
+        check(CrystalLunarVeil.portraitAlpha(1f) == 1f)
+        check(CrystalLunarVeil.portraitScale(0f) > 1f)
+        check(abs(CrystalLunarVeil.portraitScale(1f) - 1f) < 0.0001f)
+        check(CrystalLunarVeil.uiAlpha(0.5f) == 0f)
+        check(CrystalLunarVeil.uiAlpha(1f) == 1f)
+
+        check(abs(CrystalLunarIris.roomScale(0f) - 0.93f) < 0.0001f)
+        check(abs(CrystalLunarIris.roomScale(1f) - 1f) < 0.0001f)
+        check(CrystalLunarIris.rimAlpha(0f) == 0f)
+        check(CrystalLunarIris.rimAlpha(0.5f) > 0.9f)
+        check(CrystalLunarIris.rimAlpha(1f) == 0f)
+        check(CrystalLunarIris.noseBloomAlpha(0.17f) > 0.9f)
+        check(CrystalLunarIris.noseBloomAlpha(0.5f) == 0f)
+    }
+
+    @Test
+    fun portalTransitionFlagIsOneShotAndExpiresCleanly() {
+        CrystalPortalTransition.clear()
+        check(!CrystalPortalTransition.consumeNavigatorPortal(nowMs = 1_000L))
+        check(!CrystalPortalTransition.consumeIrisReveal(nowMs = 1_000L))
+
+        CrystalPortalTransition.arm(nowMs = 2_000L)
+        check(CrystalPortalTransition.consumeNavigatorPortal(nowMs = 2_100L))
+        check(!CrystalPortalTransition.consumeNavigatorPortal(nowMs = 2_200L))
+        check(CrystalPortalTransition.consumeIrisReveal(nowMs = 2_150L))
+        check(!CrystalPortalTransition.consumeIrisReveal(nowMs = 2_200L))
+
+        CrystalPortalTransition.arm(nowMs = 5_000L)
+        check(!CrystalPortalTransition.consumeNavigatorPortal(nowMs = 10_000L))
+        check(!CrystalPortalTransition.consumeIrisReveal(nowMs = 10_000L))
+    }
 }

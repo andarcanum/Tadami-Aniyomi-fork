@@ -100,6 +100,10 @@ internal fun resolveUpdatedChangelogPrompt(
     )
 }
 
+internal fun shouldCommitUpdatedChangelogImmediately(
+    decision: UpdatedChangelogPromptDecision,
+): Boolean = !decision.shouldPrompt
+
 val GITHUB_REPO = "andarcanum/Tadami-Aniyomi-fork"
 
 val RELEASE_TAG: String by lazy {

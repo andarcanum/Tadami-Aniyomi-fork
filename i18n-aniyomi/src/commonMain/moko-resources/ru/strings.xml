@@ -3451,6 +3451,7 @@
     <string name="crystal_debug_title">Мемориал Кристал</string>
     <string name="crystal_debug_description">Просмотр, сброс и проверка памятного подарка</string>
     <string name="crystal_debug_reset">Сбросить и запустить заново</string>
+    <string name="crystal_debug_simulate_release">Симулировать релиз (Главная → Что нового → Мемориал)</string>
     <string name="crystal_debug_replay">Повторить без сброса наград</string>
     <string name="crystal_debug_reset_failed">Не удалось выполнить сброс. Новая сцена не запущена.</string>
     <string name="crystal_debug_release">Целевой релиз</string>

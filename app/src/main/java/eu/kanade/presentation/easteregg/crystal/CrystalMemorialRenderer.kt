@@ -96,13 +96,18 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         inkForeground: Int = Color.BLACK,
         fittedArtwork: Boolean = false,
         ceremonyBlend: Float = 0f,
+        entranceReveal: Float = 1f,
     ) {
         if (width <= 0f || height <= 0f) return
         val m = width / 404f
         val ambient = if (reduced) 0f else ambientSeconds
         val blend = if (fittedArtwork) 0f else ceremonyBlend.coerceIn(0f, 1f)
+        val reveal = if (eInk || reduced) 1f else entranceReveal.coerceIn(0f, 1f)
+        val atmosphereVisibility = if (reveal < 1f) CrystalLunarVeil.atmosphereAlpha(reveal) else 1f
         canvas.drawColor(if (eInk) inkBackground else 0xFF050811.toInt())
-        if (!eInk) drawAtmosphere(canvas, width, height, ambient, pointerX, pointerY, reduced, blend)
+        if (!eInk) {
+            drawAtmosphere(canvas, width, height, ambient, pointerX, pointerY, reduced, blend, atmosphereVisibility)
+        }
         val rx = (if (reduced) 0f else cos(ambient * 0.52f) * 0.07f) - pointerY * 0.18f
         val ry = (if (reduced) 0f else sin(ambient * 0.65f) * 0.11f) + pointerX * 0.22f
         for (i in projected.indices) {
@@ -122,7 +127,17 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         val cy = height * if (fittedArtwork) 0.5f else 0.425f
         val breath = if (reduced) 0f else sin(ambient * 1.1f)
         val gather = CrystalTimeline.smooth(elapsedMs / CrystalTimeline.GATHER_MS)
-        val transformScale = (1 + breath * 0.004f) * (1 + 0.032f * gather)
+        val veilPortraitAlpha = if (reveal < 1f && elapsedMs < CrystalTimeline.GATHER_MS) {
+            CrystalLunarVeil.portraitAlpha(reveal)
+        } else {
+            1f
+        }
+        val veilPortraitScale = if (reveal < 1f && elapsedMs < CrystalTimeline.GATHER_MS) {
+            CrystalLunarVeil.portraitScale(reveal)
+        } else {
+            1f
+        }
+        val transformScale = (1 + breath * 0.004f) * (1 + 0.032f * gather) * veilPortraitScale
         val transformY = -breath * 1.8f * m - 4f * m * gather
         val save = canvas.save()
         canvas.translate(cx, cy + transformY)
@@ -136,7 +151,10 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
             canvas.drawBitmap(image, null, destination, imagePaint)
         } else if (elapsedMs < CrystalTimeline.GATHER_MS) {
             if (released > 0) resetMask()
-            canvas.drawBitmap(image, null, destination, imagePaint)
+            if (veilPortraitAlpha > 0.003f) {
+                imagePaint.alpha = alpha(veilPortraitAlpha)
+                canvas.drawBitmap(image, null, destination, imagePaint)
+            }
         } else {
             advanceMask(e)
             if (released < pool.cells.size) {
@@ -216,7 +234,10 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
                 val bx = positiveMod(b[0] * width + b[3] * ambient + pointerX * 22, width + 60) - 30
                 val by = positiveMod(b[1] * height + b[4] * ambient + pointerY * 22, height + 60) - 30
                 val pulse = 0.5f + 0.5f * sin(ambient * 0.9f + b[5])
-                drawSprite(canvas, frontier, bx, by, b[2] * 2, 0.045f + pulse * 0.055f)
+                drawSprite(canvas, frontier, bx, by, b[2] * 2, (0.045f + pulse * 0.055f) * atmosphereVisibility)
+            }
+            if (reveal < 0.999f) {
+                drawLunarVeilEntrance(canvas, width, height, cx, cy, m, reveal)
             }
         }
     }
@@ -259,10 +280,11 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         py: Float,
         reduced: Boolean,
         ceremonyBlend: Float,
+        visibility: Float = 1f,
     ) {
         val skyShift = ceremonyBlend * 0.12f
         val haloShift = ceremonyBlend * 0.17f
-        fill(0xFF0B101D.toInt())
+        fill(0xFF0B101D.toInt(), visibility)
         paint.shader = RadialGradient(
             w * 0.5f,
             h * (0.38f - skyShift),
@@ -272,6 +294,7 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
             Shader.TileMode.CLAMP,
         )
         canvas.drawRect(0f, 0f, w, h, paint)
+        fill(0xFFFFFFFF.toInt(), visibility)
         paint.shader = RadialGradient(
             w * 0.5f + px * 12,
             h * (0.425f - haloShift) - 40 + py * 12,
@@ -284,8 +307,67 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         paint.shader = null
         for (s in stars) {
             val twinkle = if (reduced) 1f else 0.75f + 0.25f * sin(time * 1.8f + s[4])
-            fill(0xFFF6ECD8.toInt(), s[3] * twinkle)
+            fill(0xFFF6ECD8.toInt(), s[3] * twinkle * visibility)
             canvas.drawCircle(s[0] * w + px * s[5] * 10, s[1] * h + py * s[5] * 10, s[2] * w / 404f, paint)
+        }
+    }
+
+    /** Slow, cinematic "Lunar Veil Breathing" entrance overlay: lifting twilight vignette, fine golden breath-ring & central lunar star. */
+    private fun drawLunarVeilEntrance(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        cx: Float,
+        cy: Float,
+        m: Float,
+        reveal: Float,
+    ) {
+        val veilLift = CrystalLunarVeil.veilLift(reveal)
+        if (veilLift < 0.99f) {
+            val outerOpacity = (1f - veilLift) * 0.78f
+            val innerRadius = (width * 0.16f + veilLift * width * 0.82f).coerceAtLeast(1f)
+            fill(0xFF050811.toInt(), outerOpacity)
+            paint.shader = RadialGradient(
+                cx,
+                cy,
+                innerRadius,
+                intArrayOf(0x00050811, 0x8A050811.toInt(), 0xEE050811.toInt()),
+                floatArrayOf(0f, 0.58f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawRect(0f, 0f, width, height, paint)
+            paint.shader = null
+        }
+
+        val ringT = CrystalLunarVeil.ringProgress(reveal)
+        if (ringT > 0.005f && ringT < 0.995f) {
+            val easeOut = 1f - (1f - ringT) * (1f - ringT) * (1f - ringT)
+            val radius = (14f + easeOut * 182f) * m
+            val ringAlpha = sin(ringT * PI.toFloat()).coerceIn(0f, 1f)
+            // Soft outer halo behind the fine golden breath-ring
+            stroke(0xFFF6D9A4.toInt(), 0.18f * ringAlpha, (6.5f - ringT * 2.5f) * m)
+            canvas.drawCircle(cx, cy, radius, paint)
+            // Crisp lunar gold ring
+            stroke(0xFFF6D9A4.toInt(), 0.64f * ringAlpha, (1.7f - ringT * 0.75f) * m)
+            canvas.drawCircle(cx, cy, radius, paint)
+            // Delicate central 4-point star ignition
+            val starAlpha = ringAlpha * 0.90f
+            drawSprite(canvas, star, cx, cy, (42f + 16f * ringAlpha) * m, starAlpha * 0.78f)
+            val rayLen = (15f * ringAlpha) * m
+            if (rayLen > 0.5f) {
+                stroke(0xFFFFF9EC.toInt(), starAlpha * 0.85f, 1.15f * m)
+                canvas.drawLine(cx - rayLen, cy, cx + rayLen, cy, paint)
+                canvas.drawLine(cx, cy - rayLen, cx, cy + rayLen, paint)
+            }
+        }
+
+        val echoT = CrystalLunarVeil.echoRingProgress(reveal)
+        if (echoT > 0.005f && echoT < 0.995f) {
+            val easeOut = 1f - (1f - echoT) * (1f - echoT) * (1f - echoT)
+            val echoRadius = (18f + easeOut * 148f) * m
+            val echoAlpha = sin(echoT * PI.toFloat()).coerceIn(0f, 1f) * 0.36f
+            stroke(0xFFE6A8C4.toInt(), echoAlpha, (1.15f - echoT * 0.45f) * m)
+            canvas.drawCircle(cx, cy, echoRadius, paint)
         }
     }
 

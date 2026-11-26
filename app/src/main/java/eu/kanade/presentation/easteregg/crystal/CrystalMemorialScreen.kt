@@ -57,8 +57,8 @@ internal class CrystalMemorialScreen(
         val assets = LocalContext.current.applicationContext.assets
         var ceremony by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(assets) {
-            if (CrystalLivingArtwork.cachedOrNull() == null) {
-                runCatching { withContext(Dispatchers.IO) { CrystalLivingArtwork.loadCached(assets) } }
+            if (CrystalLivingCornerPainter.cachedHeroOrNull() == null) {
+                runCatching { withContext(Dispatchers.IO) { CrystalLivingCornerPainter.loadCachedHero(assets) } }
             }
         }
         val goBack = {
@@ -67,6 +67,7 @@ internal class CrystalMemorialScreen(
         }
         val goTreasury = {
             if (navigator.lastItem.key == key) {
+                CrystalPortalTransition.arm()
                 navigator.openCrystalCollection()
             }
         }
@@ -84,15 +85,13 @@ internal class CrystalMemorialScreen(
             val labels = crystalSceneLabels()
             if (!ui.loaded || ui.loadFailed) {
                 Box(Modifier.fillMaxSize().background(colors.background)) {
-                    TextButton(goBack, Modifier.statusBarsPadding().padding(12.dp)) {
-                        Text(labels.back, color = colors.textPrimary)
-                    }
                     if (ui.loadFailed) {
+                        TextButton(goBack, Modifier.statusBarsPadding().padding(12.dp)) {
+                            Text(labels.back, color = colors.textPrimary)
+                        }
                         TextButton(model::reload, Modifier.align(Alignment.Center)) {
                             Text(labels.retry, color = colors.textPrimary)
                         }
-                    } else {
-                        Text(labels.loading, Modifier.align(Alignment.Center), color = colors.textSecondary)
                     }
                 }
             } else if (ui.allowed && !ui.stale) {

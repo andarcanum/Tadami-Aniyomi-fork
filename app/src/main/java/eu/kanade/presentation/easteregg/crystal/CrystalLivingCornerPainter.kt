@@ -1,5 +1,6 @@
 package eu.kanade.presentation.easteregg.crystal
 
+import android.content.res.AssetManager
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
@@ -44,7 +45,6 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
     )
     private val root = compile(artwork.root, Style(), worldBounds, emptyMap(), false, false, isRoot = true)
     private val thread = Path()
-    private val dynamicRayPath = Path()
     private val dynamicLightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
@@ -61,6 +61,54 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
     private val jewelPainter = CrystalJewelPainter()
     private var currentColors: CrystalLivingCornerColors? = null
     private val shaders = mutableMapOf<Pair<Int, Int>, Shader>()
+    private val sunUnitGradient = RadialGradient(
+        0f,
+        0f,
+        1f,
+        intArrayOf(
+            0xFAFFFDF5.toInt(),
+            0xDEFFF2CB.toInt(),
+            0x6BFFE1A0.toInt(),
+            0x00FFD584,
+        ),
+        floatArrayOf(0f, 0.24f, 0.54f, 1f),
+        Shader.TileMode.CLAMP,
+    )
+    private var cachedShaftPhase: CrystalDayPhase? = null
+    private var cachedShaftRgb: Int = -1
+    private var cachedShaftShader: LinearGradient? = null
+    private val shaftPathsByPhase: Map<CrystalDayPhase, List<Pair<Path, Float>>> =
+        CrystalDayPhase.entries.associateWith { phase ->
+            val cones = when (phase) {
+                CrystalDayPhase.DAWN -> arrayOf(
+                    floatArrayOf(464f, 142f, 492f, 154f, 396f, 356f, 296f, 348f, 0.52f),
+                    floatArrayOf(474f, 148f, 510f, 166f, 458f, 364f, 366f, 356f, 0.38f),
+                )
+                CrystalDayPhase.SUNSET -> arrayOf(
+                    floatArrayOf(534f, 138f, 564f, 154f, 434f, 358f, 316f, 348f, 0.56f),
+                    floatArrayOf(544f, 144f, 578f, 166f, 504f, 366f, 392f, 358f, 0.42f),
+                )
+                CrystalDayPhase.NIGHT -> arrayOf(
+                    floatArrayOf(542f, 60f, 568f, 76f, 492f, 356f, 402f, 348f, 0.48f),
+                    floatArrayOf(550f, 66f, 576f, 88f, 542f, 364f, 458f, 356f, 0.34f),
+                )
+                else -> arrayOf(
+                    floatArrayOf(536f, 68f, 568f, 84f, 486f, 358f, 386f, 348f, 0.54f),
+                    floatArrayOf(548f, 74f, 580f, 98f, 548f, 366f, 452f, 358f, 0.42f),
+                )
+            }
+            cones.map { cone ->
+                Path().apply {
+                    moveTo(cone[0], cone[1])
+                    lineTo(cone[2], cone[3])
+                    lineTo(cone[4], cone[5])
+                    lineTo(cone[6], cone[7])
+                    close()
+                } to cone[8]
+            }
+        }
+    private var cachedFloorPoolRgb: Int = -1
+    private var cachedFloorPoolGrad: RadialGradient? = null
 
     fun draw(
         canvas: Canvas,
@@ -193,19 +241,9 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
             lerp(0.94f, 1.12f, pulse(state.time, 6.8f))
         }
         val radius = 36f * haloScale
-        dynamicLightPaint.shader = RadialGradient(
-            0f,
-            0f,
-            radius,
-            intArrayOf(
-                0xFAFFFDF5.toInt(),
-                0xDEFFF2CB.toInt(),
-                0x6BFFE1A0.toInt(),
-                0x00FFD584,
-            ),
-            floatArrayOf(0f, 0.24f, 0.54f, 1f),
-            Shader.TileMode.CLAMP,
-        )
+        dynamicLightMatrix.setScale(radius, radius)
+        sunUnitGradient.setLocalMatrix(dynamicLightMatrix)
+        dynamicLightPaint.shader = sunUnitGradient
         dynamicLightPaint.alpha = (opacity * 235f).roundToInt().coerceIn(0, 255)
         canvas.drawCircle(0f, 0f, radius, dynamicLightPaint)
         dynamicLightPaint.shader = null
@@ -226,52 +264,58 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
         } else {
             opacity
         }
-        val (sx, sy, ex, ey) = when (state.phase) {
-            CrystalDayPhase.DAWN -> floatArrayOf(475f, 152f, 350f, 360f)
-            CrystalDayPhase.SUNSET -> floatArrayOf(548f, 148f, 380f, 362f)
-            CrystalDayPhase.NIGHT -> floatArrayOf(555f, 68f, 450f, 360f)
-            else -> floatArrayOf(552f, 75f, 440f, 362f)
+        if (cachedShaftPhase != state.phase || cachedShaftRgb != rgb || cachedShaftShader == null) {
+            cachedShaftPhase = state.phase
+            cachedShaftRgb = rgb
+            val sx: Float
+            val sy: Float
+            val ex: Float
+            val ey: Float
+            when (state.phase) {
+                CrystalDayPhase.DAWN -> {
+                    sx = 475f
+                    sy = 152f
+                    ex = 350f
+                    ey = 360f
+                }
+                CrystalDayPhase.SUNSET -> {
+                    sx = 548f
+                    sy = 148f
+                    ex = 380f
+                    ey = 362f
+                }
+                CrystalDayPhase.NIGHT -> {
+                    sx = 555f
+                    sy = 68f
+                    ex = 450f
+                    ey = 360f
+                }
+                else -> {
+                    sx = 552f
+                    sy = 75f
+                    ex = 440f
+                    ey = 362f
+                }
+            }
+            cachedShaftShader = LinearGradient(
+                sx,
+                sy,
+                ex,
+                ey,
+                intArrayOf(
+                    rgb or (0x6B shl 24),
+                    rgb or (0x26 shl 24),
+                    rgb,
+                ),
+                floatArrayOf(0f, 0.56f, 1f),
+                Shader.TileMode.CLAMP,
+            )
         }
-        dynamicLightPaint.shader = LinearGradient(
-            sx,
-            sy,
-            ex,
-            ey,
-            intArrayOf(
-                rgb or (0x6B shl 24),
-                rgb or (0x26 shl 24),
-                rgb,
-            ),
-            floatArrayOf(0f, 0.56f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        val cones = when (state.phase) {
-            CrystalDayPhase.DAWN -> arrayOf(
-                floatArrayOf(464f, 142f, 492f, 154f, 396f, 356f, 296f, 348f, 0.52f),
-                floatArrayOf(474f, 148f, 510f, 166f, 458f, 364f, 366f, 356f, 0.38f),
-            )
-            CrystalDayPhase.SUNSET -> arrayOf(
-                floatArrayOf(534f, 138f, 564f, 154f, 434f, 358f, 316f, 348f, 0.56f),
-                floatArrayOf(544f, 144f, 578f, 166f, 504f, 366f, 392f, 358f, 0.42f),
-            )
-            CrystalDayPhase.NIGHT -> arrayOf(
-                floatArrayOf(542f, 60f, 568f, 76f, 492f, 356f, 402f, 348f, 0.48f),
-                floatArrayOf(550f, 66f, 576f, 88f, 542f, 364f, 458f, 356f, 0.34f),
-            )
-            else -> arrayOf(
-                floatArrayOf(536f, 68f, 568f, 84f, 486f, 358f, 386f, 348f, 0.54f),
-                floatArrayOf(548f, 74f, 580f, 98f, 548f, 366f, 452f, 358f, 0.42f),
-            )
-        }
-        for (cone in cones) {
-            dynamicRayPath.rewind()
-            dynamicRayPath.moveTo(cone[0], cone[1])
-            dynamicRayPath.lineTo(cone[2], cone[3])
-            dynamicRayPath.lineTo(cone[4], cone[5])
-            dynamicRayPath.lineTo(cone[6], cone[7])
-            dynamicRayPath.close()
-            dynamicLightPaint.alpha = (effectiveOpacity * cone[8] * 255f).roundToInt().coerceIn(0, 255)
-            if (dynamicLightPaint.alpha > 0) canvas.drawPath(dynamicRayPath, dynamicLightPaint)
+        dynamicLightPaint.shader = cachedShaftShader
+        val cones = shaftPathsByPhase[state.phase].orEmpty()
+        for ((conePath, weight) in cones) {
+            dynamicLightPaint.alpha = (effectiveOpacity * weight * 255f).roundToInt().coerceIn(0, 255)
+            if (dynamicLightPaint.alpha > 0) canvas.drawPath(conePath, dynamicLightPaint)
         }
         dynamicLightPaint.shader = null
     }
@@ -293,38 +337,30 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
         } else {
             lerp(-3f, 4f, pulse(state.time, 9f))
         }
-        val pools = when (state.phase) {
-            CrystalDayPhase.DAWN -> arrayOf(
-                floatArrayOf(374f + driftX, 354f, 108f, 20f, 0.52f),
-                floatArrayOf(432f + driftX, 346f, 76f, 14f, 0.36f),
-            )
-            CrystalDayPhase.SUNSET -> arrayOf(
-                floatArrayOf(406f + driftX, 354f, 122f, 21f, 0.54f),
-                floatArrayOf(468f + driftX, 346f, 84f, 15f, 0.38f),
-            )
-            CrystalDayPhase.NIGHT -> arrayOf(
-                floatArrayOf(466f + driftX, 352f, 98f, 19f, 0.48f),
-                floatArrayOf(508f + driftX, 344f, 68f, 13f, 0.32f),
-            )
-            else -> arrayOf(
-                floatArrayOf(458f + driftX, 352f, 114f, 22f, 0.54f),
-                floatArrayOf(510f + driftX, 342f, 78f, 15f, 0.38f),
+        if (cachedFloorPoolRgb != rgb || cachedFloorPoolGrad == null) {
+            cachedFloorPoolRgb = rgb
+            cachedFloorPoolGrad = RadialGradient(
+                0f,
+                0f,
+                1f,
+                intArrayOf(
+                    rgb or (0x9E shl 24),
+                    rgb or (0x3D shl 24),
+                    rgb,
+                ),
+                floatArrayOf(0f, 0.55f, 1f),
+                Shader.TileMode.CLAMP,
             )
         }
-        val unitGrad = RadialGradient(
-            0f,
-            0f,
-            1f,
-            intArrayOf(
-                rgb or (0x9E shl 24),
-                rgb or (0x3D shl 24),
-                rgb,
-            ),
-            floatArrayOf(0f, 0.55f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        for (pool in pools) {
-            val cx = pool[0]
+        val unitGrad = cachedFloorPoolGrad ?: return
+        val basePools = when (state.phase) {
+            CrystalDayPhase.DAWN -> FLOOR_POOLS_DAWN
+            CrystalDayPhase.SUNSET -> FLOOR_POOLS_SUNSET
+            CrystalDayPhase.NIGHT -> FLOOR_POOLS_NIGHT
+            else -> FLOOR_POOLS_DAY
+        }
+        for (pool in basePools) {
+            val cx = pool[0] + driftX
             val cy = pool[1]
             val rx = pool[2]
             val ry = pool[3]
@@ -1107,6 +1143,37 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
         )
         private val WET_ONLY = setOf("atmo-rain", "atmo-dark-clouds", "atmo-glass-drops")
         private val STORM_ONLY = setOf("atmo-lightning", "atmo-storm-wash")
+        private val FLOOR_POOLS_DAWN = arrayOf(
+            floatArrayOf(374f, 354f, 108f, 20f, 0.52f),
+            floatArrayOf(432f, 346f, 76f, 14f, 0.36f),
+        )
+        private val FLOOR_POOLS_SUNSET = arrayOf(
+            floatArrayOf(406f, 354f, 122f, 21f, 0.54f),
+            floatArrayOf(468f, 346f, 84f, 15f, 0.38f),
+        )
+        private val FLOOR_POOLS_NIGHT = arrayOf(
+            floatArrayOf(466f, 352f, 98f, 19f, 0.48f),
+            floatArrayOf(508f, 344f, 68f, 13f, 0.32f),
+        )
+        private val FLOOR_POOLS_DAY = arrayOf(
+            floatArrayOf(458f, 352f, 114f, 22f, 0.54f),
+            floatArrayOf(510f, 342f, 78f, 15f, 0.38f),
+        )
+        private val heroCacheLock = Any()
+
+        @Volatile
+        private var cachedHeroPainter: CrystalLivingCornerPainter? = null
+
+        fun cachedHeroOrNull(): CrystalLivingCornerPainter? = cachedHeroPainter
+
+        fun loadCachedHero(assets: AssetManager): CrystalLivingCornerPainter {
+            cachedHeroPainter?.let { return it }
+            return synchronized(heroCacheLock) {
+                cachedHeroPainter ?: CrystalLivingCornerPainter(CrystalLivingArtwork.loadCached(assets)).also {
+                    cachedHeroPainter = it
+                }
+            }
+        }
         private val IDENTITY = CrystalLivingTransform()
         private val RESTING_HEAD = CrystalLivingTransform(scaleX = 1.06f, scaleY = 1.06f)
         private val PARTS = mapOf(

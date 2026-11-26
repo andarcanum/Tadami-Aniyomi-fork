@@ -9,9 +9,10 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.domain.easteregg.crystal.CrystalCompletionResult
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialState
 
 internal class CrystalMemorialScreenModel(private val manager: CrystalMemorialManager, val replay: Boolean) :
-    StateScreenModel<CrystalMemorialScreenModel.State>(State()) {
+    StateScreenModel<CrystalMemorialScreenModel.State>(initialState(manager.latestState, replay)) {
     data class State(
         val loaded: Boolean = false,
         val allowed: Boolean = false,
@@ -30,20 +31,13 @@ internal class CrystalMemorialScreenModel(private val manager: CrystalMemorialMa
     }
 
     fun reload() {
-        mutableState.update { it.copy(loaded = false, loadFailed = false) }
+        mutableState.update {
+            if (it.loaded && !it.loadFailed) it else it.copy(loaded = false, loadFailed = false)
+        }
         screenModelScope.launch {
             try {
                 val saved = manager.repository.getState()
-                mutableState.value =
-                    State(
-                        loaded = true,
-                        allowed = if (replay) saved.isGranted else saved.isEligible || saved.isGranted,
-                        granted = saved.isGranted,
-                        generation = saved.generation,
-                        firstGrant = !replay && saved.hasPendingCeremony,
-                        resumeCeremony =
-                        !replay && saved.hasPendingCeremony,
-                    )
+                mutableState.value = stateFrom(saved, replay)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -119,6 +113,22 @@ internal class CrystalMemorialScreenModel(private val manager: CrystalMemorialMa
             } finally {
                 acknowledging = false
             }
+        }
+    }
+
+    companion object {
+        internal fun stateFrom(saved: CrystalMemorialState, replay: Boolean): State = State(
+            loaded = true,
+            allowed = if (replay) saved.isGranted else saved.isEligible || saved.isGranted,
+            granted = saved.isGranted,
+            generation = saved.generation,
+            firstGrant = !replay && saved.hasPendingCeremony,
+            resumeCeremony = !replay && saved.hasPendingCeremony,
+        )
+
+        internal fun initialState(saved: CrystalMemorialState, replay: Boolean): State {
+            val candidate = stateFrom(saved, replay)
+            return if (candidate.allowed) candidate else State()
         }
     }
 }

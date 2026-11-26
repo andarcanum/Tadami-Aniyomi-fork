@@ -14,7 +14,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 
 @Composable
 internal fun CrystalMemorialCanvas(
-    pool: CrystalPortraitPool,
+    renderer: CrystalMemorialRenderer,
     elapsedMs: () -> Float,
     ambientMs: () -> Float,
     pointer: Offset,
@@ -22,8 +22,8 @@ internal fun CrystalMemorialCanvas(
     modifier: Modifier = Modifier,
     fittedArtwork: Boolean = false,
     ceremonyBlend: () -> Float = { 0f },
+    entranceReveal: () -> Float = { 1f },
 ) {
-    val renderer = remember(pool) { CrystalMemorialRenderer(pool) }
     val colors = AuroraTheme.colors
     Canvas(modifier) {
         drawIntoCanvas { composeCanvas ->
@@ -39,6 +39,7 @@ internal fun CrystalMemorialCanvas(
                 colors.textPrimary.toArgb(),
                 fittedArtwork,
                 ceremonyBlend(),
+                entranceReveal(),
             )
             canvas.restoreToCount(saved)
         }

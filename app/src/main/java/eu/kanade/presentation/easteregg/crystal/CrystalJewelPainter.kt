@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
@@ -27,6 +28,54 @@ internal class CrystalJewelPainter {
     private val paths = mutableMapOf<String, Path>()
     private var palette = CrystalPalette.Moon
     private var ink: Int? = null
+    private val shaderMatrix = Matrix()
+    private val relicRotX = FloatArray(14)
+    private val relicRotY = FloatArray(14)
+    private val relicRotZ = FloatArray(14)
+    private val relicScreenX = FloatArray(14)
+    private val relicScreenY = FloatArray(14)
+    private val relicFacetOrder = IntArray(24)
+    private val relicFacetZ = FloatArray(24)
+    private val relicFacetNx = FloatArray(24)
+    private val relicFacetNy = FloatArray(24)
+    private val relicFacetNz = FloatArray(24)
+    private val relicTriVerts = FloatArray(6)
+    private val relicTriColors = IntArray(3)
+    private val relicEdgeLines = FloatArray(12)
+    private var relicShaderPalette: CrystalPalette? = null
+    private var relicOuterGlow: RadialGradient? = null
+    private var relicCoreGlow: RadialGradient? = null
+    private var relicStreak: LinearGradient? = null
+
+    private fun ensureRelicShaders(colors: CrystalPalette) {
+        if (relicShaderPalette == colors && relicOuterGlow != null) return
+        relicShaderPalette = colors
+        relicOuterGlow = RadialGradient(
+            0f,
+            0f,
+            1f,
+            intArrayOf(withAlpha(colors.gold, 0.42f), withAlpha(colors.rose, 0.16f), 0),
+            floatArrayOf(0f, 0.45f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        relicCoreGlow = RadialGradient(
+            0f,
+            0f,
+            1f,
+            intArrayOf(0xF2FFFCF2.toInt(), withAlpha(colors.gold, 0.55f), 0),
+            floatArrayOf(0f, 0.45f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        relicStreak = LinearGradient(
+            -1f,
+            0f,
+            1f,
+            0f,
+            intArrayOf(0, withAlpha(colors.gold, 0.48f), 0),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+    }
 
     fun relic(
         canvas: Canvas,
@@ -47,87 +96,139 @@ internal class CrystalJewelPainter {
         val ry = t * 0.75f
         val rx = 0.32f + sin(t * 0.9f) * 0.14f
         val rz = cos(t * 0.65f) * 0.08f
-        data class Vertex(val x: Float, val y: Float, val v: CrystalPoint3)
-        data class Facet(
-            val a: Vertex,
-            val b: Vertex,
-            val c: Vertex,
-            val nx: Float,
-            val ny: Float,
-            val nz: Float,
-            val z: Float,
-            val index: Int,
-        )
-        val vertices = (0 until 14).map { i ->
-            val p = CrystalSceneGeometry.rotate(
-                CrystalPoint3(
-                    CrystalSceneData.vertices[i * 3],
-                    CrystalSceneData.vertices[
-                        i *
-                            3 +
-                            1,
-                    ],
-                    CrystalSceneData.vertices[i * 3 + 2],
-                ),
-                rx,
-                ry,
-                rz,
-            )
-            val perspective = 3.4f / (3.4f - p.z * 0.55f)
-            Vertex(cx + p.x * r * perspective, cy + p.y * r * perspective, p)
+        val cosY = cos(ry)
+        val sinY = sin(ry)
+        val cosX = cos(rx)
+        val sinX = sin(rx)
+        val cosZ = cos(rz)
+        val sinZ = sin(rz)
+        val rawVerts = CrystalSceneData.vertices
+        for (i in 0 until 14) {
+            val vx = rawVerts[i * 3]
+            val vy = rawVerts[i * 3 + 1]
+            val vz = rawVerts[i * 3 + 2]
+            val x1 = vx * cosY + vz * sinY
+            val z1 = -vx * sinY + vz * cosY
+            val y2 = vy * cosX - z1 * sinX
+            val z2 = vy * sinX + z1 * cosX
+            val rx3 = x1 * cosZ - y2 * sinZ
+            val ry3 = x1 * sinZ + y2 * cosZ
+            relicRotX[i] = rx3
+            relicRotY[i] = ry3
+            relicRotZ[i] = z2
+            val perspective = 3.4f / (3.4f - z2 * 0.55f)
+            relicScreenX[i] = cx + rx3 * r * perspective
+            relicScreenY[i] = cy + ry3 * r * perspective
         }
-        val facets = CrystalSceneData.facets.mapIndexed { index, indices ->
-            val a = vertices[indices[0]]
-            val b = vertices[indices[1]]
-            val c = vertices[indices[2]]
-            val ux = b.v.x - a.v.x
-            val uy = b.v.y - a.v.y
-            val uz = b.v.z - a.v.z
-            val vx = c.v.x - a.v.x
-            val vy = c.v.y - a.v.y
-            val vz = c.v.z - a.v.z
+        val rawFacets = CrystalSceneData.facets
+        for (index in 0 until 24) {
+            val indices = rawFacets[index]
+            val ia = indices[0]
+            val ib = indices[1]
+            val ic = indices[2]
+            val ux = relicRotX[ib] - relicRotX[ia]
+            val uy = relicRotY[ib] - relicRotY[ia]
+            val uz = relicRotZ[ib] - relicRotZ[ia]
+            val vx = relicRotX[ic] - relicRotX[ia]
+            val vy = relicRotY[ic] - relicRotY[ia]
+            val vz = relicRotZ[ic] - relicRotZ[ia]
             val nx = uy * vz - uz * vy
             val ny = uz * vx - ux * vz
             val nz = ux * vy - uy * vx
-            val length = sqrt(nx * nx + ny * ny + nz * nz).coerceAtLeast(0.0001f)
-            Facet(a, b, c, nx / length, ny / length, nz / length, (a.v.z + b.v.z + c.v.z) / 3, index)
-        }.sortedBy { it.z }
+            val invLen = 1f / sqrt(nx * nx + ny * ny + nz * nz).coerceAtLeast(0.0001f)
+            relicFacetNx[index] = nx * invLen
+            relicFacetNy[index] = ny * invLen
+            relicFacetNz[index] = nz * invLen
+            relicFacetZ[index] = (relicRotZ[ia] + relicRotZ[ib] + relicRotZ[ic]) * (1f / 3f)
+            relicFacetOrder[index] = index
+        }
+        // Allocation-free insertion sort on 24 facets back-to-front.
+        for (i in 1 until 24) {
+            val key = relicFacetOrder[i]
+            val keyZ = relicFacetZ[key]
+            var j = i - 1
+            while (j >= 0 && relicFacetZ[relicFacetOrder[j]] > keyZ) {
+                relicFacetOrder[j + 1] = relicFacetOrder[j]
+                j--
+            }
+            relicFacetOrder[j + 1] = key
+        }
         if (ink == null) {
-            glow(canvas, cx, cy, r * 1.45f, withAlpha(colors.gold, 0.42f), withAlpha(colors.rose, 0.16f))
-            fill(colors.gold)
-            paint.shader = LinearGradient(
-                cx - r * 1.5f,
-                cy,
-                cx + r * 1.5f,
-                cy,
-                intArrayOf(0, withAlpha(colors.gold, 0.48f), 0),
-                floatArrayOf(0f, 0.5f, 1f),
-                Shader.TileMode.CLAMP,
-            )
-            canvas.drawRect(cx - r * 1.5f, cy - 1.2f, cx + r * 1.5f, cy + 1.2f, paint)
+            ensureRelicShaders(colors)
+            val outerR = r * 1.45f
+            shaderMatrix.setScale(outerR, outerR)
+            shaderMatrix.postTranslate(cx, cy)
+            relicOuterGlow?.let {
+                it.setLocalMatrix(shaderMatrix)
+                fill(Color.WHITE)
+                paint.shader = it
+                canvas.drawCircle(cx, cy, outerR, paint)
+            }
+            val streakHalf = r * 1.5f
+            shaderMatrix.setScale(streakHalf, 1f)
+            shaderMatrix.postTranslate(cx, cy)
+            relicStreak?.let {
+                it.setLocalMatrix(shaderMatrix)
+                fill(Color.WHITE)
+                paint.shader = it
+                canvas.drawRect(cx - streakHalf, cy - 1.2f, cx + streakHalf, cy + 1.2f, paint)
+            }
+            paint.shader = null
         }
         orbit(canvas, cx, cy, r, t, true)
-        for (face in facets) {
-            val front = face.nz >= -0.08f
-            val light = max(0f, face.nx * -0.45f + face.ny * -0.62f + face.nz * 0.64f)
-            val specular = max(0f, face.nz * 0.8f + light * 0.5f).pow(9)
-            val dichroic = 0.5f + 0.5f * sin(face.index * 0.7f + ry * 1.4f)
-            path.reset()
-            path.moveTo(face.a.x, face.a.y)
-            path.lineTo(face.b.x, face.b.y)
-            path.lineTo(face.c.x, face.c.y)
-            path.close()
+        for (orderIdx in 0 until 24) {
+            val faceIdx = relicFacetOrder[orderIdx]
+            val indices = rawFacets[faceIdx]
+            val ia = indices[0]
+            val ib = indices[1]
+            val ic = indices[2]
+            val ax = relicScreenX[ia]
+            val ay = relicScreenY[ia]
+            val bx = relicScreenX[ib]
+            val by = relicScreenY[ib]
+            val cxp = relicScreenX[ic]
+            val cyp = relicScreenY[ic]
+            val nx = relicFacetNx[faceIdx]
+            val ny = relicFacetNy[faceIdx]
+            val nz = relicFacetNz[faceIdx]
+            val front = nz >= -0.08f
+            val light = max(0f, nx * -0.45f + ny * -0.62f + nz * 0.64f)
+            val specular = max(0f, nz * 0.8f + light * 0.5f).pow(9)
+            val dichroic = 0.5f + 0.5f * sin(faceIdx * 0.7f + ry * 1.4f)
             if (ink == null) {
                 val base = blend(colors.gold, blend(colors.rose, colors.mint, dichroic), 0.45f)
-                fill(
-                    Color.rgb(
-                        (Color.red(base) + specular * 55).toInt().coerceIn(0, 255),
-                        (Color.green(base) + specular * 50).toInt().coerceIn(0, 255),
-                        (Color.blue(base) + specular * 45).toInt().coerceIn(0, 255),
-                    ),
-                    if (front) 0.46f + light * 0.42f else 0.22f,
+                val fillOpacity = if (front) 0.46f + light * 0.42f else 0.22f
+                val argb = Color.argb(
+                    (fillOpacity.coerceIn(0f, 1f) * 255f).toInt(),
+                    (Color.red(base) + specular * 55).toInt().coerceIn(0, 255),
+                    (Color.green(base) + specular * 50).toInt().coerceIn(0, 255),
+                    (Color.blue(base) + specular * 45).toInt().coerceIn(0, 255),
                 )
-                canvas.drawPath(path, paint)
+                relicTriVerts[0] = ax
+                relicTriVerts[1] = ay
+                relicTriVerts[2] = bx
+                relicTriVerts[3] = by
+                relicTriVerts[4] = cxp
+                relicTriVerts[5] = cyp
+                relicTriColors[0] = argb
+                relicTriColors[1] = argb
+                relicTriColors[2] = argb
+                // Hardware GPU triangle fill: zero Skia SW Path Mask allocations.
+                fill(Color.WHITE, 1f)
+                canvas.drawVertices(
+                    Canvas.VertexMode.TRIANGLES,
+                    6,
+                    relicTriVerts,
+                    0,
+                    null,
+                    0,
+                    relicTriColors,
+                    0,
+                    null,
+                    0,
+                    0,
+                    paint,
+                )
             }
             stroke(
                 ink ?: if (front) 0xFFFFF8E8.toInt() else colors.gold,
@@ -140,9 +241,32 @@ internal class CrystalJewelPainter {
                 },
                 if (front) 0.85f else 0.5f,
             )
-            canvas.drawPath(path, paint)
+            relicEdgeLines[0] = ax
+            relicEdgeLines[1] = ay
+            relicEdgeLines[2] = bx
+            relicEdgeLines[3] = by
+            relicEdgeLines[4] = bx
+            relicEdgeLines[5] = by
+            relicEdgeLines[6] = cxp
+            relicEdgeLines[7] = cyp
+            relicEdgeLines[8] = cxp
+            relicEdgeLines[9] = cyp
+            relicEdgeLines[10] = ax
+            relicEdgeLines[11] = ay
+            canvas.drawLines(relicEdgeLines, paint)
         }
-        if (ink == null) glow(canvas, cx, cy, r * 0.42f, 0xF2FFFCF2.toInt(), withAlpha(colors.gold, 0.55f))
+        if (ink == null) {
+            val coreR = r * 0.42f
+            shaderMatrix.setScale(coreR, coreR)
+            shaderMatrix.postTranslate(cx, cy)
+            relicCoreGlow?.let {
+                it.setLocalMatrix(shaderMatrix)
+                fill(Color.WHITE)
+                paint.shader = it
+                canvas.drawCircle(cx, cy, coreR, paint)
+            }
+            paint.shader = null
+        }
         orbit(canvas, cx, cy, r, t, false)
     }
 

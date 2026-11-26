@@ -138,6 +138,29 @@ internal class CrystalMemorialDebugScreen : Screen() {
                         scope.launch {
                             try {
                                 manager.resetAndPrepareDebug()
+                                CrystalDebugReleaseSimulation.trigger(portrait, front)
+                                navigator.popUntilRoot()
+                            } catch (
+                                e: CancellationException,
+                            ) {
+                                throw e
+                            } catch (_: Exception) {
+                                failed = true
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    }
+                }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(AYMR.strings.crystal_debug_simulate_release))
+                }
+                Button(onClick = {
+                    if (!busy) {
+                        busy = true
+                        failed = false
+                        scope.launch {
+                            try {
+                                manager.resetAndPrepareDebug()
                                 if (navigator.lastItem.key ==
                                     key
                                 ) {

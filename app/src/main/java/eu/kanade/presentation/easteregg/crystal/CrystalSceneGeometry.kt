@@ -11,6 +11,7 @@ internal data class CrystalProjectedPoint(val x: Float, val y: Float, val z: Flo
 /** Pure projection shared by the memorial and jewel previews. Angles are radians. */
 internal object CrystalSceneGeometry {
     const val NODE_COUNT = 82
+    const val NOSE_STAR_INDEX = 63
 
     fun nodeDepth(index: Int): Float {
         val x = CrystalSceneData.face[index * 2]
@@ -58,6 +59,17 @@ internal object CrystalSceneGeometry {
             point.z,
             perspective,
         )
+    }
+
+    /** Exact center of Crystal's starlit cat-face (her bright nose star) for the Lunar Iris portal. */
+    fun constellationIrisCenter(
+        width: Float,
+        height: Float,
+        ceremonyBlend: Float = 1f,
+        fittedArtwork: Boolean = false,
+    ): Pair<Float, Float> {
+        val nose = projectFace(NOSE_STAR_INDEX, width, height, 0f, 0f, fittedArtwork, ceremonyBlend)
+        return nose.x to nose.y
     }
 
     /** Same 32-bit mix as the prototype; stable across recomposition and replay. */
