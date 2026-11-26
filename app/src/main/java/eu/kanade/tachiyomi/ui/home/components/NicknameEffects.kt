@@ -1265,9 +1265,9 @@ internal fun NicknameBadgeDecorator(
             if (appearance.badge) {
                 eu.kanade.presentation.easteregg.crystal.CrystalGlyphCanvas(
                     eu.kanade.presentation.easteregg.crystal.CrystalGlyph.Badge,
-                    Modifier.size(22.dp),
+                    Modifier.size(24.dp),
                     appearance.palette,
-                    animate = false,
+                    animate = !appearance.reduced,
                 )
                 Spacer(Modifier.width(6.dp))
             }

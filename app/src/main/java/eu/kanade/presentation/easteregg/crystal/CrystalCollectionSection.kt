@@ -452,32 +452,7 @@ private fun CrystalRoomTitleCard(appearance: CrystalEquippedAppearance, onClick:
                     lineHeight = 16.sp,
                 )
             }
-            Box(
-                Modifier
-                    .background(
-                        if (colors.isEInk) {
-                            Brush.linearGradient(listOf(colors.surface, colors.surface))
-                        } else {
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color(appearance.palette.gold).copy(alpha = 0.16f),
-                                    Color(appearance.palette.rose).copy(alpha = 0.14f),
-                                ),
-                            )
-                        },
-                        CircleShape,
-                    )
-                    .border(1.dp, material.accent.copy(alpha = .48f), CircleShape)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    "✦ $title",
-                    color = material.accent,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                )
-            }
+            CrystalTitlePill(appearance.palette, !appearance.reduced)
         }
     }
 }

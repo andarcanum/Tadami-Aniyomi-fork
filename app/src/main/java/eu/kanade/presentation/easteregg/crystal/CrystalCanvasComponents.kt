@@ -60,7 +60,7 @@ internal fun CrystalGlyphCanvas(
     val policy = rememberCrystalMotionPolicy()
     val motion =
         animate && policy.systemAnimations && !colors.isEInk &&
-            (glyph == CrystalGlyph.Relic || glyph == CrystalGlyph.Frame)
+            (glyph == CrystalGlyph.Relic || glyph == CrystalGlyph.Frame || glyph == CrystalGlyph.Badge)
     val time by rememberCrystalTime(motion)
     Canvas(modifier) {
         drawIntoCanvas { compose ->
@@ -88,7 +88,7 @@ internal fun CrystalGlyphCanvas(
                 }
                 CrystalGlyph.Paw -> painter.paw(canvas, 0f, 0f, minOf(width, height), palette, inkColor = ink)
                 CrystalGlyph.Title -> painter.titleGlyph(canvas, width, height, palette, ink)
-                CrystalGlyph.Badge -> painter.medallion(canvas, width, height, palette, ink)
+                CrystalGlyph.Badge -> painter.pawPendant(canvas, width, height, palette, time / 1000f, !motion, ink)
                 CrystalGlyph.Palette -> painter.paletteGlyph(canvas, width, height, palette, ink)
                 CrystalGlyph.CatFace -> painter.catFace(canvas, width, height, palette, ink)
                 CrystalGlyph.Cameo -> painter.cameoPortrait(canvas, width, height, palette, ink)

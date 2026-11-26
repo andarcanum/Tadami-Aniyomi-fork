@@ -54,6 +54,11 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
         strokeWidth = 1.25f
         strokeCap = Paint.Cap.ROUND
     }
+    private val shelfShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0xFF101C26.toInt()
+    }
+    private val jewelPainter = CrystalJewelPainter()
     private var currentColors: CrystalLivingCornerColors? = null
     private val shaders = mutableMapOf<Pair<Int, Int>, Shader>()
 
@@ -67,10 +72,11 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
         weather: CrystalWeather,
         reduced: Boolean = false,
         preview: Boolean = false,
+        palette: CrystalPalette = CrystalPalette.Moon,
     ) {
         if (!width.isFinite() || !height.isFinite() || width <= 0f || height <= 0f) return
         prepareColors(colors)
-        val state = State(frame, colors, phase, weather, reduced || colors.eInk, preview)
+        val state = State(frame, colors, phase, weather, reduced || colors.eInk, preview, palette)
         updateThread(state.yarn, state.time)
         val save = canvas.save()
         canvas.clipRect(0f, 0f, width, height)
@@ -110,15 +116,32 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
             canvas.restoreToCount(save)
             return
         }
+        if ("crystal-keepsake" in node.classes) {
+            canvas.concat(node.matrix)
+            // Place the live 3D Star of Crystal relic directly on top of the stack of books beside the lantern.
+            canvas.translate(-32f, -12f)
+            if (!state.colors.eInk) {
+                shelfShadowPaint.alpha = (opacity * 0.48f * 255f).roundToInt().coerceIn(0, 255)
+                canvas.drawOval(253f, 221.4f, 277f, 225.6f, shelfShadowPaint)
+            }
+            canvas.translate(248f, 187f)
+            jewelPainter.relic(
+                canvas = canvas,
+                width = 34f,
+                height = 34f,
+                seconds = state.time,
+                colors = state.palette,
+                reduced = state.resting,
+                inkColor = if (state.colors.eInk) state.colors.heading else null,
+            )
+            canvas.restoreToCount(save)
+            return
+        }
         canvas.concat(node.matrix)
         when {
             "crystal-placement" in node.classes -> {
                 // Bring the hanging mobile's balance crossbar and top mount inside the ceiling viewBox.
                 canvas.translate(0f, if (state.preview) 78f else 56f)
-            }
-            "crystal-keepsake" in node.classes -> {
-                // Place the shelf crystal cluster directly on top of the stack of books (x=232, y=212).
-                canvas.translate(-32f, -12f)
             }
             "shelf-lantern" in node.classes -> {
                 canvas.translate(-13f, 0f)
@@ -879,6 +902,7 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
         val weather: CrystalWeather,
         val resting: Boolean,
         val preview: Boolean = false,
+        val palette: CrystalPalette = CrystalPalette.Moon,
     ) {
         val time = frame.elapsedSeconds.takeIf { it.isFinite() && it >= 0f } ?: 0f
         val closure = if (resting) 0f else frame.eyeClosure.coerceIn(0f, 1f)

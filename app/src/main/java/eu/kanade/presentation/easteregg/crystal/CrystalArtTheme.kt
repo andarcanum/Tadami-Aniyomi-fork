@@ -10,10 +10,16 @@ import com.tadami.aurora.R
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalAuroraColors
 
-internal enum class CrystalPalette(val key: String, val gold: Int, val rose: Int, val mint: Int) {
-    Moon("moon", 0xFFF6E0BA.toInt(), 0xFFE6B2CA.toInt(), 0xFFA8DED2.toInt()),
-    Dusk("dusk", 0xFFD2C3F5.toInt(), 0xFFE1B9DC.toInt(), 0xFFAFCEEE.toInt()),
-    Pearl("pearl", 0xFFF2ECE2.toInt(), 0xFFD7C4CE.toInt(), 0xFFB8DED2.toInt()),
+internal enum class CrystalPalette(
+    val key: String,
+    val gold: Int,
+    val rose: Int,
+    val mint: Int,
+    val deep: Int,
+) {
+    Moon("moon", 0xFFF6D9A4.toInt(), 0xFFE6A8C4.toInt(), 0xFF9CDFD0.toInt(), 0xFF2B4E6E.toInt()),
+    Dusk("dusk", 0xFFFFC08A.toInt(), 0xFFE48CD0.toInt(), 0xFF9E8CFF.toInt(), 0xFF492E6B.toInt()),
+    Pearl("pearl", 0xFFE9F0FA.toInt(), 0xFFDFC0D6.toInt(), 0xFF96EDE0.toInt(), 0xFF2A475C.toInt()),
     ;
 
     companion object {

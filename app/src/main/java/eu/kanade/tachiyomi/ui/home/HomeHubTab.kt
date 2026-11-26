@@ -448,18 +448,21 @@ private const val HOME_HEADER_CANVAS_HEIGHT_ONE_LINE_DP = 72
 private const val HOME_HEADER_CANVAS_HEIGHT_TWO_LINES_DP = 76
 private const val HOME_HEADER_CANVAS_HEIGHT_THREE_LINES_DP = 80
 private const val HOME_HEADER_CANVAS_HEIGHT_FOUR_LINES_DP = 88
+internal const val HOME_HEADER_PROFILE_TITLE_EXTRA_HEIGHT_DP = 22
+internal const val HOME_HEADER_NICKNAME_WITH_TITLE_HEIGHT_PX = 52f
 
 internal fun resolveGreetingLineLimit(measuredLineCount: Int): Int {
     return measuredLineCount.coerceIn(1, 4)
 }
 
-internal fun resolveHomeHeaderCanvasHeightDp(lineLimit: Int): Int {
-    return when (lineLimit.coerceIn(1, 4)) {
+internal fun resolveHomeHeaderCanvasHeightDp(lineLimit: Int, hasProfileTitle: Boolean = false): Int {
+    val baseHeight = when (lineLimit.coerceIn(1, 4)) {
         1 -> HOME_HEADER_CANVAS_HEIGHT_ONE_LINE_DP
         2 -> HOME_HEADER_CANVAS_HEIGHT_TWO_LINES_DP
         3 -> HOME_HEADER_CANVAS_HEIGHT_THREE_LINES_DP
         else -> HOME_HEADER_CANVAS_HEIGHT_FOUR_LINES_DP
     }
+    return if (hasProfileTitle) baseHeight + HOME_HEADER_PROFILE_TITLE_EXTRA_HEIGHT_DP else baseHeight
 }
 
 internal fun resolveGreetingSlotHeightPx(lineLimit: Int): Float {
@@ -1424,6 +1427,15 @@ object HomeHubTab : Tab {
                     applyStatusBarsPadding = false,
                     instantTabSwitching = false,
                     beyondViewportPageCount = beyondViewportPageCount,
+                    backgroundOverlay = {
+                        eu.kanade.presentation.easteregg.crystal.CrystalSilkBackdrop(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(340.dp)
+                                .align(Alignment.TopCenter),
+                            openCanvas = true,
+                        )
+                    },
                     extraHeaderContent = {
                         HomeHubPinnedHeader(
                             headerOffsetPxProvider = headerOffsetPxProvider,

@@ -214,6 +214,58 @@ internal class CrystalJewelPainter {
         canvas.restoreToCount(save)
     }
 
+    /** Sculpted jewel paw pendant with soft breathing halo and periodic 4-point star twinkle. */
+    fun pawPendant(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        colors: CrystalPalette,
+        seconds: Float,
+        reduced: Boolean,
+        inkColor: Int? = null,
+    ) {
+        if (width <= 0f || height <= 0f) return
+        palette = colors
+        ink = inkColor
+        val s = canvas.save()
+        val scale = min(width, height) / 80f
+        canvas.translate((width - 80f * scale) / 2f, (height - 80f * scale) / 2f)
+        canvas.scale(scale, scale)
+
+        val t = if (reduced) 0.4f else seconds
+        if (ink == null) {
+            val breath = if (reduced) 0.92f else 0.86f + 0.14f * sin(t * 2.0f)
+            glow(
+                canvas,
+                40f,
+                42f,
+                38f,
+                withAlpha(colors.gold, 0.42f * breath),
+                withAlpha(colors.rose, 0.16f * breath),
+            )
+        }
+
+        paw(canvas, 7f, 10f, 66f, colors, 1f, inkColor)
+
+        if (ink == null) {
+            val cycle = if (reduced) 0.84f else ((t % 4.5f) + 4.5f) % 4.5f / 4.5f
+            if (cycle > 0.68f) {
+                val pulse = sin(((cycle - 0.68f) / 0.32f) * PI.toFloat()).coerceIn(0f, 1f)
+                val starScale = 0.55f + pulse * 0.72f
+                val starSave = canvas.save()
+                canvas.translate(57f, 19f)
+                canvas.scale(starScale, starScale)
+                fill(Color.WHITE, 0.95f * pulse)
+                canvas.drawPath(
+                    svg("M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z"),
+                    paint,
+                )
+                canvas.restoreToCount(starSave)
+            }
+        }
+        canvas.restoreToCount(s)
+    }
+
     fun medallion(canvas: Canvas, width: Float, height: Float, colors: CrystalPalette, inkColor: Int? = null) {
         palette = colors
         ink = inkColor

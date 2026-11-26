@@ -186,6 +186,7 @@ fun TabbedScreenAurora(
     extraSearchToActionsGap: Dp = 0.dp,
     extraActionGapAfterTitle: String? = null,
     extraHeaderContent: @Composable () -> Unit = {},
+    backgroundOverlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
     disablePagerScroll: Boolean = false,
     beyondViewportPageCount: Int = 0,
 ) {
@@ -287,6 +288,7 @@ fun TabbedScreenAurora(
     AuroraBackground(
         modifier = modifier,
     ) {
+        backgroundOverlay()
         Column(modifier = Modifier.fillMaxSize()) {
             if (applyStatusBarsPadding) {
                 Spacer(modifier = Modifier.statusBarsPadding())

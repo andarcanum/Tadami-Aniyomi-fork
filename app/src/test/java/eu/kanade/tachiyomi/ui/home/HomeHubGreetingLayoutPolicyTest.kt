@@ -22,6 +22,25 @@ class HomeHubGreetingLayoutPolicyTest {
     }
 
     @Test
+    fun `resolveHomeHeaderCanvasHeightDp reserves space for profile title across all greeting lines`() {
+        for (lines in 1..4) {
+            val canvasHeight = resolveHomeHeaderCanvasHeightDp(lineLimit = lines, hasProfileTitle = true)
+            val baseHeight = resolveHomeHeaderCanvasHeightDp(lineLimit = lines, hasProfileTitle = false)
+            canvasHeight shouldBe baseHeight + HOME_HEADER_PROFILE_TITLE_EXTRA_HEIGHT_DP
+
+            val greetingHeight = resolveGreetingSlotHeightPx(lines)
+            val nicknameY = resolveNicknameYForGreetingOverlap(
+                nicknameY = 26f,
+                greetingY = 0f,
+                greetingHeight = greetingHeight,
+            )
+            check(nicknameY + HOME_HEADER_NICKNAME_WITH_TITLE_HEIGHT_PX <= canvasHeight.toFloat()) {
+                "Expected nickname + title (${nicknameY + HOME_HEADER_NICKNAME_WITH_TITLE_HEIGHT_PX}) <= $canvasHeight for $lines lines"
+            }
+        }
+    }
+
+    @Test
     fun `resolveGreetingSlotHeightPx grows progressively by lines`() {
         resolveGreetingSlotHeightPx(lineLimit = 1) shouldBe 24f
         resolveGreetingSlotHeightPx(lineLimit = 2) shouldBe 36f

@@ -453,6 +453,7 @@ internal fun CrystalLivingCornerHero(
                             phase,
                             weather,
                             reduced,
+                            palette = palette,
                         )
                     }
                 }
@@ -733,6 +734,7 @@ internal fun CrystalLivingCornerPreview(palette: CrystalPalette, modifier: Modif
                         weather,
                         reduced = true,
                         preview = true,
+                        palette = palette,
                     )
                 }
             }
