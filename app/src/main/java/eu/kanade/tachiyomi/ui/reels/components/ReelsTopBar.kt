@@ -83,18 +83,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -259,74 +263,62 @@ fun ReelsTopBar(
     var confirmLogout by remember { mutableStateOf(false) }
     var sleepDialogOpen by remember { mutableStateOf(false) }
 
+    val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
+    val contentTint = if (isEInk) MaterialTheme.colorScheme.onSurface else Color.White
+    val textShadow = if (isEInk) {
+        null
+    } else {
+        Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(0f, 1f), blurRadius = 6f)
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
-        // Search moves inside the source capsule only when both halves are usable: switchable
-        // source (so the left half is a real target) and an actual search mode.
-        val mergedSearch = showSourcePicker && showSearch
         // Main Navigation & Actions Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Left: Back button + Source Title. Weighted (fill=false) so a long title
-            // ellipsizes instead of stealing width from the action buttons.
+            // Left: Bare Back button + Source Title. Weighted (fill=false) so a long title
+            // ellipsizes instead of stealing width from the action icons.
             Row(
                 modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // Back Button — visual circle stays 40dp; the outer 48dp box provides the
-                // minimum touch target.
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .clickable { onBackClick() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .reelsGlassSurface(
-                                eInk = AuroraTheme.colors.isEInk,
-                                eInkColor = AuroraTheme.colors.cardBackground,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(MR.strings.action_bar_up_description),
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
+                TopBarChromeIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(MR.strings.action_bar_up_description),
+                    tint = contentTint,
+                    iconSize = 24.dp,
+                    width = 48.dp,
+                    onClick = onBackClick,
+                )
 
-                // Source identity. The capsule exists only where the source can actually be
-                // switched: a plate that is not tappable reads as a broken button, which is what
-                // the single-source case used to look like.
+                // Source identity: keep a light translucent capsule only when the source is
+                // tappable to switch; static titles sit cleanly over the top edge scrim.
                 if (sourceName.isNotBlank()) {
                     if (showSourcePicker) {
                         Box(
                             modifier = Modifier
                                 .weight(1f, fill = false)
-                                .height(40.dp)
+                                .height(34.dp)
                                 .reelsGlassSurface(
-                                    RoundedCornerShape(20.dp),
-                                    eInk = AuroraTheme.colors.isEInk,
-                                    eInkColor = AuroraTheme.colors.cardBackground,
+                                    shape = RoundedCornerShape(17.dp),
+                                    eInk = isEInk,
+                                    eInkColor = auroraColors.cardBackground,
+                                    subtle = true,
                                 )
                                 .clickable {
                                     onOpenSourcePicker()
                                     openHub = HubMenu.NONE
                                 }
-                                .padding(start = 10.dp, end = if (mergedSearch) 4.dp else 10.dp),
+                                .padding(horizontal = 10.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Row(
@@ -338,19 +330,17 @@ fun ReelsTopBar(
                                         bitmap = sourceIcon,
                                         contentDescription = null,
                                         modifier = Modifier
-                                            .size(20.dp)
-                                            .clip(RoundedCornerShape(6.dp)),
+                                            .size(18.dp)
+                                            .clip(RoundedCornerShape(5.dp)),
                                     )
                                 }
                                 Text(
                                     text = formatTopBarTitle(sourceName),
-                                    color = Color.White,
+                                    color = contentTint,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    // Weighted so the fixed icon/dropdown are measured first and
-                                    // never squeezed out by a long name.
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
                                 if (isIncognito) {
@@ -358,59 +348,36 @@ fun ReelsTopBar(
                                     Icon(
                                         imageVector = Icons.Filled.PrivacyTip,
                                         contentDescription = stringResource(MR.strings.reels_incognito_active),
-                                        tint = AuroraTheme.colors.accent,
+                                        tint = auroraColors.accent,
                                         modifier = Modifier.size(14.dp),
                                     )
                                 }
                                 Icon(
                                     imageVector = Icons.Filled.ArrowDropDown,
                                     contentDescription = stringResource(MR.strings.reels_switch_source),
-                                    tint = Color.White.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(18.dp),
+                                    tint = contentTint.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(17.dp),
                                 )
-                                if (mergedSearch) {
-                                    // Search lives inside the capsule so the row keeps one circle
-                                    // more for real session actions. 32dp inside a 40dp plate is
-                                    // the deliberate trade recorded in the prototype.
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .reelsGlassSurface(
-                                                active = isSearchBarOpen,
-                                                eInk = AuroraTheme.colors.isEInk,
-                                                eInkColor = AuroraTheme.colors.cardBackground,
-                                            )
-                                            .clickable {
-                                                onToggleSearchBar()
-                                                openHub = HubMenu.NONE
-                                            },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Search,
-                                            contentDescription = stringResource(MR.strings.action_search),
-                                            tint = if (isSearchBarOpen) {
-                                                AuroraTheme.colors.accent
-                                            } else {
-                                                Color.White
-                                            },
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                }
                             }
                         }
                     } else {
                         Row(
                             modifier = Modifier
                                 .weight(1f, fill = false)
-                                .height(36.dp)
-                                .reelsGlassSurface(
-                                    RoundedCornerShape(18.dp),
-                                    eInk = AuroraTheme.colors.isEInk,
-                                    eInkColor = AuroraTheme.colors.cardBackground,
-                                )
-                                .padding(horizontal = 10.dp),
+                                .then(
+                                    if (isEInk) {
+                                        Modifier
+                                            .height(34.dp)
+                                            .reelsGlassSurface(
+                                                shape = RoundedCornerShape(17.dp),
+                                                eInk = true,
+                                                eInkColor = auroraColors.cardBackground,
+                                            )
+                                            .padding(horizontal = 10.dp)
+                                    } else {
+                                        Modifier.padding(horizontal = 4.dp)
+                                    },
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
@@ -425,19 +392,23 @@ fun ReelsTopBar(
                             }
                             Text(
                                 text = formatTopBarTitle(sourceName),
-                                color = Color.White.copy(alpha = 0.94f),
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
+                                color = contentTint.copy(alpha = 0.96f),
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    shadow = textShadow,
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
                             if (isIncognito) {
-                                Icon(
+                                ReelsChromeIcon(
                                     imageVector = Icons.Filled.PrivacyTip,
                                     contentDescription = stringResource(MR.strings.reels_incognito_active),
-                                    tint = AuroraTheme.colors.accent,
-                                    modifier = Modifier.size(14.dp),
+                                    tint = auroraColors.accent,
+                                    size = 15.dp,
+                                    eInk = isEInk,
                                 )
                             }
                         }
@@ -445,118 +416,58 @@ fun ReelsTopBar(
                 }
             }
 
-            // Guaranteed air: a long source capsule can consume the whole row, and
-            // SpaceBetween alone then leaves zero gap before the first action circle.
-            Spacer(Modifier.width(10.dp))
+            // Guaranteed air before the right action cluster.
+            Spacer(Modifier.width(6.dp))
 
-            // Right Actions: Search, Filter (online only), Favorites, Follows, Follow, More.
-            // Horizontally scrollable: the fixed-size circles must never be squeezed to
-            // slivers when the row runs out of width (long creator names, large fonts).
             // Right Actions: Search, Filter (online), Account hub, More.
-            // Outer 48dp boxes satisfy minimum touch targets around compact 36dp visuals.
+            // Clean bare 22dp glyphs with optical shadow (e-ink falls back to solid circles).
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-                if (!isOffline && showSearch && !mergedSearch) {
-                    // Search toggle button
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                onToggleSearchBar()
-                                openHub = HubMenu.NONE
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .reelsGlassSurface(
-                                    active = isSearchBarOpen,
-                                    eInk = AuroraTheme.colors.isEInk,
-                                    eInkColor = AuroraTheme.colors.cardBackground,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Search,
-                                contentDescription = stringResource(MR.strings.action_search),
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
+                if (!isOffline && showSearch) {
+                    TopBarChromeIconButton(
+                        icon = Icons.Filled.Search,
+                        contentDescription = stringResource(MR.strings.action_search),
+                        tint = if (isSearchBarOpen) auroraColors.accent else contentTint,
+                        showActiveDot = isSearchBarOpen,
+                        onClick = {
+                            onToggleSearchBar()
+                            openHub = HubMenu.NONE
+                        },
+                    )
                 }
 
                 // Direct Filter button in GLOBAL, CREATOR, and NICHE modes when supported.
                 if (!isOffline && showFilter) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                onOpenFilterDialog()
-                                openHub = HubMenu.NONE
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .reelsGlassSurface(
-                                    active = isFilterActive,
-                                    eInk = AuroraTheme.colors.isEInk,
-                                    eInkColor = AuroraTheme.colors.cardBackground,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.FilterList,
-                                contentDescription = stringResource(MR.strings.action_filter),
-                                tint = if (isFilterActive) AuroraTheme.colors.accent else Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
+                    TopBarChromeIconButton(
+                        icon = Icons.Filled.FilterList,
+                        contentDescription = stringResource(MR.strings.action_filter),
+                        tint = if (isFilterActive) auroraColors.accent else contentTint,
+                        showActiveDot = isFilterActive,
+                        onClick = {
+                            onOpenFilterDialog()
+                            openHub = HubMenu.NONE
+                        },
+                    )
                 }
 
                 // Account hub (contract v19): login state, custom feeds, login/logout.
                 if (!isOffline && showAccount) {
                     Box {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .clickable {
-                                    openHub = if (openHub == HubMenu.ACCOUNT) {
-                                        HubMenu.NONE
-                                    } else {
-                                        HubMenu.ACCOUNT
-                                    }
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .reelsGlassSurface(
-                                        active = isLoggedIn,
-                                        eInk = AuroraTheme.colors.isEInk,
-                                        eInkColor = AuroraTheme.colors.cardBackground,
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Person,
-                                    contentDescription = stringResource(MR.strings.reels_account),
-                                    tint = if (isLoggedIn) AuroraTheme.colors.accent else Color.White,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        }
+                        TopBarChromeIconButton(
+                            icon = Icons.Filled.Person,
+                            contentDescription = stringResource(MR.strings.reels_account),
+                            tint = if (isLoggedIn) auroraColors.accent else contentTint,
+                            onClick = {
+                                openHub = if (openHub == HubMenu.ACCOUNT) {
+                                    HubMenu.NONE
+                                } else {
+                                    HubMenu.ACCOUNT
+                                }
+                            },
+                        )
                         if (openHub == HubMenu.ACCOUNT) {
                             ReelsAccountMenu(
                                 isLoggedIn = isLoggedIn,
@@ -582,33 +493,14 @@ fun ReelsTopBar(
 
                 // More (feed shortcuts, playback settings, quality & cache)
                 Box {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                openHub = if (openHub == HubMenu.MORE) HubMenu.NONE else HubMenu.MORE
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .reelsGlassSurface(
-                                    active = openHub == HubMenu.MORE,
-                                    eInk = AuroraTheme.colors.isEInk,
-                                    eInkColor = AuroraTheme.colors.cardBackground,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.MoreVert,
-                                contentDescription = stringResource(MR.strings.reels_more),
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
+                    TopBarChromeIconButton(
+                        icon = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(MR.strings.reels_more),
+                        tint = if (openHub == HubMenu.MORE) auroraColors.accent else contentTint,
+                        onClick = {
+                            openHub = if (openHub == HubMenu.MORE) HubMenu.NONE else HubMenu.MORE
+                        },
+                    )
                     if (openHub == HubMenu.MORE) {
                         ReelsMoreMenu(
                             isAutoAdvance = isAutoAdvance,
@@ -1709,6 +1601,66 @@ private fun ReelsAccountMenu(
                         onDismiss()
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopBarChromeIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    tint: Color,
+    onClick: () -> Unit,
+    iconSize: Dp = 22.dp,
+    width: Dp = 44.dp,
+    showActiveDot: Boolean = false,
+) {
+    val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(48.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isEInk) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .reelsGlassSurface(
+                        active = showActiveDot,
+                        eInk = true,
+                        eInkColor = auroraColors.cardBackground,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = tint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        } else {
+            ReelsChromeIcon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = tint,
+                size = iconSize,
+                eInk = false,
+            )
+            if (showActiveDot) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 7.dp)
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(auroraColors.accent),
+                )
             }
         }
     }

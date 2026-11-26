@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -33,7 +34,6 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +53,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -412,6 +413,7 @@ fun ReelsLandscapeScrubberDock(
                             label = formatCompactCount(likesCount),
                             icon = likeIcon,
                             isActive = isLiked,
+                            showActivePill = false,
                             contentTint = likeTint,
                             contentDescription = "$likeA11y: ${formatCompactCount(likesCount)}",
                             visualModifier = Modifier.scale(likeScale),
@@ -499,13 +501,21 @@ private fun DockUnifiedPill(
     onClick: () -> Unit,
     icon: ImageVector? = null,
     isActive: Boolean = false,
+    showActivePill: Boolean = true,
     visualModifier: Modifier = Modifier,
 ) {
     val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
+    val usePillSurface = isEInk || (isActive && showActivePill)
+    val textShadow = if (isEInk) {
+        null
+    } else {
+        Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(0f, 1f), blurRadius = 5f)
+    }
     Box(
         modifier = Modifier
             .defaultMinSize(
-                minWidth = REELS_LANDSCAPE_DOCK_HEIGHT_DP.dp,
+                minWidth = 44.dp,
                 minHeight = REELS_LANDSCAPE_DOCK_HEIGHT_DP.dp,
             )
             .clip(CircleShape)
@@ -520,31 +530,42 @@ private fun DockUnifiedPill(
     ) {
         Row(
             modifier = visualModifier
-                .height(REELS_LANDSCAPE_CONTROL_VISUAL_HEIGHT_DP.dp)
-                .reelsGlassSurface(
-                    shape = CircleShape,
-                    active = isActive,
-                    eInk = auroraColors.isEInk,
-                    eInkColor = auroraColors.cardBackground,
-                )
-                .padding(horizontal = 11.dp),
+                .then(
+                    if (usePillSurface) {
+                        Modifier
+                            .height(30.dp)
+                            .reelsGlassSurface(
+                                shape = CircleShape,
+                                active = isActive,
+                                eInk = isEInk,
+                                eInkColor = auroraColors.cardBackground,
+                            )
+                            .padding(horizontal = 10.dp)
+                    } else {
+                        Modifier.padding(horizontal = 8.dp)
+                    },
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             if (icon != null) {
-                Icon(
+                ReelsChromeIcon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = contentTint,
-                    modifier = Modifier.size(15.dp),
+                    size = if (usePillSurface) 16.dp else 20.dp,
+                    eInk = isEInk,
                 )
             }
             Text(
                 text = label,
                 color = contentTint,
-                fontSize = 11.5.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                style = TextStyle(fontFeatureSettings = "tnum"),
+                style = TextStyle(
+                    fontFeatureSettings = "tnum",
+                    shadow = textShadow,
+                ),
                 maxLines = 1,
             )
         }
@@ -563,9 +584,11 @@ private fun DockUnifiedIconButton(
     visualModifier: Modifier = Modifier,
 ) {
     val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
     Box(
         modifier = Modifier
-            .size(REELS_LANDSCAPE_DOCK_HEIGHT_DP.dp)
+            .width(44.dp)
+            .height(REELS_LANDSCAPE_DOCK_HEIGHT_DP.dp)
             .semantics {
                 role = Role.Button
                 this.contentDescription = contentDescription
@@ -574,40 +597,54 @@ private fun DockUnifiedIconButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = visualModifier
-                .size(REELS_LANDSCAPE_CONTROL_VISUAL_HEIGHT_DP.dp)
-                .reelsGlassSurface(
-                    shape = CircleShape,
-                    active = isActive,
-                    eInk = auroraColors.isEInk,
-                    eInkColor = auroraColors.cardBackground,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
+        val iconContent: @Composable () -> Unit = {
             if (isLoading) {
+                val spinnerSize = if (isEInk) 17.dp else 20.dp
                 val safeProgress = progress?.takeIf { it.isFinite() && it in 0f..1f }
                 if (safeProgress != null) {
                     CircularProgressIndicator(
                         progress = { safeProgress },
-                        modifier = Modifier.size(17.dp),
+                        modifier = Modifier.size(spinnerSize),
                         color = auroraColors.accent,
                         strokeWidth = 2.dp,
                     )
                 } else {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(17.dp),
+                        modifier = Modifier.size(spinnerSize),
                         color = auroraColors.accent,
                         strokeWidth = 2.dp,
                     )
                 }
             } else {
-                Icon(
+                ReelsChromeIcon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = tint,
-                    modifier = Modifier.size(17.dp),
+                    size = if (isEInk) 18.dp else 22.dp,
+                    eInk = isEInk,
                 )
+            }
+        }
+        if (isEInk) {
+            Box(
+                modifier = visualModifier
+                    .size(REELS_LANDSCAPE_CONTROL_VISUAL_HEIGHT_DP.dp)
+                    .reelsGlassSurface(
+                        shape = CircleShape,
+                        active = isActive,
+                        eInk = true,
+                        eInkColor = auroraColors.cardBackground,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                iconContent()
+            }
+        } else {
+            Box(
+                modifier = visualModifier,
+                contentAlignment = Alignment.Center,
+            ) {
+                iconContent()
             }
         }
     }
@@ -622,6 +659,12 @@ private fun LandscapeDockTimeDisplay(
     durationSec: Float,
     contentTint: Color,
 ) {
+    val isEInk = AuroraTheme.colors.isEInk
+    val textShadow = if (isEInk) {
+        null
+    } else {
+        Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(0f, 1f), blurRadius = 5f)
+    }
     val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
     val currentSec by remember(durationSec, isDragging, externalScrubFraction) {
         derivedStateOf {
@@ -640,16 +683,16 @@ private fun LandscapeDockTimeDisplay(
         Text(
             text = formatSeconds(currentSec),
             color = contentTint,
-            fontSize = 11.5.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            style = TextStyle(fontFeatureSettings = "tnum"),
+            style = TextStyle(fontFeatureSettings = "tnum", shadow = textShadow),
         )
         Text(
             text = " / ${formatSeconds(totalSec)}",
-            color = contentTint.copy(alpha = 0.62f),
-            fontSize = 11.5.sp,
+            color = contentTint.copy(alpha = 0.72f),
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            style = TextStyle(fontFeatureSettings = "tnum"),
+            style = TextStyle(fontFeatureSettings = "tnum", shadow = textShadow),
         )
     }
 }

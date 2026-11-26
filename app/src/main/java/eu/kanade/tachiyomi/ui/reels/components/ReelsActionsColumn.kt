@@ -3,12 +3,15 @@ package eu.kanade.tachiyomi.ui.reels.components
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -21,7 +24,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -203,7 +205,7 @@ fun ReelsActionsColumn(
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         LikeItem()
@@ -228,13 +230,20 @@ private fun ActionIconItem(
     isLoading: Boolean = false,
     progress: Float? = null,
 ) {
+    val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
+    val resolvedTint = if (isEInk && tint == Color.White) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        tint
+    }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
         modifier = modifier,
     ) {
-        // Visual circle matches the reels top-bar buttons (36dp/18dp); the outer box keeps
-        // a 48dp minimum a11y touch target along the right edge.
+        // Bare 27dp glyph over the right-edge scrim (no glass circle wrapper) inside a 48dp
+        // minimum touch target. E-ink keeps a solid high-contrast circular backplate.
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -246,34 +255,48 @@ private fun ActionIconItem(
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .reelsGlassSurface(
-                        eInk = AuroraTheme.colors.isEInk,
-                        eInkColor = AuroraTheme.colors.cardBackground,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
+            val content: @Composable () -> Unit = {
                 if (isLoading) {
+                    val spinnerSize = if (isEInk) 20.dp else 24.dp
                     if (progress == null) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(spinnerSize),
+                            color = resolvedTint,
+                            strokeWidth = 2.5.dp,
+                        )
                     } else {
                         CircularProgressIndicator(
                             progress = { progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.size(18.dp),
-                            color = tint,
-                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(spinnerSize),
+                            color = resolvedTint,
+                            strokeWidth = 2.5.dp,
                         )
                     }
                 } else {
-                    Icon(
+                    ReelsChromeIcon(
                         imageVector = icon,
                         contentDescription = contentDescription,
-                        tint = tint,
-                        modifier = Modifier.size(18.dp),
+                        tint = resolvedTint,
+                        size = if (isEInk) 20.dp else 27.dp,
+                        eInk = isEInk,
                     )
                 }
+            }
+
+            if (isEInk) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .reelsGlassSurface(
+                            eInk = true,
+                            eInkColor = auroraColors.cardBackground,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    content()
+                }
+            } else {
+                content()
             }
         }
         if (showLabel) {
@@ -281,11 +304,26 @@ private fun ActionIconItem(
                 text = label,
                 fontSize = 11.sp,
                 lineHeight = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.92f),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    shadow = Shadow(color = Color.Black, offset = Offset(0f, 1f), blurRadius = 4f),
-                ),
+                fontWeight = FontWeight.SemiBold,
+                color = if (isEInk) MaterialTheme.colorScheme.onSurface else Color.White.copy(alpha = 0.94f),
+                style = if (isEInk) {
+                    MaterialTheme.typography.labelSmall
+                } else {
+                    MaterialTheme.typography.labelSmall.copy(
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.85f),
+                            offset = Offset(0f, 1f),
+                            blurRadius = 6f,
+                        ),
+                    )
+                },
+                modifier = if (isEInk) {
+                    Modifier
+                        .background(auroraColors.cardBackground.copy(alpha = 0.92f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                } else {
+                    Modifier
+                },
                 maxLines = 1,
             )
         }

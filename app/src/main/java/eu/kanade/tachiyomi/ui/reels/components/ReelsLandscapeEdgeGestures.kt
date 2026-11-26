@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -32,7 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Brightness6
-import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,10 +41,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -194,9 +196,20 @@ internal fun applyMediaVolume(
 }
 
 /**
- * Aurora Frost vertical capsule HUD shown during landscape edge brightness/volume adjustments.
- * Anchored inward from the active side (`start = 88.dp` for brightness, `end = 88.dp` for volume)
- * so the dragging thumb never covers the indicator while keeping strong spatial association.
+ * Returns the opposite-side HUD alignment for a landscape edge gesture so the dragging thumb
+ * never covers the indicator: left-edge brightness renders on the right, right-edge volume
+ * renders on the left.
+ */
+internal fun resolveEdgeGestureHudAlignment(zone: ReelsLandscapeEdgeZone): Alignment = when (zone) {
+    ReelsLandscapeEdgeZone.Brightness -> Alignment.CenterEnd
+    ReelsLandscapeEdgeZone.Volume -> Alignment.CenterStart
+}
+
+/**
+ * Slim iOS-style vertical bar HUD shown during landscape edge brightness/volume adjustments.
+ * Mirrored to the side opposite the active finger (`end = 28.dp` for left-edge brightness,
+ * `start = 28.dp` for right-edge volume) with no outer dark card wrapper; e-ink mode adds a
+ * solid monochrome backplate for contrast.
  */
 @Composable
 internal fun BoxScope.ReelsEdgeGestureHud(
@@ -213,13 +226,10 @@ internal fun BoxScope.ReelsEdgeGestureHud(
     val visible = state != null
     val activeZone = displayed?.zone ?: ReelsLandscapeEdgeZone.Volume
     val level = (displayed?.level ?: 0f).coerceIn(0f, 1f)
-    val alignment = when (activeZone) {
-        ReelsLandscapeEdgeZone.Brightness -> Alignment.CenterStart
-        ReelsLandscapeEdgeZone.Volume -> Alignment.CenterEnd
-    }
+    val alignment = resolveEdgeGestureHudAlignment(activeZone)
     val horizontalPad = when (activeZone) {
-        ReelsLandscapeEdgeZone.Brightness -> Modifier.padding(start = 72.dp)
-        ReelsLandscapeEdgeZone.Volume -> Modifier.padding(end = 72.dp)
+        ReelsLandscapeEdgeZone.Brightness -> Modifier.padding(end = 28.dp)
+        ReelsLandscapeEdgeZone.Volume -> Modifier.padding(start = 28.dp)
     }
 
     AnimatedVisibility(
@@ -231,6 +241,9 @@ internal fun BoxScope.ReelsEdgeGestureHud(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .then(horizontalPad),
     ) {
+        val auroraColors = AuroraTheme.colors
+        val isEInk = auroraColors.isEInk
+        val onSurface = MaterialTheme.colorScheme.onSurface
         val percentText = formatGesturePercent(level)
         val a11yLabel = when (activeZone) {
             ReelsLandscapeEdgeZone.Brightness ->
@@ -246,44 +259,74 @@ internal fun BoxScope.ReelsEdgeGestureHud(
                 else -> Icons.AutoMirrored.Filled.VolumeUp
             }
         }
-        val accent = AuroraTheme.colors.accent
-        val fillBrush = when (activeZone) {
-            ReelsLandscapeEdgeZone.Brightness -> Brush.verticalGradient(
-                colors = listOf(Color(0xFFFDE68A), Color(0xFFF59E0B)),
+        val accent = auroraColors.accent
+        val fillBrush = when {
+            isEInk -> Brush.verticalGradient(colors = listOf(onSurface, onSurface))
+            activeZone == ReelsLandscapeEdgeZone.Brightness -> Brush.verticalGradient(
+                colors = listOf(Color(0xFFFEF08A), Color(0xFFF59E0B)),
             )
-            ReelsLandscapeEdgeZone.Volume -> Brush.verticalGradient(
+            else -> Brush.verticalGradient(
                 colors = listOf(accent, accent.copy(alpha = 0.72f)),
             )
         }
-        val iconTint = when (activeZone) {
-            ReelsLandscapeEdgeZone.Brightness -> Color(0xFFFDE68A)
-            ReelsLandscapeEdgeZone.Volume -> if (level <= 0.005f) Color.White.copy(alpha = 0.65f) else accent
+        val iconTint = when {
+            isEInk -> onSurface
+            activeZone == ReelsLandscapeEdgeZone.Brightness -> Color(0xFFFDE68A)
+            level <= 0.005f -> Color(0xFFFDA4AF)
+            else -> accent
+        }
+        val textShadow = if (isEInk) {
+            null
+        } else {
+            Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(0f, 1f), blurRadius = 6f)
         }
 
         Column(
             modifier = Modifier
-                .width(54.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(Color(0xD80A0D14))
-                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(22.dp))
-                .padding(vertical = 12.dp, horizontal = 8.dp)
+                .then(
+                    if (isEInk) {
+                        Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(auroraColors.cardBackground)
+                            .border(1.dp, onSurface.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                            .padding(vertical = 10.dp, horizontal = 8.dp)
+                    } else {
+                        Modifier
+                    },
+                )
                 .semantics { contentDescription = a11yLabel },
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(
+            ReelsChromeIcon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(20.dp),
+                size = 21.dp,
+                eInk = isEInk,
             )
 
             Box(
                 modifier = Modifier
-                    .width(7.dp)
-                    .height(104.dp)
+                    .width(14.dp)
+                    .height(128.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.16f)),
+                    .background(
+                        if (isEInk) {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        } else {
+                            Color(0xFF0E1018).copy(alpha = 0.56f)
+                        },
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (isEInk) {
+                            onSurface.copy(alpha = 0.45f)
+                        } else {
+                            Color.White.copy(alpha = 0.18f)
+                        },
+                        shape = CircleShape,
+                    ),
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 if (level > 0.005f) {
@@ -299,9 +342,13 @@ internal fun BoxScope.ReelsEdgeGestureHud(
 
             Text(
                 text = percentText,
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                color = if (isEInk) onSurface else Color.White,
+                style = TextStyle(
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFeatureSettings = "tnum",
+                    shadow = textShadow,
+                ),
                 maxLines = 1,
             )
         }

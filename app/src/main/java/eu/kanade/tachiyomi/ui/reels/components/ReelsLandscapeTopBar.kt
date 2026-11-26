@@ -112,7 +112,7 @@ fun ReelsLandscapeTopBar(
                 icon = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(MR.strings.action_bar_up_description),
                 tint = contentTint,
-                iconSize = 20.dp,
+                iconSize = 24.dp,
                 onClick = onBackClick,
             )
 
@@ -280,9 +280,10 @@ private fun LandscapeTopCircleButton(
     tint: Color,
     onClick: () -> Unit,
     isActive: Boolean = false,
-    iconSize: androidx.compose.ui.unit.Dp = 18.dp,
+    iconSize: androidx.compose.ui.unit.Dp = 22.dp,
 ) {
     val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
     Box(
         modifier = Modifier
             .size(48.dp)
@@ -294,21 +295,31 @@ private fun LandscapeTopCircleButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .size(REELS_LANDSCAPE_CONTROL_VISUAL_HEIGHT_DP.dp)
-                .reelsGlassSurface(
-                    active = isActive,
-                    eInk = auroraColors.isEInk,
-                    eInkColor = auroraColors.cardBackground,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
+        if (isEInk) {
+            Box(
+                modifier = Modifier
+                    .size(REELS_LANDSCAPE_CONTROL_VISUAL_HEIGHT_DP.dp)
+                    .reelsGlassSurface(
+                        active = isActive,
+                        eInk = true,
+                        eInkColor = auroraColors.cardBackground,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        } else {
+            ReelsChromeIcon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = tint,
-                modifier = Modifier.size(iconSize),
+                size = iconSize,
+                eInk = false,
             )
         }
     }
@@ -341,16 +352,17 @@ private fun LandscapeTopPill(
     ) {
         Row(
             modifier = Modifier
-                .height(REELS_LANDSCAPE_CONTROL_VISUAL_HEIGHT_DP.dp)
+                .height(32.dp)
                 .reelsGlassSurface(
                     shape = CircleShape,
                     active = active,
                     eInk = auroraColors.isEInk,
                     eInkColor = auroraColors.cardBackground,
+                    subtle = true,
                 )
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             content = content,
         )
     }

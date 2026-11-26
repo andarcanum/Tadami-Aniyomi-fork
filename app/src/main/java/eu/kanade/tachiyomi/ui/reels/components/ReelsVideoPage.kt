@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
@@ -41,6 +42,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -1175,27 +1177,46 @@ fun ReelsVideoPage(
             )
         }
 
-        // 2. Gradient overlays for readable text & controls. The scrim is part of the
-        // chrome: in clean fullscreen / auto-hidden state the video must stay untouched
-        // (the progress bar and fullscreen button carry their own backplates).
+        // 2. Cinema edge scrims for readable bare icons & text. The scrim is part of the
+        // chrome: in clean fullscreen / auto-hidden state the video stays untouched, and
+        // e-ink uses solid high-contrast backplates instead of translucent gradients.
+        val isEInk = AuroraTheme.colors.isEInk
         AnimatedVisibility(
-            visible = effectiveChromeVisible && !isInPictureInPicture,
+            visible = effectiveChromeVisible && !isInPictureInPicture && !isEInk,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0.0f to Color.Black.copy(alpha = 0.45f),
-                            0.2f to Color.Transparent,
-                            0.6f to Color.Transparent,
-                            1.0f to Color.Black.copy(alpha = 0.85f),
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0.0f to Color.Black.copy(alpha = 0.58f),
+                                0.11f to Color.Black.copy(alpha = 0.24f),
+                                0.22f to Color.Transparent,
+                                0.58f to Color.Transparent,
+                                0.78f to Color.Black.copy(alpha = 0.36f),
+                                1.0f to Color.Black.copy(alpha = 0.84f),
+                            ),
                         ),
-                    ),
-            )
+                )
+                if (!isLandscape) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(96.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    0.0f to Color.Transparent,
+                                    1.0f to Color.Black.copy(alpha = 0.28f),
+                                ),
+                            ),
+                    )
+                }
+            }
         }
 
         // 3. Center transport / Play-Pause overlay

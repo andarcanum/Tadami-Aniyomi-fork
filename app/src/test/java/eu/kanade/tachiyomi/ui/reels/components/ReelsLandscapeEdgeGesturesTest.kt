@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
+import androidx.compose.ui.Alignment
 import io.kotest.matchers.floats.shouldBeWithinPercentageOf
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
@@ -174,5 +175,12 @@ class ReelsLandscapeEdgeGesturesTest {
         formatGesturePercent(1f) shouldBe "100%"
         formatGesturePercent(1.4f) shouldBe "100%"
         formatGesturePercent(-0.1f) shouldBe "0%"
+    }
+
+    @Test
+    fun `resolveEdgeGestureHudAlignment mirrors HUD to side opposite active finger`() {
+        // Left-edge drag (Brightness) renders HUD on the right; right-edge drag (Volume) renders on the left.
+        resolveEdgeGestureHudAlignment(ReelsLandscapeEdgeZone.Brightness) shouldBe Alignment.CenterEnd
+        resolveEdgeGestureHudAlignment(ReelsLandscapeEdgeZone.Volume) shouldBe Alignment.CenterStart
     }
 }
