@@ -39,6 +39,7 @@ internal object CrystalSceneGeometry {
         rx: Float = 0f,
         ry: Float = 0f,
         fittedArtwork: Boolean = false,
+        ceremonyBlend: Float = 0f,
     ): CrystalProjectedPoint {
         val point =
             rotate(
@@ -46,11 +47,14 @@ internal object CrystalSceneGeometry {
                 rx,
                 ry,
             )
-        val scale = min(width * 0.275f, height * if (fittedArtwork) 0.33f else 0.115f)
+        val blend = if (fittedArtwork) 0f else ceremonyBlend.coerceIn(0f, 1f)
+        val baseScale = min(width * 0.275f, height * if (fittedArtwork) 0.33f else 0.115f)
+        val scale = baseScale * (1f - blend * 0.07f)
+        val yAnchor = if (fittedArtwork) 0.5f else 0.315f - blend * 0.095f
         val perspective = 2.6f / (2.6f - point.z * 0.55f)
         return CrystalProjectedPoint(
             width / 2 + point.x * scale * perspective,
-            height * (if (fittedArtwork) 0.5f else 0.315f) + point.y * scale * perspective,
+            height * yAnchor + point.y * scale * perspective,
             point.z,
             perspective,
         )

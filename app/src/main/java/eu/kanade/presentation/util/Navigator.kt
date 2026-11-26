@@ -31,6 +31,8 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.ScreenTransitionContent
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
+import eu.kanade.presentation.easteregg.crystal.CrystalCollectionScreen
+import eu.kanade.presentation.easteregg.crystal.CrystalMemorialScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
@@ -128,6 +130,9 @@ fun DefaultNavigatorScreenTransition(
                     // System (or user) has disabled animations altogether.
                     resolvedMode == ResolvedNavigationTransitionMode.NONE ->
                         EnterTransition.None togetherWith ExitTransition.None
+                    // Atmospheric fade + gentle bloom for Crystal Memorial & Crystal's corner.
+                    isForward && targetState.isCrystalScreen() -> crystalScreenEnter()
+                    !isForward && initialState.isCrystalScreen() -> crystalScreenExit()
                     // Dedicated title-screen entrance: Deep Zoom (scale + fade),
                     // only when pushing an entry screen forward and the option
                     // is enabled. Everything else keeps the configured mode.
@@ -160,6 +165,57 @@ fun DefaultNavigatorScreenTransition(
 
 private fun Screen.isTitleScreen(): Boolean =
     this is MangaScreen || this is AnimeScreen || this is NovelScreen
+
+private fun Screen.isCrystalScreen(): Boolean =
+    this is CrystalCollectionScreen || this is CrystalMemorialScreen
+
+private fun AnimatedContentTransitionScope<Screen>.crystalScreenEnter(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = 420,
+            easing = AURORA_EASING,
+        ),
+    ) + scaleIn(
+        initialScale = 0.965f,
+        animationSpec = tween(
+            durationMillis = 420,
+            easing = AURORA_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = AURORA_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
+
+private fun AnimatedContentTransitionScope<Screen>.crystalScreenExit(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = AURORA_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = 320,
+            easing = AURORA_EASING,
+        ),
+    ) + scaleOut(
+        targetScale = 0.97f,
+        animationSpec = tween(
+            durationMillis = 320,
+            easing = AURORA_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
 
 private fun AnimatedContentTransitionScope<Screen>.titleScreenDeepZoom(): ContentTransform {
     val enter = fadeIn(

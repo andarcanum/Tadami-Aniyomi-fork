@@ -3389,6 +3389,12 @@
     <string name="crystal_ceremony_title">The light remains</string>
     <string name="crystal_ceremony_description">The collection is yours forever. Choose which keepsakes to wear.</string>
     <string name="crystal_ceremony_repeat">Your keepsakes are safe. This replay does not award more points.</string>
+    <string name="crystal_ceremony_constellation_sub">Six warm traces of Crystal are with you forever.</string>
+    <string name="crystal_ceremony_constellation_repeat">All keepsakes are safely kept in your Treasury.</string>
+    <string name="crystal_ceremony_tap_hint">Tap any light to look closer</string>
+    <string name="crystal_ceremony_sparks">Kept in your Treasury · %1$d sparks of memory</string>
+    <string name="crystal_ceremony_repeat_note">Your keepsakes are safe · repeat visit</string>
+    <string name="crystal_stay_here">Stay here</string>
     <string name="crystal_to_treasury">Go to Treasury</string>
     <string name="crystal_earned">Added to your Treasury</string>
     <string name="crystal_owned">In your collection</string>

@@ -1,6 +1,9 @@
 package eu.kanade.presentation.easteregg.crystal
 
 import android.view.ViewTreeObserver
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -13,6 +16,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -50,13 +54,13 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -105,16 +109,17 @@ private data class LivingPainterState(val painter: CrystalLivingCornerPainter? =
 @Composable
 private fun rememberLivingPainter(): State<LivingPainterState> {
     val assets = LocalContext.current.applicationContext.assets
-    val result = remember(assets) { mutableStateOf(LivingPainterState()) }
+    val result = remember(assets) {
+        mutableStateOf(
+            CrystalLivingArtwork.cachedOrNull()?.let { LivingPainterState(CrystalLivingCornerPainter(it)) }
+                ?: LivingPainterState(),
+        )
+    }
     LaunchedEffect(assets) {
+        if (result.value.painter != null) return@LaunchedEffect
         try {
             val painter = withContext(Dispatchers.IO) {
-                assets.open(CrystalLivingArtwork.ASSET_NAME).use {
-                    CrystalLivingCornerPainter(
-                        CrystalLivingArtwork
-                            .load(it),
-                    )
-                }
+                CrystalLivingCornerPainter(CrystalLivingArtwork.loadCached(assets))
             }
             result.value = LivingPainterState(painter)
         } catch (cancelled: CancellationException) {
@@ -231,7 +236,6 @@ internal fun CrystalLivingCornerHero(
     val top = navigator?.lastItem == if (labMode) CrystalLivingCornerDebugScreen else CrystalCollectionScreen
     val view = LocalView.current
     var visible by remember { mutableStateOf(false) }
-    var sceneSize by remember { mutableStateOf(IntSize.Zero) }
     var paused by remember { mutableStateOf(false) }
     val loaded by rememberLivingPainter()
     val calendarActive = isCrystalLivingViewActive(policy.resumed, focused, visible, top, occluded)
@@ -252,7 +256,11 @@ internal fun CrystalLivingCornerHero(
     }
     val reduced = reduceMotion || !policy.systemAnimations || appColors.isEInk
     val running = isCrystalLivingMotionActive(calendarActive, paused, reduced, loaded.painter != null)
-    val viewport = remember(sceneSize) { LivingViewport(sceneSize) }
+    val canvasAlpha by animateFloatAsState(
+        targetValue = if (loaded.painter != null) 1f else 0f,
+        animationSpec = if (reduced) snap() else tween(260),
+        label = "livingCornerCanvasAlpha",
+    )
     val haptics = LocalAppHaptics.current
     var manualMessage by remember { mutableStateOf(LivingMessage.REST) }
     var messageUntil by remember { mutableStateOf(0f) }
@@ -334,10 +342,8 @@ internal fun CrystalLivingCornerHero(
     val skyDescription = crystalLivingPhaseLabel(phase) + ", " + crystalLivingWeatherLabel(weather)
     val playLabel = stringResource(AYMR.strings.crystal_living_play)
     val petLabel = stringResource(AYMR.strings.crystal_living_pet)
-    val artScale = with(LocalDensity.current) { sceneSize.width.toDp().value / 390f }
-        .takeIf { it > 0f }?.coerceIn(.75f, 1.2f) ?: 1f
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(CRYSTAL_LIVING_ASPECT_RATIO)
@@ -364,15 +370,18 @@ internal fun CrystalLivingCornerHero(
                         },
                     )
                 }
-                .onSizeChanged { sceneSize = it }
                 .onGloballyPositioned { coordinates ->
                     val bounds = coordinates.boundsInWindow()
                     val clipped = (min(bounds.bottom, view.height.toFloat()) - maxOf(bounds.top, 0f)).coerceAtLeast(0f)
                     visible = clipped > coordinates.size.height * .15f && bounds.width > 0f
                 },
         ) {
+            val sceneSize = IntSize(constraints.maxWidth, constraints.maxHeight)
+            val viewport = remember(sceneSize) { LivingViewport(sceneSize) }
+            val artScale = with(LocalDensity.current) { sceneSize.width.toDp().value / 390f }
+                .takeIf { it > 0f }?.coerceIn(.75f, 1.2f) ?: 1f
             Canvas(
-                Modifier.fillMaxSize().clearAndSetSemantics { }
+                Modifier.fillMaxSize().graphicsLayer { alpha = canvasAlpha }.clearAndSetSemantics { }
                     .pointerInput(engine, running, viewport) {
                         if (!running) return@pointerInput
                         awaitEachGesture {
@@ -696,27 +705,36 @@ internal fun CrystalLivingCornerPreview(palette: CrystalPalette, modifier: Modif
         )
     }
     val loaded by rememberLivingPainter()
+    val previewAlpha by animateFloatAsState(
+        targetValue = if (loaded.painter != null) 1f else 0f,
+        animationSpec = if (colors.isEInk || !policy.systemAnimations) snap() else tween(220),
+        label = "livingCornerPreviewAlpha",
+    )
     val frame = remember { CrystalLivingEngine().restingSnapshot() }
     val view = LocalView.current
-    Canvas(
-        modifier.background(Color(sceneColors.wall)).clearAndSetSemantics { }.onGloballyPositioned {
+    Box(
+        modifier.background(Color(sceneColors.wall)).onGloballyPositioned {
             val bounds = it.boundsInWindow()
             visible = bounds.bottom > 0 && bounds.top < view.height && bounds.width > 0
         },
     ) {
-        loaded.painter?.let { painter ->
-            drawIntoCanvas {
-                painter.draw(
-                    it.nativeCanvas,
-                    size.width,
-                    size.height,
-                    frame,
-                    sceneColors,
-                    phase,
-                    weather,
-                    reduced = true,
-                    preview = true,
-                )
+        Canvas(
+            Modifier.fillMaxSize().graphicsLayer { alpha = previewAlpha }.clearAndSetSemantics { },
+        ) {
+            loaded.painter?.let { painter ->
+                drawIntoCanvas {
+                    painter.draw(
+                        it.nativeCanvas,
+                        size.width,
+                        size.height,
+                        frame,
+                        sceneColors,
+                        phase,
+                        weather,
+                        reduced = true,
+                        preview = true,
+                    )
+                }
             }
         }
     }

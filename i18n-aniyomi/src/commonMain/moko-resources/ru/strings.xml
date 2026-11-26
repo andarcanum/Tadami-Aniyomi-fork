@@ -3428,6 +3428,12 @@
     <string name="crystal_ceremony_title">Свет остаётся</string>
     <string name="crystal_ceremony_description">Коллекция теперь ваша навсегда. Выберите, какие предметы включить в оформление.</string>
     <string name="crystal_ceremony_repeat">Памятные предметы сохранены. Повторный просмотр не начисляет очки.</string>
+    <string name="crystal_ceremony_constellation_sub">Шесть тёплых следов Кристал теперь всегда с вами.</string>
+    <string name="crystal_ceremony_constellation_repeat">Все памятные следы бережно сохранены в вашей Сокровищнице.</string>
+    <string name="crystal_ceremony_tap_hint">Коснитесь любого огонька, чтобы рассмотреть ближе</string>
+    <string name="crystal_ceremony_sparks">Сохранено в Сокровищнице · %1$d искр памяти</string>
+    <string name="crystal_ceremony_repeat_note">Ваша коллекция в безопасности · повторный просмотр</string>
+    <string name="crystal_stay_here">Остаться здесь</string>
     <string name="crystal_to_treasury">Перейти в Сокровищницу</string>
     <string name="crystal_earned">Начислено в Сокровищницу</string>
     <string name="crystal_owned">В коллекции</string>

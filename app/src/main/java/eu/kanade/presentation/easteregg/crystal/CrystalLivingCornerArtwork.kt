@@ -1,5 +1,6 @@
 package eu.kanade.presentation.easteregg.crystal
 
+import android.content.res.AssetManager
 import org.w3c.dom.Element
 import org.xml.sax.SAXException
 import java.io.ByteArrayInputStream
@@ -22,6 +23,20 @@ internal class CrystalLivingArtwork private constructor(
 
     companion object {
         const val ASSET_NAME = "easteregg/crystal/living_corner_v8.svg"
+        private val cacheLock = Any()
+
+        @Volatile
+        private var cachedArtwork: CrystalLivingArtwork? = null
+
+        fun cachedOrNull(): CrystalLivingArtwork? = cachedArtwork
+
+        fun loadCached(assets: AssetManager): CrystalLivingArtwork {
+            cachedArtwork?.let { return it }
+            return synchronized(cacheLock) {
+                cachedArtwork ?: assets.open(ASSET_NAME).use(::load).also { cachedArtwork = it }
+            }
+        }
+
         val supportedTags = setOf(
             "svg", "g", "defs", "title", "desc", "path", "circle", "ellipse", "rect", "polygon",
             "linearGradient", "radialGradient", "stop", "clipPath",

@@ -45,7 +45,7 @@ internal fun rememberCrystalAppearance(): CrystalEquippedAppearance {
     val manager = remember { Injekt.get<CrystalMemorialManager>() }
     val profile = remember { Injekt.get<UserProfilePreferences>() }
     val prefs = manager.appearance
-    val receipt by manager.state.collectAsStateWithLifecycle(initialValue = CrystalMemorialState())
+    val receipt by manager.state.collectAsStateWithLifecycle(initialValue = manager.latestState)
     val frameKey by profile.avatarFrameStyle().collectAsStateWithLifecycle()
     val titleKey by profile.profileTitle().collectAsStateWithLifecycle()
     val badgeKey by profile.homeBadgeStyle().collectAsStateWithLifecycle()

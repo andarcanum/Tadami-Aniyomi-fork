@@ -95,16 +95,18 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         inkBackground: Int = Color.WHITE,
         inkForeground: Int = Color.BLACK,
         fittedArtwork: Boolean = false,
+        ceremonyBlend: Float = 0f,
     ) {
         if (width <= 0f || height <= 0f) return
         val m = width / 404f
         val ambient = if (reduced) 0f else ambientSeconds
+        val blend = if (fittedArtwork) 0f else ceremonyBlend.coerceIn(0f, 1f)
         canvas.drawColor(if (eInk) inkBackground else 0xFF050811.toInt())
-        if (!eInk) drawAtmosphere(canvas, width, height, ambient, pointerX, pointerY, reduced)
+        if (!eInk) drawAtmosphere(canvas, width, height, ambient, pointerX, pointerY, reduced, blend)
         val rx = (if (reduced) 0f else cos(ambient * 0.52f) * 0.07f) - pointerY * 0.18f
         val ry = (if (reduced) 0f else sin(ambient * 0.65f) * 0.11f) + pointerX * 0.22f
         for (i in projected.indices) {
-            projected[i] = CrystalSceneGeometry.projectFace(i, width, height, rx, ry, fittedArtwork)
+            projected[i] = CrystalSceneGeometry.projectFace(i, width, height, rx, ry, fittedArtwork, blend)
         }
         drawConstellation(canvas, elapsedMs, m, reduced, eInk, inkForeground)
 
@@ -256,11 +258,14 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         px: Float,
         py: Float,
         reduced: Boolean,
+        ceremonyBlend: Float,
     ) {
+        val skyShift = ceremonyBlend * 0.12f
+        val haloShift = ceremonyBlend * 0.17f
         fill(0xFF0B101D.toInt())
         paint.shader = RadialGradient(
             w * 0.5f,
-            h * 0.38f,
+            h * (0.38f - skyShift),
             w * 0.85f,
             intArrayOf(0xFF181A2C.toInt(), 0xFF0B101D.toInt(), 0xFF050811.toInt()),
             floatArrayOf(0f, 0.62f, 1f),
@@ -269,7 +274,7 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         canvas.drawRect(0f, 0f, w, h, paint)
         paint.shader = RadialGradient(
             w * 0.5f + px * 12,
-            h * 0.425f - 40 + py * 12,
+            h * (0.425f - haloShift) - 40 + py * 12,
             w * 0.72f,
             intArrayOf(0x29EACEAC, 0x14BAA2D4, 0),
             floatArrayOf(0f, 0.45f, 1f),

@@ -21,6 +21,7 @@ internal fun CrystalMemorialCanvas(
     reduced: Boolean,
     modifier: Modifier = Modifier,
     fittedArtwork: Boolean = false,
+    ceremonyBlend: () -> Float = { 0f },
 ) {
     val renderer = remember(pool) { CrystalMemorialRenderer(pool) }
     val colors = AuroraTheme.colors
@@ -37,6 +38,7 @@ internal fun CrystalMemorialCanvas(
                 colors.background.toArgb(),
                 colors.textPrimary.toArgb(),
                 fittedArtwork,
+                ceremonyBlend(),
             )
             canvas.restoreToCount(saved)
         }

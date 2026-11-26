@@ -3,6 +3,10 @@ package eu.kanade.presentation.easteregg.crystal
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -30,6 +35,8 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.easteregg.crystal.CrystalMemorialManager
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Screen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
@@ -47,7 +54,13 @@ internal class CrystalMemorialScreen(
         val ui by model.state.collectAsStateWithLifecycle()
         val appearance = rememberCrystalAppearance()
         val navigator = LocalNavigator.currentOrThrow
+        val assets = LocalContext.current.applicationContext.assets
         var ceremony by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(assets) {
+            if (CrystalLivingArtwork.cachedOrNull() == null) {
+                runCatching { withContext(Dispatchers.IO) { CrystalLivingArtwork.loadCached(assets) } }
+            }
+        }
         val goBack = {
             if (navigator.lastItem.key == key) navigator.pop()
             Unit
@@ -83,38 +96,55 @@ internal class CrystalMemorialScreen(
                     }
                 }
             } else if (ui.allowed && !ui.stale) {
-                CrystalMemorialScene(
-                    labels, goBack, model::complete, { ceremony = true }, model::complete,
-                    receiptReady = ui.granted, receiptFailed = ui.grantFailed, portrait = portrait, front = front,
-                    reduceMotion = appearance.reduced, soundEnabled = appearance.sound,
-                    onSoundChanged = { manager.appearance.soundEnabled().set(it) },
-                    previewTimeMs = if (ui.resumeCeremony) {
-                        CrystalTimeline.total(
-                            appearance.reduced || colors.isEInk,
+                val showCeremony = ceremony && ui.granted
+                val dismissCeremony = {
+                    val resume = ui.resumeCeremony
+                    model.acknowledgeCeremony {
+                        ceremony = false
+                        if (resume) goBack()
+                    }
+                }
+                Box(Modifier.fillMaxSize()) {
+                    CrystalMemorialScene(
+                        labels,
+                        onBack = { if (showCeremony) dismissCeremony() else goBack() },
+                        onFinale = model::complete,
+                        onContinue = { ceremony = true },
+                        onRetryGrant = model::complete,
+                        receiptReady = ui.granted,
+                        receiptFailed = ui.grantFailed,
+                        portrait = portrait,
+                        front = front,
+                        reduceMotion = appearance.reduced,
+                        soundEnabled = appearance.sound,
+                        onSoundChanged = { manager.appearance.soundEnabled().set(it) },
+                        previewTimeMs = if (ui.resumeCeremony) {
+                            CrystalTimeline.total(
+                                appearance.reduced || colors.isEInk,
+                            )
+                        } else {
+                            null
+                        },
+                        ceremonyOpen = showCeremony,
+                    )
+                    AnimatedVisibility(
+                        visible = showCeremony,
+                        enter = fadeIn(tween(if (appearance.reduced || colors.isEInk) 0 else 520)),
+                        exit = fadeOut(tween(if (appearance.reduced || colors.isEInk) 0 else 360)),
+                    ) {
+                        CrystalRewardCeremony(
+                            firstGrant = ui.firstGrant,
+                            reduced = appearance.reduced,
+                            onDismiss = dismissCeremony,
+                            onTreasury = {
+                                model.acknowledgeCeremony {
+                                    goTreasury()
+                                }
+                            },
+                            palette = appearance.palette,
                         )
-                    } else {
-                        null
-                    },
-                )
-            }
-            if (ceremony && ui.granted) {
-                CrystalRewardCeremony(
-                    ui.firstGrant,
-                    appearance.reduced,
-                    onDismiss = {
-                        val resume = ui.resumeCeremony
-                        model.acknowledgeCeremony {
-                            ceremony = false
-                            if (resume) goBack()
-                        }
-                    },
-                    onTreasury = {
-                        model.acknowledgeCeremony {
-                            ceremony = false
-                            goTreasury()
-                        }
-                    },
-                )
+                    }
+                }
             }
         }
     }

@@ -2,6 +2,7 @@ package eu.kanade.domain.easteregg.crystal
 
 import com.tadami.aurora.BuildConfig
 import eu.kanade.domain.ui.UserProfilePreferences
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import tachiyomi.domain.easteregg.crystal.CrystalCompletionResult
@@ -16,7 +17,11 @@ class CrystalMemorialManager(
     private val profile: UserProfilePreferences,
     private val debugAllowed: Boolean = BuildConfig.DEBUG && BuildConfig.BUILD_TYPE == "debug",
 ) {
-    val state = repository.observeState()
+    @Volatile
+    var latestState: CrystalMemorialState = CrystalMemorialState()
+        private set
+
+    val state = repository.observeState().onEach { latestState = it }
     private val appearanceMutation = Mutex()
 
     suspend fun resetAndPrepareDebug(): CrystalMemorialState = appearanceMutation.withLock {

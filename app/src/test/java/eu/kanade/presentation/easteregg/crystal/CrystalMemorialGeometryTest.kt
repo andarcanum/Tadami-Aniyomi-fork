@@ -128,6 +128,18 @@ class CrystalMemorialGeometryTest {
     }
 
     @Test
+    fun ceremonyBlendLiftsConstellationSmoothlyWithinViewportBounds() {
+        val nose = CrystalSceneData.roles.indexOf("nose")
+        val resting = CrystalSceneGeometry.projectFace(nose, 390f, 844f, ceremonyBlend = 0f)
+        val lifted = CrystalSceneGeometry.projectFace(nose, 390f, 844f, ceremonyBlend = 1f)
+        check(lifted.y < resting.y) { "Constellation should lift upward when 1D ceremony opens" }
+        for (index in 0..81) {
+            val node = CrystalSceneGeometry.projectFace(index, 390f, 844f, 0.2f, -0.25f, ceremonyBlend = 1f)
+            check(node.x in 0f..390f && node.y in 0f..844f && node.perspective.isFinite())
+        }
+    }
+
+    @Test
     fun backgroundAndFirstResumedFrameNeverAdvanceTheScene() {
         val c = CrystalFrameClock()
         c.advance(0L, true)

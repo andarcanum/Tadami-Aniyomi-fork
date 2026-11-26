@@ -1,6 +1,9 @@
 package eu.kanade.presentation.easteregg.crystal
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -113,6 +116,7 @@ internal fun CrystalMemorialScene(
     soundEnabled: Boolean = true,
     onSoundChanged: (Boolean) -> Unit = {},
     previewTimeMs: Float? = null,
+    ceremonyOpen: Boolean = false,
 ) {
     val context = LocalContext.current
     val colors = AuroraTheme.colors
@@ -186,7 +190,13 @@ internal fun CrystalMemorialScene(
     }
     val keyboardInput = LocalInputModeManager.current.inputMode == InputMode.Keyboard
     val showControls =
-        !started || finished || previewTimeMs != null || controlsPeek || touchExploration || keyboardInput
+        !started || finished || previewTimeMs != null || controlsPeek || touchExploration || keyboardInput ||
+            ceremonyOpen
+    val ceremonyBlend by animateFloatAsState(
+        targetValue = if (ceremonyOpen) 1f else 0f,
+        animationSpec = if (reduced) snap() else tween(600, easing = FastOutSlowInEasing),
+        label = "ceremonyBlend",
+    )
     val begin = {
         if (pool != null && !started && previewTimeMs == null && policy.resumed) {
             haptics.tap()
@@ -243,6 +253,7 @@ internal fun CrystalMemorialScene(
                 pointer,
                 reduced,
                 Modifier.fillMaxSize().then(artworkInput),
+                ceremonyBlend = { ceremonyBlend },
             )
         }
         Column(
@@ -390,8 +401,15 @@ internal fun CrystalMemorialScene(
                     }
                     Column(
                         Modifier.align(Alignment.Center).offset(y = sceneHeight * 0.12f)
+                            .graphicsLayer {
+                                alpha = 1f - ceremonyBlend
+                                translationY = -ceremonyBlend * 24.dp.toPx()
+                                val s = 1f - ceremonyBlend * 0.04f
+                                scaleX = s
+                                scaleY = s
+                            }
                             .clearAndSetSemantics {
-                                if (finished) {
+                                if (finished && !ceremonyOpen) {
                                     contentDescription =
                                         labels.recognizes + ". Farewell, Crystal."
                                 }
@@ -454,9 +472,9 @@ internal fun CrystalMemorialScene(
                         )
                     }
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = finished,
+                        visible = finished && !ceremonyOpen,
                         enter = fadeIn(animationSpec = tween(durationMillis = if (reduced) 0 else 820)),
-                        exit = fadeOut(animationSpec = tween(durationMillis = if (reduced) 0 else 220)),
+                        exit = fadeOut(animationSpec = tween(durationMillis = if (reduced) 0 else 280)),
                     ) {
                         if (receiptFailed) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
