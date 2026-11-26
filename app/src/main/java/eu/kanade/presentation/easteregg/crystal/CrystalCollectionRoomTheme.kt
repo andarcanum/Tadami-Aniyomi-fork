@@ -43,9 +43,11 @@ internal fun crystalCollectionRoomColors(
 )
 
 @Composable
-internal fun CrystalCollectionRoomTheme(content: @Composable (CrystalLivingCornerColors) -> Unit) {
+internal fun CrystalCollectionRoomTheme(
+    appearance: CrystalEquippedAppearance = rememberCrystalAppearance(),
+    content: @Composable (CrystalLivingCornerColors) -> Unit,
+) {
     val current = AuroraTheme.colors
-    val appearance = rememberCrystalAppearance()
     val preferences = remember { Injekt.get<CrystalAppearancePreferences>() }
     val seed = remember(preferences, appearance.receipt.isEligible, appearance.receipt.isGranted) {
         if (appearance.receipt.isEligible || appearance.receipt.isGranted) {

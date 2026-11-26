@@ -5,7 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
-import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
@@ -29,6 +29,31 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
     private val mask = requireNotNull(pool.bitmap.copy(Bitmap.Config.ARGB_8888, true))
     private val maskCanvas = Canvas(mask)
     private val destination = RectF()
+    private val shaderMatrix = Matrix()
+    private val skyUnitGradient = RadialGradient(
+        0f,
+        0f,
+        1f,
+        intArrayOf(0xFF181A2C.toInt(), 0xFF0B101D.toInt(), 0xFF050811.toInt()),
+        floatArrayOf(0f, 0.62f, 1f),
+        Shader.TileMode.CLAMP,
+    )
+    private val haloUnitGradient = RadialGradient(
+        0f,
+        0f,
+        1f,
+        intArrayOf(0x29EACEAC, 0x14BAA2D4, 0),
+        floatArrayOf(0f, 0.45f, 1f),
+        Shader.TileMode.CLAMP,
+    )
+    private val veilUnitGradient = RadialGradient(
+        0f,
+        0f,
+        1f,
+        intArrayOf(0x00050811, 0x8A050811.toInt(), 0xEE050811.toInt()),
+        floatArrayOf(0f, 0.58f, 1f),
+        Shader.TileMode.CLAMP,
+    )
     private var released = 0
     private var previousElapsed = -1f
     private val visibility = FloatArray(82)
@@ -285,24 +310,18 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
         val skyShift = ceremonyBlend * 0.12f
         val haloShift = ceremonyBlend * 0.17f
         fill(0xFF0B101D.toInt(), visibility)
-        paint.shader = RadialGradient(
-            w * 0.5f,
-            h * (0.38f - skyShift),
-            w * 0.85f,
-            intArrayOf(0xFF181A2C.toInt(), 0xFF0B101D.toInt(), 0xFF050811.toInt()),
-            floatArrayOf(0f, 0.62f, 1f),
-            Shader.TileMode.CLAMP,
-        )
+        val skyR = (w * 0.85f).coerceAtLeast(1f)
+        shaderMatrix.setScale(skyR, skyR)
+        shaderMatrix.postTranslate(w * 0.5f, h * (0.38f - skyShift))
+        skyUnitGradient.setLocalMatrix(shaderMatrix)
+        paint.shader = skyUnitGradient
         canvas.drawRect(0f, 0f, w, h, paint)
         fill(0xFFFFFFFF.toInt(), visibility)
-        paint.shader = RadialGradient(
-            w * 0.5f + px * 12,
-            h * (0.425f - haloShift) - 40 + py * 12,
-            w * 0.72f,
-            intArrayOf(0x29EACEAC, 0x14BAA2D4, 0),
-            floatArrayOf(0f, 0.45f, 1f),
-            Shader.TileMode.CLAMP,
-        )
+        val haloR = (w * 0.72f).coerceAtLeast(1f)
+        shaderMatrix.setScale(haloR, haloR)
+        shaderMatrix.postTranslate(w * 0.5f + px * 12, h * (0.425f - haloShift) - 40 + py * 12)
+        haloUnitGradient.setLocalMatrix(shaderMatrix)
+        paint.shader = haloUnitGradient
         canvas.drawRect(0f, 0f, w, h, paint)
         paint.shader = null
         for (s in stars) {
@@ -327,14 +346,10 @@ internal class CrystalMemorialRenderer(private val pool: CrystalPortraitPool) {
             val outerOpacity = (1f - veilLift) * 0.78f
             val innerRadius = (width * 0.16f + veilLift * width * 0.82f).coerceAtLeast(1f)
             fill(0xFF050811.toInt(), outerOpacity)
-            paint.shader = RadialGradient(
-                cx,
-                cy,
-                innerRadius,
-                intArrayOf(0x00050811, 0x8A050811.toInt(), 0xEE050811.toInt()),
-                floatArrayOf(0f, 0.58f, 1f),
-                Shader.TileMode.CLAMP,
-            )
+            shaderMatrix.setScale(innerRadius, innerRadius)
+            shaderMatrix.postTranslate(cx, cy)
+            veilUnitGradient.setLocalMatrix(shaderMatrix)
+            paint.shader = veilUnitGradient
             canvas.drawRect(0f, 0f, width, height, paint)
             paint.shader = null
         }

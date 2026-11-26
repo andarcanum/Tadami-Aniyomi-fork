@@ -165,9 +165,20 @@ internal fun CrystalMemorialScene(
     }
     val sound = soundEnabled
     val onFinaleLatest by rememberUpdatedState(onFinale)
-    val audio = remember(context) { CrystalMemorialAudio(context.applicationContext) }
-    DisposableEffect(audio) { onDispose { audio.release() } }
-    LaunchedEffect(policy.resumed, sound) { if (!policy.resumed || !sound) audio.stop() }
+    var audio by remember(context) { mutableStateOf<CrystalMemorialAudio?>(null) }
+    LaunchedEffect(context) {
+        val loadedAudio = withContext(Dispatchers.IO) {
+            runCatching { CrystalMemorialAudio(context.applicationContext) }.getOrNull()
+        }
+        audio = loadedAudio
+    }
+    DisposableEffect(context) {
+        onDispose {
+            audio?.release()
+            audio = null
+        }
+    }
+    LaunchedEffect(policy.resumed, sound, audio) { if (!policy.resumed || !sound) audio?.stop() }
     LaunchedEffect(started, policy.resumed, reduced, previewTimeMs, renderer) {
         if (!started || finished || !policy.resumed || renderer == null || previewTimeMs != null) return@LaunchedEffect
         if (!policy.systemAnimations || colors.isEInk) {
@@ -193,10 +204,10 @@ internal fun CrystalMemorialScene(
     LaunchedEffect(finished, receiptReady, receiptFailed, previewTimeMs) {
         if (finished && !receiptReady && !receiptFailed && previewTimeMs == null) onFinaleLatest()
     }
-    val ambient = rememberCrystalTime(!reduced && previewTimeMs == null)
-    val sensor by rememberCrystalSensor(!reduced)
+    val ambient = rememberCrystalTime(!reduced && previewTimeMs == null, minFrameIntervalNanos = 15_000_000L)
+    val sensorState = rememberCrystalSensor(!reduced)
     var drag by remember { mutableStateOf<Offset?>(null) }
-    val pointer = drag ?: sensor
+    val pointerProvider = { drag ?: sensorState.value }
     val touchExploration = rememberCrystalTouchExploration()
     var controlsRequest by remember { mutableIntStateOf(0) }
     var controlsPeek by remember { mutableStateOf(false) }
@@ -212,7 +223,7 @@ internal fun CrystalMemorialScene(
     val showControls =
         !started || finished || previewTimeMs != null || controlsPeek || touchExploration || keyboardInput ||
             ceremonyOpen
-    val ceremonyBlend by animateFloatAsState(
+    val ceremonyBlendState = animateFloatAsState(
         targetValue = if (ceremonyOpen) 1f else 0f,
         animationSpec = if (reduced) snap() else tween(600, easing = FastOutSlowInEasing),
         label = "ceremonyBlend",
@@ -221,7 +232,7 @@ internal fun CrystalMemorialScene(
         if (renderer != null && !started && previewTimeMs == null && policy.resumed) {
             haptics.tap()
             started = true
-            if (sound) audio.play()
+            if (sound) audio?.play()
         }
     }
     BoxWithConstraints(modifier.fillMaxSize().background(colors.background)) {
@@ -276,10 +287,10 @@ internal fun CrystalMemorialScene(
                 renderer,
                 { previewTimeMs ?: elapsed.floatValue },
                 { if (previewTimeMs == null) ambient.value else 0f },
-                pointer,
+                pointerProvider,
                 reduced,
                 Modifier.fillMaxSize().then(artworkInput),
-                ceremonyBlend = { ceremonyBlend },
+                ceremonyBlend = { ceremonyBlendState.value },
                 entranceReveal = { if (skipEntrance) 1f else entranceProgress.value },
             )
         }
@@ -345,7 +356,7 @@ internal fun CrystalMemorialScene(
                                 renderer,
                                 { previewTimeMs ?: elapsed.floatValue },
                                 { if (previewTimeMs == null) ambient.value else 0f },
-                                pointer,
+                                pointerProvider,
                                 reduced,
                                 artModifier.clip(RoundedCornerShape(24.dp)).clipToBounds().then(artworkInput),
                                 fittedArtwork = true,
@@ -426,9 +437,10 @@ internal fun CrystalMemorialScene(
                     Column(
                         Modifier.align(Alignment.Center).offset(y = sceneHeight * 0.12f)
                             .graphicsLayer {
-                                alpha = 1f - ceremonyBlend
-                                translationY = -ceremonyBlend * 24.dp.toPx()
-                                val s = 1f - ceremonyBlend * 0.04f
+                                val blend = ceremonyBlendState.value
+                                alpha = (1f - blend * 1.75f).coerceIn(0f, 1f)
+                                translationY = -blend * 20.dp.toPx()
+                                val s = 1f - blend * 0.03f
                                 scaleX = s
                                 scaleY = s
                             }

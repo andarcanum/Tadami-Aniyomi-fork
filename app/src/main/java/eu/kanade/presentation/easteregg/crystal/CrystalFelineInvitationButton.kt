@@ -3,12 +3,12 @@ package eu.kanade.presentation.easteregg.crystal
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -132,15 +132,14 @@ internal fun CrystalFelineInvitationButton(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(Modifier.size(34.dp).clearAndSetSemantics {}) {
-            val r = size.minDimension * 0.46f
-            val center = Offset(size.width / 2f, size.height / 2f)
-            if (colors.isEInk) {
-                drawCircle(colors.surface, r, center)
-                drawCircle(foreground, r, center, style = Stroke(1.dp.toPx()))
-            } else {
-                drawCircle(
-                    Brush.radialGradient(
+        Box(
+            Modifier
+                .size(34.dp)
+                .clearAndSetSemantics {}
+                .drawWithCache {
+                    val r = size.minDimension * 0.46f
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val haloBrush = Brush.radialGradient(
                         listOf(
                             gold.copy(alpha = 0.28f),
                             rose.copy(alpha = 0.14f),
@@ -148,44 +147,45 @@ internal fun CrystalFelineInvitationButton(
                         ),
                         center = center,
                         radius = r * 1.18f,
-                    ),
-                    radius = r * 1.18f,
-                    center = center,
-                )
-                drawCircle(
-                    Brush.radialGradient(
+                    )
+                    val wellBrush = Brush.radialGradient(
                         listOf(Color(0xFF2E263D), Color(0xFF171B2A)),
                         center = center,
                         radius = r,
-                    ),
-                    radius = r,
-                    center = center,
-                )
-                drawCircle(
-                    Brush.linearGradient(listOf(Color(0xFFFFF8EA), gold, rose)),
-                    radius = r,
-                    center = center,
-                    style = Stroke(1.15.dp.toPx()),
-                )
-            }
-            drawIntoCanvas { composeCanvas ->
-                val native = composeCanvas.nativeCanvas
-                val saved = native.save()
-                native.scale(density, density)
-                val iconDp = 22f
-                val offsetDp = (34f - iconDp) / 2f
-                jewelPainter.paw(
-                    native,
-                    offsetDp,
-                    offsetDp + 0.5f,
-                    iconDp,
-                    palette,
-                    1f,
-                    if (colors.isEInk) foreground.toArgb() else null,
-                )
-                native.restoreToCount(saved)
-            }
-        }
+                    )
+                    val rimBrush = Brush.linearGradient(listOf(Color(0xFFFFF8EA), gold, rose))
+                    val rimStroke = Stroke(1.15.dp.toPx())
+                    val eInkStroke = Stroke(1.dp.toPx())
+                    val inkArgb = if (colors.isEInk) foreground.toArgb() else null
+                    onDrawBehind {
+                        if (colors.isEInk) {
+                            drawCircle(colors.surface, r, center)
+                            drawCircle(foreground, r, center, style = eInkStroke)
+                        } else {
+                            drawCircle(haloBrush, radius = r * 1.18f, center = center)
+                            drawCircle(wellBrush, radius = r, center = center)
+                            drawCircle(rimBrush, radius = r, center = center, style = rimStroke)
+                        }
+                        drawIntoCanvas { composeCanvas ->
+                            val native = composeCanvas.nativeCanvas
+                            val saved = native.save()
+                            native.scale(density, density)
+                            val iconDp = 22f
+                            val offsetDp = (34f - iconDp) / 2f
+                            jewelPainter.paw(
+                                native,
+                                offsetDp,
+                                offsetDp + 0.5f,
+                                iconDp,
+                                palette,
+                                1f,
+                                inkArgb,
+                            )
+                            native.restoreToCount(saved)
+                        }
+                    }
+                },
+        )
         Text(
             label,
             Modifier.weight(1f),
@@ -196,49 +196,45 @@ internal fun CrystalFelineInvitationButton(
             letterSpacing = 0.3.sp,
             textAlign = TextAlign.Center,
         )
-        Canvas(Modifier.size(28.dp).clearAndSetSemantics {}) {
-            val center = Offset(size.width / 2f, size.height / 2f)
-            val r = size.minDimension * 0.44f
-            if (!colors.isEInk) {
-                drawCircle(
-                    gold.copy(alpha = 0.12f),
-                    radius = r,
-                    center = center,
-                )
-                drawCircle(
-                    gold.copy(alpha = 0.32f),
-                    radius = r,
-                    center = center,
-                    style = Stroke(0.9.dp.toPx()),
-                )
-            }
-            val chevron = Path().apply {
-                moveTo(center.x - 2.2.dp.toPx(), center.y - 4.2.dp.toPx())
-                lineTo(center.x + 2.4.dp.toPx(), center.y)
-                lineTo(center.x - 2.2.dp.toPx(), center.y + 4.2.dp.toPx())
-            }
-            drawPath(
-                chevron,
-                color = if (colors.isEInk) foreground else gold,
-                style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
-            )
-            if (!colors.isEInk) {
-                val sparkX = center.x - 5.2.dp.toPx()
-                val sparkY = center.y - 4.2.dp.toPx()
-                val spark = Path().apply {
-                    moveTo(sparkX, sparkY - 2.2.dp.toPx())
-                    lineTo(sparkX + 0.7.dp.toPx(), sparkY - 0.7.dp.toPx())
-                    lineTo(sparkX + 2.2.dp.toPx(), sparkY)
-                    lineTo(sparkX + 0.7.dp.toPx(), sparkY + 0.7.dp.toPx())
-                    lineTo(sparkX, sparkY + 2.2.dp.toPx())
-                    lineTo(sparkX - 0.7.dp.toPx(), sparkY + 0.7.dp.toPx())
-                    lineTo(sparkX - 2.2.dp.toPx(), sparkY)
-                    lineTo(sparkX - 0.7.dp.toPx(), sparkY - 0.7.dp.toPx())
-                    close()
-                }
-                drawPath(spark, Color(0xFFFFF8EA).copy(alpha = 0.85f))
-            }
-        }
+        Box(
+            Modifier
+                .size(28.dp)
+                .clearAndSetSemantics {}
+                .drawWithCache {
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val r = size.minDimension * 0.44f
+                    val ringStroke = Stroke(0.9.dp.toPx())
+                    val chevron = Path().apply {
+                        moveTo(center.x - 2.2.dp.toPx(), center.y - 4.2.dp.toPx())
+                        lineTo(center.x + 2.4.dp.toPx(), center.y)
+                        lineTo(center.x - 2.2.dp.toPx(), center.y + 4.2.dp.toPx())
+                    }
+                    val chevronStroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    val sparkX = center.x - 5.2.dp.toPx()
+                    val sparkY = center.y - 4.2.dp.toPx()
+                    val spark = Path().apply {
+                        moveTo(sparkX, sparkY - 2.2.dp.toPx())
+                        lineTo(sparkX + 0.7.dp.toPx(), sparkY - 0.7.dp.toPx())
+                        lineTo(sparkX + 2.2.dp.toPx(), sparkY)
+                        lineTo(sparkX + 0.7.dp.toPx(), sparkY + 0.7.dp.toPx())
+                        lineTo(sparkX, sparkY + 2.2.dp.toPx())
+                        lineTo(sparkX - 0.7.dp.toPx(), sparkY + 0.7.dp.toPx())
+                        lineTo(sparkX - 2.2.dp.toPx(), sparkY)
+                        lineTo(sparkX - 0.7.dp.toPx(), sparkY - 0.7.dp.toPx())
+                        close()
+                    }
+                    onDrawBehind {
+                        if (!colors.isEInk) {
+                            drawCircle(gold.copy(alpha = 0.12f), radius = r, center = center)
+                            drawCircle(gold.copy(alpha = 0.32f), radius = r, center = center, style = ringStroke)
+                        }
+                        drawPath(chevron, color = if (colors.isEInk) foreground else gold, style = chevronStroke)
+                        if (!colors.isEInk) {
+                            drawPath(spark, Color(0xFFFFF8EA).copy(alpha = 0.85f))
+                        }
+                    }
+                },
+        )
     }
 }
 

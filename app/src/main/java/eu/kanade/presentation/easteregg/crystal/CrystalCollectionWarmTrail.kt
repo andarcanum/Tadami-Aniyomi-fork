@@ -61,8 +61,16 @@ internal fun CrystalCollectionWarmTrail(reduced: Boolean, occluded: Boolean, mod
     LaunchedEffect(running) {
         clock.pause()
         if (running) {
+            var lastEmitNanos = 0L
             try {
-                while (isActive) withFrameNanos { seconds = clock.advance(it, true) / 1000f }
+                while (isActive) {
+                    withFrameNanos { now ->
+                        // 18-second paw fade looks identical at ~30fps while cutting draw work by 75%.
+                        if (lastEmitNanos != 0L && now - lastEmitNanos < 32_000_000L) return@withFrameNanos
+                        lastEmitNanos = now
+                        seconds = clock.advance(now, true) / 1000f
+                    }
+                }
             } finally {
                 clock.pause()
             }

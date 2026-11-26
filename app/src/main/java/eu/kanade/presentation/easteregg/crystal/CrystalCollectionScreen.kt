@@ -29,7 +29,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,12 +40,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -56,6 +60,7 @@ import eu.kanade.presentation.more.settings.screen.SettingsTreasuryScreen
 import eu.kanade.presentation.more.settings.screen.resolveSearchableSettingsBackPress
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.util.LocalBackPress
+import kotlinx.coroutines.delay
 import tachiyomi.domain.easteregg.crystal.CrystalMemorialState
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -98,7 +103,12 @@ internal object CrystalCollectionScreen : SearchableSettings {
         val animateIris = playIris && !appearance.reduced && !isEInk && policy.systemAnimations
         val iris = remember(animateIris) { Animatable(if (animateIris) 0f else 1f) }
         val irisSettled by remember(iris) { derivedStateOf { iris.value >= 0.999f } }
-        LaunchedEffect(animateIris) {
+        // Even when opened from Treasury (no iris), hold the pre-rendered resting room Bitmap during the
+        // 480ms Navigator entrance so 462 SVG paths never tessellate mid-transition.
+        var navEntranceSettled by remember(animateIris, isEInk, appearance.reduced) {
+            mutableStateOf(animateIris || isEInk || appearance.reduced || !policy.systemAnimations)
+        }
+        LaunchedEffect(animateIris, navEntranceSettled) {
             if (animateIris) {
                 // Let the first frame lay out before starting the iris clock so frame 0 is never skipped.
                 withFrameNanos { }
@@ -109,13 +119,17 @@ internal object CrystalCollectionScreen : SearchableSettings {
                         easing = CrystalLunarIris.EASING,
                     ),
                 )
+            } else if (!navEntranceSettled) {
+                delay(520L)
+                navEntranceSettled = true
             }
         }
+        val ambientPaused = !irisSettled || !navEntranceSettled
         val irisPath = remember { Path() }
         val goldColor = Color(appearance.palette.gold)
         val roseColor = Color(appearance.palette.rose)
         BackHandler(onBack = back)
-        CrystalCollectionRoomTheme { scene ->
+        CrystalCollectionRoomTheme(appearance = appearance) { scene ->
             val topWallBackdropHeight = with(androidx.compose.ui.platform.LocalDensity.current) {
                 (220.dp.toPx() - scroll.value).coerceAtLeast(0f).toDp()
             }
@@ -135,7 +149,6 @@ internal object CrystalCollectionScreen : SearchableSettings {
                             val maxRadius = CrystalLunarIris.maxCornerRadius(cx, cy, size.width, size.height)
                             val radius = p * maxRadius
                             if (radius > 0.5f) {
-                                val roomScale = CrystalLunarIris.roomScale(p)
                                 irisPath.reset()
                                 irisPath.addOval(
                                     Rect(
@@ -146,9 +159,7 @@ internal object CrystalCollectionScreen : SearchableSettings {
                                     ),
                                 )
                                 clipPath(irisPath) {
-                                    scale(roomScale, roomScale, pivot = Offset(cx, cy)) {
-                                        this@drawWithContent.drawContent()
-                                    }
+                                    this@drawWithContent.drawContent()
                                 }
                             }
                             drawCatFaceLunarIrisOverlay(
@@ -160,42 +171,68 @@ internal object CrystalCollectionScreen : SearchableSettings {
                                 rose = roseColor,
                             )
                         }
-                    }
-                    .background(Color(scene.floor)),
+                    },
             ) {
-                if (topWallBackdropHeight > 0.dp) {
-                    Box(
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .height(topWallBackdropHeight)
-                            .background(Color(scene.wall)),
-                    )
-                }
-                CrystalCollectionSection(
-                    modifier = Modifier.fillMaxSize().navigationBarsPadding().verticalScroll(scroll),
-                    ambientPaused = !irisSettled,
-                )
-                Row(
-                    Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().height(60.dp)
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Surface(
-                        color = Color(scene.wall).copy(alpha = .18f),
-                        shape = CircleShape,
-                        border = BorderStroke(1.dp, Color(scene.trim).copy(alpha = .35f)),
-                    ) {
-                        IconButton(onClick = back) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                stringResource(AYMR.strings.crystal_back),
-                                tint = Color(scene.heading),
-                            )
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val p = iris.value
+                            if (p < 0.999f) {
+                                compositingStrategy = CompositingStrategy.Offscreen
+                                val (cx, cy) = CrystalSceneGeometry.constellationIrisCenter(
+                                    width = size.width,
+                                    height = size.height,
+                                    ceremonyBlend = 1f,
+                                )
+                                val roomScale = CrystalLunarIris.roomScale(p)
+                                scaleX = roomScale
+                                scaleY = roomScale
+                                transformOrigin = TransformOrigin(
+                                    pivotFractionX = if (size.width > 0f) cx / size.width else 0.5f,
+                                    pivotFractionY = if (size.height > 0f) cy / size.height else 0.24f,
+                                )
+                            } else {
+                                compositingStrategy = CompositingStrategy.Auto
+                            }
                         }
+                        .background(Color(scene.floor)),
+                ) {
+                    if (topWallBackdropHeight > 0.dp) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .height(topWallBackdropHeight)
+                                .background(Color(scene.wall)),
+                        )
                     }
-                    Spacer(Modifier.weight(1f))
-                    AppBarAction()
+                    CrystalCollectionSection(
+                        modifier = Modifier.fillMaxSize().navigationBarsPadding().verticalScroll(scroll),
+                        ambientPaused = ambientPaused,
+                        appearance = appearance,
+                    )
+                    Row(
+                        Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().height(60.dp)
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            color = Color(scene.wall).copy(alpha = .18f),
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, Color(scene.trim).copy(alpha = .35f)),
+                        ) {
+                            IconButton(onClick = back) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    stringResource(AYMR.strings.crystal_back),
+                                    tint = Color(scene.heading),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        AppBarAction()
+                    }
                 }
             }
         }

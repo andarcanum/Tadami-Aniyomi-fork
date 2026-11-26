@@ -79,8 +79,8 @@ import uy.kohesive.injekt.api.get
 internal fun CrystalCollectionSection(
     modifier: Modifier = Modifier,
     ambientPaused: Boolean = false,
+    appearance: CrystalEquippedAppearance = rememberCrystalAppearance(),
 ) {
-    val appearance = rememberCrystalAppearance()
     if (!appearance.receipt.isEligible && !appearance.receipt.isGranted) return
     val colors = AuroraTheme.colors
     val navigator = LocalNavigator.currentOrThrow
@@ -152,7 +152,7 @@ internal fun CrystalCollectionSection(
                             ) { selected = CrystalItem.Badge }
                         }
                     }
-                    CrystalRoomTitleCard(appearance) { selected = CrystalItem.Title }
+                    CrystalRoomTitleCard(appearance, ambientPaused = ambientPaused) { selected = CrystalItem.Title }
                     CrystalPaletteCard(appearance) { selected = CrystalItem.Silk }
                     val footerShape = RoundedCornerShape(20.dp)
                     val footerAccent = if (colors.isEInk) colors.textPrimary else Color(appearance.palette.gold)
@@ -430,7 +430,11 @@ private fun CrystalInventoryCard(
 }
 
 @Composable
-private fun CrystalRoomTitleCard(appearance: CrystalEquippedAppearance, onClick: () -> Unit) {
+private fun CrystalRoomTitleCard(
+    appearance: CrystalEquippedAppearance,
+    ambientPaused: Boolean = false,
+    onClick: () -> Unit,
+) {
     val material = crystalRoomMaterial(CrystalItem.Title, appearance.palette)
     val title = crystalItemTitle(CrystalItem.Title)
     val shape = RoundedCornerShape(19.dp, 5.dp, 19.dp, 19.dp)
@@ -459,7 +463,7 @@ private fun CrystalRoomTitleCard(appearance: CrystalEquippedAppearance, onClick:
                     lineHeight = 16.sp,
                 )
             }
-            CrystalTitlePill(appearance.palette, !appearance.reduced)
+            CrystalTitlePill(appearance.palette, !appearance.reduced && !ambientPaused)
         }
     }
 }

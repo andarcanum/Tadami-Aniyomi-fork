@@ -11,6 +11,7 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import androidx.core.graphics.PathParser
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -22,10 +23,9 @@ import kotlin.math.sqrt
 /** Shared native geometry for the relic, inventory icons and equipped profile jewellery. */
 internal class CrystalJewelPainter {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val path = Path()
     private val rect = RectF()
-    private val innerMask = Path()
-    private val paths = mutableMapOf<String, Path>()
+    private val avatarInnerMask = Path().apply { addCircle(64f, 70f, 41.4f, Path.Direction.CW) }
+    private val cameoInnerMask = Path().apply { addCircle(40f, 40f, 39.5f, Path.Direction.CW) }
     private var palette = CrystalPalette.Moon
     private var ink: Int? = null
     private val shaderMatrix = Matrix()
@@ -477,9 +477,7 @@ internal class CrystalJewelPainter {
 
         // 1. Exterior elements (orbital threads & radially aligned ears) clipped strictly outside the photo circle
         val extSave = canvas.save()
-        innerMask.reset()
-        innerMask.addCircle(64f, 70f, 41.4f, Path.Direction.CW)
-        canvas.clipOutPath(innerMask)
+        canvas.clipOutPath(avatarInnerMask)
 
         if (variant == CrystalFrameVariant.Thread) {
             for (tilt in listOf(-24f, 24f)) {
@@ -795,9 +793,7 @@ internal class CrystalJewelPainter {
         canvas.translate((width - 80f * scale) / 2f, (height - 80f * scale) / 2f)
         canvas.scale(scale, scale)
 
-        innerMask.reset()
-        innerMask.addCircle(40f, 40f, 39.5f, Path.Direction.CW)
-        canvas.clipPath(innerMask)
+        canvas.clipPath(cameoInnerMask)
 
         if (ink == null) {
             fill(0xFF172834.toInt())
@@ -1031,7 +1027,9 @@ internal class CrystalJewelPainter {
         paint.strokeCap =
             Paint.Cap.ROUND
     }
-    private fun svg(data: String) = paths.getOrPut(data) { requireNotNull(PathParser.createPathFromPathData(data)) }
+    private fun svg(
+        data: String,
+    ) = sharedPaths.getOrPut(data) { requireNotNull(PathParser.createPathFromPathData(data)) }
     private fun withAlpha(color: Int, a: Float) = (color and 0x00FFFFFF) or ((a.coerceIn(0f, 1f) * 255).toInt() shl 24)
     private fun blend(a: Int, b: Int, t: Float) = Color.rgb(
         (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
@@ -1042,6 +1040,27 @@ internal class CrystalJewelPainter {
             ).toInt(),
     )
     companion object {
+        private val sharedPaths = ConcurrentHashMap<String, Path>()
+
+        /** Pre-parse common jewel SVG paths off the UI thread before the 1D ceremony mounts. */
+        fun prewarmStaticPaths() {
+            val common = arrayOf(
+                "M32 29.5 C24 23.5,18.5 26.5,14.8 34.2 C11.2 41.8,13.5 50.5,22.2 51.5 C26.2 52,28.5 47.8,32 47.8 C35.5 47.8,37.8 52,41.8 51.5 C50.5 50.5,52.8 41.8,49.2 34.2 C45.5 26.5,40 23.5,32 29.5Z",
+                "M23 33.5 C26 30.2,31 30.2,35 32.5",
+                "M24 33.5 C28 30.2,36 30.2,40 33.5 M23 13.5 Q25.5 11.5,27.5 13.5 M36.5 13.5 Q38.5 11.5,41 13.5",
+                "M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z",
+                "M49.8 31.8 C48.8 20.4,54.8 14.6,64.0 14.6 C73.2 14.6,79.2 20.4,78.2 31.8 Z",
+                "M53.6 31.2 C53.0 22.4,57.4 18.0,64.0 18.0 C70.6 18.0,75.0 22.4,74.4 31.2 Z",
+                "M64 104.2 L66.1 109.8 L71.7 111.8 L66.1 113.8 L64 119.4 L61.9 113.8 L56.3 111.8 L61.9 109.8 Z",
+                "M40 16 L43.5 34.5 L62 40 L43.5 45.5 L40 64 L36.5 45.5 L18 40 L36.5 34.5Z",
+                ROSETTE_16_PATH,
+                GUILLOCHE_RAYS_PATH,
+            )
+            for (data in common) {
+                sharedPaths.getOrPut(data) { requireNotNull(PathParser.createPathFromPathData(data)) }
+            }
+        }
+
         private val RAD_TO_DEGREES = 180f / PI.toFloat()
         private const val ROSETTE_16_PATH =
             "M71.2 35.8 Q75.6 42.0 71.2 48.2 L71.2 48.2 Q72.9 55.6 66.4 59.7 L66.4 59.7 Q65.2 67.2 57.7 68.4 L57.7 68.4 Q53.6 74.9 46.2 73.2 L46.2 73.2 Q40.0 77.6 33.8 73.2 L33.8 73.2 Q26.4 74.9 22.3 68.4 L22.3 68.4 Q14.8 67.2 13.6 59.7 L13.6 59.7 Q7.1 55.6 8.8 48.2 L8.8 48.2 Q4.4 42.0 8.8 35.8 L8.8 35.8 Q7.1 28.4 13.6 24.3 L13.6 24.3 Q14.8 16.8 22.3 15.6 L22.3 15.6 Q26.4 9.1 33.8 10.8 L33.8 10.8 Q40.0 6.4 46.2 10.8 L46.2 10.8 Q53.6 9.1 57.7 15.6 L57.7 15.6 Q65.2 16.8 66.4 24.3 L66.4 24.3 Q72.9 28.4 71.2 35.8 Z"

@@ -1,5 +1,7 @@
 package eu.kanade.presentation.easteregg.crystal
 
+import android.graphics.Paint
+import android.graphics.RectF
 import android.view.ViewTreeObserver
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -242,6 +244,7 @@ internal fun CrystalLivingCornerHero(
     var visible by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     val loaded by rememberLivingPainter(useHeroCache = !labMode)
+    val assets = LocalContext.current.applicationContext.assets
     val calendarActive = isCrystalLivingViewActive(policy.resumed, focused, visible, top, occluded)
     val liveMoment by rememberLivingMoment(calendarActive)
     val moment = forcedMoment ?: liveMoment
@@ -258,10 +261,39 @@ internal fun CrystalLivingCornerHero(
             appColors.eInkProfile == EInkProfile.COLOR,
         )
     }
+    var heroSnapshot by remember(sceneColors, phase, weather, palette, labMode) {
+        mutableStateOf(
+            if (labMode) {
+                null
+            } else {
+                CrystalLivingCornerPainter.cachedHeroSnapshotOrNull(sceneColors, phase, weather, palette)
+            },
+        )
+    }
+    LaunchedEffect(assets, sceneColors, phase, weather, palette, labMode) {
+        if (!labMode && heroSnapshot == null) {
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    val widthPx = view.width.takeIf { it > 0 } ?: 1080
+                    CrystalLivingCornerPainter.prewarmHeroSnapshot(
+                        assets = assets,
+                        widthPx = widthPx,
+                        colors = sceneColors,
+                        phase = phase,
+                        weather = weather,
+                        palette = palette,
+                        seedHash = seed.hashCode(),
+                    )
+                }
+            }.getOrNull()?.let { heroSnapshot = it }
+        }
+    }
+    val snapshotPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG) }
+    val snapshotDst = remember { RectF() }
     val reduced = reduceMotion || !policy.systemAnimations || appColors.isEInk
     val running = isCrystalLivingMotionActive(calendarActive, paused, reduced, loaded.painter != null)
     val canvasAlpha by animateFloatAsState(
-        targetValue = if (loaded.painter != null) 1f else 0f,
+        targetValue = if (loaded.painter != null || heroSnapshot != null) 1f else 0f,
         animationSpec = if (reduced) snap() else tween(260),
         label = "livingCornerCanvasAlpha",
     )
@@ -310,8 +342,9 @@ internal fun CrystalLivingCornerHero(
             try {
                 while (isActive) {
                     withFrameNanos { now ->
-                        // Cap ambient room redraws to ~60fps so 120Hz panels don't double draw-command load.
-                        if (lastRenderNanos != 0L && now - lastRenderNanos < 15_000_000L) return@withFrameNanos
+                        // Run cozy idle breathing at ~36fps and interactive play/drag at ~60fps.
+                        val minInterval = if (frame.value.dragging || frame.value.playing) 15_000_000L else 27_000_000L
+                        if (lastRenderNanos != 0L && now - lastRenderNanos < minInterval) return@withFrameNanos
                         lastRenderNanos = now
                         val milliseconds = clock.advance(now, true)
                         val delta = previous?.let { (milliseconds - it).coerceAtLeast(0f) / 1000f } ?: 0f
@@ -449,20 +482,29 @@ internal fun CrystalLivingCornerHero(
                         }
                     },
             ) {
-                val currentFrame = if (reduced) engine.restingSnapshot() else frame.value
-                loaded.painter?.let { painter ->
+                val snapshot = heroSnapshot
+                if (snapshot != null && !snapshot.isRecycled && (occluded || !running)) {
+                    // Single GPU texture blit during screen transitions / paused state (0 SVG tessellation).
                     drawIntoCanvas {
-                        painter.draw(
-                            it.nativeCanvas,
-                            this.size.width,
-                            this.size.height,
-                            currentFrame,
-                            sceneColors,
-                            phase,
-                            weather,
-                            reduced,
-                            palette = palette,
-                        )
+                        snapshotDst.set(0f, 0f, this.size.width, this.size.height)
+                        it.nativeCanvas.drawBitmap(snapshot, null, snapshotDst, snapshotPaint)
+                    }
+                } else {
+                    val currentFrame = if (reduced) engine.restingSnapshot() else frame.value
+                    loaded.painter?.let { painter ->
+                        drawIntoCanvas {
+                            painter.draw(
+                                it.nativeCanvas,
+                                this.size.width,
+                                this.size.height,
+                                currentFrame,
+                                sceneColors,
+                                phase,
+                                weather,
+                                reduced,
+                                palette = palette,
+                            )
+                        }
                     }
                 }
             }
@@ -713,14 +755,51 @@ internal fun CrystalLivingCornerPreview(palette: CrystalPalette, modifier: Modif
             colors.eInkProfile == EInkProfile.COLOR,
         )
     }
-    val loaded by rememberLivingPainter(useHeroCache = false)
+    val assets = LocalContext.current.applicationContext.assets
+    val view = LocalView.current
+    var previewBitmap by remember(sceneColors, phase, weather, palette) {
+        mutableStateOf(CrystalLivingCornerPainter.cachedPreviewSnapshotOrNull(sceneColors, phase, weather, palette))
+    }
+    LaunchedEffect(assets, sceneColors, phase, weather, palette) {
+        val widthPx = view.width.takeIf { it > 0 } ?: 1080
+        if (previewBitmap == null) {
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    CrystalLivingCornerPainter.loadOrRenderPreviewSnapshot(
+                        assets = assets,
+                        widthPx = widthPx,
+                        colors = sceneColors,
+                        phase = phase,
+                        weather = weather,
+                        palette = palette,
+                    )
+                }
+            }.getOrNull()?.let { previewBitmap = it }
+        }
+        // Pre-compile the full-room hero painter AND pre-render its resting Bitmap off the UI thread
+        // while viewing Treasury so tapping into Crystal's Corner opens with 0ms SVG freeze.
+        runCatching {
+            withContext(Dispatchers.Default) {
+                CrystalLivingCornerPainter.loadCachedHero(assets, initialColors = sceneColors)
+                CrystalLivingCornerPainter.prewarmHeroSnapshot(
+                    assets = assets,
+                    widthPx = widthPx,
+                    colors = sceneColors,
+                    phase = phase,
+                    weather = weather,
+                    palette = palette,
+                    seedHash = seed.hashCode(),
+                )
+            }
+        }
+    }
     val previewAlpha by animateFloatAsState(
-        targetValue = if (loaded.painter != null) 1f else 0f,
+        targetValue = if (previewBitmap != null) 1f else 0f,
         animationSpec = if (colors.isEInk || !policy.systemAnimations) snap() else tween(220),
         label = "livingCornerPreviewAlpha",
     )
-    val frame = remember { CrystalLivingEngine().restingSnapshot() }
-    val view = LocalView.current
+    val previewPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG) }
+    val previewDst = remember { RectF() }
     Box(
         modifier.background(Color(sceneColors.wall)).onGloballyPositioned {
             val bounds = it.boundsInWindow()
@@ -730,20 +809,11 @@ internal fun CrystalLivingCornerPreview(palette: CrystalPalette, modifier: Modif
         Canvas(
             Modifier.fillMaxSize().graphicsLayer { alpha = previewAlpha }.clearAndSetSemantics { },
         ) {
-            loaded.painter?.let { painter ->
+            val bmp = previewBitmap
+            if (bmp != null && !bmp.isRecycled) {
                 drawIntoCanvas {
-                    painter.draw(
-                        it.nativeCanvas,
-                        size.width,
-                        size.height,
-                        frame,
-                        sceneColors,
-                        phase,
-                        weather,
-                        reduced = true,
-                        preview = true,
-                        palette = palette,
-                    )
+                    previewDst.set(0f, 0f, size.width, size.height)
+                    it.nativeCanvas.drawBitmap(bmp, null, previewDst, previewPaint)
                 }
             }
         }

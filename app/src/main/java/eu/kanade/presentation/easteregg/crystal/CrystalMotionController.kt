@@ -41,15 +41,30 @@ internal fun rememberCrystalMotionPolicy(): CrystalMotionPolicy {
 
 /** One active frame source per caller. Background intervals are never counted. */
 @Composable
-internal fun rememberCrystalTime(running: Boolean, resetKey: Any? = Unit): State<Float> {
+internal fun rememberCrystalTime(
+    running: Boolean,
+    resetKey: Any? = Unit,
+    minFrameIntervalNanos: Long = 15_000_000L,
+): State<Float> {
     val policy = rememberCrystalMotionPolicy()
     val clock = remember(resetKey) { CrystalFrameClock() }
     val time = remember(resetKey) { mutableFloatStateOf(0f) }
-    LaunchedEffect(running, policy.resumed, clock) {
+    LaunchedEffect(running, policy.resumed, clock, minFrameIntervalNanos) {
         clock.pause()
         if (running && policy.resumed) {
+            var lastEmitNanos = 0L
             try {
-                while (isActive) withFrameNanos { now -> time.floatValue = clock.advance(now, true) }
+                while (isActive) {
+                    withFrameNanos { now ->
+                        if (minFrameIntervalNanos > 0L && lastEmitNanos != 0L &&
+                            now - lastEmitNanos < minFrameIntervalNanos
+                        ) {
+                            return@withFrameNanos
+                        }
+                        lastEmitNanos = now
+                        time.floatValue = clock.advance(now, true)
+                    }
+                }
             } finally {
                 clock.pause()
             }

@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -66,30 +65,56 @@ internal fun CrystalTitlePill(palette: CrystalPalette, animate: Boolean, modifie
     val colors = AuroraTheme.colors
     val policy = rememberCrystalMotionPolicy()
     val moving = animate && policy.systemAnimations && !colors.isEInk
-    val time = rememberCrystalTime(moving)
-    val sec = time.value / 1000f
+    val time = rememberCrystalTime(moving, minFrameIntervalNanos = 32_000_000L)
 
     val gold = if (colors.isDark) Color(palette.gold) else lerp(Color(palette.gold), Color(0xFF6B4716), 0.62f)
     val rose = if (colors.isDark) Color(palette.rose) else lerp(Color(palette.rose), Color(0xFF7B385C), 0.52f)
-    val shimmerHi = if (colors.isDark) Color.White else Color(0xFFFFF7E8)
+    val shimmerHi = if (colors.isDark) Color(0xFFFFF8EC) else Color(0xFFFFF7E8)
 
-    val phase = (time.value % 5600f) / 5600f
-    val sweep = ((phase - 0.52f) / 0.48f).coerceIn(0f, 1f)
-    val density = LocalDensity.current.density
-    val start = (220f - sweep * 420f) * density
-    val textBrush = if (colors.isEInk) {
-        null
-    } else {
-        Brush.linearGradient(
-            listOf(gold, gold, shimmerHi, rose, gold),
-            start = Offset(start, 0f),
-            end = Offset(start + 170f * density, 40f * density),
+    val textStyle = remember(colors.isEInk, colors.textPrimary, gold, rose, shimmerHi) {
+        val base = TextStyle(
+            fontFamily = CrystalFonts.Serif,
+            fontStyle = FontStyle.Italic,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp,
+            lineHeight = 16.sp,
+            letterSpacing = 0.35.sp,
+            color = if (colors.isEInk) colors.textPrimary else gold,
         )
+        if (colors.isEInk) {
+            base
+        } else {
+            base.copy(brush = Brush.horizontalGradient(listOf(gold, shimmerHi, rose, gold)))
+        }
     }
-    val starPulse = if (moving) 0.5f + 0.5f * sin(sec * (2f * PI.toFloat() / 3.8f)) else 0.7f
-    val starAlpha = if (colors.isEInk) 1f else 0.64f + 0.36f * starPulse
-    val starScale = if (colors.isEInk) 1f else 0.92f + 0.20f * starPulse
-    val starPath = remember { Path() }
+    val hairlineBrush = remember(colors.isEInk, colors.textPrimary, gold, rose) {
+        if (colors.isEInk) {
+            Brush.horizontalGradient(
+                listOf(colors.textPrimary.copy(alpha = 0.55f), Color.Transparent),
+            )
+        } else {
+            Brush.horizontalGradient(
+                0f to gold.copy(alpha = 0.72f),
+                0.55f to rose.copy(alpha = 0.45f),
+                1f to Color.Transparent,
+            )
+        }
+    }
+    val unitStarPath = remember {
+        Path().apply {
+            val r = 1f
+            val inner = 0.24f
+            moveTo(0f, -r)
+            lineTo(inner, -inner)
+            lineTo(r, 0f)
+            lineTo(inner, inner)
+            lineTo(0f, r)
+            lineTo(-inner, inner)
+            lineTo(-r, 0f)
+            lineTo(-inner, -inner)
+            close()
+        }
+    }
 
     Column(
         modifier = modifier.width(IntrinsicSize.Max),
@@ -100,47 +125,33 @@ internal fun CrystalTitlePill(palette: CrystalPalette, animate: Boolean, modifie
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Canvas(Modifier.size(10.dp)) {
+                val sec = if (moving) time.value / 1000f else 0f
+                val starPulse = if (moving) 0.5f + 0.5f * sin(sec * (2f * PI.toFloat() / 3.8f)) else 0.7f
+                val starAlpha = if (colors.isEInk) 1f else 0.64f + 0.36f * starPulse
+                val starScale = if (colors.isEInk) 1f else 0.92f + 0.20f * starPulse
                 val cx = size.width * 0.5f
                 val cy = size.height * 0.5f
                 val r = size.minDimension * 0.46f * starScale
-                val inner = r * 0.24f
                 if (!colors.isEInk) {
                     drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(gold.copy(alpha = 0.45f * starAlpha), Color.Transparent),
-                            center = Offset(cx, cy),
-                            radius = (size.minDimension * 0.72f).coerceAtLeast(1f),
-                        ),
-                        radius = size.minDimension * 0.72f,
+                        color = gold.copy(alpha = 0.26f * starAlpha),
+                        radius = size.minDimension * 0.64f,
                         center = Offset(cx, cy),
                     )
                 }
-                starPath.reset()
-                starPath.moveTo(cx, cy - r)
-                starPath.lineTo(cx + inner, cy - inner)
-                starPath.lineTo(cx + r, cy)
-                starPath.lineTo(cx + inner, cy + inner)
-                starPath.lineTo(cx, cy + r)
-                starPath.lineTo(cx - inner, cy + inner)
-                starPath.lineTo(cx - r, cy)
-                starPath.lineTo(cx - inner, cy - inner)
-                starPath.close()
+                val s = drawContext.canvas
+                s.save()
+                s.translate(cx, cy)
+                s.scale(r, r)
                 drawPath(
-                    starPath,
+                    unitStarPath,
                     color = if (colors.isEInk) colors.textPrimary else gold.copy(alpha = starAlpha),
                 )
+                s.restore()
             }
             Text(
                 text = stringResource(AYMR.strings.unlockable_title_crystal_light_keeper),
-                style = TextStyle(
-                    fontFamily = CrystalFonts.Serif,
-                    fontStyle = FontStyle.Italic,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    lineHeight = 16.sp,
-                    letterSpacing = 0.35.sp,
-                    color = if (colors.isEInk) colors.textPrimary else gold,
-                ).let { if (textBrush != null) it.copy(brush = textBrush) else it },
+                style = textStyle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -149,19 +160,7 @@ internal fun CrystalTitlePill(palette: CrystalPalette, animate: Boolean, modifie
             Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(
-                    if (colors.isEInk) {
-                        Brush.horizontalGradient(
-                            listOf(colors.textPrimary.copy(alpha = 0.55f), Color.Transparent),
-                        )
-                    } else {
-                        Brush.horizontalGradient(
-                            0f to gold.copy(alpha = 0.72f),
-                            0.55f to rose.copy(alpha = 0.45f),
-                            1f to Color.Transparent,
-                        )
-                    },
-                ),
+                .background(hairlineBrush),
         )
     }
 }

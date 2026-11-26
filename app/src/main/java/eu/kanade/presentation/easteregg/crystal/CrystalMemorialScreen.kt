@@ -4,8 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -32,7 +32,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.easteregg.crystal.CrystalAtmosphereModel
 import eu.kanade.domain.easteregg.crystal.CrystalMemorialManager
+import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Screen
 import kotlinx.coroutines.Dispatchers
@@ -55,10 +57,39 @@ internal class CrystalMemorialScreen(
         val appearance = rememberCrystalAppearance()
         val navigator = LocalNavigator.currentOrThrow
         val assets = LocalContext.current.applicationContext.assets
+        val view = LocalView.current
+        val appColors = AuroraTheme.colors
         var ceremony by rememberSaveable { mutableStateOf(false) }
-        LaunchedEffect(assets) {
-            if (CrystalLivingCornerPainter.cachedHeroOrNull() == null) {
-                runCatching { withContext(Dispatchers.IO) { CrystalLivingCornerPainter.loadCachedHero(assets) } }
+        LaunchedEffect(assets, appearance.palette, appColors.isEInk, appColors.isDark, appColors.isAmoled) {
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    // Pre-parse jewel SVG paths for the 1D ceremony AND pre-render the 462-shape Living Corner Bitmap
+                    // off the UI thread so neither ceremony open nor Lunar Iris portal ever blocks a frame.
+                    CrystalJewelPainter.prewarmStaticPaths()
+                    val seed = manager.appearance.getOrCreateAtmosphereSeed()
+                    val moment = currentCrystalCalendarMoment()
+                    val phase = CrystalAtmosphereModel.phaseAt(moment)
+                    val weather = CrystalAtmosphereModel.weatherAt(moment, seed)
+                    val sceneColors = resolveCrystalLivingColors(
+                        phase = phase,
+                        weather = weather,
+                        palette = appearance.palette,
+                        eInk = appColors.isEInk,
+                        isDark = appColors.isDark,
+                        isAmoled = appColors.isAmoled,
+                        colorEInk = appColors.eInkProfile == EInkProfile.COLOR,
+                    )
+                    CrystalLivingCornerPainter.loadCachedHero(assets, initialColors = sceneColors)
+                    CrystalLivingCornerPainter.prewarmHeroSnapshot(
+                        assets = assets,
+                        widthPx = view.width.takeIf { it > 0 } ?: 1080,
+                        colors = sceneColors,
+                        phase = phase,
+                        weather = weather,
+                        palette = appearance.palette,
+                        seedHash = seed.hashCode(),
+                    )
+                }
             }
         }
         val goBack = {
@@ -128,7 +159,7 @@ internal class CrystalMemorialScreen(
                     )
                     AnimatedVisibility(
                         visible = showCeremony,
-                        enter = fadeIn(tween(if (appearance.reduced || colors.isEInk) 0 else 520)),
+                        enter = EnterTransition.None,
                         exit = fadeOut(tween(if (appearance.reduced || colors.isEInk) 0 else 360)),
                     ) {
                         CrystalRewardCeremony(

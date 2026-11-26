@@ -17,7 +17,7 @@ internal fun CrystalMemorialCanvas(
     renderer: CrystalMemorialRenderer,
     elapsedMs: () -> Float,
     ambientMs: () -> Float,
-    pointer: Offset,
+    pointer: () -> Offset,
     reduced: Boolean,
     modifier: Modifier = Modifier,
     fittedArtwork: Boolean = false,
@@ -26,13 +26,14 @@ internal fun CrystalMemorialCanvas(
 ) {
     val colors = AuroraTheme.colors
     Canvas(modifier) {
+        val currentPointer = if (reduced) Offset.Zero else pointer()
         drawIntoCanvas { composeCanvas ->
             val canvas = composeCanvas.nativeCanvas
             val saved = canvas.save()
             canvas.scale(density, density)
             renderer.draw(
                 canvas, size.width / density, size.height / density, elapsedMs(), ambientMs() / 1000f,
-                if (reduced) 0f else pointer.x, if (reduced) 0f else pointer.y, reduced,
+                currentPointer.x, currentPointer.y, reduced,
                 colors.isEInk,
                 colors.eInkProfile == EInkProfile.MONOCHROME,
                 colors.background.toArgb(),
@@ -55,15 +56,14 @@ internal fun CrystalGlyphCanvas(
     palette: CrystalPalette = CrystalPalette.Moon,
     frame: CrystalFrameVariant = CrystalFrameVariant.Fold,
     animate: Boolean = true,
+    painter: CrystalJewelPainter = remember { CrystalJewelPainter() },
 ) {
-    val painter = remember { CrystalJewelPainter() }
     val colors = AuroraTheme.colors
-    val policy = rememberCrystalMotionPolicy()
-    val motion =
-        animate && policy.systemAnimations && !colors.isEInk &&
-            (glyph == CrystalGlyph.Relic || glyph == CrystalGlyph.Frame || glyph == CrystalGlyph.Badge)
-    val time by rememberCrystalTime(motion)
+    val canAnimate = animate && !colors.isEInk && (glyph == CrystalGlyph.Relic || glyph == CrystalGlyph.Badge)
+    val motion = if (canAnimate) rememberCrystalMotionPolicy().systemAnimations else false
+    val timeState = if (motion) rememberCrystalTime(true) else null
     Canvas(modifier) {
+        val seconds = if (timeState != null) timeState.value / 1000f else 0f
         drawIntoCanvas { compose ->
             val canvas = compose.nativeCanvas
             val saved = canvas.save()
@@ -72,7 +72,7 @@ internal fun CrystalGlyphCanvas(
             val height = size.height / density
             val ink = if (colors.isEInk) colors.textPrimary.toArgb() else null
             when (glyph) {
-                CrystalGlyph.Relic -> painter.relic(canvas, width, height, time / 1000f, palette, !motion, ink)
+                CrystalGlyph.Relic -> painter.relic(canvas, width, height, seconds, palette, !motion, ink)
                 CrystalGlyph.Frame -> {
                     // Inventory thumbnail contains the full ear/medallion silhouette, including its overflow.
                     canvas.translate(width * 0.16f, height * 0.21f)
@@ -82,14 +82,14 @@ internal fun CrystalGlyphCanvas(
                         height * 0.68f,
                         frame,
                         palette,
-                        time / 1000f,
-                        !motion,
+                        0f,
+                        true,
                         inkColor = ink,
                     )
                 }
                 CrystalGlyph.Paw -> painter.paw(canvas, 0f, 0f, minOf(width, height), palette, inkColor = ink)
                 CrystalGlyph.Title -> painter.titleGlyph(canvas, width, height, palette, ink)
-                CrystalGlyph.Badge -> painter.pawPendant(canvas, width, height, palette, time / 1000f, !motion, ink)
+                CrystalGlyph.Badge -> painter.pawPendant(canvas, width, height, palette, seconds, !motion, ink)
                 CrystalGlyph.Palette -> painter.paletteGlyph(canvas, width, height, palette, ink)
                 CrystalGlyph.CatFace -> painter.catFace(canvas, width, height, palette, ink)
                 CrystalGlyph.Cameo -> painter.cameoPortrait(canvas, width, height, palette, ink)
@@ -109,16 +109,13 @@ internal fun CrystalAvatarFrame(
 ) {
     val painter = remember { CrystalJewelPainter() }
     val colors = AuroraTheme.colors
-    val policy = rememberCrystalMotionPolicy()
-    val motion = animate && policy.systemAnimations && !colors.isEInk
-    val time by rememberCrystalTime(motion)
     Canvas(modifier) {
         drawIntoCanvas { compose ->
             val canvas = compose.nativeCanvas
             val save = canvas.save()
             canvas.scale(density, density)
             painter.avatarFrame(
-                canvas, size.width / density, size.height / density, variant, palette, time / 1000f, !motion,
+                canvas, size.width / density, size.height / density, variant, palette, 0f, true,
                 avatarInsetDp, if (colors.isEInk) colors.textPrimary.toArgb() else null,
             )
             canvas.restoreToCount(save)

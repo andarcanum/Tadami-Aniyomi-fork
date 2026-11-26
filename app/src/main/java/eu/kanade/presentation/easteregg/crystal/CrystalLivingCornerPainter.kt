@@ -1,6 +1,7 @@
 package eu.kanade.presentation.easteregg.crystal
 
 import android.content.res.AssetManager
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
@@ -1160,18 +1161,141 @@ internal class CrystalLivingCornerPainter(private val artwork: CrystalLivingArtw
             floatArrayOf(510f, 342f, 78f, 15f, 0.38f),
         )
         private val heroCacheLock = Any()
+        private val snapshotLock = Any()
+
+        internal data class SnapshotKey(
+            val colors: CrystalLivingCornerColors,
+            val phase: CrystalDayPhase,
+            val weather: CrystalWeather,
+            val palette: CrystalPalette,
+            val preview: Boolean,
+        )
 
         @Volatile
         private var cachedHeroPainter: CrystalLivingCornerPainter? = null
 
+        @Volatile
+        private var cachedHeroSnapshot: Pair<SnapshotKey, Bitmap>? = null
+
+        @Volatile
+        private var cachedPreviewSnapshot: Pair<SnapshotKey, Bitmap>? = null
+
         fun cachedHeroOrNull(): CrystalLivingCornerPainter? = cachedHeroPainter
 
-        fun loadCachedHero(assets: AssetManager): CrystalLivingCornerPainter {
-            cachedHeroPainter?.let { return it }
-            return synchronized(heroCacheLock) {
+        fun loadCachedHero(
+            assets: AssetManager,
+            initialColors: CrystalLivingCornerColors? = null,
+        ): CrystalLivingCornerPainter {
+            val painter = cachedHeroPainter ?: synchronized(heroCacheLock) {
                 cachedHeroPainter ?: CrystalLivingCornerPainter(CrystalLivingArtwork.loadCached(assets)).also {
                     cachedHeroPainter = it
                 }
+            }
+            if (initialColors != null) {
+                synchronized(heroCacheLock) { painter.prepareColors(initialColors) }
+            }
+            return painter
+        }
+
+        fun cachedHeroSnapshotOrNull(
+            colors: CrystalLivingCornerColors,
+            phase: CrystalDayPhase,
+            weather: CrystalWeather,
+            palette: CrystalPalette,
+        ): Bitmap? {
+            val pair = cachedHeroSnapshot ?: return null
+            val key = SnapshotKey(colors, phase, weather, palette, preview = false)
+            return if (pair.first == key && !pair.second.isRecycled) pair.second else null
+        }
+
+        fun cachedPreviewSnapshotOrNull(
+            colors: CrystalLivingCornerColors,
+            phase: CrystalDayPhase,
+            weather: CrystalWeather,
+            palette: CrystalPalette,
+        ): Bitmap? {
+            val pair = cachedPreviewSnapshot ?: return null
+            val key = SnapshotKey(colors, phase, weather, palette, preview = true)
+            return if (pair.first == key && !pair.second.isRecycled) pair.second else null
+        }
+
+        /**
+         * Pre-renders the 462-shape authored room SVG into a crisp offscreen Bitmap off the main thread
+         * so transitions (Lunar Iris & Treasury push) blit a single GPU texture (~0.15ms) instead of
+         * re-tessellating 462 vector shapes at a changing scale on every frame.
+         */
+        fun prewarmHeroSnapshot(
+            assets: AssetManager,
+            widthPx: Int,
+            colors: CrystalLivingCornerColors,
+            phase: CrystalDayPhase,
+            weather: CrystalWeather,
+            palette: CrystalPalette,
+            seedHash: Int = 0,
+        ): Bitmap {
+            val key = SnapshotKey(colors, phase, weather, palette, preview = false)
+            cachedHeroSnapshot?.let { if (it.first == key && !it.second.isRecycled) return it.second }
+            return synchronized(snapshotLock) {
+                cachedHeroSnapshot?.let { if (it.first == key && !it.second.isRecycled) return@synchronized it.second }
+                val w = widthPx.coerceIn(480, 1080)
+                val h = (w * 530f / 640f).roundToInt().coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val painter = CrystalLivingCornerPainter(CrystalLivingArtwork.loadCached(assets))
+                val frame = CrystalLivingEngine(seedHash).snapshot()
+                painter.draw(
+                    canvas = Canvas(bitmap),
+                    width = w.toFloat(),
+                    height = h.toFloat(),
+                    frame = frame,
+                    colors = colors,
+                    phase = phase,
+                    weather = weather,
+                    reduced = false,
+                    preview = false,
+                    palette = palette,
+                )
+                cachedHeroSnapshot = key to bitmap
+                bitmap
+            }
+        }
+
+        fun loadOrRenderPreviewSnapshot(
+            assets: AssetManager,
+            widthPx: Int,
+            colors: CrystalLivingCornerColors,
+            phase: CrystalDayPhase,
+            weather: CrystalWeather,
+            palette: CrystalPalette,
+        ): Bitmap {
+            val key = SnapshotKey(colors, phase, weather, palette, preview = true)
+            cachedPreviewSnapshot?.let { if (it.first == key && !it.second.isRecycled) return it.second }
+            return synchronized(snapshotLock) {
+                cachedPreviewSnapshot?.let {
+                    if (it.first == key &&
+                        !it.second.isRecycled
+                    ) {
+                        return@synchronized it.second
+                    }
+                }
+                val w = widthPx.coerceIn(420, 960)
+                val h = (w * 416f / 640f).roundToInt().coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val painter = CrystalLivingCornerPainter(CrystalLivingArtwork.loadCached(assets))
+                val frame = CrystalLivingEngine().restingSnapshot()
+                painter.draw(
+                    canvas = Canvas(bitmap),
+                    width = w.toFloat(),
+                    height = h.toFloat(),
+                    frame = frame,
+                    colors = colors,
+                    phase = phase,
+                    weather = weather,
+                    reduced = true,
+                    preview = true,
+                    palette = palette,
+                )
+                cachedPreviewSnapshot = key to bitmap
+                bitmap
             }
         }
         private val IDENTITY = CrystalLivingTransform()
