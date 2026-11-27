@@ -77,6 +77,7 @@ import coil3.compose.AsyncImage
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.resolveActiveAuraPalette
 import eu.kanade.presentation.components.resolveAuroraCardOverlaySpec
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
@@ -162,14 +163,7 @@ private object GlowContourCardShape : Shape {
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        return Outline.Generic(
-            createScaledGlowContourPath(
-                pathData = DEFAULT_GLOW_CONTOUR_ZONE_LAYER_SPEC.shellPathData,
-                size = size,
-                svgWidth = DEFAULT_GLOW_CONTOUR_ZONE_LAYER_SPEC.svgWidth,
-                svgHeight = DEFAULT_GLOW_CONTOUR_ZONE_LAYER_SPEC.svgHeight,
-            ),
-        )
+        return Outline.Generic(cachedGlowContourZonedPaths(size).shellPath)
     }
 }
 
@@ -941,7 +935,8 @@ private fun GlowContourLibraryCard(
             if (customCover != null) {
                 customCover()
             } else {
-                val coverRequest = remember(coverData) {
+                val coverReloadTick = rememberCoverReloadTick()
+                val coverRequest = remember(context, coverData, coverReloadTick) {
                     buildAuroraCoverImageRequest(context, coverData)
                 }
 

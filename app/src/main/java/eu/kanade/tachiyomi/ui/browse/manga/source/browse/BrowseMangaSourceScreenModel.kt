@@ -310,7 +310,8 @@ class BrowseMangaSourceScreenModel(
     // change anywhere (any source, read/unread, tracking) re-emitted into the open browse
     // screen. Source-scoped interactor instead (novel etalon :360-365).
     val favoriteMangaUrls = getMangaFavorites.subscribe(sourceId)
-        .map { favorites -> favorites.map { it.url }.toSet() }
+        .map { favorites -> favorites.mapTo(HashSet(favorites.size)) { it.url } }
+        .distinctUntilChanged()
         .stateIn(screenModelScope, SharingStarted.Lazily, emptySet())
 
     /**
@@ -323,6 +324,7 @@ class BrowseMangaSourceScreenModel(
                 PagingConfig(
                     pageSize = 25,
                     initialLoadSize = 25,
+                    prefetchDistance = 6,
                 ),
             ) {
                 getRemoteManga.subscribe(sourceId, listing.query ?: "", listing.filters)
@@ -342,8 +344,11 @@ class BrowseMangaSourceScreenModel(
                     // РЕШ-10: the pref was snapshotted once in the constructor - toggling the
                     // setting did not affect the open browse screen until it was recreated.
                     // Read it live per emission (in-memory SharedPreferences read).
-                    val hideLibraryItems = sourcePreferences.hideInMangaLibraryItems().get()
-                    pagingData.filter { !hideLibraryItems || !it.favorite }
+                    if (sourcePreferences.hideInMangaLibraryItems().get()) {
+                        pagingData.filter { !it.favorite }
+                    } else {
+                        pagingData
+                    }
                 }
                 .cachedIn(ioCoroutineScope)
         }

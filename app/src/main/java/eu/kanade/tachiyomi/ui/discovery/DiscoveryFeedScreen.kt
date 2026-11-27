@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.discovery
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -49,6 +51,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +75,8 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
+import coil3.request.crossfade
+import coil3.size.Precision
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.HazeBlurStyle
@@ -83,7 +88,6 @@ import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.manga.interactor.GetEnabledMangaSources
 import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
@@ -126,6 +130,7 @@ import uy.kohesive.injekt.api.get
 import java.io.Serializable
 import androidx.compose.foundation.lazy.items as lazyRowItems
 import cafe.adriel.voyager.core.screen.Screen as VoyagerScreenInterface
+import coil3.size.Size as CoilSize
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as prefCollectAsStateWithLifecycle
 
@@ -190,14 +195,9 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
             scope.launch {
                 if (item.rowType == DiscoveryRowType.SOURCE) {
                     // Ряд источника: открываем каталог источника напрямую, без глобального поиска.
-                    val sourceId = when (state.mediaType) {
-                        DiscoveryMediaType.ANIME -> Injekt.get<GetEnabledAnimeSources>()
-                            .subscribe().first().firstOrNull { it.name == item.provider }?.id
-                        DiscoveryMediaType.MANGA -> Injekt.get<GetEnabledMangaSources>()
-                            .subscribe().first().firstOrNull { it.name == item.provider }?.id
-                        DiscoveryMediaType.NOVEL -> Injekt.get<GetEnabledNovelSources>()
-                            .subscribe().first().firstOrNull { it.name == item.provider }?.id
-                    }
+                    val policy = Injekt.get<tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider>()
+                        .current(item.mediaType)
+                    val sourceId = item.sourceId?.takeIf { policy.allows(item) }
                     if (sourceId != null) {
                         navigator.push(
                             when (state.mediaType) {
@@ -232,220 +232,280 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
         val density = LocalDensity.current
         val topBarHeightDp = with(density) { topBarHeightPx.toDp() }
 
-        Box(Modifier.fillMaxSize().background(colors.background)) {
-            // Выбранный таб могли скрыть в настройках после открытия экрана — контент
-            // и табы показывают effectiveTab (fallback MIX), чтобы не было пустого разрыва.
-            val effectiveTab = if (tab in state.visibleTabs) tab else FeedSignalTab.MIX
-            val feedItems = remember(state, effectiveTab, provider) {
-                screenModel.displayedItems(effectiveTab, provider)
-            }
-            FeedBody(
-                state = state,
-                hazeState = hazeState,
-                items = feedItems,
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = if (topBarHeightDp > 0.dp) topBarHeightDp + 8.dp else 140.dp,
-                    bottom = 24.dp,
-                ),
-                exposureTracker = exposureTracker,
-                isResumed = isResumed,
-                // Прямое открытие plugin-bound карточки; guard от повторного тапа
-                // на время резолва, fallback в шторку при неполной привязке/ошибке.
-                onItemClick = { item ->
-                    if (state.openingItem != item) {
-                        // Taste Engine: клик = слабый позитивный сигнал (guard исключает двойную запись).
-                        screenModel.recordClick(item)
-                        scope.launch {
-                            screenModel.setOpenPending(item)
-                            // finally: pending сбрасывается и при отмене (rotation/back),
-                            // иначе guard залипнет на пережившем config change ScreenModel.
-                            val entryId = try {
-                                screenModel.resolveEntryId(item)
-                            } finally {
-                                screenModel.setOpenPending(null)
-                            }
-                            if (entryId != null) {
-                                navigator.push(
-                                    when (item.mediaType) {
-                                        DiscoveryMediaType.ANIME -> AnimeScreen(entryId, fromSource = true)
-                                        DiscoveryMediaType.MANGA -> MangaScreen(entryId, fromSource = true)
-                                        DiscoveryMediaType.NOVEL -> NovelScreen(entryId, fromSource = true)
-                                    },
-                                )
-                            } else {
-                                sheetItem = item
+        ProvideDiscoveryCoverContext(mediaType = state.mediaType) {
+            Box(Modifier.fillMaxSize().background(colors.background)) {
+                // Выбранный таб могли скрыть в настройках после открытия экрана — контент
+                // и табы показывают effectiveTab (fallback MIX), чтобы не было пустого разрыва.
+                val effectiveTab = if (tab in state.visibleTabs) tab else FeedSignalTab.MIX
+                var selectedGenre by rememberSaveable { mutableStateOf<String?>(null) }
+                LaunchedEffect(effectiveTab, provider) {
+                    selectedGenre = null
+                }
+                val availableGenres = remember(
+                    state.rows,
+                    state.mix,
+                    state.isProvisionalColdStart,
+                    effectiveTab,
+                    provider,
+                ) {
+                    screenModel.availableGenres(effectiveTab, provider)
+                }
+                val feedItems = remember(
+                    state.activeWindows,
+                    state.rows,
+                    state.mix,
+                    state.isProvisionalColdStart,
+                    effectiveTab,
+                    provider,
+                    selectedGenre,
+                ) {
+                    screenModel.displayedItems(effectiveTab, provider, selectedGenre)
+                }
+                FeedBody(
+                    state = state,
+                    hazeState = hazeState,
+                    items = feedItems,
+                    availableGenres = availableGenres,
+                    selectedGenre = selectedGenre,
+                    onGenreSelect = { selectedGenre = it },
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = if (topBarHeightDp > 0.dp) topBarHeightDp + 8.dp else 140.dp,
+                        bottom = 24.dp,
+                    ),
+                    exposureTracker = exposureTracker,
+                    isResumed = isResumed,
+                    // Прямое открытие plugin-bound карточки; guard от повторного тапа
+                    // на время резолва, fallback в шторку при неполной привязке/ошибке.
+                    onItemClick = { item ->
+                        if (state.openingItem != item) {
+                            // Taste Engine: клик = слабый позитивный сигнал (guard исключает двойную запись).
+                            screenModel.recordClick(item)
+                            scope.launch {
+                                screenModel.setOpenPending(item)
+                                // finally: pending сбрасывается и при отмене (rotation/back),
+                                // иначе guard залипнет на пережившем config change ScreenModel.
+                                val entryId = try {
+                                    screenModel.resolveEntryId(item)
+                                } finally {
+                                    screenModel.setOpenPending(null)
+                                }
+                                if (entryId != null) {
+                                    navigator.push(
+                                        when (item.mediaType) {
+                                            DiscoveryMediaType.ANIME -> AnimeScreen(entryId, fromSource = true)
+                                            DiscoveryMediaType.MANGA -> MangaScreen(entryId, fromSource = true)
+                                            DiscoveryMediaType.NOVEL -> NovelScreen(entryId, fromSource = true)
+                                        },
+                                    )
+                                } else {
+                                    sheetItem = item
+                                }
                             }
                         }
-                    }
-                },
-                onItemLongClick = { longPressItem = it },
-                onItemAdd = { screenModel.addToLibrary(it) },
-                onRetry = { screenModel.refreshNow() },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .auroraCenteredMaxWidth(contentMaxWidthDp),
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .onSizeChanged { topBarHeightPx = it.height }
-                    .then(
-                        if (colors.isEInk) {
-                            Modifier
-                                .background(colors.surface)
-                                .border(1.dp, colors.divider)
-                        } else {
-                            Modifier.hazeBlur(
-                                input = HazeInput.Sources(hazeState),
-                                style = HazeBlurStyle {
-                                    backgroundColor(colors.background)
-                                    colorEffects(
-                                        listOf(
-                                            HazeColorEffect.tint(
-                                                colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f),
-                                            ),
-                                        ),
-                                    )
-                                    blurRadius(22.dp)
-                                    noiseFactor(0.10f)
-                                },
-                            )
-                        },
-                    )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {},
-                    ),
-            ) {
+                    },
+                    onItemLongClick = { longPressItem = it },
+                    onItemAdd = { screenModel.addToLibrary(it) },
+                    onRetry = { screenModel.refreshNow() },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .auroraCenteredMaxWidth(contentMaxWidthDp),
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .auroraCenteredMaxWidth(contentMaxWidthDp),
-                ) {
-                    FeedToolbar(
-                        state = state,
-                        onBack = { navigator.pop() },
-                        onRefresh = {
-                            if (state.isRefreshing) {
-                                screenModel.cancelRefresh()
-                                context.toast(context.contextStringResource(MR.strings.action_cancel))
+                        .align(Alignment.TopCenter)
+                        .onSizeChanged { topBarHeightPx = it.height }
+                        .then(
+                            if (colors.isEInk) {
+                                Modifier
+                                    .background(colors.surface)
+                                    .border(1.dp, colors.divider)
                             } else {
-                                val cooldown = screenModel.rotateOrRefreshFeed(effectiveTab)
-                                if (cooldown > 0L) {
-                                    context.toast(
-                                        context.contextStringResource(AYMR.strings.for_you_refresh_cooldown, cooldown),
-                                    )
+                                Modifier.hazeBlur(
+                                    input = HazeInput.Sources(hazeState),
+                                    style = HazeBlurStyle {
+                                        backgroundColor(colors.background)
+                                        colorEffects(
+                                            listOf(
+                                                HazeColorEffect.tint(
+                                                    colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f),
+                                                ),
+                                            ),
+                                        )
+                                        blurRadius(22.dp)
+                                        noiseFactor(0.10f)
+                                    },
+                                )
+                            },
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {},
+                        ),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .auroraCenteredMaxWidth(contentMaxWidthDp),
+                    ) {
+                        FeedToolbar(
+                            state = state,
+                            onBack = { navigator.pop() },
+                            onRefresh = {
+                                if (state.isRefreshing) {
+                                    screenModel.cancelRefresh()
+                                    context.toast(context.contextStringResource(MR.strings.action_cancel))
+                                } else {
+                                    val cooldown = screenModel.rotateOrRefreshFeed(effectiveTab)
+                                    if (cooldown > 0L) {
+                                        context.toast(
+                                            context.contextStringResource(
+                                                AYMR.strings.for_you_refresh_cooldown,
+                                                cooldown,
+                                            ),
+                                        )
+                                    }
                                 }
-                            }
-                        },
-                    )
-                    if (state.failedRows.isNotEmpty()) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            },
+                        )
+                        val poolStatusLabel = if (
+                            state.poolSize in 1 until eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET
                         ) {
-                            Icon(
-                                Icons.Outlined.Warning,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(14.dp),
+                            stringResource(
+                                AYMR.strings.for_you_pool_status,
+                                state.poolSize,
+                                eu.kanade.tachiyomi.data.discovery.DISCOVERY_POOL_TARGET,
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                stringResource(AYMR.strings.for_you_failed_banner),
-                                color = colors.textSecondary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                        } else {
+                            null
                         }
+                        val sourcesUnavailableLabel = if (state.failedSourceCount > 0) {
+                            stringResource(AYMR.strings.for_you_sources_unavailable, state.failedSourceCount)
+                        } else {
+                            null
+                        }
+                        val rowsFailedLabel = if (state.failedRows.isNotEmpty()) {
+                            stringResource(AYMR.strings.for_you_failed_banner)
+                        } else {
+                            null
+                        }
+                        val statusBannerText = listOfNotNull(
+                            poolStatusLabel,
+                            sourcesUnavailableLabel,
+                            rowsFailedLabel,
+                        ).joinToString(" · ")
+                        if (statusBannerText.isNotEmpty()) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Warning,
+                                    contentDescription = null,
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    statusBannerText,
+                                    color = colors.textSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                        val tabCounts = remember(state.rows, state.mix) {
+                            FeedSignalTab.entries.associateWith { itemsForTab(state, it).size }
+                        }
+                        // tab здесь — effectiveTab (fallback MIX вычислен выше, в Content).
+                        FeedTabs(
+                            tab = effectiveTab,
+                            counts = tabCounts,
+                            onTab = {
+                                tab = it
+                                screenModel.onTabSelected(it)
+                            },
+                            visibleTabs = state.visibleTabs,
+                        )
+                        val feedProviderOptions = remember(state.rows) { providerOptions(state) }
+                        FeedProviderChips(
+                            options = feedProviderOptions,
+                            selected = provider,
+                            onSelect = { provider = it },
+                        )
+                        Spacer(Modifier.height(8.dp))
                     }
-                    val tabCounts = remember(state) {
-                        FeedSignalTab.entries.associateWith { itemsForTab(state, it).size }
-                    }
-                    // tab здесь — effectiveTab (fallback MIX вычислен выше, в Content).
-                    FeedTabs(
-                        tab = effectiveTab,
-                        counts = tabCounts,
-                        onTab = {
-                            tab = it
-                            screenModel.onTabSelected(it)
-                        },
-                        visibleTabs = state.visibleTabs,
-                    )
-                    FeedProviderChips(
-                        options = providerOptions(state),
-                        selected = provider,
-                        onSelect = { provider = it },
-                    )
-                    Spacer(Modifier.height(8.dp))
                 }
-            }
-            FeedSnackbar(
-                state = state,
-                onUndo = { screenModel.undoHide() },
-                onDismissHidden = { screenModel.dismissHiddenSnackbar() },
-                onDismissAdded = { screenModel.dismissAddedSnackbar() },
-                onUndoTag = { screenModel.undoBlacklistTag() },
-                onDismissTag = { screenModel.dismissTagSnackbar() },
-            )
-            // «+» промахнулся (внешний провайдер или нет точного совпадения в источнике
-            // рекомендации): уходим в каталог источника/глобальный поиск вместо тупика.
-            LaunchedEffect(state.searchFallbackItem) {
-                val item = state.searchFallbackItem ?: return@LaunchedEffect
-                screenModel.dismissSearchFallback()
-                context.toast(context.contextStringResource(AYMR.strings.for_you_select_source_to_read))
-                navigateFor(item)
-            }
-            sheetItem?.let { item ->
-                DiscoveryPreviewSheet(
-                    item = item,
-                    meta = sheetMeta,
-                    isMetaLoading = sheetMetaLoading,
-                    coverMediaType = state.mediaType,
-                    onDismiss = { sheetItem = null },
-                    onAdd = {
-                        screenModel.addToLibrary(item)
-                        sheetItem = null
-                    },
-                    onFind = {
-                        sheetItem = null
-                        navigateFor(item)
-                    },
-                    onHide = {
-                        screenModel.hide(item, effectiveTab)
-                        sheetItem = null
-                    },
-                    hazeState = hazeState,
+                FeedSnackbar(
+                    state = state,
+                    onUndo = { screenModel.undoHide() },
+                    onDismissHidden = { screenModel.dismissHiddenSnackbar() },
+                    onDismissAdded = { screenModel.dismissAddedSnackbar() },
+                    onUndoTag = { screenModel.undoBlacklistTag() },
+                    onDismissTag = { screenModel.dismissTagSnackbar() },
                 )
-            }
-            longPressItem?.let { lpItem ->
-                eu.kanade.tachiyomi.ui.home.DiscoveryHideOptionsSheet(
-                    itemTitle = lpItem.title,
-                    tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(lpItem.genres, lpItem.rowType, lpItem.reason),
-                    onHide = {
-                        screenModel.hide(lpItem, effectiveTab)
-                        longPressItem = null
-                    },
-                    onBlacklistTag = { tag ->
-                        screenModel.blacklistTag(tag)
-                        longPressItem = null
-                    },
-                    onDismiss = { longPressItem = null },
-                    onMoreLikeThis = {
-                        longPressItem = null
-                        screenModel.recordLike(lpItem)
-                    },
-                    onMarkConsumed = {
-                        longPressItem = null
-                        screenModel.recordConsumed(lpItem, effectiveTab)
-                    },
-                )
+                // «+» промахнулся (внешний провайдер или нет точного совпадения в источнике
+                // рекомендации): уходим в каталог источника/глобальный поиск вместо тупика.
+                LaunchedEffect(state.searchFallbackItem) {
+                    val item = state.searchFallbackItem ?: return@LaunchedEffect
+                    screenModel.dismissSearchFallback()
+                    context.toast(context.contextStringResource(AYMR.strings.for_you_select_source_to_read))
+                    navigateFor(item)
+                }
+                sheetItem?.let { item ->
+                    DiscoveryPreviewSheet(
+                        item = item,
+                        meta = sheetMeta,
+                        isMetaLoading = sheetMetaLoading,
+                        coverMediaType = state.mediaType,
+                        onDismiss = { sheetItem = null },
+                        onAdd = {
+                            screenModel.addToLibrary(item)
+                            sheetItem = null
+                        },
+                        onFind = {
+                            sheetItem = null
+                            navigateFor(item)
+                        },
+                        onHide = {
+                            screenModel.hide(item, effectiveTab)
+                            sheetItem = null
+                        },
+                        hazeState = hazeState,
+                    )
+                }
+                longPressItem?.let { lpItem ->
+                    eu.kanade.tachiyomi.ui.home.DiscoveryHideOptionsSheet(
+                        itemTitle = lpItem.title,
+                        tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(
+                            lpItem.genres,
+                            lpItem.rowType,
+                            lpItem.reason,
+                        ),
+                        onHide = {
+                            screenModel.hide(lpItem, effectiveTab)
+                            longPressItem = null
+                        },
+                        onBlacklistTag = { tag ->
+                            screenModel.blacklistTag(tag)
+                            longPressItem = null
+                        },
+                        onDismiss = { longPressItem = null },
+                        onMoreLikeThis = {
+                            longPressItem = null
+                            screenModel.recordLike(lpItem)
+                        },
+                        onMarkConsumed = {
+                            longPressItem = null
+                            screenModel.recordConsumed(lpItem, effectiveTab)
+                        },
+                    )
+                }
             }
         }
     }
@@ -460,7 +520,7 @@ private fun FeedToolbar(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val (labelKind, labelValue) = resolveUpdatedLabel(state.lastUpdatedAt, System.currentTimeMillis())
-    val updatedLabel = if (state.isRefreshing && !state.progressText.isNullOrBlank()) {
+    val updatedLabel = if ((state.isRefreshing || state.isLoading) && !state.progressText.isNullOrBlank()) {
         state.progressText
     } else {
         when (labelKind) {
@@ -794,6 +854,9 @@ private fun FeedBody(
     state: DiscoveryFeedUiState,
     hazeState: HazeState,
     items: List<DiscoverySuggestion>,
+    availableGenres: List<String>,
+    selectedGenre: String?,
+    onGenreSelect: (String?) -> Unit,
     contentPadding: PaddingValues,
     exposureTracker: HomeDiscoveryExposureTracker,
     isResumed: Boolean,
@@ -810,18 +873,16 @@ private fun FeedBody(
     val similarTemplate = stringResource(AYMR.strings.for_you_reason_similar)
     val trendTemplate = stringResource(AYMR.strings.for_you_reason_trending)
     val nextTemplate = stringResource(AYMR.strings.for_you_reason_season_next)
+    val tasteTemplate = stringResource(AYMR.strings.for_you_reason_taste)
 
     when {
-        state.isLoading -> Box(
-            modifier
-                .padding(contentPadding)
-                .fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator(color = colors.accent)
-        }
+        state.isLoading || (items.isEmpty() && selectedGenre == null && state.isRefreshing) ->
+            DiscoveryFeedSkeletonGrid(
+                contentPadding = contentPadding,
+                modifier = modifier,
+            )
 
-        items.isEmpty() -> Column(
+        items.isEmpty() && selectedGenre == null -> Column(
             modifier
                 .padding(contentPadding)
                 .fillMaxSize()
@@ -844,7 +905,15 @@ private fun FeedBody(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                stringResource(AYMR.strings.for_you_empty_subtitle),
+                stringResource(
+                    if (state.lastGenerationStatus == "FAILED" ||
+                        (state.lastGenerationStatus == "PARTIAL" && state.failedSourceCount > 0)
+                    ) {
+                        AYMR.strings.for_you_refresh_failed
+                    } else {
+                        AYMR.strings.for_you_empty_subtitle
+                    },
+                ),
                 color = colors.textSecondary,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center,
@@ -868,46 +937,91 @@ private fun FeedBody(
             }
         }
 
-        else -> LazyVerticalGrid(
-            columns = GridCells.Adaptive(130.dp),
-            modifier = modifier
-                .then(if (colors.isEInk) Modifier else Modifier.hazeSource(hazeState)),
-            contentPadding = contentPadding,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            items(items = items, key = { it.rowType.key + ":" + it.cleanTitle }) { item ->
-                val homeItem = remember(item) { item.toHomeHubDiscoveryItem() }
-                val reason = if (showReasons) {
-                    discoveryReasonText(homeItem, similarTemplate, trendTemplate, nextTemplate)
-                } else {
-                    null
+        else -> {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(130.dp),
+                modifier = modifier
+                    .then(if (colors.isEInk) Modifier else Modifier.hazeSource(hazeState)),
+                contentPadding = contentPadding,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (availableGenres.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "genre_chips") {
+                        DiscoveryGenreChipBar(
+                            genres = availableGenres,
+                            selectedGenre = selectedGenre,
+                            onGenreSelect = onGenreSelect,
+                        )
+                    }
                 }
-                FeedCard(
-                    item = item,
-                    reason = reason,
-                    isAdding = item.title in state.addingTitles,
-                    coverMediaType = state.mediaType,
-                    coverRecoveryTick = state.coverRecoveryTick,
-                    modifier = Modifier.trackDiscoveryExposure(
-                        tracker = exposureTracker,
-                        item = homeItem,
-                        isSectionActive = true,
-                        isResumed = isResumed,
-                    ),
-                    onClick = {
-                        appHaptics.tap()
-                        onItemClick(item)
-                    },
-                    onLongClick = {
-                        appHaptics.tap()
-                        onItemLongClick(item)
-                    },
-                    onAdd = {
-                        appHaptics.tap()
-                        onItemAdd(item)
-                    },
-                )
+
+                if (items.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "empty_genre") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp, horizontal = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                stringResource(AYMR.strings.for_you_no_genre_matches),
+                                color = colors.textSecondary,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    appHaptics.tap()
+                                    onGenreSelect(null)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text(
+                                    stringResource(AYMR.strings.for_you_filter_reset),
+                                    color = colors.textOnAccent,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(items = items, key = { it.rowType.key + ":" + it.cleanTitle }) { item ->
+                        val homeItem = remember(item) { item.toHomeHubDiscoveryItem() }
+                        val reason = if (showReasons) {
+                            discoveryReasonText(homeItem, similarTemplate, trendTemplate, nextTemplate, tasteTemplate)
+                        } else {
+                            null
+                        }
+                        FeedCard(
+                            item = item,
+                            reason = reason,
+                            isAdding = item.title in state.addingTitles,
+                            coverMediaType = state.mediaType,
+                            coverRecoveryTick = state.coverRecoveryTick,
+                            modifier = Modifier.trackDiscoveryExposure(
+                                tracker = exposureTracker,
+                                item = homeItem,
+                                isSectionActive = true,
+                                isResumed = isResumed,
+                            ),
+                            onClick = {
+                                appHaptics.tap()
+                                onItemClick(item)
+                            },
+                            onLongClick = {
+                                appHaptics.tap()
+                                onItemLongClick(item)
+                            },
+                            onAdd = {
+                                appHaptics.tap()
+                                onItemAdd(item)
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -930,34 +1044,37 @@ private fun FeedCard(
     val context = LocalContext.current
     val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Portrait)
     val coverReloadTick = rememberCoverReloadTick()
-    val coverRequest = remember(context, item.coverUrl, item.provider, coverReloadTick, coverRecoveryTick) {
-        buildAuroraCoverImageRequest(
-            context,
-            discoveryCoverData(
-                coverMediaType,
-                item.provider,
-                item.coverUrl,
-                DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle),
-            ),
-        )
+    val coverResolution = rememberDiscoveryCoverResolution(
+        item,
+        DiscoveryCoverRecovery.get(coverMediaType, item.cleanTitle),
+    )
+    val coverRequest = remember(context, coverResolution, coverReloadTick, coverRecoveryTick) {
+        buildDiscoveryCoverImageRequest(context, coverResolution) {
+            size(CoilSize(360, 540))
+            precision(Precision.INEXACT)
+            crossfade(false)
+        }
     }
-    val containerShape = RoundedCornerShape(18.dp)
-    val posterShape = RoundedCornerShape(16.dp)
+    val isCoverPending = coverResolution is DiscoveryCoverResolution.PendingCacheOnly
+    val containerShape = remember { RoundedCornerShape(18.dp) }
+    val posterShape = remember { RoundedCornerShape(16.dp) }
 
-    val borderBrush = if (isDark) {
-        Brush.verticalGradient(
-            listOf(
-                Color.White.copy(alpha = 0.12f),
-                Color.White.copy(alpha = 0.02f),
-            ),
-        )
-    } else {
-        Brush.verticalGradient(
-            listOf(
-                Color.Black.copy(alpha = 0.08f),
-                Color.Black.copy(alpha = 0.02f),
-            ),
-        )
+    val borderBrush = remember(isDark) {
+        if (isDark) {
+            Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.12f),
+                    Color.White.copy(alpha = 0.02f),
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                listOf(
+                    Color.Black.copy(alpha = 0.08f),
+                    Color.Black.copy(alpha = 0.02f),
+                ),
+            )
+        }
     }
 
     Column(
@@ -975,15 +1092,30 @@ private fun FeedCard(
                 .clip(posterShape)
                 .background(colors.cardBackground),
         ) {
-            AsyncImage(
-                model = coverRequest,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                colorFilter = rememberAuroraPosterColorFilter(),
-                modifier = Modifier.fillMaxSize(),
-                error = fallbackPainter,
-                fallback = fallbackPainter,
-            )
+            val coverColorFilter = rememberAuroraPosterColorFilter()
+            if (coverRequest != null) {
+                val coverTransform = rememberDiscoveryCoverTransform(
+                    coverRequest = coverRequest,
+                    isCoverPending = isCoverPending,
+                    fallbackPainter = fallbackPainter,
+                )
+                AsyncImage(
+                    model = coverRequest,
+                    transform = coverTransform,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = coverColorFilter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Image(
+                    painter = fallbackPainter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = coverColorFilter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)

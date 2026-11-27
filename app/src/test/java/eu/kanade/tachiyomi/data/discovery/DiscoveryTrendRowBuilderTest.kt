@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.discovery
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryExternalProvider
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import java.io.IOException
@@ -47,7 +48,9 @@ class DiscoveryTrendRowBuilderTest {
             sourceId: Long,
             page: Int,
             releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
-        ): List<DiscoveryRowItem> = latestItems
+        ): List<DiscoveryRowItem> = latestItems.map {
+            it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+        }
     }
 
     private val testContext = DiscoveryBuildContext(
@@ -57,6 +60,11 @@ class DiscoveryTrendRowBuilderTest {
         historyCleanTitles = emptySet(),
         hiddenCleanTitles = emptySet(),
         sourceId = 42L,
+        sourcePolicy = discoveryQueryPolicyFixture(
+            DiscoveryMediaType.NOVEL,
+            listOf(42L),
+            mapOf(DiscoveryRowType.TREND to setOf(DiscoveryExternalProvider.ANILIST)),
+        ),
     )
 
     @Test
@@ -140,7 +148,15 @@ class DiscoveryTrendRowBuilderTest {
             sortProvider = { TrendSort.POPULARITY },
         )
         val result = builder.build(
-            testContext.copy(mediaType = DiscoveryMediaType.ANIME, blacklistedTags = setOf("фэнтези")),
+            testContext.copy(
+                mediaType = DiscoveryMediaType.ANIME,
+                sourcePolicy = discoveryQueryPolicyFixture(
+                    DiscoveryMediaType.ANIME,
+                    listOf(42L),
+                    mapOf(DiscoveryRowType.TREND to setOf(DiscoveryExternalProvider.ANILIST)),
+                ),
+                blacklistedTags = setOf("фэнтези"),
+            ),
         )
         result.map { it.title } shouldBe listOf("Action Anime")
     }

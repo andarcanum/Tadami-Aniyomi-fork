@@ -7,6 +7,9 @@ interface UserProfileRepository {
     fun getProfile(userId: String = "default"): Flow<UserProfile?>
     suspend fun getProfileSync(userId: String = "default"): UserProfile?
     suspend fun saveProfile(profile: UserProfile)
+
+    /** Atomic additive mutation; returns whether the level increased. */
+    suspend fun addXP(userId: String, amount: Int): Boolean
     suspend fun updateXP(userId: String, totalXP: Int, currentXP: Int, level: Int, xpToNextLevel: Int)
     suspend fun addTitle(userId: String, title: String)
     suspend fun addBadge(userId: String, badge: String)

@@ -6,6 +6,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNames
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryRowType
 
 internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
 
@@ -28,6 +30,7 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
         val heroJson = prefs.getString(KEY_HERO, null)
         val historyJson = prefs.getString(KEY_HISTORY, null)
         val recommendationsJson = prefs.getString(KEY_RECOMMENDATIONS, null)
+        val discoveryJson = prefs.getString(KEY_DISCOVERY, null)
         val userName = prefs.getString(KEY_USER_NAME, "") ?: ""
         val userAvatar = prefs.getString(KEY_USER_AVATAR, "") ?: ""
         val initialized = prefs.getBoolean(KEY_INITIALIZED, false)
@@ -40,6 +43,9 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
             recommendations = recommendationsJson?.let {
                 runCatching { json.decodeFromString<List<CachedRecommendationItem>>(it) }.getOrNull()
             } ?: emptyList(),
+            discovery = discoveryJson?.takeIf { it.isNotBlank() }?.let {
+                runCatching { json.decodeFromString<List<CachedDiscoveryItem>>(it) }.getOrNull()
+            } ?: emptyList(),
             userName = userName,
             userAvatar = userAvatar,
             isInitialized = initialized,
@@ -49,8 +55,8 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
         return state
     }
 
-    fun save(state: CachedHomeState) {
-        if (memoryCache == state) return
+    fun save(state: CachedHomeState): Boolean {
+        if (memoryCache == state) return false
 
         memoryCache = state
 
@@ -58,11 +64,13 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
             putString(KEY_HERO, state.hero?.let { json.encodeToString(it) })
             putString(KEY_HISTORY, json.encodeToString(state.history))
             putString(KEY_RECOMMENDATIONS, json.encodeToString(state.recommendations))
+            putString(KEY_DISCOVERY, json.encodeToString(state.discovery))
             putString(KEY_USER_NAME, state.userName)
             putString(KEY_USER_AVATAR, state.userAvatar)
             putBoolean(KEY_INITIALIZED, state.isInitialized)
             apply()
         }
+        return true
     }
 
     fun markInitialized() {
@@ -80,12 +88,19 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
         memoryCache = memoryCache?.copy(userAvatar = path)
     }
 
+    fun updateDiscovery(items: List<CachedDiscoveryItem>) {
+        if (memoryCache?.discovery == items) return
+        prefs.edit().putString(KEY_DISCOVERY, json.encodeToString(items)).apply()
+        memoryCache = (memoryCache ?: load()).copy(discovery = items)
+    }
+
     fun loadCachedState(): CachedHomeState = load()
 
     companion object {
         private const val KEY_HERO = "hero"
         private const val KEY_HISTORY = "history"
         private const val KEY_RECOMMENDATIONS = "recommendations"
+        private const val KEY_DISCOVERY = "discovery"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_AVATAR = "user_avatar"
         private const val KEY_INITIALIZED = "initialized"
@@ -97,6 +112,7 @@ data class CachedHomeState(
     val hero: CachedHeroItem? = null,
     val history: List<CachedHistoryItem> = emptyList(),
     val recommendations: List<CachedRecommendationItem> = emptyList(),
+    val discovery: List<CachedDiscoveryItem> = emptyList(),
     val userName: String = "",
     val userAvatar: String = "",
     val isInitialized: Boolean = false,
@@ -150,3 +166,53 @@ data class CachedRecommendationItem(
     val progressNumerator: Long
         get() = unreadCount?.let { totalCount - it } ?: progressCount
 }
+
+@Serializable
+data class CachedDiscoveryItem(
+    val title: String,
+    val cleanTitle: String,
+    val coverUrl: String? = null,
+    val seedTitle: String? = null,
+    val reasonPayload: String? = null,
+    val provider: String = "",
+    val rowTypeKey: String = DiscoveryRowType.TASTE.key,
+    val sourceId: Long? = null,
+    val sourceUrl: String? = null,
+    val shownAt: Long? = null,
+    val genres: List<String> = emptyList(),
+    val hasPriorityBoost: Boolean = false,
+)
+
+internal fun HomeHubDiscoveryItem.toCachedDiscoveryItem(): CachedDiscoveryItem =
+    CachedDiscoveryItem(
+        title = title,
+        cleanTitle = cleanTitle,
+        coverUrl = coverUrl,
+        seedTitle = seedTitle,
+        reasonPayload = reasonPayload,
+        provider = provider,
+        rowTypeKey = rowType.key,
+        sourceId = sourceId,
+        sourceUrl = sourceUrl,
+        shownAt = shownAt,
+        genres = genres,
+        hasPriorityBoost = hasPriorityBoost,
+    )
+
+internal fun CachedDiscoveryItem.toHomeHubDiscoveryItem(
+    mediaType: DiscoveryMediaType,
+): HomeHubDiscoveryItem = HomeHubDiscoveryItem(
+    title = title,
+    cleanTitle = cleanTitle,
+    coverUrl = coverUrl,
+    seedTitle = seedTitle,
+    reasonPayload = reasonPayload,
+    provider = provider,
+    rowType = DiscoveryRowType.fromKey(rowTypeKey) ?: DiscoveryRowType.TASTE,
+    mediaType = mediaType,
+    sourceId = sourceId,
+    sourceUrl = sourceUrl,
+    shownAt = shownAt,
+    genres = genres,
+    hasPriorityBoost = hasPriorityBoost,
+)

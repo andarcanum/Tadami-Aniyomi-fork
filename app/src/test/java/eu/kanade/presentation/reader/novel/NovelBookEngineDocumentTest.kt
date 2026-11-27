@@ -202,4 +202,33 @@ class NovelBookEngineDocumentTest {
         // on estimated chapter weights.
         html shouldContain "onSectionMeasured"
     }
+
+    @Test
+    fun `book document guards transient resize frames and preserves text anchor across resize and book flip`() {
+        val paginatedHtml = buildNovelBookEngineDocumentHtml(
+            document = NovelBookDocument(
+                sectionIndex = 0,
+                chapterId = 1L,
+                html = "<p>Chapter paragraph one</p><p>Chapter paragraph two</p>",
+            ),
+            flow = NovelBookEngineFlow.PAGINATED,
+        )
+
+        paginatedHtml shouldContain "isValidViewportBox"
+        paginatedHtml shouldContain "hasPendingViewportResize"
+        paginatedHtml shouldContain "applyViewportResizeAnchor"
+        paginatedHtml shouldContain "getPropertyValue('--an-reader-bg')"
+
+        val scrolledHtml = buildNovelBookEngineDocumentHtml(
+            document = NovelBookDocument(
+                sectionIndex = 0,
+                chapterId = 1L,
+                html = "<p>Scrolled paragraph</p>",
+            ),
+            flow = NovelBookEngineFlow.SCROLLED,
+        )
+
+        scrolledHtml shouldContain "applyViewportResizeAnchor"
+        scrolledHtml shouldContain "settledScrollFraction"
+    }
 }

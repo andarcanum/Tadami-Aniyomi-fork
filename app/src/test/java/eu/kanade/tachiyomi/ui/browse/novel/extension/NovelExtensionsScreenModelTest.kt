@@ -1,10 +1,16 @@
 package eu.kanade.tachiyomi.ui.browse.novel.extension
 
 import android.app.Application
+import androidx.lifecycle.asFlow
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.tachiyomi.data.updater.ExtensionUpdateJob
 import eu.kanade.tachiyomi.extension.InstallStep
+import eu.kanade.tachiyomi.extension.installer.ApkExtensionKind
 import eu.kanade.tachiyomi.extension.installer.ApkInstallRequest
 import eu.kanade.tachiyomi.extension.installer.ApkInstallResult
 import eu.kanade.tachiyomi.extension.installer.ApkUninstallRequest
@@ -14,11 +20,16 @@ import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginSettingsSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
+import eu.kanade.tachiyomi.util.system.workManager
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkObject
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -473,6 +484,92 @@ class NovelExtensionsScreenModelTest {
     }
 
     @Test
+    fun `updateAllExtensions delegates to ExtensionUpdateJob start`() {
+        runBlocking {
+            mockkObject(ExtensionUpdateJob.Companion)
+            every { ExtensionUpdateJob.start(any(), ApkExtensionKind.NOVEL_KOTLIN) } returns true
+
+            val screenModel = createScreenModel(
+                FakeNovelExtensionManager(
+                    installed = emptyList(),
+                    available = emptyList(),
+                    updates = emptyList(),
+                ),
+            )
+            awaitWithin { !screenModel.state.value.isLoading }
+
+            screenModel.updateAllExtensions()
+
+            verify(exactly = 1) {
+                ExtensionUpdateJob.start(any(), ApkExtensionKind.NOVEL_KOTLIN)
+            }
+            unmockkObject(ExtensionUpdateJob.Companion)
+        }
+    }
+
+    @Test
+    fun `cancelUpdateAll delegates to ExtensionUpdateJob stop`() {
+        runBlocking {
+            mockkObject(ExtensionUpdateJob.Companion)
+            every { ExtensionUpdateJob.stop(any(), ApkExtensionKind.NOVEL_KOTLIN) } returns Unit
+
+            val screenModel = createScreenModel(
+                FakeNovelExtensionManager(
+                    installed = emptyList(),
+                    available = emptyList(),
+                    updates = emptyList(),
+                ),
+            )
+            awaitWithin { !screenModel.state.value.isLoading }
+
+            screenModel.cancelUpdateAll()
+
+            verify(exactly = 1) {
+                ExtensionUpdateJob.stop(any(), ApkExtensionKind.NOVEL_KOTLIN)
+            }
+            unmockkObject(ExtensionUpdateJob.Companion)
+        }
+    }
+
+    @Test
+    fun `isUpdatingAll and updatingAllProgress reflect WorkManager progress`() {
+        runBlocking {
+            mockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
+            mockkStatic("androidx.lifecycle.FlowLiveDataConversions")
+            val workManager = mockk<WorkManager>(relaxed = true)
+            every { any<android.content.Context>().workManager } returns workManager
+
+            val runningWorkInfo = mockk<WorkInfo> {
+                every { state } returns WorkInfo.State.RUNNING
+                every { progress } returns workDataOf(
+                    ExtensionUpdateJob.KEY_CURRENT to 3,
+                    ExtensionUpdateJob.KEY_TOTAL to 7,
+                )
+            }
+            val liveData = mockk<androidx.lifecycle.LiveData<List<WorkInfo>>>(relaxed = true)
+            every { workManager.getWorkInfosForUniqueWorkLiveData(ExtensionUpdateJob.WORK_NAME_NOVEL) } returns liveData
+            every { liveData.asFlow() } returns flowOf(listOf(runningWorkInfo))
+
+            val screenModel = createScreenModel(
+                FakeNovelExtensionManager(
+                    installed = emptyList(),
+                    available = emptyList(),
+                    updates = emptyList(),
+                ),
+            )
+            awaitWithin { !screenModel.state.value.isLoading }
+
+            awaitWithin { screenModel.state.value.isUpdatingAll }
+
+            screenModel.state.value.isUpdatingAll shouldBe true
+            screenModel.state.value.updatingAllProgress shouldBe Pair(3, 7)
+
+            unmockkStatic("androidx.lifecycle.FlowLiveDataConversions")
+            unmockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
+        }
+    }
+
+    @Test
     fun `untracked install mirrored into currentDownloads clears on terminal step`() {
         runBlocking {
             val installed = pluginInstalled("kid", 1).copy(pkgName = "org.kid")
@@ -892,6 +989,37 @@ class NovelExtensionsScreenModelTest {
             awaitWithin { screenModel.state.value.queuedReinstallPlugin == null }
             delay(100)
             extensionManager.installStarts shouldBe 0
+        }
+    }
+
+    @Test
+    fun `cancelUpdateAll cancels active novel plugin install and stops remaining queue`() {
+        runBlocking {
+            val firstInstalled = pluginInstalled("kid-a", 1)
+            val secondInstalled = pluginInstalled("kid-b", 1)
+            val extensionManager = FakeNovelExtensionManager(
+                installed = listOf(firstInstalled, secondInstalled),
+                available = listOf(pluginAvailable("kid-a", 2), pluginAvailable("kid-b", 2)),
+                updates = listOf(firstInstalled, secondInstalled),
+            )
+            extensionManager.installGate = CompletableDeferred()
+            val screenModel = createScreenModel(extensionManager)
+            awaitWithin { !screenModel.state.value.isLoading }
+
+            screenModel.updateAllExtensions()
+            awaitWithin { extensionManager.installStarts == 1 }
+            screenModel.state.value.isUpdatingAll shouldBe true
+            screenModel.state.value.updatingAllProgress shouldBe (0 to 2)
+
+            screenModel.cancelUpdateAll()
+
+            screenModel.state.value.isUpdatingAll shouldBe false
+            screenModel.state.value.updatingAllProgress shouldBe null
+            extensionManager.cancelledIds shouldBe listOf("kid-a")
+
+            extensionManager.installGate?.complete(Unit)
+            delay(100)
+            extensionManager.installStarts shouldBe 1
         }
     }
 

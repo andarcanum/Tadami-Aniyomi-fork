@@ -11,6 +11,7 @@ import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
+import tachiyomi.domain.library.model.AuroraLibraryListStyle
 import tachiyomi.domain.library.model.GroupLibraryMode
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.model.LibraryGroup
@@ -150,6 +151,16 @@ class LibraryPreferences(
     fun auroraLibraryCardStyle() = preferenceStore.getEnum(
         "pref_aurora_library_card_style",
         AuroraLibraryCardStyle.GlowContour,
+    )
+
+    fun auroraLibraryListStyle() = preferenceStore.getEnum(
+        "pref_aurora_library_list_style",
+        AuroraLibraryListStyle.Banner,
+    )
+
+    fun auroraLibraryListSize() = preferenceStore.getInt(
+        "pref_aurora_library_list_size",
+        0,
     )
 
     // Common Category

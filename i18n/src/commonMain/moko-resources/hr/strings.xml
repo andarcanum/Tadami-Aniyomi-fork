@@ -790,7 +790,6 @@
     <string name="manga_interval_expected_update_soon">Uskoro</string>
     <string name="available_disk_space_info">Dostupno: %1$s / Ukupno: %2$s</string>
     <string name="pref_webtoon_disable_zoom_out">Deaktiviraj smanjivanje zumiranja</string>
-    <string name="pref_display_profile">Prilagođeni profil prikaza</string>
     <string name="label_upcoming">Predstojeći</string>
     <string name="action_migrate_duplicate">Migriraj postojeći unos</string>
     <string name="action_add_anyway">Svejedno dodaj</string>
@@ -835,5 +834,4 @@
     <string name="pref_hardware_bitmap_threshold_summary">Ako čitač učita praznu sliku, postupno smanji prag.\nOdabrano: %s</string>
     <string name="pref_hardware_bitmap_threshold">Prilagođeni hardverski prag bitmapa</string>
     <string name="pref_hardware_bitmap_threshold_default">Standardno (%d)</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Utječe na performansu. Aktiviraj samo ako smanjenje praga bitmapa ne riješi probleme s praznim slikama</string>
 </resources>

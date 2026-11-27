@@ -58,6 +58,11 @@ class SyncChapterProgressWithTrackTest {
         )
 
         assertEquals(listOf(1L, 2L), chapterUpdatesSlot.captured.map { it.id })
+        chapterUpdatesSlot.captured.forEach {
+            assertEquals(null, it.bookmark)
+            assertEquals(null, it.lastPageRead)
+            assertEquals(null, it.version)
+        }
         assertTrue(chapterUpdatesSlot.captured.all { it.read == true })
         coVerify(exactly = 1) { updateChapter.awaitAll(any()) }
         coVerify(exactly = 0) { tracker.update(any(), any()) }
@@ -135,6 +140,48 @@ class SyncChapterProgressWithTrackTest {
         )
 
         assertEquals(2.0, updatedTrackSlot.captured.last_chapter_read)
+        coVerify(exactly = 1) { tracker.update(any(), any()) }
+        coVerify(exactly = 1) { insertTrack.await(any()) }
+    }
+
+    @Test
+    fun `read chapters beyond a gap push maximum recognized progress`() = runTest {
+        val mangaId = 42L
+        val getChaptersByMangaId = mockk<GetChaptersByMangaId>()
+        val updateChapter = mockk<UpdateChapter>(relaxed = true)
+        val insertTrack = mockk<InsertMangaTrack>(relaxed = true)
+        val tracker = mockk<MangaTracker>(relaxed = true)
+        val trackPreferences = mockk<TrackPreferences>()
+        val pullPreference = mockk<Preference<Boolean>>()
+        val updatedTrackSlot = slot<eu.kanade.tachiyomi.data.database.models.manga.MangaTrack>()
+
+        coEvery { getChaptersByMangaId.await(mangaId, any()) } returns listOf(
+            chapter(id = 4, mangaId = mangaId, chapterNumber = 4.5, read = true),
+            chapter(id = 1, mangaId = mangaId, chapterNumber = 1.0, read = false),
+            chapter(id = 2, mangaId = mangaId, chapterNumber = 2.0, read = true),
+            chapter(id = 3, mangaId = mangaId, chapterNumber = 3.0, read = false),
+            chapter(id = 5, mangaId = mangaId, chapterNumber = 5.0, read = false).copy(lastPageRead = 8),
+            chapter(id = 6, mangaId = mangaId, chapterNumber = -1.0, read = true),
+        )
+        every { trackPreferences.autoSyncProgressFromTracker() } returns pullPreference
+        every { pullPreference.get() } returns true
+        coEvery { tracker.update(capture(updatedTrackSlot), any()) } answers { firstArg() }
+
+        val interactor = SyncChapterProgressWithTrack(
+            updateChapter = updateChapter,
+            insertTrack = insertTrack,
+            getChaptersByMangaId = getChaptersByMangaId,
+            trackPreferences = trackPreferences,
+            resolveTrackProgressSync = ResolveTrackProgressSync(),
+        )
+
+        interactor.await(
+            mangaId = mangaId,
+            remoteTrack = track(mangaId = mangaId, lastChapterRead = 1.0),
+            tracker = tracker,
+        )
+
+        assertEquals(4.5, updatedTrackSlot.captured.last_chapter_read)
         coVerify(exactly = 1) { tracker.update(any(), any()) }
         coVerify(exactly = 1) { insertTrack.await(any()) }
     }

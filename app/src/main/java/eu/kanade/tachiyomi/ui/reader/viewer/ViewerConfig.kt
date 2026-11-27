@@ -38,6 +38,8 @@ abstract class ViewerConfig(
     var doubleTapAnimDuration = 500
     var volumeKeysEnabled = false
     var volumeKeysInverted = false
+    var volumeKeysAdjustAutoScroll = true
+    var edgeTapGuardDp = 0
     var alwaysShowChapterTransition = true
     var preloadNextChapter = true
     var navigationMode = 0
@@ -62,12 +64,17 @@ abstract class ViewerConfig(
     var joinDoublePages = false
         protected set
 
+    var pauseShadersOnFling = readerPreferences.pauseShadersOnFling().get()
+        protected set
+
     private var isEInkMode = uiPreferences.eInkProfile().get().isEnabled
 
     abstract var navigator: ViewerNavigation
         protected set
 
     init {
+        readerPreferences.pauseShadersOnFling()
+            .register({ pauseShadersOnFling = it })
         uiPreferences.eInkProfile()
             .changes()
             .onEach {
@@ -93,6 +100,10 @@ abstract class ViewerConfig(
 
         readerPreferences.readWithVolumeKeysInverted()
             .register({ volumeKeysInverted = it })
+        readerPreferences.volumeKeysAdjustAutoScroll()
+            .register({ volumeKeysAdjustAutoScroll = it })
+        readerPreferences.edgeTapGuardDp()
+            .register({ edgeTapGuardDp = it })
 
         readerPreferences.alwaysShowChapterTransition()
             .register({ alwaysShowChapterTransition = it }, { transitionPropertyChangedListener?.invoke() })

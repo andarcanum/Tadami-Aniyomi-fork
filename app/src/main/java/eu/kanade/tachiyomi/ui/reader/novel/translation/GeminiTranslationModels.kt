@@ -19,6 +19,7 @@ data class GeminiTranslationParams(
     val provider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
     val privateUnlocked: Boolean = false,
     val privatePythonLikeMode: Boolean = false,
+    val frozenGenerationConfig: kotlinx.serialization.json.JsonObject? = null,
 )
 
 /**
@@ -48,13 +49,19 @@ internal data class GeminiTranslationCacheEntry(
     val replaceRulesFingerprint: String = "",
     /** Source segment count at write time; 0 = unknown (legacy). Fewer translations = incomplete. */
     val sourceSegmentCount: Int = 0,
+    /** New artifacts bind to actual source and effective generation settings; legacy defaults stay readable. */
+    val sourceFingerprint: String = "",
+    val generationFingerprint: String = "",
 ) {
     /**
      * A relaxed-mode run can persist a partially translated chapter; skip-checks must treat it as
      * not-cached so a later batch heals it, while display restore may still show what exists.
      */
     val isTranslationComplete: Boolean
-        get() = sourceSegmentCount <= 0 || translatedByIndex.size >= sourceSegmentCount
+        get() = sourceSegmentCount > 0 &&
+            translatedByIndex.size == sourceSegmentCount &&
+            translatedByIndex.keys == (0 until sourceSegmentCount).toSet() &&
+            translatedByIndex.values.none { it.isBlank() }
 }
 
 data class AirforceTranslationParams(

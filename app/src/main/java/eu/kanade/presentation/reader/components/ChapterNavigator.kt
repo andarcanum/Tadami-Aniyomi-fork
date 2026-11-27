@@ -1,16 +1,26 @@
 package eu.kanade.presentation.reader.components
 
+import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -33,26 +43,39 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
 import eu.kanade.presentation.util.isTabletUi
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressHudLogic
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Slider
 import tachiyomi.presentation.core.i18n.stringResource
@@ -97,10 +120,14 @@ fun VerticalSlider(
     onValueChange: (Int) -> Unit,
     valueRange: ClosedRange<Float>,
     modifier: Modifier = Modifier,
+    onValueChangeFinished: (() -> Unit)? = null,
     activeColor: Color = MaterialTheme.colorScheme.primary,
     inactiveColor: Color = activeColor.copy(alpha = 0.3f),
+    onDragStateChange: (Boolean) -> Unit = {},
 ) {
     val haptic = LocalHapticFeedback.current
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
     // РЕШ-11 revival: `haptic` was declared and never used. Mirror the horizontal slider's tick
     // feedback (TextHandleMove on value change); the initial composition is skipped because
     // lastHapticValue starts equal to value.
@@ -118,14 +145,25 @@ fun VerticalSlider(
             .pointerInput(valueRange) {
                 detectTapGestures { offset ->
                     val newValue = verticalSliderValueFromPosition(offset.y, size.height.toFloat(), valueRange)
-                    onValueChange(newValue.roundToInt())
+                    currentOnValueChange(newValue.roundToInt())
+                    currentOnValueChangeFinished?.invoke()
                 }
             }
             .pointerInput(valueRange) {
-                detectVerticalDragGestures { change, _ ->
+                detectVerticalDragGestures(
+                    onDragStart = { onDragStateChange(true) },
+                    onDragEnd = {
+                        onDragStateChange(false)
+                        currentOnValueChangeFinished?.invoke()
+                    },
+                    onDragCancel = {
+                        onDragStateChange(false)
+                        currentOnValueChangeFinished?.invoke()
+                    },
+                ) { change, _ ->
                     change.consume()
                     val newValue = verticalSliderValueFromPosition(change.position.y, size.height.toFloat(), valueRange)
-                    onValueChange(newValue.roundToInt())
+                    currentOnValueChange(newValue.roundToInt())
                 }
             },
     ) {
@@ -194,6 +232,9 @@ fun ChapterNavigator(
     cornerRadius: Int = 24,
     showTickMarks: Boolean = false,
     isVertical: Boolean = false,
+    showScrubPreview: Boolean = false,
+    isLeftAligned: Boolean = false,
+    loadScrubPreview: (suspend (pageIndex: Int) -> Bitmap?)? = null,
 ) {
     val isTabletUi = isTabletUi()
     val horizontalPadding = if (isTabletUi) 24.dp else 8.dp
@@ -225,107 +266,183 @@ fun ChapterNavigator(
         inactiveTrackColor = activeSliderColor.copy(alpha = 0.3f),
     )
 
+    var isVerticalDragging by remember { mutableStateOf(false) }
+
+    val scope = rememberCoroutineScope()
+    var scrubPage by remember(totalPages) { mutableStateOf<Int?>(null) }
+    var lastDispatchedPage by remember(totalPages) { mutableIntStateOf(currentPage) }
+    var pendingJumpJob by remember(totalPages) { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(currentPage, scrubPage) {
+        if (scrubPage == null) {
+            lastDispatchedPage = currentPage
+        }
+    }
+    DisposableEffect(totalPages) {
+        onDispose {
+            pendingJumpJob?.cancel()
+            pendingJumpJob = null
+        }
+    }
+
+    val displayedPage = if (totalPages > 0) {
+        (scrubPage ?: currentPage).coerceIn(1, totalPages)
+    } else {
+        currentPage
+    }
+
+    fun onSliderScrub(newPage: Int) {
+        if (totalPages <= 0) return
+        val clamped = newPage.coerceIn(1, totalPages)
+        if (clamped == displayedPage) return
+        scrubPage = clamped
+        pendingJumpJob?.cancel()
+        pendingJumpJob = scope.launch {
+            delay(SCRUB_JUMP_COALESCE_MS)
+            if (lastDispatchedPage != clamped) {
+                lastDispatchedPage = clamped
+                onPageIndexChange(clamped - 1)
+            }
+        }
+    }
+
+    fun onSliderScrubFinished() {
+        pendingJumpJob?.cancel()
+        pendingJumpJob = null
+        val target = scrubPage
+        scrubPage = null
+        if (target != null && target != lastDispatchedPage) {
+            lastDispatchedPage = target
+            onPageIndexChange(target - 1)
+        }
+    }
+
     // We explicitly handle direction based on the reader viewer rather than the system direction
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         if (isVertical) {
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight(0.75f)
-                    .width(navigatorHeight.heightDp.dp)
-                    .padding(vertical = horizontalPadding),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            val previewVisible = isVerticalDragging && showScrubPreview && totalPages > 1
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (showChapterButtons) {
-                    FilledIconButton(
-                        enabled = if (isRtl) enabledNext else enabledPrevious,
-                        onClick = {
-                            appHaptics.tap()
-                            if (isRtl) {
-                                onNextChapter()
-                            } else {
-                                onPreviousChapter()
-                            }
-                        },
-                        colors = buttonColor,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.SkipPrevious,
-                            contentDescription = stringResource(
-                                if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
-                            ),
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
+                if (!isLeftAligned) {
+                    ScrubPreviewOverlay(
+                        visible = previewVisible,
+                        currentPage = displayedPage,
+                        totalPages = totalPages,
+                        loadScrubPreview = loadScrubPreview,
+                    )
                 }
-
-                if (totalPages > 1) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(cornerRadius.dp))
-                            .background(backgroundColor)
-                            .padding(vertical = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        if (showPageNumbers) {
-                            Text(
-                                text = currentPage.toString(),
-                                style = MaterialTheme.typography.bodySmall,
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight(0.75f)
+                        .width(navigatorHeight.heightDp.dp)
+                        .padding(vertical = horizontalPadding),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (showChapterButtons) {
+                        FilledIconButton(
+                            enabled = if (isRtl) enabledNext else enabledPrevious,
+                            onClick = {
+                                appHaptics.tap()
+                                if (isRtl) {
+                                    onNextChapter()
+                                } else {
+                                    onPreviousChapter()
+                                }
+                            },
+                            colors = buttonColor,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.SkipPrevious,
+                                contentDescription = stringResource(
+                                    if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
+                                ),
                             )
-                            Spacer(Modifier.height(8.dp))
                         }
+                        Spacer(Modifier.height(8.dp))
+                    }
 
-                        VerticalSlider(
+                    if (totalPages > 1) {
+                        Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(vertical = 8.dp),
-                            value = currentPage,
-                            valueRange = 1f..totalPages.toFloat(),
-                            onValueChange = f@{
-                                if (it == currentPage) return@f
-                                onPageIndexChange(it - 1)
-                            },
-                            activeColor = activeSliderColor,
-                            inactiveColor = activeSliderColor.copy(alpha = 0.3f),
-                        )
+                                .clip(RoundedCornerShape(cornerRadius.dp))
+                                .background(backgroundColor)
+                                .padding(vertical = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (showPageNumbers) {
+                                Text(
+                                    text = displayedPage.toString(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
 
-                        if (showPageNumbers) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = totalPages.toString(),
-                                style = MaterialTheme.typography.bodySmall,
+                            VerticalSlider(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(vertical = 8.dp),
+                                value = displayedPage,
+                                valueRange = 1f..totalPages.toFloat(),
+                                onValueChange = ::onSliderScrub,
+                                onValueChangeFinished = ::onSliderScrubFinished,
+                                activeColor = activeSliderColor,
+                                inactiveColor = activeSliderColor.copy(alpha = 0.3f),
+                                onDragStateChange = { isVerticalDragging = it },
+                            )
+
+                            if (showPageNumbers) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = totalPages.toString(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+
+                    if (showChapterButtons) {
+                        Spacer(Modifier.height(8.dp))
+                        FilledIconButton(
+                            enabled = if (isRtl) enabledPrevious else enabledNext,
+                            onClick = {
+                                appHaptics.tap()
+                                if (isRtl) {
+                                    onPreviousChapter()
+                                } else {
+                                    onNextChapter()
+                                }
+                            },
+                            colors = buttonColor,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.SkipNext,
+                                contentDescription = stringResource(
+                                    if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
+                                ),
                             )
                         }
                     }
-                } else {
-                    Spacer(Modifier.weight(1f))
                 }
-
-                if (showChapterButtons) {
-                    Spacer(Modifier.height(8.dp))
-                    FilledIconButton(
-                        enabled = if (isRtl) enabledPrevious else enabledNext,
-                        onClick = {
-                            appHaptics.tap()
-                            if (isRtl) {
-                                onPreviousChapter()
-                            } else {
-                                onNextChapter()
-                            }
-                        },
-                        colors = buttonColor,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.SkipNext,
-                            contentDescription = stringResource(
-                                if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
-                            ),
-                        )
-                    }
+                if (isLeftAligned) {
+                    ScrubPreviewOverlay(
+                        visible = previewVisible,
+                        currentPage = displayedPage,
+                        totalPages = totalPages,
+                        loadScrubPreview = loadScrubPreview,
+                    )
                 }
             }
         } else {
-            Row(
+            val interactionSource = remember { MutableInteractionSource() }
+            val sliderDragged by interactionSource.collectIsDraggedAsState()
+            val previewVisible = sliderDragged && showScrubPreview && totalPages > 1
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentWidth(Alignment.CenterHorizontally)
@@ -336,103 +453,224 @@ fun ChapterNavigator(
                             Modifier
                         },
                     )
-                    .height(navigatorHeight.heightDp.dp)
                     .padding(horizontal = horizontalPadding),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (showChapterButtons) {
-                    FilledIconButton(
-                        enabled = if (isRtl) enabledNext else enabledPrevious,
-                        onClick = {
-                            appHaptics.tap()
-                            if (isRtl) {
-                                onNextChapter()
-                            } else {
-                                onPreviousChapter()
-                            }
-                        },
-                        colors = buttonColor,
+                if (showScrubPreview && totalPages > 1) {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.SkipPrevious,
-                            contentDescription = stringResource(
-                                if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
-                            ),
+                        val cardWidth = 96.dp
+                        val maxShift = (maxWidth - cardWidth).coerceAtLeast(0.dp)
+                        val offsetFraction = ReaderProgressHudLogic.computeScrubPreviewOffsetFraction(
+                            currentPage = displayedPage,
+                            totalPages = totalPages,
+                            isRtl = isRtl,
                         )
-                    }
-                }
-
-                if (totalPages > 1) {
-                    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(cornerRadius.dp))
-                                .background(backgroundColor)
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Box(
+                            modifier = Modifier.offset(x = maxShift * offsetFraction),
                         ) {
-                            if (showPageNumbers) {
-                                Box(contentAlignment = Alignment.CenterEnd) {
-                                    Text(text = currentPage.toString())
-                                    // Taking up full length so the slider doesn't shift when 'currentPage' length changes
-                                    Text(text = totalPages.toString(), color = Color.Transparent)
-                                }
-                            }
-
-                            val interactionSource = remember { MutableInteractionSource() }
-                            val sliderDragged by interactionSource.collectIsDraggedAsState()
-                            LaunchedEffect(currentPage) {
-                                if (sliderDragged) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                }
-                            }
-
-                            Slider(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 8.dp),
-                                value = currentPage,
-                                valueRange = 1..totalPages,
-                                onValueChange = f@{
-                                    if (it == currentPage) return@f
-                                    onPageIndexChange(it - 1)
-                                },
-                                interactionSource = interactionSource,
-                                colors = sliderColors,
-                                steps = if (showTickMarks) totalPages - 2 else 0,
+                            ScrubPreviewOverlay(
+                                visible = previewVisible,
+                                currentPage = displayedPage,
+                                totalPages = totalPages,
+                                loadScrubPreview = loadScrubPreview,
+                                bottomPadding = 8.dp,
                             )
-
-                            if (showPageNumbers) {
-                                Text(text = totalPages.toString())
-                            }
                         }
                     }
-                } else {
-                    Spacer(Modifier.weight(1f))
                 }
 
-                if (showChapterButtons) {
-                    FilledIconButton(
-                        enabled = if (isRtl) enabledPrevious else enabledNext,
-                        onClick = {
-                            appHaptics.tap()
-                            if (isRtl) {
-                                onPreviousChapter()
-                            } else {
-                                onNextChapter()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(navigatorHeight.heightDp.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showChapterButtons) {
+                        FilledIconButton(
+                            enabled = if (isRtl) enabledNext else enabledPrevious,
+                            onClick = {
+                                appHaptics.tap()
+                                if (isRtl) {
+                                    onNextChapter()
+                                } else {
+                                    onPreviousChapter()
+                                }
+                            },
+                            colors = buttonColor,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.SkipPrevious,
+                                contentDescription = stringResource(
+                                    if (isRtl) MR.strings.action_next_chapter else MR.strings.action_previous_chapter,
+                                ),
+                            )
+                        }
+                    }
+
+                    if (totalPages > 1) {
+                        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(cornerRadius.dp))
+                                    .background(backgroundColor)
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (showPageNumbers) {
+                                    Box(contentAlignment = Alignment.CenterEnd) {
+                                        Text(text = displayedPage.toString())
+                                        // Taking up full length so the slider doesn't shift when 'currentPage' length changes
+                                        Text(text = totalPages.toString(), color = Color.Transparent)
+                                    }
+                                }
+
+                                LaunchedEffect(displayedPage) {
+                                    if (sliderDragged || scrubPage != null) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                }
+
+                                Slider(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 8.dp),
+                                    value = displayedPage,
+                                    valueRange = 1..totalPages,
+                                    onValueChange = ::onSliderScrub,
+                                    onValueChangeFinished = ::onSliderScrubFinished,
+                                    interactionSource = interactionSource,
+                                    colors = sliderColors,
+                                    steps = if (showTickMarks) totalPages - 2 else 0,
+                                )
+
+                                if (showPageNumbers) {
+                                    Text(text = totalPages.toString())
+                                }
                             }
-                        },
-                        colors = buttonColor,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.SkipNext,
-                            contentDescription = stringResource(
-                                if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
-                            ),
-                        )
+                        }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+
+                    if (showChapterButtons) {
+                        FilledIconButton(
+                            enabled = if (isRtl) enabledPrevious else enabledNext,
+                            onClick = {
+                                appHaptics.tap()
+                                if (isRtl) {
+                                    onPreviousChapter()
+                                } else {
+                                    onNextChapter()
+                                }
+                            },
+                            colors = buttonColor,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.SkipNext,
+                                contentDescription = stringResource(
+                                    if (isRtl) MR.strings.action_previous_chapter else MR.strings.action_next_chapter,
+                                ),
+                            )
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScrubPreviewOverlay(
+    visible: Boolean,
+    currentPage: Int,
+    totalPages: Int,
+    loadScrubPreview: (suspend (pageIndex: Int) -> Bitmap?)?,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
+) {
+    val aurora = AuroraTheme.colors
+    val pageIndex = (currentPage - 1).coerceAtLeast(0)
+    val previewBitmap by produceState<Bitmap?>(
+        initialValue = null,
+        key1 = visible,
+        key2 = pageIndex,
+        key3 = loadScrubPreview,
+    ) {
+        if (!visible || loadScrubPreview == null) {
+            value = null
+            return@produceState
+        }
+        value = loadScrubPreview(pageIndex)
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + scaleIn(initialScale = 0.92f),
+        exit = fadeOut() + scaleOut(targetScale = 0.92f),
+    ) {
+        val cardShape = RoundedCornerShape(12.dp)
+        val surfaceColor = if (aurora.isEInk) {
+            aurora.surface
+        } else {
+            MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp).copy(alpha = 0.94f)
+        }
+        val borderColor = if (aurora.isEInk) {
+            aurora.textPrimary.copy(alpha = 0.4f)
+        } else {
+            Color.White.copy(alpha = 0.2f)
+        }
+        val percent = ReaderProgressHudLogic.computePercent(currentPage, totalPages)
+
+        Box(
+            modifier = Modifier
+                .padding(bottom = bottomPadding)
+                .width(96.dp)
+                .height(136.dp)
+                .clip(cardShape)
+                .background(surfaceColor)
+                .border(1.dp, borderColor, cardShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            val validBitmap = previewBitmap?.takeIf { !it.isRecycled }
+            if (validBitmap != null) {
+                Image(
+                    bitmap = validBitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = currentPage.toString(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = aurora.textPrimary.copy(alpha = 0.7f),
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(
+                        if (aurora.isEInk) {
+                            aurora.surface.copy(alpha = 0.95f)
+                        } else {
+                            Color.Black.copy(alpha = 0.68f)
+                        },
+                    )
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$currentPage/$totalPages · $percent%",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (aurora.isEInk) aurora.textPrimary else Color.White,
+                    maxLines = 1,
+                )
             }
         }
     }
@@ -455,3 +693,5 @@ private fun ChapterNavigatorPreview() {
         )
     }
 }
+
+private const val SCRUB_JUMP_COALESCE_MS = 60L

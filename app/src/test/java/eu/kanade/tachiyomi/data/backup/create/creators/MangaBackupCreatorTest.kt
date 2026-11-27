@@ -120,6 +120,31 @@ class MangaBackupCreatorTest {
         m1.history shouldBe emptyList()
     }
 
+    @Test
+    fun `getAllChaptersForBackup includes read non-favorite entries and skips unread non-library entries`() = runTest {
+        val readNonFavId = insertManga(url = "https://x/read-non-fav", favorite = false)
+        val unreadNonFavId = insertManga(url = "https://x/unread-non-fav", favorite = false)
+        database.chaptersQueries.insert(
+            mangaId = readNonFavId,
+            url = "/read-c1",
+            name = "Ch 1",
+            scanlator = null,
+            read = true,
+            bookmark = false,
+            lastPageRead = 0L,
+            chapterNumber = 1.0,
+            sourceOrder = 0L,
+            dateFetch = 0L,
+            dateUpload = 0L,
+            version = 0L,
+            memo = kotlinx.serialization.json.JsonObject(emptyMap()),
+        )
+        insertChapter(mangaId = unreadNonFavId, url = "/unread-c1", sourceOrder = 0)
+
+        val rows = database.chaptersQueries.getAllChaptersForBackup().executeAsList()
+        rows.map { it.url } shouldBe listOf("/read-c1")
+    }
+
     private fun insertManga(url: String, favorite: Boolean): Long {
         database.mangasQueries.insert(
             source = 1L,

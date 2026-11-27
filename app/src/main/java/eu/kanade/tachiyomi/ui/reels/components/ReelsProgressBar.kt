@@ -1,11 +1,13 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -14,23 +16,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -48,20 +57,47 @@ fun ReelsProgressBar(
     progressState: State<Float>,
     durationSec: Float,
     onSeek: (Float) -> Unit,
+    onScrubPreview: ((Float) -> Unit)? = null,
     onScrubStart: () -> Unit = {},
+    onScrubStateChange: ((ReelsScrubUiState) -> Unit)? = null,
+    externalScrubFraction: Float? = null,
+    chromeVisible: Boolean = true,
+    bufferFraction: Float = 0f,
+    bufferFractionState: State<Float>? = null,
+    posterUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
     var barWidthPx by remember { mutableFloatStateOf(1f) }
+    val haptic = LocalHapticFeedback.current
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentOnScrubPreview by rememberUpdatedState(onScrubPreview)
+    val currentOnScrubStart by rememberUpdatedState(onScrubStart)
+    val currentOnScrubStateChange by rememberUpdatedState(onScrubStateChange)
 
-    // Only this composable reads progressState.value, so the 10Hz updates recompose just the
-    // bar, not the whole video page.
-    val currentFraction = if (isDragging) dragProgress else progressState.value.coerceIn(0f, 1f)
+    val effectiveDragging = isDragging || externalScrubFraction != null
+    val semanticProgress by remember(isDragging, externalScrubFraction) {
+        derivedStateOf {
+            val raw = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            (raw * 100f).roundToInt() / 100f
+        }
+    }
     val barHeight by animateDpAsState(
-        targetValue = if (isDragging) 6.dp else 3.dp,
+        targetValue = if (effectiveDragging) {
+            6.dp
+        } else if (chromeVisible) {
+            4.dp
+        } else {
+            3.dp
+        },
         label = "progress_bar_height",
     )
+    val accentColor = AuroraTheme.colors.accent
 
     Box(
         modifier = modifier
@@ -71,7 +107,7 @@ fun ReelsProgressBar(
             .height(48.dp)
             // TalkBack: expose the scrubber as an adjustable progress control.
             .semantics {
-                progressBarRangeInfo = ProgressBarRangeInfo(currentFraction, 0f..1f)
+                progressBarRangeInfo = ProgressBarRangeInfo(semanticProgress, 0f..1f)
                 setProgress { target: Float ->
                     onSeek(target.coerceIn(0f, 1f))
                     true
@@ -88,93 +124,183 @@ fun ReelsProgressBar(
                     // Own the down so the page-level tap does not also toggle playback; the
                     // pager still tracks it and takes over once the movement turns vertical.
                     down.consume()
+                    val startProgress = progressState.value.coerceIn(0f, 1f)
                     gesture.start(down.position.x, barWidthPx)
                     isDragging = true
                     dragProgress = gesture.progress
-                    onScrubStart()
-                    while (true) {
-                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        val delta = change.positionChange()
-                        val outcome = gesture.move(delta.x, delta.y, consumedByOther = change.isConsumed)
-                        if (outcome == ReelsScrubOutcome.Cancelled) break
-                        if (outcome == ReelsScrubOutcome.Owned) change.consume()
-                        dragProgress = gesture.progress
-                        isDragging = gesture.isActive
+                    currentOnScrubStart()
+                    currentOnScrubStateChange?.invoke(
+                        ReelsScrubUiState(
+                            isActive = true,
+                            progress = gesture.progress,
+                            startProgress = startProgress,
+                            isFineMode = false,
+                            fromScreenGesture = false,
+                            barWidthPx = barWidthPx,
+                        ),
+                    )
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    var lastLiveSeekAtMs = 0L
+                    try {
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            val delta = change.positionChange()
+                            val outcome = gesture.move(delta.x, delta.y, consumedByOther = change.isConsumed)
+                            if (outcome == ReelsScrubOutcome.Cancelled) break
+                            if (outcome == ReelsScrubOutcome.Owned) change.consume()
+                            dragProgress = gesture.progress
+                            isDragging = gesture.isActive
+                            if (gesture.isActive) {
+                                currentOnScrubStateChange?.invoke(
+                                    ReelsScrubUiState(
+                                        isActive = true,
+                                        progress = gesture.progress,
+                                        startProgress = startProgress,
+                                        isFineMode = false,
+                                        fromScreenGesture = false,
+                                        barWidthPx = barWidthPx,
+                                    ),
+                                )
+                            }
+                            if (outcome == ReelsScrubOutcome.Owned) {
+                                val now = SystemClock.elapsedRealtime()
+                                if (now - lastLiveSeekAtMs >= LIVE_SCRUB_THROTTLE_MS) {
+                                    lastLiveSeekAtMs = now
+                                    currentOnScrubPreview?.invoke(gesture.progress)
+                                }
+                            }
+                        }
+                        gesture.end()?.let { target ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            currentOnSeek(target)
+                        }
+                    } finally {
+                        isDragging = false
+                        currentOnScrubStateChange?.invoke(ReelsScrubUiState())
                     }
-                    // Exactly one commit per gesture — and none when a competing gesture
-                    // (vertical scroll) took it over.
-                    gesture.end()?.let(onSeek)
-                    isDragging = false
                 }
             },
         contentAlignment = Alignment.BottomCenter,
     ) {
-        // Floating Time Indicator when dragging (bottom-anchored so the taller touch box
-        // does not shift it relative to the bar).
+        // Compact Time Badge when chrome is visible and user is not actively scrubbing.
+        // Recomposes at most once per second (integer-second derivedStateOf) and unmounts when hidden.
         AnimatedVisibility(
-            visible = isDragging,
-            enter = fadeIn() + scaleIn(initialScale = 0.85f),
-            exit = fadeOut() + scaleOut(targetScale = 0.85f),
+            visible = chromeVisible && !effectiveDragging && durationSec > 0f,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut() + slideOutVertically { it },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 12.dp, end = 12.dp),
         ) {
-            val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
-            val currentSec = (currentFraction * durationSec).coerceAtLeast(0f).roundToInt()
-
-            val currentFormatted = formatSeconds(currentSec)
-            val totalFormatted = formatSeconds(totalSec)
-
-            Box(
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
-                    .border(1.dp, AuroraTheme.colors.accent.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    text = "$currentFormatted / $totalFormatted",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            ReelsProgressTimeBadge(
+                progressState = progressState,
+                isDragging = isDragging,
+                dragProgress = dragProgress,
+                externalScrubFraction = externalScrubFraction,
+                durationSec = durationSec,
+            )
         }
 
-        // Base Track
-        Box(
+        // Preview card is rendered unclipped by ReelsScrubPreviewOverlay in ReelsVideoPage.
+        // Draw-phase track: reads progressState and bufferFractionState strictly in DrawScope
+        // so playback progress updates cause zero Compose recompositions or layout passes.
+        Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(barHeight)
-                .background(Color.White.copy(alpha = 0.25f)),
-            contentAlignment = Alignment.CenterStart,
+                .height(barHeight),
         ) {
-            // Active Progress Fill
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction = currentFraction)
-                    .height(barHeight)
-                    .background(AuroraTheme.colors.accent),
+            val corner = CornerRadius(size.height / 2f, size.height / 2f)
+            // Base Track
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.22f),
+                cornerRadius = corner,
             )
 
+            // Buffered Progress Fill
+            val effectiveBufferFraction = (bufferFractionState?.value ?: bufferFraction).coerceIn(0f, 1f)
+            if (effectiveBufferFraction > 0f) {
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.35f),
+                    size = Size(size.width * effectiveBufferFraction, size.height),
+                    cornerRadius = corner,
+                )
+            }
+
+            // Active Progress Fill (using dynamic Aurora Theme Accent!)
+            val currentFraction = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            if (currentFraction > 0f) {
+                drawRoundRect(
+                    color = accentColor,
+                    size = Size(size.width * currentFraction, size.height),
+                    cornerRadius = corner,
+                )
+            }
+
             // Scrubber Thumb on Drag
-            if (isDragging) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction = currentFraction),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .background(Color.White, CircleShape)
-                            .border(2.dp, AuroraTheme.colors.accent, CircleShape),
-                    )
-                }
+            if (effectiveDragging) {
+                val thumbRadius = 7.dp.toPx()
+                val strokeWidth = 2.5.dp.toPx()
+                val centerX = (size.width * currentFraction)
+                    .coerceIn(thumbRadius, (size.width - thumbRadius).coerceAtLeast(thumbRadius))
+                val center = Offset(centerX, size.height / 2f)
+                drawCircle(
+                    color = Color.White,
+                    radius = thumbRadius,
+                    center = center,
+                )
+                drawCircle(
+                    color = accentColor,
+                    radius = (thumbRadius - strokeWidth / 2f).coerceAtLeast(0f),
+                    center = center,
+                    style = Stroke(width = strokeWidth),
+                )
             }
         }
     }
 }
+
+@Composable
+private fun ReelsProgressTimeBadge(
+    progressState: State<Float>,
+    isDragging: Boolean,
+    dragProgress: Float,
+    externalScrubFraction: Float?,
+    durationSec: Float,
+) {
+    val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
+    val currentSec by remember(durationSec, isDragging, externalScrubFraction) {
+        derivedStateOf {
+            val frac = when {
+                isDragging -> dragProgress
+                externalScrubFraction != null -> externalScrubFraction.coerceIn(0f, 1f)
+                else -> progressState.value.coerceIn(0f, 1f)
+            }
+            (frac * durationSec).coerceAtLeast(0f).roundToInt()
+        }
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "${formatSeconds(currentSec)} / ${formatSeconds(totalSec)}",
+            color = Color.White.copy(alpha = 0.95f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+private const val LIVE_SCRUB_THROTTLE_MS = 90L
 
 private fun formatSeconds(totalSeconds: Int): String {
     val minutes = totalSeconds / 60
@@ -213,7 +339,7 @@ internal class ReelsScrubGesture(private val touchSlop: Float) {
 
     fun move(dx: Float, dy: Float, consumedByOther: Boolean): ReelsScrubOutcome {
         if (!isActive) return ReelsScrubOutcome.Cancelled
-        if (consumedByOther) return cancel()
+        if (!horizontal && consumedByOther) return cancel()
         if (!horizontal) {
             totalDx += dx
             totalDy += dy

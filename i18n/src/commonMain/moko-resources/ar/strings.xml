@@ -501,9 +501,6 @@
     <string name="pref_hardware_bitmap_threshold">عتبة صورة العتاد المخصصة</string>
     <string name="pref_hardware_bitmap_threshold_default">الافتراضي (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">إذا قام القارئ بتحميل صورة فارغة، قلل الحد تدريجياً.\nالمحدد: %s</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">استخدام مفكك الشيفرة القديم لقارئ الشريط الطويل</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">يؤثر على الأداء. قم بتمكينه فقط إذا كان تقليل حد الصورة النقطية لا يحل مشاكل الصور الفارغة</string>
-    <string name="pref_display_profile">عرض الملف الشخصي</string>
     <string name="pref_crop_borders">قص الحواف</string>
     <string name="pref_custom_brightness">سطوع مخصص</string>
     <string name="pref_grayscale">تدرج الرمادي</string>

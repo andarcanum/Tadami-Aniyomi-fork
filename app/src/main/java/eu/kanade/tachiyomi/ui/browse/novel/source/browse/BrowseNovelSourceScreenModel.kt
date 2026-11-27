@@ -360,7 +360,8 @@ class BrowseNovelSourceScreenModel(
     // BRN-16/РЕШ-B5: the autoFavoriteLocalNovels field was read once and never used (removed).
 
     val favoriteNovelUrls = resolveGetNovelFavorites()?.subscribe(sourceId)
-        ?.map { list -> list.map { it.url }.toSet() }
+        ?.map { list -> list.mapTo(HashSet(list.size)) { it.url } }
+        ?.distinctUntilChanged()
         ?.stateIn(screenModelScope, SharingStarted.Lazily, emptySet())
         ?: MutableStateFlow(emptySet())
 
@@ -384,6 +385,7 @@ class BrowseNovelSourceScreenModel(
                 PagingConfig(
                     pageSize = 25,
                     initialLoadSize = 25,
+                    prefetchDistance = 6,
                 ),
             ) {
                 getRemoteNovel.subscribe(sourceId, request.query, request.filters)
@@ -403,8 +405,11 @@ class BrowseNovelSourceScreenModel(
                     // BRN-7 (РЕШ-10 port): the pref was snapshotted once in the constructor -
                     // toggling the setting did not affect the open browse screen. Read it live
                     // per emission (manga etalon).
-                    val hideLibraryItems = sourcePreferences.hideInNovelLibraryItems().get()
-                    pagingData.filter { !hideLibraryItems || !it.favorite }
+                    if (sourcePreferences.hideInNovelLibraryItems().get()) {
+                        pagingData.filter { !it.favorite }
+                    } else {
+                        pagingData
+                    }
                 }
                 .cachedIn(ioCoroutineScope)
         }

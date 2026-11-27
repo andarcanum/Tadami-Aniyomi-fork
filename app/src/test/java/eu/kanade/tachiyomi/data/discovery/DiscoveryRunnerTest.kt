@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
 import eu.kanade.tachiyomi.data.suggestions.SuggestionFetchResult
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
+import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -14,17 +15,22 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
+import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import java.io.IOException
 
 class DiscoveryRunnerTest {
@@ -75,10 +81,268 @@ class DiscoveryRunnerTest {
         outcomes[DiscoveryMediaType.ANIME]?.persistedRows shouldBe setOf(DiscoveryRowType.LIKE)
     }
 
+    @Test
+    fun `manual refresh scans from the first page with a deep page budget`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val cursorKey = cursorConfigurationKey(preferences)
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = cursorKey,
+                    nextPage = 7,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        var usedHarvest = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                usedHarvest = context.harvestPages
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            sourcePolicyProvider = cursorSourcePolicies,
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+
+        usedPage shouldBe 1
+        usedHarvest shouldBe 20
+        repo.lastPublishedCursors.single().nextPage shouldBe 1
+    }
+
+    @Test
+    fun `background refresh resumes the persisted page cursor`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val cursorKey = cursorConfigurationKey(preferences)
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = cursorKey,
+                    nextPage = 7,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        var usedHarvest = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                usedHarvest = context.harvestPages
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            sourcePolicyProvider = cursorSourcePolicies,
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+
+        usedPage shouldBe 7
+        usedHarvest shouldBe 1
+        repo.lastPublishedCursors.single().nextPage shouldBe 8
+    }
+
+    @Test
+    fun `a cursor from another configuration is ignored`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = "some-other-configuration",
+                    nextPage = 9,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            sourcePolicyProvider = cursorSourcePolicies,
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+
+        usedPage shouldBe backgroundPageOffset(1)
+    }
+
+    @Test
+    fun `background cursor wraps to the first page at the depth cap`() = runTest {
+        val preferences = DiscoveryPreferences(InMemoryPreferenceStore())
+        val cursorKey = cursorConfigurationKey(preferences)
+        val repo = FakeRepository().apply {
+            cursors = listOf(
+                DiscoverySourceCursor(
+                    sourceId = 0L,
+                    queryKey = cursorKey,
+                    nextPage = 30,
+                    exhausted = false,
+                ),
+            )
+        }
+        var usedPage = 0
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                usedPage = context.pageOffset
+                return listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "source", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh",
+                    ),
+                )
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = preferences,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            sourcePolicyProvider = cursorSourcePolicies,
+            fallbackSourceIdProvider = { -1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+
+        usedPage shouldBe 30
+        repo.lastPublishedCursors.single().nextPage shouldBe 1
+    }
+
+    @Test
+    fun completeEligibilityReachesSourceAdmissionBeforePublication() = runTest {
+        val key = tachiyomi.domain.discovery.model.canonicalDiscoveryKey(
+            DiscoveryMediaType.NOVEL,
+            1L,
+            "/retired",
+            "retired",
+        )
+        val repository = object : FakeRepository() {
+            override suspend fun eligibility(media: DiscoveryMediaType) =
+                DiscoveryEligibilitySnapshot(media, 0L, setOf(key), emptySet())
+        }
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext) = listOf(
+                DiscoveryRowItem(
+                    "Retired", "retired", null, null, null, "s", 1.0,
+                    sourceId = 1L, sourceUrl = "/retired",
+                ),
+                DiscoveryRowItem("Fresh", "fresh", null, null, null, "s", 1.0, sourceId = 1L, sourceUrl = "/fresh"),
+            ).filterNot { it.isExcludedBy(context.exclusionKeys, context.mediaType) }
+        }
+        val runner = DiscoveryRunner(
+            repository = repository,
+            preferences = discoveryPrefs(
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", false, false),
+            ),
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            sourcePolicyProvider = cursorSourcePolicies,
+            fallbackSourceIdProvider = { 1L },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+
+        repository.publishedPools.single().map { it.title } shouldBe listOf("Fresh")
+    }
+
+    @Test
+    fun emptyRowsWithoutSourceEndEvidenceDoNotRetireThePreviousPool() = runTest {
+        val repository = FakeRepository()
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.SOURCE
+            override suspend fun build(context: DiscoveryBuildContext) = emptyList<DiscoveryRowItem>()
+        }
+        val runner = DiscoveryRunner(
+            repository = repository,
+            preferences = discoveryPrefs(
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+                InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", false, false),
+            ),
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            sourcePolicyProvider = cursorSourcePolicies,
+            fallbackSourceIdProvider = { 1L },
+        )
+
+        val outcome = runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+            .getValue(DiscoveryMediaType.NOVEL)
+
+        repository.publishedPools shouldBe emptyList()
+        outcome.status shouldBe DiscoveryRunStatus.FAILED
+    }
+
+    private fun finiteEndEvidence(queryKey: String) = listOf(
+        tachiyomi.domain.discovery.model.DiscoveryQueryEvidence(
+            queryKey = queryKey,
+            transportOk = true,
+            rawEnd = true,
+            pending = 0,
+            unattempted = 0,
+            metadataFailures = 0,
+            budgetStopped = false,
+            duplicatePageStopped = false,
+        ),
+    )
+
     private open class FakeRepository(
         val initialSignals: List<DiscoverySignal> = emptyList(),
         initialSuggestions: List<DiscoverySuggestion> = emptyList(),
-    ) : DiscoveryRepository {
+    ) : FakeDiscoveryRepositoryBase() {
         val replaced = mutableListOf<Triple<DiscoveryMediaType, DiscoveryRowType, List<DiscoverySuggestion>>>()
         val flow = MutableStateFlow(initialSuggestions)
         override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> = flow
@@ -170,6 +434,53 @@ class DiscoveryRunnerTest {
         }
         override suspend fun hasUnboundSourceRows(): Boolean = false
 
+        var generation = 0L
+        var cursors: List<DiscoverySourceCursor> = emptyList()
+        var lastPublishedCursors: List<DiscoverySourceCursor> = emptyList()
+        val publishedPools = mutableListOf<List<DiscoverySuggestion>>()
+
+        override suspend fun publication(media: DiscoveryMediaType) =
+            emptyPublication(media).copy(generation = generation, cursors = cursors)
+
+        override suspend fun reserveGeneration(
+            media: DiscoveryMediaType,
+            requestId: String,
+            expectedGeneration: Long,
+            configurationKey: String,
+        ): tachiyomi.domain.discovery.model.DiscoveryGenerationToken =
+            tachiyomi.domain.discovery.model.DiscoveryGenerationToken(
+                mediaType = media,
+                requestId = requestId,
+                ownerRevision = 1L,
+                expectedGeneration = expectedGeneration,
+                configurationKey = configurationKey,
+            )
+
+        var lastRetirementPolicy: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy? = null
+
+        override suspend fun publishGeneration(
+            token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+            prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+            retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
+        ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
+            lastRetirementPolicy = retirement
+            generation = token.expectedGeneration + 1
+            val suggestions = (prepared as? tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh)
+                ?.suggestions.orEmpty()
+            lastPublishedCursors = when (prepared) {
+                is tachiyomi.domain.discovery.model.DiscoveryPreparedPool.Fresh -> prepared.cursors
+                is tachiyomi.domain.discovery.model.DiscoveryPreparedPool.VerifiedEmpty -> prepared.cursors
+            }
+            publishedPools += suggestions
+            flow.value = flow.value.filterNot { it.mediaType == token.mediaType } + suggestions
+            suggestions.groupBy { it.rowType }.forEach { (row, items) ->
+                replaced += Triple(token.mediaType, row, items)
+            }
+            return tachiyomi.domain.discovery.model.DiscoveryPublishReceipt.Published(
+                emptyPublication(token.mediaType).copy(generation = generation, suggestions = suggestions),
+            )
+        }
+
         val recordedSignals = mutableListOf<Triple<DiscoveryMediaType, String, DiscoverySignalType>>()
         var signals: List<DiscoverySignal> = initialSignals
         override suspend fun getSignals(mediaType: DiscoveryMediaType): List<DiscoverySignal> = signals
@@ -226,6 +537,21 @@ class DiscoveryRunnerTest {
     }
 
     private fun testSourcePrefs() = SourcePreferences(InMemoryPreferenceStore())
+
+    private val cursorSourcePolicies = object : DiscoverySourcePolicyProvider {
+        override fun current(
+            mediaType: DiscoveryMediaType,
+        ) = discoveryQueryPolicyFixture(mediaType, nativeIds = listOf(1L))
+        override fun observe(mediaType: DiscoveryMediaType) = flowOf(current(mediaType))
+        override suspend fun awaitComplete(mediaType: DiscoveryMediaType) = current(mediaType)
+    }
+
+    private fun cursorConfigurationKey(preferences: DiscoveryPreferences) = computeDiscoveryConfigurationKey(
+        preferences,
+        DiscoveryMediaType.NOVEL,
+        testSourcePrefs(),
+        cursorSourcePolicies.current(DiscoveryMediaType.NOVEL).revision,
+    )
 
     private fun fakeBuilders(failLike: Boolean) = listOf(
         object : DiscoveryRowBuilder {
@@ -375,7 +701,7 @@ class DiscoveryRunnerTest {
         val tasteBuilder = object : DiscoveryRowBuilder {
             override val rowType = DiscoveryRowType.TASTE
             override suspend fun build(context: DiscoveryBuildContext) = listOf(
-                DiscoveryRowItem("Taste Pick", "taste pick", null, null, null, "catalog", 0.9),
+                DiscoveryRowItem("Taste Pick", "taste pick", null, null, null, "anilist", 0.9),
             )
         }
         val mixedBuilders = fakeBuilders(failLike = true) + tasteBuilder
@@ -397,15 +723,16 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `successful run with empty candidates produces SUCCESS status and updates preferences`() = runTest {
+    fun `verified empty source result produces SUCCESS status and updates preferences`() = runTest {
         val repo = FakeRepository()
         val emptyBuilders = listOf(
             object : DiscoveryRowBuilder {
                 override val rowType = DiscoveryRowType.LIKE
+                override val exhaustionEvidence = finiteEndEvidence("fixture-like-ended")
                 override suspend fun build(context: DiscoveryBuildContext) = emptyList<DiscoveryRowItem>()
             },
         )
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
         prefs.rowTasteEnabled().set(false)
         prefs.rowTrendEnabled().set(false)
         prefs.rowSourceEnabled().set(false)
@@ -424,6 +751,83 @@ class DiscoveryRunnerTest {
         outcome.persistedRows.isEmpty() shouldBe true
         prefs.lastGenerationStatus(DiscoveryMediaType.NOVEL).get() shouldBe DiscoveryRunStatus.SUCCESS.name
         (prefs.lastGenerationAt(DiscoveryMediaType.NOVEL).get() > 0L) shouldBe true
+    }
+
+    @Test
+    fun `source native empty end publishes a verified empty pool through the runner`() = runTest {
+        val repo = FakeRepository()
+        var latestCalls = 0
+        var popularCalls = 0
+        val catalog = object : DiscoverySourceCatalog {
+            override suspend fun popular(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun popularPage(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+                budget: DiscoveryVerificationBudget?,
+            ): DiscoveryBrowsePage {
+                popularCalls++
+                return DiscoveryBrowsePage(emptyList(), hasNextPage = false)
+            }
+
+            override suspend fun latestPage(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+                budget: DiscoveryVerificationBudget?,
+            ): DiscoveryBrowsePage {
+                latestCalls++
+                return DiscoveryBrowsePage(emptyList(), hasNextPage = false)
+            }
+
+            override suspend fun popularWithGenres(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                genres: List<String>,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun latest(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+        }
+        val prefs = discoveryPrefs(
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_source", true, true),
+        )
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = prefs,
+            seedSources = weightedSeedSources(),
+            coordinatorFactory = {
+                DiscoveryCoordinator(listOf(DiscoverySourceRowBuilder(catalog, rowCap = 20)))
+            },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { listOf(DiscoveryInstalledPlugin("p1", listOf(11L))) },
+        )
+
+        val outcome = runner.run(listOf(DiscoveryMediaType.NOVEL)).getValue(DiscoveryMediaType.NOVEL)
+
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+        outcome.persistedRows shouldBe emptySet()
+        outcome.degradedRows shouldBe emptySet()
+        latestCalls shouldBe 1
+        popularCalls shouldBe 1
+        repo.publishedPools.size shouldBe 1
     }
 
     @Test
@@ -524,6 +928,12 @@ class DiscoveryRunnerTest {
             seedSources = seedSources,
             coordinatorFactory = { DiscoveryCoordinator(listOf(capturingBuilder)) },
             sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = {
+                listOf(
+                    DiscoveryInstalledPlugin("owned-11", listOf(11L)),
+                    DiscoveryInstalledPlugin("owned-22", listOf(22L)),
+                )
+            },
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
         captured.single().sourceIds shouldBe listOf(11L, 22L)
@@ -578,12 +988,8 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        repo.replaced.map { it.second } shouldBe listOf(
-            DiscoveryRowType.LIKE,
-            DiscoveryRowType.TASTE,
-            DiscoveryRowType.TREND,
-            DiscoveryRowType.SOURCE,
-        )
+        // No enabled builder: generation is skipped and nothing is published.
+        repo.replaced.isEmpty() shouldBe true
     }
 
     @Test
@@ -621,12 +1027,7 @@ class DiscoveryRunnerTest {
         seenBuilderTypes.filter { it == DiscoveryRowType.TREND } shouldBe emptyList()
         seenBuilderTypes.filter { it == DiscoveryRowType.LIKE } shouldBe listOf(DiscoveryRowType.LIKE)
         // Кэш чисто внешнего ряда TREND очищен (как при выключенных рядах), TASTE и LIKE сохранены/обновлены.
-        repo.replaced.map { it.second }.toSet() shouldBe setOf(
-            DiscoveryRowType.LIKE,
-            DiscoveryRowType.TASTE,
-            DiscoveryRowType.TREND,
-        )
-        repo.replaced.all { it.third.isEmpty() } shouldBe true
+        repo.replaced.none { it.second == DiscoveryRowType.TREND } shouldBe true
     }
 
     @Test
@@ -641,10 +1042,12 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("Local Plugin", "AniList Plugin")
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.SOURCE }.map { it.provider } shouldBe
-            listOf("Local Plugin")
+        // A successful publication replaces the whole pool; external LIKE rows from
+        // the previous pool cannot survive it.
+        repo.publishedPools.isNotEmpty() shouldBe true
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.none {
+            it.provider in setOf("AniList", "Shikimori", "MyAnimeList", "MangaUpdates", "NovelUpdates")
+        } shouldBe true
     }
 
     @Test
@@ -658,11 +1061,13 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "MyAnimeList", "MangaUpdates", "NovelUpdates", "Local Plugin", "AniList Plugin")
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.TREND }.map { it.provider } shouldBe
-            listOf("Shikimori")
-        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+        val publishedLike = repo.publishedPools.lastOrNull()?.filter { it.rowType == DiscoveryRowType.LIKE }
+        if (publishedLike != null) {
+            publishedLike.none { it.provider == "Shikimori" } shouldBe true
+        } else {
+            // Failed generation: the previous pool is preserved untouched.
+            repo.replaced.isEmpty() shouldBe true
+        }
     }
 
     @Test
@@ -675,8 +1080,8 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "Shikimori", "MyAnimeList", "NovelUpdates", "Local Plugin", "AniList Plugin")
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.none { it.provider == "MangaUpdates" } shouldBe
+            true
     }
 
     @Test
@@ -689,8 +1094,8 @@ class DiscoveryRunnerTest {
 
         runner.run(listOf(DiscoveryMediaType.NOVEL))
 
-        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "Shikimori", "MyAnimeList", "MangaUpdates", "Local Plugin", "AniList Plugin")
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.none { it.provider == "NovelUpdates" } shouldBe
+            true
     }
 
     @Test
@@ -737,8 +1142,7 @@ class DiscoveryRunnerTest {
             listOf("AniList")
         repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.title } shouldBe
             listOf("Fresh Pick")
-        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.size shouldBe 2
-        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.size shouldBe 1
     }
 
     @Test
@@ -760,13 +1164,19 @@ class DiscoveryRunnerTest {
         val outcome = outcomes[DiscoveryMediaType.NOVEL]!!
         outcome.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
 
+        // A failed generation publishes nothing: the previous pool stays intact.
+        repo.replaced.isEmpty() shouldBe true
         repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
-            listOf("AniList", "MyAnimeList", "MangaUpdates", "NovelUpdates", "Local Plugin", "AniList Plugin")
-        repo.flow.value.map { it.title } shouldBe
-            listOf("Cached 7", "Cached 8", "Cached 0", "Cached 2", "Cached 3", "Cached 4", "Cached 5", "Cached 6")
-        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.map { it.second } shouldBe
-            listOf(DiscoveryRowType.LIKE)
-        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+            listOf(
+                "AniList",
+                "Shikimori",
+                "MyAnimeList",
+                "MangaUpdates",
+                "NovelUpdates",
+                "Local Plugin",
+                "AniList Plugin",
+            )
+        repo.flow.value.size shouldBe 9
     }
 
     private fun cachedProviderSuggestions(): List<DiscoverySuggestion> {
@@ -850,6 +1260,7 @@ class DiscoveryRunnerTest {
                 listOf(
                     likeBuilder ?: object : DiscoveryRowBuilder {
                         override val rowType = DiscoveryRowType.LIKE
+                        override val exhaustionEvidence = finiteEndEvidence("fixture-similar-ended")
                         override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
                             context.seeds.size shouldBe 1
                             if (failLike) throw IOException("provider unavailable")
@@ -886,6 +1297,7 @@ class DiscoveryRunnerTest {
                     builders.map { b ->
                         object : DiscoveryRowBuilder {
                             override val rowType = b.rowType
+                            override val exhaustionEvidence = finiteEndEvidence("fixture-ended-" + b.rowType.key)
                             override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
                                 seenStatuses += context.releaseStatuses
                                 return emptyList()
@@ -899,13 +1311,8 @@ class DiscoveryRunnerTest {
         runner.run(listOf(DiscoveryMediaType.NOVEL))
         // Контекст донёс фильтр до билдеров, пустые ряды вычищены из кэша.
         seenStatuses.all { it == setOf(tachiyomi.domain.discovery.model.DiscoveryReleaseStatus.FINISHED) } shouldBe true
-        repo.replaced.map { it.second }.toSet() shouldBe setOf(
-            DiscoveryRowType.LIKE,
-            DiscoveryRowType.TASTE,
-            DiscoveryRowType.TREND,
-            DiscoveryRowType.SOURCE,
-        )
-        repo.replaced.all { it.third.isEmpty() } shouldBe true
+        repo.publishedPools.isNotEmpty() shouldBe true
+        repo.replaced.isEmpty() shouldBe true
     }
 
     @Test
@@ -944,6 +1351,205 @@ class DiscoveryRunnerTest {
     }
 
     // ── Source participation (Task 2) ────────────────────────────────────────────
+
+    @Test
+    fun `manga resilience TREND-only refresh keeps unqueried source failure history`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val history = "11:$failedAt:2,22:$failedAt:3"
+        val preferences = resiliencePreferences(history, trendOnly = true)
+        val repository = FakeRepository()
+        val catalog = ResilienceSourceCatalog()
+
+        val outcome = resilienceRunner(repository, preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+        repository.publishedPools.single().map { it.title } shouldBe listOf("External Resilience Manga")
+        (catalog.latestRequests + catalog.popularRequests + catalog.genreRequests) shouldBe emptyList()
+        preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get() shouldBe history
+    }
+
+    @Test
+    fun `manga resilience terminal catalogue successes reduce their source histories`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val preferences = resiliencePreferences("11:$failedAt:2,22:$failedAt:3", trendOnly = false)
+        val catalog = ResilienceSourceCatalog()
+
+        val outcome = resilienceRunner(FakeRepository(), preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+        catalog.latestRequests.toSet() shouldBe setOf(11L, 22L)
+        catalog.popularRequests.toSet() shouldBe setOf(11L, 22L)
+        parseSourceFailureHistory(preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get())
+            .mapValues { it.value.failCount } shouldBe mapOf(11L to 1, 22L to 2)
+    }
+
+    @Test
+    fun `manga resilience incomplete catalogue coverage cannot reward source histories`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val history = "11:$failedAt:2,22:$failedAt:3"
+        val preferences = resiliencePreferences(history, trendOnly = false)
+        val catalog = ResilienceSourceCatalog(incomplete = true)
+
+        val outcome = resilienceRunner(FakeRepository(), preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.PARTIAL
+        outcome.degradedRows shouldBe setOf(DiscoveryRowType.SOURCE)
+        catalog.latestRequests.toSet() shouldBe setOf(11L, 22L)
+        catalog.popularRequests.toSet() shouldBe setOf(11L, 22L)
+        preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get() shouldBe history
+    }
+
+    @Test
+    fun `manga resilience successful source is rewarded beside a failed source`() = runTest {
+        val failedAt = System.currentTimeMillis()
+        val preferences = resiliencePreferences("11:$failedAt:2,22:$failedAt:3", trendOnly = false)
+        val catalog = ResilienceSourceCatalog(failedSourceIds = setOf(22L))
+
+        val outcome = resilienceRunner(FakeRepository(), preferences, catalog).run(listOf(DiscoveryMediaType.MANGA))
+            .getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.PARTIAL
+        catalog.latestRequests.toSet() shouldBe setOf(11L, 22L)
+        catalog.popularRequests.toSet() shouldBe setOf(11L, 22L)
+        parseSourceFailureHistory(preferences.sourceFailureHistory(DiscoveryMediaType.MANGA).get())
+            .mapValues { it.value.failCount } shouldBe mapOf(11L to 1, 22L to 4)
+    }
+
+    private fun resiliencePreferences(history: String, trendOnly: Boolean) =
+        DiscoveryPreferences(PersistingPreferenceStore()).apply {
+            rowLikeEnabled().set(false)
+            rowTasteEnabled().set(false)
+            rowTrendEnabled().set(trendOnly)
+            rowSourceEnabled().set(!trendOnly)
+            sourceFailureHistory(DiscoveryMediaType.MANGA).set(history)
+        }
+
+    private fun resilienceRunner(
+        repository: FakeRepository,
+        preferences: DiscoveryPreferences,
+        catalog: DiscoverySourceCatalog,
+    ) = DiscoveryRunner(
+        repository = repository,
+        preferences = preferences,
+        seedSources = weightedSeedSources(),
+        sourcePreferencesProvider = ::testSourcePrefs,
+        installedPluginsProvider = {
+            listOf(
+                DiscoveryInstalledPlugin("resilience-11", listOf(11L)),
+                DiscoveryInstalledPlugin("resilience-22", listOf(22L)),
+            )
+        },
+        fallbackSourceIdProvider = { -1L },
+        sourceCatalog = catalog,
+        trendingFactory = {
+            object : DiscoveryTrendingSource {
+                override suspend fun fetch(
+                    mediaType: DiscoveryMediaType,
+                    season: TrendSeason,
+                    sort: TrendSort,
+                    page: Int,
+                    releaseStatuses: Set<DiscoveryReleaseStatus>,
+                ) = listOf(
+                    DiscoveryTrendingItem(
+                        title = "External Resilience Manga",
+                        cleanTitle = "external resilience manga",
+                        coverUrl = null,
+                        seasonLabel = null,
+                        genres = listOf("Comedy"),
+                        provider = "anilist_trend",
+                    ),
+                )
+
+                override suspend fun fetchByGenres(
+                    mediaType: DiscoveryMediaType,
+                    genres: List<String>,
+                    sort: TrendSort,
+                    page: Int,
+                    releaseStatuses: Set<DiscoveryReleaseStatus>,
+                ) = emptyList<DiscoveryTrendingItem>()
+
+                override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? = null
+            }
+        },
+    )
+
+    private class ResilienceSourceCatalog(
+        private val incomplete: Boolean = false,
+        private val failedSourceIds: Set<Long> = emptySet(),
+    ) : DiscoverySourceCatalog {
+        val latestRequests = mutableListOf<Long>()
+        val popularRequests = mutableListOf<Long>()
+        val genreRequests = mutableListOf<Long>()
+
+        override suspend fun latestPage(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+            budget: DiscoveryVerificationBudget?,
+        ): DiscoveryBrowsePage {
+            latestRequests += sourceId
+            if (sourceId in failedSourceIds) throw IOException("catalogue unavailable")
+            return DiscoveryBrowsePage(
+                items = listOf(
+                    DiscoveryRowItem(
+                        title = "Fresh Source $sourceId",
+                        cleanTitle = "fresh source $sourceId",
+                        coverUrl = null,
+                        reason = null,
+                        seedTitle = null,
+                        provider = "resilience-catalogue",
+                        score = 1.0,
+                        sourceId = sourceId,
+                        sourceUrl = "/fresh/$sourceId",
+                        genres = listOf("Action"),
+                    ),
+                ),
+                hasNextPage = if (incomplete) null else false,
+            )
+        }
+
+        override suspend fun popularPage(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+            budget: DiscoveryVerificationBudget?,
+        ): DiscoveryBrowsePage {
+            popularRequests += sourceId
+            if (sourceId in failedSourceIds) throw IOException("catalogue unavailable")
+            return DiscoveryBrowsePage(emptyList(), hasNextPage = if (incomplete) null else false)
+        }
+
+        override suspend fun latest(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+        ) = latestPage(mediaType, sourceId, page, releaseStatuses, null).items
+
+        override suspend fun popular(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+        ) = popularPage(mediaType, sourceId, page, releaseStatuses, null).items
+
+        override suspend fun popularWithGenres(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            genres: List<String>,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+        ): List<DiscoveryRowItem> {
+            genreRequests += sourceId
+            if (sourceId in failedSourceIds) throw IOException("catalogue unavailable")
+            return emptyList()
+        }
+    }
 
     private fun weightedSeedSources() = object : DiscoverySeedSources {
         override suspend fun candidates(mediaType: DiscoveryMediaType) = listOf(
@@ -1147,6 +1753,7 @@ class DiscoveryRunnerTest {
             seedSources = FakeSeedSources(),
             coordinatorFactory = { DiscoveryCoordinator(listOf(boundBuilder)) },
             sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { listOf(DiscoveryInstalledPlugin("owned-77", listOf(77L))) },
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
         val sourceRow = repo.replaced.first { it.second == DiscoveryRowType.SOURCE }
@@ -1156,7 +1763,7 @@ class DiscoveryRunnerTest {
 
     @Test
     fun `manual refresh count not persisted when generation yields no rows`() = runTest {
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
         val runner = DiscoveryRunner(
             repository = FakeRepository(),
             preferences = prefs,
@@ -1169,10 +1776,102 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `manual refresh count is incremented when builders run even if rows empty`() = runTest {
-        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+    fun `kept existing appends through top up and advances the refresh counter`() = runTest {
+        var appended = 0
+        val repo = object : FakeRepository() {
+            override suspend fun publishGeneration(
+                token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+                prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+                retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
+            ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt =
+                tachiyomi.domain.discovery.model.DiscoveryPublishReceipt.KeptExisting(
+                    accepted = 6,
+                    oldEligible = 24,
+                )
+
+            override suspend fun topUpPool(
+                media: DiscoveryMediaType,
+                expectedGeneration: Long,
+                additions: List<DiscoverySuggestion>,
+                cursors: List<DiscoverySourceCursor>,
+                maxPoolSize: Int,
+            ): tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt {
+                appended = additions.size
+                return tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt.ToppedUp(
+                    added = additions.size,
+                    eligibleAfter = 30,
+                    snapshot = emptyPublication(media).copy(
+                        generation = expectedGeneration,
+                        suggestions = additions,
+                    ),
+                )
+            }
+        }
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.LIKE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> =
+                (1..6).map { number ->
+                    DiscoveryRowItem(
+                        title = "Kept$number",
+                        cleanTitle = "kept$number",
+                        coverUrl = null,
+                        reason = null,
+                        seedTitle = null,
+                        provider = "anilist",
+                        score = 1.0,
+                    )
+                }
+        }
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+        prefs.rowTasteEnabled().set(false)
+        prefs.rowTrendEnabled().set(false)
+        prefs.rowSourceEnabled().set(false)
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = true)
+
+        appended shouldBe 6
+        prefs.manualRefreshCount(DiscoveryMediaType.MANGA).get() shouldBe 1
+        prefs.lastTopUpAdded(DiscoveryMediaType.MANGA).get() shouldBe 6
+        prefs.lastGenerationStatus(DiscoveryMediaType.MANGA).get() shouldBe
+            DiscoveryRunStatus.SUCCESS.name
+    }
+
+    @Test
+    fun `source failure ids from feed are persisted as the source failure count`() = runTest {
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.LIKE
+            override val failedSourceIds = setOf(7L)
+            override val degradedSourceIds = setOf(8L)
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> =
+                listOf(DiscoveryRowItem("Source Count", "source count", null, null, null, "fixture", 1.0))
+        }
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.MANGA))
+
+        prefs.lastSourceFailureCount(DiscoveryMediaType.MANGA).get() shouldBe 1
+    }
+
+    @Test
+    fun `manual refresh count increments after a verified empty publication`() = runTest {
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
         val emptyBuilder = object : DiscoveryRowBuilder {
             override val rowType = DiscoveryRowType.TREND
+            override val exhaustionEvidence = finiteEndEvidence("fixture-trend-ended")
             override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = emptyList()
         }
         val runner = DiscoveryRunner(
@@ -1187,7 +1886,7 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `like row cache cleared when seeds empty and row honestly empty`() = runTest {
+    fun `an unqueried empty like row is not proof of catalogue exhaustion`() = runTest {
         val repo = FakeRepository()
         val runner = DiscoveryRunner(
             repository = repo,
@@ -1208,7 +1907,8 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = false)
-        repo.replaced.any { it.second == DiscoveryRowType.LIKE && it.third.isEmpty() } shouldBe true
+        repo.publishedPools shouldBe emptyList()
+        repo.flow.value.isEmpty() shouldBe true
     }
 
     @Test
@@ -1217,11 +1917,11 @@ class DiscoveryRunnerTest {
         var maxConcurrent = 0
         val concurrencyLock = Mutex()
         val repo = object : FakeRepository() {
-            override suspend fun replaceRows(
-                mediaType: DiscoveryMediaType,
-                rowType: DiscoveryRowType,
-                items: List<DiscoverySuggestion>,
-            ) {
+            override suspend fun publishGeneration(
+                token: tachiyomi.domain.discovery.model.DiscoveryGenerationToken,
+                prepared: tachiyomi.domain.discovery.model.DiscoveryPreparedPool,
+                retirement: tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy,
+            ): tachiyomi.domain.discovery.model.DiscoveryPublishReceipt {
                 concurrencyLock.withLock {
                     currentConcurrent++
                     if (currentConcurrent > maxConcurrent) maxConcurrent = currentConcurrent
@@ -1230,7 +1930,7 @@ class DiscoveryRunnerTest {
                 concurrencyLock.withLock {
                     currentConcurrent--
                 }
-                super.replaceRows(mediaType, rowType, items)
+                return super.publishGeneration(token, prepared, retirement)
             }
         }
         val builder = object : DiscoveryRowBuilder {
@@ -1321,6 +2021,55 @@ class DiscoveryRunnerTest {
         selectFeedbackSeeds(signals, DiscoveryMediaType.MANGA).map { it.cleanTitle } shouldBe
             listOf("consumed liked", "consumed added")
         signals.all { it.signalType.excludesFromFeed } shouldBe true
+    }
+
+    @Test
+    fun `collect deadline publishes settled rows when a slow builder hangs`() = runTest {
+        val repo = FakeRepository()
+        val fastTrend = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.TREND
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = listOf(
+                DiscoveryRowItem(
+                    title = "Fast Survivor",
+                    cleanTitle = "fast survivor",
+                    coverUrl = null,
+                    reason = null,
+                    seedTitle = null,
+                    provider = "AniList",
+                    score = 1.0,
+                ),
+            )
+        }
+        val hungLike = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.LIKE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                kotlinx.coroutines.awaitCancellation()
+            }
+        }
+        val prefs = discoveryPrefs(
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_like", true, true),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_taste", false, false),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_trend", true, true),
+            InMemoryPreferenceStore.InMemoryPreference("discovery_row_source", false, false),
+        )
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(hungLike, fastTrend)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        val outcome = runner.run(
+            mediaTypes = listOf(DiscoveryMediaType.MANGA),
+            totalBudgetMs = 25_000L,
+        ).getValue(DiscoveryMediaType.MANGA)
+
+        outcome.status shouldBe DiscoveryRunStatus.PARTIAL
+        outcome.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
+        outcome.persistedRows shouldBe setOf(DiscoveryRowType.TREND)
+        repo.publishedPools.size shouldBe 1
+        repo.publishedPools.single().map { it.title } shouldBe listOf("Fast Survivor")
     }
 
     private fun testSignal(
@@ -1435,5 +2184,87 @@ class DiscoveryRunnerTest {
         ctx.seeds.size shouldBe 1
         ctx.seeds.single().entryId shouldBe 102L
         ctx.seeds.single().title shouldBe "library title 2"
+    }
+
+    @Test
+    fun `configuration refresh uses DiscoveryRetirementPolicy NONE to avoid quarantine`() = runTest {
+        val repo = FakeRepository()
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = discoveryPrefs(),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType) = emptyList<DiscoverySeedInput>()
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+            coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = false)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isConfigurationRefresh = true)
+        repo.lastRetirementPolicy shouldBe tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy.NONE
+    }
+
+    @Test
+    fun `manual refresh uses DiscoveryRetirementPolicy RETIRE_ALL`() = runTest {
+        val repo = FakeRepository()
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = discoveryPrefs(),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType) = emptyList<DiscoverySeedInput>()
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+            coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = false)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = true)
+        repo.lastRetirementPolicy shouldBe tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy.RETIRE_ALL
+    }
+
+    @Test
+    fun `standard background refresh uses DiscoveryRetirementPolicy SEEN_ONLY`() = runTest {
+        val repo = FakeRepository()
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = discoveryPrefs(),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType) = emptyList<DiscoverySeedInput>()
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+            coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = false)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL), isManualRefresh = false)
+        repo.lastRetirementPolicy shouldBe tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy.SEEN_ONLY
+    }
+
+    @Test
+    fun `newly installed plugin in manual mode is auto excluded instead of participating`() = runTest {
+        val captured = mutableListOf<DiscoveryBuildContext>()
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore()).apply {
+            discoverySourceMode(DiscoveryMediaType.MANGA).set("manual")
+            discoverySourceKnown(DiscoveryMediaType.MANGA).set("p1,p2")
+            discoverySourceExcluded(DiscoveryMediaType.MANGA).set("p2")
+        }
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = prefs,
+            seedSources = weightedSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(capturingBuilder(captured))) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = {
+                listOf(
+                    DiscoveryInstalledPlugin("p1", listOf(11L)),
+                    DiscoveryInstalledPlugin("p2", listOf(22L)),
+                    DiscoveryInstalledPlugin("p3", listOf(33L)),
+                )
+            },
+        )
+        runner.run(listOf(DiscoveryMediaType.MANGA))
+        captured.single().sourceIds shouldBe listOf(11L)
+        parseKeyCsv(prefs.discoverySourceExcluded(DiscoveryMediaType.MANGA).get()) shouldBe setOf("p2", "p3")
+        parseKeyCsv(prefs.discoverySourceKnown(DiscoveryMediaType.MANGA).get()) shouldBe setOf("p1", "p2", "p3")
     }
 }

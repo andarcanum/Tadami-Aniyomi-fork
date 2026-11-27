@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.appbars
 
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -135,6 +137,8 @@ fun ReaderAppBars(
     navigatorHeight: ReaderPreferences.NavigatorHeight = ReaderPreferences.NavigatorHeight.NORMAL,
     navigatorCornerRadius: Int = 24,
     navigatorShowTickMarks: Boolean = false,
+    navigatorShowScrubPreview: Boolean = true,
+    loadScrubPreview: (suspend (pageIndex: Int) -> Bitmap?)? = null,
 
     // Auto-scroll options
     autoScrollEnabled: Boolean = false,
@@ -200,7 +204,8 @@ fun ReaderAppBars(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .statusBarsPadding(),
+                            .statusBarsPadding()
+                            .displayCutoutPadding(),
                     ) {
                         AppBar(
                             modifier = Modifier.fillMaxWidth(),
@@ -350,7 +355,9 @@ fun ReaderAppBars(
                 ) + fadeOut(animationSpec = panelFadeSpec),
             ) {
                 Column(
-                    modifier = Modifier.navigationBarsPadding(),
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .displayCutoutPadding(),
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
                 ) {
                     if (showNavigator && bottomBarPosition == ReaderPreferences.BottomBarPosition.BOTTOM) {
@@ -371,6 +378,8 @@ fun ReaderAppBars(
                             cornerRadius = navigatorCornerRadius,
                             showTickMarks = navigatorShowTickMarks,
                             isVertical = false,
+                            showScrubPreview = navigatorShowScrubPreview,
+                            loadScrubPreview = loadScrubPreview,
                         )
                     }
                     BottomReaderBar(
@@ -408,7 +417,8 @@ fun ReaderAppBars(
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
                         .statusBarsPadding()
-                        .navigationBarsPadding(),
+                        .navigationBarsPadding()
+                        .displayCutoutPadding(),
                 ) {
                     ChapterNavigator(
                         isRtl = isRtl,
@@ -427,6 +437,9 @@ fun ReaderAppBars(
                         cornerRadius = navigatorCornerRadius,
                         showTickMarks = navigatorShowTickMarks,
                         isVertical = true,
+                        showScrubPreview = navigatorShowScrubPreview,
+                        isLeftAligned = isLeft,
+                        loadScrubPreview = loadScrubPreview,
                     )
                 }
             }

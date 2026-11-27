@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.category.manga.interactor.GetVisibleMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.history.manga.repository.MangaHistoryRepository
 import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
@@ -46,6 +47,7 @@ class MangaSeriesScreenModel(
     private val getVisibleMangaCategories: GetVisibleMangaCategories = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
     private val seriesCoverCache: SeriesCoverCache = Injekt.get(),
+    private val mangaHistoryRepository: MangaHistoryRepository = Injekt.get(),
 ) : ScreenModel {
 
     private val customCoverState = MutableStateFlow(
@@ -61,7 +63,7 @@ class MangaSeriesScreenModel(
             flow {
                 emit(
                     wrapper.series.entries.map { entry ->
-                        entry to getChaptersByMangaId.await(entry.id)
+                        entry to getChaptersByMangaId.await(entry.id, applyScanlatorFilter = true)
                             .sortedWith(
                                 compareBy<Chapter> { it.chapterNumber }
                                     .thenBy { it.sourceOrder }
@@ -82,12 +84,21 @@ class MangaSeriesScreenModel(
         if (wrapper == null) {
             State(isLoading = false, series = null, categories = categories, chapters = chapters)
         } else {
+            val resumeChapterId = wrapper.series.entries.maxByOrNull { it.lastRead }
+                ?.takeIf { it.lastRead > 0L }
+                ?.let { entry ->
+                    mangaHistoryRepository.getHistoryByMangaId(entry.id)
+                        .filter { (it.readAt?.time ?: 0L) > 0L }
+                        .maxByOrNull { it.readAt?.time ?: 0L }
+                        ?.chapterId
+                }
             State(
                 isLoading = false,
                 series = wrapper.series,
                 entryIds = wrapper.entryIds,
                 categories = categories,
                 chapters = chapters,
+                resumeChapterId = resumeChapterId,
                 hasCustomCover = customCoverFile?.exists() == true,
                 customCoverFile = customCoverFile,
             )
@@ -203,5 +214,6 @@ class MangaSeriesScreenModel(
         val hasCustomCover: Boolean = false,
         val customCoverFile: File? = null,
         val searchQuery: String? = null,
+        val resumeChapterId: Long? = null,
     )
 }

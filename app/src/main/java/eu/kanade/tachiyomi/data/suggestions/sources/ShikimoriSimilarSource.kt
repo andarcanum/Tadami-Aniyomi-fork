@@ -53,6 +53,8 @@ class ShikimoriSimilarSource(
     }
 
     override suspend fun fetchSuggestions(seed: SuggestionSeed): List<SuggestionItem> = coroutineScope {
+        val nsfwFilter = nsfwFilterProvider()
+        val isRu = isRussianLocaleProvider()
         val cacheKey = SuggestionCache.makeKey(
             name,
             seed.primaryTitle,
@@ -60,6 +62,7 @@ class ShikimoriSimilarSource(
             seed.candidateTitles,
             seed.description,
             seed.author,
+            extraKeys = listOf("nsfw=$nsfwFilter", "ru=$isRu"),
         )
         SuggestionCache.get(cacheKey)?.let {
             logcat { "[ShikimoriSimilar] CACHE HIT for '${seed.primaryTitle}'" }
@@ -154,8 +157,8 @@ internal fun selectShikimoriBestMatch(
     .mapNotNull { item ->
         val score = candidates.maxOfOrNull { candidate ->
             maxOf(
-                SuggestionTitleResolver.scoreMatch(candidate, item.name),
-                item.russian?.let { SuggestionTitleResolver.scoreMatch(candidate, it) } ?: 0,
+                SuggestionTitleResolver.scoreBaseTitleMatch(candidate, item.name),
+                item.russian?.let { SuggestionTitleResolver.scoreBaseTitleMatch(candidate, it) } ?: 0,
             )
         } ?: 0
         if (score > 0) item to score else null
@@ -170,10 +173,15 @@ internal fun shikimoriSimilarToSuggestion(
 ): SuggestionItem? {
     val title = if (isRussianLocale && !item.russian.isNullOrBlank()) item.russian else item.name
     if (title.isBlank()) return null
+    val altTitle = if (title == item.russian) item.name else item.russian
+    val searchQueries = listOfNotNull(title, altTitle)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
     val cover = item.image?.original ?: item.image?.preview
     return SuggestionItem(
         title = title,
-        searchQueries = listOf(title),
+        searchQueries = searchQueries,
         thumbnailUrl = cover?.let { "https://shikimori.one$it" },
         providerName = "Shikimori",
         providerUrl = item.url?.let { "https://shikimori.one$it" } ?: "",

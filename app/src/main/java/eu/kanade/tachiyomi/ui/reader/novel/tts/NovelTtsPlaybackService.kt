@@ -145,35 +145,80 @@ class NovelTtsPlaybackService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        val currentState = runtime?.playbackState()?.value?.playbackState
+        if (currentState != NovelTtsPlaybackState.PLAYING) {
+            stateCollectionJob?.cancel()
+            stateCollectionJob = null
+            runtime = null
+            stopForegroundPlayback()
+        }
+        return super.onUnbind(intent)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         handleIntent(mediaSession, intent)
-        resolveTransportAction(intent?.action)?.let(::dispatchTransportAction)
-        startForeground(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
-        return START_STICKY
+        val action = resolveTransportAction(intent?.action)
+        if (action == NovelTtsTransportAction.STOP) {
+            // Swipe-to-dismiss (deleteIntent) or Stop button may deliver ACTION_STOP even after
+            // TTS is already idle or unbound; never re-enter startForeground or re-post a
+            // notification on STOP.
+            dispatchTransportAction(NovelTtsTransportAction.STOP)
+            return START_NOT_STICKY
+        }
+        action?.let(::dispatchTransportAction)
+        val currentState = runtime?.playbackState()?.value?.playbackState
+        val isActivePlayback = action == NovelTtsTransportAction.PLAY ||
+            currentState == NovelTtsPlaybackState.PLAYING ||
+            currentState == NovelTtsPlaybackState.PAUSED
+        if (isActivePlayback) {
+            mediaSession.isActive = true
+            startForeground(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
+        } else {
+            // Satisfy the API 26+ startForegroundService contract briefly only when a start
+            // command arrives without an action (ContextCompat.startForegroundService), then
+            // immediately tear down and cancel the notification so nothing lingers.
+            if (action == null) {
+                startForeground(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
+            }
+            stopForegroundPlayback()
+        }
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stateCollectionJob?.cancel()
+        stateCollectionJob = null
+        runtime = null
+        stopForegroundPlayback()
+        super.onTaskRemoved(rootIntent)
     }
 
     fun bindRuntime(runtime: NovelTtsPlaybackServiceRuntime) {
         this.runtime = runtime
         stateCollectionJob?.cancel()
         stateCollectionJob = serviceScope.launch {
-            runtime.playbackState().collectLatest {
-                updateMediaSessionState()
-                NotificationManagerCompat.from(this@NovelTtsPlaybackService)
-                    .notify(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
+            runtime.playbackState().collectLatest { state ->
                 if (
-                    it.playbackState == NovelTtsPlaybackState.IDLE ||
-                    it.playbackState == NovelTtsPlaybackState.COMPLETED
+                    state.playbackState == NovelTtsPlaybackState.PLAYING ||
+                    state.playbackState == NovelTtsPlaybackState.PAUSED
                 ) {
+                    mediaSession.isActive = true
+                    updateMediaSessionState()
+                    NotificationManagerCompat.from(this@NovelTtsPlaybackService)
+                        .notify(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
+                } else {
                     stopForegroundPlayback()
                 }
             }
         }
-        updateMediaSessionState()
-        NotificationManagerCompat.from(this).notify(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
     }
 
     override fun onDestroy() {
         stateCollectionJob?.cancel()
+        stateCollectionJob = null
+        runtime = null
+        clearMediaSessionAndNotification()
         mediaSession.release()
         serviceJob.cancel()
         super.onDestroy()
@@ -182,10 +227,20 @@ class NovelTtsPlaybackService : Service() {
     private fun dispatchTransportAction(action: NovelTtsTransportAction) {
         serviceScope.launch {
             runtime?.handleTransportAction(action)
-            updateMediaSessionState()
-            NotificationManagerCompat.from(this@NovelTtsPlaybackService)
-                .notify(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
             if (action == NovelTtsTransportAction.STOP) {
+                stopForegroundPlayback()
+                return@launch
+            }
+            val currentState = runtime?.playbackState()?.value?.playbackState
+            if (
+                currentState == NovelTtsPlaybackState.PLAYING ||
+                currentState == NovelTtsPlaybackState.PAUSED
+            ) {
+                mediaSession.isActive = true
+                updateMediaSessionState()
+                NotificationManagerCompat.from(this@NovelTtsPlaybackService)
+                    .notify(Notifications.ID_NOVEL_TTS_PLAYBACK, buildNotification())
+            } else {
                 stopForegroundPlayback()
             }
         }
@@ -310,7 +365,22 @@ class NovelTtsPlaybackService : Service() {
         )
     }
 
+    private fun clearMediaSessionAndNotification() {
+        mediaSession.setPlaybackState(
+            PlaybackStateCompat.Builder()
+                .setState(
+                    PlaybackStateCompat.STATE_STOPPED,
+                    PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                    0f,
+                )
+                .build(),
+        )
+        mediaSession.isActive = false
+        NotificationManagerCompat.from(this).cancel(Notifications.ID_NOVEL_TTS_PLAYBACK)
+    }
+
     private fun stopForegroundPlayback() {
+        clearMediaSessionAndNotification()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

@@ -1,0 +1,78 @@
+{
+  "source": "prototype_crystal_hiend_suite.html",
+  "sourceSha256": "b54706d14f9ad8d2c9e3cf78f48990b3cd33abd1817a8bbe2144f23fc092a74e",
+  "resources": [
+    {
+      "path": "app/src/main/res/drawable-nodpi/crystal_portrait_v1.png",
+      "sha256": "b5509e2f9c02d41c51da88eaad3debb732c44292022977d46fbad68b72192610",
+      "origin": "embedded ASSETS.v1"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/crystal_portrait_v2.png",
+      "sha256": "35c2498a1c8fd644cda09225b5e6711247e0928f1c30e609f9df4efddafca26d",
+      "origin": "embedded ASSETS.v2"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/crystal_portrait_photo.png",
+      "sha256": "f23e748d9c47b2536f2b13270f6a976525cd0cb74b1eaa73d529a3c7cccd114c",
+      "origin": "embedded ASSETS.photo"
+    },
+    {
+      "path": "app/src/main/assets/easteregg/crystal/scene.json",
+      "sha256": "6111c828919ee518262b1a5e9fad32f4478ce9c77a325b467929763d955dbd12",
+      "origin": "approved scene geometry"
+    },
+    {
+      "path": "app/src/main/java/eu/kanade/presentation/easteregg/crystal/CrystalSceneData.kt",
+      "sha256": "df9e1750f1f34016c23919da91db839ade9a4775d8c134d82e659ab170b5634c",
+      "origin": "approved FACE and CRYSTAL mesh"
+    },
+    {
+      "path": "app/src/main/res/raw/crystal_chime.wav",
+      "sha256": "5af6c74a7bff567fc73dc3faa0681d99316900e41454d94b4d04398746124978",
+      "origin": "original prototype WebAudio frequencies/envelopes; deterministic PCM export"
+    },
+    {
+      "path": "app/src/main/res/font/crystal_great_vibes.ttf",
+      "sha256": "8d509802186f1b51572531ecf313e8098f9a5bfdfaca93f0c9b34467f9982d15",
+      "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/greatvibes/GreatVibes-Regular.ttf",
+      "sourceGitBlob": "a1327ff3b862246f1f253639040edcc473e5f3a9"
+    },
+    {
+      "path": "app/src/main/res/font/crystal_cormorant.ttf",
+      "sha256": "b20b7d9626dd956b2c5e558692ad328b1f19e3275e2782db4fa07670d83f35e0",
+      "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf",
+      "sourceGitBlob": "d992a83ce525c330fad3a19087746bcb2dc038ee"
+    },
+    {
+      "path": "app/src/main/res/font/crystal_cormorant_italic.ttf",
+      "sha256": "0f48ea6abb2084537854f7174c470991a463b13036309e3b50a81511611c530d",
+      "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond-Italic%5Bwght%5D.ttf",
+      "sourceGitBlob": "0d914e7663b7a1429d06ec60a5c5bb026031a2ef"
+    },
+    {
+      "path": "app/src/main/res/font/crystal_manrope.ttf",
+      "sha256": "3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6",
+      "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf",
+      "sourceGitBlob": "75274da58537d6123b14f2cd0c355ad4681fc2b3"
+    },
+    {
+      "path": "app/src/main/assets/easteregg/crystal/licenses/greatvibes-OFL.txt",
+      "sha256": "61093a21f5e63dedf54222b3c09997e54c0fe43e3851d21386e02ddcbc246d49",
+      "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/greatvibes/OFL.txt",
+      "sourceGitBlob": "70025926f5684ebed9d119424b178faa4e0a5cc6"
+    },
+    {
+      "path": "app/src/main/assets/easteregg/crystal/licenses/cormorantgaramond-OFL.txt",
+      "sha256": "60700d351cac4650c51f3f9db318d2a420f8b45052dba2715eb5fec41f0f6956",
+      "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/OFL.txt",
+      "sourceGitBlob": "507d70f4565352dbfcf2dfc9b42eb092b57c0be8"
+    },
+    {
+      "path": "app/src/main/assets/easteregg/crystal/licenses/manrope-OFL.txt",
+      "sha256": "58172e0c0fac2cda8a37b348164bb55e44b0e69051e557e92b1d3f6910141f7b",
+      "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/OFL.txt",
+      "sourceGitBlob": "e271172a9ed0cddc895aabb6509f1c7d880b492d"
+    }
+  ]
+}

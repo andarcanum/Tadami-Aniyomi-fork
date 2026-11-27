@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.ResolvableSource
 import eu.kanade.tachiyomi.source.online.UriType
+import eu.kanade.tachiyomi.util.manga.fetchMangaChaptersForUpdate
 import kotlinx.coroutines.flow.update
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.util.lang.launchIO
@@ -90,12 +91,9 @@ class DeepLinkMangaScreenModel(
         val localChapter = getChapterByUrlAndMangaId.await(sChapter.url, manga.id)
 
         return if (localChapter == null) {
-            val sourceChapters = source.getMangaUpdate(
+            val sourceChapters = source.fetchMangaChaptersForUpdate(
                 manga = manga.toSManga(),
-                chapters = emptyList(),
-                fetchDetails = false,
-                fetchChapters = true,
-            ).chapters
+            )
             val newChapters = syncChaptersWithSource.await(sourceChapters, manga, source, false)
             newChapters.find { it.url == sChapter.url }
         } else {

@@ -1,0 +1,80 @@
+CREATE INDEX IF NOT EXISTS novels_categories_novel_id_index ON novels_categories(novel_id);
+CREATE INDEX IF NOT EXISTS novels_categories_category_id_index ON novels_categories(category_id);
+CREATE INDEX IF NOT EXISTS novel_chapters_date_fetch_index ON novel_chapters(date_fetch DESC);
+CREATE INDEX IF NOT EXISTS novel_chapters_novel_id_date_fetch_index ON novel_chapters(novel_id, date_fetch DESC);
+CREATE INDEX IF NOT EXISTS novel_chapters_date_upload_index ON novel_chapters(date_upload DESC);
+
+DROP VIEW IF EXISTS novellibraryView;
+CREATE VIEW novellibraryView AS
+SELECT
+    N.*,
+    coalesce(C.total, 0) AS totalCount,
+    coalesce(C.readCount, 0) AS readCount,
+    coalesce(C.latestUpload, 0) AS latestUpload,
+    coalesce(C.fetchedAt, 0) AS chapterFetchedAt,
+    coalesce(C.lastRead, 0) AS lastRead,
+    coalesce(C.bookmarkCount, 0) AS bookmarkCount,
+    coalesce(NC.category_id, 0) AS category
+FROM novels N
+LEFT JOIN(
+    SELECT
+        novel_chapters.novel_id,
+        count(*) AS total,
+        sum(read) AS readCount,
+        coalesce(max(novel_chapters.date_upload), 0) AS latestUpload,
+        coalesce(max(novel_history.last_read), 0) AS lastRead,
+        coalesce(max(novel_chapters.date_fetch), 0) AS fetchedAt,
+        sum(novel_chapters.bookmark) AS bookmarkCount
+    FROM novel_chapters
+    LEFT JOIN novel_excluded_scanlators
+    ON novel_chapters.novel_id = novel_excluded_scanlators.novel_id
+    AND novel_chapters.scanlator = novel_excluded_scanlators.scanlator
+    LEFT JOIN novel_history
+    ON novel_chapters._id = novel_history.chapter_id
+    WHERE novel_excluded_scanlators.scanlator IS NULL
+    AND novel_chapters.novel_id IN (SELECT _id FROM novels WHERE favorite = 1)
+    GROUP BY novel_chapters.novel_id
+) AS C
+ON N._id = C.novel_id
+LEFT JOIN(
+    -- Categories are many-to-many: a plain join would return one row per category of a novel and
+    -- the library would list that novel multiple times, which crashes the LazyColumn (duplicate
+    -- keys) as soon as a title sits in two categories. One row per novel, with the lowest
+    -- category id as the display category.
+    SELECT novel_id, MIN(category_id) AS category_id
+    FROM novels_categories
+    WHERE novel_id IN (SELECT _id FROM novels WHERE favorite = 1)
+    GROUP BY novel_id
+) AS NC
+ON NC.novel_id = N._id
+WHERE N.favorite = 1;
+
+DROP VIEW IF EXISTS novelhistoryView;
+CREATE VIEW novelhistoryView AS
+SELECT
+    novel_history._id AS id,
+    novels._id AS novelId,
+    novel_chapters._id AS chapterId,
+    novels.title,
+    novels.thumbnail_url AS thumbnailUrl,
+    novels.source,
+    novels.favorite,
+    novels.cover_last_modified,
+    novel_chapters.chapter_number AS chapterNumber,
+    novel_history.last_read AS readAt,
+    novel_history.time_read AS readDuration,
+    max_last_read.last_read AS maxReadAt,
+    max_last_read.chapter_id AS maxReadAtChapterId
+FROM novels
+JOIN novel_chapters
+ON novels._id = novel_chapters.novel_id
+JOIN novel_history
+ON novel_chapters._id = novel_history.chapter_id
+JOIN (
+    SELECT novel_chapters.novel_id, novel_chapters._id AS chapter_id, MAX(novel_history.last_read) AS last_read
+    FROM novel_chapters JOIN novel_history
+    ON novel_chapters._id = novel_history.chapter_id
+    WHERE novel_history.last_read > 0
+    GROUP BY novel_chapters.novel_id
+) AS max_last_read
+ON novel_chapters.novel_id = max_last_read.novel_id;

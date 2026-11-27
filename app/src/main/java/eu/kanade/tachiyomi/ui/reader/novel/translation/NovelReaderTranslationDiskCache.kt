@@ -16,6 +16,8 @@ import uy.kohesive.injekt.api.get
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+private const val INDEX_META_SCHEMA_VERSION = 1
+
 internal class NovelReaderTranslationDiskCache(
     private val directory: File,
     private val json: Json,
@@ -38,9 +40,10 @@ internal class NovelReaderTranslationDiskCache(
         val replaceRulesFingerprint: String = "",
         val sourceSegmentCount: Int = 0,
         val translatedCount: Int = 0,
+        val isPlaceholder: Boolean = false,
     ) {
         val isComplete: Boolean
-            get() = sourceSegmentCount <= 0 || translatedCount >= sourceSegmentCount
+            get() = sourceSegmentCount > 0 && translatedCount >= sourceSegmentCount
     }
 
     private val index = ConcurrentHashMap<Long, IndexEntry>()
@@ -50,6 +53,10 @@ internal class NovelReaderTranslationDiskCache(
 
     @Volatile
     private var indexBuilding = false
+
+    private var indexEpoch = 0L
+
+    internal var onRebuildScanForTest: (() -> Unit)? = null
 
     @Serializable
     private data class IndexEntryDiskModel(
@@ -67,17 +74,19 @@ internal class NovelReaderTranslationDiskCache(
         val replaceRulesFingerprint: String = "",
         val sourceSegmentCount: Int = 0,
         val translatedCount: Int = 0,
+        val schemaVersion: Int = 0,
     )
 
-    private fun getOrLoadEntry(chapterId: Long): IndexEntry? {
+    private fun getOrLoadEntryLocked(chapterId: Long): IndexEntry? {
         val entry = index[chapterId] ?: return null
-        if (entry.targetLang.isNotEmpty()) return entry
+        if (!entry.isPlaceholder) return entry
 
         // Try reading companion meta file first
         val metaFile = File(directory, "$chapterId.meta")
         if (metaFile.isFile) {
             val loaded = runCatching {
                 val model = json.decodeFromString<IndexEntryDiskModel>(metaFile.readText(Charsets.UTF_8))
+                if (model.schemaVersion != INDEX_META_SCHEMA_VERSION) return@runCatching null
                 IndexEntry(
                     targetLang = model.targetLang,
                     provider = model.provider,
@@ -91,6 +100,7 @@ internal class NovelReaderTranslationDiskCache(
                     replaceRulesFingerprint = model.replaceRulesFingerprint,
                     sourceSegmentCount = model.sourceSegmentCount,
                     translatedCount = model.translatedCount,
+                    isPlaceholder = false,
                 )
             }.getOrNull()
             if (loaded != null) {
@@ -100,11 +110,12 @@ internal class NovelReaderTranslationDiskCache(
         }
 
         // Fallback: read main JSON disk model
-        val diskModel = readEntryDiskModel(chapterId)
+        val diskModel = readEntryDiskModelLocked(chapterId)
         if (diskModel == null) {
             index.remove(chapterId)
             return null
         }
+        val complete = diskModel.toDomain().isTranslationComplete
         val loaded = IndexEntry(
             targetLang = diskModel.targetLang,
             provider = diskModel.provider,
@@ -112,12 +123,13 @@ internal class NovelReaderTranslationDiskCache(
             sourceLang = diskModel.sourceLang,
             promptMode = diskModel.promptMode,
             stylePreset = diskModel.stylePreset,
-            hasTranslatedContent = diskModel.translatedByIndex.isNotEmpty(),
+            hasTranslatedContent = diskModel.translatedByIndex.values.any { it.isNotBlank() },
             extractorVersion = diskModel.extractorVersion,
             promptModifiersFingerprint = diskModel.promptModifiersFingerprint,
             replaceRulesFingerprint = diskModel.replaceRulesFingerprint,
             sourceSegmentCount = diskModel.sourceSegmentCount,
-            translatedCount = diskModel.translatedByIndex.size,
+            translatedCount = if (complete) diskModel.translatedByIndex.size else -1,
+            isPlaceholder = false,
         )
 
         // Write the meta companion file so future reads are fast
@@ -135,6 +147,7 @@ internal class NovelReaderTranslationDiskCache(
                 replaceRulesFingerprint = loaded.replaceRulesFingerprint,
                 sourceSegmentCount = loaded.sourceSegmentCount,
                 translatedCount = loaded.translatedCount,
+                schemaVersion = INDEX_META_SCHEMA_VERSION,
             )
             metaFile.writeText(json.encodeToString(metaModel), Charsets.UTF_8)
         }
@@ -144,33 +157,36 @@ internal class NovelReaderTranslationDiskCache(
     }
 
     private fun ensureIndex() {
-        if (indexBuilt) return
-        if (indexBuilding) return // background rebuild already in progress, fallback to file-scan
+        if (indexBuilt || indexBuilding) return
 
+        val snapshotEpoch: Long
         synchronized(lock) {
             if (indexBuilt || indexBuilding) return
             indexBuilding = true
-            Thread {
-                try {
-                    rebuildIndex()
-                } finally {
-                    indexBuilt = true
+            snapshotEpoch = indexEpoch
+        }
+        Thread {
+            try {
+                rebuildIndex(snapshotEpoch)
+            } catch (t: Throwable) {
+                synchronized(lock) {
                     indexBuilding = false
                 }
-            }.apply {
-                name = "novel-translation-cache-index-rebuild"
-                isDaemon = true
-                start()
+                throw t
             }
+        }.apply {
+            name = "novel-translation-cache-index-rebuild"
+            isDaemon = true
+            start()
         }
     }
 
-    private fun rebuildIndex() {
+    private fun rebuildIndex(snapshotEpoch: Long) {
         val rebuilt = linkedMapOf<Long, IndexEntry>()
         if (directory.exists()) {
             directory.listFiles()?.filter { it.isFile && it.extension == "json" }?.forEach { file ->
                 val chapterId = file.nameWithoutExtension.toLongOrNull() ?: return@forEach
-                // Placeholder: targetLang is set to empty to trigger lazy load on demand.
+                // Placeholder: triggers lazy load on demand.
                 rebuilt[chapterId] = IndexEntry(
                     targetLang = "",
                     provider = NovelTranslationProvider.GEMINI,
@@ -179,19 +195,29 @@ internal class NovelReaderTranslationDiskCache(
                     promptMode = GeminiPromptMode.CLASSIC,
                     stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
                     hasTranslatedContent = true,
+                    isPlaceholder = true,
                 )
             }
         }
-        // Merge placeholders per key instead of clear()+putAll(): a put() landing while the file
-        // scan runs would otherwise be wiped from the in-memory index even though its file exists
-        // on disk, giving has()/chapterIds() false negatives until the next rebuild. Stale ids
-        // (files deleted externally) self-heal in getOrLoadEntry's disk fallback.
-        rebuilt.forEach { (chapterId, placeholder) ->
-            index.putIfAbsent(chapterId, placeholder)
+        onRebuildScanForTest?.invoke()
+        synchronized(lock) {
+            try {
+                // Only commit the scanned snapshot when no put/remove/clear/trim mutated the cache
+                // during the off-lock directory scan; otherwise stale snapshots could resurrect
+                // removed entries or mark an incomplete index as built.
+                if (indexEpoch == snapshotEpoch) {
+                    rebuilt.forEach { (chapterId, placeholder) ->
+                        index.putIfAbsent(chapterId, placeholder)
+                    }
+                    indexBuilt = true
+                }
+            } finally {
+                indexBuilding = false
+            }
         }
     }
 
-    private fun readEntryDiskModel(chapterId: Long): GeminiTranslationCacheDiskModel? {
+    private fun readEntryDiskModelLocked(chapterId: Long): GeminiTranslationCacheDiskModel? {
         val file = fileFor(chapterId)
         if (!file.isFile) return null
         return runCatching {
@@ -210,30 +236,39 @@ internal class NovelReaderTranslationDiskCache(
 
     fun put(entry: GeminiTranslationCacheEntry) {
         synchronized(lock) {
-            runCatching {
-                if (!directory.exists()) directory.mkdirs()
-                val file = fileFor(entry.chapterId)
-                file.writeText(json.encodeToString(GeminiTranslationCacheDiskModel.fromDomain(entry)), Charsets.UTF_8)
-
-                // Write companion meta file
-                val metaFile = File(directory, "${entry.chapterId}.meta")
-                val metaModel = IndexEntryDiskModel(
-                    targetLang = entry.targetLang,
-                    provider = entry.provider,
-                    model = entry.model,
-                    sourceLang = entry.sourceLang,
-                    promptMode = entry.promptMode,
-                    stylePreset = entry.stylePreset,
-                    hasTranslatedContent = entry.translatedByIndex.isNotEmpty(),
-                    extractorVersion = entry.extractorVersion,
-                    promptModifiersFingerprint = entry.promptModifiersFingerprint,
-                    replaceRulesFingerprint = entry.replaceRulesFingerprint,
-                    sourceSegmentCount = entry.sourceSegmentCount,
-                    translatedCount = entry.translatedByIndex.size,
-                )
-                metaFile.writeText(json.encodeToString(metaModel), Charsets.UTF_8)
-
-                // Maintain in-memory index
+            if (!directory.isDirectory &&
+                !directory.mkdirs()
+            ) {
+                throw java.io.IOException("Cannot create translation cache directory")
+            }
+            val existing = readEntryLocked(entry.chapterId)
+            // A failed replacement may leave checkpoints, but must never replace the last full artifact.
+            if (!entry.isTranslationComplete && existing?.isTranslationComplete == true) return
+            val encoded = json.encodeToString(GeminiTranslationCacheDiskModel.fromDomain(entry))
+            val temporary = File.createTempFile(".${entry.chapterId}-", ".tmp", directory)
+            try {
+                java.io.FileOutputStream(temporary).use { output ->
+                    output.write(encoded.toByteArray(Charsets.UTF_8))
+                    output.fd.sync()
+                }
+                val targetPath = fileFor(entry.chapterId).toPath()
+                try {
+                    java.nio.file.Files.move(
+                        temporary.toPath(),
+                        targetPath,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    )
+                } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                    java.nio.file.Files.move(
+                        temporary.toPath(),
+                        targetPath,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    )
+                }
+                // A sidecar is never authoritative for a newly published artifact.
+                File(directory, "${entry.chapterId}.meta").delete()
+                indexEpoch++
                 index[entry.chapterId] = IndexEntry(
                     targetLang = entry.targetLang,
                     provider = entry.provider,
@@ -241,17 +276,16 @@ internal class NovelReaderTranslationDiskCache(
                     sourceLang = entry.sourceLang,
                     promptMode = entry.promptMode,
                     stylePreset = entry.stylePreset,
-                    hasTranslatedContent = entry.translatedByIndex.isNotEmpty(),
+                    hasTranslatedContent = entry.translatedByIndex.values.any { it.isNotBlank() },
                     extractorVersion = entry.extractorVersion,
                     promptModifiersFingerprint = entry.promptModifiersFingerprint,
                     replaceRulesFingerprint = entry.replaceRulesFingerprint,
                     sourceSegmentCount = entry.sourceSegmentCount,
-                    translatedCount = entry.translatedByIndex.size,
+                    translatedCount = if (entry.isTranslationComplete) entry.translatedByIndex.size else -1,
+                    isPlaceholder = false,
                 )
-            }.onFailure { error ->
-                logcat(LogPriority.WARN, error) {
-                    "Failed to write novel translation cache for chapter=${entry.chapterId}"
-                }
+            } finally {
+                temporary.delete()
             }
         }
     }
@@ -260,6 +294,7 @@ internal class NovelReaderTranslationDiskCache(
         synchronized(lock) {
             fileFor(chapterId).delete()
             File(directory, "$chapterId.meta").delete()
+            indexEpoch++
             index.remove(chapterId)
         }
     }
@@ -268,62 +303,36 @@ internal class NovelReaderTranslationDiskCache(
 
     fun has(chapterId: Long): Boolean {
         ensureIndex()
-        if (!indexReady()) return hasFallback(chapterId)
-        return getOrLoadEntry(chapterId)?.hasTranslatedContent == true
+        synchronized(lock) {
+            if (!indexReady()) return hasFallbackLocked(chapterId)
+            return getOrLoadEntryLocked(chapterId)?.hasTranslatedContent == true
+        }
     }
 
-    fun has(
-        chapterId: Long,
-        requirements: NovelReaderTranslationCacheRequirements,
-    ): Boolean {
-        ensureIndex()
-        if (!indexReady()) return hasFallback(chapterId, requirements)
-        val entry = getOrLoadEntry(chapterId) ?: return false
-        if (!entry.hasTranslatedContent) return false
-        // Skip-checks must also see partial (relaxed-mode) entries as not-cached so a later batch
-        // heals them instead of skipping the chapter forever.
-        if (!entry.isComplete) return false
-        return requirements.matchesEntryMetadata(
-            entryProvider = entry.provider,
-            entryModel = entry.model,
-            entrySourceLang = entry.sourceLang,
-            entryTargetLang = entry.targetLang,
-            entryPromptMode = entry.promptMode,
-            entryStylePreset = entry.stylePreset,
-            entryExtractorVersion = entry.extractorVersion,
-            entryPromptModifiersFingerprint = entry.promptModifiersFingerprint,
-            entryReplaceRulesFingerprint = entry.replaceRulesFingerprint,
-        )
+    fun has(chapterId: Long, requirements: NovelReaderTranslationCacheRequirements): Boolean = synchronized(lock) {
+        val entry = readEntryLocked(chapterId) ?: return@synchronized false
+        entry.isTranslationComplete && NovelReaderTranslationCacheResolver.matches(entry, requirements)
     }
 
-    fun has(
-        chapterId: Long,
-        targetLang: String,
-    ): Boolean {
+    fun has(chapterId: Long, targetLang: String): Boolean {
         ensureIndex()
-        if (!indexReady()) return hasFallback(chapterId, targetLang)
-        return getOrLoadEntry(chapterId)?.takeIf { it.hasTranslatedContent }?.targetLang == targetLang
+        synchronized(lock) {
+            if (!indexReady()) {
+                val entry = readEntryLocked(chapterId) ?: return false
+                return entry.targetLang == targetLang && entry.isTranslationComplete
+            }
+            val entry = getOrLoadEntryLocked(chapterId) ?: return false
+            return entry.targetLang == targetLang && entry.hasTranslatedContent && entry.isComplete
+        }
     }
 
     // -- Fallback methods (file-scan, used while index builds in background) --
 
-    private fun hasFallback(chapterId: Long): Boolean {
+    private fun hasFallbackLocked(chapterId: Long): Boolean {
         return readEntryLocked(chapterId)?.translatedByIndex?.isNotEmpty() == true
     }
 
-    private fun hasFallback(chapterId: Long, requirements: NovelReaderTranslationCacheRequirements): Boolean {
-        val cached = readEntryLocked(chapterId) ?: return false
-        return NovelReaderTranslationCacheResolver.matches(
-            cached = cached,
-            requirements = requirements,
-        ) && cached.isTranslationComplete
-    }
-
-    private fun hasFallback(chapterId: Long, targetLang: String): Boolean {
-        return readEntryLocked(chapterId)?.targetLang == targetLang
-    }
-
-    private fun chapterIdsFallback(): Set<Long> {
+    private fun chapterIdsFallbackLocked(): Set<Long> {
         if (!directory.exists()) return emptySet()
         return directory.listFiles()
             ?.asSequence()
@@ -338,106 +347,78 @@ internal class NovelReaderTranslationDiskCache(
             ?: emptySet()
     }
 
-    private fun chapterIdsFallback(targetLang: String): Set<Long> {
-        if (!directory.exists()) return emptySet()
-        return directory.listFiles()
-            ?.asSequence()
-            ?.filter { it.isFile && it.extension == "json" }
-            ?.mapNotNull { file ->
-                val chapterId = file.nameWithoutExtension.toLongOrNull() ?: return@mapNotNull null
-                readEntryLocked(chapterId)
-                    ?.takeIf { it.targetLang == targetLang && it.translatedByIndex.isNotEmpty() }
-                    ?.chapterId
-            }
-            ?.toSet()
-            ?: emptySet()
-    }
-
-    private fun chapterIdsFallback(chapterIds: Collection<Long>, targetLang: String): Set<Long> {
-        if (!directory.exists() || chapterIds.isEmpty()) return emptySet()
-        return chapterIds.filter { chapterId ->
-            val file = fileFor(chapterId)
-            // Content check mirrors the index path: an entry whose translations were all blank
-            // must not light up badges during the first-rebuild fallback window.
-            file.isFile && readEntryLocked(chapterId)
-                ?.takeIf { it.targetLang == targetLang && it.translatedByIndex.isNotEmpty() } != null
-        }.toSet()
-    }
-
-    private fun chapterIdsFallback(requirements: NovelReaderTranslationCacheRequirements): Set<Long> {
-        if (!directory.exists()) return emptySet()
-        return directory.listFiles()
-            ?.asSequence()
-            ?.filter { it.isFile && it.extension == "json" }
-            ?.mapNotNull { file ->
-                val chapterId = file.nameWithoutExtension.toLongOrNull() ?: return@mapNotNull null
-                readEntryLocked(chapterId)
-                    ?.takeIf { cached ->
-                        NovelReaderTranslationCacheResolver.matches(
-                            cached = cached,
-                            requirements = requirements,
-                        )
-                    }
-                    ?.chapterId
-            }
-            ?.toSet()
-            ?: emptySet()
-    }
-
     fun chapterIds(): Set<Long> {
         ensureIndex()
-        if (!indexReady()) return chapterIdsFallback()
-        return index.keys.filter { getOrLoadEntry(it)?.hasTranslatedContent == true }.toSet()
+        synchronized(lock) {
+            if (!indexReady()) return chapterIdsFallbackLocked()
+            return index.keys.toList().filter { getOrLoadEntryLocked(it)?.hasTranslatedContent == true }.toSet()
+        }
     }
 
-    fun chapterIds(targetLang: String): Set<Long> {
-        ensureIndex()
-        if (!indexReady()) return chapterIdsFallback(targetLang)
-        return index.entries
-            .filter { getOrLoadEntry(it.key)?.takeIf { it.hasTranslatedContent }?.targetLang == targetLang }
-            .map { it.key }
-            .toSet()
-    }
+    fun chapterIds(targetLang: String): Set<Long> = chapterIds().filter { has(it, targetLang) }.toSet()
 
-    fun chapterIds(chapterIds: Collection<Long>, targetLang: String): Set<Long> {
-        ensureIndex()
-        if (!indexReady()) return chapterIdsFallback(chapterIds, targetLang)
-        return chapterIds.filter { chapterId ->
-            getOrLoadEntry(chapterId)?.takeIf { it.targetLang == targetLang && it.hasTranslatedContent } != null
-        }.toSet()
-    }
+    fun chapterIds(chapterIds: Collection<Long>, targetLang: String): Set<Long> =
+        chapterIds.filter { has(it, targetLang) }.toSet()
 
-    fun chapterIds(requirements: NovelReaderTranslationCacheRequirements): Set<Long> {
-        ensureIndex()
-        if (!indexReady()) return chapterIdsFallback(requirements)
-        return index.entries
-            .filter { (chapterId, _) ->
-                val entry = getOrLoadEntry(chapterId) ?: return@filter false
-                entry.hasTranslatedContent &&
-                    requirements.matchesEntryMetadata(
-                        entryProvider = entry.provider,
-                        entryModel = entry.model,
-                        entrySourceLang = entry.sourceLang,
-                        entryTargetLang = entry.targetLang,
-                        entryPromptMode = entry.promptMode,
-                        entryStylePreset = entry.stylePreset,
-                        entryExtractorVersion = entry.extractorVersion,
-                        entryPromptModifiersFingerprint = entry.promptModifiersFingerprint,
-                        entryReplaceRulesFingerprint = entry.replaceRulesFingerprint,
-                    )
-            }
-            .map { it.key }
-            .toSet()
-    }
+    fun chapterIds(requirements: NovelReaderTranslationCacheRequirements): Set<Long> =
+        chapterIds().filter { has(it, requirements) }.toSet()
+
+    fun chapterIds(
+        chapterIds: Collection<Long>,
+        requirements: NovelReaderTranslationCacheRequirements,
+    ): Set<Long> = chapterIds.filter { has(it, requirements) }.toSet()
 
     fun clear() {
         synchronized(lock) {
+            indexEpoch++
+            index.clear()
+            indexBuilt = false
             if (!directory.exists()) return
             directory.listFiles()?.forEach { file ->
                 if (file.isFile) file.delete()
             }
-            index.clear()
-            indexBuilt = false
+        }
+    }
+
+    fun currentBytes(): Long {
+        synchronized(lock) {
+            if (!directory.exists()) return 0L
+            return directory.listFiles()
+                ?.filter { it.isFile && it.extension != "tmp" }
+                ?.sumOf { it.length() }
+                ?: 0L
+        }
+    }
+
+    fun trimToTargetBytes(targetBytes: Long) {
+        synchronized(lock) {
+            if (!directory.exists()) return
+            val allFiles = directory.listFiles()
+                ?.filter { it.isFile && it.extension != "tmp" }
+                .orEmpty()
+            var total = allFiles.sumOf { it.length() }
+            if (total <= targetBytes) return
+            val sortedFiles = allFiles.sortedBy { it.lastModified() }
+            for (file in sortedFiles) {
+                if (total <= targetBytes) break
+                if (!file.exists()) continue
+                val chapterId = file.nameWithoutExtension.toLongOrNull()
+                val fileLength = file.length()
+                if (file.delete()) {
+                    total -= fileLength
+                    indexEpoch++
+                    if (chapterId != null && file.extension == "json") {
+                        val metaFile = File(directory, "$chapterId.meta")
+                        if (metaFile.isFile) {
+                            val metaLength = metaFile.length()
+                            if (metaFile.delete()) {
+                                total -= metaLength
+                            }
+                        }
+                        index.remove(chapterId)
+                    }
+                }
+            }
         }
     }
 
@@ -471,6 +452,8 @@ private data class GeminiTranslationCacheDiskModel(
     val promptModifiersFingerprint: String = "",
     val replaceRulesFingerprint: String = "",
     val sourceSegmentCount: Int = 0,
+    val sourceFingerprint: String = "",
+    val generationFingerprint: String = "",
 ) {
     fun toDomain(): GeminiTranslationCacheEntry {
         return GeminiTranslationCacheEntry(
@@ -486,6 +469,8 @@ private data class GeminiTranslationCacheDiskModel(
             promptModifiersFingerprint = promptModifiersFingerprint,
             replaceRulesFingerprint = replaceRulesFingerprint,
             sourceSegmentCount = sourceSegmentCount,
+            sourceFingerprint = sourceFingerprint,
+            generationFingerprint = generationFingerprint,
         )
     }
 
@@ -504,6 +489,8 @@ private data class GeminiTranslationCacheDiskModel(
                 promptModifiersFingerprint = entry.promptModifiersFingerprint,
                 replaceRulesFingerprint = entry.replaceRulesFingerprint,
                 sourceSegmentCount = entry.sourceSegmentCount,
+                sourceFingerprint = entry.sourceFingerprint,
+                generationFingerprint = entry.generationFingerprint,
             )
         }
     }
@@ -528,24 +515,8 @@ internal object NovelReaderTranslationDiskCacheStore {
         eu.kanade.tachiyomi.ui.reader.novel.GlobalCacheCoordinator.instance.register(
             object : eu.kanade.tachiyomi.ui.reader.novel.cache.NovelReaderCacheReporter {
                 override fun cacheId(): String = "novel-reader-translation-disk"
-                override fun currentBytes(): Long {
-                    return cache.cacheDir.listFiles()
-                        ?.filter { it.isFile }
-                        ?.sumOf { it.length() }
-                        ?: 0L
-                }
-                override fun trimToTargetBytes(targetBytes: Long) {
-                    val files = cache.cacheDir.listFiles()
-                        ?.filter { it.isFile }
-                        ?.sortedBy { it.lastModified() }
-                        .orEmpty()
-                    var total = files.sumOf { it.length() }
-                    for (file in files) {
-                        if (total <= targetBytes) break
-                        total -= file.length()
-                        file.delete()
-                    }
-                }
+                override fun currentBytes(): Long = cache.currentBytes()
+                override fun trimToTargetBytes(targetBytes: Long) = cache.trimToTargetBytes(targetBytes)
             },
         )
     }
@@ -576,6 +547,11 @@ internal object NovelReaderTranslationDiskCacheStore {
     )
 
     fun chapterIds(requirements: NovelReaderTranslationCacheRequirements): Set<Long> = cache.chapterIds(requirements)
+
+    fun chapterIds(
+        chapterIds: Collection<Long>,
+        requirements: NovelReaderTranslationCacheRequirements,
+    ): Set<Long> = cache.chapterIds(chapterIds, requirements)
 
     fun remove(chapterId: Long) = cache.remove(chapterId)
 

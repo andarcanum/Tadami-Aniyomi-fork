@@ -25,28 +25,31 @@ import java.time.format.DateTimeFormatter
  */
 class ActivityDataRepositoryImpl(
     private val database: AchievementsDatabase,
+    private val todayProvider: () -> LocalDate = { LocalDate.now() },
 ) : ActivityDataRepository {
 
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
     override fun getActivityData(days: Int): Flow<List<DayActivity>> {
-        val today = LocalDate.now()
-        val startDate = today.minusDays((days - 1).toLong())
-        val startDateStr = startDate.format(dateFormatter)
-        val endDateStr = today.format(dateFormatter)
-
+        // Observe the full activity_log table and evaluate `today` dynamically on each emission.
+        // Capturing LocalDate.now() once at Flow creation froze the date window when the app stayed
+        // alive in memory across midnight, causing streaks to drop to 0 after 2+ days without kill.
         return database.activityLogQueries
-            .getActivityForDateRange(startDateStr, endDateStr)
+            .selectAllActivityLog()
             .asFlow()
             .mapToList(Dispatchers.IO)
             .map { records ->
+                val today = todayProvider()
+                val startDate = today.minusDays((days - 1).toLong())
+                val recordsByDate = records.associateBy { it.date }
+
                 // Create full date range with all days (including empty ones)
-                val activities = mutableListOf<DayActivity>()
+                val activities = ArrayList<DayActivity>(days.coerceAtLeast(0))
                 var currentDate = startDate
 
                 while (!currentDate.isAfter(today)) {
                     val dateStr = currentDate.format(dateFormatter)
-                    val record = records.firstOrNull { it.date == dateStr }
+                    val record = recordsByDate[dateStr]
 
                     val (type, level) = if (record != null) {
                         calculateActivityTypeAndLevel(
@@ -54,6 +57,7 @@ class ActivityDataRepositoryImpl(
                             episodesWatched = record.episodes_watched.toInt(),
                             appOpens = record.app_opens.toInt(),
                             achievementsUnlocked = record.achievements_unlocked.toInt(),
+                            durationMs = record.duration_ms,
                         )
                     } else {
                         ActivityType.APP_OPEN to 0
@@ -90,18 +94,18 @@ class ActivityDataRepositoryImpl(
     }
 
     override suspend fun getCurrentMonthStats(): MonthStats {
-        val now = LocalDate.now()
+        val now = todayProvider()
         return getMonthStats(now.year, now.monthValue)
     }
 
     override suspend fun getPreviousMonthStats(): MonthStats {
-        val now = LocalDate.now()
+        val now = todayProvider()
         val previousMonth = now.minusMonths(1)
         return getMonthStats(previousMonth.year, previousMonth.monthValue)
     }
 
     override suspend fun recordReading(id: Long, chaptersCount: Int, durationMs: Long) {
-        val today = LocalDate.now().format(dateFormatter)
+        val today = todayProvider().format(dateFormatter)
         val level = calculateActivityLevel(chaptersCount, ActivityType.READING)
         database.activityLogQueries.incrementChapters(
             date = today,
@@ -119,7 +123,7 @@ class ActivityDataRepositoryImpl(
     }
 
     override suspend fun recordWatching(id: Long, episodesCount: Int, durationMs: Long) {
-        val today = LocalDate.now().format(dateFormatter)
+        val today = todayProvider().format(dateFormatter)
         val level = calculateActivityLevel(episodesCount, ActivityType.WATCHING)
         database.activityLogQueries.incrementEpisodes(
             date = today,
@@ -137,7 +141,7 @@ class ActivityDataRepositoryImpl(
     }
 
     override suspend fun recordAppSession(durationMs: Long) {
-        val today = LocalDate.now().format(dateFormatter)
+        val today = todayProvider().format(dateFormatter)
         database.activityLogQueries.addDuration(
             date = today,
             duration_ms = durationMs,
@@ -146,7 +150,7 @@ class ActivityDataRepositoryImpl(
     }
 
     override suspend fun recordAppOpen() {
-        val today = LocalDate.now().format(dateFormatter)
+        val today = todayProvider().format(dateFormatter)
         database.activityLogQueries.incrementAppOpens(
             date = today,
             last_updated = System.currentTimeMillis(),
@@ -154,7 +158,7 @@ class ActivityDataRepositoryImpl(
     }
 
     override suspend fun recordAchievementUnlock() {
-        val today = LocalDate.now().format(dateFormatter)
+        val today = todayProvider().format(dateFormatter)
         database.activityLogQueries.incrementAchievements(
             date = today,
             last_updated = System.currentTimeMillis(),
@@ -168,7 +172,7 @@ class ActivityDataRepositoryImpl(
      * выдавалась в другой день, его строка не корректируется; level=4 не откатывается.
      */
     override suspend fun decrementAchievementUnlock() {
-        val today = LocalDate.now().format(dateFormatter)
+        val today = todayProvider().format(dateFormatter)
         database.activityLogQueries.decrementAchievements(
             date = today,
             last_updated = System.currentTimeMillis(),
@@ -177,7 +181,7 @@ class ActivityDataRepositoryImpl(
     }
 
     override suspend fun getLastTwelveMonthsStats(): List<Pair<YearMonth, MonthStats>> {
-        val today = YearMonth.now()
+        val today = YearMonth.from(todayProvider())
         val stats = mutableListOf<Pair<YearMonth, MonthStats>>()
 
         // Last 12 months including current
@@ -203,6 +207,7 @@ class ActivityDataRepositoryImpl(
             episodesWatched = episodesWatched,
             appOpens = appOpens,
             achievementsUnlocked = achievementsUnlocked,
+            durationMs = durationMs,
         )
 
         database.activityLogQueries.upsertActivity(
@@ -228,6 +233,7 @@ class ActivityDataRepositoryImpl(
         episodesWatched: Int,
         appOpens: Int,
         achievementsUnlocked: Int,
+        durationMs: Long = 0L,
     ): Pair<ActivityType, Int> {
         return when {
             achievementsUnlocked > 0 -> ActivityType.READING to 4 // Highlighting achievements with max level
@@ -235,6 +241,7 @@ class ActivityDataRepositoryImpl(
                 ActivityType.WATCHING to
                     calculateActivityLevel(episodesWatched, ActivityType.WATCHING)
             chaptersRead > 0 -> ActivityType.READING to calculateActivityLevel(chaptersRead, ActivityType.READING)
+            durationMs > 0L -> ActivityType.READING to 1
             appOpens > 0 -> ActivityType.APP_OPEN to 1
             else -> ActivityType.APP_OPEN to 0
         }

@@ -1,7 +1,11 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
+import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
 
 data class DiscoveryRowItem(
     val title: String,
@@ -15,6 +19,7 @@ data class DiscoveryRowItem(
     val sourceUrl: String? = null,
     val genres: List<String> = emptyList(),
     val altCleanTitles: List<String> = emptyList(),
+    val releaseStatus: DiscoveryReleaseStatus? = null,
 )
 
 data class DiscoveryFeedbackSeed(
@@ -64,6 +69,8 @@ data class DiscoveryBuildContext(
      */
     val existingRowItems: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
     val pageOffset: Int = 1,
+    /** Consecutive catalogue pages harvested from each source, starting at [pageOffset]. */
+    val harvestPages: Int = 1,
     /**
      * Shared deadline and details allowance for this media run. Rows must not
      * create their own budgets: TASTE and SOURCE consume the same one.
@@ -75,7 +82,53 @@ data class DiscoveryBuildContext(
      * coordinator's cross-row dedupe cannot empty SOURCE.
      */
     val sharedGenreQuery: SharedRequiredGenreQuery? = null,
+    val eligibilitySnapshot: DiscoveryEligibilitySnapshot? = null,
+    /** Authorization captured for this run; missing inventory never authorizes a native source. */
+    val sourcePolicy: DiscoverySourcePolicy = DiscoverySourcePolicy(
+        mediaType = mediaType,
+        revision = "unavailable",
+        inventoryComplete = false,
+        allowedPluginKeys = emptySet(),
+        pluginMembers = emptyMap(),
+    ),
 ) {
+    /** Titles that must not consume row slots: known, shown, and the previous pool. */
+    val exclusionKeys: Set<String>
+        get() = libraryCleanTitles + historyCleanTitles + hiddenCleanTitles +
+            recentCleanTitles + currentFeedCleanTitles +
+            eligibilitySnapshot?.excludedIdentityKeys.orEmpty() + eligibilitySnapshot?.excludedLookupKeys.orEmpty()
+
+    val nativeQuerySourceIds: List<Long>
+        get() = if (sourcePolicy.mediaType != mediaType) {
+            emptyList()
+        } else {
+            sourceIds.ifEmpty { sourcePolicy.representativeSourceIds }
+                .filter(sourcePolicy::allowsNative).distinct()
+        }
+
+    fun eligibleCandidates(rowType: DiscoveryRowType, items: List<DiscoveryRowItem>): List<DiscoveryRowItem> {
+        if (sourcePolicy.mediaType != mediaType) return emptyList()
+        val excluded = exclusionKeys
+        return items.filter { sourcePolicy.allows(rowType, it.sourceId, it.provider) }
+            .filterNot { it.isExcludedBy(excluded, mediaType) }
+    }
+
+    /** Keep BEST_EFFORT lower tiers until the coordinator knows cross-row eligibility. */
+    fun admittedCandidates(rowType: DiscoveryRowType, items: List<DiscoveryRowItem>): List<DiscoveryRowItem> {
+        val policy = candidatePolicy
+        val admitted = eligibleCandidates(rowType, items).filter {
+            policy.evaluate(it.genres) is CandidateVerdict.Admitted
+        }
+        if (policy.priorityGenres.isEmpty()) return admitted
+        val rankOnly = DiscoveryCandidatePolicy(
+            blacklistedTags = policy.blacklistedTags,
+            ignoredGenres = policy.ignoredGenres,
+            priorityGenres = policy.priorityGenres,
+            unknownGenrePolicy = policy.unknownGenrePolicy,
+        )
+        return rankOnly.filterRowCandidates(admitted, { it.genres })
+    }
+
     val candidatePolicy: DiscoveryCandidatePolicy
         get() {
             val effectiveIgnored =
@@ -99,5 +152,17 @@ data class DiscoveryBuildContext(
 interface DiscoveryRowBuilder {
     val rowType: DiscoveryRowType
     val isDegraded: Boolean get() = false
+
+    /** Source ids whose genre query failed operationally. */
+    val failedSourceIds: Set<Long> get() = emptySet()
+
+    /** Source ids whose genre coverage is incomplete by the same rule as [isDegraded]. */
+    val degradedSourceIds: Set<Long> get() = emptySet()
+
+    /** Source ids with an observed successful attempt whose coverage is not degraded. */
+    val successfulSourceIds: Set<Long> get() = emptySet()
+
+    /** Null means the builder cannot prove an exhaustive catalogue result. */
+    val exhaustionEvidence: List<DiscoveryQueryEvidence>? get() = null
     suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem>
 }

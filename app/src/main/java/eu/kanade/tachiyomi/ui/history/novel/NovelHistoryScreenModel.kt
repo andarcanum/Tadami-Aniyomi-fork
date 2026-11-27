@@ -3,10 +3,10 @@ package eu.kanade.tachiyomi.ui.history.novel
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.core.util.insertSeparators
 import eu.kanade.domain.entries.novel.LocalNovelVisibility
 import eu.kanade.presentation.history.novel.NovelHistoryUiModel
-import eu.kanade.tachiyomi.util.lang.toLocalDate
+import eu.kanade.tachiyomi.ui.library.leadingDebounce
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -51,16 +51,18 @@ class NovelHistoryScreenModel(
     private val dialogState = MutableStateFlow<Dialog?>(null)
 
     val state: StateFlow<State> = combine(
-        _query.flatMapLatest { query ->
-            historyRepository.getNovelHistory(query ?: "")
-                .catch { error ->
-                    logcat(LogPriority.ERROR, error)
-                    _events.send(Event.InternalError)
-                }
-                .distinctUntilChanged()
-                .map { items -> items.filterVisibleLocalNovels().toHistoryUiModels() }
-                .flowOn(Dispatchers.IO)
-        },
+        _query
+            .leadingDebounce(SEARCH_DEBOUNCE_MILLIS)
+            .flatMapLatest { query ->
+                historyRepository.getNovelHistory(query ?: "")
+                    .catch { error ->
+                        logcat(LogPriority.ERROR, error)
+                        _events.send(Event.InternalError)
+                    }
+                    .distinctUntilChanged()
+                    .map { items -> items.filterVisibleLocalNovels().toHistoryUiModels() }
+                    .flowOn(Dispatchers.IO)
+            },
         dialogState,
         searchQueryState,
     ) { list, dialog, searchQuery ->
@@ -83,37 +85,35 @@ class NovelHistoryScreenModel(
         val localItems = filter { LocalNovelVisibility.isLocalSource(it.coverData.sourceId) }
         if (localItems.isEmpty()) return this
 
-        val urlByNovelId = HashMap<Long, String?>(localItems.size)
+        val visibleByNovelId = HashMap<Long, Boolean>(localItems.size)
         for (item in localItems) {
-            if (item.novelId in urlByNovelId) continue
+            if (item.novelId in visibleByNovelId) continue
             if (LocalNovelVisibility.shouldHideLocalHistoryByCover(item.coverData.sourceId, item.coverData.url)) {
-                urlByNovelId[item.novelId] = null
+                visibleByNovelId[item.novelId] = false
                 continue
             }
-            urlByNovelId[item.novelId] = getNovel.await(item.novelId)?.url
-        }
-
-        return filter { item ->
-            if (!LocalNovelVisibility.isLocalSource(item.coverData.sourceId)) return@filter true
-            LocalNovelVisibility.shouldShowLocalNovelEntry(
+            val url = getNovel.await(item.novelId)?.url
+            visibleByNovelId[item.novelId] = LocalNovelVisibility.shouldShowLocalNovelEntry(
                 sourceId = item.coverData.sourceId,
-                url = urlByNovelId[item.novelId],
+                url = url,
                 coverUrl = item.coverData.url,
                 hasSupportedContent = localNovelSourceFileSystem::hasSupportedLocalNovelContent,
             )
         }
+
+        return filter { item ->
+            if (!LocalNovelVisibility.isLocalSource(item.coverData.sourceId)) return@filter true
+            visibleByNovelId[item.novelId] == true
+        }
     }
 
     private fun List<NovelHistoryWithRelations>.toHistoryUiModels(): List<NovelHistoryUiModel> {
-        return map { NovelHistoryUiModel.Item(it) }
-            .insertSeparators { before, after ->
-                val beforeDate = before?.item?.readAt?.time?.toLocalDate()
-                val afterDate = after?.item?.readAt?.time?.toLocalDate()
-                when {
-                    beforeDate != afterDate && afterDate != null -> NovelHistoryUiModel.Header(afterDate)
-                    else -> null
-                }
-            }
+        return buildDateGroupedUiModels(
+            items = this,
+            timestampMillis = { it.readAt?.time },
+            header = NovelHistoryUiModel::Header,
+            item = NovelHistoryUiModel::Item,
+        )
     }
 
     fun setDialog(dialog: Dialog?) {
@@ -163,3 +163,5 @@ class NovelHistoryScreenModel(
         data object HistoryCleared : Event
     }
 }
+
+private const val SEARCH_DEBOUNCE_MILLIS = 200L

@@ -30,10 +30,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -79,7 +81,10 @@ import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.discovery.DiscoveryDirectOpenResolver
 import eu.kanade.tachiyomi.ui.discovery.DiscoveryFeedScreen
+import eu.kanade.tachiyomi.ui.discovery.DiscoveryHeroCollageSkeleton
+import eu.kanade.tachiyomi.ui.discovery.DiscoveryHeroStageSkeleton
 import eu.kanade.tachiyomi.ui.discovery.DiscoveryPreviewSheet
+import eu.kanade.tachiyomi.ui.discovery.HybridDiscoveryStripSkeleton
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
@@ -89,7 +94,9 @@ import eu.kanade.tachiyomi.ui.history.HistoriesTab
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -161,13 +168,13 @@ internal fun AnimeHomeHub(
         }
     }
 
+    val isAnimeActive = activeSection == HomeHubSection.Anime
+    val currentIsAnimeActive by rememberUpdatedState(isAnimeActive)
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, activeSection) {
+    DisposableEffect(lifecycleOwner, screenModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (activeSection == HomeHubSection.Anime) {
-                    screenModel.onScreenReentry()
-                }
+            if (event == Lifecycle.Event.ON_RESUME && currentIsAnimeActive) {
+                screenModel.onScreenReentry()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -176,32 +183,24 @@ internal fun AnimeHomeHub(
         }
     }
 
-    var isFirstComposition by remember { mutableStateOf(true) }
-    LaunchedEffect(activeSection, tabNavigator.current) {
-        if (activeSection == HomeHubSection.Anime && tabNavigator.current is HomeHubTab) {
-            if (isFirstComposition) {
-                isFirstComposition = false
-            } else {
-                screenModel.onScreenReentry()
-            }
-        }
+    var lastSourceId by remember(screenModel) {
+        mutableLongStateOf(screenModel.getLastUsedAnimeSourceId())
     }
-
-    var lastSourceId by remember(activeSection) {
-        mutableLongStateOf(
-            if (activeSection == HomeHubSection.Anime) screenModel.getLastUsedAnimeSourceId() else -1L,
-        )
+    var lastSourceName by remember(screenModel) {
+        mutableStateOf<String?>(null)
     }
-    var lastSourceName by remember(activeSection) {
-        mutableStateOf<String?>(
-            if (activeSection ==
-                HomeHubSection.Anime
-            ) {
-                screenModel.getLastUsedAnimeSourceName()
+    LaunchedEffect(isAnimeActive, screenModel, state.availableSources) {
+        if (isAnimeActive) {
+            val latestId = withContext(Dispatchers.IO) { screenModel.getLastUsedAnimeSourceId() }
+            val fromAvailable = state.availableSources.firstOrNull { it.id == latestId }?.name
+            val latestName = fromAvailable ?: if (latestId != -1L) {
+                withContext(Dispatchers.IO) { screenModel.getLastUsedAnimeSourceName() }
             } else {
                 null
-            },
-        )
+            }
+            if (lastSourceId != latestId) lastSourceId = latestId
+            if (lastSourceName != latestName) lastSourceName = latestName
+        }
     }
     val availableSources = state.availableSources
 
@@ -260,6 +259,7 @@ internal fun AnimeHomeHub(
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
+        onDiscoveryMarkConsumed = { screenModel.markDiscoveryItemConsumed(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -301,13 +301,13 @@ internal fun MangaHomeHub(
         }
     }
 
+    val isMangaActive = activeSection == HomeHubSection.Manga
+    val currentIsMangaActive by rememberUpdatedState(isMangaActive)
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, activeSection) {
+    DisposableEffect(lifecycleOwner, screenModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (activeSection == HomeHubSection.Manga) {
-                    screenModel.onScreenReentry()
-                }
+            if (event == Lifecycle.Event.ON_RESUME && currentIsMangaActive) {
+                screenModel.onScreenReentry()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -317,8 +317,8 @@ internal fun MangaHomeHub(
     }
 
     var isFirstComposition by remember { mutableStateOf(true) }
-    LaunchedEffect(activeSection, tabNavigator.current) {
-        if (activeSection == HomeHubSection.Manga && tabNavigator.current is HomeHubTab) {
+    LaunchedEffect(isMangaActive, tabNavigator.current) {
+        if (isMangaActive && tabNavigator.current is HomeHubTab) {
             if (isFirstComposition) {
                 isFirstComposition = false
             } else {
@@ -327,21 +327,24 @@ internal fun MangaHomeHub(
         }
     }
 
-    var lastSourceId by remember(activeSection) {
-        mutableLongStateOf(
-            if (activeSection == HomeHubSection.Manga) screenModel.getLastUsedMangaSourceId() else -1L,
-        )
+    var lastSourceId by remember(screenModel) {
+        mutableLongStateOf(screenModel.getLastUsedMangaSourceId())
     }
-    var lastSourceName by remember(activeSection) {
-        mutableStateOf<String?>(
-            if (activeSection ==
-                HomeHubSection.Manga
-            ) {
-                screenModel.getLastUsedMangaSourceName()
+    var lastSourceName by remember(screenModel) {
+        mutableStateOf<String?>(null)
+    }
+    LaunchedEffect(isMangaActive, screenModel, state.availableSources) {
+        if (isMangaActive) {
+            val latestId = withContext(Dispatchers.IO) { screenModel.getLastUsedMangaSourceId() }
+            val fromAvailable = state.availableSources.firstOrNull { it.id == latestId }?.name
+            val latestName = fromAvailable ?: if (latestId != -1L) {
+                withContext(Dispatchers.IO) { screenModel.getLastUsedMangaSourceName() }
             } else {
                 null
-            },
-        )
+            }
+            if (lastSourceId != latestId) lastSourceId = latestId
+            if (lastSourceName != latestName) lastSourceName = latestName
+        }
     }
     val availableSources = state.availableSources
 
@@ -403,6 +406,7 @@ internal fun MangaHomeHub(
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
+        onDiscoveryMarkConsumed = { screenModel.markDiscoveryItemConsumed(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -443,13 +447,13 @@ internal fun NovelHomeHub(
         }
     }
 
+    val isNovelActive = activeSection == HomeHubSection.Novel
+    val currentIsNovelActive by rememberUpdatedState(isNovelActive)
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, activeSection) {
+    DisposableEffect(lifecycleOwner, screenModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                if (activeSection == HomeHubSection.Novel) {
-                    screenModel.onScreenReentry()
-                }
+            if (event == Lifecycle.Event.ON_RESUME && currentIsNovelActive) {
+                screenModel.onScreenReentry()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -459,8 +463,8 @@ internal fun NovelHomeHub(
     }
 
     var isFirstComposition by remember { mutableStateOf(true) }
-    LaunchedEffect(activeSection, tabNavigator.current) {
-        if (activeSection == HomeHubSection.Novel && tabNavigator.current is HomeHubTab) {
+    LaunchedEffect(isNovelActive, tabNavigator.current) {
+        if (isNovelActive && tabNavigator.current is HomeHubTab) {
             if (isFirstComposition) {
                 isFirstComposition = false
             } else {
@@ -469,21 +473,24 @@ internal fun NovelHomeHub(
         }
     }
 
-    var lastSourceId by remember(activeSection) {
-        mutableLongStateOf(
-            if (activeSection == HomeHubSection.Novel) screenModel.getLastUsedNovelSourceId() else -1L,
-        )
+    var lastSourceId by remember(screenModel) {
+        mutableLongStateOf(screenModel.getLastUsedNovelSourceId())
     }
-    var lastSourceName by remember(activeSection) {
-        mutableStateOf<String?>(
-            if (activeSection ==
-                HomeHubSection.Novel
-            ) {
-                screenModel.getLastUsedNovelSourceName()
+    var lastSourceName by remember(screenModel) {
+        mutableStateOf<String?>(null)
+    }
+    LaunchedEffect(isNovelActive, screenModel, state.availableSources) {
+        if (isNovelActive) {
+            val latestId = withContext(Dispatchers.IO) { screenModel.getLastUsedNovelSourceId() }
+            val fromAvailable = state.availableSources.firstOrNull { it.id == latestId }?.name
+            val latestName = fromAvailable ?: if (latestId != -1L) {
+                withContext(Dispatchers.IO) { screenModel.getLastUsedNovelSourceName() }
             } else {
                 null
-            },
-        )
+            }
+            if (lastSourceId != latestId) lastSourceId = latestId
+            if (lastSourceName != latestName) lastSourceName = latestName
+        }
     }
     val availableSources = state.availableSources
 
@@ -549,6 +556,7 @@ internal fun NovelHomeHub(
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
+        onDiscoveryMarkConsumed = { screenModel.markDiscoveryItemConsumed(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -590,6 +598,7 @@ private fun HomeHubScreen(
     onDiscoveryRefreshClick: (() -> Unit)? = null,
     onDiscoveryItemFocused: (HomeHubDiscoveryItem) -> Unit = {},
     onDiscoveryLikeClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
+    onDiscoveryMarkConsumed: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryItemClick: (HomeHubDiscoveryItem) -> Unit,
     // Direct open тизера: пушит экран тайтла своего медиатипа (fromSource = true).
     openDirectEntry: ((Long) -> Unit)? = null,
@@ -616,9 +625,21 @@ private fun HomeHubScreen(
 
     // Home hub should open from the top after app relaunch; avoid saveable scroll restoration.
     val listState = remember(section) { LazyListState() }
+    var lastHandledResetToken by remember(section) { mutableIntStateOf(scrollResetToken) }
     LaunchedEffect(section, activeSection, scrollResetToken) {
-        if (section == activeSection) {
+        if (
+            shouldResetHomeHubListPosition(
+                scrollResetToken = scrollResetToken,
+                lastHandledToken = lastHandledResetToken,
+                isSectionActive = section == activeSection,
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+            )
+        ) {
             listState.scrollToItem(0)
+        }
+        if (section == activeSection && scrollResetToken > lastHandledResetToken) {
+            lastHandledResetToken = scrollResetToken
         }
     }
     val nestedScrollConnection = remember(section, activeSection, listState) {
@@ -806,12 +827,15 @@ private fun HomeHubScreen(
                             tracker = exposureTracker,
                             isSectionActive = isSectionActive,
                             isResumed = isResumed,
+                            poolSize = state.discoveryPool.size,
+                            failedSourceCount = state.discoveryFailedSourceCount,
                             emptyState = resolveForYouEmptyState(
                                 discoveryEnabled = state.discoveryEnabled,
                                 isRefreshing = state.isDiscoveryRefreshing,
                                 hasItems = discovery.isNotEmpty(),
                                 lastUpdatedAt = state.discoveryLastUpdated,
                                 isFailed = state.isDiscoveryFailed,
+                                isLoading = state.isDiscoveryLoading,
                             ),
                         )
                     }
@@ -827,29 +851,78 @@ private fun HomeHubScreen(
                 ) {
                     item(key = "hero", contentType = "home_hub_hero") {
                         when {
-                            keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue -> Box(
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                ForYouSection(
-                                    items = heroFeedItems,
-                                    coverMediaType = section.toDiscoveryMediaType(),
-                                    onMoreClick = onForYouMoreClick,
-                                    onItemClick = { openTeaser(it) },
-                                    onLongClick = { longPressItem = it },
+                            keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue -> {
+                                val heroEmptyState = resolveForYouEmptyState(
+                                    discoveryEnabled = state.discoveryEnabled,
                                     isRefreshing = state.isDiscoveryRefreshing,
-                                    onRefreshClick = onDiscoveryRefreshClick,
-                                    tracker = exposureTracker,
-                                    isSectionActive = isSectionActive,
-                                    isResumed = isResumed,
-                                    emptyState = resolveForYouEmptyState(
-                                        discoveryEnabled = state.discoveryEnabled,
-                                        isRefreshing = state.isDiscoveryRefreshing,
-                                        hasItems = heroFeedItems.isNotEmpty(),
-                                        lastUpdatedAt = state.discoveryLastUpdated,
-                                        isFailed = state.isDiscoveryFailed,
-                                    ),
+                                    hasItems = heroFeedItems.isNotEmpty(),
+                                    lastUpdatedAt = state.discoveryLastUpdated,
+                                    isFailed = state.isDiscoveryFailed,
+                                    isLoading = state.isDiscoveryLoading,
                                 )
+                                val skeletonStyle = if (
+                                    heroFeedItems.isEmpty() && heroEmptyState == ForYouEmptyState.REFRESHING
+                                ) {
+                                    resolveDiscoveryHeroSkeletonStyle(
+                                        preferredMode = heroMode,
+                                        discoveryEnabled = state.discoveryEnabled,
+                                        isFiltering = isFiltering,
+                                        keepDiscoveryHeroSlot = keepDiscoveryHeroSlot,
+                                    )
+                                } else {
+                                    null
+                                }
+                                when (skeletonStyle) {
+                                    DiscoveryHeroSkeletonStyle.STAGE -> DiscoveryHeroStageSkeleton(
+                                        onMoreClick = onForYouMoreClick,
+                                    )
+                                    DiscoveryHeroSkeletonStyle.COLLAGE -> DiscoveryHeroCollageSkeleton(
+                                        onMoreClick = onForYouMoreClick,
+                                    )
+                                    DiscoveryHeroSkeletonStyle.HYBRID -> if (hero != null) {
+                                        Column {
+                                            HeroSection(
+                                                hero = hero,
+                                                section = section,
+                                                ctaMode = heroCtaMode,
+                                                compact = true,
+                                                onPlayClick = onPlayHero,
+                                                onEntryClick = { onEntryClick(hero.entryId) },
+                                            )
+                                            HybridDiscoveryStripSkeleton(
+                                                onMoreClick = onForYouMoreClick,
+                                                isRefreshing = state.isDiscoveryRefreshing,
+                                                onRefreshClick = onDiscoveryRefreshClick,
+                                            )
+                                        }
+                                    } else {
+                                        HybridDiscoveryStripSkeleton(
+                                            onMoreClick = onForYouMoreClick,
+                                            isRefreshing = state.isDiscoveryRefreshing,
+                                            onRefreshClick = onDiscoveryRefreshClick,
+                                        )
+                                    }
+                                    DiscoveryHeroSkeletonStyle.TEASER_ROW, null -> Box(
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        ForYouSection(
+                                            items = heroFeedItems,
+                                            coverMediaType = section.toDiscoveryMediaType(),
+                                            onMoreClick = onForYouMoreClick,
+                                            onItemClick = { openTeaser(it) },
+                                            onLongClick = { longPressItem = it },
+                                            isRefreshing = state.isDiscoveryRefreshing,
+                                            onRefreshClick = onDiscoveryRefreshClick,
+                                            tracker = exposureTracker,
+                                            isSectionActive = isSectionActive,
+                                            isResumed = isResumed,
+                                            poolSize = state.discoveryPool.size,
+                                            failedSourceCount = state.discoveryFailedSourceCount,
+                                            emptyState = heroEmptyState,
+                                        )
+                                    }
+                                }
                             }
                             // Ветка stage идёт первой: при наличии hero она обязана перебивать HeroSection,
                             // иначе режим не отрисуется никогда.
@@ -859,6 +932,7 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
+                                isSectionActive = isSectionActive,
                                 onItemFocused = { item ->
                                     exposureTracker.recordStageFocus(item, isSectionActive, isResumed)
                                 },
@@ -961,12 +1035,15 @@ private fun HomeHubScreen(
                             tracker = exposureTracker,
                             isSectionActive = isSectionActive,
                             isResumed = isResumed,
+                            poolSize = state.discoveryPool.size,
+                            failedSourceCount = state.discoveryFailedSourceCount,
                             emptyState = resolveForYouEmptyState(
                                 discoveryEnabled = state.discoveryEnabled,
                                 isRefreshing = state.isDiscoveryRefreshing,
                                 hasItems = forYouItems.isNotEmpty(),
                                 lastUpdatedAt = state.discoveryLastUpdated,
                                 isFailed = state.isDiscoveryFailed,
+                                isLoading = state.isDiscoveryLoading,
                             ),
                         )
                     }
@@ -1027,7 +1104,7 @@ private fun HomeHubScreen(
                     previewItem = null
                     scope.launch {
                         val adder = DiscoveryLibraryAdder()
-                        val added = adder.addFromProvider(item.mediaType, item.title, item.provider)
+                        val added = adder.add(item.toDiscoverySuggestion())
                         if (added) {
                             context.toast(
                                 context.contextStringResource(AYMR.strings.for_you_added_snackbar, item.title),
@@ -1084,13 +1161,18 @@ private fun HomeHubScreen(
                 },
                 onMarkConsumed = {
                     longPressItem = null
-                    // Taste Engine: «просмотрено» — нейтральное исключение (вкус не трогает).
-                    scope.launch {
-                        eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
-                            tasteRepository,
-                            lpItem.toDiscoverySuggestion(),
-                            tachiyomi.domain.discovery.model.DiscoverySignalType.CONSUMED,
-                        )
+                    // Taste Engine: «просмотрено» — мгновенное удаление карточки + фоновое исключение.
+                    if (onDiscoveryMarkConsumed != null) {
+                        onDiscoveryMarkConsumed.invoke(lpItem)
+                    } else {
+                        scope.launch {
+                            eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
+                                tasteRepository,
+                                lpItem.toDiscoverySuggestion(),
+                                tachiyomi.domain.discovery.model.DiscoverySignalType.CONSUMED,
+                                altKeyEnrichmentScope = scope,
+                            )
+                        }
                     }
                     context.toast(
                         context.contextStringResource(AYMR.strings.for_you_mark_consumed_toast),

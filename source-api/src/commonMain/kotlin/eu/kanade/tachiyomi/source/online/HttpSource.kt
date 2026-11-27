@@ -562,7 +562,10 @@ abstract class HttpSource : CatalogueSource {
         private val pageToNextPage = BoundedCache<String, Page>(maxSize = 2000)
         private val inFlightPrefetches = ConcurrentHashMap<String, Boolean>()
 
-        private const val IMAGE_CALL_TIMEOUT_MINUTES = 15L
+        // Hard transport ceiling per image request: long enough for slow CDN strips on
+        // mobile networks, short enough that a dead socket cannot pin a download worker
+        // for a quarter of an hour.
+        private const val IMAGE_CALL_TIMEOUT_MINUTES = 2L
 
         private val prefetchScope = CoroutineScope(
             Dispatchers.IO + SupervisorJob(),

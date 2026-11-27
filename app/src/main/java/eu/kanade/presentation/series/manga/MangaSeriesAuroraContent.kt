@@ -100,10 +100,11 @@ fun MangaSeriesAuroraContent(
     val colors = AuroraTheme.colors
     val heroManga = series.selectedCoverManga ?: series.activeManga
     val customCoverFile = state.customCoverFile.takeIf { series.series.coverMode == SeriesCoverMode.CUSTOM }
-    val readingTarget = remember(series, state.chapters) {
+    val readingTarget = remember(series, state.chapters, state.resumeChapterId) {
         resolveMangaSeriesReadingTarget(
             series = series,
             chapters = state.chapters,
+            resumeChapterId = state.resumeChapterId,
         )
     }
 

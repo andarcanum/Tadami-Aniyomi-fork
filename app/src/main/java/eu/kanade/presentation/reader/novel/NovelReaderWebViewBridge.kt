@@ -341,6 +341,15 @@ private const val NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS = 2_000L
 /** Invalidates any in-flight restore so its retries and completion cannot outlive this document. */
 internal fun WebView.cancelReaderScrollRestore() {
     novelReaderScrollRestoreRequests.remove(this)
+    evaluateJavascript(
+        """
+        (function() {
+            const reflow = document.__anReaderCssReflow;
+            if (reflow) reflow.release();
+        })();
+        """.trimIndent(),
+        null,
+    )
 }
 
 internal fun WebView.restoreWebViewScroll(
@@ -362,6 +371,32 @@ internal fun WebView.restoreWebViewScroll(
         novelReaderScrollRestoreRequests.remove(this)
         onComplete?.invoke(restored)
     }
+    fun applyRestoredScroll(attempt: Int, scheduleNext: () -> Unit) {
+        val totalScrollable = resolveWebViewTotalScrollablePx(
+            contentHeightPx = resolveWebViewContentHeightPx(),
+            viewHeightPx = height,
+        )
+        stableSamples = if (totalScrollable == previousHeight && height > 0) stableSamples + 1 else 0
+        previousHeight = totalScrollable
+        if ((height <= 0 || stableSamples < 2) && attempt < maxAttempts.coerceAtLeast(0)) {
+            scheduleNext()
+            return
+        }
+        val targetY = ((progressPercent.coerceIn(0, 100) / 100f) * totalScrollable).roundToInt()
+        // Restoring zero must actively return a reused WebView to the top.
+        scrollTo(0, targetY.coerceIn(0, totalScrollable.coerceAtLeast(0)))
+        finish(height > 0 && (progressPercent <= 0 || totalScrollable > 0))
+    }
+    fun attemptRestoreNative(attempt: Int) {
+        if (!isCurrent() || finished) return
+        if (SystemClock.uptimeMillis() >= deadlineUptimeMs) {
+            finish(false)
+            return
+        }
+        applyRestoredScroll(attempt) {
+            postDelayed({ attemptRestoreNative(attempt + 1) }, 42L)
+        }
+    }
     fun attemptRestore(attempt: Int) {
         if (!isCurrent() || finished) return
         // The height can stay unstable forever on a still-loading page; the deadline guarantees
@@ -381,23 +416,18 @@ internal fun WebView.restoreWebViewScroll(
                 novelReaderScrollRestoreRequests.remove(this)
                 return@evaluateJavascript
             }
-            val totalScrollable = resolveWebViewTotalScrollablePx(
-                contentHeightPx = resolveWebViewContentHeightPx(),
-                viewHeightPx = height,
-            )
-            stableSamples = if (totalScrollable == previousHeight && height > 0) stableSamples + 1 else 0
-            previousHeight = totalScrollable
-            if ((height <= 0 || stableSamples < 2) && attempt < maxAttempts.coerceAtLeast(0)) {
+            applyRestoredScroll(attempt) {
                 postDelayed({ attemptRestore(attempt + 1) }, 42L)
-                return@evaluateJavascript
             }
-            val targetY = ((progressPercent.coerceIn(0, 100) / 100f) * totalScrollable).roundToInt()
-            // Restoring zero must actively return a reused WebView to the top.
-            scrollTo(0, targetY.coerceIn(0, totalScrollable.coerceAtLeast(0)))
-            finish(height > 0 && (progressPercent <= 0 || totalScrollable > 0))
         }
     }
     postDelayed({ finish(false) }, NOVEL_READER_SCROLL_RESTORE_TIMEOUT_MS)
+    if (!settings.javaScriptEnabled) {
+        // When JavaScript is disabled, evaluateJavascript returns "null" without running scripts.
+        // Fall back to native content-height polling so scroll position still restores cleanly.
+        post { attemptRestoreNative(0) }
+        return
+    }
     evaluateJavascript(
         """
         (function() {
@@ -482,6 +512,7 @@ internal fun WebView.applyReaderCss(
     forceBoldText: Boolean,
     forceItalicText: Boolean,
     bionicReadingEnabled: Boolean,
+    preserveScrollFraction: Boolean = false,
 ) {
     val css = buildWebReaderCssText(
         fontFaceCss = fontFaceCss,
@@ -513,9 +544,25 @@ internal fun WebView.applyReaderCss(
     val fontFlag = if (shouldForceFontFamily) "true" else "false"
     val alignFlag = if (textAlignCss.isNullOrBlank()) "false" else "true"
     val firstLineIndentFlag = if (firstLineIndentCss.isNullOrBlank()) "false" else "true"
+    val preserveScrollFlag = if (preserveScrollFraction) "true" else "false"
     evaluateJavascript(
         """
         (function() {
+            const docEl = document.documentElement;
+            const previousReflow = document.__anReaderCssReflow;
+            const activeFraction = previousReflow && previousReflow.isCurrent()
+                ? previousReflow.fraction
+                : null;
+            if (previousReflow) previousReflow.release();
+            const prevTotalScrollable = ($preserveScrollFlag && docEl)
+                ? Math.max(0, docEl.scrollHeight - window.innerHeight)
+                : 0;
+            // An overlapping CSS update must not recapture a resize-clamped position.
+            const preservedFraction = !$preserveScrollFlag ? null : activeFraction !== null
+                ? activeFraction
+                : prevTotalScrollable > 0
+                    ? Math.min(1, Math.max(0, window.scrollY / prevTotalScrollable))
+                    : null;
             const styleId = '$WEB_READER_STYLE_ELEMENT_ID';
             let style = document.getElementById(styleId);
             if (!style) {
@@ -561,7 +608,9 @@ internal fun WebView.applyReaderCss(
                         continue;
                     }
                 }
-                node.style.setProperty('background-color', 'transparent', 'important');
+                if (!node.classList.contains('an-hl')) {
+                    node.style.setProperty('background-color', 'transparent', 'important');
+                }
                 node.style.setProperty('color', 'var(--an-reader-fg)', 'important');
                 if (shouldForceAlign) {
                     node.style.setProperty('text-align', 'var(--an-reader-align)', 'important');
@@ -577,6 +626,73 @@ internal fun WebView.applyReaderCss(
                 if (shouldForceFont) {
                     node.style.setProperty('font-family', 'var(--an-reader-font)', 'important');
                 }
+            }
+            if (preservedFraction !== null && docEl) {
+                let frameId = null;
+                let expectedScrollY = window.scrollY;
+                let expectedTotalScrollable = Math.max(0, docEl.scrollHeight - window.innerHeight);
+                const inputEvents = ['pointerdown', 'touchstart', 'wheel', 'keydown'];
+                const isCurrent = function() {
+                    if (document.documentElement !== docEl || document.body !== root ||
+                        document.__anReaderCssReflow !== reflow) return false;
+                    const nextTotal = Math.max(0, docEl.scrollHeight - window.innerHeight);
+                    const currentY = window.scrollY;
+                    // Own scroll events arrive asynchronously and may coalesce with a
+                    // resize clamp or the native rotation restore. Neither is navigation.
+                    const followsReflow = currentY === expectedScrollY ||
+                        currentY === Math.round(preservedFraction * nextTotal) ||
+                        (nextTotal !== expectedTotalScrollable && currentY === Math.min(expectedScrollY, nextTotal));
+                    if (!followsReflow) return false;
+                    // Remember accepted geometry for a rapid resize back, but keep the
+                    // original fraction until this request settles or navigation cancels it.
+                    expectedScrollY = currentY;
+                    expectedTotalScrollable = nextTotal;
+                    return true;
+                };
+                const release = function() {
+                    if (document.__anReaderCssReflow === reflow) document.__anReaderCssReflow = null;
+                    if (frameId !== null) window.cancelAnimationFrame(frameId);
+                    frameId = null;
+                    window.removeEventListener('scroll', onViewportChanged, true);
+                    window.removeEventListener('resize', onViewportChanged, true);
+                    window.removeEventListener('pagehide', release, true);
+                    for (const event of inputEvents) window.removeEventListener(event, release, true);
+                };
+                const onViewportChanged = function() {
+                    if (!isCurrent()) release();
+                };
+                const reflow = { fraction: preservedFraction, isCurrent: isCurrent, release: release };
+                document.__anReaderCssReflow = reflow;
+                // These passive guards live only for this bounded two-frame request.
+                window.addEventListener('scroll', onViewportChanged, { passive: true, capture: true });
+                window.addEventListener('resize', onViewportChanged, { passive: true, capture: true });
+                window.addEventListener('pagehide', release, true);
+                for (const event of inputEvents) {
+                    window.addEventListener(event, release, { passive: true, capture: true });
+                }
+                const applyPreservedScroll = function() {
+                    if (!isCurrent()) {
+                        release();
+                        return;
+                    }
+                    const nextTotalScrollable = Math.max(0, docEl.scrollHeight - window.innerHeight);
+                    window.scrollTo(0, Math.round(preservedFraction * nextTotalScrollable));
+                    expectedScrollY = window.scrollY;
+                    expectedTotalScrollable = nextTotalScrollable;
+                };
+                applyPreservedScroll();
+                frameId = window.requestAnimationFrame(function() {
+                    frameId = null;
+                    if (!isCurrent()) {
+                        release();
+                        return;
+                    }
+                    frameId = window.requestAnimationFrame(function() {
+                        frameId = null;
+                        applyPreservedScroll();
+                        release();
+                    });
+                });
             }
         })();
         """.trimIndent(),
@@ -594,8 +710,9 @@ private fun injectHtmlFragmentIntoHead(
     fragment: String,
 ): String {
     val headCloseRegex = Regex("</head>", RegexOption.IGNORE_CASE)
-    if (headCloseRegex.containsMatchIn(rawHtml)) {
-        return headCloseRegex.replaceFirst(rawHtml, "$fragment</head>")
+    val headCloseMatch = headCloseRegex.find(rawHtml)
+    if (headCloseMatch != null) {
+        return rawHtml.replaceRange(headCloseMatch.range, fragment + headCloseMatch.value)
     }
 
     val bodyOpenRegex = Regex("<body[^>]*>", RegexOption.IGNORE_CASE)
@@ -749,7 +866,10 @@ internal fun buildWebReaderCssText(
         )
         append("  margin-top: 0 !important;\n")
         append("}\n")
-        append("body, body *:not(img):not(svg):not(video):not(canvas):not(iframe), body *::before, body *::after {\n")
+        append(
+            "body, body *:not(img):not(svg):not(video):not(canvas):not(iframe):not(.an-hl), " +
+                "body *::before, body *::after {\n",
+        )
         append("  color: var(--an-reader-fg) !important;\n")
         if (!textAlignCss.isNullOrBlank()) {
             append("  text-align: var(--an-reader-align) !important;\n")
@@ -799,13 +919,16 @@ internal fun buildWebReaderAtmosphereCss(
     if (appearanceMode == NovelReaderAppearanceMode.BACKGROUND) {
         if (backgroundImageUrl.isNullOrBlank()) return ""
         return buildString {
-            append("html, body {\n")
+            append("html {\n")
             append("  background-color: var(--an-reader-bg) !important;\n")
             append("  background-image: url('$backgroundImageUrl') !important;\n")
             append("  background-repeat: no-repeat !important;\n")
             append("  background-size: cover !important;\n")
             append("  background-position: center center !important;\n")
             append("  background-attachment: fixed !important;\n")
+            append("}\n")
+            append("body {\n")
+            append("  background: transparent !important;\n")
             append("}\n")
         }
     }
@@ -840,11 +963,14 @@ internal fun buildWebReaderAtmosphereCss(
                     }
                 }
             }.joinToString(", ")
-            append("html, body {\n")
+            append("html {\n")
             append("  background-color: var(--an-reader-bg) !important;\n")
             append("  background-image: ${layers.joinToString(", ")} !important;\n")
             append("  background-repeat: $repeatValues !important;\n")
             append("  background-attachment: fixed !important;\n")
+            append("}\n")
+            append("body {\n")
+            append("  background: transparent !important;\n")
             append("}\n")
         }
     }

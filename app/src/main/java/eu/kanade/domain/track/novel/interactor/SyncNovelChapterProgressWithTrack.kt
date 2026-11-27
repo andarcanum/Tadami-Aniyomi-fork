@@ -7,7 +7,7 @@ import eu.kanade.tachiyomi.data.track.MangaTracker
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
-import tachiyomi.domain.items.novelchapter.model.toNovelChapterUpdate
+import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.track.novel.interactor.InsertNovelTrack
 import tachiyomi.domain.track.novel.model.NovelTrack
@@ -29,9 +29,9 @@ class SyncNovelChapterProgressWithTrack(
             .sortedBy { it.chapterNumber }
             .filter { it.isRecognizedNumber }
 
-        val localLastRead = sortedChapters.takeWhile { it.read }
-            .lastOrNull()
-            ?.chapterNumber
+        val localLastRead = sortedChapters.asSequence()
+            .filter { it.read }
+            .maxOfOrNull { it.chapterNumber }
             ?: 0.0
         val action = resolveTrackProgressSync.resolve(
             local = localLastRead,
@@ -45,7 +45,7 @@ class SyncNovelChapterProgressWithTrack(
             is ResolveTrackProgressSync.SyncAction.MarkLocalUntil -> {
                 val chapterUpdates = sortedChapters
                     .filter { chapter -> chapter.chapterNumber <= action.value && !chapter.read }
-                    .map { it.copy(read = true).toNovelChapterUpdate() }
+                    .map { NovelChapterUpdate(id = it.id, read = true) }
                 try {
                     novelChapterRepository.updateAllChapters(chapterUpdates)
                 } catch (e: Throwable) {

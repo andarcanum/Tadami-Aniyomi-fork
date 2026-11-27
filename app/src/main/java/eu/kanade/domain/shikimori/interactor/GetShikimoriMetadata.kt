@@ -162,49 +162,6 @@ class GetShikimoriMetadata(
         return false
     }
 
-    private fun parseOriginalTitle(description: String?): String? {
-        if (description.isNullOrBlank()) return null
-
-        val patterns = listOf(
-            Regex("""Original:\s*([^\n\r]+)""", RegexOption.IGNORE_CASE),
-            Regex("""Оригинал:\s*([^\n\r]+)""", RegexOption.IGNORE_CASE),
-            Regex("""Original Title:\s*([^\n\r]+)""", RegexOption.IGNORE_CASE),
-            Regex("""Оригинальное название:\s*([^\n\r]+)""", RegexOption.IGNORE_CASE),
-            Regex("""Original:\s*\(([^)]+)\)""", RegexOption.IGNORE_CASE),
-            Regex("""Оригинал:\s*\(([^)]+)\)""", RegexOption.IGNORE_CASE),
-        )
-
-        for (pattern in patterns) {
-            val match = pattern.find(description)
-            if (match != null) {
-                val title = match.groupValues[1].trim()
-                val cleaned = title.trimEnd('.', ',', '"', '\'')
-                if (cleaned.isNotEmpty()) {
-                    return cleaned
-                }
-            }
-        }
-
-        description.lines().forEach { line ->
-            if (line.contains("Original", ignoreCase = true) ||
-                line.contains("Оригинал", ignoreCase = true) ||
-                line.contains("Romaji", ignoreCase = true) ||
-                line.contains("Японское", ignoreCase = true)
-            ) {
-                val colonIndex = line.indexOf(':')
-                if (colonIndex > 0) {
-                    val afterColon = line.substring(colonIndex + 1).trim()
-                    if (afterColon.isNotEmpty()) {
-                        return afterColon.trimEnd('.', ',', '"', '\'')
-                    }
-                }
-            }
-            val nonCyrillic = line.filter { char -> char.code < 0x400 || char.code > 0x4FF }.trim()
-            if (nonCyrillic.length > 5 && nonCyrillic.length < 200) {
-                return nonCyrillic.trimEnd('.', ',', '"', '\'')
-            }
-        }
-
-        return null
-    }
+    private fun parseOriginalTitle(description: String?): String? =
+        eu.kanade.domain.metadata.interactor.parseOriginalTitle(description)
 }

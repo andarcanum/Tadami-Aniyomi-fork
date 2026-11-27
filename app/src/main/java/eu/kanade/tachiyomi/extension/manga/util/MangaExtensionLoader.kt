@@ -541,14 +541,22 @@ internal object MangaExtensionLoader {
         if (!hasFeature) return false
 
         val appInfo = pkgInfo.applicationInfo ?: return true
-        val isNovel = appInfo.metaData?.run {
-            getBoolean("tachiyomi.extension.novel", false) ||
-                getInt("tachiyomi.extension.novel", 0) == 1 ||
-                getBoolean("tachiyomi.novelextension.novel", false) ||
-                getInt("tachiyomi.novelextension.novel", 0) == 1
+        val isNovel = appInfo.metaData?.let { meta ->
+            isTruthyMetaFlag(meta, "tachiyomi.extension.novel") ||
+                isTruthyMetaFlag(meta, "tachiyomi.novelextension.novel")
         } ?: false
 
         return !isNovel
+    }
+
+    @Suppress("DEPRECATION") // Bundle.get(String) avoids ClassCastException/log spam when manifest type varies
+    private fun isTruthyMetaFlag(metaData: android.os.Bundle, key: String): Boolean {
+        return when (val value = metaData.get(key)) {
+            is Boolean -> value
+            is Number -> value.toInt() == 1
+            is String -> value.equals("true", ignoreCase = true) || value == "1"
+            else -> false
+        }
     }
 
     /**

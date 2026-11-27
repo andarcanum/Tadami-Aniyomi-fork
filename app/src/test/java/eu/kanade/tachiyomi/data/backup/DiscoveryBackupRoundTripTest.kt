@@ -4,12 +4,17 @@ import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryHidden
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoverySignal
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTag
+import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTasteResetEpoch
+import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTitleMemory
 import eu.kanade.tachiyomi.data.backup.models.toBackupDiscoveryHidden
 import eu.kanade.tachiyomi.data.backup.models.toBackupDiscoverySignal
 import eu.kanade.tachiyomi.data.backup.models.toBackupDiscoveryTag
+import eu.kanade.tachiyomi.data.backup.models.toBackupDiscoveryTitleMemory
 import eu.kanade.tachiyomi.data.backup.models.toDomainEntry
 import eu.kanade.tachiyomi.data.backup.models.toDomainSignal
+import eu.kanade.tachiyomi.data.backup.models.toDomainTitleMemory
 import eu.kanade.tachiyomi.data.backup.restore.restorers.DiscoveryRestorer
+import eu.kanade.tachiyomi.data.discovery.FakeDiscoveryRepositoryBase
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -170,12 +175,64 @@ class DiscoveryBackupRoundTripTest {
                 provider = null,
                 sourceKey = null,
                 createdAt = 42L,
+                metadataChangedAt = 42L,
             ),
         )
     }
+
+    @Test
+    fun `v2 title memory, taste reset epochs and v2 signal fields survive proto round trip`() {
+        val signal = DiscoverySignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "lord of the mysteries",
+            title = "Lord of the Mysteries",
+            signalType = DiscoverySignalType.CONSUMED_LIKED,
+            genres = listOf("Mystery", "Fantasy"),
+            provider = "shikimori",
+            sourceKey = "plugin.novel",
+            createdAt = 500L,
+            identityKey = "source:7:/lotm",
+            trustedAliases = setOf("klein moretti"),
+            sourceId = 7L,
+            sourceUrl = "/lotm",
+            metadataChangedAt = 505L,
+            positiveKind = DiscoverySignalType.LIKE,
+            positiveCreatedAt = 400L,
+        )
+        val memory = tachiyomi.domain.discovery.model.DiscoveryTitleMemory(
+            identity = tachiyomi.domain.discovery.model.DiscoveryTitleIdentity(
+                mediaType = DiscoveryMediaType.NOVEL,
+                identityKey = "source:7:/lotm",
+                title = "Lord of the Mysteries",
+                primaryCleanTitle = "lord of the mysteries",
+                sourceId = 7L,
+                sourceUrl = "/lotm",
+                trustedAliases = setOf("lotm"),
+                metadataChangedAt = 505L,
+            ),
+            opened = tachiyomi.domain.discovery.model.DiscoveryFactState(true, 100L),
+            started = tachiyomi.domain.discovery.model.DiscoveryFactState(true, 200L),
+            consumed = tachiyomi.domain.discovery.model.DiscoveryFactState(true, 500L),
+            blockedUntil = 999L,
+        )
+        val backup = Backup(
+            backupDiscoverySignals = listOf(signal.toBackupDiscoverySignal()),
+            backupDiscoveryTitleMemory = listOf(memory.toBackupDiscoveryTitleMemory()),
+            backupDiscoveryTasteResetEpochs = listOf(BackupDiscoveryTasteResetEpoch("novel", 1_700_000_000_000L)),
+        )
+
+        val decoded = ProtoBuf.decodeFromByteArray(
+            Backup.serializer(),
+            ProtoBuf.encodeToByteArray(Backup.serializer(), backup),
+        )
+
+        decoded.backupDiscoverySignals.single().toDomainSignal() shouldBe signal
+        decoded.backupDiscoveryTitleMemory.single().toDomainTitleMemory() shouldBe memory
+        decoded.backupDiscoveryTasteResetEpochs shouldBe backup.backupDiscoveryTasteResetEpochs
+    }
 }
 
-private class FakeDiscoveryRepository : DiscoveryRepository {
+private class FakeDiscoveryRepository : FakeDiscoveryRepositoryBase() {
     val restoredHidden = mutableMapOf<DiscoveryMediaType, List<DiscoveryHiddenEntry>>()
     val restoredTags = mutableMapOf<DiscoveryMediaType, List<DiscoveryBlacklistEntry>>()
 

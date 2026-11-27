@@ -7,6 +7,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -22,6 +23,8 @@ import tachiyomi.domain.book.novel.interactor.GetNovelBookState
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.history.novel.model.NovelHistory
+import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
@@ -33,6 +36,8 @@ import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 import tachiyomi.domain.series.novel.model.LibraryNovelSeries
 import tachiyomi.domain.series.novel.model.LibraryNovelSeriesWithEntryIds
 import tachiyomi.domain.series.novel.model.NovelSeries
+import java.util.Date
+import kotlin.test.assertEquals
 
 class NovelSeriesScreenModelReorderTest {
 
@@ -40,6 +45,8 @@ class NovelSeriesScreenModelReorderTest {
     private val testDispatcher = StandardTestDispatcher()
     private val activeScreenModels = mutableListOf<NovelSeriesScreenModel>()
     private val getNovelSeriesWithEntries: GetNovelSeriesWithEntries = mockk()
+    private lateinit var seriesFlow: MutableStateFlow<LibraryNovelSeriesWithEntryIds?>
+    private val novelHistoryRepository: NovelHistoryRepository = mockk()
     private val updateNovelSeries: UpdateNovelSeries = mockk(relaxed = true)
     private val deleteNovelSeries: DeleteNovelSeries = mockk(relaxed = true)
     private val addNovelsToSeries: AddNovelsToSeries = mockk(relaxed = true)
@@ -79,7 +86,9 @@ class NovelSeriesScreenModelReorderTest {
             ),
         )
 
-        every { getNovelSeriesWithEntries.subscribe(seriesId) } returns flowOf(wrapper)
+        seriesFlow = MutableStateFlow(wrapper)
+        every { getNovelSeriesWithEntries.subscribe(seriesId) } returns seriesFlow
+        coEvery { novelHistoryRepository.getHistoryByNovelId(any()) } returns emptyList()
         every { getNovelCategories.subscribe() } returns flowOf(emptyList())
         coEvery { getNovelChapters.await(any()) } returns emptyList()
         coJustRun { reorderSeriesEntries.await(any()) }
@@ -95,20 +104,7 @@ class NovelSeriesScreenModelReorderTest {
 
     @Test
     fun `reorderEntries commits mapped order once per drop`() = runTest(testDispatcher) {
-        val screenModel = NovelSeriesScreenModel(
-            seriesId = seriesId,
-            getNovelSeriesWithEntries = getNovelSeriesWithEntries,
-            updateNovelSeries = updateNovelSeries,
-            deleteNovelSeries = deleteNovelSeries,
-            addNovelsToSeries = addNovelsToSeries,
-            removeNovelFromSeries = removeNovelFromSeries,
-            reorderSeriesEntries = reorderSeriesEntries,
-            getNovelChapters = getNovelChapters,
-            getNovelBookState = getNovelBookState,
-            getNovelCategories = getNovelCategories,
-            setNovelCategories = setNovelCategories,
-            seriesCoverCache = seriesCoverCache,
-        ).also(activeScreenModels::add)
+        val screenModel = createScreenModel()
 
         // WhileSubscribed stateIn needs an active collector to drive the upstream flow
         val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -129,6 +125,58 @@ class NovelSeriesScreenModelReorderTest {
                 },
             )
         }
+    }
+
+    @Test
+    fun `resume follows latest history and updates when another volume is read`() = runTest(testDispatcher) {
+        val wrapper = requireNotNull(seriesFlow.value)
+        val entries = wrapper.series.entries.map {
+            it.copy(lastRead = if (it.id == 20L) 200L else 100L, readCount = if (it.id == 20L) 0L else 1L)
+        }
+        seriesFlow.value = wrapper.copy(series = wrapper.series.copy(entries = entries))
+        coEvery { novelHistoryRepository.getHistoryByNovelId(20L) } returns listOf(
+            NovelHistory.create().copy(chapterId = 12L, readAt = Date(150L)),
+            NovelHistory.create().copy(chapterId = 11L, readAt = Date(200L)),
+            NovelHistory.create().copy(chapterId = 13L, readAt = null),
+        )
+        coEvery { novelHistoryRepository.getHistoryByNovelId(10L) } returns listOf(
+            NovelHistory.create().copy(chapterId = 1L, readAt = Date(300L)),
+        )
+        val screenModel = createScreenModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { screenModel.state.collect() }
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(11L, screenModel.state.value.resumeChapterId)
+
+        seriesFlow.value = wrapper.copy(
+            series = wrapper.series.copy(entries = entries.map { if (it.id == 10L) it.copy(lastRead = 300L) else it }),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1L, screenModel.state.value.resumeChapterId)
+
+        seriesFlow.value = wrapper
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(null, screenModel.state.value.resumeChapterId)
+    }
+
+    private fun createScreenModel(): NovelSeriesScreenModel {
+        return NovelSeriesScreenModel(
+            seriesId = seriesId,
+            getNovelSeriesWithEntries = getNovelSeriesWithEntries,
+            updateNovelSeries = updateNovelSeries,
+            deleteNovelSeries = deleteNovelSeries,
+            addNovelsToSeries = addNovelsToSeries,
+            removeNovelFromSeries = removeNovelFromSeries,
+            reorderSeriesEntries = reorderSeriesEntries,
+            getNovelChapters = getNovelChapters,
+            getNovelBookState = getNovelBookState,
+            getNovelCategories = getNovelCategories,
+            setNovelCategories = setNovelCategories,
+            seriesCoverCache = seriesCoverCache,
+            novelHistoryRepository = novelHistoryRepository,
+        ).also(activeScreenModels::add)
     }
 
     private fun libraryNovel(

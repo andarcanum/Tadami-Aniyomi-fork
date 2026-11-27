@@ -1,5 +1,6 @@
 package eu.kanade.domain.ui.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -20,12 +21,14 @@ enum class HomeHeaderLayoutElement(val key: String) {
     }
 }
 
+@Immutable
 @Serializable
 data class HomeHeaderLayoutPointSpec(
     val x: Float,
     val y: Float,
 )
 
+@Immutable
 @Serializable
 data class HomeHeaderLayoutCanvasSpec(
     val width: Float = DEFAULT_WIDTH_PX,
@@ -37,6 +40,7 @@ data class HomeHeaderLayoutCanvasSpec(
     }
 }
 
+@Immutable
 @Serializable
 data class HomeHeaderLayoutSpec(
     val version: Int = CURRENT_VERSION,

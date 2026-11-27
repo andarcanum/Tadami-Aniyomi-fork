@@ -44,6 +44,29 @@ class DecoderPreferencesTest {
     }
 
     @Test
+    fun `useZeroCopyHwdec defaults to off`() {
+        val prefs = DecoderPreferences(MutablePreferenceStore())
+
+        prefs.useZeroCopyHwdec().get() shouldBe false
+    }
+
+    @Test
+    fun `mid preset enables balanced shaders without motion interpolation`() {
+        val prefs = DecoderPreferences(MutablePreferenceStore())
+        prefs.useZeroCopyHwdec().set(true)
+
+        DecoderPreset.Mid.applyTo(prefs)
+
+        prefs.tryHWDecoding().get() shouldBe true
+        prefs.useZeroCopyHwdec().get() shouldBe false
+        prefs.gpuNext().get() shouldBe true
+        prefs.videoDebanding().get() shouldBe Debanding.GPU
+        prefs.anime4kShaderPreset().get() shouldBe Anime4KShaderPreset.Balanced
+        prefs.motionInterpolationMode().get() shouldBe MotionInterpolationMode.Off
+        prefs.useYUV420P().get() shouldBe false
+    }
+
+    @Test
     fun `low preset disables all optional decoder features`() {
         val prefs = DecoderPreferences(MutablePreferenceStore())
 

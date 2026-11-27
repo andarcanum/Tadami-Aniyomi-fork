@@ -19,6 +19,9 @@ package eu.kanade.tachiyomi.ui.player.controls
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -64,6 +67,7 @@ import eu.kanade.tachiyomi.ui.player.PlayerUpdates
 import eu.kanade.tachiyomi.ui.player.PlayerViewModel
 import eu.kanade.tachiyomi.ui.player.Sheets
 import eu.kanade.tachiyomi.ui.player.controls.components.DoubleTapSeekTriangles
+import eu.kanade.tachiyomi.ui.player.controls.components.resolvePinchAspectTransition
 import eu.kanade.tachiyomi.ui.player.settings.AudioPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
@@ -93,8 +97,6 @@ fun GestureHandler(
     val allowGesturesInPanels by playerPreferences.allowGestures().collectAsStateWithLifecycle()
     val speedGestureResetOnRelease by gesturePreferences.speedGestureResetOnRelease()
         .collectAsStateWithLifecycle()
-    val duration by viewModel.duration.collectAsStateWithLifecycle()
-    val position by viewModel.pos.collectAsStateWithLifecycle()
     val controlsShown by viewModel.controlsShown.collectAsStateWithLifecycle()
     val areControlsLocked by viewModel.areControlsLocked.collectAsStateWithLifecycle()
     val seekAmount by viewModel.doubleTapSeekAmount.collectAsStateWithLifecycle()
@@ -126,6 +128,34 @@ fun GestureHandler(
         modifier = modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeGestures)
+            .pointerInput(areControlsLocked, isDynamicSpeedActive) {
+                if (areControlsLocked || isDynamicSpeedActive) return@pointerInput
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var cumulativeZoom = 1f
+                    var switchedInGesture = false
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressedCount = event.changes.count { it.pressed }
+                        if (pressedCount >= 2) {
+                            val zoomChange = event.calculateZoom()
+                            if (zoomChange != 1f) {
+                                cumulativeZoom *= zoomChange
+                                event.changes.forEach { it.consume() }
+                                if (!switchedInGesture) {
+                                    val currentAspect = playerPreferences.aspectState().get()
+                                    val targetAspect = resolvePinchAspectTransition(cumulativeZoom, currentAspect)
+                                    if (targetAspect != null) {
+                                        switchedInGesture = true
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.changeVideoAspect(targetAspect)
+                                    }
+                                }
+                            }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
             .pointerInput(longPressAction, speedGestureResetOnRelease) {
                 if (areControlsLocked || longPressAction != LongPressGesture.PlaybackSpeed) return@pointerInput
                 awaitPointerEventScope {
@@ -200,7 +230,6 @@ fun GestureHandler(
                 }
             }
             .pointerInput(longPressAction) {
-                val originalSpeed = viewModel.playbackSpeed.value
                 detectTapGestures(
                     onTap = {
                         if (controlsShown) viewModel.hideControls() else viewModel.showControls()
@@ -243,10 +272,14 @@ fun GestureHandler(
                         tryAwaitRelease()
                         if (isLongPressing) {
                             isLongPressing = false
-                            if (longPressAction == LongPressGesture.PlaybackSpeed) {
-                                // Handled in outer Initial pointerInput
-                            } else {
-                                MPVLib.setPropertyDouble("speed", originalSpeed.toDouble())
+                            if (longPressAction == LongPressGesture.PlaybackSpeed &&
+                                viewModel.isDynamicSpeedActive.value
+                            ) {
+                                viewModel.isDynamicSpeedActive.update { false }
+                                MPVLib.setPropertyDouble(
+                                    "speed",
+                                    viewModel.preGesturePlaybackSpeed.value.toDouble(),
+                                )
                             }
                             viewModel.playerUpdate.update { PlayerUpdates.None }
                         }
@@ -275,33 +308,39 @@ fun GestureHandler(
             }
             .pointerInput(areControlsLocked, isDynamicSpeedActive) {
                 if (!seekGesture || areControlsLocked || isDynamicSpeedActive) return@pointerInput
-                var startingPosition = position.toInt()
+                var startingPosition = 0
                 var startingX = 0f
                 var wasPlayerAlreadyPause = false
+                val finishHorizontalDrag = {
+                    viewModel.gestureSeekAmount.update { null }
+                    viewModel.hideSeekBar()
+                    if (!wasPlayerAlreadyPause) viewModel.unpause()
+                }
                 detectHorizontalDragGestures(
                     onDragStart = {
-                        startingPosition = position.toInt()
+                        startingPosition = viewModel.pos.value.toInt()
                         startingX = it.x
                         wasPlayerAlreadyPause = viewModel.paused.value
                         viewModel.pause()
                     },
-                    onDragEnd = {
-                        viewModel.gestureSeekAmount.update { null }
-                        viewModel.hideSeekBar()
-                        if (!wasPlayerAlreadyPause) viewModel.unpause()
-                    },
+                    onDragEnd = finishHorizontalDrag,
+                    onDragCancel = finishHorizontalDrag,
                 ) { change, dragAmount ->
-                    if (position <= 0f && dragAmount < 0) return@detectHorizontalDragGestures
-                    if (position >= duration && dragAmount > 0) return@detectHorizontalDragGestures
+                    val currentPos = viewModel.pos.value
+                    val currentDuration = viewModel.duration.value
+                    if (currentPos <= 0f && dragAmount < 0) return@detectHorizontalDragGestures
+                    if (currentPos >= currentDuration && dragAmount > 0) return@detectHorizontalDragGestures
+                    val maxDurationInt = currentDuration.toInt().coerceAtLeast(0)
+                    val minDelta = 0 - startingPosition
+                    val maxDelta = (maxDurationInt - startingPosition).coerceAtLeast(minDelta)
                     calculateNewHorizontalGestureValue(startingPosition, startingX, change.position.x, 0.15f).let {
                         viewModel.gestureSeekAmount.update { _ ->
                             Pair(
                                 startingPosition,
-                                (it - startingPosition)
-                                    .coerceIn(0 - startingPosition, (duration - startingPosition).toInt()),
+                                (it - startingPosition).coerceIn(minDelta, maxDelta),
                             )
                         }
-                        viewModel.seekTo(it.coerceIn(0, duration.toInt()), preciseSeeking)
+                        viewModel.seekTo(it.coerceIn(0, maxDurationInt), preciseSeeking)
                     }
 
                     if (showSeekbar) viewModel.showSeekBar()

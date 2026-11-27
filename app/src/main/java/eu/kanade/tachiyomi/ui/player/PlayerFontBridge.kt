@@ -46,15 +46,34 @@ internal object PlayerFontBridge {
         if (!targetFontsDirectory.exists()) {
             targetFontsDirectory.mkdirs()
         }
+
+        val stagedFontNames = HashSet<String>(sourceFonts.size)
         sourceFonts.forEach { font ->
             val fontName = font.name ?: return@forEach
+            val outFile = File(targetFontsDirectory, fontName)
+            val sourceLength = font.length()
+            val sourceLastModified = font.lastModified()
+
+            if (
+                outFile.isFile &&
+                sourceLength >= 0L &&
+                outFile.length() == sourceLength &&
+                (sourceLastModified <= 0L || outFile.lastModified() >= sourceLastModified)
+            ) {
+                stagedFontNames.add(fontName)
+                return@forEach
+            }
+
             runCatching {
-                val outFile = File(targetFontsDirectory, fontName)
                 font.openInputStream().use { input ->
                     outFile.outputStream().use { output ->
                         input.copyTo(output)
                     }
                 }
+                if (sourceLastModified > 0L) {
+                    outFile.setLastModified(sourceLastModified)
+                }
+                stagedFontNames.add(fontName)
             }.onFailure { error ->
                 if (error is IOException) {
                     logcat(LogPriority.WARN, error) {
@@ -63,6 +82,12 @@ internal object PlayerFontBridge {
                 } else {
                     throw error
                 }
+            }
+        }
+
+        targetFontsDirectory.listFiles()?.forEach { existing ->
+            if (existing.isFile && existing.name !in stagedFontNames) {
+                existing.delete()
             }
         }
     }

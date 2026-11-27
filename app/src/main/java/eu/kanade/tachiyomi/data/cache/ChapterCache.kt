@@ -5,7 +5,7 @@ import android.text.format.Formatter
 import com.jakewharton.disklrucache.DiskLruCache
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.storage.DiskUtil
-import eu.kanade.tachiyomi.util.storage.saveTo
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
@@ -15,7 +15,11 @@ import okio.sink
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.items.chapter.model.Chapter
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Class used to create chapter cache
@@ -66,7 +70,7 @@ class ChapterCache(
      * @param chapter the chapter.
      * @return the list of pages.
      */
-    fun getPageListFromCache(chapter: Chapter): List<Page> {
+    fun getPageListFromCache(chapter: Chapter, maxAgeMs: Long = DEFAULT_PAGE_LIST_TTL_MS): List<Page> {
         // Get the key for the chapter.
         val key = DiskUtil.hashKeyForDisk(getKey(chapter))
 
@@ -74,7 +78,17 @@ class ChapterCache(
         return runCatching {
             diskCache.get(key).use { snapshot ->
                 snapshot?.getString(0)?.let { cachedValue ->
-                    json.decodeFromString<List<Page>>(cachedValue)
+                    val envelope = runCatching { json.decodeFromString<CachedPageList>(cachedValue) }.getOrNull()
+                    if (envelope != null) {
+                        if (System.currentTimeMillis() - envelope.savedAtMs > maxAgeMs) {
+                            emptyList()
+                        } else {
+                            envelope.pages
+                        }
+                    } else {
+                        // Legacy format fallback: plain List<Page> without TTL wrapper.
+                        json.decodeFromString<List<Page>>(cachedValue)
+                    }
                 }.orEmpty()
             }
         }.getOrElse {
@@ -89,6 +103,7 @@ class ChapterCache(
      * @param chapter the chapter.
      * @param pages list of pages.
      */
+    @Synchronized
     fun putPageListToCache(chapter: Chapter, pages: List<Page>) {
         // Initialize the editor (edits the values for an entry).
         var editor: DiskLruCache.Editor? = null
@@ -99,12 +114,12 @@ class ChapterCache(
             editor = diskCache.edit(key) ?: return
 
             // Write chapter urls to cache.
+            val envelope = CachedPageList(savedAtMs = System.currentTimeMillis(), pages = pages)
             editor.newOutputStream(0).sink().buffer().use {
-                it.write(json.encodeToString(pages).toByteArray())
+                it.write(json.encodeToString(envelope).toByteArray())
                 it.flush()
             }
 
-            diskCache.flush()
             editor.commit()
             editor.abortUnlessCommitted()
         } catch (e: Exception) {
@@ -126,6 +141,46 @@ class ChapterCache(
             diskCache.get(DiskUtil.hashKeyForDisk(imageUrl)).use { it != null }
         } catch (e: IOException) {
             false
+        }
+    }
+
+    /**
+     * Removes a single cached image entry so retries can re-download a clean copy.
+     */
+    fun removeImageFromCache(imageUrl: String): Boolean {
+        return runCatching {
+            diskCache.remove(DiskUtil.hashKeyForDisk(imageUrl))
+        }.onFailure {
+            logcat(LogPriority.WARN, it) { "Failed to remove image from cache" }
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Opens a cached image stream via [DiskLruCache.get] so LRU recency is updated and the
+     * underlying entry stays protected until the returned stream is closed.
+     */
+    @Throws(IOException::class)
+    fun openImageStream(imageUrl: String): InputStream {
+        val key = DiskUtil.hashKeyForDisk(imageUrl)
+        val snapshot = diskCache.get(key)
+            ?: throw FileNotFoundException("Image not found in cache: $imageUrl")
+        return try {
+            val stream = snapshot.getInputStream(0)
+            object : FilterInputStream(stream) {
+                private val closed = AtomicBoolean(false)
+
+                override fun close() {
+                    if (!closed.compareAndSet(false, true)) return
+                    try {
+                        super.close()
+                    } finally {
+                        snapshot.close()
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            snapshot.close()
+            throw t
         }
     }
 
@@ -154,14 +209,37 @@ class ChapterCache(
         var editor: DiskLruCache.Editor? = null
 
         try {
+            val mediaType = response.body.contentType()
+            if (mediaType != null &&
+                (
+                    (
+                        mediaType.type.equals("text", ignoreCase = true) &&
+                            mediaType.subtype.equals("html", ignoreCase = true)
+                        ) ||
+                        mediaType.subtype.equals("xhtml+xml", ignoreCase = true)
+                    )
+            ) {
+                throw IOException("Unexpected HTML response for image: $mediaType")
+            }
+
             // Get editor from md5 key.
             val key = DiskUtil.hashKeyForDisk(imageUrl)
             editor = diskCache.edit(key) ?: throw IOException("Unable to edit key")
 
-            // Get OutputStream and write image with Okio.
-            response.body.source().saveTo(editor.newOutputStream(0))
+            // Write image body and verify we did not commit an empty or truncated payload.
+            val expectedLength = response.body.contentLength()
+            val bytesWritten = editor.newOutputStream(0).sink().buffer().use { sink ->
+                val count = sink.writeAll(response.body.source())
+                sink.flush()
+                count
+            }
+            if (bytesWritten <= 0L) {
+                throw IOException("Empty image response")
+            }
+            if (expectedLength > 0L && bytesWritten < expectedLength) {
+                throw IOException("Truncated image response ($bytesWritten/$expectedLength bytes)")
+            }
 
-            diskCache.flush()
             editor.commit()
         } finally {
             response.body.close()
@@ -232,3 +310,10 @@ private const val PARAMETER_VALUE_COUNT = 1
 private const val BYTES_PER_MEGABYTE = 1024L * 1024L
 private const val MINIMUM_CACHE_SIZE_BYTES = 1L * BYTES_PER_MEGABYTE
 private const val PARAMETER_CACHE_SIZE = 100L * BYTES_PER_MEGABYTE
+private const val DEFAULT_PAGE_LIST_TTL_MS = 12L * 60L * 60L * 1000L
+
+@Serializable
+private data class CachedPageList(
+    val savedAtMs: Long,
+    val pages: List<Page>,
+)

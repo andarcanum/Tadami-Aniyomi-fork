@@ -1,8 +1,12 @@
 package eu.kanade.presentation.components
 
 import android.content.Context
+import coil3.request.Options
+import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
+import eu.kanade.tachiyomi.data.coil.AuroraPosterRequestKeyer
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import okhttp3.OkHttpClient
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.entries.manga.model.MangaCover
@@ -84,5 +88,26 @@ class AuroraCoverPlaceholdersTest {
         )
 
         request.placeholderMemoryCacheKey?.key shouldBe "manga;3;https://example.org/manga.jpg;5678"
+    }
+
+    @Test
+    fun `AuroraPosterRequest placeholder memory cache key matches keyer across pending and ready states`() {
+        val context = mockk<Context>(relaxed = true)
+        val options = Options(context = context)
+        val pending = AuroraPosterRequest(
+            primaryUrl = "https://example.org/poster.jpg",
+            fallbackUrl = "https://example.org/fallback.jpg",
+        )
+        val ready = pending.copy(
+            refererUrl = "https://example.org",
+            headers = mapOf("User-Agent" to "Test"),
+            client = OkHttpClient(),
+        )
+        val keyer = AuroraPosterRequestKeyer()
+
+        resolveAuroraCoverPlaceholderMemoryCacheKey(pending) shouldBe keyer.key(pending, options)
+        resolveAuroraCoverPlaceholderMemoryCacheKey(ready) shouldBe keyer.key(ready, options)
+        resolveAuroraCoverPlaceholderMemoryCacheKey(pending) shouldBe
+            resolveAuroraCoverPlaceholderMemoryCacheKey(ready)
     }
 }

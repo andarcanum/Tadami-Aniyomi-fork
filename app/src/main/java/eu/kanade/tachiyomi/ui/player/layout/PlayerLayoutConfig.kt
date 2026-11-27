@@ -59,11 +59,13 @@ data class PlayerLayoutConfig(
         orientation: PlayerLayoutOrientation,
         slotLabel: (PlayerLayoutSlot) -> String = { it.previewLabel },
         regionLabel: (PlayerLayoutRegion) -> String = { it.previewLabel },
+        emptyLabel: String = "none",
     ): String {
         return regionSummary(
             orientation = orientation,
             slotLabel = slotLabel,
             regionLabel = regionLabel,
+            emptyLabel = emptyLabel,
         )
     }
 
@@ -88,12 +90,13 @@ data class PlayerLayoutConfig(
         orientation: PlayerLayoutOrientation,
         slotLabel: (PlayerLayoutSlot) -> String,
         regionLabel: (PlayerLayoutRegion) -> String,
+        emptyLabel: String = "none",
     ): String {
         val activeLayout = layoutFor(orientation)
         return PlayerLayoutRegion.entries.joinToString(separator = "\n") { region ->
             val slots = PlayerLayoutSlot.entries.filter { activeLayout[it] == region }
             val slotText = if (slots.isEmpty()) {
-                "none"
+                emptyLabel
             } else {
                 slots.joinToString { slotLabel(it) }
             }
@@ -169,6 +172,53 @@ enum class PlayerLayoutSlot(
         val options = allowedRegions()
         val index = options.indexOf(current).takeIf { it >= 0 } ?: 0
         return options[(index + 1) % options.size]
+    }
+}
+
+enum class PlayerLayoutPreset {
+    Minimal,
+    Standard,
+    Pro,
+    ;
+
+    fun layoutFor(orientation: PlayerLayoutOrientation): Map<PlayerLayoutSlot, PlayerLayoutRegion> {
+        return when (this) {
+            Minimal -> mapOf(
+                PlayerLayoutSlot.PlaybackSpeed to PlayerLayoutRegion.BottomLeft,
+                PlayerLayoutSlot.LockControls to PlayerLayoutRegion.BottomLeft,
+                PlayerLayoutSlot.RotateScreen to PlayerLayoutRegion.BottomRight,
+                PlayerLayoutSlot.SkipIntro to PlayerLayoutRegion.BottomRight,
+                PlayerLayoutSlot.CustomButton to PlayerLayoutRegion.Hidden,
+                PlayerLayoutSlot.PictureInPicture to PlayerLayoutRegion.Hidden,
+                PlayerLayoutSlot.AspectRatio to PlayerLayoutRegion.BottomRight,
+            )
+            Standard -> when (orientation) {
+                PlayerLayoutOrientation.Portrait -> defaultPortraitLayout()
+                PlayerLayoutOrientation.Landscape -> defaultLandscapeLayout()
+            }
+            Pro -> mapOf(
+                PlayerLayoutSlot.LockControls to PlayerLayoutRegion.BottomLeft,
+                PlayerLayoutSlot.PlaybackSpeed to PlayerLayoutRegion.BottomLeft,
+                PlayerLayoutSlot.RotateScreen to PlayerLayoutRegion.BottomLeft,
+                PlayerLayoutSlot.SkipIntro to PlayerLayoutRegion.BottomRight,
+                PlayerLayoutSlot.CustomButton to PlayerLayoutRegion.BottomRight,
+                PlayerLayoutSlot.PictureInPicture to PlayerLayoutRegion.BottomRight,
+                PlayerLayoutSlot.AspectRatio to PlayerLayoutRegion.BottomRight,
+            )
+        }
+    }
+
+    fun applyTo(config: PlayerLayoutConfig, orientation: PlayerLayoutOrientation): PlayerLayoutConfig {
+        val target = layoutFor(orientation)
+        return when (orientation) {
+            PlayerLayoutOrientation.Portrait -> config.copy(portrait = target)
+            PlayerLayoutOrientation.Landscape -> config.copy(landscape = target)
+        }
+    }
+
+    fun matches(config: PlayerLayoutConfig, orientation: PlayerLayoutOrientation): Boolean {
+        val target = layoutFor(orientation)
+        return PlayerLayoutSlot.entries.all { slot -> config.regionFor(orientation, slot) == target[slot] }
     }
 }
 

@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.backup.BackupDiagnosticLog
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.network.NetworkPreferences
+import eu.kanade.tachiyomi.ui.reels.ReelsMixDiagnosticLog
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
@@ -39,6 +40,12 @@ class CrashLogUtil(
             BackupDiagnosticLog.readLog(context)?.let { backupLog ->
                 file.appendText("=== Backup diagnostics (last sessions) ===\n\n")
                 file.appendText(backupLog)
+                file.appendText("\n\n")
+            }
+
+            ReelsMixDiagnosticLog.readLog(context)?.let { mixLog ->
+                file.appendText("=== Reels Mix diagnostics ===\n\n")
+                file.appendText(mixLog)
                 file.appendText("\n\n")
             }
 

@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.ui.home
+package eu.kanade.tachiyomi.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -86,7 +86,7 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun HomeHubPinnedHeader(
-    headerOffsetPx: Float,
+    headerOffsetPxProvider: () -> Float,
     onHeightMeasured: (Int) -> Unit,
     greeting: dev.icerock.moko.resources.StringResource,
     userName: String,
@@ -173,7 +173,7 @@ internal fun HomeHubPinnedHeader(
             if (fullHeight > 0) {
                 onHeightMeasured(fullHeight)
             }
-            val collapsedHeight = headerOffsetPx.roundToInt().coerceIn(0, fullHeight)
+            val collapsedHeight = headerOffsetPxProvider().roundToInt().coerceIn(0, fullHeight)
             val visibleHeight = (fullHeight - collapsedHeight).coerceAtLeast(0)
             layout(placeable.width, visibleHeight) {
                 placeable.placeRelative(x = 0, y = -collapsedHeight)
@@ -225,7 +225,9 @@ private fun HomeHubProfileHeaderCanvas(
     // Use the classic (phone) header layout on tablets too.
     val isTabletHeaderLayout = false
     val elementSizes = remember { defaultHomeHeaderElementPixelSizes() }
-    val greetingFontFamily = greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
+    val greetingFontFamily = remember(greetingStyle.font.fontRes) {
+        greetingStyle.font.fontRes?.let { FontFamily(Font(it)) }
+    }
     val decoratedGreetingText = remember(greetingText, greetingStyle.decoration) {
         decorateGreetingText(greetingText, greetingStyle.decoration)
     }
@@ -245,6 +247,8 @@ private fun HomeHubProfileHeaderCanvas(
         )
     }
     val textMeasurer = rememberTextMeasurer()
+
+    val hasProfileTitle = profileTitleKey != "none"
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val preMeasureWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
@@ -274,7 +278,7 @@ private fun HomeHubProfileHeaderCanvas(
             1
         }
         val greetingLineLimit = resolveGreetingLineLimit(measuredGreetingLineCount)
-        val headerCanvasHeightDp = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).dp
+        val headerCanvasHeightDp = resolveHomeHeaderCanvasHeightDp(greetingLineLimit, hasProfileTitle).dp
 
         BoxWithConstraints(
             modifier = Modifier
@@ -284,17 +288,24 @@ private fun HomeHubProfileHeaderCanvas(
             val containerWidthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
             val containerHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
             val designWidthPx = layoutSpec.canvas.width.coerceAtLeast(1f)
-            val designHeightPx = resolveHomeHeaderCanvasHeightDp(greetingLineLimit).toFloat().coerceAtLeast(1f)
+            val designHeightPx = resolveHomeHeaderCanvasHeightDp(greetingLineLimit, hasProfileTitle).toFloat()
+                .coerceAtLeast(1f)
             val scaleX = containerWidthPx / designWidthPx
             val scaleY = containerHeightPx / designHeightPx
             val defaultLayoutSpec = remember(layoutSpec.canvas) { HomeHeaderLayoutSpec.default(layoutSpec.canvas) }
 
             fun elementSizeFor(element: HomeHeaderLayoutElement): HomeHeaderPixelSize {
                 val baseSize = elementSizes.getValue(element)
-                return if (element == HomeHeaderLayoutElement.Greeting) {
-                    baseSize.copy(height = resolveGreetingSlotHeightPx(greetingLineLimit))
-                } else {
-                    baseSize
+                return when (element) {
+                    HomeHeaderLayoutElement.Greeting -> baseSize.copy(
+                        height = resolveGreetingSlotHeightPx(greetingLineLimit),
+                    )
+                    HomeHeaderLayoutElement.Nickname -> if (hasProfileTitle) {
+                        baseSize.copy(height = maxOf(baseSize.height, HOME_HEADER_NICKNAME_WITH_TITLE_HEIGHT_PX))
+                    } else {
+                        baseSize
+                    }
+                    else -> baseSize
                 }
             }
 
@@ -492,11 +503,22 @@ private fun HomeHubProfileHeaderCanvas(
                     (containerHeightPx - elementHeightPx).coerceAtLeast(0f),
                 )
 
-                val slotModifier = Modifier
-                    .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
-                    .width(widthDp)
-                    .height(heightDp)
-                val contentModifier = Modifier.fillMaxSize()
+                val slotModifier = if (element == HomeHeaderLayoutElement.Nickname) {
+                    Modifier
+                        .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
+                        .width(widthDp)
+                        .heightIn(min = heightDp)
+                } else {
+                    Modifier
+                        .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
+                        .width(widthDp)
+                        .height(heightDp)
+                }
+                val contentModifier = if (element == HomeHeaderLayoutElement.Nickname) {
+                    Modifier.fillMaxWidth()
+                } else {
+                    Modifier.fillMaxSize()
+                }
                 return slotModifier to contentModifier
             }
 
@@ -562,7 +584,9 @@ private fun HomeHubProfileHeaderCanvas(
                                 nicknameStyle = nicknameStyle,
                                 badgeStyleKey = homeBadgeStyleKey,
                             )
-                            if (profileTitleKey != "none") {
+                            if (profileTitleKey == tachiyomi.domain.easteregg.crystal.CrystalMemorialIds.TITLE) {
+                                eu.kanade.presentation.easteregg.crystal.CrystalProfileTitle()
+                            } else if (profileTitleKey != "none") {
                                 Text(
                                     text = homeProfileTitleDisplayName(profileTitleKey),
                                     style = MaterialTheme.typography.labelSmall,

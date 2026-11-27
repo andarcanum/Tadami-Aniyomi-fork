@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginWebViewCoordinator
+import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +42,8 @@ import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.extension.novel.NovelPluginInstallerFacade
 import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
+import tachiyomi.domain.discovery.model.DiscoverySourceInventory
+import tachiyomi.domain.discovery.model.DiscoverySourcePlugin
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
 import tachiyomi.domain.source.novel.model.StubNovelSource
@@ -79,6 +82,28 @@ class DefaultNovelExtensionManager(
     ) : this(null, repository, api, installer, sourceFactory, null)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private data class CachedJsSourceKey(
+        val id: String,
+        val versionCode: Int,
+        val sha256: String,
+        val lang: String,
+        val site: String,
+        val url: String,
+        val customJs: String?,
+        val customCss: String?,
+    )
+
+    private val cachedJsSources = mutableMapOf<String, Pair<CachedJsSourceKey, NovelSource>>()
+    private val installedSnapshotLock = Any()
+    private var loadedJsInventory = false
+    private var loadedKotlinInventory = context == null
+    private val discoveryInventoryState = MutableStateFlow(DiscoverySourceInventory.Unavailable)
+    private data class DiscoverySdkFrame(
+        val inventory: DiscoverySourceInventory,
+        val bindings: Map<String, List<NovelSource>>,
+    )
+
+    @Volatile private var discoverySdkFrame = DiscoverySdkFrame(DiscoverySourceInventory.Unavailable, emptyMap())
     private val installedSources = MutableStateFlow<List<NovelSource>>(emptyList())
     private val installedPlugins = MutableStateFlow<List<NovelPlugin.Installed>>(emptyList())
     private val availablePlugins = MutableStateFlow<List<NovelPlugin.Available>>(emptyList())
@@ -95,6 +120,24 @@ class DefaultNovelExtensionManager(
 
     @Volatile
     private var installedKotlinExtensionsSnapshot: List<KotlinNovelExtensionLoadResult> = emptyList()
+
+    override fun discoverySourceInventory(): DiscoverySourceInventory = discoveryInventoryState.value
+    override fun isDiscoverySourceBinding(
+        sourceId: Long,
+        source: Any,
+        allowedOwners: Set<String>,
+        expected: DiscoverySourceInventory,
+    ): Boolean {
+        val frame = discoverySdkFrame
+        return frame.inventory.complete == expected.complete &&
+            frame.inventory.plugins.toSet() == expected.plugins.toSet() &&
+            frame.bindings.any { (owner, sources) ->
+                owner in allowedOwners && sources.any {
+                    it is NovelCatalogueSource && it.id == sourceId && it === source
+                }
+            }
+    }
+    override val discoverySourceInventoryChanges: Flow<DiscoverySourceInventory> = discoveryInventoryState.asStateFlow()
 
     override val installedSourcesFlow: Flow<List<NovelSource>> = installedSources.asStateFlow()
     override val installedPluginsFlow: Flow<List<NovelPlugin.Installed>> = installedPlugins.asStateFlow()
@@ -134,8 +177,11 @@ class DefaultNovelExtensionManager(
         }
         scope.launch {
             repository.subscribeAll().collect {
-                installedJsPluginsSnapshot = it
-                applyInstalledSnapshots()
+                synchronized(installedSnapshotLock) {
+                    installedJsPluginsSnapshot = it
+                    loadedJsInventory = true
+                    applyInstalledSnapshots()
+                }
             }
         }
         // The NSFW toggle gates which sources are exposed; re-apply immediately on change instead
@@ -224,9 +270,12 @@ class DefaultNovelExtensionManager(
         val installed = installer.install(plugin).withNormalizedLang()
         saveInstalledRepo(installed)
         enableLanguageOf(installed)
-        installedJsPluginsSnapshot = installedJsPluginsSnapshot
-            .filterNot { it.id == installed.id } + installed
-        applyInstalledSnapshots()
+        synchronized(installedSnapshotLock) {
+            cachedJsSources.remove(installed.id)
+            installedJsPluginsSnapshot = installedJsPluginsSnapshot
+                .filterNot { it.id == installed.id } + installed
+            applyInstalledSnapshots()
+        }
         return installed
     }
 
@@ -254,8 +303,11 @@ class DefaultNovelExtensionManager(
 
         removeSavedInstalledRepo(plugin.id, plugin.pkgName)
         installer.uninstall(plugin.id)
-        installedJsPluginsSnapshot = installedJsPluginsSnapshot.filterNot { it.id == plugin.id }
-        applyInstalledSnapshots()
+        synchronized(installedSnapshotLock) {
+            cachedJsSources.remove(plugin.id)
+            installedJsPluginsSnapshot = installedJsPluginsSnapshot.filterNot { it.id == plugin.id }
+            applyInstalledSnapshots()
+        }
         // Free plugin-owned state so a reinstall cannot pick up stale settings or web storage.
         runCatching { Injekt.get<NovelPluginKeyValueStore>().clear(plugin.id) }
         runCatching { Injekt.get<NovelPluginWebViewCoordinator>().cleanup(plugin.id) }
@@ -366,8 +418,12 @@ class DefaultNovelExtensionManager(
 
     private fun reloadInstalledKotlinExtensions() {
         val appContext = context ?: return
-        installedKotlinExtensionsSnapshot = KotlinNovelExtensionLoader.loadExtensions(appContext)
-        applyInstalledSnapshots()
+        val loaded = KotlinNovelExtensionLoader.loadExtensions(appContext)
+        synchronized(installedSnapshotLock) {
+            installedKotlinExtensionsSnapshot = loaded
+            loadedKotlinInventory = true
+            applyInstalledSnapshots()
+        }
     }
 
     /**
@@ -391,7 +447,7 @@ class DefaultNovelExtensionManager(
         }
     }
 
-    private fun applyInstalledSnapshots() {
+    private fun applyInstalledSnapshots(): Unit = synchronized(installedSnapshotLock) {
         val availableById = availablePlugins.value.groupBy { it.id }
         val normalizedJs = installedJsPluginsSnapshot
             .map {
@@ -415,21 +471,68 @@ class DefaultNovelExtensionManager(
         // Parental control: an NSFW plugin must not register sources while the setting is off, the
         // same way the manga/anime loaders refuse to load NSFW extensions.
         val showNsfwSources = sourcePreferences?.showNsfwSource()?.get() ?: true
-        installedSources.value =
-            normalizedJs
-                .filter { showNsfwSources || !it.isNsfw }
-                .mapNotNull { plugin ->
-                    // The DB collector running this has no exception handler; one broken plugin
-                    // (e.g. script file vanished mid-uninstall) must not crash extension loading.
-                    runCatching { sourceFactory.create(plugin) }
-                        .onFailure {
-                            logcat(LogPriority.WARN) { "Failed to create novel source for plugin id=${plugin.id}: $it" }
+        val visibleJs = normalizedJs.filter { showNsfwSources || !it.isNsfw }
+        val visibleKotlin = installedKotlinExtensionsSnapshot
+            .filter { it.plugin is NovelPlugin.Installed && (showNsfwSources || !it.plugin.isNsfw) }
+        val visibleJsIds = visibleJs.mapTo(HashSet()) { it.id }
+        cachedJsSources.keys.retainAll(visibleJsIds)
+        val jsCreated = visibleJs.mapNotNull { plugin ->
+            val key = CachedJsSourceKey(
+                id = plugin.id,
+                versionCode = plugin.versionCode,
+                sha256 = plugin.sha256,
+                lang = plugin.lang,
+                site = plugin.site,
+                url = plugin.url,
+                customJs = plugin.customJs,
+                customCss = plugin.customCss,
+            )
+            val cached = cachedJsSources[plugin.id]
+            val source = if (cached != null && cached.first == key) {
+                cached.second
+            } else {
+                runCatching { sourceFactory.create(plugin) }
+                    .onFailure {
+                        logcat(LogPriority.WARN) {
+                            "Failed to create novel source for plugin id=${plugin.id}: $it"
                         }
-                        .getOrNull()
-                } +
-            installedKotlinExtensionsSnapshot
-                .filter { it.plugin is NovelPlugin.Installed && (showNsfwSources || !it.plugin.isNsfw) }
-                .flatMap { it.sources }
+                    }
+                    .getOrNull()
+                    ?.also { created -> cachedJsSources[plugin.id] = key to created }
+            }
+            source?.let { plugin to it }
+        }
+        val preparedBindings = (
+            jsCreated.map { (plugin, source) -> plugin.id to listOf(source) } +
+                visibleKotlin.map {
+                    it.plugin.id to it.sources
+                }
+            ).groupBy({
+            it.first
+        }, {
+            it.second
+        }).mapValues { (_, sources) ->
+            sources.flatten()
+        }
+        val preparedInventory = DiscoverySourceInventory(
+            complete = loadedJsInventory && loadedKotlinInventory,
+            plugins = jsCreated.map { (plugin, source) ->
+                val id = (source as? NovelCatalogueSource)?.id ?: NovelPluginId.toSourceId(plugin.id)
+                DiscoverySourcePlugin(plugin.id, listOf(id), mapOf(id to plugin.lang), plugin.versionCode.toString())
+            } + visibleKotlin.mapNotNull { result ->
+                val sources = result.sources.filterIsInstance<NovelCatalogueSource>()
+                if (sources.isEmpty()) return@mapNotNull null
+                DiscoverySourcePlugin(
+                    key = result.plugin.id,
+                    sourceIds = sources.map { it.id },
+                    langs = sources.associate { it.id to it.lang },
+                    version = result.plugin.versionCode.toString(),
+                )
+            },
+        )
+        discoverySdkFrame = DiscoverySdkFrame(preparedInventory, preparedBindings)
+        discoveryInventoryState.value = preparedInventory
+        installedSources.value = jsCreated.map { it.second } + visibleKotlin.flatMap { it.sources }
 
         installedPluginIconUrls.clear()
         normalizedJs.forEach { plugin ->

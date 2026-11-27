@@ -5,18 +5,37 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.relativeDateTimeText
+import eu.kanade.presentation.more.settings.translation.AiTranslationAction
+import eu.kanade.presentation.more.settings.translation.AiTranslationEditorHost
+import eu.kanade.presentation.more.settings.translation.AiTranslationJobCommand
+import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsEffect
+import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsMessage
+import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsScreen
+import eu.kanade.presentation.more.settings.translation.AiTranslationSettingsScreenModel
+import eu.kanade.presentation.more.settings.translation.AiTranslationTab
 import eu.kanade.presentation.reader.ReaderChapterListItem
 import eu.kanade.presentation.reader.ReaderChapterListSheet
+import eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.util.system.toast
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.api.get
 
 /**
  * Host for every reader dialog and sheet.
@@ -49,64 +68,17 @@ internal fun NovelReaderDialogHost(
     val onDismissGeminiDialog = actions.onDismissGeminiDialog
     val onDismissGoogleDialog = actions.onDismissGoogleDialog
     val onDismissTranslationSwitchRequest = actions.onDismissTranslationSwitchRequest
-    val requestGeminiTranslationStart = actions.requestGeminiTranslationStart
     val requestGoogleTranslationStart = actions.requestGoogleTranslationStart
     val onPrepareWholeBook = actions.onPrepareWholeBook
-    val onStopGeminiTranslation = actions.onStopGeminiTranslation
     val onToggleGeminiTranslationVisibility = actions.onToggleGeminiTranslationVisibility
     val onClearGeminiTranslation = actions.onClearGeminiTranslation
     val onClearGeminiTranslationForSwitch = actions.onClearGeminiTranslationForSwitch
     val onClearAllGeminiTranslationCache = actions.onClearAllGeminiTranslationCache
-    val onAddAiTranslationLog = actions.onAddAiTranslationLog
     val onClearGeminiLogs = actions.onClearGeminiLogs
-    val onSetGeminiApiKey = actions.onSetGeminiApiKey
-    val onSetGeminiModel = actions.onSetGeminiModel
-    val onRefreshGeminiModels = actions.onRefreshGeminiModels
-    val onSetGeminiBatchSize = actions.onSetGeminiBatchSize
-    val onSetGeminiConcurrency = actions.onSetGeminiConcurrency
-    val onSetGeminiRelaxedMode = actions.onSetGeminiRelaxedMode
-    val onSetGeminiDisableCache = actions.onSetGeminiDisableCache
-    val onSetGeminiReasoningEffort = actions.onSetGeminiReasoningEffort
-    val onSetGeminiBudgetTokens = actions.onSetGeminiBudgetTokens
-    val onSetGeminiTemperature = actions.onSetGeminiTemperature
-    val onSetGeminiTopP = actions.onSetGeminiTopP
-    val onSetGeminiTopK = actions.onSetGeminiTopK
-    val onSetGeminiPromptMode = actions.onSetGeminiPromptMode
-    val onSetGeminiSourceLang = actions.onSetGeminiSourceLang
-    val onSetGeminiTargetLang = actions.onSetGeminiTargetLang
-    val onSetGeminiStylePreset = actions.onSetGeminiStylePreset
-    val onSetGeminiEnabledPromptModifiers = actions.onSetGeminiEnabledPromptModifiers
-    val onSetGeminiCustomPromptModifier = actions.onSetGeminiCustomPromptModifier
     val onSetGeminiAutoTranslateEnglishSource = actions.onSetGeminiAutoTranslateEnglishSource
     val onSetGeminiPrefetchNextChapterTranslation = actions.onSetGeminiPrefetchNextChapterTranslation
-    val onSetGeminiPrivateUnlocked = actions.onSetGeminiPrivateUnlocked
+    val onSetGeminiDisableCache = actions.onSetGeminiDisableCache
     val onSetGeminiPrivatePythonLikeMode = actions.onSetGeminiPrivatePythonLikeMode
-    val onSetTranslationProvider = actions.onSetTranslationProvider
-    val onSetOpenRouterBaseUrl = actions.onSetOpenRouterBaseUrl
-    val onSetOpenRouterApiKey = actions.onSetOpenRouterApiKey
-    val onSetOpenRouterModel = actions.onSetOpenRouterModel
-    val onRefreshOpenRouterModels = actions.onRefreshOpenRouterModels
-    val onTestOpenRouterConnection = actions.onTestOpenRouterConnection
-    val onSetDeepSeekBaseUrl = actions.onSetDeepSeekBaseUrl
-    val onSetDeepSeekApiKey = actions.onSetDeepSeekApiKey
-    val onSetDeepSeekModel = actions.onSetDeepSeekModel
-    val onRefreshDeepSeekModels = actions.onRefreshDeepSeekModels
-    val onTestDeepSeekConnection = actions.onTestDeepSeekConnection
-    val onSetMistralBaseUrl = actions.onSetMistralBaseUrl
-    val onSetMistralApiKey = actions.onSetMistralApiKey
-    val onSetMistralModel = actions.onSetMistralModel
-    val onRefreshMistralModels = actions.onRefreshMistralModels
-    val onTestMistralConnection = actions.onTestMistralConnection
-    val onSetNvidiaBaseUrl = actions.onSetNvidiaBaseUrl
-    val onSetNvidiaApiKey = actions.onSetNvidiaApiKey
-    val onSetNvidiaModel = actions.onSetNvidiaModel
-    val onRefreshNvidiaModels = actions.onRefreshNvidiaModels
-    val onTestNvidiaConnection = actions.onTestNvidiaConnection
-    val onSetOllamaCloudBaseUrl = actions.onSetOllamaCloudBaseUrl
-    val onSetOllamaCloudApiKey = actions.onSetOllamaCloudApiKey
-    val onSetOllamaCloudModel = actions.onSetOllamaCloudModel
-    val onRefreshOllamaCloudModels = actions.onRefreshOllamaCloudModels
-    val onTestOllamaCloudConnection = actions.onTestOllamaCloudConnection
     val onStopGoogleTranslation = actions.onStopGoogleTranslation
     val onResumeGoogleTranslation = actions.onResumeGoogleTranslation
     val onToggleGoogleTranslationVisibility = actions.onToggleGoogleTranslationVisibility
@@ -115,6 +87,9 @@ internal fun NovelReaderDialogHost(
     val onSetGoogleTranslationSourceLang = actions.onSetGoogleTranslationSourceLang
     val onSetGoogleTranslationTargetLang = actions.onSetGoogleTranslationTargetLang
     val onStartGeminiTranslation = actions.onStartGeminiTranslation
+    val onStartGeminiTranslationForProfile = actions.onStartGeminiTranslationForProfile
+    val requestGeminiTranslationStartForProfile = actions.requestGeminiTranslationStartForProfile
+    val onClearSuppressedGeminiCompletion = actions.onClearSuppressedGeminiCompletion
     val onStartGoogleTranslation = actions.onStartGoogleTranslation
     if (showSettings) {
         NovelReaderSettingsDialog(
@@ -170,97 +145,113 @@ internal fun NovelReaderDialogHost(
             onDismissRequest = onDismissTtsBehaviorSettings,
         )
     }
-    if (showGeminiDialog && state.readerSettings.geminiEnabled) {
-        GeminiTranslationDialog(
-            readerSettings = state.readerSettings,
-            isTranslating = state.isGeminiTranslating,
-            translationProgress = state.geminiTranslationProgress,
-            isVisible = state.isGeminiTranslationVisible,
-            hasCache = state.hasGeminiTranslationCache,
-            logs = state.geminiLogs,
-            onStart = requestGeminiTranslationStart,
-            onStop = onStopGeminiTranslation,
-            onToggleVisibility = onToggleGeminiTranslationVisibility,
-            onClear = onClearGeminiTranslation,
-            onClearAllCache = onClearAllGeminiTranslationCache,
-            onAddLog = onAddAiTranslationLog,
-            onClearLogs = onClearGeminiLogs,
-            onSetGeminiApiKey = onSetGeminiApiKey,
-            onSetGeminiModel = onSetGeminiModel,
-            onRefreshGeminiModels = onRefreshGeminiModels,
-            onSetGeminiBatchSize = onSetGeminiBatchSize,
-            onSetGeminiConcurrency = onSetGeminiConcurrency,
-            onSetGeminiRelaxedMode = onSetGeminiRelaxedMode,
-            onSetGeminiDisableCache = onSetGeminiDisableCache,
-            onSetGeminiReasoningEffort = onSetGeminiReasoningEffort,
-            onSetGeminiBudgetTokens = onSetGeminiBudgetTokens,
-            onSetGeminiTemperature = onSetGeminiTemperature,
-            onSetGeminiTopP = onSetGeminiTopP,
-            onSetGeminiTopK = onSetGeminiTopK,
-            onSetGeminiPromptMode = onSetGeminiPromptMode,
-            onSetGeminiSourceLang = onSetGeminiSourceLang,
-            onSetGeminiTargetLang = onSetGeminiTargetLang,
-            onSetGeminiStylePreset = onSetGeminiStylePreset,
-            onSetGeminiEnabledPromptModifiers = onSetGeminiEnabledPromptModifiers,
-            onSetGeminiCustomPromptModifier = onSetGeminiCustomPromptModifier,
-            onSetGeminiAutoTranslateEnglishSource = onSetGeminiAutoTranslateEnglishSource,
-            onSetGeminiPrefetchNextChapterTranslation = onSetGeminiPrefetchNextChapterTranslation,
-            onSetGeminiPrivateUnlocked = onSetGeminiPrivateUnlocked,
-            onSetGeminiPrivatePythonLikeMode = onSetGeminiPrivatePythonLikeMode,
-            onSetTranslationProvider = onSetTranslationProvider,
-            onSetOpenRouterBaseUrl = onSetOpenRouterBaseUrl,
-            onSetOpenRouterApiKey = onSetOpenRouterApiKey,
-            onSetOpenRouterModel = onSetOpenRouterModel,
-            onRefreshOpenRouterModels = onRefreshOpenRouterModels,
-            onTestOpenRouterConnection = onTestOpenRouterConnection,
-            onSetDeepSeekBaseUrl = onSetDeepSeekBaseUrl,
-            onSetDeepSeekApiKey = onSetDeepSeekApiKey,
-            onSetDeepSeekModel = onSetDeepSeekModel,
-            onRefreshDeepSeekModels = onRefreshDeepSeekModels,
-            onTestDeepSeekConnection = onTestDeepSeekConnection,
-            onSetMistralBaseUrl = onSetMistralBaseUrl,
-            onSetMistralApiKey = onSetMistralApiKey,
-            onSetMistralModel = onSetMistralModel,
-            onRefreshMistralModels = onRefreshMistralModels,
-            onTestMistralConnection = onTestMistralConnection,
-            onSetNvidiaBaseUrl = onSetNvidiaBaseUrl,
-            onSetNvidiaApiKey = onSetNvidiaApiKey,
-            onSetNvidiaModel = onSetNvidiaModel,
-            onRefreshNvidiaModels = onRefreshNvidiaModels,
-            onTestNvidiaConnection = onTestNvidiaConnection,
-            onSetOllamaCloudBaseUrl = onSetOllamaCloudBaseUrl,
-            onSetOllamaCloudApiKey = onSetOllamaCloudApiKey,
-            onSetOllamaCloudModel = onSetOllamaCloudModel,
-            onRefreshOllamaCloudModels = onRefreshOllamaCloudModels,
-            onTestOllamaCloudConnection = onTestOllamaCloudConnection,
-            geminiModels = state.geminiModelEntries,
-            isGeminiModelsLoading = state.isGeminiModelsLoading,
-            openRouterModels = state.openRouterModelIds,
-            isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
-            isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
-            openRouterApiTestStatus = state.openRouterApiTestStatus,
-            openRouterApiTestMessage = state.openRouterApiTestMessage,
-            deepSeekModels = state.deepSeekModelIds,
-            isDeepSeekModelsLoading = state.isDeepSeekModelsLoading,
-            isTestingDeepSeekConnection = state.isTestingDeepSeekConnection,
-            deepSeekApiTestStatus = state.deepSeekApiTestStatus,
-            deepSeekApiTestMessage = state.deepSeekApiTestMessage,
-            mistralModels = state.mistralModelIds,
-            isMistralModelsLoading = state.isMistralModelsLoading,
-            isTestingMistralConnection = state.isTestingMistralConnection,
-            mistralApiTestStatus = state.mistralApiTestStatus,
-            mistralApiTestMessage = state.mistralApiTestMessage,
-            nvidiaModels = state.nvidiaModelIds,
-            isNvidiaModelsLoading = state.isNvidiaModelsLoading,
-            isTestingNvidiaConnection = state.isTestingNvidiaConnection,
-            nvidiaApiTestStatus = state.nvidiaApiTestStatus,
-            nvidiaApiTestMessage = state.nvidiaApiTestMessage,
-            ollamaCloudModels = state.ollamaCloudModelIds,
-            isOllamaCloudModelsLoading = state.isOllamaCloudModelsLoading,
-            isTestingOllamaCloudConnection = state.isTestingOllamaCloudConnection,
-            ollamaCloudApiTestStatus = state.ollamaCloudApiTestStatus,
-            ollamaCloudApiTestMessage = state.ollamaCloudApiTestMessage,
+    // Always open the unified Aurora quick window when AI translation is enabled so the profile
+    // grid and quick setup editors stay accessible even before the first profile is created.
+    val quickModel = if (
+        showGeminiDialog &&
+        (state.readerSettings.geminiEnabled || state.readerSettings.aiTranslationProfileNeedsConfiguration)
+    ) {
+        val quickScope = rememberCoroutineScope()
+        remember(state.novel.id, state.chapter.id, state.readerSettings.geminiPrivateUnlocked, quickScope) {
+            AiTranslationSettingsScreenModel(
+                scope = quickScope,
+                novelId = state.novel.id,
+                chapterId = state.chapter.id,
+                sourceId = state.novel.source,
+                privateUnlocked = state.readerSettings.geminiPrivateUnlocked,
+                onStartChapterTranslation = { profileId, forceRetranslate ->
+                    requestGeminiTranslationStartForProfile(profileId, forceRetranslate)
+                },
+                removeCredentialMetadata = { id ->
+                    TranslationProfileServices.repository.deleteCredentialMetadataIfUnused(id)
+                },
+                ownedRunAction = { run, command ->
+                    val queue = uy.kohesive.injekt.Injekt.get<
+                        eu.kanade.tachiyomi.data.translation.TranslationQueueManager,
+                        >()
+                    when (command) {
+                        AiTranslationJobCommand.PAUSE -> queue.pauseImplicitOwner(run.chapterId, run.generation)
+                        AiTranslationJobCommand.RESUME -> {
+                            onClearSuppressedGeminiCompletion()
+                            queue.resumeImplicitOwner(run.chapterId, run.generation)
+                        }
+                        AiTranslationJobCommand.CANCEL -> queue.detachImplicitOwner(run.chapterId, run.generation)
+                        AiTranslationJobCommand.RETRY_MISSING -> {
+                            onClearSuppressedGeminiCompletion()
+                            queue.retryOwnedRun(run.chapterId, run.generation, false)
+                        }
+                        AiTranslationJobCommand.RETRANSLATE -> {
+                            onClearSuppressedGeminiCompletion()
+                            queue.retryOwnedRun(run.chapterId, run.generation, true)
+                        }
+                        else -> false
+                    }
+                },
+                initialCatalog = TranslationProfileServices.cachedCatalog,
+            )
+        }
+    } else {
+        null
+    }
+    if (quickModel != null) {
+        val context = LocalContext.current
+        DisposableEffect(quickModel) { onDispose { quickModel.onDispose() } }
+        LaunchedEffect(quickModel) {
+            quickModel.effects.collect { effect ->
+                when (effect) {
+                    is AiTranslationSettingsEffect.Message -> context.toast(
+                        when (effect.kind) {
+                            AiTranslationSettingsMessage.VALIDATION -> AYMR.strings.ai_translation_error_field
+                            AiTranslationSettingsMessage.STORAGE -> AYMR.strings.ai_translation_protected_save_failed
+                            AiTranslationSettingsMessage.UNAVAILABLE -> AYMR.strings.ai_translation_action_unavailable
+                            AiTranslationSettingsMessage.REFERENCED -> AYMR.strings.ai_translation_item_in_use
+                        },
+                    )
+                    is AiTranslationSettingsEffect.OpenChapter -> Unit
+                }
+            }
+        }
+    }
+    val quick = quickModel?.quickState?.collectAsStateWithLifecycle()?.value
+    if (quickModel != null && quick != null) {
+        val navigator = LocalNavigator.currentOrThrow
+        val centre by quickModel.state.collectAsStateWithLifecycle()
+        AiTranslationQuickDialog(
+            state = quick.copy(sourceLabel = state.novel.title, chapterLabel = state.chapter.name),
+            onAction = { action ->
+                when (action) {
+                    AiTranslationAction.OpenAllJobs -> {
+                        onDismissGeminiDialog()
+                        navigator.push(AiTranslationSettingsScreen())
+                    }
+                    AiTranslationAction.OpenFullSettings -> {
+                        onDismissGeminiDialog()
+                        navigator.push(AiTranslationSettingsScreen(initialTab = AiTranslationTab.PROFILES))
+                    }
+                    else -> quickModel.onAction(action)
+                }
+            },
             onDismiss = onDismissGeminiDialog,
+            isTranslationVisible = state.isGeminiTranslationVisible,
+            hasTranslationCache = state.hasGeminiTranslationCache,
+            onToggleTranslationVisibility = onToggleGeminiTranslationVisibility,
+            onClearChapterCache = onClearGeminiTranslation,
+            onClearAllCache = onClearAllGeminiTranslationCache,
+            autoTranslateEnglishSource = state.readerSettings.geminiAutoTranslateEnglishSource,
+            onSetAutoTranslateEnglishSource = onSetGeminiAutoTranslateEnglishSource,
+            prefetchNextChapterTranslation = state.readerSettings.geminiPrefetchNextChapterTranslation,
+            onSetPrefetchNextChapterTranslation = onSetGeminiPrefetchNextChapterTranslation,
+            disableCache = state.readerSettings.geminiDisableCache,
+            onSetDisableCache = onSetGeminiDisableCache,
+            privatePythonLikeMode = state.readerSettings.geminiPrivatePythonLikeMode,
+            onSetPrivatePythonLikeMode = onSetGeminiPrivatePythonLikeMode,
+            logs = state.geminiLogs,
+            onClearLogs = onClearGeminiLogs,
+        )
+        AiTranslationEditorHost(
+            state = centre,
+            onAction = quickModel::onAction,
+            onSaveCredential = quickModel::saveCredential,
         )
     }
     if (showGoogleDialog && state.readerSettings.googleTranslationEnabled) {
@@ -315,7 +306,16 @@ internal fun NovelReaderDialogHost(
                         }
                         onDismissTranslationSwitchRequest()
                         when (switchRequest.to) {
-                            TranslationKind.Gemini -> onStartGeminiTranslation()
+                            TranslationKind.Gemini -> if (
+                                switchRequest.profileId != null || switchRequest.forceRetranslate
+                            ) {
+                                onStartGeminiTranslationForProfile(
+                                    switchRequest.profileId,
+                                    switchRequest.forceRetranslate,
+                                )
+                            } else {
+                                onStartGeminiTranslation()
+                            }
                             TranslationKind.Google -> onStartGoogleTranslation()
                         }
                     },
@@ -350,6 +350,8 @@ internal data class NovelReaderDialogActions(
     val onDismissGoogleDialog: () -> Unit,
     val onDismissTranslationSwitchRequest: () -> Unit,
     val requestGeminiTranslationStart: () -> Unit,
+    val requestGeminiTranslationStartForProfile: (profileId: String?, forceRetranslate: Boolean) -> Unit = { _, _ -> },
+    val onClearSuppressedGeminiCompletion: () -> Unit = {},
     val requestGoogleTranslationStart: () -> Unit,
     val onPrepareWholeBook: () -> Unit,
     val onStopGeminiTranslation: () -> Unit,
@@ -415,5 +417,6 @@ internal data class NovelReaderDialogActions(
     val onSetGoogleTranslationSourceLang: (String) -> Unit,
     val onSetGoogleTranslationTargetLang: (String) -> Unit,
     val onStartGeminiTranslation: () -> Unit,
+    val onStartGeminiTranslationForProfile: (profileId: String?, forceRetranslate: Boolean) -> Unit = { _, _ -> },
     val onStartGoogleTranslation: () -> Unit,
 )

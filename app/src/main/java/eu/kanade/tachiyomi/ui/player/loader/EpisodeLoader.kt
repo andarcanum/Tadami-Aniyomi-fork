@@ -10,6 +10,8 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.source.local.entries.anime.LocalAnimeSource
@@ -226,7 +228,14 @@ class EpisodeLoader {
             }
         }
 
-        suspend fun loadHosterVideos(source: AnimeSource, hoster: Hoster, force: Boolean = false): HosterState {
+        internal const val DEFAULT_HOSTER_TIMEOUT_MS = 15_000L
+
+        suspend fun loadHosterVideos(
+            source: AnimeSource,
+            hoster: Hoster,
+            force: Boolean = false,
+            timeoutMs: Long = DEFAULT_HOSTER_TIMEOUT_MS,
+        ): HosterState {
             if (!force && hoster.lazy) {
                 return HosterState.Idle(
                     name = hoster.hosterName,
@@ -239,11 +248,22 @@ class EpisodeLoader {
             }
 
             return try {
-                val videos = getVideos(source, hoster)
+                val videos = withTimeout(timeoutMs) {
+                    getVideos(source, hoster)
+                }
                 HosterState.Ready(
                     name = hoster.hosterName,
                     videoList = videos,
                     videoState = List(videos.size) { Video.State.QUEUE },
+                    playerId = hoster.playerId,
+                    playerLabel = hoster.playerLabel,
+                    dubbingId = hoster.dubbingId,
+                    dubbingLabel = hoster.dubbingLabel,
+                    sortOrder = hoster.sortOrder,
+                )
+            } catch (_: TimeoutCancellationException) {
+                HosterState.Error(
+                    name = hoster.hosterName,
                     playerId = hoster.playerId,
                     playerLabel = hoster.playerLabel,
                     dubbingId = hoster.dubbingId,

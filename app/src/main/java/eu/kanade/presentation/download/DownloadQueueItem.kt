@@ -61,6 +61,7 @@ import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.resolveAuroraTabContainerColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.download.DownloadQueueUiItem
@@ -107,7 +108,8 @@ fun DownloadQueueItem(
     } else {
         BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     }
-    val coverRequest = remember(item.coverData) {
+    val coverReloadTick = rememberCoverReloadTick()
+    val coverRequest = remember(context, item.coverData, coverReloadTick) {
         buildAuroraCoverImageRequest(context, item.coverData)
     }
     val coverPlaceholder = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Portrait)

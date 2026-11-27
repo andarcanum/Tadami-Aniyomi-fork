@@ -18,59 +18,24 @@
 package eu.kanade.tachiyomi.ui.player.controls
 
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
-import eu.kanade.tachiyomi.ui.player.controls.components.FilledControlsButton
-import eu.kanade.tachiyomi.ui.player.execute
-import eu.kanade.tachiyomi.ui.player.executeLongPress
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutSlot
-import tachiyomi.domain.custombuttons.model.CustomButton
 
 @Composable
 fun BottomRightPlayerControls(
     layoutSlots: Set<PlayerLayoutSlot>,
-    customButton: CustomButton?,
-    customButtonTitle: String,
-    skipIntroButton: String?,
-    onPressSkipIntroButton: () -> Unit,
-    isPipAvailable: Boolean,
-    onAspectClick: () -> Unit,
-    onPipClick: () -> Unit,
+    slotActions: BottomPlayerSlotActions,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier) {
-        if (PlayerLayoutSlot.SkipIntro in layoutSlots && skipIntroButton != null) {
-            FilledControlsButton(
-                text = skipIntroButton,
-                onClick = onPressSkipIntroButton,
-                onLongClick = {},
-            )
-        }
-
-        if (PlayerLayoutSlot.CustomButton in layoutSlots && customButton != null) {
-            FilledControlsButton(
-                text = customButtonTitle,
-                onClick = customButton::execute,
-                onLongClick = customButton::executeLongPress,
-            )
-        }
-
-        if (PlayerLayoutSlot.PictureInPicture in layoutSlots && isPipAvailable) {
-            ControlsButton(
-                Icons.Default.PictureInPictureAlt,
-                onClick = onPipClick,
-            )
-        }
-
-        if (PlayerLayoutSlot.AspectRatio in layoutSlots) {
-            ControlsButton(
-                Icons.Default.AspectRatio,
-                onClick = onAspectClick,
-            )
-        }
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RenderBottomPlayerSlots(
+            layoutSlots = layoutSlots,
+            actions = slotActions,
+        )
     }
 }

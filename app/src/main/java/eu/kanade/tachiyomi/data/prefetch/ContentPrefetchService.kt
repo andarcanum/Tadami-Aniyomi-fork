@@ -142,7 +142,7 @@ internal class ContentPrefetchService(
             }
     }
 
-    private suspend fun hasCachedNovelChapterText(
+    suspend fun hasCachedNovelChapterText(
         novel: Novel,
         chapter: NovelChapter,
         downloadManager: NovelDownloadManager,

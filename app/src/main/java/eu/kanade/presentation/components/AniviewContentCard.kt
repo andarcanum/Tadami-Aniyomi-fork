@@ -58,7 +58,8 @@ fun AniviewContentCard(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
-    val contentCardRequest = remember(imageUrl) {
+    val coverReloadTick = rememberCoverReloadTick()
+    val contentCardRequest = remember(context, imageUrl, coverReloadTick) {
         buildAuroraCoverImageRequest(context, imageUrl)
     }
 
@@ -181,7 +182,8 @@ fun AniviewHeroCard(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
-    val heroCardRequest = remember(imageUrl) {
+    val coverReloadTick = rememberCoverReloadTick()
+    val heroCardRequest = remember(context, imageUrl, coverReloadTick) {
         buildAuroraCoverImageRequest(context, imageUrl)
     }
 

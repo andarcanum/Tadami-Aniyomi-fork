@@ -59,10 +59,12 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import dev.chrisbanes.haze.HazeState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.UpIcon
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
+import eu.kanade.presentation.more.settings.AuroraQuickReturnTopBarController
 import eu.kanade.presentation.more.settings.AuroraSettingsTopBarChrome
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
@@ -71,6 +73,7 @@ import eu.kanade.presentation.more.settings.SettingsAuroraBackground
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.more.settings.canScroll
+import eu.kanade.presentation.more.settings.rememberAuroraQuickReturnTopBarScrollBehavior
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsAdvancedScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsAudioScreen
@@ -115,8 +118,9 @@ class SettingsSearchScreen(
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
         val topBarState = rememberTopAppBarState()
+        val settingsHazeState = if (isAurora) remember { HazeState() } else null
         val topBarScrollBehavior = if (isAurora) {
-            TopAppBarDefaults.enterAlwaysScrollBehavior(
+            rememberAuroraQuickReturnTopBarScrollBehavior(
                 state = topBarState,
                 canScroll = { listState.canScroll() },
             )
@@ -144,13 +148,19 @@ class SettingsSearchScreen(
         }
 
         val textFieldState = rememberTextFieldState()
+        LaunchedEffect(textFieldState.text) {
+            (topBarScrollBehavior as? AuroraQuickReturnTopBarController)?.resetToTop()
+        }
         CompositionLocalProvider(LocalSettingsUiStyle provides uiStyle) {
             Scaffold(
                 containerColor = if (isAurora) Color.Transparent else MaterialTheme.colorScheme.background,
                 topBarScrollBehavior = topBarScrollBehavior,
                 topBar = {
                     if (isAurora) {
-                        AuroraSettingsTopBarChrome(topBarScrollBehavior) {
+                        AuroraSettingsTopBarChrome(
+                            scrollBehavior = topBarScrollBehavior,
+                            hazeState = settingsHazeState,
+                        ) {
                             Column {
                                 TopAppBar(
                                     colors = TopAppBarDefaults.topAppBarColors(
@@ -303,7 +313,10 @@ class SettingsSearchScreen(
                     }
                 }
                 if (isAurora) {
-                    SettingsAuroraBackground(modifier = Modifier.fillMaxSize()) {
+                    SettingsAuroraBackground(
+                        modifier = Modifier.fillMaxSize(),
+                        hazeState = settingsHazeState,
+                    ) {
                         contentBody()
                     }
                 } else {

@@ -2,6 +2,7 @@ package eu.kanade.presentation.reader.novel
 
 import android.graphics.Typeface
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,8 +12,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -128,28 +131,36 @@ internal fun NovelRichNativeScrollItem(
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
     paragraphSpacing: androidx.compose.ui.unit.Dp,
+    availableWidthPx: Int? = null,
     ttsHighlightState: NovelReaderTtsHighlightState? = null,
     ttsHighlightColor: Color = Color.Transparent,
     selectionSessionIdProvider: () -> Long,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
     onPlainTap: ((Float, Float, Float, Float) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
+    onImageClick: ((String) -> Unit)? = null,
+    onImageLongClick: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val onLinkClick: (String) -> Unit = { rawUrl ->
-        val resolvedUrl = resolveNovelReaderLinkUrl(
-            rawUrl = rawUrl,
-            chapterWebUrl = chapterWebUrl,
-            novelUrl = novelUrl,
-        )
-        if (!resolvedUrl.isNullOrBlank()) {
-            context.startActivity(
-                WebViewActivity.newIntent(
-                    context = context,
-                    url = resolvedUrl,
-                    sourceId = sourceId,
-                    title = novelTitle,
-                ),
+        if (onUrlClick != null) {
+            onUrlClick(rawUrl)
+        } else {
+            val resolvedUrl = resolveNovelReaderLinkUrl(
+                rawUrl = rawUrl,
+                chapterWebUrl = chapterWebUrl,
+                novelUrl = novelUrl,
             )
+            if (!resolvedUrl.isNullOrBlank()) {
+                context.startActivity(
+                    WebViewActivity.newIntent(
+                        context = context,
+                        url = resolvedUrl,
+                        sourceId = sourceId,
+                        title = novelTitle,
+                    ),
+                )
+            }
         }
     }
     when (block) {
@@ -196,6 +207,7 @@ internal fun NovelRichNativeScrollItem(
                         textShadowBlur = readerSettings.textShadowBlur,
                         textShadowX = readerSettings.textShadowX,
                         textShadowY = readerSettings.textShadowY,
+                        availableWidthPx = availableWidthPx,
                         layoutMode = NovelPageReaderLayoutMode.SCROLL,
                         selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                         selectionSessionIdProvider = selectionSessionIdProvider,
@@ -231,6 +243,7 @@ internal fun NovelRichNativeScrollItem(
                     textShadowBlur = readerSettings.textShadowBlur,
                     textShadowX = readerSettings.textShadowX,
                     textShadowY = readerSettings.textShadowY,
+                    availableWidthPx = availableWidthPx,
                     layoutMode = NovelPageReaderLayoutMode.SCROLL,
                     selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                     selectionSessionIdProvider = selectionSessionIdProvider,
@@ -284,6 +297,7 @@ internal fun NovelRichNativeScrollItem(
                 fontSizeMultiplier = headingScale,
                 lineHeightMultiplier = 1.1f,
                 baseTypefaceStyle = Typeface.BOLD,
+                availableWidthPx = availableWidthPx,
                 layoutMode = NovelPageReaderLayoutMode.SCROLL,
                 selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                 selectionSessionIdProvider = selectionSessionIdProvider,
@@ -300,6 +314,8 @@ internal fun NovelRichNativeScrollItem(
         }
         is NovelRichContentBlock.BlockQuote -> {
             val baseText = buildNovelRichAnnotatedString(block.segments)
+            val quoteIndentPx = with(LocalDensity.current) { 12.dp.roundToPx() }
+            val quoteAvailableWidthPx = availableWidthPx?.let { (it - quoteIndentPx).coerceAtLeast(1) }
             NovelPageReaderTextBlock(
                 text = applyNovelReaderTtsHighlight(
                     text = baseText,
@@ -328,6 +344,7 @@ internal fun NovelRichNativeScrollItem(
                 textShadowX = readerSettings.textShadowX,
                 textShadowY = readerSettings.textShadowY,
                 textColorOverride = textColor.copy(alpha = 0.92f),
+                availableWidthPx = quoteAvailableWidthPx,
                 layoutMode = NovelPageReaderLayoutMode.SCROLL,
                 selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                 selectionSessionIdProvider = selectionSessionIdProvider,
@@ -375,6 +392,18 @@ internal fun NovelRichNativeScrollItem(
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(
+                        if (onImageClick != null || onImageLongClick != null) {
+                            Modifier.pointerInput(block.url, onImageClick, onImageLongClick) {
+                                detectTapGestures(
+                                    onTap = { onImageClick?.invoke(block.url) },
+                                    onLongPress = { onImageLongClick?.invoke(block.url) },
+                                )
+                            }
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(
                         top = if (index == 0) statusBarTopPadding else 0.dp,
                         bottom = if (index == lastIndex) 0.dp else paragraphSpacing,

@@ -15,6 +15,10 @@ class DiscoverySourceRowBuilderTest {
         private val latestBySource: Map<Long, List<DiscoveryRowItem>> = emptyMap(),
         private val failing: Set<Long> = emptySet(),
         private val failingLatest: Set<Long> = emptySet(),
+        private val continuation: Map<Pair<Long, Int>, Boolean> = emptyMap(),
+        private val itemsByPage: Map<Pair<Long, Int>, List<DiscoveryRowItem>> = emptyMap(),
+        private val genreItemsBySource: Map<Long, List<DiscoveryRowItem>> = emptyMap(),
+        private val beforePage: () -> Unit = {},
     ) : DiscoverySourceCatalog {
         val requested = mutableListOf<Long>()
         val requestedPopular = mutableListOf<Pair<Long, Int>>()
@@ -26,11 +30,56 @@ class DiscoverySourceRowBuilderTest {
             page: Int,
             releaseStatuses: Set<DiscoveryReleaseStatus>,
         ): List<DiscoveryRowItem> {
+            beforePage()
             requested += sourceId
             requestedPopular += sourceId to page
             if (sourceId in failing) throw IOException("boom $sourceId")
-            return itemsBySource[sourceId].orEmpty()
+            return (itemsByPage[sourceId to page] ?: itemsBySource[sourceId].orEmpty()).map {
+                it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+            }
         }
+
+        override suspend fun popularPage(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+            budget: DiscoveryVerificationBudget?,
+        ): DiscoveryBrowsePage = popularPage(
+            mediaType,
+            sourceId,
+            page,
+            releaseStatuses,
+            budget,
+            excludedKeys = emptySet(),
+        )
+
+        override suspend fun popularPage(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+            budget: DiscoveryVerificationBudget?,
+            excludedKeys: Set<String>,
+        ): DiscoveryBrowsePage = DiscoveryBrowsePage(
+            popular(mediaType, sourceId, page, releaseStatuses)
+                .filterNot { it.isExcludedBy(excludedKeys, mediaType) },
+            hasNext(sourceId, page),
+        )
+
+        override suspend fun latestPage(
+            mediaType: DiscoveryMediaType,
+            sourceId: Long,
+            page: Int,
+            releaseStatuses: Set<DiscoveryReleaseStatus>,
+            budget: DiscoveryVerificationBudget?,
+        ): DiscoveryBrowsePage = DiscoveryBrowsePage(
+            latest(mediaType, sourceId, page, releaseStatuses),
+            hasNext(sourceId, page),
+        )
+
+        private fun hasNext(sourceId: Long, page: Int): Boolean = continuation[sourceId to page]
+            ?: (itemsByPage.keys.filter { it.first == sourceId }.maxOfOrNull { it.second }?.let { page <= it } ?: false)
 
         override suspend fun popularWithGenres(
             mediaType: DiscoveryMediaType,
@@ -38,7 +87,9 @@ class DiscoverySourceRowBuilderTest {
             genres: List<String>,
             page: Int,
             releaseStatuses: Set<DiscoveryReleaseStatus>,
-        ): List<DiscoveryRowItem> = emptyList()
+        ): List<DiscoveryRowItem> = genreItemsBySource[sourceId].orEmpty().map {
+            it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+        }
 
         override suspend fun latest(
             mediaType: DiscoveryMediaType,
@@ -46,9 +97,12 @@ class DiscoverySourceRowBuilderTest {
             page: Int,
             releaseStatuses: Set<DiscoveryReleaseStatus>,
         ): List<DiscoveryRowItem> {
+            beforePage()
             requestedLatest += sourceId to page
             if (sourceId in failingLatest) throw IOException("latest boom $sourceId")
-            return latestBySource[sourceId].orEmpty()
+            return (itemsByPage[sourceId to page] ?: latestBySource[sourceId].orEmpty()).map {
+                it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle)
+            }
         }
     }
 
@@ -68,8 +122,61 @@ class DiscoverySourceRowBuilderTest {
         hiddenCleanTitles = emptySet(),
         sourceId = sourceId,
         sourceIds = sourceIds,
+        sourcePolicy = discoveryQueryPolicyFixture(
+            DiscoveryMediaType.MANGA,
+            sourceIds.ifEmpty {
+                listOf(sourceId).filter {
+                    it > 0L
+                }
+            },
+        ),
         pageOffset = pageOffset,
     )
+
+    @Test
+    fun `harvest pages fetch consecutive catalogue pages per source`() = runTest {
+        val catalog = FakeCatalog(
+            itemsByPage = (5..7).associate { number ->
+                (1L to number) to items("S1-page$number", 10).map { it.copy(provider = "S1") }
+            },
+            continuation = mapOf((1L to 7) to false),
+        )
+
+        DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 5).copy(harvestPages = 3),
+        )
+
+        catalog.requestedPopular.map { it.second }.distinct().sorted() shouldBe listOf(5, 6, 7)
+        catalog.requestedLatest.map { it.second }.distinct().sorted() shouldBe listOf(5, 6, 7)
+    }
+
+    @Test
+    fun `required source target follows row cap instead of static thirty`() = runTest {
+        val cards = (1..60).map { number ->
+            DiscoveryRowItem(
+                title = "G$number",
+                cleanTitle = "g$number",
+                coverUrl = null,
+                reason = null,
+                seedTitle = null,
+                provider = "S1",
+                score = 1.0,
+                sourceId = 1L,
+                sourceUrl = "/g$number",
+                genres = listOf("Fantasy"),
+            )
+        }
+        val catalog = FakeCatalog(genreItemsBySource = mapOf(1L to cards))
+
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 60).build(
+            context(sourceIds = listOf(1L)).copy(
+                requiredGenres = setOf("Fantasy"),
+                genreFilterSpec = GenreFilterSpec(requiredGenres = setOf("Fantasy")),
+            ),
+        )
+
+        result.size shouldBe 60
+    }
 
     @Test
     fun `failed dominant source slots are backfilled from fetched surplus`() = runTest {
@@ -223,6 +330,145 @@ class DiscoverySourceRowBuilderTest {
             DiscoverySourceRowBuilder(catalog).build(context(sourceIds = listOf(1L, 2L)))
         }
         result.isFailure shouldBe true
+    }
+
+    @Test
+    fun `source waiting past the shared deadline performs no page calls`() = runTest {
+        var now = 0L
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(
+                (1L to 1) to items("S1", 5),
+                (2L to 1) to items("S2", 5),
+            ),
+            beforePage = { now = 2_000L },
+        )
+        val budget = DiscoveryVerificationBudget(budgetMs = 1_000, clock = { now })
+        val builder = DiscoverySourceRowBuilder(catalog, rowCap = 20, maxConcurrency = 1)
+
+        builder.build(
+            context(sourceIds = listOf(1L, 2L)).copy(verificationBudget = budget),
+        )
+
+        budget.isExpired() shouldBe true
+        catalog.requestedPopular.size shouldBe 1
+        catalog.requestedLatest.size shouldBe 1
+        catalog.requestedPopular.map { it.first }.distinct().size shouldBe 1
+        val evidence = builder.exhaustionEvidence.orEmpty()
+        evidence.count { it.transportOk } shouldBe 2
+        evidence.count { !it.transportOk && it.budgetStopped } shouldBe 2
+        evidence.count { it.rawEnd } shouldBe 0
+    }
+
+    @Test
+    fun `source row continues after a filtered first page`() = runTest {
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(
+                1L to 1 to listOf(
+                    DiscoveryRowItem(
+                        "Drama", "drama", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/drama", genres = listOf("Drama"),
+                    ),
+                ),
+                1L to 2 to listOf(
+                    DiscoveryRowItem(
+                        "Fantasy", "fantasy", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/fantasy", genres = listOf("Fantasy"),
+                    ),
+                ),
+            ),
+            continuation = mapOf((1L to 2) to false),
+        )
+
+        DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(
+                genreFilterSpec = GenreFilterSpec(ignoredGenres = setOf("Drama")),
+                harvestPages = 5,
+            ),
+        )
+
+        catalog.requestedPopular.map { it.second }.distinct() shouldBe listOf(1, 2)
+        catalog.requestedLatest.map { it.second }.distinct() shouldBe listOf(1, 2)
+    }
+
+    @Test
+    fun `source row pages past retired matches and admits the next page`() = runTest {
+        val retired = (1..10).map {
+            DiscoveryRowItem(
+                "Retired $it", "retired $it", null, null, null, "s", 1.0,
+                sourceId = 1L, sourceUrl = "/retired-$it", genres = listOf("Fantasy"),
+            )
+        }
+        val fresh = (1..5).map {
+            DiscoveryRowItem(
+                "Fresh $it", "fresh $it", null, null, null, "s", 1.0,
+                sourceId = 1L, sourceUrl = "/fresh-$it", genres = listOf("Fantasy"),
+            )
+        }
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(1L to 1 to retired, 1L to 2 to fresh),
+        )
+
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(
+                harvestPages = 5,
+                recentCleanTitles = retired.mapTo(HashSet()) { it.cleanTitle },
+            ),
+        )
+
+        catalog.requestedPopular.map { it.second }.contains(2) shouldBe true
+        result.map { it.cleanTitle }.toSet() shouldBe
+            (1..5).mapTo(HashSet()) { "fresh $it" }
+    }
+
+    @Test
+    fun `an empty page stops the source immediately`() = runTest {
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(
+                1L to 1 to listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh", genres = listOf("Fantasy"),
+                    ),
+                ),
+            ),
+        )
+
+        DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(harvestPages = 10),
+        )
+
+        catalog.requestedPopular.map { it.second } shouldBe listOf(1, 2)
+        catalog.requestedLatest.map { it.second } shouldBe listOf(1, 2)
+    }
+
+    @Test
+    fun `retired pages do not stop the source before its native end`() = runTest {
+        fun retired(number: Int) = DiscoveryRowItem(
+            "Retired $number", "retired $number", null, null, null, "s", 1.0,
+            sourceId = 1L, sourceUrl = "/retired-$number", genres = listOf("Fantasy"),
+        )
+        val catalog = FakeCatalog(
+            itemsByPage = mapOf(
+                1L to 1 to listOf(
+                    DiscoveryRowItem(
+                        "Fresh", "fresh", null, null, null, "s", 1.0,
+                        sourceId = 1L, sourceUrl = "/fresh", genres = listOf("Fantasy"),
+                    ),
+                ),
+                1L to 2 to listOf(retired(2)),
+                1L to 3 to listOf(retired(3)),
+            ),
+        )
+
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L), pageOffset = 1).copy(
+                harvestPages = 10,
+                recentCleanTitles = setOf("retired 2", "retired 3"),
+            ),
+        )
+
+        catalog.requestedPopular.map { it.second } shouldBe listOf(1, 2, 3, 4)
+        result.map { it.cleanTitle } shouldBe listOf("fresh")
     }
 
     @Test

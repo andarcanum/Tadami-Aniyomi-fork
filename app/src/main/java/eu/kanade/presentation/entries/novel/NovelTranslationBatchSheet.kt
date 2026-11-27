@@ -2,26 +2,16 @@ package eu.kanade.presentation.entries.novel
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +22,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.AuroraFrostCancel
+import eu.kanade.presentation.more.settings.translation.AiTranslationOutlinedTextField
+import eu.kanade.presentation.more.settings.translation.AiTranslationPrimaryButton
+import eu.kanade.presentation.more.settings.translation.AiTranslationToggleRow
+import eu.kanade.presentation.more.settings.translation.AiTranslatorChoiceChip
+import eu.kanade.presentation.reader.components.AuroraReaderSheet
+import eu.kanade.presentation.reader.settings.AuroraGlassSection
+import eu.kanade.presentation.reader.settings.auroraRimColor
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.entries.novel.TranslationBatchScope
 import eu.kanade.tachiyomi.ui.entries.novel.resolveTranslationBatchChapterIds
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -80,148 +79,145 @@ internal fun NovelTranslationBatchSheet(
         )
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-    ) {
+    AuroraReaderSheet(onDismissRequest = onDismissRequest) {
+        val aurora = AuroraTheme.colors
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = stringResource(MR.strings.novel_batch_title),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            if (chapterTitle.isNotBlank()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text(
-                    text = stringResource(MR.strings.novel_batch_current_chapter, chapterTitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Text(
-                text = stringResource(MR.strings.novel_batch_select_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = stringResource(MR.strings.novel_batch_mode),
-                    style = MaterialTheme.typography.titleSmall,
+                    text = stringResource(MR.strings.novel_batch_title),
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
+                    color = aurora.textPrimary,
                 )
-                ScopeChipRow(
-                    selected = selectedScope,
-                    onSelected = { selectedScope = it },
+                if (chapterTitle.isNotBlank()) {
+                    Text(
+                        text = stringResource(MR.strings.novel_batch_current_chapter, chapterTitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = aurora.textSecondary,
+                    )
+                }
+                Text(
+                    text = stringResource(MR.strings.novel_batch_select_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = aurora.textSecondary,
                 )
             }
 
-            if (selectedScope == TranslationBatchScope.FIRST_N_VISIBLE) {
-                OutlinedTextField(
-                    value = customCount,
-                    onValueChange = { customCount = it.filter(Char::isDigit) },
-                    label = { Text(stringResource(MR.strings.novel_batch_first_n_chapters)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            AuroraGlassSection(title = stringResource(MR.strings.novel_batch_mode)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ScopeChipRow(
+                        selected = selectedScope,
+                        onSelected = { selectedScope = it },
+                    )
+
+                    if (selectedScope == TranslationBatchScope.FIRST_N_VISIBLE) {
+                        AiTranslationOutlinedTextField(
+                            value = customCount,
+                            onValueChange = { customCount = it.filter(Char::isDigit) },
+                            label = { Text(stringResource(MR.strings.novel_batch_first_n_chapters)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    if (selectedScope == TranslationBatchScope.RANGE) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            AiTranslationOutlinedTextField(
+                                value = rangeStart,
+                                onValueChange = { rangeStart = it.filter(Char::isDigit) },
+                                label = { Text(stringResource(MR.strings.novel_batch_from_chapter)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            AiTranslationOutlinedTextField(
+                                value = rangeEnd,
+                                onValueChange = { rangeEnd = it.filter(Char::isDigit) },
+                                label = { Text(stringResource(MR.strings.novel_batch_to_chapter)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
             }
 
-            if (selectedScope == TranslationBatchScope.RANGE) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = rangeStart,
-                        onValueChange = { rangeStart = it.filter(Char::isDigit) },
-                        label = { Text(stringResource(MR.strings.novel_batch_from_chapter)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
+            AuroraGlassSection {
+                AiTranslationToggleRow(
+                    label = stringResource(MR.strings.novel_batch_force_retranslate),
+                    subtitle = stringResource(MR.strings.novel_batch_force_retranslate_desc),
+                    checked = forceRetranslate,
+                    onClick = { forceRetranslate = !forceRetranslate },
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    color = auroraRimColor(),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = stringResource(MR.strings.novel_batch_queue_count, previewChapterIds.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = aurora.textPrimary,
                     )
-                    OutlinedTextField(
-                        value = rangeEnd,
-                        onValueChange = { rangeEnd = it.filter(Char::isDigit) },
-                        label = { Text(stringResource(MR.strings.novel_batch_to_chapter)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (!forceRetranslate) {
+                        Text(
+                            text = stringResource(MR.strings.novel_batch_skip_translated),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = aurora.textSecondary,
+                        )
+                    }
                 }
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Checkbox(
-                    checked = forceRetranslate,
-                    onCheckedChange = { forceRetranslate = it },
+                AuroraFrostCancel(
+                    label = stringResource(MR.strings.action_cancel),
+                    onClick = onDismissRequest,
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(MR.strings.novel_batch_force_retranslate),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(
-                        text = stringResource(MR.strings.novel_batch_force_retranslate_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            Text(
-                text = stringResource(MR.strings.novel_batch_queue_count, previewChapterIds.size),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (!forceRetranslate) {
-                Text(
-                    text = stringResource(MR.strings.novel_batch_skip_translated),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Button(
-                onClick = {
-                    onStartBatch(
-                        selectedScope,
-                        resolvedLimit,
-                        resolvedRangeStart,
-                        resolvedRangeEnd,
-                        forceRetranslate,
-                    )
-                },
-                enabled = previewChapterIds.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(vertical = 12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            ) {
-                Text(
+                AiTranslationPrimaryButton(
                     text = stringResource(MR.strings.novel_batch_start),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    onClick = {
+                        onStartBatch(
+                            selectedScope,
+                            resolvedLimit,
+                            resolvedRangeStart,
+                            resolvedRangeEnd,
+                            forceRetranslate,
+                        )
+                    },
+                    enabled = previewChapterIds.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
                 )
-            }
-
-            TextButton(
-                onClick = onDismissRequest,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(text = stringResource(MR.strings.action_cancel))
             }
         }
     }
@@ -242,14 +238,16 @@ private fun ScopeChipRow(
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         scopes.chunked(2).forEach { rowScopes ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 rowScopes.forEach { (scope, label) ->
-                    FilterChip(
+                    AiTranslatorChoiceChip(
+                        text = label,
                         selected = selected == scope,
                         onClick = { onSelected(scope) },
-                        label = { Text(label) },
                         modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(),
                     )
                 }
                 if (rowScopes.size == 1) {

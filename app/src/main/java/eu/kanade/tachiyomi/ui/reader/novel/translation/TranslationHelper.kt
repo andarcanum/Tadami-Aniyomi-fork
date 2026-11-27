@@ -85,41 +85,34 @@ fun computeRateLimitDelayMs(
  */
 internal fun JsonObject.extractOpenAiStyleChoiceContent(): String {
     val message = this["message"].asObjectOrNull()
-    message?.get("content")
-        .extractOpenAiChoiceContentArray()
-        .firstOrNull()
-        ?.let { return it }
-
-    val sources = listOf(
-        message?.get("content"),
-        message?.get("text"),
-        this["text"],
-        this["output_text"],
-        this["content"],
-    )
-    return sources.firstNotNullOfOrNull {
-        it.extractTextCandidates(includeThinking = false).firstOrNull()
-    }.orEmpty()
+    val sources =
+        listOf(message?.get("content"), message?.get("text"), this["text"], this["output_text"], this["content"])
+    return sources.firstNotNullOfOrNull { it.extractAnswerText().takeIf(String::isNotBlank) }.orEmpty()
 }
 
-/**
- * Handles content-as-array responses (e.g. Claude-style content blocks forwarded
- * through OpenRouter), skipping thinking blocks.
- */
-internal fun JsonElement?.extractOpenAiChoiceContentArray(): List<String> {
-    val array = this as? JsonArray ?: return emptyList()
-    return array
-        .flatMap { entry ->
-            val obj = entry as? JsonObject
-                ?: return@flatMap entry.extractTextCandidates(includeThinking = false)
-            if (obj["type"].asStringOrNull()?.equals("thinking", ignoreCase = true) == true) {
-                emptyList()
-            } else {
-                obj["text"].extractTextCandidates(includeThinking = false)
-            }
+/** Preserve fragment whitespace and repetitions. Thought parts are never reader output. */
+private fun JsonElement?.extractAnswerText(): String = when (this) {
+    is JsonPrimitive -> if (isString) content else ""
+    is JsonArray -> joinToString("") { it.extractAnswerText() }
+    is JsonObject -> {
+        if (this["type"].asStringOrNull()?.equals("thinking", ignoreCase = true) == true ||
+            (this["thought"] as? JsonPrimitive)?.content == "true"
+        ) {
+            ""
+        } else {
+            listOf("text", "content", "output_text").firstNotNullOfOrNull {
+                this[it].extractAnswerText().takeIf(String::isNotBlank)
+            }.orEmpty()
         }
-        .distinct()
+    }
+    else -> ""
 }
+
+internal fun JsonElement?.extractOpenAiChoiceContentArray(): List<String> =
+    (this as? JsonArray)?.map { it.extractAnswerText() }?.filter { it.isNotBlank() }.orEmpty()
+
+internal fun escapeTranslationSource(text: String): String = text
+    .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 /**
  * Estimates a reasonable max_tokens value for standard chat-completion providers

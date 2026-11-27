@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.AchievementRestorer
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +31,7 @@ import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.model.Reward
 import tachiyomi.domain.achievement.model.RewardType
 import tachiyomi.domain.achievement.model.UserProfile
+import tachiyomi.domain.achievement.repository.AchievementRepository
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -58,6 +60,7 @@ class AchievementBackupRestoreIntegrationTest {
     private lateinit var unlockableManager: UnlockableManager
     private lateinit var backupCreator: AchievementBackupCreator
     private lateinit var restorer: AchievementRestorer
+    private lateinit var memorial: tachiyomi.data.easteregg.crystal.CrystalMemorialRepositoryImpl
 
     @Before
     fun setup() {
@@ -77,6 +80,12 @@ class AchievementBackupRestoreIntegrationTest {
         )
         unlockableManager = UnlockableManager(treasuryPrefs, userProfileManager)
 
+        memorial = tachiyomi.data.easteregg.crystal.CrystalMemorialRepositoryImpl(database, { granted ->
+            tachiyomi.domain.easteregg.crystal.CrystalMemorialIds.REWARDS.forEach { id ->
+                if (granted) unlockableManager.setUnlockableUnlocked(id) else unlockableManager.removeUnlockable(id)
+            }
+        })
+
         // Note: AchievementBackupCreator requires more dependencies, simplified version for testing
         restorer = AchievementRestorer(
             achievementRepository = achievementRepository,
@@ -84,7 +93,94 @@ class AchievementBackupRestoreIntegrationTest {
             userProfileRepository = userProfileRepository,
             userProfileManager = userProfileManager,
             unlockableManager = unlockableManager,
+            memorialRepository = memorial,
         )
+    }
+
+    @Test
+    fun crystalReceiptRestoresSixItemsWithoutReplayingXp() = runTest {
+        val ids = tachiyomi.domain.easteregg.crystal.CrystalMemorialIds
+        val definition = tachiyomi.domain.achievement.model.Achievement(
+            id = ids.GRANT_KEY,
+            type = tachiyomi.domain.achievement.model.AchievementType.EVENT,
+            category = tachiyomi.domain.achievement.model.AchievementCategory.SECRET,
+            threshold = 1,
+            points = 999,
+            title = "Crystal",
+            rewards = ids.REWARDS.map { id ->
+                tachiyomi.domain.achievement.model.Reward(
+                    tachiyomi.domain.achievement.model.RewardType.SPECIAL,
+                    id,
+                    title = id,
+                )
+            },
+        )
+        achievementRepository.insertAchievement(definition)
+        val eligible = memorial.makeEligible(tachiyomi.domain.easteregg.crystal.CrystalEligibilityReason.RELEASE)
+        memorial.completeMemorial(eligible.generation)
+        val snapshot = memorial.snapshotForBackup()
+        val record = eu.kanade.tachiyomi.data.backup.models.BackupCrystalMemorial.fromState(snapshot.state)
+        val profile = BackupUserProfile.fromUserProfile(snapshot.profile!!)
+        val entry = BackupAchievement.fromAchievement(definition, snapshot.progress)
+        memorial.debugReset()
+        userProfileManager.addXP(5000)
+        repeat(2) { restorer.restoreAchievements(listOf(entry), profile, emptyList(), backupCrystalMemorial = record) }
+        assertEquals(5999, userProfileManager.getCurrentProfile().totalXP)
+        assertTrue(memorial.getState().isGranted)
+        ids.REWARDS.forEach { id -> assertTrue(unlockableManager.isUnlockableUnlocked(id)) }
+        assertTrue(userProfileManager.getCurrentProfile().titles.isEmpty())
+    }
+
+    @Test
+    fun nativeExportUsesCoherentReceiptEvenWhenGrantOccursAfterCatalogRead() = runTest {
+        val ids = tachiyomi.domain.easteregg.crystal.CrystalMemorialIds
+        val definition = tachiyomi.domain.achievement.model.Achievement(
+            id = ids.GRANT_KEY,
+            type = tachiyomi.domain.achievement.model.AchievementType.EVENT,
+            category = tachiyomi.domain.achievement.model.AchievementCategory.SECRET,
+            threshold = 1,
+            points = 999,
+            title = "Crystal",
+            rewards = ids.REWARDS.map { id ->
+                tachiyomi.domain.achievement.model.Reward(
+                    tachiyomi.domain.achievement.model.RewardType.SPECIAL,
+                    id,
+                    title = id,
+                )
+            },
+        )
+        achievementRepository.insertAchievement(definition)
+        val duringGrant = object : AchievementRepository by achievementRepository {
+            override fun getAllProgress() = kotlinx.coroutines.flow.flow {
+                val previous = achievementRepository.getAllProgress().first()
+                val state = memorial.makeEligible(tachiyomi.domain.easteregg.crystal.CrystalEligibilityReason.RELEASE)
+                memorial.completeMemorial(state.generation)
+                emit(previous)
+            }
+        }
+        backupCreator = AchievementBackupCreator(
+            achievementRepository = duringGrant,
+            activityDataRepository = activityRepository,
+            achievementsDatabase = database,
+            getLibraryManga = io.mockk.mockk(), getLibraryAnime = io.mockk.mockk(),
+            getTotalReadDuration = io.mockk.mockk(),
+            getTracksPerManga = io.mockk.mockk(),
+            getAnimeTracks = io.mockk.mockk(),
+            mangaDownloadManager = io.mockk.mockk(),
+            animeDownloadManager = io.mockk.mockk(),
+            getEpisodesByAnimeId = io.mockk.mockk(),
+            trackerManager = io.mockk.mockk(), preferences = io.mockk.mockk(), memorialRepository = memorial,
+        )
+        val result =
+            backupCreator(eu.kanade.tachiyomi.data.backup.create.BackupOptions(achievements = true, stats = false))
+        assertEquals(999, result.userProfile?.totalXP)
+        assertEquals(999, result.crystalMemorial?.grantedXp)
+        assertTrue(result.achievements.single { it.id == ids.GRANT_KEY }.isUnlocked)
+        val excluded =
+            backupCreator(eu.kanade.tachiyomi.data.backup.create.BackupOptions(achievements = false, stats = false))
+        assertNull(excluded.crystalMemorial)
+        assertNull(excluded.userProfile)
+        assertTrue(excluded.achievements.isEmpty())
     }
 
     @After

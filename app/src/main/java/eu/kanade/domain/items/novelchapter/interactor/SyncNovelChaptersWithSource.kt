@@ -12,7 +12,7 @@ import tachiyomi.domain.items.chapter.service.ChapterRecognition
 import tachiyomi.domain.items.novelchapter.interactor.ShouldUpdateDbNovelChapter
 import tachiyomi.domain.items.novelchapter.model.NoChaptersException
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
-import tachiyomi.domain.items.novelchapter.model.toNovelChapterUpdate
+import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.source.local.entries.novel.isLocal
@@ -56,14 +56,17 @@ class SyncNovelChaptersWithSource(
             .mapIndexed { i, sChapter ->
                 NovelChapter.create()
                     .copyFromSNovelChapter(sChapter)
-                    .copy(name = with(ChapterSanitizer) { sChapter.name.sanitize(novel.title) })
-                    .copy(novelId = novel.id, sourceOrder = sourceOrderOffset + i.toLong())
+                    .copy(
+                        name = with(ChapterSanitizer) { sChapter.name.sanitize(novel.title) },
+                        novelId = novel.id,
+                        sourceOrder = sourceOrderOffset + i.toLong(),
+                    )
             }
 
         val dbChapters = novelChapterRepository.getChapterByNovelId(novel.id)
 
         val newChapters = mutableListOf<NovelChapter>()
-        val updatedChapters = mutableListOf<NovelChapter>()
+        val updatedChapters = mutableListOf<NovelChapterUpdate>()
 
         val sourceUrls = sourceChapters.mapTo(HashSet(sourceChapters.size)) { it.url }
         val removedChapters = if (retainMissingChapters) {
@@ -91,19 +94,18 @@ class SyncNovelChaptersWithSource(
                 newChapters.add(chapter)
             } else {
                 if (shouldUpdateDbNovelChapter.await(dbChapter, chapter)) {
-                    var toChangeChapter = dbChapter.copy(
-                        name = chapter.name,
-                        chapterNumber = chapter.chapterNumber,
-                        scanlator = chapter.scanlator,
-                        sourceOrder = chapter.sourceOrder,
+                    // Source metadata must not replay user state or its version from dbChapters.
+                    updatedChapters.add(
+                        NovelChapterUpdate(
+                            id = dbChapter.id,
+                            name = chapter.name,
+                            chapterNumber = chapter.chapterNumber,
+                            scanlator = chapter.scanlator,
+                            sourceOrder = chapter.sourceOrder,
+                            dateUpload = chapter.dateUpload.takeIf { it != 0L },
+                            dateUploadRaw = chapter.dateUploadRaw,
+                        ),
                     )
-                    if (chapter.dateUpload != 0L) {
-                        toChangeChapter = toChangeChapter.copy(dateUpload = chapter.dateUpload)
-                    }
-                    chapter.dateUploadRaw?.let {
-                        toChangeChapter = toChangeChapter.copy(dateUploadRaw = it)
-                    }
-                    updatedChapters.add(toChangeChapter)
                 }
             }
         }
@@ -134,11 +136,19 @@ class SyncNovelChaptersWithSource(
             deletedChapterNumbers.add(chapter.chapterNumber)
         }
 
-        val removedChaptersSortedDesc = removedChapters.sortedByDescending { it.dateFetch }
-        val deletedChapterNumberDateFetchMap = removedChaptersSortedDesc.associate { it.chapterNumber to it.dateFetch }
-        val deletedChapterNumberLastPageReadMap = removedChaptersSortedDesc.associate {
-            it.chapterNumber to
-                it.lastPageRead
+        val deletedChapterNumberDateFetchMap: Map<Double, Long>
+        val deletedChapterNumberLastPageReadMap: Map<Double, Long>
+        if (removedChapters.isEmpty()) {
+            deletedChapterNumberDateFetchMap = emptyMap()
+            deletedChapterNumberLastPageReadMap = emptyMap()
+        } else {
+            val removedChaptersSortedDesc = removedChapters.sortedByDescending { it.dateFetch }
+            deletedChapterNumberDateFetchMap = removedChaptersSortedDesc.associate {
+                it.chapterNumber to it.dateFetch
+            }
+            deletedChapterNumberLastPageReadMap = removedChaptersSortedDesc.associate {
+                it.chapterNumber to it.lastPageRead
+            }
         }
 
         val markDuplicateAsRead = libraryPreferences.markDuplicateReadChapterAsRead().get()
@@ -176,12 +186,11 @@ class SyncNovelChaptersWithSource(
         }
 
         val toDeleteIds = removedChapters.map { it.id }
-        val chapterUpdates = updatedChapters.map { it.toNovelChapterUpdate() }
 
-        if (toDeleteIds.isNotEmpty() || updatedToAdd.isNotEmpty() || chapterUpdates.isNotEmpty()) {
+        if (toDeleteIds.isNotEmpty() || updatedToAdd.isNotEmpty() || updatedChapters.isNotEmpty()) {
             val syncResult = novelChapterRepository.syncChapters(
                 toAdd = updatedToAdd,
-                toUpdate = chapterUpdates,
+                toUpdate = updatedChapters,
                 toDelete = toDeleteIds,
             )
             if (updatedToAdd.isNotEmpty()) {

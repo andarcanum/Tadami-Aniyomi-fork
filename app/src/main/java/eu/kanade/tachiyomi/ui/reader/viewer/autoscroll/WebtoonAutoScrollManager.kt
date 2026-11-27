@@ -55,7 +55,7 @@ class WebtoonAutoScrollManager(
     /**
      * Timestamp of the previous animation frame, used to compute frame deltas.
      */
-    private var lastFrameTimeMs: Long = 0L
+    private var lastFrameTimeNs: Long = 0L
 
     /**
      * Accumulates fractional pixels that cannot be scrolled within a single frame.
@@ -85,6 +85,7 @@ class WebtoonAutoScrollManager(
     }
 
     override fun setCooldown(delayMs: Long) {
+        if (!_state.value.isActive || _state.value.isPaused) return
         cooldownUntilMs = SystemClock.elapsedRealtime() + delayMs
         _state.update { it.copy(cooldownUntilMs = cooldownUntilMs) }
     }
@@ -141,13 +142,8 @@ class WebtoonAutoScrollManager(
 
     override fun setSpeed(speed: Int) {
         val clampedSpeed = speed.coerceIn(1, 100)
+        if (_state.value.speed == clampedSpeed) return
         _state.update { it.copy(speed = clampedSpeed) }
-
-        // Restart animator if currently running to apply new speed
-        if (isRunning) {
-            stopAnimator()
-            startAnimator()
-        }
         logcat { "WebtoonAutoScrollManager speed set to $clampedSpeed" }
     }
 
@@ -162,9 +158,7 @@ class WebtoonAutoScrollManager(
      * scroll speed independent of the display refresh rate.
      */
     private fun startAnimator() {
-        val pxPerSecond = calculateScrollSpeedPxPerSecond(_state.value.speed)
-
-        lastFrameTimeMs = 0L
+        lastFrameTimeNs = 0L
         scrollRemainder = 0f
 
         valueAnimator = ValueAnimator.ofInt(0, Int.MAX_VALUE).apply {
@@ -172,16 +166,16 @@ class WebtoonAutoScrollManager(
             interpolator = LinearInterpolator()
 
             addUpdateListener {
-                val now = SystemClock.elapsedRealtime()
-                val deltaMs = if (lastFrameTimeMs == 0L) {
-                    0L
+                val nowNs = System.nanoTime()
+                val deltaMs = if (lastFrameTimeNs == 0L) {
+                    0f
                 } else {
-                    (now - lastFrameTimeMs).coerceAtMost(MAX_FRAME_DELTA_MS)
+                    ((nowNs - lastFrameTimeNs) / 1_000_000f).coerceAtMost(MAX_FRAME_DELTA_MS.toFloat())
                 }
-                lastFrameTimeMs = now
-                if (deltaMs <= 0L) return@addUpdateListener
+                lastFrameTimeNs = nowNs
+                if (deltaMs <= 0f) return@addUpdateListener
 
-                val inCooldown = now < cooldownUntilMs
+                val inCooldown = SystemClock.elapsedRealtime() < cooldownUntilMs
 
                 // Smooth, time-based deceleration into / acceleration out of cooldown
                 val rampDelta = deltaMs / SPEED_RAMP_DURATION_MS
@@ -196,7 +190,8 @@ class WebtoonAutoScrollManager(
                     return@addUpdateListener
                 }
 
-                // Frame rate independent scroll amount with sub-pixel accumulation
+                // Frame rate independent scroll amount with nanosecond-accurate sub-pixel accumulation
+                val pxPerSecond = calculateScrollSpeedPxPerSecond(_state.value.speed)
                 val exactDelta = pxPerSecond * currentSpeedFactor * (deltaMs / 1000f) + scrollRemainder
                 val deltaY = exactDelta.toInt()
                 scrollRemainder = exactDelta - deltaY

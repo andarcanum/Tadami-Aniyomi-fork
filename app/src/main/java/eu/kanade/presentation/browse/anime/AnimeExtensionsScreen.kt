@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.browse.anime
+package eu.kanade.presentation.browse.anime
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -101,6 +101,7 @@ fun AnimeExtensionScreen(
     onTrustExtension: (AnimeExtension.Untrusted) -> Unit,
     onOpenExtension: (AnimeExtension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
+    onCancelUpdateAll: () -> Unit,
     onRefresh: () -> Unit,
     onToggleSection: (AnimeExtensionUiModel.Header.Text) -> Unit,
     onReinstallAfterSignatureMismatch: () -> Unit,
@@ -155,6 +156,7 @@ fun AnimeExtensionScreen(
                     onTrustExtension = onTrustExtension,
                     onOpenExtension = onOpenExtension,
                     onClickUpdateAll = onClickUpdateAll,
+                    onCancelUpdateAll = onCancelUpdateAll,
                     onToggleSection = onToggleSection,
                 )
             }
@@ -176,6 +178,7 @@ private fun AnimeExtensionContent(
     onTrustExtension: (AnimeExtension.Untrusted) -> Unit,
     onOpenExtension: (AnimeExtension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
+    onCancelUpdateAll: () -> Unit,
     onToggleSection: (AnimeExtensionUiModel.Header.Text) -> Unit,
 ) {
     val context = LocalContext.current
@@ -205,29 +208,53 @@ private fun AnimeExtensionContent(
                     is AnimeExtensionUiModel.Header.Resource -> {
                         val action: @Composable RowScope.() -> Unit =
                             if (header.textRes == MR.strings.ext_updates_pending &&
-                                items.any { item ->
-                                    val extension = item.extension
-                                    extension is AnimeExtension.Installed &&
-                                        extension.hasUpdate &&
-                                        !extension.needsReinstall
-                                }
+                                (
+                                    state.isUpdatingAll || items.any { item ->
+                                        val extension = item.extension
+                                        extension is AnimeExtension.Installed &&
+                                            extension.hasUpdate &&
+                                            !extension.needsReinstall
+                                    }
+                                    )
                             ) {
                                 {
-                                    // Aurora-стиль: чистая accent-пилла вместо M3 Button.
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(AuroraTheme.colors.accent)
-                                            .clickable { onClickUpdateAll() }
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    ) {
-                                        Text(
-                                            text = stringResource(MR.strings.ext_update_all),
-                                            style = MaterialTheme.typography.labelLarge.copy(
-                                                color = MaterialTheme.colorScheme.onPrimary,
-                                                fontWeight = FontWeight.Bold,
-                                            ),
-                                        )
+                                    if (state.isUpdatingAll) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.error)
+                                                .clickable { onCancelUpdateAll() }
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        ) {
+                                            Text(
+                                                text = stringResource(MR.strings.ai_translator_action_stop) +
+                                                    (
+                                                        state.updatingAllProgress?.let { " (${it.first}/${it.second})" }
+                                                            ?: ""
+                                                        ),
+                                                style = MaterialTheme.typography.labelLarge.copy(
+                                                    color = MaterialTheme.colorScheme.onError,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                            )
+                                        }
+                                    } else {
+                                        // Aurora-стиль: чистая accent-пилла вместо M3 Button.
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(CircleShape)
+                                                .background(AuroraTheme.colors.accent)
+                                                .clickable { onClickUpdateAll() }
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        ) {
+                                            Text(
+                                                text = stringResource(MR.strings.ext_update_all),
+                                                style = MaterialTheme.typography.labelLarge.copy(
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    fontWeight = FontWeight.Bold,
+                                                ),
+                                            )
+                                        }
                                     }
                                 }
                             } else {

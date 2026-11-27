@@ -103,4 +103,51 @@ class SuggestionTitleResolverTest {
         val cleaned = SuggestionTitleResolver.cleanTitle("Re:Zero Vol. 1 (Light Novel)")
         assertEquals("re zero", cleaned)
     }
+
+    @Test
+    fun `scoreBaseTitleMatch rejects accidental stopword and substring hits`() {
+        // Common preposition "of" must never bind unrelated titles together
+        assertEquals(0, SuggestionTitleResolver.scoreBaseTitleMatch("Sword of Destiny", "Chronicles of Narnia"))
+        // Single significant token out of 3 is too weak
+        assertEquals(0, SuggestionTitleResolver.scoreBaseTitleMatch("Spear of Destiny", "Spear of Fate"))
+        // Substring "ice" inside "practice" must not match as containment
+        assertEquals(0, SuggestionTitleResolver.scoreBaseTitleMatch("Ice", "Evil Practice Game"))
+        // Real matches still pass cleanly
+        assertEquals(100, SuggestionTitleResolver.scoreBaseTitleMatch("Re:Zero (Light Novel)", "re zero"))
+        assert(SuggestionTitleResolver.scoreBaseTitleMatch("Стальной алхимик", "Стальной алхимик: Братство") >= 75)
+        assert(SuggestionTitleResolver.scoreBaseTitleMatch("Sword Art Online", "Sword Art Online: Alicization") >= 55)
+    }
+
+    @Test
+    fun `resolveCandidates ignores punctuation garbage extracted from Russian descriptions`() {
+        val russianDescription = """
+            Юный герой, живущий в далёкой деревне, однажды находит таинственный артефакт.
+            С этого дня его жизнь, полная тревог, испытаний и неожиданных встреч, меняется навсегда.
+            В 2024 году, несмотря на все трудности, он отправляется в путь.
+        """.trimIndent()
+
+        val candidates = SuggestionTitleResolver.resolveCandidates(
+            title = "Копьё Судьбы",
+            description = russianDescription,
+            metadataAlternativeTitles = listOf(" , . , . ", "   "),
+        )
+
+        assertEquals(listOf("Копьё Судьбы"), candidates)
+    }
+
+    @Test
+    fun `resolveCandidates keeps valid standalone Latin title line from description`() {
+        val description = """
+            Mushoku Tensei: Jobless Reincarnation
+            История о перерождении в фэнтезийном мире, полном магии и приключений.
+        """.trimIndent()
+
+        val candidates = SuggestionTitleResolver.resolveCandidates(
+            title = "Реинкарнация безработного",
+            description = description,
+        )
+
+        assertTrue(candidates.contains("Реинкарнация безработного"))
+        assertTrue(candidates.contains("Mushoku Tensei: Jobless Reincarnation"))
+    }
 }

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.network
 
+import android.app.ActivityManager
 import android.content.Context
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.interceptor.CoverRecoveryInterceptor
@@ -26,7 +27,14 @@ class NetworkHelper(
         (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 
+    private val isLowRamDevice: Boolean by lazy {
+        runCatching {
+            (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.isLowRamDevice == true
+        }.getOrDefault(false)
+    }
+
     private val clientBuilder: OkHttpClient.Builder = run {
+        val lowRam = isLowRamDevice
         val builder = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -34,16 +42,16 @@ class NetworkHelper(
             .callTimeout(2, TimeUnit.MINUTES)
             .dispatcher(
                 okhttp3.Dispatcher().apply {
-                    maxRequests = 64
+                    maxRequests = if (lowRam) 32 else 64
                     // Cover grids hammer a single CDN host; 8 serialized
-                    // http/1.1 connections per host was the throughput ceiling.
-                    maxRequestsPerHost = 16
+                    // http/1.1 connections per host was the throughput ceiling on normal devices.
+                    maxRequestsPerHost = if (lowRam) 8 else 16
                 },
             )
             .connectionPool(
                 okhttp3.ConnectionPool(
-                    maxIdleConnections = 15,
-                    keepAliveDuration = 5,
+                    maxIdleConnections = if (lowRam) 8 else 15,
+                    keepAliveDuration = if (lowRam) 3 else 5,
                     timeUnit = TimeUnit.MINUTES,
                 ),
             )

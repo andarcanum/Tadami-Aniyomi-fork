@@ -126,7 +126,15 @@ fun NovelReaderSettingsDialog(
         bottomStart = ZeroCornerSize,
         bottomEnd = ZeroCornerSize,
     )
-    val pageMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.62f).dp
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val pageMaxHeight = if (isLandscape) {
+        (configuration.screenHeightDp * 0.56f)
+            .coerceAtMost((configuration.screenHeightDp - 132).coerceAtLeast(140).toFloat())
+            .dp
+    } else {
+        (configuration.screenHeightDp * 0.62f).dp
+    }
 
     MaterialTheme(
         colorScheme = auroraScheme,

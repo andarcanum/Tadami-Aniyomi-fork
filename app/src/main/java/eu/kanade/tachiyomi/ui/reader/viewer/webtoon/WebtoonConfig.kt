@@ -41,6 +41,18 @@ class WebtoonConfig(
     var sidePadding = 0
         private set
 
+    var pageGapDp = -1
+        private set
+
+    var compactChapterTransition = false
+        private set
+
+    var dualPageSmartGutter = true
+        private set
+
+    var hardwareTilesEnabled = true
+        private set
+
     var doubleTapZoom = true
         private set
 
@@ -58,6 +70,18 @@ class WebtoonConfig(
 
         readerPreferences.webtoonSidePadding()
             .register({ sidePadding = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.webtoonPageGapDp()
+            .register({ pageGapDp = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.webtoonCompactChapterTransition()
+            .register({ compactChapterTransition = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.dualPageSmartGutter()
+            .register({ dualPageSmartGutter = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.hardwareTilesEnabled()
+            .register({ hardwareTilesEnabled = it }, { imagePropertyChangedListener?.invoke() })
 
         readerPreferences.navigationModeWebtoon()
             .register({ navigationMode = it }, { updateNavigation(it) })

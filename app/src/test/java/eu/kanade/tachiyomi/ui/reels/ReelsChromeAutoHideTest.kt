@@ -22,6 +22,18 @@ class ReelsChromeAutoHideTest {
     }
 
     @Test
+    fun `chrome stays reachable whenever a blocking surface is open`() {
+        reelsChromeShouldAutoHide(
+            visible = true,
+            actuallyPlaying = true,
+            hasItems = true,
+            hasError = false,
+            isLoading = false,
+            blockingSurfaceOpen = true,
+        ) shouldBe false
+    }
+
+    @Test
     fun `chrome stays reachable while the feed is errored empty stalled or paused`() {
         // Full-feed error: retry and source switch must be reachable.
         reelsChromeShouldAutoHide(
@@ -68,5 +80,71 @@ class ReelsChromeAutoHideTest {
             isLoading = false,
         ) shouldBe
             false
+    }
+
+    @Test
+    fun `status bar follows the feed chrome`() {
+        // Clean fullscreen playback: no chrome, no status icons.
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = false,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe false
+
+        // Top bar up (revealed by tap or before the auto-hide): icons are back.
+        reelsSystemChromeVisible(
+            chromeVisible = true,
+            moreMenuOpen = false,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `status bar stays while a blocking surface covers the feed`() {
+        // ⋮ settings block holds the chrome open.
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = true,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
+
+        // Search bar with the input field.
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = false,
+            isSearchBarOpen = true,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = false,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
+
+        // Any open sheet (source picker as the representative case).
+        reelsSystemChromeVisible(
+            chromeVisible = false,
+            moreMenuOpen = false,
+            isSearchBarOpen = false,
+            isFilterDialogOpen = false,
+            isSourcePickerOpen = true,
+            isLoginDialogOpen = false,
+            isCustomFeedsOpen = false,
+            isWebLoginDialogOpen = false,
+        ) shouldBe true
     }
 }

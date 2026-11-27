@@ -23,12 +23,14 @@ class RemoveAnimeFromSeriesTest {
         coEvery { repository.getSeriesForAnime(7L) } returns series
         coJustRun { repository.deleteEntry(7L) }
         coEvery { repository.getEntriesForSeries(series.id) } returns flowOf(emptyList())
+        coJustRun { repository.updateEntryPositions(any()) }
 
         interactor.await(7L)
 
         coVerify(exactly = 1) { repository.deleteEntry(7L) }
         coVerify(exactly = 0) { repository.deleteSeries(series.id) }
-        coVerify(exactly = 0) { repository.updateEntryPositions(match<List<AnimeSeriesEntry>> { true }) }
+        // The interactor re-indexes unconditionally; an empty remainder is a no-op list.
+        coVerify(exactly = 0) { repository.updateEntryPositions(match<List<AnimeSeriesEntry>> { it.isNotEmpty() }) }
     }
 
     @Test

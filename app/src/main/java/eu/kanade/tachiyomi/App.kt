@@ -44,6 +44,8 @@ import eu.kanade.presentation.tutorial.CoachTipRegistry
 import eu.kanade.tachiyomi.crash.CrashActivity
 import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
+import eu.kanade.tachiyomi.data.cache.EntryMemoryCacheTrimCallbacks
+import eu.kanade.tachiyomi.data.coil.AnimatedNativeImageDecoder
 import eu.kanade.tachiyomi.data.coil.AnimeCoverKeyer
 import eu.kanade.tachiyomi.data.coil.AnimeImageFetcher
 import eu.kanade.tachiyomi.data.coil.AnimeKeyer
@@ -95,6 +97,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -147,7 +150,15 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     @SuppressLint("LaunchActivityFromNotification")
     @OptIn(DelicateCoilApi::class)
     override fun onCreate() {
-        LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
+        val minLogPriority = if (
+            BuildConfig.DEBUG ||
+            runCatching { networkPreferences.verboseLogging().get() }.getOrDefault(false)
+        ) {
+            LogPriority.VERBOSE
+        } else {
+            LogPriority.WARN
+        }
+        LogcatLogger.install(AndroidLogcatLogger(minLogPriority))
         super<Application>.onCreate()
 
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
@@ -253,6 +264,34 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             }
         }
 
+        val translationStartupPrep = if (isMainProcess) {
+            // A restored private backup carries plaintext keys again: move them into the vault
+            // before any dispatch, and warm the catalog mirror the reader gate reads synchronously.
+            applicationScope.launch(Dispatchers.IO) {
+                try {
+                    eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.runLegacyMigration()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    logcat(LogPriority.WARN) {
+                        "Legacy translation credential migration deferred (${error.javaClass.simpleName})"
+                    }
+                }
+                try {
+                    eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.repository
+                        .pruneOrphanNovelAssignments()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    logcat(LogPriority.WARN) {
+                        "Orphan translation assignment prune deferred (${error.javaClass.simpleName})"
+                    }
+                }
+            }
+        } else {
+            null
+        }
+
         if (isMainProcess) {
             Handler(Looper.getMainLooper()).post {
                 achievementScope.launch {
@@ -267,12 +306,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                     }
                 }
 
-                // Register memory-pressure callback that trims novel plugin runtime caches
+                // Register memory-pressure callbacks that trim novel plugin & entry screen caches
                 registerComponentCallbacks(
                     NovelRuntimeCacheTrimCallbacks(
                         sourceFactory = Injekt.get<NovelPluginSourceFactory>(),
                     ),
                 )
+                registerComponentCallbacks(EntryMemoryCacheTrimCallbacks())
             }
         }
 
@@ -322,6 +362,18 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         setAppCompatDelegateThemeMode(Injekt.get<UiPreferences>().themeMode().get())
 
         if (isMainProcess) {
+            // Reconcile durable translation work after process death/enqueue-scheduling interruption.
+            // Wait for legacy migration/prune first so restored plaintext keys are vaulted before dispatch.
+            // APPEND_OR_REPLACE never resets an already active worker; that worker owns lease recovery.
+            scope.launch(Dispatchers.IO) {
+                translationStartupPrep?.join()
+                runCatching {
+                    val queue = Injekt.get<eu.kanade.tachiyomi.data.translation.TranslationQueueManager>()
+                    if (queue.repository.observeRuns().first().any { !it.status.isTerminal }) {
+                        eu.kanade.tachiyomi.data.translation.TranslationJob.runImmediately(this@App)
+                    }
+                }.onFailure { logcat(LogPriority.WARN) { "Unable to schedule translation reconciliation" } }
+            }
             // Updates widget update
             with(MangaWidgetManager(Injekt.get(), Injekt.get())) {
                 init(ProcessLifecycleOwner.get().lifecycleScope)
@@ -433,12 +485,12 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             }
         }
 
-        if (!LogcatLogger.isInstalled && networkPreferences.verboseLogging().get()) {
-            LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
-        }
-
         if (isMainProcess) {
-            BackupCreateJob.clearStaleProgressNotification(this)
+            applicationScope.launch(Dispatchers.IO) {
+                runCatching {
+                    BackupCreateJob.clearStaleProgressNotification(this@App)
+                }
+            }
         }
 
         if (isMainProcess) {
@@ -499,6 +551,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(OkHttpNetworkFetcherFactory(callFactory = { callFactoryLazy.value }))
                 add(FallbackUriFetcher.Factory(callFactoryLazy))
                 // Decoder.Factory
+                add(AnimatedNativeImageDecoder.Factory())
                 add(TachiyomiImageDecoder.Factory())
                 // Fetcher.Factory
                 add(BufferedSourceFetcher.Factory())
@@ -530,10 +583,11 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             // A 256 MB heap cap leaves little headroom next to a quarter-heap bitmap cache and
             // 24 parallel cover decodes (OOM forensics 2026-09-13).
             val isSmallHeap = Runtime.getRuntime().maxMemory() <= SMALL_HEAP_MAX_BYTES
-            allowRgb565(isLowRam)
+            val constrainedMemory = isLowRam || isSmallHeap
+            allowRgb565(constrainedMemory)
             memoryCache {
                 MemoryCache.Builder()
-                    .maxSizePercent(this@App, if (isSmallHeap) 0.15 else 0.25)
+                    .maxSizePercent(this@App, if (constrainedMemory) 0.15 else 0.25)
                     .build()
             }
             diskCache {

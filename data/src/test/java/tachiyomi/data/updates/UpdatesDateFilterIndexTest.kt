@@ -48,7 +48,9 @@ class UpdatesDateFilterIndexTest {
             // Before the migration the date filter has no usable index.
             explainPlan(driver, query) shouldNotContain "chapters_manga_id_date_upload_index"
 
-            schema.migrate(driver, schema.version - 1L, schema.version)
+            // The composite index lands in 51.sqm. Later migrations add columns/tables that a
+            // freshly created current schema already has, so apply exactly that single step.
+            schema.migrate(driver, 51L, 52L)
 
             explainPlan(driver, query) shouldContain "chapters_manga_id_date_upload_index"
         } finally {
@@ -107,7 +109,9 @@ class UpdatesDateFilterIndexTest {
             // Before the migration the date filter has no usable index.
             explainPlan(driver, query) shouldNotContain "novel_chapters_novel_id_date_fetch_index"
 
-            schema.migrate(driver, schema.version - 1L, schema.version)
+            // The composite index lands in 28.sqm. Later migrations (31/32) add columns/tables
+            // that a freshly created current schema already has, so apply exactly that step.
+            schema.migrate(driver, 28L, 29L)
 
             explainPlan(driver, query) shouldContain "novel_chapters_novel_id_date_fetch_index"
         } finally {

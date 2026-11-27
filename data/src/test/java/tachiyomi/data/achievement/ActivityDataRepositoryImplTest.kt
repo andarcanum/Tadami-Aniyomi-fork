@@ -302,4 +302,58 @@ class ActivityDataRepositoryImplTest {
         val activity = activities.first()
         assertEquals(4, activity.level) // Max level due to achievement
     }
+
+    @Test
+    fun `duration-only re-read activity keeps day active for streak continuity`() = runTest {
+        val today = LocalDate.now()
+
+        // Re-reading an already-read chapter records chaptersCount = 0 and durationMs > 0
+        repository.recordReading(id = 42L, chaptersCount = 0, durationMs = 600_000L)
+
+        val activities = repository.getActivityData(days = 1).first()
+        assertEquals(1, activities.size)
+        assertEquals(today, activities.first().date)
+        assertTrue(activities.first().level > 0)
+    }
+
+    @Test
+    fun `getActivityData advances date window dynamically across midnight without resetting streak`() = runTest {
+        var currentDay = LocalDate.of(2026, 11, 18)
+        val dynamicRepo = ActivityDataRepositoryImpl(
+            database = database,
+            todayProvider = { currentDay },
+        )
+
+        // Seed 102 consecutive active days ending on currentDay
+        for (offset in 0L until 102L) {
+            dynamicRepo.upsertActivityData(
+                date = currentDay.minusDays(offset),
+                chaptersRead = 2,
+                episodesWatched = 0,
+                appOpens = 1,
+                achievementsUnlocked = 0,
+                durationMs = 300_000L,
+            )
+        }
+
+        // Create flow before midnight (as HomeHubTab / AchievementScreenModel does)
+        val flow = dynamicRepo.getActivityData(days = 365)
+        val beforeMidnight = flow.first()
+        assertEquals(currentDay, beforeMidnight.last().date)
+
+        // Process stays alive for 2 days across midnight and records activity on both days
+        currentDay = currentDay.plusDays(1)
+        dynamicRepo.recordAppOpen()
+        currentDay = currentDay.plusDays(1)
+        dynamicRepo.recordAppOpen()
+
+        val afterTwoMidnights = flow.first()
+        assertEquals(currentDay, afterTwoMidnights.last().date)
+        assertTrue(afterTwoMidnights.last().level > 0)
+
+        // Verify all 104 consecutive days remain active
+        val tail104 = afterTwoMidnights.takeLast(104)
+        assertEquals(104, tail104.size)
+        assertTrue(tail104.all { it.level > 0 })
+    }
 }

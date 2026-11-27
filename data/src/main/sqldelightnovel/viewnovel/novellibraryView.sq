@@ -25,6 +25,7 @@ LEFT JOIN(
     LEFT JOIN novel_history
     ON novel_chapters._id = novel_history.chapter_id
     WHERE novel_excluded_scanlators.scanlator IS NULL
+    AND novel_chapters.novel_id IN (SELECT _id FROM novels WHERE favorite = 1)
     GROUP BY novel_chapters.novel_id
 ) AS C
 ON N._id = C.novel_id
@@ -35,6 +36,7 @@ LEFT JOIN(
     -- category id as the display category.
     SELECT novel_id, MIN(category_id) AS category_id
     FROM novels_categories
+    WHERE novel_id IN (SELECT _id FROM novels WHERE favorite = 1)
     GROUP BY novel_id
 ) AS NC
 ON NC.novel_id = N._id

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "source": "docs/prototypes/prototype_crystal_illustrated_v4.html",
+  "sourceSha256": "7cd7ab11c96673efe008e56bc124baae48122fae9d408ce76129eb836249ec62",
+  "svgSha256": "a700ccdc587bae3c79e7803ab4e7fea01b4e0dc1794f468821ee82dfbec53c8e",
+  "viewBox": [
+    0,
+    0,
+    640,
+    420
+  ],
+  "preserveAspectRatio": "xMidYMid meet",
+  "elements": 700,
+  "tags": [
+    "title",
+    "desc",
+    "defs",
+    "linearGradient",
+    "stop",
+    "clipPath",
+    "path",
+    "radialGradient",
+    "g",
+    "ellipse",
+    "circle",
+    "polygon",
+    "rect",
+    "svg"
+  ],
+  "nativeRuntime": "Compose + cached Android Canvas/PathParser; no HTML/JS runtime",
+  "note": "Final post-mutation v4 after validated gesture/physics/contact/eink fixes. Dynamic CSS transforms removed; class roles, SVG transforms, gradient tokens and pivots preserved."
+}

@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.translation
 
 import android.app.Application
+import eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -16,7 +17,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationSer
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.effectiveTranslationBatchSize
 import eu.kanade.tachiyomi.ui.reader.novel.translation.hasConfiguredTranslationProvider
-import eu.kanade.tachiyomi.ui.reader.novel.translation.shouldUseSinglePrivateChapterRequestMode
+import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveGeminiModelCapabilities
 import eu.kanade.tachiyomi.ui.reader.novel.translation.supportsAdultPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toDeepSeekTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toGeminiTranslationParams
@@ -24,22 +25,25 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.toMistralTranslationParam
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toNvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOllamaCloudTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOpenRouterTranslationParams
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheNamespace
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationConcurrencyLimit
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationRequestConfigLog
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.translation.credentials.CredentialSecret
+import tachiyomi.domain.translation.model.TranslationAttemptException
+import tachiyomi.domain.translation.model.TranslationFailure
+import tachiyomi.domain.translation.model.TranslationFailureKind
+import tachiyomi.domain.translation.model.TranslationFragment
+import tachiyomi.domain.translation.model.TranslationRun
+import tachiyomi.domain.translation.service.TranslationChunkExecutor
+import tachiyomi.domain.translation.service.TranslationFragmentPlanner
+import tachiyomi.domain.translation.service.TranslationPassResult
+import tachiyomi.domain.translation.service.TranslationPassState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.util.concurrent.ConcurrentHashMap
 
 class NovelChapterTranslationProcessor(
     private val application: Application = Injekt.get(),
@@ -114,8 +118,12 @@ class NovelChapterTranslationProcessor(
             json = json,
         )
     },
+    private val resolveCredential: suspend (NovelTranslationProvider, Long?) -> CredentialSecret? =
+        { provider, sourceId -> TranslationProfileServices.legacyCredentials.resolveLegacyOrNull(provider, sourceId) },
+    private val profileRuntime: eu.kanade.tachiyomi.data.translation.profile.ProfileTranslationRuntime? = null,
 ) {
 
+    /** Compatibility entry point. An incomplete map must never look like a successful chapter. */
     suspend fun translateSegments(
         segments: List<String>,
         settings: NovelReaderSettings,
@@ -123,293 +131,165 @@ class NovelChapterTranslationProcessor(
         onProgress: ((Int) -> Unit)? = null,
     ): Map<Int, String> {
         if (segments.isEmpty()) return emptyMap()
-        if (!settings.geminiEnabled) {
-            throw IllegalStateException("Translation is disabled")
+        val initial = TranslationFragmentPlanner.plan(segments, maxFragmentChars(settings))
+        val current = initial.associateBy { it.id }.toMutableMap()
+        val result = translateFragments(initial, settings, onLog = onLog, checkpoint = { changes ->
+            changes.forEach { current[it.id] = it }
+            onProgress?.invoke(TranslationFragmentPlanner.progress(current.values.toList()))
+        })
+        val translated = TranslationFragmentPlanner.assemble(result.fragments)
+        if (result.state != TranslationPassState.COMPLETE || translated.keys != segments.indices.toSet()) {
+            throw IncompleteChapterTranslationException(translated, result)
         }
-        if (!settings.hasConfiguredTranslationProvider()) {
-            throw IllegalStateException("Translation provider is not configured")
-        }
+        return translated
+    }
 
+    suspend fun translateFragments(
+        fragments: List<TranslationFragment>,
+        settings: NovelReaderSettings,
+        onLog: ((String) -> Unit)? = null,
+        beforeRequest: suspend () -> Boolean = { true },
+        checkpoint: suspend (List<TranslationFragment>) -> Unit = {},
+        executor: TranslationChunkExecutor = TranslationChunkExecutor(),
+        profileSnapshot: TranslationQueueProfileSnapshot? = null,
+        run: TranslationRun? = null,
+    ): TranslationPassResult {
+        if (profileSnapshot?.snapshotVersion == 2) {
+            val owner = run ?: throw TranslationAttemptException(
+                TranslationFailure(
+                    TranslationFailureKind.CONFIGURATION,
+                    "Profile translation needs an owned durable run",
+                    attempted = false,
+                ),
+            )
+            return (profileRuntime ?: TranslationProfileServices.runtime).translateFragments(
+                owner,
+                profileSnapshot,
+                fragments,
+                beforeRequest,
+                checkpoint,
+            )
+        }
+        if (!settings.geminiEnabled || !settings.hasConfiguredTranslationProvider()) {
+            throw TranslationAttemptException(
+                TranslationFailure(
+                    TranslationFailureKind.CONFIGURATION,
+                    "Translation provider is not configured or is disabled",
+                ),
+            )
+        }
         onLog?.invoke(settings.translationRequestConfigLog())
-
-        // Every prompt-shaping setting is part of the cache identity: the old (text, targetLang)
-        // key kept serving (and re-stamping into the disk cache) translations produced by a
-        // different provider/model/prompt/style after the user switched settings.
-        val cacheNamespace = settings.translationCacheNamespace()
         if (settings.geminiPromptMode == GeminiPromptMode.ADULT_18 &&
             !settings.translationProvider.supportsAdultPromptMode()
         ) {
-            // Honest fallback: the provider has no 18+ prompt asset and translates with CLASSIC.
-            onLog?.invoke(
-                "Prompt mode ADULT_18 is not supported by ${settings.translationProvider.name}; " +
-                    "the CLASSIC system prompt is used instead.",
-            )
+            onLog?.invoke("The selected provider uses the CLASSIC prompt; ADULT_18 is unavailable")
         }
-        val translated = mutableMapOf<Int, String>()
-        val indexedBlocks = segments.mapIndexed { index, text -> index to text }
-        val nonCachedSegments = mutableListOf<Pair<Int, String>>()
+        return executor.execute(
+            fragments = fragments,
+            maxBatchSize = settings.effectiveTranslationBatchSize(),
+            maxRequestChars = maxRequestChars(settings),
+            concurrency = settings.translationConcurrencyLimit(),
+            beforeRequest = beforeRequest,
+            request = { texts -> requestTranslationBatch(texts, settings, onLog) },
+            checkpoint = checkpoint,
+        )
+    }
 
-        indexedBlocks.forEach { (index, text) ->
-            val cachedTranslation = segmentTranslationCache[SegmentCacheKey(cacheNamespace, text)]
-            if (!cachedTranslation.isNullOrBlank()) {
-                translated[index] = cachedTranslation
-            } else {
-                nonCachedSegments.add(index to text)
-            }
+    fun maxFragmentChars(settings: NovelReaderSettings): Int = minOf(2_000, maxRequestChars(settings)).coerceAtLeast(32)
+
+    private fun maxRequestChars(settings: NovelReaderSettings): Int {
+        if (settings.translationProfile != null) {
+            val frozen = (
+                settings.geminiFrozenGenerationConfig?.get("maxOutputTokens") as?
+                    kotlinx.serialization.json.JsonPrimitive
+                )?.content?.toIntOrNull()
+            val output = frozen ?: settings.translationProfile.generation.maxOutputTokens ?: 8_192
+            return minOf(8_000, output / 3).coerceAtLeast(32)
         }
-
-        if (nonCachedSegments.isEmpty()) {
-            onLog?.invoke("All segments successfully loaded from in-memory cache!")
-            onProgress?.invoke(100)
-            return translated.toMap()
+        val outputTokens = when (settings.translationProvider) {
+            NovelTranslationProvider.GEMINI -> (
+                settings.geminiFrozenGenerationConfig?.get(
+                    "maxOutputTokens",
+                ) as? kotlinx.serialization.json.JsonPrimitive
+                )?.let {
+                it.content.toIntOrNull()
+            } ?: resolveGeminiModelCapabilities(settings.geminiModel).maxOutputTokens()
+            NovelTranslationProvider.GEMINI_PRIVATE -> 16_384
+            NovelTranslationProvider.OPENROUTER -> 16_384
+            NovelTranslationProvider.DEEPSEEK -> 8_192
+            else -> 8_192
         }
-
-        val updateMutex = Mutex()
-
-        suspend fun runChunkedTranslation(
-            chunks: List<List<Pair<Int, String>>>,
-            chunkSize: Int,
-            concurrencyLimit: Int,
-            strictOnNull: Boolean,
-        ) {
-            if (chunks.isEmpty()) return
-            val semaphore = Semaphore(concurrencyLimit)
-            var completedChunks = 0
-            onLog?.invoke(
-                "Split chapter into ${chunks.size} chunks (batch=$chunkSize, concurrency=$concurrencyLimit)",
-            )
-
-            coroutineScope {
-                chunks.mapIndexed { chunkIndex, chunk ->
-                    async {
-                        semaphore.withPermit {
-                            onLog?.invoke("Requesting chunk ${chunkIndex + 1}/${chunks.size}")
-                            val primaryResult = requestTranslationBatch(
-                                segments = chunk.map { it.second },
-                                settings = settings,
-                                onLog = onLog,
-                            )
-                            val result = recoverIncompleteChunk(
-                                provider = settings.translationProvider,
-                                chunk = chunk,
-                                result = primaryResult,
-                                settings = settings,
-                                onLog = onLog,
-                            )
-                            if (result == null && strictOnNull) {
-                                throw IllegalStateException(
-                                    "${settings.translationProvider} returned an empty response for chunk ${chunkIndex + 1}",
-                                )
-                            }
-                            if (result == null) {
-                                onLog?.invoke(
-                                    "[${settings.translationProvider}] Chunk ${chunkIndex + 1}/${chunks.size} returned empty response (skipped)",
-                                )
-                            }
-
-                            updateMutex.withLock {
-                                if (result != null) {
-                                    result.forEachIndexed { localIndex, text ->
-                                        val pair = chunk.getOrNull(localIndex) ?: return@forEachIndexed
-                                        val originalIndex = pair.first
-                                        val originalText = pair.second
-                                        if (!text.isNullOrBlank()) {
-                                            translated[originalIndex] = text
-                                            segmentTranslationCache[SegmentCacheKey(cacheNamespace, originalText)] =
-                                                text
-                                        }
-                                    }
-                                }
-                                completedChunks += 1
-                                val progress = ((completedChunks.toFloat() / chunks.size.toFloat()) * 100f)
-                                    .toInt()
-                                    .coerceIn(0, 100)
-                                onProgress?.invoke(progress)
-                            }
-                        }
-                    }
-                }.awaitAll()
-            }
-        }
-
-        try {
-            if (settings.shouldUseSinglePrivateChapterRequestMode()) {
-                onLog?.invoke("Private Gemini mode: requesting the whole chapter at once")
-                val singleResult = requestTranslationBatch(
-                    segments = nonCachedSegments.map { it.second },
-                    settings = settings,
-                    onLog = onLog,
+        // Conservative language expansion/reasoning headroom; exact tokenizer support is not assumed.
+        val inputBudget = if (settings.translationProvider == NovelTranslationProvider.GEMINI) {
+            (
+                settings.geminiFrozenInputTokenLimit
+                    ?: resolveGeminiModelCapabilities(settings.geminiModel).inputTokenLimit
                 )
-                val singleSuccess = singleResult?.any { !it.isNullOrBlank() } == true
-                if (singleSuccess) {
-                    singleResult.orEmpty().forEachIndexed { index, text ->
-                        if (!text.isNullOrBlank()) {
-                            val pair = nonCachedSegments.getOrNull(index) ?: return@forEachIndexed
-                            val originalIndex = pair.first
-                            val originalText = pair.second
-                            translated[originalIndex] = text
-                            segmentTranslationCache[SegmentCacheKey(cacheNamespace, originalText)] = text
-                        }
-                    }
-                    onProgress?.invoke(100)
-                } else {
-                    onLog?.invoke(
-                        "Single chapter request failed, falling back to chunked mode " +
-                            "(batch=$PRIVATE_FALLBACK_CHUNK_SIZE, concurrency=$PRIVATE_FALLBACK_CONCURRENCY)",
-                    )
-                    val fallbackChunks = nonCachedSegments.chunked(PRIVATE_FALLBACK_CHUNK_SIZE)
-                    runChunkedTranslation(
-                        chunks = fallbackChunks,
-                        chunkSize = PRIVATE_FALLBACK_CHUNK_SIZE,
-                        concurrencyLimit = PRIVATE_FALLBACK_CONCURRENCY,
-                        strictOnNull = !settings.geminiRelaxedMode,
-                    )
-                }
-            } else {
-                val chunkSize = settings.effectiveTranslationBatchSize()
-                val chunks = nonCachedSegments.chunked(chunkSize)
-                runChunkedTranslation(
-                    chunks = chunks,
-                    chunkSize = chunkSize,
-                    concurrencyLimit = settings.translationConcurrencyLimit(),
-                    strictOnNull = !settings.geminiRelaxedMode,
-                )
-            }
-        } catch (error: Exception) {
-            logcat(LogPriority.WARN, error) { "Background chapter translation failed" }
-            throw error
+                ?.let { ((it - 4_096).coerceAtLeast(160) / 5) }
+        } else {
+            null
         }
-
-        if (translated.isEmpty()) {
-            val providerName = settings.translationProvider.name
-            throw IllegalStateException(
-                "$providerName returned no translated blocks. Check model, API key, and quota in logs.",
-            )
-        }
-
-        return translated.toMap()
+        return minOf(8_000, outputTokens / 3, inputBudget ?: Int.MAX_VALUE).coerceAtLeast(32)
     }
 
     private suspend fun requestTranslationBatch(
         segments: List<String>,
         settings: NovelReaderSettings,
-        onLog: ((String) -> Unit)? = null,
-    ): List<String?>? {
-        return when (settings.translationProvider) {
-            NovelTranslationProvider.GEMINI -> {
-                geminiTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toGeminiTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.GEMINI_PRIVATE -> {
-                geminiTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toGeminiTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.OPENROUTER -> {
-                openRouterTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toOpenRouterTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.DEEPSEEK -> {
-                deepSeekTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toDeepSeekTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.MISTRAL -> {
-                mistralTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toMistralTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.NVIDIA -> {
-                nvidiaTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toNvidiaTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.OLLAMA_CLOUD -> {
-                ollamaCloudTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toOllamaCloudTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-        }
-    }
-
-    private suspend fun recoverIncompleteChunk(
-        provider: NovelTranslationProvider,
-        chunk: List<Pair<Int, String>>,
-        result: List<String?>?,
-        settings: NovelReaderSettings,
         onLog: ((String) -> Unit)?,
     ): List<String?>? {
-        if (!provider.supportsGranularFallback()) return result
-        if (chunk.isEmpty()) return result
-
-        val recovered = MutableList<String?>(chunk.size) { index ->
-            result?.getOrNull(index)
-        }
-        val missingIndexes = chunk.indices.filter { index ->
-            recovered.getOrNull(index).isNullOrBlank()
-        }
-        if (missingIndexes.isEmpty()) return recovered
-
-        if (result == null || result.all { it.isNullOrBlank() }) {
-            onLog?.invoke("[$provider] Chunk response had no translated blocks, retrying segments individually")
-        } else {
-            onLog?.invoke(
-                "[$provider] Chunk response had missing ${missingIndexes.size}/${chunk.size} translated blocks, " +
-                    "retrying missing segments individually",
-            )
-        }
-
-        missingIndexes.forEach { localIndex ->
-            val text = chunk.getOrNull(localIndex)?.second ?: return@forEach
-            val single = requestTranslationBatch(
-                segments = listOf(text),
-                settings = settings,
-                onLog = onLog,
-            )
-            val translated = single?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
-            if (translated != null) {
-                recovered[localIndex] = translated
+        val credential = resolveCredential(settings.translationProvider, settings.translationSourceId)
+        try {
+            return when (settings.translationProvider) {
+                NovelTranslationProvider.GEMINI,
+                NovelTranslationProvider.GEMINI_PRIVATE,
+                -> geminiTranslationService.translateBatch(
+                    segments,
+                    settings.toGeminiTranslationParams(
+                        apiKey =
+                        credential?.reveal() ?: settings.geminiApiKey,
+                    ),
+                    onLog,
+                )
+                NovelTranslationProvider.OPENROUTER -> openRouterTranslationService.translateBatch(
+                    segments,
+                    settings.toOpenRouterTranslationParams(apiKey = credential?.reveal() ?: settings.openRouterApiKey),
+                    onLog,
+                )
+                NovelTranslationProvider.DEEPSEEK -> deepSeekTranslationService.translateBatch(
+                    segments,
+                    settings.toDeepSeekTranslationParams(apiKey = credential?.reveal() ?: settings.deepSeekApiKey),
+                    onLog,
+                )
+                NovelTranslationProvider.MISTRAL -> mistralTranslationService.translateBatch(
+                    segments,
+                    settings.toMistralTranslationParams(apiKey = credential?.reveal() ?: settings.mistralApiKey),
+                    onLog,
+                )
+                NovelTranslationProvider.NVIDIA -> nvidiaTranslationService.translateBatch(
+                    segments,
+                    settings.toNvidiaTranslationParams(apiKey = credential?.reveal() ?: settings.nvidiaApiKey),
+                    onLog,
+                )
+                NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudTranslationService.translateBatch(
+                    segments,
+                    settings.toOllamaCloudTranslationParams(
+                        apiKey = credential?.reveal() ?: settings.ollamaCloudApiKey,
+                    ),
+                    onLog,
+                )
             }
+        } finally {
+            credential?.close()
         }
-        return if (recovered.any { !it.isNullOrBlank() }) recovered else result
     }
 
     companion object {
-        private val segmentTranslationCache = ConcurrentHashMap<SegmentCacheKey, String>()
-
-        fun clearCache() {
-            segmentTranslationCache.clear()
-        }
+        /** Kept for old callers. Cross-chapter process-global text reuse was intentionally removed. */
+        fun clearCache() = Unit
     }
-
-    /** In-memory segment cache key: the settings namespace plus the source text. */
-    private data class SegmentCacheKey(
-        val namespace: String,
-        val text: String,
-    )
 }
 
-private fun NovelTranslationProvider.supportsGranularFallback(): Boolean {
-    return this == NovelTranslationProvider.MISTRAL ||
-        this == NovelTranslationProvider.NVIDIA ||
-        this == NovelTranslationProvider.OLLAMA_CLOUD
-}
-
-private const val PRIVATE_FALLBACK_CHUNK_SIZE = 40
-private const val PRIVATE_FALLBACK_CONCURRENCY = 1
+class IncompleteChapterTranslationException(
+    val translatedByIndex: Map<Int, String>,
+    val result: TranslationPassResult,
+) : IllegalStateException(result.failure?.message ?: "Chapter translation is incomplete")

@@ -21,4 +21,34 @@ class ReelsVideoPageMediaPlanTest {
         reelMediaPlan("", hasResolver = false, lazyResolution = true) shouldBe ReelMediaPlan.UNPLAYABLE
         reelMediaPlan("", hasResolver = false, lazyResolution = false) shouldBe ReelMediaPlan.UNPLAYABLE
     }
+
+    @Test
+    fun `quality mode waits while resolving and becomes unplayable when quality preparation fails`() {
+        reelMediaPlan(
+            rawUrl = "",
+            hasResolver = false,
+            lazyResolution = false,
+            qualityModeEnabled = true,
+            qualitySwitching = true,
+            qualityHasFailure = false,
+        ) shouldBe ReelMediaPlan.WAIT
+
+        reelMediaPlan(
+            rawUrl = "",
+            hasResolver = false,
+            lazyResolution = false,
+            qualityModeEnabled = true,
+            qualitySwitching = false,
+            qualityHasFailure = true,
+        ) shouldBe ReelMediaPlan.UNPLAYABLE
+
+        reelMediaPlan(
+            rawUrl = "https://cdn.example.com/720.mp4",
+            hasResolver = false,
+            lazyResolution = false,
+            qualityModeEnabled = true,
+            qualitySwitching = false,
+            qualityHasFailure = true,
+        ) shouldBe ReelMediaPlan.READY
+    }
 }

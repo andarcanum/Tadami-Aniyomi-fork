@@ -52,6 +52,7 @@ import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -305,7 +306,8 @@ private fun NovelUpdateCard(
     val update = item.update
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
     val context = LocalContext.current
-    val coverRequest = remember(update.coverData) {
+    val coverReloadTick = rememberCoverReloadTick()
+    val coverRequest = remember(context, update.coverData, coverReloadTick) {
         buildAuroraCoverImageRequest(context, update.coverData)
     }
 

@@ -1,13 +1,28 @@
 package tachiyomi.domain.discovery.repository
 
 import kotlinx.coroutines.flow.Flow
+import tachiyomi.domain.discovery.model.DiscoveryBatchReceipt
 import tachiyomi.domain.discovery.model.DiscoveryBlacklistEntry
+import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
+import tachiyomi.domain.discovery.model.DiscoveryFactKind
+import tachiyomi.domain.discovery.model.DiscoveryGenerationToken
 import tachiyomi.domain.discovery.model.DiscoveryHiddenEntry
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryPositiveReceipt
+import tachiyomi.domain.discovery.model.DiscoveryPreparedPool
+import tachiyomi.domain.discovery.model.DiscoveryPublicationSnapshot
+import tachiyomi.domain.discovery.model.DiscoveryPublishReceipt
+import tachiyomi.domain.discovery.model.DiscoveryRetirementPolicy
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignal
 import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.DiscoverySourceCursor
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.DiscoveryTasteMetadata
+import tachiyomi.domain.discovery.model.DiscoveryTasteRecord
+import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
+import tachiyomi.domain.discovery.model.DiscoveryTitleMemory
+import tachiyomi.domain.discovery.model.DiscoveryTopUpReceipt
 
 interface DiscoveryRepository {
     fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>>
@@ -158,4 +173,116 @@ interface DiscoveryRepository {
     /** Backup (Taste Engine): полный сброс + идемпотентный restore. */
     suspend fun clearAllSignals()
     suspend fun restoreSignals(signals: List<DiscoverySignal>)
+
+    // ==================== Publication / memory (v2) ====================
+
+    fun observePublication(media: DiscoveryMediaType): Flow<DiscoveryPublicationSnapshot>
+    fun observeTitleMemory(media: DiscoveryMediaType): Flow<List<DiscoveryTitleMemory>>
+    fun observeTaste(media: DiscoveryMediaType): Flow<List<DiscoveryTasteRecord>>
+
+    suspend fun publication(media: DiscoveryMediaType): DiscoveryPublicationSnapshot
+    suspend fun eligibility(media: DiscoveryMediaType): DiscoveryEligibilitySnapshot
+    suspend fun resolveIdentity(identity: DiscoveryTitleIdentity): DiscoveryTitleIdentity
+    suspend fun installConfigurationKey(media: DiscoveryMediaType, key: String)
+
+    suspend fun reserveGeneration(
+        media: DiscoveryMediaType,
+        requestId: String,
+        expectedGeneration: Long,
+        configurationKey: String,
+    ): DiscoveryGenerationToken?
+
+    suspend fun revokeGeneration(media: DiscoveryMediaType, requestId: String)
+    suspend fun publishGeneration(
+        token: DiscoveryGenerationToken,
+        prepared: DiscoveryPreparedPool,
+        retirement: DiscoveryRetirementPolicy = DiscoveryRetirementPolicy.RETIRE_ALL,
+    ): DiscoveryPublishReceipt
+
+    suspend fun nextHomeBatch(
+        media: DiscoveryMediaType,
+        generation: Long,
+        rankedKeys: List<String>,
+    ): DiscoveryBatchReceipt
+
+    suspend fun reconcileHomeBatch(
+        media: DiscoveryMediaType,
+        generation: Long,
+        rankedKeys: List<String>,
+    ): DiscoveryBatchReceipt
+
+    suspend fun topUpPool(
+        media: DiscoveryMediaType,
+        expectedGeneration: Long,
+        additions: List<DiscoverySuggestion>,
+        cursors: List<DiscoverySourceCursor>,
+        maxPoolSize: Int,
+    ): DiscoveryTopUpReceipt
+
+    suspend fun recordTaste(
+        identity: DiscoveryTitleIdentity,
+        kind: DiscoverySignalType,
+        metadata: DiscoveryTasteMetadata,
+    ): DiscoveryPositiveReceipt?
+
+    suspend fun recordNegativeTaste(
+        identity: DiscoveryTitleIdentity,
+        metadata: DiscoveryTasteMetadata,
+    ): Long? {
+        val cleanTitle = identity.primaryCleanTitle
+        hide(identity.mediaType, cleanTitle)
+        return recordSignalWithReceipt(
+            mediaType = identity.mediaType,
+            cleanTitle = cleanTitle,
+            title = metadata.title.ifBlank { identity.title },
+            signalType = DiscoverySignalType.HIDE,
+            genres = metadata.genres,
+            provider = metadata.provider,
+            sourceKey = metadata.sourceKey,
+            timestamp = metadata.changedAt,
+        )
+    }
+
+    suspend fun recordConsumedTaste(
+        identity: DiscoveryTitleIdentity,
+        metadata: DiscoveryTasteMetadata,
+    ): Long? = recordSignalWithReceipt(
+        mediaType = identity.mediaType,
+        cleanTitle = identity.primaryCleanTitle,
+        title = metadata.title.ifBlank { identity.title },
+        signalType = DiscoverySignalType.CONSUMED,
+        genres = metadata.genres,
+        provider = metadata.provider,
+        sourceKey = metadata.sourceKey,
+        timestamp = metadata.changedAt,
+    )
+
+    suspend fun clearConsumedSignal(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        identityKey: String? = null,
+    ) {
+        removeSignal(mediaType, cleanTitle)
+        if (!identityKey.isNullOrBlank()) {
+            clearFact(mediaType, identityKey, DiscoveryFactKind.EXPLICIT_CONSUMED)
+        }
+    }
+
+    suspend fun enrichTasteMetadata(
+        media: DiscoveryMediaType,
+        identityKey: String,
+        expectedPositiveAt: Long,
+        metadata: DiscoveryTasteMetadata,
+    ): Boolean
+
+    suspend fun getTasteRecords(media: DiscoveryMediaType): List<DiscoveryTasteRecord>
+    suspend fun recordFact(identity: DiscoveryTitleIdentity, kind: DiscoveryFactKind)
+    suspend fun clearFact(media: DiscoveryMediaType, key: String, kind: DiscoveryFactKind)
+    suspend fun clearTaste(media: DiscoveryMediaType?)
+    suspend fun clearRetirementBlocks(): Int
+    suspend fun getTitleMemory(media: DiscoveryMediaType): List<DiscoveryTitleMemory> = emptyList()
+    suspend fun getTasteResetEpochs(): Map<DiscoveryMediaType, Long> = emptyMap()
+    suspend fun restoreTitleMemory(records: List<DiscoveryTitleMemory>)
+    suspend fun restoreTasteRecords(records: List<DiscoveryTasteRecord>)
+    suspend fun restoreTasteResetEpochs(epochs: Map<DiscoveryMediaType, Long>)
 }

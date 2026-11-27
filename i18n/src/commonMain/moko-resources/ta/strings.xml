@@ -376,7 +376,6 @@
     <string name="pref_flash_duration_summary">%1$s MS</string>
     <string name="pref_flash_page_interval">ஒவ்வொரு ஃபிளாச்</string>
     <string name="pref_flash_with">உடன் ஃபிளாச்</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">செயல்திறனை பாதிக்கிறது. பிட்மேப் வாசலைக் குறைப்பது வெற்று பட சிக்கல்களை சரிசெய்யவில்லை என்றால் மட்டுமே இயக்கவும்</string>
     <string name="pref_flash_style_black">கருப்பு</string>
     <string name="pref_flash_style_white">வெள்ளை</string>
     <string name="pref_flash_style_white_black">வெள்ளை மற்றும் கருப்பு</string>
@@ -387,7 +386,6 @@
     <string name="pref_hardware_bitmap_threshold">தனிப்பயன் வன்பொருள் பிட்மேப் வாசல்</string>
     <string name="pref_hardware_bitmap_threshold_default">இயல்புநிலை (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">வாசகர் ஒரு வெற்று படத்தை ஏற்றினால், வாசலைக் குறைக்கும்.\n தேர்ந்தெடுக்கப்பட்டது: %s</string>
-    <string name="pref_display_profile">தனிப்பயன் காட்சி சுயவிவரம்</string>
     <string name="filter_mode_overlay">மேலடுக்கு</string>
     <string name="pref_crop_borders">பயிர் எல்லைகள்</string>
     <string name="pref_custom_brightness">தனிப்பயன் ஒளி</string>

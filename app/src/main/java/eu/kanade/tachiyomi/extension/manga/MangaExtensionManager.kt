@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.extension.manga
+package eu.kanade.tachiyomi.extension.manga
 
 import android.content.Context
 import android.graphics.drawable.Drawable
@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.extension.manga.model.selectMangaReinstallCandidates
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallReceiver
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstaller
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionLoader
+import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +42,8 @@ import logcat.LogPriority
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.discovery.model.DiscoverySourceInventory
+import tachiyomi.domain.discovery.model.DiscoverySourcePlugin
 import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
@@ -100,7 +103,58 @@ class MangaExtensionManager(
     private var sourceIdToPackageName = emptyMap<Long, String>()
 
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Installed>())
-    val installedExtensionsFlow = installedExtensionsMapFlow.mapExtensions(scope)
+    val installedExtensionsFlow: StateFlow<List<MangaExtension.Installed>> by lazy {
+        installedExtensionsMapFlow.mapExtensions(scope)
+    }
+
+    @Volatile
+    private var cachedDiscoveryInventory: Pair<Map<String, MangaExtension.Installed>, DiscoverySourceInventory>? = null
+
+    /** Raw installed inventory is loaded synchronously before this manager is published. */
+    fun discoverySourceInventory(): DiscoverySourceInventory {
+        val currentMap = installedExtensionsMapFlow.value
+        cachedDiscoveryInventory?.takeIf { it.first === currentMap }?.let { return it.second }
+        return discoveryInventory(currentMap.values).also { inventory ->
+            cachedDiscoveryInventory = currentMap to inventory
+        }
+    }
+
+    internal fun isDiscoverySourceBinding(
+        sourceId: Long,
+        source: Any,
+        allowedOwners: Set<String>,
+        expected: DiscoverySourceInventory,
+    ): Boolean {
+        val currentMap = installedExtensionsMapFlow.value
+        val inventory = discoverySourceInventory()
+        val matchesExpected = inventory === expected ||
+            (inventory.complete == expected.complete && inventory.plugins == expected.plugins)
+        return matchesExpected &&
+            currentMap.values.any { extension ->
+                extension.pkgName in allowedOwners && extension.sources.any {
+                    it is CatalogueSource && it.id == sourceId && it === source
+                }
+            }
+    }
+
+    val discoverySourceInventoryChanges: Flow<DiscoverySourceInventory> = installedExtensionsMapFlow.map {
+        discoverySourceInventory()
+    }
+
+    private fun discoveryInventory(extensions: Collection<MangaExtension.Installed>): DiscoverySourceInventory =
+        DiscoverySourceInventory(
+            complete = true,
+            plugins = extensions.mapNotNull { extension ->
+                val sources = extension.sources.filterIsInstance<CatalogueSource>()
+                if (sources.isEmpty()) return@mapNotNull null
+                DiscoverySourcePlugin(
+                    key = extension.pkgName,
+                    sourceIds = sources.map { it.id },
+                    langs = sources.associate { it.id to it.lang },
+                    version = extension.versionCode.toString(),
+                )
+            },
+        )
 
     private val availableExtensionsStateFlow = MutableStateFlow(emptyList<MangaExtension.Available>())
     val availableExtensionsFlow: StateFlow<List<MangaExtension.Available>> = availableExtensionsStateFlow.asStateFlow()
@@ -108,7 +162,9 @@ class MangaExtensionManager(
     private val availableExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Available>())
 
     private val untrustedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Untrusted>())
-    val untrustedExtensionsFlow = untrustedExtensionsMapFlow.mapExtensions(scope)
+    val untrustedExtensionsFlow: StateFlow<List<MangaExtension.Untrusted>> by lazy {
+        untrustedExtensionsMapFlow.mapExtensions(scope)
+    }
 
     /**
      * Install attempts that failed because the APK is signed with a different key than the

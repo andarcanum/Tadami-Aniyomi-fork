@@ -29,6 +29,7 @@ object PlayerSettingsAudioScreen : SearchableSettings {
 
         val prefLangs = audioPreferences.preferredAudioLanguages()
         val pitchCorrection = audioPreferences.enablePitchCorrection()
+        val audioNormalization = audioPreferences.audioNormalization()
         val audioChannels = audioPreferences.audioChannels()
         val boostCapPref = audioPreferences.volumeBoostCap()
         val boostCap by boostCapPref.collectAsState()
@@ -79,6 +80,11 @@ object PlayerSettingsAudioScreen : SearchableSettings {
                 preference = pitchCorrection,
                 title = stringResource(AYMR.strings.pref_player_audio_pitch_correction),
                 subtitle = stringResource(AYMR.strings.pref_player_audio_pitch_correction_summary),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = audioNormalization,
+                title = stringResource(AYMR.strings.pref_player_audio_normalization),
+                subtitle = stringResource(AYMR.strings.pref_player_audio_normalization_summary),
             ),
             Preference.PreferenceItem.ListPreference(
                 preference = audioChannels,

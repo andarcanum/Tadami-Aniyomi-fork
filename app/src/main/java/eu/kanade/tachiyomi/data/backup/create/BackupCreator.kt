@@ -33,6 +33,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ReelsFavoritesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ReelsFollowsBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.TranslationConfigurationBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
@@ -116,6 +117,8 @@ class BackupCreator(
     private val extensionsBackupCreator: ExtensionsBackupCreator = ExtensionsBackupCreator(context),
     private val achievementBackupCreator: AchievementBackupCreator = AchievementBackupCreator(),
     private val achievementHandler: AchievementHandler = Injekt.get(),
+    private val translationConfigurationBackupCreator: TranslationConfigurationBackupCreator =
+        TranslationConfigurationBackupCreator(),
 ) {
 
     suspend fun backup(uri: Uri, options: BackupOptions): String = backupCreationMutex.withLock {
@@ -230,11 +233,7 @@ class BackupCreator(
                 if (options.discoveryData && !options.sisterAppCompatible) {
                     discoveryBackupCreator()
                 } else {
-                    Triple(
-                        emptyList<eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryHidden>(),
-                        emptyList<eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTag>(),
-                        emptyList<eu.kanade.tachiyomi.data.backup.models.BackupDiscoverySignal>(),
-                    )
+                    eu.kanade.tachiyomi.data.backup.create.creators.DiscoveryBackupPayload()
                 }
             }
 
@@ -299,6 +298,7 @@ class BackupCreator(
                 backupUserProfile = if (options.sisterAppCompatible) null else achievementData.userProfile,
                 backupActivityLog = if (options.sisterAppCompatible) emptyList() else achievementData.activityLog,
                 backupStats = if (options.sisterAppCompatible) null else achievementData.stats,
+                backupCrystalMemorial = if (options.sisterAppCompatible) null else achievementData.crystalMemorial,
                 backupMangaSeries = if (options.sisterAppCompatible) emptyList() else backupMangaSeries,
                 backupNovelSeries = if (options.sisterAppCompatible) emptyList() else backupNovelSeries,
                 backupAnimeSeries = if (options.sisterAppCompatible) emptyList() else backupAnimeSeries,
@@ -309,9 +309,20 @@ class BackupCreator(
                     backupReelsFavorites
                 },
                 backupReelsFollows = if (options.sisterAppCompatible) emptyList() else backupReelsFollows,
-                backupDiscoveryHidden = if (options.sisterAppCompatible) emptyList() else backupDiscovery.first,
-                backupDiscoveryBlacklistTags = if (options.sisterAppCompatible) emptyList() else backupDiscovery.second,
-                backupDiscoverySignals = if (options.sisterAppCompatible) emptyList() else backupDiscovery.third,
+                backupDiscoveryHidden = if (options.sisterAppCompatible) emptyList() else backupDiscovery.hidden,
+                backupDiscoveryBlacklistTags = if (options.sisterAppCompatible) emptyList() else backupDiscovery.tags,
+                backupDiscoverySignals = if (options.sisterAppCompatible) emptyList() else backupDiscovery.signals,
+                backupTranslationConfiguration = translationConfigurationBackupCreator(options),
+                backupDiscoveryTitleMemory = if (options.sisterAppCompatible) {
+                    emptyList()
+                } else {
+                    backupDiscovery.titleMemory
+                },
+                backupDiscoveryTasteResetEpochs = if (options.sisterAppCompatible) {
+                    emptyList()
+                } else {
+                    backupDiscovery.tasteResetEpochs
+                },
             )
 
             // The object above already mirrors the wire: sister mode flattens novels into the

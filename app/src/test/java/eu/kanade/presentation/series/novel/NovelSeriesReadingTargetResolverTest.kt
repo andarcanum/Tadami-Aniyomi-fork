@@ -83,6 +83,101 @@ class NovelSeriesReadingTargetResolverTest {
         )
     }
 
+    @Test
+    fun `book position takes precedence within the last read volume`() {
+        val series = series(
+            listOf(
+                libraryNovel(id = 10L, title = "One", totalChapters = 2, readCount = 1),
+                libraryNovel(id = 20L, title = "Two", totalChapters = 2, readCount = 0),
+            ),
+        )
+        val chapters = listOf(
+            libraryNovelChapters(novelId = 10L, chapterIds = listOf(1L, 2L), read = false),
+            libraryNovelChapters(novelId = 20L, chapterIds = listOf(11L, 12L), read = false),
+        )
+        val bookState = tachiyomi.domain.book.novel.model.NovelBookState
+            .create(novelId = 20L, sourceId = 1L)
+            .copy(enabled = true, lastChapterId = 12L)
+
+        val target = resolveNovelSeriesReadingTarget(series, chapters, resumeChapterId = 11L) { novelId ->
+            bookState.takeIf { it.novelId == novelId }
+        }
+
+        assertEquals(20L, target?.novel?.novel?.id)
+        assertEquals(12L, target?.chapter?.id)
+    }
+
+    @Test
+    fun `resumes history chapter in later volume without completed chapters`() {
+        val series = series(
+            listOf(
+                libraryNovel(id = 10L, title = "One", totalChapters = 2, readCount = 1),
+                libraryNovel(id = 20L, title = "Two", totalChapters = 2, readCount = 0),
+            ),
+        )
+        val first = libraryNovelChapters(novelId = 10L, chapterIds = listOf(1L, 2L), read = false)
+        val second = libraryNovelChapters(novelId = 20L, chapterIds = listOf(11L, 12L), read = false)
+        val chapters = listOf(
+            first.first to first.second.map { it.copy(read = it.id == 1L) },
+            second.first to second.second.map { it.copy(lastPageRead = if (it.id == 11L) 5L else 0L) },
+        )
+
+        val target = resolveNovelSeriesReadingTarget(series, chapters, resumeChapterId = 11L)
+
+        assertEquals(20L, target?.novel?.novel?.id)
+        assertEquals(11L, target?.chapter?.id)
+    }
+
+    @Test
+    fun `history chapter wins over later volumes when rereading`() {
+        val series = series(
+            listOf(
+                libraryNovel(id = 10L, title = "One", totalChapters = 2, readCount = 2),
+                libraryNovel(id = 20L, title = "Two", totalChapters = 2, readCount = 1),
+            ),
+        )
+        val first = libraryNovelChapters(novelId = 10L, chapterIds = listOf(1L, 2L), read = true)
+        val second = libraryNovelChapters(novelId = 20L, chapterIds = listOf(11L, 12L), read = false)
+        val chapters = listOf(first, second.first to second.second.map { it.copy(read = it.id == 11L) })
+
+        val target = resolveNovelSeriesReadingTarget(series, chapters, resumeChapterId = 1L)
+
+        assertEquals(10L, target?.novel?.novel?.id)
+        assertEquals(1L, target?.chapter?.id)
+    }
+
+    @Test
+    fun `missing history chapter falls back to reading frontier`() {
+        val series = series(
+            listOf(
+                libraryNovel(id = 10L, title = "One", totalChapters = 2, readCount = 2),
+                libraryNovel(id = 20L, title = "Two", totalChapters = 2, readCount = 0),
+            ),
+        )
+        val chapters = listOf(
+            libraryNovelChapters(novelId = 10L, chapterIds = listOf(1L, 2L), read = true),
+            libraryNovelChapters(novelId = 20L, chapterIds = listOf(11L, 12L), read = false),
+        )
+
+        val target = resolveNovelSeriesReadingTarget(series, chapters, resumeChapterId = 999L)
+
+        assertEquals(20L, target?.novel?.novel?.id)
+        assertEquals(11L, target?.chapter?.id)
+    }
+
+    private fun series(entries: List<LibraryNovel>) = LibraryNovelSeries(
+        series = NovelSeries(
+            id = 1L,
+            title = "Series",
+            description = null,
+            categoryId = 0L,
+            sortOrder = 0L,
+            dateAdded = 0L,
+            coverLastModified = 0L,
+        ),
+        entries = entries,
+    )
+
     private fun libraryNovel(
         id: Long,
         title: String,

@@ -225,8 +225,11 @@ private fun parseParagraphLikeOrContainerBlocks(
             } else {
                 null
             }
-            val normalizedSegments = trimTrailingFormattingWhitespaceFromSegments(
+            val segmentsWithoutLeadingFormatting = trimLeadingFormattingWhitespaceFromSegments(
                 inferredLeadingIndent?.segments ?: merged,
+            )
+            val normalizedSegments = trimTrailingFormattingWhitespaceFromSegments(
+                segmentsWithoutLeadingFormatting,
             )
             if (!hasRenderableParagraphContent(normalizedSegments)) {
                 pendingSegments.clear()
@@ -507,9 +510,30 @@ private fun parseInlineNode(
 private fun resolveTextNodeText(node: TextNode): String {
     val whole = node.wholeText
     if (whole.any(::isRichIndentSpaceChar)) {
-        return whole
+        return collapseHtmlFormattingWhitespacePreservingIndent(whole)
     }
     return node.text()
+}
+
+private fun collapseHtmlFormattingWhitespacePreservingIndent(text: String): String {
+    if (text.isEmpty()) return text
+    val out = StringBuilder(text.length)
+    var pendingHtmlSpace = false
+    for (ch in text) {
+        if (isHtmlFormattingWhitespace(ch)) {
+            pendingHtmlSpace = true
+        } else {
+            if (pendingHtmlSpace) {
+                out.append(' ')
+                pendingHtmlSpace = false
+            }
+            out.append(ch)
+        }
+    }
+    if (pendingHtmlSpace) {
+        out.append(' ')
+    }
+    return out.toString()
 }
 
 private fun parseImageBlockFromElement(element: Element): NovelRichContentBlock.Image? {
@@ -747,6 +771,23 @@ private fun parseLeadingWhitespaceIndentEm(text: String): Pair<Float, Int>? {
     }
     if (index == markerStart || indentEm < 0.5f) return null
     return indentEm to index
+}
+
+private fun trimLeadingFormattingWhitespaceFromSegments(
+    segments: List<NovelRichTextSegment>,
+): List<NovelRichTextSegment> {
+    if (segments.isEmpty()) return segments
+    val mutable = segments.toMutableList()
+    while (mutable.isNotEmpty()) {
+        val segment = mutable.first()
+        val trimmedText = segment.text.trimStart(::isHtmlFormattingWhitespace)
+        if (trimmedText.isNotEmpty()) {
+            mutable[0] = segment.copy(text = trimmedText)
+            break
+        }
+        mutable.removeAt(0)
+    }
+    return mutable
 }
 
 private fun trimTrailingFormattingWhitespaceFromSegments(

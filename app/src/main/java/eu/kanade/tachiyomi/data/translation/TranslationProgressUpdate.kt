@@ -10,4 +10,7 @@ data class TranslationProgressUpdate(
     val chapterName: String,
     val errorMessage: String?,
     val logMessage: String? = null,
+    val generation: Long = 0,
+    val nextAttemptAt: Long = 0,
+    val sourceFingerprint: String? = null,
 )

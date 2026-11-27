@@ -619,12 +619,10 @@
     <string name="action_replace_repo">Anstataŭigi</string>
     <string name="pref_hardware_bitmap_threshold">Propra rastruma sojlo de aparataro</string>
     <string name="filter_mode_darken">Malheligi</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Influas rendimenton. Ŝaltu nur se rastruma sojlo ne riparas problemojn pri malplenaj bildoj</string>
     <string name="pref_color_filter_mode">Miksa reĝimo de kolorfiltrilo</string>
     <string name="filter_mode_lighten">Heligi</string>
     <string name="pref_skip_dupe_chapters">Preterpasi duobligitajn ĉapitrojn</string>
     <string name="pref_read_with_tapping_inverted">Inversigi tuŝetzonojn</string>
-    <string name="pref_display_profile">Propra montra profilo</string>
     <string name="pref_create_folder_per_manga">Konservi paĝojn en apartajn dosierojn</string>
     <string name="pref_image_scale_type">Skala speco</string>
     <string name="pref_read_with_long_tap">Montri agojn post longa tuŝeto</string>

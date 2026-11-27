@@ -5,18 +5,33 @@ import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 
+internal data class DiscoveryGenreFilterValues(
+    val priorityCsv: String = "",
+    val requiredCsv: String = "",
+    val ignoredCsv: String = "",
+)
+
+internal fun changedDiscoveryGenreFilters(
+    initial: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+    updated: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+): Map<DiscoveryMediaType, DiscoveryGenreFilterValues> = updated.filter { (mediaType, filters) ->
+    filters != initial[mediaType]
+}
+
 /** Applying constraints revalidates the existing feed; it is not a request for different titles. */
 internal fun applyDiscoveryGenreFilters(
     context: Context,
     preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
     priorityCsv: String,
     requiredCsv: String,
     ignoredCsv: String,
+    refreshImmediately: Boolean = true,
 ) {
-    preferences.priorityGenres().set(priorityCsv)
-    preferences.requiredGenres().set(requiredCsv)
-    preferences.ignoredGenres().set(ignoredCsv)
-    DiscoveryMediaType.entries.forEach { media ->
-        DiscoveryUpdateJob.refreshConfiguration(context, media)
+    preferences.priorityGenres(mediaType).set(priorityCsv)
+    preferences.requiredGenres(mediaType).set(requiredCsv)
+    preferences.ignoredGenres(mediaType).set(ignoredCsv)
+    if (refreshImmediately) {
+        DiscoveryUpdateJob.refreshConfiguration(context, mediaType)
     }
 }

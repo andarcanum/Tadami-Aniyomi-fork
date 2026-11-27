@@ -12,6 +12,7 @@ import eu.kanade.domain.source.interactor.NovelReaderIncognitoState
 import eu.kanade.domain.source.novel.interactor.GetNovelIncognitoState
 import eu.kanade.presentation.reader.novel.NovelAutoScrollHandoffState
 import eu.kanade.presentation.reader.novel.NovelReaderAutoScrollHandoffPolicy
+import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.SeriesInterstitialState
@@ -22,7 +23,9 @@ import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
 import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationSessionResults
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
+import eu.kanade.tachiyomi.data.translation.profile.readerProfileSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJaomixPagedSource
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
@@ -83,6 +86,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.toNvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOllamaCloudTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationArtifactForSource
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationConcurrencyLimit
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
@@ -109,6 +113,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
 import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.system.isNightMode
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -116,11 +121,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -157,6 +165,7 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.domain.translation.profile.TranslationProfileRepository
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
@@ -373,6 +382,17 @@ class NovelReaderScreenModel(
         GoogleTranslationService(client = networkHelper.client)
     },
     private val translationQueueManager: TranslationQueueManager = Injekt.get(),
+    private val translationProfiles: TranslationProfileRepository? = null,
+    private val prepareTranslationSettings: suspend (
+        NovelReaderSettings,
+        Long,
+    ) -> NovelReaderSettings = { base, novelId ->
+        if (translationProfiles == null && base.translationProfile == null) {
+            base
+        } else {
+            translationQueueManager.readerProfileSettings(base, novelId, novelReaderPreferences.enabledReplaceRules())
+        }
+    },
 ) : StateScreenModel<NovelReaderScreenModel.State>(State.Loading()),
     NovelBookReaderHost,
     NovelTtsHost,
@@ -523,6 +543,7 @@ class NovelReaderScreenModel(
         // The overlay indicator follows the text, not the session: the queue may be working on a
         // chapter the reader has already left behind.
         translationController.onActiveChapterChanged(chapter.id)
+        translationController.syncBookModeChapterCache(chapter.id)
         lastSavedRead = chapter.read
         lastSavedProgress = chapter.lastPageRead
         initialProgressIndex = 0
@@ -625,12 +646,16 @@ class NovelReaderScreenModel(
     override fun ttsIsGeminiTranslating(): Boolean = translationState.isGeminiTranslating
 
     override fun ttsGeminiTranslationJob(): Job? = translationController.geminiTranslationJob()
+    override suspend fun ttsAwaitGeminiTranslation(
+        chapterId: Long,
+    ): Boolean = translationController.awaitTranslationReady(chapterId)
 
     override fun ttsIsGeminiTranslationVisible(): Boolean = translationState.isGeminiTranslationVisible
 
     override fun ttsIsGoogleTranslationVisible(): Boolean = translationState.isGoogleTranslationVisible
 
-    override fun ttsTranslationHolderEmpty(provider: String): Boolean = translationHolder.isEmpty(provider)
+    override fun ttsTranslationHolderEmpty(provider: String): Boolean =
+        translationHolderChapterId != activeTranslationChapterId() || translationHolder.isEmpty(provider)
 
     override fun ttsApplyGeminiTranslationToContentBlocks(
         blocks: List<ContentBlock>,
@@ -705,7 +730,7 @@ class NovelReaderScreenModel(
     }
 
     override fun providerHasConfiguredTranslationProvider(settings: NovelReaderSettings): Boolean =
-        settings.hasConfiguredTranslationProvider()
+        settings.hasConfiguredTranslationProvider(currentNovel?.id)
 
     // ---------------------------------------------------------------------------------------------
     // NovelTranslationHost implementation: the translation controller reaches the shared reader
@@ -752,7 +777,7 @@ class NovelReaderScreenModel(
     override fun translationIsBookRuntimeActive(): Boolean = bookController.isBookRuntimeActive()
 
     override fun translationHasConfiguredProvider(settings: NovelReaderSettings): Boolean =
-        settings.hasConfiguredTranslationProvider()
+        settings.hasConfiguredTranslationProvider(currentNovel?.id)
 
     override fun translationApplyTranslationState(
         gemini: State.ReaderGeminiState,
@@ -852,34 +877,43 @@ class NovelReaderScreenModel(
     }
 
     override fun saveHighlight(selection: NovelSelectedTextSelection) {
-        val anchor = selection.selectionAnchor ?: return
+        val anchors = selection.selectionAnchors.ifEmpty { listOfNotNull(selection.selectionAnchor) }
+        if (anchors.isEmpty()) return
         val novel = currentNovel ?: return
         val now = System.currentTimeMillis()
         val colorArgb = novelReaderPreferences.novelHighlightLastColor().get()
         // Страница фиксируется на момент создания; в режимах без страниц остаётся 0/0.
         val pageProgress = (mutableState.value as? State.Success)?.lastSavedPageReaderProgress
         screenModelScope.launch {
-            addNovelHighlight.await(
-                NovelHighlight(
-                    id = 0L,
-                    novelId = novel.id,
-                    chapterId = anchor.chapterId,
-                    blockIndex = anchor.blockIndex,
-                    charStart = anchor.charStart,
-                    charEndExclusive = anchor.charEndExclusive,
-                    normalizedText = normalizeNovelSelectedText(selection.text),
-                    colorArgb = colorArgb,
-                    note = "",
-                    createdAt = now,
-                    updatedAt = now,
-                    pageIndex = pageProgress?.let { it.index + 1 } ?: 0,
-                    pageCount = pageProgress?.totalItems ?: 0,
-                ),
-            )
-            // «Чернильница»: пересчёт прогресса по факту БД (QuoteRule слушает это событие).
-            eventBus?.tryEmit(
-                AchievementEvent.FeatureUsed(AchievementEvent.Feature.QUOTE_SAVED),
-            )
+            var savedAny = false
+            for (anchor in anchors) {
+                val normalized = normalizeNovelSelectedText(anchor.selectedText ?: selection.text)
+                if (normalized.isBlank()) continue
+                addNovelHighlight.await(
+                    NovelHighlight(
+                        id = 0L,
+                        novelId = novel.id,
+                        chapterId = anchor.chapterId,
+                        blockIndex = anchor.blockIndex,
+                        charStart = anchor.charStart,
+                        charEndExclusive = anchor.charEndExclusive,
+                        normalizedText = normalized,
+                        colorArgb = colorArgb,
+                        note = "",
+                        createdAt = now,
+                        updatedAt = now,
+                        pageIndex = pageProgress?.let { it.index + 1 } ?: 0,
+                        pageCount = pageProgress?.totalItems ?: 0,
+                    ),
+                )
+                savedAny = true
+            }
+            if (savedAny) {
+                // «Чернильница»: пересчёт прогресса по факту БД (QuoteRule слушает это событие).
+                eventBus?.tryEmit(
+                    AchievementEvent.FeatureUsed(AchievementEvent.Feature.QUOTE_SAVED),
+                )
+            }
         }
     }
 
@@ -891,12 +925,16 @@ class NovelReaderScreenModel(
     override fun batchReaderSettings(): NovelReaderSettings? =
         (mutableState.value as? State.Success)?.readerSettings
 
+    override fun batchReplaceRules(): List<eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule> =
+        novelReaderPreferences.enabledReplaceRules()
+
     override fun batchReplaceRulesFingerprint(): String =
         replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules())
 
     override fun batchCurrentNovel(): Novel? = currentNovel
 
-    override fun batchCurrentChapter(): NovelChapter? = currentChapter
+    override fun batchCurrentChapter(): NovelChapter? =
+        bookController.bookModeChapterAtReadingPosition() ?: currentChapter
 
     override fun batchSourceManager(): NovelSourceManager = sourceManager
 
@@ -918,6 +956,7 @@ class NovelReaderScreenModel(
         novelReaderPreferences = novelReaderPreferences,
         ttsChapterRepository = ttsChapterRepository,
         sourceManager = sourceManager,
+        translationQueueManager = translationQueueManager,
     )
 
     /** Snapshot of the TTS UI state, merged into the reader state by the screen model. */
@@ -926,6 +965,7 @@ class NovelReaderScreenModel(
 
     private var settingsJob: Job? = null
     private var contentModel: NovelReaderContentModel? = null
+    private var contentModelChapterId: Long? = null
     private var currentNovel: Novel? = null
 
     /**
@@ -940,12 +980,13 @@ class NovelReaderScreenModel(
     private fun markDiscoveryConsumed(title: String, sourceId: Long) {
         if (title == lastConsumedMarkedTitle) return
         lastConsumedMarkedTitle = title
-        screenModelScope.launch {
+        screenModelScope.launch(Dispatchers.IO) {
             eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.recordConsumed(
                 repository = discoveryRepository,
                 mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
                 title = title,
                 sourceId = sourceId,
+                enrichmentScope = this,
             )
         }
     }
@@ -970,6 +1011,12 @@ class NovelReaderScreenModel(
     private var currentSessionChapterId: Long = chapterId
     private var seamlessChapterSwitchJob: Job? = null
     private var seamlessChapterSwitchToken: Long = 0L
+    private var seamlessAdjacentPreloadJob: Job? = null
+    private val seamlessSnapshotCache =
+        LinkedHashMap<Long, eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot>(4, 0.75f, true)
+    private var currentChapterSnapshot: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot? = null
+    private var previousChapterPreview: AdjacentChapterPreview? = null
+    private var nextChapterPreview: AdjacentChapterPreview? = null
     private var hasTriggeredNextChapterPrefetch: Boolean = false
     private var adjacentJaomixPageJob: Job? = null
     private val attemptedJaomixPages = mutableSetOf<Int>()
@@ -1008,9 +1055,7 @@ class NovelReaderScreenModel(
         mistralTranslationService = mistralTranslationService,
         nvidiaTranslationService = nvidiaTranslationService,
         ollamaCloudTranslationService = ollamaCloudTranslationService,
-        replaceTextHtml = { html ->
-            applyReplaceRulesToHtml(html, novelReaderPreferences.enabledReplaceRules())
-        },
+
     )
 
     /** Snapshot of the translation UI state, merged into the reader state by the screen model. */
@@ -1073,27 +1118,66 @@ class NovelReaderScreenModel(
         ignoreUnknownKeys = true
         isLenient = true
     }
+    private var loadChapterJob: Job? = null
+
     init {
         ttsController.attach()
-        screenModelScope.launch {
+        loadChapterJob = screenModelScope.launch {
             loadChapter()
         }
     }
+
+    fun retryCurrentChapter() {
+        if (loadChapterJob?.isActive == true) return
+        val loadingSettings = currentNovel?.let { novel ->
+            novelReaderPreferences.resolveSettings(novel.source)
+        }
+        mutableState.value = State.Loading(loadingSettings)
+        loadChapterJob = screenModelScope.launch {
+            loadChapter(targetChapterId = currentSessionChapterId)
+        }
+    }
+
     private suspend fun loadChapter(
         targetChapterId: Long = currentSessionChapterId,
         seamless: Boolean = false,
     ) {
         currentSessionChapterId = targetChapterId
-        val snapshot = try {
-            ttsChapterRepository.loadChapterSnapshot(targetChapterId)
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) { "Failed to load novel chapter snapshot" }
-            return setError(e.message)
+        val cachedSnapshot = if (seamless) {
+            synchronized(seamlessSnapshotCache) { seamlessSnapshotCache.remove(targetChapterId) }
+        } else {
+            null
+        }
+        val snapshot = if (cachedSnapshot != null) {
+            val latestChapter = fullChapterOrderList.firstOrNull { it.id == targetChapterId }
+                ?: chapterOrderList.firstOrNull { it.id == targetChapterId }
+                ?: cachedSnapshot.chapter
+            val progressFields = resolveSnapshotProgressFields(latestChapter.lastPageRead)
+            cachedSnapshot.copy(
+                chapter = latestChapter,
+                lastSavedIndex = progressFields.lastSavedIndex,
+                lastSavedScrollOffsetPx = progressFields.lastSavedScrollOffsetPx,
+                lastSavedWebProgressPercent = progressFields.lastSavedWebProgressPercent,
+                lastSavedPageReaderProgress = progressFields.lastSavedPageReaderProgress,
+            )
+        } else {
+            try {
+                ttsChapterRepository.loadChapterSnapshot(targetChapterId)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (seamless) {
+                    NovelReaderChapterHandoffPolicy.clear()
+                }
+                logcat(LogPriority.ERROR, e) { "Failed to load novel chapter snapshot" }
+                return setError(e.message)
+            }
         }
         val chapter = snapshot.chapter
         val novel = snapshot.novel
         val source = sourceManager.getOrStub(novel.source)
+        translationBatchExecutor.onChapterBecomingActive(snapshot.chapter.id)
         clearChapterTransientState()
+        currentChapterSnapshot = snapshot
         currentNovel = novel
         observeIncognitoForNovel(novel)
         // Taste Engine: «просмотрено» — открытие читалки помечает тайтл consumed
@@ -1101,7 +1185,11 @@ class NovelReaderScreenModel(
         // Хук на открытие, не на запись истории — работает и в инкогнито.
         markDiscoveryConsumed(novel.title, novel.source)
         currentChapter = chapter
-        fullChapterOrderList = snapshot.chapterOrderList
+        // Preserve the live fullChapterOrderList on seamless cached-snapshot hits so preloaded
+        // snapshots never revert newly-read/bookmarked flags, lastPageRead, or Jaomix pages.
+        if (cachedSnapshot == null || fullChapterOrderList.isEmpty()) {
+            fullChapterOrderList = snapshot.chapterOrderList
+        }
         chapterOrderList = NovelReaderChapterWindow.resolveWindow(
             chapters = fullChapterOrderList,
             currentChapterId = chapter.id,
@@ -1133,19 +1221,44 @@ class NovelReaderScreenModel(
         customJs = snapshot.customJs
         pluginSite = snapshot.pluginSite
         chapterWebUrl = snapshot.chapterWebUrl
+        contentModelChapterId = chapter.id
         contentModel = NovelReaderContentModel(
             canonicalHtml = normalizedChapterHtml,
             chapterWebUrl = chapterWebUrl,
             novelUrl = novel.url,
             pluginSite = pluginSite,
         )
-        val initialSettings = novelReaderPreferences.resolveSettings(novel.source)
+        val initialSettings = prepareReaderSettings(novelReaderPreferences.resolveSettings(novel.source), novel.id)
         // A seamless switch keeps the previous Success state on screen while the next chapter is
         // prepared, so the reader never flashes the full-screen chapter loading state.
         if (!seamless) {
             mutableState.value = State.Loading(initialSettings)
         }
-        if (contentModel == null) return setError("Chapter content is empty")
+        val preparedContentModel = contentModel ?: return setError("Chapter content is empty")
+        // Pre-warm content block & rich HTML parsing off the main thread so updateContent() does
+        // not stall the UI thread across a seamless chapter swap.
+        withContext(Dispatchers.Default) {
+            preparedContentModel.contentBlocks
+            if (preparedContentModel.parsedRichContentResult == null) {
+                val annotatedHtml = annotateNovelBlockAnchors(
+                    rawHtml = preparedContentModel.getNormalizedHtml(
+                        settings = initialSettings,
+                        customCss = customCss,
+                        customJs = customJs,
+                    ),
+                    chapterId = chapter.id,
+                )
+                val parsedRich = parseNovelRichContent(annotatedHtml)
+                preparedContentModel.parsedRichContentResult = parsedRich.copy(
+                    blocks = resolveRichContentBlocks(
+                        blocks = parsedRich.blocks,
+                        chapterWebUrl = chapterWebUrl,
+                        novelUrl = novel.url,
+                        pluginSite = pluginSite,
+                    ),
+                )
+            }
+        }
         progressPersistenceController.resetSessionReadTimer()
         bookController.startForChapter(chapter)
         observeReadingModeChanges(chapter)
@@ -1161,14 +1274,26 @@ class NovelReaderScreenModel(
         settingsJob?.cancel()
         settingsJob = screenModelScope.launch {
             var skippedInitialEmission = false
+            val profileChanges = translationProfiles?.observeCatalog()?.map { Unit } ?: flowOf(Unit)
             novelReaderPreferences.settingsFlow(novel.source)
+                .combine(profileChanges) { settings, _ -> settings }
+                .mapLatest { prepareReaderSettings(it, novel.id) }
                 .distinctUntilChanged()
                 .collect { settings ->
+                    if (currentChapter?.id != chapter.id) return@collect
                     if (!skippedInitialEmission && settings == initialSettings) {
                         skippedInitialEmission = true
                         return@collect
                     }
                     skippedInitialEmission = true
+                    if (settings.seamlessChapterTransition && !bookController.isBookRuntimeActive()) {
+                        scheduleSeamlessAdjacentPreload(novel, chapter, settings)
+                    } else {
+                        seamlessAdjacentPreloadJob?.cancel()
+                        seamlessAdjacentPreloadJob = null
+                        previousChapterPreview = null
+                        nextChapterPreview = null
+                    }
                     updateContent(settings)
                     ttsController.initializeTtsRuntimePublic()
                     maybeAutoStartGeminiTranslation(settings)
@@ -1185,7 +1310,16 @@ class NovelReaderScreenModel(
                 "Skip novel history for empty chapter content novelId=${novel.id} chapterId=${chapter.id}"
             }
         }
+        if (initialSettings.seamlessChapterTransition && !bookController.isBookRuntimeActive()) {
+            seedSeamlessPreviewsFromCache(chapter)
+        } else {
+            previousChapterPreview = null
+            nextChapterPreview = null
+        }
         updateContent(initialSettings)
+        if (initialSettings.seamlessChapterTransition && !bookController.isBookRuntimeActive()) {
+            scheduleSeamlessAdjacentPreload(novel, chapter, initialSettings)
+        }
         ttsController.initializeTtsRuntimePublic()
         ttsController.restoreTtsAfterChapterHandoff(
             chapterId = chapter.id,
@@ -1193,14 +1327,18 @@ class NovelReaderScreenModel(
         )
         maybeAutoStartGeminiTranslation(initialSettings)
         maybeAutoStartGoogleTranslation()
-        when (initialSettings.translationProvider) {
-            NovelTranslationProvider.GEMINI -> refreshGeminiModels()
-            NovelTranslationProvider.GEMINI_PRIVATE -> Unit
-            NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
-            NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
-            NovelTranslationProvider.MISTRAL -> refreshMistralModels()
-            NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
-            NovelTranslationProvider.OLLAMA_CLOUD -> refreshOllamaCloudModels()
+        // Profile discovery is explicit in the centre; neither an inactive nor a broken profile
+        // may cause an automatic catalogue request to a legacy recipient.
+        if (initialSettings.geminiEnabled && initialSettings.translationProfile == null) {
+            when (initialSettings.translationProvider) {
+                NovelTranslationProvider.GEMINI -> refreshGeminiModels()
+                NovelTranslationProvider.GEMINI_PRIVATE -> Unit
+                NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
+                NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
+                NovelTranslationProvider.MISTRAL -> refreshMistralModels()
+                NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
+                NovelTranslationProvider.OLLAMA_CLOUD -> refreshOllamaCloudModels()
+            }
         }
     }
     fun loadFullChapterOrderList() {
@@ -1239,16 +1377,21 @@ class NovelReaderScreenModel(
      * document, the reader is not ready yet, or a switch is already running), so callers can fall
      * back to the classic screen replacement.
      */
+    fun isSeamlessChapterSwitchInProgress(): Boolean = seamlessChapterSwitchJob?.isActive == true
+
     fun openChapterInPlace(targetChapterId: Long): Boolean {
         val successState = mutableState.value as? State.Success ?: return false
-        // Opt-in feature: without it the reader keeps the classic screen replacement behaviour.
-        if (!novelReaderPreferences.seamlessChapterTransition().get()) return false
+        // Respect per-source overrides in addition to the global preference.
+        if (!successState.readerSettings.seamlessChapterTransition) return false
         if (successState.bookMode.isEnabled) return false
-        if (targetChapterId == currentChapter?.id) return false
-        if (seamlessChapterSwitchJob?.isActive == true) return false
+        // Consume duplicate triggers for the current chapter or while a seamless swap is already
+        // in flight instead of falling back to a jarring full-screen navigator.replace().
+        if (targetChapterId == currentChapter?.id) return true
+        if (seamlessChapterSwitchJob?.isActive == true) return true
         val hasTargetChapter = fullChapterOrderList.any { it.id == targetChapterId } ||
             chapterOrderList.any { it.id == targetChapterId }
         if (!hasTargetChapter) return false
+        cacheOutgoingChapterForSeamlessBacktrack(successState)
         seamlessChapterSwitchJob = screenModelScope.launch {
             // Leave the current frame before touching reader state. A chapter switch is triggered
             // from gesture/tap callbacks that can run inside a composition or layout pass, and
@@ -1260,6 +1403,194 @@ class NovelReaderScreenModel(
             loadChapter(targetChapterId = targetChapterId, seamless = true)
         }
         return true
+    }
+
+    private fun cacheOutgoingChapterForSeamlessBacktrack(outgoingState: State.Success) {
+        val outgoingChapter = currentChapter ?: outgoingState.chapter
+        val outgoingSnapshot = currentChapterSnapshot
+        if (outgoingSnapshot != null && outgoingSnapshot.chapter.id == outgoingChapter.id) {
+            val progressFields = resolveSnapshotProgressFields(outgoingChapter.lastPageRead)
+            putSeamlessSnapshotCache(
+                outgoingSnapshot.copy(
+                    chapter = outgoingChapter,
+                    contentBlocks = outgoingState.contentBlocks,
+                    richContentBlocks = outgoingState.richContentBlocks,
+                    richContentUnsupportedFeaturesDetected = outgoingState.richContentUnsupportedFeaturesDetected,
+                    lastSavedIndex = progressFields.lastSavedIndex,
+                    lastSavedScrollOffsetPx = progressFields.lastSavedScrollOffsetPx,
+                    lastSavedWebProgressPercent = progressFields.lastSavedWebProgressPercent,
+                    lastSavedPageReaderProgress = progressFields.lastSavedPageReaderProgress,
+                ),
+            )
+        }
+    }
+
+    private data class SnapshotProgressFields(
+        val lastSavedIndex: Int,
+        val lastSavedScrollOffsetPx: Int,
+        val lastSavedWebProgressPercent: Int,
+        val lastSavedPageReaderProgress: PageReaderProgress?,
+    )
+
+    private fun resolveSnapshotProgressFields(lastPageRead: Long): SnapshotProgressFields {
+        val decodedNativeProgress = decodeNativeScrollProgress(lastPageRead)
+        val decodedWebProgressPercent = decodeWebScrollProgressPercent(lastPageRead)
+        val decodedPageReaderProgress = decodePageReaderProgress(lastPageRead)
+        val lastSavedIndex = when {
+            decodedNativeProgress != null -> decodedNativeProgress.index
+            decodedPageReaderProgress != null -> decodedPageReaderProgress.index
+            decodedWebProgressPercent != null -> decodedWebProgressPercent
+            else -> lastPageRead.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+        val lastSavedScrollOffsetPx = decodedNativeProgress?.offsetPx ?: 0
+        val lastSavedWebProgressPercent = when {
+            decodedWebProgressPercent != null -> decodedWebProgressPercent
+            decodedNativeProgress != null || decodedPageReaderProgress != null -> 0
+            else -> lastPageRead.coerceIn(0L, 100L).toInt()
+        }
+        return SnapshotProgressFields(
+            lastSavedIndex = lastSavedIndex,
+            lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
+            lastSavedWebProgressPercent = lastSavedWebProgressPercent,
+            lastSavedPageReaderProgress = decodedPageReaderProgress,
+        )
+    }
+
+    private fun putSeamlessSnapshotCache(
+        snapshot: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot,
+    ) {
+        synchronized(seamlessSnapshotCache) {
+            seamlessSnapshotCache[snapshot.chapter.id] = snapshot
+            while (seamlessSnapshotCache.size > 3) {
+                val eldestKey = seamlessSnapshotCache.entries.firstOrNull()?.key ?: break
+                seamlessSnapshotCache.remove(eldestKey)
+            }
+        }
+    }
+
+    private fun toAdjacentChapterPreview(
+        snapshot: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterSnapshot,
+    ): AdjacentChapterPreview {
+        return AdjacentChapterPreview(
+            chapterId = snapshot.chapter.id,
+            chapterName = snapshot.chapter.name,
+            contentBlocks = snapshot.contentBlocks,
+            richContentBlocks = snapshot.richContentBlocks,
+            richContentUnsupportedFeaturesDetected = snapshot.richContentUnsupportedFeaturesDetected,
+        )
+    }
+
+    private fun seedSeamlessPreviewsFromCache(chapter: NovelChapter) {
+        val prevId = findPreviousChapter(chapter)?.id
+        val nextId = findNextChapter(chapter)?.id
+        synchronized(seamlessSnapshotCache) {
+            previousChapterPreview = prevId?.let { seamlessSnapshotCache[it] }?.let(::toAdjacentChapterPreview)
+            nextChapterPreview = nextId?.let { seamlessSnapshotCache[it] }?.let(::toAdjacentChapterPreview)
+        }
+    }
+
+    private fun scheduleSeamlessAdjacentPreload(
+        novel: Novel,
+        chapter: NovelChapter,
+        settings: NovelReaderSettings,
+    ) {
+        val nextChapter = findNextChapter(chapter)
+        val prevChapter = findPreviousChapter(chapter)
+        if (nextChapter == null && prevChapter == null) return
+        seamlessAdjacentPreloadJob?.cancel()
+        seamlessAdjacentPreloadJob = screenModelScope.launch(Dispatchers.IO) {
+            val source = sourceManager.getOrStub(novel.source)
+            val cacheReadChapters = novelReaderPreferences.cacheReadChapters().get()
+            if (nextChapter != null && nextChapterPreview?.chapterId != nextChapter.id) {
+                runCatching {
+                    val alreadyCached = synchronized(seamlessSnapshotCache) {
+                        seamlessSnapshotCache[nextChapter.id]
+                    }
+                    val nextSnapshot = alreadyCached ?: run {
+                        val hasLocalText = contentPrefetchService.hasCachedNovelChapterText(
+                            novel = novel,
+                            chapter = nextChapter,
+                            downloadManager = novelDownloadManager,
+                            cacheReadChapters = cacheReadChapters,
+                        )
+                        if (!hasLocalText) {
+                            if (!settings.prefetchNextChapter) {
+                                return@runCatching
+                            }
+                            kotlinx.coroutines.delay(800L)
+                            val prefetched = contentPrefetchService.prefetchNovelChapterText(
+                                prefetchEnabled = true,
+                                novel = novel,
+                                chapter = nextChapter,
+                                source = source,
+                                downloadManager = novelDownloadManager,
+                                cacheReadChapters = cacheReadChapters,
+                            )
+                            val nowLocal = prefetched || contentPrefetchService.hasCachedNovelChapterText(
+                                novel = novel,
+                                chapter = nextChapter,
+                                downloadManager = novelDownloadManager,
+                                cacheReadChapters = cacheReadChapters,
+                            )
+                            if (!nowLocal) return@runCatching
+                        }
+                        ttsChapterRepository.loadChapterSnapshot(nextChapter.id)
+                    }
+                    putSeamlessSnapshotCache(nextSnapshot)
+                    val preview = toAdjacentChapterPreview(nextSnapshot)
+                    withContext(Dispatchers.Main.immediate) {
+                        if (currentChapter?.id != chapter.id) return@withContext
+                        nextChapterPreview = preview
+                        val currentState = mutableState.value as? State.Success ?: return@withContext
+                        if (currentState.chapter.id == chapter.id) {
+                            mutableState.value = currentState.copy(nextChapterPreview = preview)
+                        }
+                    }
+                }.onFailure { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    logcat(LogPriority.DEBUG, error) { "Seamless next chapter preload skipped" }
+                }
+            }
+            if (prevChapter != null && previousChapterPreview?.chapterId != prevChapter.id) {
+                runCatching {
+                    val alreadyCached = synchronized(seamlessSnapshotCache) {
+                        seamlessSnapshotCache[prevChapter.id]
+                    }
+                    val prevSnapshot = alreadyCached ?: run {
+                        // Never trigger network requests for the previous chapter; only use local cache/downloads.
+                        val hasLocalText = contentPrefetchService.hasCachedNovelChapterText(
+                            novel = novel,
+                            chapter = prevChapter,
+                            downloadManager = novelDownloadManager,
+                            cacheReadChapters = cacheReadChapters,
+                        )
+                        if (!hasLocalText) return@runCatching
+                        ttsChapterRepository.loadChapterSnapshot(prevChapter.id)
+                    }
+                    putSeamlessSnapshotCache(prevSnapshot)
+                    val preview = toAdjacentChapterPreview(prevSnapshot)
+                    withContext(Dispatchers.Main.immediate) {
+                        if (currentChapter?.id != chapter.id) return@withContext
+                        previousChapterPreview = preview
+                        val currentState = mutableState.value as? State.Success ?: return@withContext
+                        if (currentState.chapter.id == chapter.id) {
+                            mutableState.value = currentState.copy(previousChapterPreview = preview)
+                        }
+                    }
+                }.onFailure { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    logcat(LogPriority.DEBUG, error) { "Seamless previous chapter preload skipped" }
+                }
+            }
+        }
+    }
+
+    private fun findPreviousChapter(currentChapter: NovelChapter): NovelChapter? {
+        val list = if (fullChapterOrderList.isNotEmpty()) fullChapterOrderList else chapterOrderList
+        return list
+            .indexOfFirst { it.id == currentChapter.id }
+            .takeIf { it > 0 }
+            ?.let { list.getOrNull(it - 1) }
     }
 
     private fun subscribeToQueueProgress(chapterId: Long) =
@@ -1282,7 +1613,7 @@ class NovelReaderScreenModel(
                 // Polite delay to prevent burst request collisions on rate-sensitive hosts (e.g. NovelUpdates /extnu/)
                 kotlinx.coroutines.delay(2000L)
                 val state = mutableState.value as? State.Success ?: return@runCatching
-                contentPrefetchService.prefetchNovelChapterText(
+                val prefetched = contentPrefetchService.prefetchNovelChapterText(
                     prefetchEnabled = state.readerSettings.prefetchNextChapter,
                     novel = novel,
                     chapter = nextChapter,
@@ -1290,7 +1621,15 @@ class NovelReaderScreenModel(
                     downloadManager = novelDownloadManager,
                     cacheReadChapters = novelReaderPreferences.cacheReadChapters().get(),
                 )
+                if (prefetched && state.readerSettings.seamlessChapterTransition &&
+                    !bookController.isBookRuntimeActive()
+                ) {
+                    withContext(Dispatchers.Main.immediate) {
+                        scheduleSeamlessAdjacentPreload(novel, currentChapter, state.readerSettings)
+                    }
+                }
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 logcat(LogPriority.WARN, error) { "Failed to prefetch next novel chapter" }
             }
         }
@@ -1494,7 +1833,22 @@ class NovelReaderScreenModel(
             chapters.asReversed()
         }
     }
+    private suspend fun prepareReaderSettings(base: NovelReaderSettings, novelId: Long): NovelReaderSettings = try {
+        withContext(Dispatchers.IO) { prepareTranslationSettings(base, novelId) }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        // A broken profile must not prevent reading, or silently select the legacy recipient/cache,
+        // while keeping the AI QuickDialog entry reachable so the user can fix or switch profiles.
+        logcat(LogPriority.WARN) { "AI translation profile needs configuration; original reading remains available" }
+        base.copy(
+            geminiEnabled = false,
+            aiTranslationProfileNeedsConfiguration = base.geminiEnabled,
+        )
+    }
+
     private fun updateContent(settings: NovelReaderSettings) {
+        translationController.onReaderSettingsChanged(settings)
         if (!settings.selectedTextTranslationEnabled && !settings.novelDictionaryEnabled) {
             selectionTranslationController.clearSelection(refreshUi = false)
         }
@@ -1601,25 +1955,31 @@ class NovelReaderScreenModel(
             richContentResult.blocks
         }
         val displayContent = when {
-            geminiVisibleInUi && !translationHolder.isEmpty("gemini") -> normalizeHtml(
-                rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
-                    templateHtml = html,
-                    fallbackBlocks = displayContentBlocks,
-                    translatedByIndex = translationHolder.map("gemini"),
+            geminiVisibleInUi && !translationHolder.isEmpty("gemini") -> annotateNovelBlockAnchors(
+                rawHtml = normalizeHtml(
+                    rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
+                        templateHtml = html,
+                        fallbackBlocks = displayContentBlocks,
+                        translatedByIndex = translationHolder.map("gemini"),
+                    ),
+                    settings = settings,
+                    customCss = pluginCss,
+                    customJs = pluginJs,
                 ),
-                settings = settings,
-                customCss = pluginCss,
-                customJs = pluginJs,
+                chapterId = chapter.id,
             )
-            googleVisibleInUi && !translationHolder.isEmpty("google") -> normalizeHtml(
-                rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
-                    templateHtml = html,
-                    fallbackBlocks = displayContentBlocks,
-                    translatedByIndex = translationHolder.map("google"),
+            googleVisibleInUi && !translationHolder.isEmpty("google") -> annotateNovelBlockAnchors(
+                rawHtml = normalizeHtml(
+                    rawHtml = NovelContentHtmlMapper.buildTranslatedRawHtmlForDisplay(
+                        templateHtml = html,
+                        fallbackBlocks = displayContentBlocks,
+                        translatedByIndex = translationHolder.map("google"),
+                    ),
+                    settings = settings,
+                    customCss = pluginCss,
+                    customJs = pluginJs,
                 ),
-                settings = settings,
-                customCss = pluginCss,
-                customJs = pluginJs,
+                chapterId = chapter.id,
             )
             else -> baseContent
         }
@@ -1656,6 +2016,12 @@ class NovelReaderScreenModel(
             previousChapterName = chapterNavigation.previousChapterName,
             nextChapterId = chapterNavigation.nextChapterId,
             nextChapterName = chapterNavigation.nextChapterName,
+            previousChapterPreview = previousChapterPreview?.takeIf {
+                it.chapterId == chapterNavigation.previousChapterId
+            },
+            nextChapterPreview = nextChapterPreview?.takeIf {
+                it.chapterId == chapterNavigation.nextChapterId
+            },
             seriesInterstitialState = seriesInterstitialState,
             finaleState = finaleState,
             chapterWebUrl = chapterWebUrl,
@@ -1726,6 +2092,17 @@ class NovelReaderScreenModel(
             bookMode = bookController.bookModeUiState(),
         )
     }
+    fun updateReadingProgressForChapter(
+        chapterId: Long,
+        currentIndex: Int,
+        totalItems: Int,
+        persistedProgress: Long? = null,
+        isInitialPositionRestored: Boolean = false,
+    ) {
+        if (currentChapter?.id != chapterId) return
+        updateReadingProgress(currentIndex, totalItems, persistedProgress, isInitialPositionRestored)
+    }
+
     fun updateReadingProgress(
         currentIndex: Int,
         totalItems: Int,
@@ -1735,18 +2112,17 @@ class NovelReaderScreenModel(
         val chapter = currentChapter ?: return
         if (totalItems <= 0 || currentIndex < 0) return
         val resolvedPersistedProgress = persistedProgress ?: currentIndex.toLong()
-        if (!hasProgressChanged) {
-            val isSameInitialIndex = currentIndex == initialProgressIndex
-            val isSamePersistedProgress = lastSavedProgress == resolvedPersistedProgress
-            if (totalItems > 1 && isSameInitialIndex && isSamePersistedProgress) return
-            hasProgressChanged = true
-        }
+        val isTransientSingleItemReport = totalItems == 1 &&
+            !isInitialPositionRestored &&
+            (initialProgressIndex > 0 || (lastSavedProgress ?: 0L) != 0L)
         val readThreshold = when {
             totalItems == 100 -> 0.99f
             else -> 0.95f
         }
-        val reachedReadThreshold = totalItems == 1 ||
-            ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= readThreshold
+        val reachedReadThreshold = !isTransientSingleItemReport && (
+            totalItems == 1 ||
+                ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= readThreshold
+            )
         val shouldPersistRead = (lastSavedRead == true) || chapter.read || reachedReadThreshold
         val newProgress = resolveReaderProgressToPersist(
             shouldPersistRead = shouldPersistRead,
@@ -1755,6 +2131,12 @@ class NovelReaderScreenModel(
             previousProgress = lastSavedProgress,
             isInitialPositionRestored = isInitialPositionRestored,
         ) ?: return
+        if (!hasProgressChanged) {
+            val isSameInitialIndex = currentIndex == initialProgressIndex
+            val isSamePersistedProgress = lastSavedProgress == resolvedPersistedProgress
+            if (totalItems > 1 && isSameInitialIndex && isSamePersistedProgress) return
+            hasProgressChanged = true
+        }
         maybePrefetchNextChapterOnProgress(
             currentIndex = currentIndex,
             totalItems = totalItems,
@@ -1820,6 +2202,8 @@ class NovelReaderScreenModel(
 
     fun stopTtsPlayback() = ttsController.stopTtsPlayback()
 
+    suspend fun stopTtsPlaybackAndAwait() = ttsController.stopTtsPlaybackAndAwait()
+
     fun skipToNextTtsSegment() = ttsController.skipToNextTtsSegment()
 
     fun skipToPreviousTtsSegment() = ttsController.skipToPreviousTtsSegment()
@@ -1853,6 +2237,18 @@ class NovelReaderScreenModel(
 
     suspend fun awaitPendingProgressPersistence() =
         progressPersistenceController.awaitPendingProgressPersistence()
+
+    fun captureCurrentChapterReadDuration() {
+        val chapterId = currentChapter?.id ?: return
+        val elapsed = progressPersistenceController.takeSessionReadDurationMs()
+        if (elapsed > 0L) {
+            progressPersistenceController.queueHistoryReadDuration(chapterId, elapsed)
+        }
+    }
+
+    fun resetSessionReadTimer() {
+        progressPersistenceController.resetSessionReadTimer()
+    }
 
     suspend fun persistCurrentChapterExitState() =
         progressPersistenceController.persistCurrentChapterExitState()
@@ -1920,9 +2316,18 @@ class NovelReaderScreenModel(
         // has to reach it too (same as bookMarkChapterReadInMemory); the DB write arrives
         // asynchronously through the progress pipeline.
         val fullChapterIndex = fullChapterOrderList.indexOfFirst { it.id == chapter.id }
-        if (fullChapterIndex >= 0 && fullChapterOrderList[fullChapterIndex].read != read) {
-            fullChapterOrderList = fullChapterOrderList.toMutableList().also { list ->
-                list[fullChapterIndex] = list[fullChapterIndex].copy(read = read)
+        if (fullChapterIndex >= 0) {
+            val existingFull = fullChapterOrderList[fullChapterIndex]
+            if (existingFull.read != read || existingFull.lastPageRead != progress ||
+                existingFull.bookmark != bookmark
+            ) {
+                fullChapterOrderList = fullChapterOrderList.toMutableList().also { list ->
+                    list[fullChapterIndex] = existingFull.copy(
+                        read = read,
+                        lastPageRead = progress,
+                        bookmark = bookmark,
+                    )
+                }
             }
         }
         val currentState = mutableState.value
@@ -2056,16 +2461,19 @@ class NovelReaderScreenModel(
     override fun onDispose() {
         // Fire-and-forget cancellation — no blocking cancelAndJoin calls.
         // Each job is independently cancelled; cleanup happens in clearChapterTransientState().
+        loadChapterJob?.cancel()
         settingsJob?.cancel()
         nextChapterPrefetchJob?.cancel()
+        seamlessAdjacentPreloadJob?.cancel()
+        synchronized(seamlessSnapshotCache) { seamlessSnapshotCache.clear() }
+        currentChapterSnapshot = null
         translationBatchExecutor.cancelNextChapterGeminiPrefetchJob()
         adjacentJaomixPageJob?.cancel()
         selectionTranslationController.dispose()
-        progressPersistenceController.dispose()
-        // Flush the debounced book-mode position before the jobs die: leaving the reader mid-section
-        // would otherwise lose up to one debounce window of reading progress, and chapters the reader
-        // scrolled past would never be marked read.
+        // Flush the debounced book-mode position BEFORE disposing the persistence controller so the
+        // flushed update enters the pending queue and drains on a non-cancellable IO scope.
         bookController.flushAndStop()
+        progressPersistenceController.dispose()
         ttsController.shutdown()
         incognitoObservationJob?.cancel()
         NovelReaderIncognitoState.set(false)
@@ -2096,6 +2504,7 @@ class NovelReaderScreenModel(
         currentChapter = null
         chapterOrderList = mutableListOf()
         contentModel = null
+        contentModelChapterId = null
         customCss = null
         customJs = null
         pluginSite = null
@@ -2109,6 +2518,10 @@ class NovelReaderScreenModel(
         adjacentJaomixPageJob = null
         nextChapterPrefetchJob?.cancel()
         nextChapterPrefetchJob = null
+        seamlessAdjacentPreloadJob?.cancel()
+        seamlessAdjacentPreloadJob = null
+        previousChapterPreview = null
+        nextChapterPreview = null
         translationBatchExecutor.clearChapterScopedPrefetchState()
         translationController.resetTransientState()
         selectionTranslationController.clearChapterScopedState()
@@ -2128,10 +2541,23 @@ class NovelReaderScreenModel(
 
     fun clearAllGeminiTranslationCache() = translationController.clearAllGeminiTranslationCache()
 
-    fun setGeminiApiKey(value: String) = updateGeminiSetting(
-        setGlobal = { novelReaderPreferences.geminiApiKey().set(value) },
-        setOverride = { it.copy(geminiApiKey = value) },
-    )
+    fun setGeminiApiKey(value: String) {
+        val sourceId = currentNovel?.source ?: return
+        val keyScope = sourceId.takeIf { novelReaderPreferences.getSourceOverride(it) != null }
+        screenModelScope.launch {
+            try {
+                eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.legacyCredentials.saveLegacy(
+                    NovelTranslationProvider.GEMINI,
+                    keyScope,
+                    value,
+                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                application.toast(AYMR.strings.ai_translation_protected_save_failed)
+            }
+        }
+    }
     fun setGeminiModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.geminiModel().set(value) },
         setOverride = { it.copy(geminiModel = value) },
@@ -2362,6 +2788,14 @@ class NovelReaderScreenModel(
 
     fun startGeminiTranslation() = translationController.startGeminiTranslation()
 
+    fun startGeminiTranslationForProfile(profileId: String?, forceRetranslate: Boolean) =
+        translationController.startGeminiTranslation(
+            forceRetranslate = forceRetranslate,
+            profileId = profileId,
+        )
+
+    fun clearSuppressedGeminiCompletion() = translationController.clearSuppressedCompletionForActiveChapter()
+
     fun stopGeminiTranslation() = translationController.stopGeminiTranslation()
 
     fun toggleGeminiTranslationVisibility() = translationController.toggleGeminiTranslationVisibility()
@@ -2570,7 +3004,7 @@ class NovelReaderScreenModel(
         return updated
     }
     private fun currentParsedTextBlocks(): List<String> {
-        return contentModel?.textBlocks ?: emptyList()
+        return if (currentChapter?.id == contentModelChapterId) contentModel?.textBlocks.orEmpty() else emptyList()
     }
 
     /**
@@ -2590,22 +3024,25 @@ class NovelReaderScreenModel(
      * The content model only ever holds the chapter the reader loaded, so over a book the blocks of
      * any other spine chapter have to be parsed from its own payload.
      */
-    override suspend fun translationSourceTextBlocks(chapterId: Long): List<String> {
-        if (!bookController.isBookRuntimeActive() || chapterId == currentChapter?.id) return currentParsedTextBlocks()
-        return runCatching {
-            val snapshot = ttsChapterRepository.loadChapterSnapshot(chapterId)
-            withContext(Dispatchers.Default) {
-                NovelReaderContentModel(
-                    canonicalHtml = prependChapterHeadingIfMissing(
-                        rawHtml = snapshot.rawHtml.normalizeStructuredChapterPayload(),
-                        chapterName = snapshot.chapter.name,
-                    ),
-                    chapterWebUrl = snapshot.chapterWebUrl,
-                    novelUrl = snapshot.novel.url,
-                ).textBlocks
+    override suspend fun translationSourceTextBlocks(chapterId: Long): List<String> =
+        eu.kanade.tachiyomi.ui.reader.novel.translation.translationSourceForChapter(
+            chapterId,
+            contentModelChapterId,
+            bookController.isBookRuntimeActive(),
+            ::currentParsedTextBlocks,
+        ) { requested ->
+            try {
+                ttsChapterRepository.loadChapterSnapshot(
+                    requested,
+                ).contentBlocks.filterIsInstance<ContentBlock.Text>().map {
+                    it.text
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
             }
-        }.getOrElse { emptyList() }
-    }
+        }
 
     /**
      * Renders a book section translated when a translation for that chapter exists.
@@ -2622,23 +3059,52 @@ class NovelReaderScreenModel(
         // in-memory maps are used for the chapter they were produced for, every other chapter falls
         // back to its own cache entry. Gating this on the active chapter made the neighbouring
         // resident chapters lose their translation as soon as the reader crossed a boundary.
-        val inMemory = when {
-            chapterId != translationHolderChapterId -> emptyMap()
-            translationState.isGeminiTranslationVisible && !translationHolder.isEmpty("gemini") ->
-                translationHolder.map("gemini")
-            translationState.isGoogleTranslationVisible && !translationHolder.isEmpty("google") ->
-                translationHolder.map("google")
-            else -> emptyMap()
+        if (chapterId == translationHolderChapterId &&
+            translationState.isGoogleTranslationVisible &&
+            !translationHolder.isEmpty("google")
+        ) {
+            return NovelContentHtmlMapper.buildTranslatedHtmlFromTemplate(
+                bodyHtml,
+                translationHolder.map("google"),
+            ) ?: bodyHtml
+        }
+        val geminiHiddenForSection = !settings.geminiEnabled ||
+            translationController.isGeminiTranslationHiddenByUser() ||
+            translationState.isGoogleTranslationVisible ||
+            (
+                chapterId == translationHolderChapterId &&
+                    !translationState.isGeminiTranslationVisible &&
+                    (!translationHolder.isEmpty("gemini") || translationState.hasGeminiTranslationCache)
+                )
+        if (geminiHiddenForSection) return bodyHtml
+        val inMemory = if (
+            chapterId == translationHolderChapterId &&
+            translationState.isGeminiTranslationVisible &&
+            !translationHolder.isEmpty("gemini")
+        ) {
+            translationHolder.map("gemini")
+        } else {
+            emptyMap()
         }
         val translatedByIndex = inMemory.ifEmpty {
-            val cached = NovelReaderTranslationDiskCacheStore.get(chapterId) ?: return bodyHtml
-            val settingsMatch = NovelReaderTranslationCacheResolver.matches(
-                cached = cached,
-                requirements = settings.toTranslationCacheRequirements(
-                    replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
-                ),
-            )
-            if (!settingsMatch) return bodyHtml
+            val entry = if (settings.geminiDisableCache) {
+                TranslationSessionResults.store.result(chapterId)
+            } else {
+                NovelReaderTranslationDiskCacheStore.get(chapterId)
+            }
+            val source = NovelReaderContentModel(
+                canonicalHtml = bodyHtml,
+                chapterWebUrl = null,
+                novelUrl = "",
+            ).textBlocks
+            val cached =
+                translationArtifactForSource(
+                    entry,
+                    settings,
+                    replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+                    source,
+                )
+                    ?: return bodyHtml
             cached.translatedByIndex
         }
         if (translatedByIndex.isEmpty()) return bodyHtml
@@ -2656,7 +3122,7 @@ class NovelReaderScreenModel(
     }
 
     private fun currentParsedContentBlocks(): List<ContentBlock> {
-        return contentModel?.contentBlocks ?: emptyList()
+        return if (currentChapter?.id == contentModelChapterId) contentModel?.contentBlocks.orEmpty() else emptyList()
     }
     sealed interface State {
         data class Loading(val readerSettings: NovelReaderSettings? = null) : State
@@ -2677,6 +3143,8 @@ class NovelReaderScreenModel(
             val previousChapterName: String? = null,
             val nextChapterId: Long?,
             val nextChapterName: String? = null,
+            val previousChapterPreview: AdjacentChapterPreview? = null,
+            val nextChapterPreview: AdjacentChapterPreview? = null,
             val seriesInterstitialState: SeriesInterstitialState? = null,
             val finaleState: ReaderFinaleState? = null,
             val chapterWebUrl: String?,
@@ -2857,6 +3325,14 @@ class NovelReaderScreenModel(
             val ollamaCloudApiTestMessage: String? = null,
         )
     }
+    data class AdjacentChapterPreview(
+        val chapterId: Long,
+        val chapterName: String,
+        val contentBlocks: List<ContentBlock>,
+        val richContentBlocks: List<NovelRichContentBlock>,
+        val richContentUnsupportedFeaturesDetected: Boolean,
+    )
+
     sealed interface ContentBlock {
         data class Text(val text: String) : ContentBlock
         data class Image(val url: String, val alt: String?) : ContentBlock
@@ -3851,8 +4327,9 @@ internal fun normalizeHtml(
 
 internal fun injectIntoHtml(rawHtml: String, injection: String): String {
     val headClose = Regex("</head>", RegexOption.IGNORE_CASE)
-    if (headClose.containsMatchIn(rawHtml)) {
-        return rawHtml.replaceFirst(headClose, "$injection</head>")
+    val headCloseMatch = headClose.find(rawHtml)
+    if (headCloseMatch != null) {
+        return rawHtml.replaceRange(headCloseMatch.range, injection + headCloseMatch.value)
     }
     val headOpen = Regex("<head[^>]*>", RegexOption.IGNORE_CASE)
     val headMatch = headOpen.find(rawHtml)
@@ -3860,8 +4337,9 @@ internal fun injectIntoHtml(rawHtml: String, injection: String): String {
         return rawHtml.replaceRange(headMatch.range, headMatch.value + injection)
     }
     val bodyClose = Regex("</body>", RegexOption.IGNORE_CASE)
-    if (bodyClose.containsMatchIn(rawHtml)) {
-        return rawHtml.replaceFirst(bodyClose, "$injection</body>")
+    val bodyCloseMatch = bodyClose.find(rawHtml)
+    if (bodyCloseMatch != null) {
+        return rawHtml.replaceRange(bodyCloseMatch.range, injection + bodyCloseMatch.value)
     }
     return injection + rawHtml
 }

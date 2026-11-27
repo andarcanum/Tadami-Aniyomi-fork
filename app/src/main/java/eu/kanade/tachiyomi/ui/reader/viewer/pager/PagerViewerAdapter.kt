@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
+import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
@@ -48,7 +49,13 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
      * Context that has been wrapped to use the correct theme values based on the
      * current app theme and reader background color
      */
-    private var readerThemedContext = viewer.activity.createReaderThemeContext()
+    private var readerThemedContext: Context? = null
+
+    private fun requireReaderThemedContext(): Context {
+        return readerThemedContext ?: viewer.activity.createReaderThemeContext().also {
+            readerThemedContext = it
+        }
+    }
 
     /**
      * Updates this adapter with the given [chapters]. It handles setting a few pages of the
@@ -187,11 +194,25 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
      * Creates a new view for the item at the given [position].
      */
     override fun createView(container: ViewGroup, position: Int): View {
+        val themedContext = requireReaderThemedContext()
         return when (val item = items[position]) {
-            is JoinedReaderPage -> JoinedPagerPageHolder(readerThemedContext, viewer, item)
-            is ReaderPage -> PagerPageHolder(readerThemedContext, viewer, item)
-            is ChapterTransition -> PagerTransitionHolder(readerThemedContext, viewer, item)
+            is JoinedReaderPage -> JoinedPagerPageHolder(themedContext, viewer, item).apply {
+                setDecodePriorityBoost(viewer.isCurrentItem(item))
+                setViewportVisible(viewer.isCurrentPosition(position))
+            }
+            is ReaderPage -> PagerPageHolder(themedContext, viewer, item).apply {
+                setDecodePriorityBoost(viewer.isCurrentItem(item))
+                setViewportVisible(viewer.isCurrentPosition(position))
+            }
+            is ChapterTransition -> PagerTransitionHolder(themedContext, viewer, item)
             else -> throw NotImplementedError("Holder for ${item.javaClass} not implemented")
+        }
+    }
+
+    override fun destroyView(container: ViewGroup, position: Int, view: View) {
+        when (view) {
+            is PagerPageHolder -> view.recycle()
+            is JoinedPagerPageHolder -> view.recycle()
         }
     }
 
@@ -258,7 +279,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
     }
 
     fun refresh() {
-        readerThemedContext = viewer.activity.createReaderThemeContext()
+        readerThemedContext = null
     }
 }
 

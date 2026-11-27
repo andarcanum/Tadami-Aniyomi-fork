@@ -6,13 +6,20 @@ import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tachiyomi.domain.discovery.model.DiscoveryFactKind
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import tachiyomi.domain.discovery.model.DiscoveryTasteMetadata
+import tachiyomi.domain.discovery.model.DiscoveryTitleIdentity
+import tachiyomi.domain.discovery.model.canonicalDiscoveryKey
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.domain.source.novel.model.StubNovelSource
@@ -91,6 +98,8 @@ object TasteSignalRecorder {
         ) -> List<String> = { mediaType, sourceId, sourceUrl ->
             fetchLocalGenres(mediaType, sourceId, sourceUrl)
         },
+        sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
+        altKeyEnrichmentScope: CoroutineScope? = null,
     ): Boolean {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
         var genres = snapshotGenres(item)
@@ -103,44 +112,94 @@ object TasteSignalRecorder {
             }
         }
         val eventTimestamp = nextMonotonicTimestamp()
-        val recordedTimestamp = runCatchingUnlessCancelled {
-            repository.recordSignalWithReceipt(
-                mediaType = item.mediaType,
-                cleanTitle = item.cleanTitle,
-                title = item.title,
-                signalType = signalType,
-                genres = genres,
-                provider = item.provider,
-                sourceKey = sourceKey,
-                timestamp = eventTimestamp,
-            )
-        }.getOrNull() ?: return false
+        val identity = DiscoveryTitleIdentity(
+            mediaType = item.mediaType,
+            identityKey = item.identityKey.orEmpty(),
+            title = item.title,
+            primaryCleanTitle = item.cleanTitle,
+            sourceId = item.sourceId,
+            sourceUrl = item.sourceUrl,
+            trustedAliases = item.trustedAliases,
+            metadataChangedAt = eventTimestamp,
+        )
+        val metadata = DiscoveryTasteMetadata(
+            title = item.title,
+            primaryCleanTitle = item.cleanTitle,
+            genres = genres,
+            provider = item.provider,
+            sourceKey = sourceKey,
+            sourceId = item.sourceId,
+            sourceUrl = item.sourceUrl,
+            trustedAliases = item.trustedAliases,
+            changedAt = eventTimestamp,
+        )
+        val positive = signalType == DiscoverySignalType.CLICK ||
+            signalType == DiscoverySignalType.LIKE ||
+            signalType == DiscoverySignalType.ADD
+        val recordedTimestamp = if (positive) {
+            runCatchingUnlessCancelled {
+                repository.recordTaste(identity, signalType, metadata)?.positiveCreatedAt
+            }.getOrNull() ?: return false
+        } else if (signalType == DiscoverySignalType.HIDE) {
+            runCatchingUnlessCancelled {
+                repository.recordNegativeTaste(identity, metadata)
+            }.getOrNull() ?: return false
+        } else if (signalType == DiscoverySignalType.CONSUMED) {
+            runCatchingUnlessCancelled {
+                repository.recordConsumedTaste(identity, metadata)
+            }.getOrNull() ?: return false
+        } else {
+            runCatchingUnlessCancelled {
+                repository.recordSignalWithReceipt(
+                    mediaType = item.mediaType,
+                    cleanTitle = item.cleanTitle,
+                    title = item.title,
+                    signalType = signalType,
+                    genres = genres,
+                    provider = item.provider,
+                    sourceKey = sourceKey,
+                    timestamp = eventTimestamp,
+                )
+            }.getOrNull() ?: return false
+        }
         if (signalType.excludesFromFeed) {
-            recordConsumedAltKeys(
-                repository = repository,
-                mediaType = item.mediaType,
-                primaryTitle = item.title,
-                sourceKey = sourceKey,
-                altMetaResolver = altMetaResolver,
-            )
+            if (altKeyEnrichmentScope != null) {
+                altKeyEnrichmentScope.launch {
+                    recordConsumedAltKeys(
+                        repository = repository,
+                        mediaType = item.mediaType,
+                        primaryTitle = item.title,
+                        sourceKey = sourceKey,
+                        altMetaResolver = altMetaResolver,
+                    )
+                }
+            } else {
+                recordConsumedAltKeys(
+                    repository = repository,
+                    mediaType = item.mediaType,
+                    primaryTitle = item.title,
+                    sourceKey = sourceKey,
+                    altMetaResolver = altMetaResolver,
+                )
+            }
         }
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)
-        } else if (signalType == DiscoverySignalType.LIKE) {
-            runCatching {
-                val app = Injekt.get<android.app.Application>()
-                DiscoveryUpdateJob.scheduleRefill(app, item.mediaType)
-            }
-            if (genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
-                enrichmentScope.launch {
-                    enrichLikeMetadata(
-                        repository = repository,
-                        item = item,
-                        sourceKey = sourceKey,
-                        expectedCreatedAt = recordedTimestamp,
-                        sourceDetailsResolver = sourceDetailsResolver,
-                    )
-                }
+        } else if (
+            (signalType == DiscoverySignalType.LIKE || signalType == DiscoverySignalType.ADD) &&
+            genres.isEmpty() &&
+            (item.sourceId ?: 0L) > 0L &&
+            !item.sourceUrl.isNullOrBlank()
+        ) {
+            enrichmentScope.launch {
+                enrichLikeMetadata(
+                    repository = repository,
+                    item = item,
+                    sourceKey = sourceKey,
+                    expectedCreatedAt = recordedTimestamp,
+                    sourceDetailsResolver = sourceDetailsResolver,
+                    sourcePolicyProvider = sourcePolicyProvider,
+                )
             }
         }
         return true
@@ -158,7 +217,12 @@ object TasteSignalRecorder {
         ) -> List<String> = { mediaType, sourceId, sourceUrl ->
             fetchSourceGenres(mediaType, sourceId, sourceUrl)
         },
+        sourcePolicyProvider: DiscoverySourcePolicyProvider? = null,
     ) {
+        val policies = runCatchingUnlessCancelled {
+            sourcePolicyProvider ?: Injekt.get<DiscoverySourcePolicyProvider>()
+        }.getOrNull() ?: return
+        if (!policies.current(item.mediaType).allows(item)) return
         if ((item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
             val sourceId = item.sourceId!!
             val sourceUrl = item.sourceUrl!!
@@ -166,14 +230,28 @@ object TasteSignalRecorder {
                 sourceDetailsResolver(item.mediaType, sourceId, sourceUrl)
             }.getOrNull().orEmpty()
             if (enriched.isNotEmpty()) {
+                val identityKey = item.identityKey ?: canonicalDiscoveryKey(
+                    item.mediaType,
+                    item.sourceId,
+                    item.sourceUrl,
+                    item.cleanTitle,
+                )
                 runCatchingUnlessCancelled {
-                    repository.enrichSignalMetadataIfCurrent(
-                        mediaType = item.mediaType,
-                        cleanTitle = item.cleanTitle,
-                        expectedCreatedAt = expectedCreatedAt,
-                        genres = enriched,
-                        provider = item.provider,
-                        sourceKey = sourceKey,
+                    repository.enrichTasteMetadata(
+                        media = item.mediaType,
+                        identityKey = identityKey,
+                        expectedPositiveAt = expectedCreatedAt,
+                        metadata = DiscoveryTasteMetadata(
+                            title = item.title,
+                            primaryCleanTitle = item.cleanTitle,
+                            genres = enriched,
+                            provider = item.provider,
+                            sourceKey = sourceKey,
+                            sourceId = item.sourceId,
+                            sourceUrl = item.sourceUrl,
+                            trustedAliases = item.trustedAliases,
+                            changedAt = System.currentTimeMillis(),
+                        ),
                     )
                 }
             }
@@ -192,6 +270,7 @@ object TasteSignalRecorder {
         mediaType: DiscoveryMediaType,
         title: String,
         sourceId: Long?,
+        enrichmentScope: CoroutineScope? = null,
         altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
             runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
         },
@@ -199,26 +278,53 @@ object TasteSignalRecorder {
         val cleanTitle = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(title)
         if (cleanTitle.isBlank()) return
         val sourceKey = resolveSourceKey(mediaType, sourceId)
+        val identityKey = canonicalDiscoveryKey(mediaType, sourceId, null, cleanTitle)
         val eventTimestamp = nextMonotonicTimestamp()
+        val identity = DiscoveryTitleIdentity(
+            mediaType = mediaType,
+            identityKey = identityKey,
+            title = title,
+            primaryCleanTitle = cleanTitle,
+            sourceId = sourceId,
+            metadataChangedAt = eventTimestamp,
+        )
+        val metadata = DiscoveryTasteMetadata(
+            title = title,
+            primaryCleanTitle = cleanTitle,
+            genres = emptyList(),
+            provider = null,
+            sourceKey = sourceKey,
+            sourceId = sourceId,
+            changedAt = eventTimestamp,
+        )
         runCatchingUnlessCancelled {
-            repository.recordSignal(
-                mediaType = mediaType,
-                cleanTitle = cleanTitle,
-                title = title,
-                signalType = DiscoverySignalType.CONSUMED,
-                genres = emptyList(),
-                provider = null,
-                sourceKey = sourceKey,
-                timestamp = eventTimestamp,
+            repository.recordConsumedTaste(identity, metadata)
+        }
+        runCatchingUnlessCancelled {
+            repository.recordFact(
+                identity,
+                DiscoveryFactKind.STARTED,
             )
         }
-        recordConsumedAltKeys(
-            repository = repository,
-            mediaType = mediaType,
-            primaryTitle = title,
-            sourceKey = sourceKey,
-            altMetaResolver = altMetaResolver,
-        )
+        if (enrichmentScope != null) {
+            enrichmentScope.launch {
+                recordConsumedAltKeys(
+                    repository = repository,
+                    mediaType = mediaType,
+                    primaryTitle = title,
+                    sourceKey = sourceKey,
+                    altMetaResolver = altMetaResolver,
+                )
+            }
+        } else {
+            recordConsumedAltKeys(
+                repository = repository,
+                mediaType = mediaType,
+                primaryTitle = title,
+                sourceKey = sourceKey,
+                altMetaResolver = altMetaResolver,
+            )
+        }
         afterConsumed(repository, mediaType, cleanTitle)
     }
 
@@ -235,26 +341,39 @@ object TasteSignalRecorder {
         sourceKey: String?,
         altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta?,
     ) {
+        val externalAllowed = runCatching {
+            Injekt.get<eu.kanade.domain.discovery.service.DiscoveryPreferences>().externalProvidersEnabled().get()
+        }.getOrDefault(true)
+        if (!externalAllowed) return
         val meta = runCatchingUnlessCancelled { altMetaResolver(primaryTitle, mediaType) }.getOrNull() ?: return
         val altKey = consumedAltKey(primaryTitle, meta) ?: return
+        val altTitle = meta.altTitle ?: return
+        val altIdentityKey = canonicalDiscoveryKey(mediaType, null, null, altKey)
         val eventTimestamp = nextMonotonicTimestamp()
         runCatchingUnlessCancelled {
-            repository.recordSignal(
-                mediaType = mediaType,
-                cleanTitle = altKey,
-                title = meta.altTitle!!,
-                signalType = DiscoverySignalType.CONSUMED,
-                genres = emptyList(),
-                provider = null,
-                sourceKey = sourceKey,
-                timestamp = eventTimestamp,
+            repository.recordConsumedTaste(
+                identity = DiscoveryTitleIdentity(
+                    mediaType = mediaType,
+                    identityKey = altIdentityKey,
+                    title = altTitle,
+                    primaryCleanTitle = altKey,
+                    metadataChangedAt = eventTimestamp,
+                ),
+                metadata = DiscoveryTasteMetadata(
+                    title = altTitle,
+                    primaryCleanTitle = altKey,
+                    genres = emptyList(),
+                    provider = null,
+                    sourceKey = sourceKey,
+                    changedAt = eventTimestamp,
+                ),
             )
         }
     }
 
     /**
      * Пост-эффекты consumed: 48h-полка показа (тайтл не вернётся даже после сброса
-     * вкус-лога) + дебаунс-дозаполнение ленты (10 мин REPLACE-очередь): прочитанное
+     * вкус-лога) + дебаунс-дозаполнение ленты (60 с REPLACE-очередь): прочитанное
      * заменяется свежим тайтлом из тех же плагинов, дыры в ряде не остаётся.
      */
     private suspend fun afterConsumed(
@@ -313,12 +432,27 @@ object TasteSignalRecorder {
         sourceId: Long,
         sourceUrl: String,
     ): List<String> = runCatchingUnlessCancelled {
+        val context = currentCoroutineContext()
+        context.ensureActive()
+        val policies = Injekt.get<DiscoverySourcePolicyProvider>()
+        val authority = policies as? DiscoverySdkBindingAuthority ?: return@runCatchingUnlessCancelled emptyList()
+        val revision = policies.current(mediaType).revision
+        fun guard(source: Any) {
+            context.ensureActive()
+            if (!policies.current(mediaType).allowsNative(sourceId) ||
+                !authority.isCurrentSourceBinding(mediaType, sourceId, source, revision)
+            ) {
+                throw kotlinx.coroutines.CancellationException("Discovery source binding changed")
+            }
+        }
         when (mediaType) {
             DiscoveryMediaType.MANGA -> {
                 val source = Injekt.get<tachiyomi.domain.source.manga.service.MangaSourceManager>().get(sourceId)
                 if (source != null && source !is StubMangaSource) {
-                    val sManga = SManga.create().apply { url = sourceUrl }
-                    val details = fetchDiscoveryMangaDetails(source, sManga)
+                    guard(source)
+                    val entry = SManga.create().apply { url = sourceUrl }
+                    val details = fetchDiscoveryMangaDetails(source, entry) { guard(source) }
+                    guard(source)
                     parseGenres(details.genre)
                 } else {
                     emptyList()
@@ -327,8 +461,9 @@ object TasteSignalRecorder {
             DiscoveryMediaType.ANIME -> {
                 val source = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>().get(sourceId)
                 if (source != null && source !is StubAnimeSource) {
-                    val sAnime = SAnime.create().apply { url = sourceUrl }
-                    val details = source.getAnimeDetails(sAnime)
+                    guard(source)
+                    val details = source.getAnimeDetails(SAnime.create().apply { url = sourceUrl })
+                    guard(source)
                     parseGenres(details.genre)
                 } else {
                     emptyList()
@@ -337,8 +472,9 @@ object TasteSignalRecorder {
             DiscoveryMediaType.NOVEL -> {
                 val source = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>().get(sourceId)
                 if (source != null && source !is StubNovelSource) {
-                    val sNovel = SNovel.create().apply { url = sourceUrl }
-                    val details = source.getNovelDetails(sNovel)
+                    guard(source)
+                    val details = source.getNovelDetails(SNovel.create().apply { url = sourceUrl })
+                    guard(source)
                     parseGenres(details.genre)
                 } else {
                     emptyList()

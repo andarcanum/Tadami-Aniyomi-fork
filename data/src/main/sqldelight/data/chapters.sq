@@ -25,6 +25,9 @@ CREATE TABLE chapters(
 CREATE INDEX chapters_manga_id_index ON chapters(manga_id);
 CREATE INDEX chapters_unread_by_manga_index ON chapters(manga_id, read) WHERE read = 0;
 CREATE INDEX chapters_url_index ON chapters(url);
+CREATE INDEX chapters_date_fetch_index ON chapters(date_fetch DESC);
+CREATE INDEX chapters_manga_id_date_fetch_index ON chapters(manga_id, date_fetch DESC);
+CREATE INDEX chapters_date_upload_index ON chapters(date_upload DESC);
 
 CREATE TRIGGER update_last_modified_at_chapters
 AFTER UPDATE ON chapters
@@ -145,4 +148,16 @@ WHERE manga_id = :mangaId;
 
 getAllChaptersForBackup:
 SELECT C.*
-FROM chapters C;
+FROM chapters C
+JOIN mangas M ON C.manga_id = M._id
+WHERE M.favorite = 1
+OR M._id IN (
+    SELECT DISTINCT chapters.manga_id
+    FROM chapters
+    WHERE read = 1 OR last_page_read != 0
+)
+OR M._id IN (
+    SELECT DISTINCT C2.manga_id
+    FROM history H
+    JOIN chapters C2 ON H.chapter_id = C2._id
+);

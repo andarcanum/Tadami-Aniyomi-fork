@@ -10,13 +10,7 @@ internal fun resolveTranslationReasoningOptions(
     return when (provider) {
         NovelTranslationProvider.GEMINI,
         NovelTranslationProvider.GEMINI_PRIVATE,
-        -> when {
-            normalizedModel.startsWith("gemini-3-pro") ||
-                normalizedModel.startsWith("gemini-3.1-pro") -> listOf("low", "high")
-            normalizedModel.startsWith("gemini-3-flash") ||
-                normalizedModel.startsWith("gemini-3.1-flash-lite") -> listOf("minimal", "low", "medium", "high")
-            else -> emptyList()
-        }
+        -> resolveGeminiModelCapabilities(normalizedModel).reasoningOptions
         NovelTranslationProvider.OPENROUTER -> when {
             normalizedModel.contains("/gemini-3") -> listOf("minimal", "low", "medium", "high")
             else -> emptyList()

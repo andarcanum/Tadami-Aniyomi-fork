@@ -25,6 +25,7 @@ import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.achievement.rule.RuleResult
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialIds
 import tachiyomi.domain.entries.anime.repository.AnimeRepository
 import tachiyomi.domain.entries.manga.repository.MangaRepository
 import tachiyomi.domain.entries.novel.repository.NovelRepository
@@ -360,6 +361,7 @@ class AchievementHandler(
     }
 
     private suspend fun onAchievementUnlocked(achievement: Achievement) {
+        if (achievement.id == CrystalMemorialIds.GRANT_KEY) return
         logcat(LogPriority.INFO) { "Achievement unlocked: ${achievement.title} (+${achievement.points} points)" }
 
         try {
@@ -395,6 +397,8 @@ class AchievementHandler(
         currentProgress: AchievementProgress?,
         newProgress: Int,
     ): AchievementProgress? {
+        // Crystal is granted only by its atomic scene-final receipt transaction.
+        if (achievement.id == CrystalMemorialIds.GRANT_KEY) return currentProgress
         return if (achievement.isTiered) {
             // Обработка многоуровневого достижения
             applyTieredProgressUpdate(achievement, currentProgress, newProgress)

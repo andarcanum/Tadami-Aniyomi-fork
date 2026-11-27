@@ -11,8 +11,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -106,7 +113,12 @@ internal fun NovelReaderTopBarPanel(
                     panelBackgroundColor,
                     RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp),
                 )
-                .statusBarsPadding(),
+                .statusBarsPadding()
+                .windowInsetsPadding(
+                    WindowInsets.displayCutout
+                        .union(WindowInsets.navigationBars)
+                        .only(WindowInsetsSides.Horizontal),
+                ),
         ) {
             AppBar(
                 modifier = Modifier.fillMaxWidth(),

@@ -1,12 +1,14 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import io.kotest.matchers.doubles.plusOrMinus
+import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.junit.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
+import kotlin.system.measureTimeMillis
 
 class DiscoveryCandidatePolicyTest {
 
@@ -394,5 +396,106 @@ class DiscoveryCandidatePolicyTest {
         )
 
         policy.filterRowCandidates(items, { it.genres }) shouldBe emptyList()
+    }
+
+    @Test
+    fun `best-effort required prefers proven matching items over empty-genre items with higher score`() {
+        val policy = DiscoveryCandidatePolicy(
+            requiredGenres = setOf("Romance"),
+            strictRequired = false,
+        )
+
+        val items = listOf(
+            testRowItem("Unknown Genres High Score", genres = emptyList(), score = 0.99),
+            testRowItem("Proven Romance", genres = listOf("Romance"), score = 0.30),
+        )
+
+        val filtered = policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
+        filtered.map { it.title } shouldBe listOf("Proven Romance")
+
+        val onlyUnknown = listOf(testRowItem("Unknown Genres", genres = emptyList(), score = 0.5))
+        policy.filterRowCandidates(onlyUnknown, { it.genres }).map { it.title } shouldBe listOf("Unknown Genres")
+    }
+
+    @Test
+    fun `best-effort with fillTarget tops up exact matches with partial, incomplete and fallback tiers`() {
+        val policy = DiscoveryCandidatePolicy(
+            blacklistedTags = setOf("Hentai"),
+            ignoredGenres = setOf("Horror"),
+            requiredGenres = setOf("Fantasy", "Action"),
+            requiredMatchMode = RequiredMatchMode.ALL,
+            strictRequired = false,
+        )
+
+        val items = listOf(
+            testRowItem("Fallback Drama", genres = listOf("Drama"), score = 0.9),
+            testRowItem("Blocked Hentai", genres = listOf("Fantasy", "Action", "Hentai"), score = 1.0),
+            testRowItem("Unknown Genres", genres = emptyList(), score = 0.5),
+            testRowItem("Partial Action", genres = listOf("Action"), score = 0.4),
+            testRowItem("Exact Both", genres = listOf("Fantasy", "Action"), score = 0.2),
+            testRowItem("Ignored Horror", genres = listOf("Horror"), score = 0.8),
+        )
+
+        val filled = policy.filterRowCandidates(
+            items = items,
+            genresSelector = { it.genres },
+            scoreSelector = { it.score },
+            fillTarget = 60,
+        )
+        filled.map { it.title } shouldBe listOf(
+            "Exact Both",
+            "Partial Action",
+            "Unknown Genres",
+            "Fallback Drama",
+        )
+    }
+
+    @Test
+    fun `large candidate pool evaluates quickly and preserves exact exclusion and priority ranking`() {
+        val ignored = (1..12).map { "IgnoredTag$it" }.toSet() + setOf("Ecchi", "Hentai", "Horror", "Gore")
+        val blacklisted = (1..8).map { "BlacklistedTag$it" }.toSet() + setOf("Tragedy", "Yaoi")
+        val priority = setOf("Fantasy", "Action", "Adventure", "Comedy")
+        val policy = DiscoveryCandidatePolicy(
+            blacklistedTags = blacklisted,
+            ignoredGenres = ignored,
+            requiredGenres = setOf("Fantasy", "Action"),
+            priorityGenres = priority,
+            requiredMatchMode = RequiredMatchMode.ANY,
+            strictRequired = false,
+        )
+        val fillerGenres = listOf("Drama", "Romance", "Sci-Fi", "Mystery", "Slice of Life", "Sports")
+        val items = (0 until 500).map { index ->
+            val genres = when {
+                index % 10 == 0 -> listOf("Fantasy", "Action", "Horror", "Drama", "Sci-Fi", "Mystery")
+                index % 7 == 0 -> listOf("Action", "Tragedy", "Comedy", "Romance", "Adventure", "Sports")
+                index % 3 == 0 -> listOf("Fantasy", "Action", "Adventure", "Comedy", "Drama", "Sci-Fi")
+                else -> fillerGenres
+            }
+            testRowItem(
+                title = "Candidate $index",
+                genres = genres,
+                score = (500 - index) / 500.0,
+            )
+        }
+        // Warm JVM classloading for ontology maps before measuring steady-state policy execution.
+        policy.filterRowCandidates(items.take(5), { it.genres }, scoreSelector = { it.score }, fillTarget = 60)
+
+        lateinit var filtered: List<DiscoveryRowItem>
+        val elapsedMs = measureTimeMillis {
+            filtered = policy.filterRowCandidates(
+                items = items,
+                genresSelector = { it.genres },
+                scoreSelector = { it.score },
+                fillTarget = 60,
+            )
+        }
+        filtered.size shouldBe 60
+        filtered.none { item ->
+            item.genres.any { g -> g in setOf("Horror", "Tragedy") }
+        } shouldBe true
+        filtered.all { item ->
+            "Fantasy" in item.genres || "Action" in item.genres
+        } shouldBe true
+        elapsedMs shouldBeLessThan 500L
     }
 }

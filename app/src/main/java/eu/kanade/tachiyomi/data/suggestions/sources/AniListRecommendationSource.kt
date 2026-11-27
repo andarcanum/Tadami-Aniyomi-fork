@@ -15,9 +15,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -58,11 +56,12 @@ class AniListRecommendationSource(
         return when (mediaType) {
             SuggestionMediaType.ANIME -> upperType == "ANIME"
             SuggestionMediaType.MANGA -> upperType == "MANGA" && upperFormat != "NOVEL"
-            SuggestionMediaType.NOVEL -> upperType == "MANGA"
+            SuggestionMediaType.NOVEL -> upperType == "MANGA" && upperFormat == "NOVEL"
         }
     }
 
     override suspend fun fetchSuggestions(seed: SuggestionSeed): List<SuggestionItem> = coroutineScope {
+        val nsfwFilter = nsfwFilterProvider()
         val cacheKey = SuggestionCache.makeKey(
             name,
             seed.primaryTitle,
@@ -70,6 +69,7 @@ class AniListRecommendationSource(
             seed.candidateTitles,
             seed.description,
             seed.author,
+            extraKeys = listOf("nsfw=$nsfwFilter"),
         )
         SuggestionCache.get(cacheKey)?.let {
             logcat {
@@ -186,20 +186,6 @@ class AniListRecommendationSource(
             }
         }
 
-        // F3.1: Genre-based fallback for NOVEL. If we still have no base
-        // media after the title + ANIME fallbacks, search AniList by the
-        // novel's primary genre and take the top-N by averageScore. This
-        // gives us *something* to show even when the title is unknown
-        // (e.g. KR/CN web-novels that never made it onto AniList).
-        if (mediaType == SuggestionMediaType.NOVEL && allResults.isEmpty() && !seed.genres.isNullOrEmpty()) {
-            logcat { "[AniList] Genre fallback for '${seed.primaryTitle}': genres=${seed.genres}" }
-            val genreResults = fetchByGenre(seed.genres)
-            if (genreResults.isNotEmpty()) {
-                logcat { "[AniList] Genre fallback found ${genreResults.size} media for '${seed.primaryTitle}'" }
-                allResults = genreResults
-            }
-        }
-
         logcat { "[AniList] Fetched ${allResults.size} base media before filtering for '${seed.primaryTitle}'" }
 
         if (mediaType == SuggestionMediaType.NOVEL) {
@@ -227,7 +213,7 @@ class AniListRecommendationSource(
             val mediaTitles = listOfNotNull(romaji, english, native) + synonyms
             val maxScore = mediaTitles.maxOfOrNull { mediaTitle ->
                 seed.candidateTitles.maxOfOrNull { candidate ->
-                    SuggestionTitleResolver.scoreMatch(mediaTitle, candidate)
+                    SuggestionTitleResolver.scoreBaseTitleMatch(mediaTitle, candidate)
                 } ?: 0
             } ?: 0
 
@@ -252,7 +238,7 @@ class AniListRecommendationSource(
             var bestScore = 0
             for (candidate in seed.candidateTitles) {
                 for (mediaTitle in mediaTitles) {
-                    val score = SuggestionTitleResolver.scoreMatch(mediaTitle, candidate)
+                    val score = SuggestionTitleResolver.scoreBaseTitleMatch(mediaTitle, candidate)
                     if (score > bestScore) {
                         bestScore = score
                         winningCandidate = candidate
@@ -293,11 +279,18 @@ class AniListRecommendationSource(
                 }
 
                 val siteUrl = rec["siteUrl"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                val recTitle = rec["title"]?.jsonObject?.let { t ->
-                    t["english"]?.jsonPrimitive?.contentOrNull
-                        ?: t["romaji"]?.jsonPrimitive?.contentOrNull
-                        ?: t["native"]?.jsonPrimitive?.contentOrNull
-                } ?: return@mapNotNull null
+                val titleObj = rec["title"]?.jsonObject
+                val recEnglish = titleObj?.get("english")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf {
+                    it.isNotEmpty()
+                }
+                val recRomaji = titleObj?.get("romaji")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf {
+                    it.isNotEmpty()
+                }
+                val recNative = titleObj?.get("native")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf {
+                    it.isNotEmpty()
+                }
+                val recTitle = recEnglish ?: recRomaji ?: recNative ?: return@mapNotNull null
+                val searchQueries = listOfNotNull(recTitle, recEnglish, recRomaji, recNative).distinct()
 
                 val thumbnailUrl = rec["coverImage"]?.jsonObject?.get("large")?.jsonPrimitive?.contentOrNull
 
@@ -307,7 +300,7 @@ class AniListRecommendationSource(
 
                 SuggestionItem(
                     title = recTitle,
-                    searchQueries = listOf(recTitle),
+                    searchQueries = searchQueries,
                     thumbnailUrl = thumbnailUrl,
                     providerName = name,
                     providerUrl = siteUrl,
@@ -328,98 +321,5 @@ class AniListRecommendationSource(
             SuggestionCache.put(cacheKey, suggestions)
         }
         suggestions
-    }
-
-    /**
-     * F3.1 — Genre-based AniList search.
-     *
-     * Returns the top [limit] novels sorted by `averageScore` that match
-     * the given list of genres. The result is a list of JSON "media"
-     * entries shaped the same way as the title-search result, so the
-     * downstream code can fall through to the recommendation-edge
-     * extraction path without changes.
-     */
-    private suspend fun fetchByGenre(genres: List<String>, limit: Int = 10): List<JsonObject> = coroutineScope {
-        val anilistGenres = genres
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { it.replace(Regex("\\s+"), "_").uppercase() }
-            .distinct()
-            .take(3)
-
-        if (anilistGenres.isEmpty()) return@coroutineScope emptyList()
-
-        val query = """
-            query GenreTop(${'$'}genres: [String], ${'$'}perPage: Int) {
-                Page(perPage: ${'$'}perPage) {
-                    media(genre_in: ${'$'}genres, type: MANGA, sort: SCORE_DESC) {
-                        id
-                        type
-                        format
-                        title { romaji english native }
-                        synonyms
-                        averageScore
-                        recommendations {
-                            edges {
-                                node {
-                                    mediaRecommendation {
-                                        id
-                                        type
-                                        format
-                                        isAdult
-                                        status
-                                        siteUrl
-                                        title { romaji english native }
-                                        coverImage { large }
-                                        genres
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        """.trimIndent()
-
-        try {
-            val payload = buildJsonObject {
-                put("query", query)
-                put(
-                    "variables",
-                    buildJsonObject {
-                        put(
-                            "genres",
-                            buildJsonArray {
-                                anilistGenres.forEach { add(it) }
-                            },
-                        )
-                        put("perPage", limit)
-                    },
-                )
-            }
-            val body = payload.toString().toRequestBody(jsonMime)
-            AniListRequestGuard.ensureClosed()
-            AniListRequestGuard.acquire()
-            val data = try {
-                client.newCall(POST("https://graphql.anilist.co/", headers = AniListRequestGuard.headers, body = body))
-                    .awaitSuccess()
-                    .parseAs<JsonObject>(json)
-            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (e.message?.contains("403") == true) AniListRequestGuard.reportForbidden()
-                throw e
-            }
-            data["data"]?.jsonObject
-                ?.get("Page")?.jsonObject
-                ?.get("media")?.jsonArray
-                ?.mapNotNull { it.jsonObject }
-                ?: emptyList()
-        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            logcat { "[AniList] genre search failed for $anilistGenres: ${e.message}" }
-            emptyList()
-        }
     }
 }

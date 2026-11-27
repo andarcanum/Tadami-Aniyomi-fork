@@ -25,6 +25,7 @@ fun AvailableExtensionData.toAnimeExtensionAvailable(): AnimeExtension.Available
         libVersion = libVersion,
         lang = lang,
         isNsfw = isNsfw,
+        isTorrent = isTorrent,
         sources = sources.map { source ->
             AnimeExtension.Available.AnimeSource(
                 id = source.id,

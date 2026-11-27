@@ -274,6 +274,29 @@ class ReelsForYouStorageTest {
         fixture.close()
     }
 
+    @Test
+    fun `large batches over 1000 items succeed in consumedIds and remove`() = runBlocking {
+        val fixture = Fixture()
+        val consumption = ReelsConsumptionRepositoryImpl(fixture.handler)
+        val candidates = ReelsCandidateRepositoryImpl(fixture.handler)
+        val generation = consumption.ensureScope(SCOPE, 1)
+
+        val largeBatch = (1..1200).map { "item_$it" }
+        consumption.markWatched(SCOPE, SOURCE, "item_1", Date(1_000), "foryou", 1, generation)
+        consumption.markWatched(SCOPE, SOURCE, "item_501", Date(1_000), "foryou", 1, generation)
+        consumption.markWatched(SCOPE, SOURCE, "item_1001", Date(1_000), "foryou", 1, generation)
+
+        val consumed = consumption.consumedIds(SCOPE, SOURCE, largeBatch)
+        consumed shouldBe setOf("item_1", "item_501", "item_1001")
+
+        val candidateList = listOf(candidate("item_1"), candidate("item_501"), candidate("item_1001"))
+        candidates.ingest(SCOPE, SOURCE, candidateList)
+        candidates.remove(SCOPE, SOURCE, largeBatch)
+        candidates.unconsumed(SCOPE, SOURCE, 10).shouldBeEmpty()
+
+        fixture.close()
+    }
+
     private companion object {
         const val SCOPE = "acc:101:tg-42"
         const val SOURCE = 101L

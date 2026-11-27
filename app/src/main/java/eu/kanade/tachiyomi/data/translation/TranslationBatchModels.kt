@@ -4,10 +4,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
-import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
-import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheRequirements
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelIdOf
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationPromptModifiersFingerprintOf
+import eu.kanade.tachiyomi.ui.reader.novel.translation.toGeminiTranslationParams
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -47,9 +44,21 @@ data class TranslationQueueProfileSnapshot(
     val ollamaCloudModel: String = "gpt-oss:120b",
     /** Replace rules applied to the source before extraction; part of the cache identity. */
     val replaceRulesFingerprint: String = "",
+    val snapshotVersion: Int = 0,
+    val replaceRulesSnapshot: List<eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule>? = null,
+    val geminiGenerationConfig: kotlinx.serialization.json.JsonObject? = null,
+    val geminiInputTokenLimit: Int? = null,
+    val connectionProfile: tachiyomi.domain.translation.profile.ConnectionProfile? = null,
+    val translationProfile: tachiyomi.domain.translation.profile.TranslationProfile? = null,
+    val systemPromptSnapshot: String? = null,
+    val geminiRequestShape: eu.kanade.tachiyomi.data.translation.profile.GeminiProfileRequestShape? = null,
 ) {
     fun toReaderSettings(baseSettings: NovelReaderSettings): NovelReaderSettings {
         return baseSettings.copy(
+            connectionProfile = if (snapshotVersion == 2) connectionProfile else null,
+            translationProfile = if (snapshotVersion == 2) translationProfile else null,
+            systemPromptSnapshot = if (snapshotVersion == 2) systemPromptSnapshot else null,
+            geminiRequestShape = if (snapshotVersion == 2) geminiRequestShape else null,
             geminiEnabled = geminiEnabled,
             geminiModel = geminiModel,
             geminiBatchSize = geminiBatchSize,
@@ -58,6 +67,8 @@ data class TranslationQueueProfileSnapshot(
             geminiRelaxedMode = geminiRelaxedMode,
             geminiReasoningEffort = geminiReasoningEffort,
             geminiBudgetTokens = geminiBudgetTokens,
+            geminiFrozenGenerationConfig = geminiGenerationConfig,
+            geminiFrozenInputTokenLimit = geminiInputTokenLimit,
             geminiTemperature = geminiTemperature,
             geminiTopP = geminiTopP,
             geminiTopK = geminiTopK,
@@ -93,6 +104,7 @@ data class TranslationBatchRequest(
     val chapterIds: List<Long>,
     val profileSnapshot: TranslationQueueProfileSnapshot,
     val forceRetranslate: Boolean,
+    val priority: Int = 1,
 )
 
 data class TranslationBatchEnqueueResult(
@@ -100,6 +112,7 @@ data class TranslationBatchEnqueueResult(
     val requestedCount: Int,
     val enqueuedCount: Int,
     val skippedAlreadyTranslatedCount: Int,
+    val conflictingCount: Int = 0,
 )
 
 enum class TranslationBatchStatus {
@@ -123,10 +136,12 @@ data class TranslationBatchState(
     val lastSuccessfulChapterId: Long?,
     val createdAt: Long,
     val updatedAt: Long,
+    val cancelled: Int = 0,
 )
 
 internal fun NovelReaderSettings.toTranslationQueueProfileSnapshot(
     replaceRulesFingerprint: String = "",
+    replaceRulesSnapshot: List<eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule>? = null,
 ): TranslationQueueProfileSnapshot {
     return TranslationQueueProfileSnapshot(
         geminiEnabled = geminiEnabled,
@@ -163,6 +178,30 @@ internal fun NovelReaderSettings.toTranslationQueueProfileSnapshot(
         ollamaCloudBaseUrl = ollamaCloudBaseUrl,
         ollamaCloudModel = ollamaCloudModel,
         replaceRulesFingerprint = replaceRulesFingerprint,
+        snapshotVersion = if (connectionProfile != null && translationProfile != null) 2 else 1,
+        connectionProfile = connectionProfile?.copy(credentialBindings = connectionProfile.credentialBindings.toList()),
+        translationProfile = translationProfile?.copy(
+            prompt = translationProfile.prompt.copy(
+                modifierIds = translationProfile.prompt.modifierIds.toList(),
+            ),
+        ),
+        systemPromptSnapshot = systemPromptSnapshot,
+        geminiRequestShape = geminiRequestShape,
+        replaceRulesSnapshot = replaceRulesSnapshot,
+        geminiGenerationConfig = if (translationProfile != null) {
+            geminiFrozenGenerationConfig
+        } else if (translationProvider == NovelTranslationProvider.GEMINI) {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.buildPublicGeminiGenerationConfig(
+                this.toGeminiTranslationParams(),
+            )
+        } else {
+            null
+        },
+        geminiInputTokenLimit = if (translationProvider == NovelTranslationProvider.GEMINI) {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.resolveGeminiModelCapabilities(geminiModel).inputTokenLimit
+        } else {
+            null
+        },
     )
 }
 
@@ -176,41 +215,4 @@ private fun String.toStylePreset(fallback: NovelTranslationStylePreset): NovelTr
 
 private fun String.toTranslationProvider(fallback: NovelTranslationProvider): NovelTranslationProvider {
     return enumValues<NovelTranslationProvider>().firstOrNull { it.name == this } ?: fallback
-}
-
-/**
- * Cache requirements for the batch skip-check, derived from the enqueued profile snapshot.
- *
- * The skip-check must answer exactly the same "is there a usable translation?" question the reader
- * asks on restore; probing by target language alone used to skip chapters whose cache was produced
- * by a different provider/model/prompt (the reader then showed the original text while the batch
- * reported "already translated" and enqueued nothing).
- */
-internal fun TranslationQueueProfileSnapshot.toTranslationCacheRequirements(): NovelReaderTranslationCacheRequirements {
-    val provider = translationProvider.toTranslationProvider(NovelTranslationProvider.GEMINI)
-    return NovelReaderTranslationCacheRequirements(
-        geminiEnabled = geminiEnabled,
-        geminiDisableCache = geminiDisableCache,
-        translationProvider = provider,
-        modelId = translationCacheModelIdOf(
-            provider = provider,
-            geminiModel = geminiModel,
-            openRouterModel = openRouterModel,
-            deepSeekModel = deepSeekModel,
-            mistralModel = mistralModel,
-            nvidiaModel = nvidiaModel,
-            ollamaCloudModel = ollamaCloudModel,
-        ),
-        sourceLang = geminiSourceLang,
-        targetLang = geminiTargetLang,
-        promptMode = geminiPromptMode.toGeminiPromptMode(GeminiPromptMode.ADULT_18),
-        stylePreset = geminiStylePreset.toStylePreset(NovelTranslationStylePreset.PROFESSIONAL),
-        extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
-        promptModifiersFingerprint = translationPromptModifiersFingerprintOf(
-            enabledIds = geminiEnabledPromptModifiers,
-            customModifier = geminiCustomPromptModifier,
-            rawModifiers = geminiPromptModifiers,
-        ),
-        replaceRulesFingerprint = replaceRulesFingerprint,
-    )
 }

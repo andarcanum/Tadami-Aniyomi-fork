@@ -36,8 +36,11 @@ import eu.kanade.presentation.components.AuroraSwitchItem
 import eu.kanade.presentation.components.AuroraTriStateItem
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
+import eu.kanade.presentation.library.AURORA_LIBRARY_LIST_SIZE_MAX
 import eu.kanade.presentation.library.auroraLibraryCardStyleOptions
+import eu.kanade.presentation.library.auroraLibraryListStyleOptions
 import eu.kanade.presentation.library.components.GroupPage
+import eu.kanade.presentation.library.formatAuroraLibraryListSizeLabel
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryScreenModel
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibrarySettingsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
@@ -47,6 +50,7 @@ import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.anime.model.sort
+import tachiyomi.domain.library.model.AuroraLibraryListStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -322,45 +326,64 @@ private fun ColumnScope.DisplayPage(
         onSelect = { screenModel.setDisplayMode(it) },
     )
 
-    val auroraCardStylePref = screenModel.libraryPreferences.auroraLibraryCardStyle()
-    val auroraCardStyle by auroraCardStylePref.collectAsStateWithLifecycle()
-    AuroraChipRow(MR.strings.pref_aurora_library_card_style) {
-        auroraLibraryCardStyleOptions().map { (titleRes, style) ->
-            AuroraFilterChip(
-                selected = auroraCardStyle == style,
-                onClick = { auroraCardStylePref.set(style) },
-                label = stringResource(titleRes),
+    if (displayMode == LibraryDisplayMode.List) {
+        val auroraListStylePref = remember(screenModel.libraryPreferences) {
+            screenModel.libraryPreferences.auroraLibraryListStyle()
+        }
+        val auroraListStyle by auroraListStylePref.collectAsStateWithLifecycle()
+        AuroraChipRow(MR.strings.pref_aurora_library_list_style) {
+            auroraLibraryListStyleOptions().map { (titleRes, style) ->
+                AuroraFilterChip(
+                    selected = auroraListStyle == style,
+                    onClick = { auroraListStylePref.set(style) },
+                    label = stringResource(titleRes),
+                )
+            }
+        }
+
+        if (auroraListStyle != AuroraLibraryListStyle.Banner) {
+            val listSizePref = remember(screenModel.libraryPreferences) {
+                screenModel.libraryPreferences.auroraLibraryListSize()
+            }
+            val listSize by listSizePref.collectAsStateWithLifecycle()
+            val autoLabel = stringResource(MR.strings.label_auto)
+            SliderItem(
+                value = listSize,
+                valueRange = 0..AURORA_LIBRARY_LIST_SIZE_MAX,
+                label = stringResource(AYMR.strings.pref_library_rows),
+                valueText = formatAuroraLibraryListSizeLabel(listSize, autoLabel),
+                onChange = listSizePref::set,
+                pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         }
-    }
-
-    val configuration = LocalConfiguration.current
-    // H17: keyed on orientation - the activity handles configChanges in-place (no recreation),
-    // so an unkeyed remember kept the slider bound to the pre-rotation orientation's preference
-    // while the grid itself re-bound via remember(isLandscape) (novel dialog is the reference).
-    val columnPreference = remember(configuration.orientation) {
-        if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            screenModel.libraryPreferences.animeLandscapeColumns()
-        } else {
-            screenModel.libraryPreferences.animePortraitColumns()
-        }
-    }
-
-    val columns by columnPreference.collectAsStateWithLifecycle()
-    if (displayMode == LibraryDisplayMode.List) {
-        SliderItem(
-            value = columns,
-            valueRange = 0..10,
-            label = stringResource(AYMR.strings.pref_library_rows),
-            valueText = if (columns > 0) {
-                columns.toString()
-            } else {
-                stringResource(MR.strings.label_auto)
-            },
-            onChange = columnPreference::set,
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
     } else {
+        val auroraCardStylePref = remember(screenModel.libraryPreferences) {
+            screenModel.libraryPreferences.auroraLibraryCardStyle()
+        }
+        val auroraCardStyle by auroraCardStylePref.collectAsStateWithLifecycle()
+        AuroraChipRow(MR.strings.pref_aurora_library_card_style) {
+            auroraLibraryCardStyleOptions().map { (titleRes, style) ->
+                AuroraFilterChip(
+                    selected = auroraCardStyle == style,
+                    onClick = { auroraCardStylePref.set(style) },
+                    label = stringResource(titleRes),
+                )
+            }
+        }
+
+        val configuration = LocalConfiguration.current
+        // H17: keyed on orientation - the activity handles configChanges in-place (no recreation),
+        // so an unkeyed remember kept the slider bound to the pre-rotation orientation's preference
+        // while the grid itself re-bound via remember(isLandscape) (novel dialog is the reference).
+        val columnPreference = remember(configuration.orientation) {
+            if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                screenModel.libraryPreferences.animeLandscapeColumns()
+            } else {
+                screenModel.libraryPreferences.animePortraitColumns()
+            }
+        }
+
+        val columns by columnPreference.collectAsStateWithLifecycle()
         SliderItem(
             value = columns,
             valueRange = 0..10,

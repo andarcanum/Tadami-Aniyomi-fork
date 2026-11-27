@@ -12,8 +12,15 @@ object CoverRequestPolicy {
 
     private const val FAILURE_THRESHOLD = 2
 
+    /** Cooldown after which a blacklisted cover host is eligible for a fresh retry. */
+    internal const val BLACKLIST_COOLDOWN_MS = 60_000L
+
+    @Volatile
+    internal var clockMs: () -> Long = { System.nanoTime() / 1_000_000L }
+
     private data class HostState(
         var failures: Int = 0,
+        var blacklistedAtMs: Long = 0L,
     )
 
     private val hostStates = ConcurrentHashMap<String, HostState>()
@@ -48,14 +55,28 @@ object CoverRequestPolicy {
         return builder
     }
 
+    /**
+     * Host-wide failure codes that justify temporarily pausing cover fetches for a host.
+     * HTTP 404 is deliberately excluded: a missing cover URL is per-resource and must
+     * never blacklist healthy covers hosted on the same CDN.
+     */
     fun isRecoverableResponseCode(code: Int): Boolean {
-        return code in setOf(403, 404, 429, 500, 502, 503)
+        return code in setOf(403, 429, 500, 502, 503)
     }
 
     fun recordFailure(host: String) {
+        if (host.isEmpty()) return
+        val now = clockMs()
         val state = hostStates.getOrPut(host) { HostState() }
         synchronized(state) {
+            if (state.failures >= FAILURE_THRESHOLD && now - state.blacklistedAtMs >= BLACKLIST_COOLDOWN_MS) {
+                state.failures = 0
+                state.blacklistedAtMs = 0L
+            }
             state.failures += 1
+            if (state.failures >= FAILURE_THRESHOLD && state.blacklistedAtMs == 0L) {
+                state.blacklistedAtMs = now
+            }
         }
     }
 
@@ -74,13 +95,23 @@ object CoverRequestPolicy {
     }
 
     fun isBlacklisted(host: String): Boolean {
+        if (host.isEmpty()) return false
         val state = hostStates[host] ?: return false
+        val now = clockMs()
         synchronized(state) {
-            return state.failures >= FAILURE_THRESHOLD
+            if (state.failures < FAILURE_THRESHOLD) return false
+            if (now - state.blacklistedAtMs >= BLACKLIST_COOLDOWN_MS) {
+                state.failures = 0
+                state.blacklistedAtMs = 0L
+                hostStates.remove(host, state)
+                return false
+            }
+            return true
         }
     }
 
     fun resetForTests() {
+        clockMs = { System.nanoTime() / 1_000_000L }
         clearAll()
     }
 }

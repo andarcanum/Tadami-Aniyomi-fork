@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.discovery
 
 import androidx.work.WorkManager
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.ui.home.HomeHubDiscoveryItem
+import eu.kanade.tachiyomi.ui.home.toSuggestionItem
 import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -157,5 +159,70 @@ class DiscoveryFeedLogicTest {
         filterByProvider(items, "") shouldBe items
         filterByProvider(items, "AniList") shouldBe listOf(s1)
         filterByProvider(items, "Unknown") shouldBe emptyList()
+    }
+
+    @Test
+    fun `toSuggestionItem preserves trustedAliases and maps trend provider variants`() {
+        val item = suggestion(DiscoveryRowType.TREND, "Omniscient Reader", provider = "shikimori_trend")
+            .copy(
+                mediaType = DiscoveryMediaType.NOVEL,
+                trustedAliases = setOf("Всеведущий читатель", "Omniscient Reader"),
+            )
+        val mapped = item.toSuggestionItem()
+        mapped.reason shouldBe SuggestionReason.EXTERNAL_SHIKIMORI
+        mapped.searchQueries shouldBe listOf("Omniscient Reader", "Всеведущий читатель")
+
+        suggestion(DiscoveryRowType.TREND, "A", provider = "anilist_trend")
+            .toSuggestionItem().reason shouldBe SuggestionReason.EXTERNAL_ANILIST
+        suggestion(DiscoveryRowType.TREND, "B", provider = "jikan_trend")
+            .toSuggestionItem().reason shouldBe SuggestionReason.EXTERNAL_MAL
+        suggestion(DiscoveryRowType.TREND, "C", provider = "jikan")
+            .toSuggestionItem().reason shouldBe SuggestionReason.EXTERNAL_MAL
+
+        val homeMapped = HomeHubDiscoveryItem(
+            title = "Reverend Insanity",
+            cleanTitle = "reverend insanity",
+            coverUrl = null,
+            seedTitle = null,
+            reasonPayload = null,
+            provider = "anilist_trend",
+            rowType = DiscoveryRowType.TREND,
+            mediaType = DiscoveryMediaType.NOVEL,
+            trustedAliases = setOf("Преподобный Гу"),
+        ).toSuggestionItem()
+        homeMapped.reason shouldBe SuggestionReason.EXTERNAL_ANILIST
+        homeMapped.searchQueries shouldBe listOf("Reverend Insanity", "Преподобный Гу")
+    }
+
+    @Test
+    fun `sliceFeedForGenre filters full pool beyond first 24-card window`() {
+        val actionHead = (1..26).map { index ->
+            suggestion(DiscoveryRowType.LIKE, "Action $index").copy(genres = listOf("Action"))
+        }
+        val fantasyTail = (1..3).map { index ->
+            suggestion(DiscoveryRowType.TREND, "Fantasy $index").copy(genres = listOf("Fantasy"))
+        }
+        val fullPool = actionHead + fantasyTail
+        val state = DiscoveryFeedUiState(
+            mix = fullPool,
+            activeWindows = mapOf(FeedSignalTab.MIX to fullPool.take(24)),
+        )
+
+        sliceFeedForGenre(state, FeedSignalTab.MIX, provider = null, selectedGenre = "Fantasy")
+            .map { it.title } shouldBe listOf("Fantasy 1", "Fantasy 2", "Fantasy 3")
+        sliceFeedForGenre(state, FeedSignalTab.MIX, provider = null, selectedGenre = null).size shouldBe 24
+    }
+
+    @Test
+    fun `sliceFeedForGenre returns full pool and full genre match beyond 20-card cap`() {
+        val pool = (1..60).map { index ->
+            suggestion(DiscoveryRowType.LIKE, "Mix $index").copy(
+                genres = if (index <= 35) listOf("Action") else listOf("Drama"),
+            )
+        }
+        val state = DiscoveryFeedUiState(mix = pool)
+
+        sliceFeedForGenre(state, FeedSignalTab.MIX, provider = null, selectedGenre = null).size shouldBe 60
+        sliceFeedForGenre(state, FeedSignalTab.MIX, provider = null, selectedGenre = "Action").size shouldBe 35
     }
 }

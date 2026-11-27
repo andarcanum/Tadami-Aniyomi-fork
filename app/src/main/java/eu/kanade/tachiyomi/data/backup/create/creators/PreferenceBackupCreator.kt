@@ -59,7 +59,10 @@ class PreferenceBackupCreator(
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, *>.toBackupPreferences(): List<BackupPreference> {
         return this
-            .filterKeys { !Preference.isAppState(it) }
+            .filterKeys {
+                !Preference.isAppState(it) &&
+                    !eu.kanade.domain.discovery.service.DiscoveryPreferences.isRuntimeStateKey(it)
+            }
             .mapNotNull { (key, value) ->
                 when (value) {
                     is Int -> BackupPreference(key, IntPreferenceValue(value))
@@ -80,5 +83,6 @@ class PreferenceBackupCreator(
             this
         } else {
             this.filter { !Preference.isPrivate(it.key) }
+                .mapNotNull(NovelTranslationPreferenceSanitizer::sanitize)
         }
 }

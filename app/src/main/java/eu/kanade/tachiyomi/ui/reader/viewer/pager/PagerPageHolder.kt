@@ -6,15 +6,23 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.view.LayoutInflater
 import androidx.core.view.isVisible
+import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.tadami.aurora.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ProcessedPageImage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.GuidedPanelController
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.MangaPanelCache
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.MangaPanelDetector
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.PanelRect
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
@@ -23,11 +31,14 @@ import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import okio.Buffer
 import okio.BufferedSource
+import tachiyomi.core.common.util.image.NativeImageDecoder
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
+import java.io.FileNotFoundException
+import java.io.InputStream
 
 /**
  * View of the ViewPager that contains a page of a chapter.
@@ -62,23 +73,67 @@ class PagerPageHolder(
      */
     private var loadJob: Job? = null
 
+    private var cacheEvictionRetried = false
+    private var tileErrorRetried = false
+
+    private var panelDetectJob: Job? = null
+    private var detectedPanels: List<PanelRect> = emptyList()
+    private val guidedPanelController = GuidedPanelController()
+    private var pendingGuidedEntryFromEnd: Boolean? = null
+    private var viewportVisible: Boolean = true
+
     init {
         loadJob = scope.launch { loadPageAndProcessStatus() }
+        onHdrChanged = { isHdr ->
+            page.isHdr = isHdr
+            viewer.updateWindowHdrState()
+        }
+    }
+
+    fun setViewportVisible(visible: Boolean) {
+        viewportVisible = visible
+        progressIndicator?.setInViewport(visible)
+        setInViewport(visible)
+    }
+
+    override fun recycle() {
+        loadJob?.cancel()
+        loadJob = null
+        cacheEvictionRetried = false
+        tileErrorRetried = false
+        panelDetectJob?.cancel()
+        panelDetectJob = null
+        detectedPanels = emptyList()
+        guidedPanelController.reset()
+        pendingGuidedEntryFromEnd = null
+        viewportVisible = true
+        super.recycle()
     }
 
     /**
      * Called when this view is detached from the window. Unsubscribes any active subscription.
      */
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (loadJob == null) {
+            loadJob = scope.launch { loadPageAndProcessStatus() }
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         loadJob?.cancel()
         loadJob = null
+        panelDetectJob?.cancel()
+        panelDetectJob = null
     }
 
     private fun initProgressIndicator() {
         if (progressIndicator == null) {
-            progressIndicator = ReaderProgressIndicator(context)
+            progressIndicator = ReaderProgressIndicator(context).apply {
+                setInViewport(viewportVisible)
+            }
             addView(progressIndicator)
         }
     }
@@ -147,11 +202,49 @@ class PagerPageHolder(
     private suspend fun setImage() {
         progressIndicator?.setProgress(0)
 
-        val streamFn = page.stream ?: return
+        val streamFn = page.stream ?: run {
+            markDecodeError()
+            return
+        }
 
         try {
             val prepared = withIOContext {
-                when (val processed = streamFn().use { process(item, Buffer().readFrom(it)) }) {
+                when (val processed = process(item, streamFn)) {
+                    is ProcessedPageImage.Streamed -> {
+                        val unmodified = !viewer.config.dualPageSplit && !viewer.config.dualPageRotateToFit
+                        val reusable = page.takeIf { unmodified }?.imageDimensions
+                        val meta = if (reusable != null) {
+                            ImageUtil.ImageMetadata(isAnimated = false, dimensions = reusable)
+                        } else {
+                            streamFn().use { ImageUtil.sniffImageMetadata(it) }
+                        }
+                        val isAnimated = meta.isAnimated
+                        if (isAnimated) {
+                            val animatedSource = streamFn().use { Buffer().readFrom(it) }
+                            PageImageResult.Encoded(
+                                source = animatedSource,
+                                isAnimated = true,
+                                background = null,
+                                dimensions = null,
+                            )
+                        } else {
+                            val background = if (viewer.config.automaticBackground) {
+                                streamFn().use { ImageUtil.chooseBackground(context, it) }
+                            } else {
+                                null
+                            }
+                            val dims = meta.dimensions
+                            if (reusable == null && dims != null && unmodified) {
+                                page.imageDimensions = dims
+                            }
+                            PageImageResult.Streamed(
+                                streamFn = processed.streamFn,
+                                isAnimated = false,
+                                background = background,
+                                dimensions = dims,
+                            )
+                        }
+                    }
                     is ProcessedPageImage.Decoded -> PageImageResult.Decoded(processed.bitmap)
                     is ProcessedPageImage.Encoded -> {
                         val source = processed.source
@@ -161,15 +254,12 @@ class PagerPageHolder(
                         } else {
                             null
                         }
+                        val dims = if (isAnimated) null else ImageUtil.getImageDimensions(source)
                         PageImageResult.Encoded(
                             source = source,
                             isAnimated = isAnimated,
                             background = background,
-                            dimensions = ImageUtil.getImageDimensions(source),
-                            // Sniff the header here so the UI thread does not have to instantiate a
-                            // native decoder per page (ReaderPageImageView falls back to parsing the
-                            // source on the main thread when the config value is absent).
-                            canUseHardwareBitmap = !isAnimated && ImageUtil.canUseHardwareBitmap(source),
+                            dimensions = dims,
                         )
                     }
                 }
@@ -182,9 +272,35 @@ class PagerPageHolder(
                     zoomStartPosition = viewer.config.imageZoomType,
                     landscapeZoom = viewer.config.landscapeZoom,
                     enablePinchToZoom = viewer.config.enablePinchToZoom,
-                    canUseHardwareBitmap = (prepared as? PageImageResult.Encoded)?.canUseHardwareBitmap,
+                    lockedZoomRatio = if (viewer.config.zoomLockEnabled) viewer.lockedZoomRatio else null,
+                    hardwareTilesEnabled = viewer.config.hardwareTilesEnabled,
+                    doubleTapZoomScale = viewer.config.doubleTapZoomScale,
+                    previewKey = if (prepared is PageImageResult.Streamed && !prepared.isAnimated &&
+                        page !is InsertPage
+                    ) {
+                        ReaderPreviewCache.key(
+                            chapterId = page.chapter.chapter.id,
+                            pageIndex = page.index,
+                            cropBorders = viewer.config.imageCropBorders,
+                        )
+                    } else {
+                        null
+                    },
                 )
                 when (prepared) {
+                    is PageImageResult.Streamed -> {
+                        prepared.dimensions?.let {
+                            viewer.activity.viewModel.onReaderPageImageDimensionsAvailable(
+                                page = page,
+                                width = it.width,
+                                height = it.height,
+                            )
+                        }
+                        setImage(prepared.streamFn, prepared.isAnimated, config)
+                        if (!prepared.isAnimated) {
+                            pageBackground = prepared.background
+                        }
+                    }
                     is PageImageResult.Encoded -> {
                         prepared.dimensions?.let {
                             viewer.activity.viewModel.onReaderPageImageDimensionsAvailable(
@@ -214,27 +330,53 @@ class PagerPageHolder(
                 removeErrorLayout()
             }
         } catch (e: Throwable) {
+            if (e is CancellationException) {
+                throw e
+            }
             logcat(LogPriority.ERROR, e)
             withUIContext {
-                markDecodeError()
+                if (e is FileNotFoundException &&
+                    !cacheEvictionRetried &&
+                    page.status == Page.State.READY
+                ) {
+                    cacheEvictionRetried = true
+                    page.chapter.pageLoader?.retryPage(page)
+                } else {
+                    markDecodeError()
+                }
             }
         }
     }
 
     private sealed interface PageImageResult {
+        data class Streamed(
+            val streamFn: () -> InputStream,
+            val isAnimated: Boolean,
+            val background: android.graphics.drawable.Drawable?,
+            val dimensions: ImageUtil.ImageDimensions?,
+        ) : PageImageResult
+
         data class Encoded(
             val source: BufferedSource,
             val isAnimated: Boolean,
             val background: android.graphics.drawable.Drawable?,
             val dimensions: ImageUtil.ImageDimensions?,
-            val canUseHardwareBitmap: Boolean,
         ) : PageImageResult
 
         data class Decoded(val bitmap: Bitmap) : PageImageResult
     }
 
-    private fun process(page: ReaderPage, imageSource: BufferedSource): ProcessedPageImage {
-        val isDoublePage = ImageUtil.isWideImage(imageSource)
+    private fun process(page: ReaderPage, streamFn: () -> InputStream): ProcessedPageImage {
+        val dims = page.imageDimensions ?: streamFn().use { stream ->
+            val meta = ImageUtil.sniffImageMetadata(stream)
+            if (meta.isAnimated) {
+                page.isAnimatedImage = true
+                null
+            } else {
+                meta.dimensions?.also { page.imageDimensions = it }
+            }
+        }
+        val isDoublePage = dims != null && dims.width > dims.height
         if (isDoublePage && !page.isWide) {
             page.isWide = true
             if (viewer.config.joinDoublePages) {
@@ -244,27 +386,27 @@ class PagerPageHolder(
             }
         }
 
-        if (viewer.config.dualPageRotateToFit) {
+        if (viewer.config.dualPageRotateToFit && isDoublePage) {
+            val imageSource = streamFn().use { Buffer().readFrom(it) }
             return rotateDualPage(imageSource)
         }
 
-        // joinDoublePages wins over dualPageSplit: the halves of a JoinedReaderPage spread are
-        // raw ReaderPages that are not adapter items, so splitting them produced a duplicate of
-        // the same half (and index -1 lookups in the adapter).
         if (!viewer.config.dualPageSplit || viewer.config.joinDoublePages) {
-            return ProcessedPageImage.Encoded(imageSource)
+            return ProcessedPageImage.Streamed(streamFn)
         }
 
         if (page is InsertPage) {
+            val imageSource = streamFn().use { Buffer().readFrom(it) }
             return splitInHalf(imageSource)
         }
 
         if (!isDoublePage) {
-            return ProcessedPageImage.Encoded(imageSource)
+            return ProcessedPageImage.Streamed(streamFn)
         }
 
         onPageSplit(page)
 
+        val imageSource = streamFn().use { Buffer().readFrom(it) }
         return splitInHalf(imageSource)
     }
 
@@ -275,9 +417,14 @@ class PagerPageHolder(
         }
         val rotation = if (viewer.config.dualPageRotateToFitInvert) -90f else 90f
         // peek() keeps the source intact so the stream variant remains a viable fallback.
-        return ImageUtil.rotateImageBitmap(imageSource.peek(), rotation)
-            ?.let { ProcessedPageImage.Decoded(it) }
-            ?: ProcessedPageImage.Encoded(ImageUtil.rotateImage(imageSource, rotation))
+        val rotatedBitmap = ImageUtil.rotateImageBitmap(imageSource.peek(), rotation)
+        if (rotatedBitmap != null) {
+            if (maxOf(rotatedBitmap.width, rotatedBitmap.height) <= ImageUtil.hardwareBitmapThreshold) {
+                return ProcessedPageImage.Decoded(rotatedBitmap)
+            }
+            rotatedBitmap.recycle()
+        }
+        return ProcessedPageImage.Encoded(ImageUtil.rotateImage(imageSource, rotation))
     }
 
     private fun splitInHalf(imageSource: BufferedSource): ProcessedPageImage {
@@ -297,10 +444,16 @@ class PagerPageHolder(
         }
 
         // Region-decode only the kept half and skip the JPEG q=100 re-encode; fall back to the
-        // stream variant on the rare decoder failure (peek() left the source unconsumed).
-        return ImageUtil.splitInHalfBitmap(imageSource.peek(), side)
-            ?.let { ProcessedPageImage.Decoded(it) }
-            ?: ProcessedPageImage.Encoded(ImageUtil.splitInHalf(imageSource, side))
+        // stream variant on the rare decoder failure or oversized texture (peek() left the
+        // source unconsumed).
+        val splitBitmap = ImageUtil.splitInHalfBitmap(imageSource.peek(), side, viewer.config.dualPageSmartGutter)
+        if (splitBitmap != null) {
+            if (maxOf(splitBitmap.width, splitBitmap.height) <= ImageUtil.hardwareBitmapThreshold) {
+                return ProcessedPageImage.Decoded(splitBitmap)
+            }
+            splitBitmap.recycle()
+        }
+        return ProcessedPageImage.Encoded(ImageUtil.splitInHalf(imageSource, side))
     }
 
     private fun onPageSplit(page: ReaderPage) {
@@ -325,12 +478,150 @@ class PagerPageHolder(
         if (page.status == Page.State.READY) {
             page.status = Page.State.ERROR
         }
-        setError()
+        if (page.status == Page.State.ERROR) {
+            setError()
+        }
+    }
+
+    override fun onPageSelected(forward: Boolean) {
+        super.onPageSelected(forward)
+        if (!viewer.config.guidedPanelMode || page is InsertPage || page.isAnimatedImage) {
+            guidedPanelController.reset()
+            pendingGuidedEntryFromEnd = null
+            return
+        }
+        val fromEnd = !forward
+        if (detectedPanels.size >= 2) {
+            pendingGuidedEntryFromEnd = null
+            guidedPanelController.enterPage(detectedPanels, fromEnd = fromEnd)?.let { focus ->
+                animateToPanel(focus.panel)
+            }
+        } else {
+            pendingGuidedEntryFromEnd = fromEnd
+            ensurePanelsDetected()
+        }
+    }
+
+    /**
+     * Steps to the next or previous detected panel on this page.
+     * Returns true if the viewport animated to another panel, or false when the pager should flip
+     * to the adjacent page.
+     */
+    internal fun stepGuidedPanel(forward: Boolean): Boolean {
+        if (!viewer.config.guidedPanelMode || detectedPanels.size < 2) return false
+        val result = if (forward) {
+            guidedPanelController.stepForward(detectedPanels)
+        } else {
+            guidedPanelController.stepBackward(detectedPanels)
+        }
+        return when (result) {
+            is GuidedPanelController.StepResult.Focus -> animateToPanel(result.panel)
+            GuidedPanelController.StepResult.NextPage,
+            GuidedPanelController.StepResult.PrevPage,
+            -> false
+        }
+    }
+
+    private fun ensurePanelsDetected() {
+        if (!viewer.config.guidedPanelMode || page is InsertPage || page.isAnimatedImage) return
+        val isRtl = viewer is R2LPagerViewer
+        val cropBorders = viewer.config.imageCropBorders
+        val cacheKey = MangaPanelCache.key(
+            chapterId = page.chapter.chapter.id,
+            pageIndex = page.index,
+            isRtl = isRtl,
+            cropBorders = cropBorders,
+        )
+        if (cacheKey != null) {
+            val cached = MangaPanelCache.get(cacheKey)
+            if (cached != null) {
+                applyDetectedPanels(cached)
+                return
+            }
+        }
+        if (panelDetectJob?.isActive == true) return
+        val previewKey = ReaderPreviewCache.key(
+            chapterId = page.chapter.chapter.id,
+            pageIndex = page.index,
+            cropBorders = cropBorders,
+        )
+        val cachedPreview = previewKey?.let(ReaderPreviewCache::get)?.bitmap?.takeIf { !it.isRecycled }
+        val streamFn = page.stream
+        if (cachedPreview == null && streamFn == null) return
+
+        panelDetectJob = scope.launch(Dispatchers.Default) {
+            val panels = try {
+                val preview =
+                    cachedPreview ?: previewKey?.let(ReaderPreviewCache::get)?.bitmap?.takeIf { !it.isRecycled }
+                if (preview != null) {
+                    MangaPanelDetector.detectFromBitmap(preview, isRtl = isRtl)
+                } else if (streamFn != null) {
+                    withIOContext {
+                        decodePanelAnalysisBitmap(streamFn, cropBorders)?.let { bmp ->
+                            try {
+                                MangaPanelDetector.detectFromBitmap(bmp, isRtl = isRtl)
+                            } finally {
+                                if (!bmp.isRecycled) bmp.recycle()
+                            }
+                        }
+                    }
+                } else {
+                    null
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+            if (panels != null) {
+                if (cacheKey != null) {
+                    MangaPanelCache.put(cacheKey, panels)
+                }
+                withUIContext {
+                    applyDetectedPanels(panels)
+                }
+            }
+        }
+    }
+
+    private fun applyDetectedPanels(panels: List<PanelRect>) {
+        detectedPanels = panels
+        val fromEnd = pendingGuidedEntryFromEnd
+        if (fromEnd != null && viewer.config.guidedPanelMode && panels.size >= 2) {
+            pendingGuidedEntryFromEnd = null
+            guidedPanelController.enterPage(panels, fromEnd = fromEnd)?.let { focus ->
+                animateToPanel(focus.panel)
+            }
+        }
+    }
+
+    private fun decodePanelAnalysisBitmap(
+        streamFn: () -> InputStream,
+        cropBorders: Boolean,
+    ): Bitmap? {
+        return try {
+            NativeImageDecoder.open(streamFn(), cropBorders).use { decoder ->
+                val w = decoder.width
+                val h = decoder.height
+                if (w <= 0 || h <= 0) return null
+                var sampleSize = 1
+                while ((w / (sampleSize * 2)) >= 280) {
+                    sampleSize *= 2
+                }
+                decoder.decode(region = null, sampleSize = sampleSize)
+            }
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     override fun onImageLoaded() {
         super.onImageLoaded()
+        cacheEvictionRetried = false
         progressIndicator?.hide()
+        if (viewer.config.guidedPanelMode) {
+            ensurePanelsDetected()
+        }
     }
 
     /**
@@ -341,11 +632,26 @@ class PagerPageHolder(
         markDecodeError()
     }
 
+    override fun onTileLoadError(e: Exception) {
+        super.onTileLoadError(e)
+        if (!tileErrorRetried && page.status == Page.State.READY) {
+            tileErrorRetried = true
+            page.chapter.pageLoader?.retryPage(page)
+        }
+    }
+
     /**
      * Called when an image is zoomed in/out.
      */
     override fun onScaleChanged(newScale: Float) {
         super.onScaleChanged(newScale)
+        if (viewer.config.zoomLockEnabled) {
+            val ssiv = getImageView() as? SubsamplingScaleImageView
+            if (ssiv != null && ssiv.isReady && ssiv.minScale > 0f) {
+                val ratio = newScale / ssiv.minScale
+                viewer.lockedZoomRatio = if (ratio > 1.01f) ratio else null
+            }
+        }
         viewer.activity.hideMenu()
     }
 

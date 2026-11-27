@@ -76,6 +76,7 @@ import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.domain.track.service.ResolveTrackProgressSync
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.data.discovery.AppDiscoveryCandidateValidator
 import eu.kanade.tachiyomi.data.discovery.AppDiscoverySeedSources
 import eu.kanade.tachiyomi.data.discovery.DiscoveryRunner
 import eu.kanade.tachiyomi.data.discovery.DiscoverySeedSources
@@ -136,6 +137,7 @@ import tachiyomi.data.category.anime.AnimeCategoryRepositoryImpl
 import tachiyomi.data.category.manga.MangaCategoryRepositoryImpl
 import tachiyomi.data.category.novel.NovelCategoryRepositoryImpl
 import tachiyomi.data.custombutton.CustomButtonRepositoryImpl
+import tachiyomi.data.discovery.DiscoveryKnownTitlesProviderImpl
 import tachiyomi.data.discovery.DiscoveryRepositoryImpl
 import tachiyomi.data.entries.anime.AnimeRepositoryImpl
 import tachiyomi.data.entries.manga.MangaRepositoryImpl
@@ -156,6 +158,7 @@ import tachiyomi.data.reels.anime.ReelsConsumptionRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFavoriteRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsFollowRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsHiddenRepositoryImpl
+import tachiyomi.data.reels.anime.ReelsRoundRobinRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsSessionRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsWatchRepositoryImpl
 import tachiyomi.data.release.ReleaseServiceImpl
@@ -233,6 +236,8 @@ import tachiyomi.domain.custombuttons.interactor.ReorderCustomButton
 import tachiyomi.domain.custombuttons.interactor.ToggleFavoriteCustomButton
 import tachiyomi.domain.custombuttons.interactor.UpdateCustomButton
 import tachiyomi.domain.custombuttons.repository.CustomButtonRepository
+import tachiyomi.domain.discovery.repository.DiscoveryCandidateValidator
+import tachiyomi.domain.discovery.repository.DiscoveryKnownTitlesProvider
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import tachiyomi.domain.entries.anime.interactor.AnimeFetchInterval
 import tachiyomi.domain.entries.anime.interactor.GetAnime
@@ -309,6 +314,7 @@ import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
+import tachiyomi.domain.reels.anime.repository.ReelsRoundRobinRepository
 import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.release.interactor.GetApplicationRelease
@@ -683,9 +689,25 @@ class DomainModule : InjektModule {
         addSingletonFactory<NovelHistoryRepository> { NovelHistoryRepositoryImpl(get()) }
         addFactory { GetTotalNovelReadDuration(get()) }
 
-        addSingletonFactory<DiscoveryRepository> { DiscoveryRepositoryImpl(get()) }
+        addSingletonFactory<DiscoveryRepository> { DiscoveryRepositoryImpl(get(), get(), get()) }
+        addSingletonFactory<DiscoveryKnownTitlesProvider> {
+            DiscoveryKnownTitlesProviderImpl(
+                get<MangaDatabaseHandler>(),
+                get<AnimeDatabaseHandler>(),
+                get<NovelDatabaseHandler>(),
+            )
+        }
+        addSingletonFactory<eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver> {
+            eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver(get(), get())
+        }
+        addSingletonFactory<tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider> {
+            get<eu.kanade.tachiyomi.data.discovery.DiscoverySourcePolicyResolver>()
+        }
+        addSingletonFactory<DiscoveryCandidateValidator> { AppDiscoveryCandidateValidator(get(), get()) }
         addSingletonFactory<DiscoverySeedSources> { AppDiscoverySeedSources() }
-        addSingletonFactory<DiscoveryRunner> { DiscoveryRunner(get(), get(), get()) }
+        addSingletonFactory<DiscoveryRunner> {
+            DiscoveryRunner(get(), get(), get(), sourcePolicyProvider = get())
+        }
 
         addFactory { DeleteChapterDownload(get(), get()) }
 
@@ -714,6 +736,7 @@ class DomainModule : InjektModule {
         addSingletonFactory<ReelsConsumptionRepository> { ReelsConsumptionRepositoryImpl(get()) }
         addSingletonFactory<ReelsCandidateRepository> { ReelsCandidateRepositoryImpl(get()) }
         addSingletonFactory<ReelsSessionRepository> { ReelsSessionRepositoryImpl(get()) }
+        addSingletonFactory<ReelsRoundRobinRepository> { ReelsRoundRobinRepositoryImpl(get()) }
         addSingletonFactory<ReelsOfflineStore> { ReelsOfflineStoreImpl() }
         addFactory { GetEnabledAnimeSources(get(), get()) }
         addFactory { GetLanguagesWithAnimeSources(get(), get()) }

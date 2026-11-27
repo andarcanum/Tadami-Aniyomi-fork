@@ -5,6 +5,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import mihon.data.extension.model.AvailableExtensionData
+import mihon.data.extension.service.ExtensionStoreMedia
 import mihon.data.extension.service.ExtensionStoreService
 import mihon.domain.extensionstore.model.ExtensionStore
 import tachiyomi.core.common.util.system.logcat
@@ -28,12 +29,15 @@ data class ExtensionStoreFetchResult(
 class ExtensionStoreFetcher(
     private val service: ExtensionStoreService,
 ) {
-    suspend fun fetchExtensions(stores: List<ExtensionStore>): ExtensionStoreFetchResult {
+    suspend fun fetchExtensions(
+        stores: List<ExtensionStore>,
+        media: ExtensionStoreMedia = ExtensionStoreMedia.MANGA,
+    ): ExtensionStoreFetchResult {
         if (stores.isEmpty()) return ExtensionStoreFetchResult(emptyList(), emptyList())
         val results = supervisorScope {
             stores.map { store ->
                 async {
-                    store to service.getExtensions(store).onFailure {
+                    store to service.getExtensions(store, media).onFailure {
                         logcat(LogPriority.ERROR, it) {
                             "Failed to fetch extensions for store '${store.name} (${store.indexUrl})'"
                         }

@@ -1,6 +1,7 @@
 package tachiyomi.domain.reels.anime.repository
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import tachiyomi.domain.reels.anime.model.ReelsAlbum
 
 /**
@@ -8,6 +9,10 @@ import tachiyomi.domain.reels.anime.model.ReelsAlbum
  * "watched" marks for album items. Progress bars come from the watch history, not from here.
  */
 interface ReelsAlbumRepository {
+
+    fun subscribeAll(): Flow<List<ReelsAlbum>> = emptyFlow()
+
+    suspend fun getAll(): List<ReelsAlbum> = emptyList()
 
     fun subscribeBySource(sourceId: Long): Flow<List<ReelsAlbum>>
 

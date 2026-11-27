@@ -95,7 +95,10 @@ class NovelTtsChapterRepository internal constructor(
         return loaded
     }
 
-    suspend fun loadChapterSnapshot(chapterId: Long): NovelTtsChapterSnapshot {
+    suspend fun loadChapterSnapshot(
+        chapterId: Long,
+        replaceRulesSnapshot: List<eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule>? = null,
+    ): NovelTtsChapterSnapshot {
         val chapter = withContext(Dispatchers.IO) {
             novelChapterRepository.getChapterById(chapterId)
         } ?: error("Chapter not found")
@@ -154,7 +157,7 @@ class NovelTtsChapterRepository internal constructor(
             } else {
                 applyReplaceRulesToHtml(
                     rawHtml = sanitized,
-                    rules = novelReaderPreferences.enabledReplaceRules(),
+                    rules = replaceRulesSnapshot ?: novelReaderPreferences.enabledReplaceRules(),
                 )
             }
         }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -71,27 +72,33 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -104,6 +111,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestion
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -115,6 +123,10 @@ fun ReelsTopBar(
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isHdQuality: Boolean,
+    qualityModeEnabled: Boolean = false,
+    qualityLabel: String? = null,
+    onOpenQualityVideo: () -> Unit = {},
+    onOpenQualityDefault: () -> Unit = {},
     dataSaverEnabled: Boolean,
     preloadEnabled: Boolean,
     preloadWifiOnly: Boolean,
@@ -127,6 +139,7 @@ fun ReelsTopBar(
     // query is active; null hides the whole block.
     searchSuggestions: SearchSuggestions? = null,
     showFilter: Boolean = true,
+    isFilterActive: Boolean = false,
     // Favorites keeps a first-class circle (frequent, one-tap local action) — a hub with a
     // single entry would be pure indirection. Account & personal content (custom feeds,
     // Following) live in the account hub, which always has at least two entries.
@@ -137,9 +150,25 @@ fun ReelsTopBar(
     // NICHE mode: save/remove the currently open album in the collection (null hides the row).
     nicheAlbumSaved: Boolean? = null,
     onToggleNicheAlbum: () -> Unit = {},
+    showNicheFollowRow: Boolean = false,
+    isNicheFollowed: Boolean = false,
+    onToggleNicheFollow: () -> Unit = {},
+    onOpenHide: (() -> Unit)? = null,
     onOpenFollows: () -> Unit = {},
     isPipEnabled: Boolean = false,
     onTogglePip: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER")
+    landscapeBrightnessGestureEnabled: Boolean = true,
+    @Suppress("UNUSED_PARAMETER")
+    onToggleLandscapeBrightnessGesture: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER")
+    landscapeVolumeGestureEnabled: Boolean = true,
+    @Suppress("UNUSED_PARAMETER")
+    onToggleLandscapeVolumeGesture: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER")
+    landscapePullUpSeekEnabled: Boolean = true,
+    @Suppress("UNUSED_PARAMETER")
+    onToggleLandscapePullUpSeek: () -> Unit = {},
     // Audit H8: offline-copy storage visibility + user-initiated cleanup (More menu).
     offlineUsedBytes: Long = 0L,
     onClearOfflineStorage: () -> Unit = {},
@@ -184,10 +213,13 @@ fun ReelsTopBar(
     onOpenNiches: () -> Unit = {},
     onOpenContentPrefs: () -> Unit = {},
     onOpenBlockedTags: () -> Unit = {},
-    // Creator chrome (contract v18): Follow/Following action on the creator page. The
-    // follows-screen entry moved into the library hub.
+    // Deprecated top-bar follow params kept for source compatibility; single follow lives next
+    // to the author chip in ReelsBottomMeta (and Niche follow lives in More menu).
+    @Suppress("UNUSED_PARAMETER")
     showFollowToggle: Boolean = false,
+    @Suppress("UNUSED_PARAMETER")
     isFollowingCreator: Boolean = false,
+    @Suppress("UNUSED_PARAMETER")
     onToggleFollow: () -> Unit = {},
     showSourcePicker: Boolean,
     onBackClick: () -> Unit,
@@ -219,18 +251,32 @@ fun ReelsTopBar(
             onSuggestionsRequest(textInput)
         }
     }
-    var openHub by remember { mutableStateOf(HubMenu.NONE) }
+    // Survives a configuration recreation: an open settings block must not close itself
+    // and release the playback hold on rotation.
+    var openHub by rememberSaveable { mutableStateOf(HubMenu.NONE) }
     // Device UX: the screen holds playback and pins the chrome while the settings block is
     // open, and resumes both when it closes.
     LaunchedEffect(openHub) { onMoreMenuOpenChanged(openHub == HubMenu.MORE) }
+    DisposableEffect(Unit) {
+        onDispose { onMoreMenuOpenChanged(false) }
+    }
     var confirmLogout by remember { mutableStateOf(false) }
     var sleepDialogOpen by remember { mutableStateOf(false) }
+
+    val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
+    val contentTint = if (isEInk) MaterialTheme.colorScheme.onSurface else Color.White
+    val textShadow = if (isEInk) {
+        null
+    } else {
+        Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(0f, 1f), blurRadius = 6f)
+    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         // Main Navigation & Actions Row
         Row(
@@ -238,51 +284,100 @@ fun ReelsTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Left: Back button + Source Title. Weighted (fill=false) so a long title
-            // ellipsizes instead of stealing width from the action buttons.
+            // Left: Bare Back button + Source Title. Weighted (fill=false) so a long title
+            // ellipsizes instead of stealing width from the action icons.
             Row(
                 modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // Back Button — visual circle stays 40dp; the outer 48dp box provides the
-                // minimum touch target.
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clickable { onBackClick() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(MR.strings.action_bar_up_description),
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
+                TopBarChromeIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(MR.strings.action_bar_up_description),
+                    tint = contentTint,
+                    iconSize = 24.dp,
+                    width = 48.dp,
+                    onClick = onBackClick,
+                )
 
-                // Source Title Badge (with dropdown if multiple sources available)
+                // Source identity: keep a light translucent capsule only when the source is
+                // tappable to switch; static titles sit cleanly over the top edge scrim.
                 if (sourceName.isNotBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                            .clickable(enabled = showSourcePicker) {
-                                onOpenSourcePicker()
-                                openHub = HubMenu.NONE
+                    if (showSourcePicker) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .height(34.dp)
+                                .reelsGlassSurface(
+                                    shape = RoundedCornerShape(17.dp),
+                                    eInk = isEInk,
+                                    eInkColor = auroraColors.cardBackground,
+                                    subtle = true,
+                                )
+                                .clickable {
+                                    onOpenSourcePicker()
+                                    openHub = HubMenu.NONE
+                                }
+                                .padding(horizontal = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                if (sourceIcon != null) {
+                                    Image(
+                                        bitmap = sourceIcon,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(RoundedCornerShape(5.dp)),
+                                    )
+                                }
+                                Text(
+                                    text = formatTopBarTitle(sourceName),
+                                    color = contentTint,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (isIncognito) {
+                                    // Audit H9: a visible marker that writes are being suppressed.
+                                    Icon(
+                                        imageVector = Icons.Filled.PrivacyTip,
+                                        contentDescription = stringResource(MR.strings.reels_incognito_active),
+                                        tint = auroraColors.accent,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowDropDown,
+                                    contentDescription = stringResource(MR.strings.reels_switch_source),
+                                    tint = contentTint.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(17.dp),
+                                )
                             }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    ) {
+                        }
+                    } else {
                         Row(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .then(
+                                    if (isEInk) {
+                                        Modifier
+                                            .height(34.dp)
+                                            .reelsGlassSurface(
+                                                shape = RoundedCornerShape(17.dp),
+                                                eInk = true,
+                                                eInkColor = auroraColors.cardBackground,
+                                            )
+                                            .padding(horizontal = 10.dp)
+                                    } else {
+                                        Modifier.padding(horizontal = 4.dp)
+                                    },
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
@@ -291,36 +386,29 @@ fun ReelsTopBar(
                                     bitmap = sourceIcon,
                                     contentDescription = null,
                                     modifier = Modifier
-                                        .size(20.dp)
-                                        .clip(RoundedCornerShape(6.dp)),
+                                        .size(18.dp)
+                                        .clip(RoundedCornerShape(5.dp)),
                                 )
                             }
                             Text(
-                                text = sourceName,
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = formatTopBarTitle(sourceName),
+                                color = contentTint.copy(alpha = 0.96f),
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    shadow = textShadow,
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                // Weighted so the fixed icon/dropdown are measured first and
-                                // never squeezed out by a long name.
                                 modifier = Modifier.weight(1f, fill = false),
                             )
                             if (isIncognito) {
-                                // Audit H9: a visible marker that writes are being suppressed.
-                                Icon(
+                                ReelsChromeIcon(
                                     imageVector = Icons.Filled.PrivacyTip,
                                     contentDescription = stringResource(MR.strings.reels_incognito_active),
-                                    tint = AuroraTheme.colors.accent,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                            }
-                            if (showSourcePicker) {
-                                Icon(
-                                    imageVector = Icons.Filled.ArrowDropDown,
-                                    contentDescription = stringResource(MR.strings.reels_switch_source),
-                                    tint = Color.White.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(18.dp),
+                                    tint = auroraColors.accent,
+                                    size = 15.dp,
+                                    eInk = isEInk,
                                 )
                             }
                         }
@@ -328,141 +416,58 @@ fun ReelsTopBar(
                 }
             }
 
-            // Right Actions: Search, Filter (online only), Favorites, Follows, Follow, More.
-            // Horizontally scrollable: the fixed-size circles must never be squeezed to
-            // slivers when the row runs out of width (long creator names, large fonts).
+            // Guaranteed air before the right action cluster.
+            Spacer(Modifier.width(6.dp))
+
+            // Right Actions: Search, Filter (online), Account hub, More.
+            // Clean bare 22dp glyphs with optical shadow (e-ink falls back to solid circles).
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 if (!isOffline && showSearch) {
-                    // Search toggle button
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(
-                                if (isSearchBarOpen) {
-                                    AuroraTheme.colors.accent.copy(alpha = 0.35f)
-                                } else {
-                                    Color.Black.copy(alpha = 0.5f)
-                                },
-                                CircleShape,
-                            )
-                            .border(
-                                1.dp,
-                                if (isSearchBarOpen) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
-                                CircleShape,
-                            )
-                            .clickable {
-                                onToggleSearchBar()
-                                openHub = HubMenu.NONE
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = stringResource(MR.strings.action_search),
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
-
-                // Favorites — first-class circle in every mode (frequent local action).
-                // Filter/sort, watch history and the PiP toggle live in the More menu
-                // (declutter redesign): the top bar keeps only "where am I" + session actions.
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-                        .clickable {
-                            onOpenFavorites()
+                    TopBarChromeIconButton(
+                        icon = Icons.Filled.Search,
+                        contentDescription = stringResource(MR.strings.action_search),
+                        tint = if (isSearchBarOpen) auroraColors.accent else contentTint,
+                        showActiveDot = isSearchBarOpen,
+                        onClick = {
+                            onToggleSearchBar()
                             openHub = HubMenu.NONE
                         },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.FavoriteBorder,
-                        contentDescription = stringResource(MR.strings.reels_open_favorites),
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp),
                     )
                 }
 
-                // Follow / Following toggle on the creator page.
-                if (showFollowToggle) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(
-                                if (isFollowingCreator) {
-                                    AuroraTheme.colors.accent.copy(alpha = 0.35f)
-                                } else {
-                                    Color.Black.copy(alpha = 0.5f)
-                                },
-                                CircleShape,
-                            )
-                            .border(
-                                1.dp,
-                                if (isFollowingCreator) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
-                                CircleShape,
-                            )
-                            .clickable {
-                                onToggleFollow()
-                                openHub = HubMenu.NONE
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = if (isFollowingCreator) Icons.Filled.Person else Icons.Filled.PersonAdd,
-                            contentDescription = stringResource(
-                                if (isFollowingCreator) MR.strings.reels_following else MR.strings.reels_follow,
-                            ),
-                            tint = if (isFollowingCreator) AuroraTheme.colors.accent else Color.White,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                // Direct Filter button in GLOBAL, CREATOR, and NICHE modes when supported.
+                if (!isOffline && showFilter) {
+                    TopBarChromeIconButton(
+                        icon = Icons.Filled.FilterList,
+                        contentDescription = stringResource(MR.strings.action_filter),
+                        tint = if (isFilterActive) auroraColors.accent else contentTint,
+                        showActiveDot = isFilterActive,
+                        onClick = {
+                            onOpenFilterDialog()
+                            openHub = HubMenu.NONE
+                        },
+                    )
                 }
 
                 // Account hub (contract v19): login state, custom feeds, login/logout.
                 if (!isOffline && showAccount) {
                     Box {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(
-                                    if (isLoggedIn) {
-                                        AuroraTheme.colors.accent.copy(alpha = 0.35f)
-                                    } else {
-                                        Color.Black.copy(alpha = 0.5f)
-                                    },
-                                    CircleShape,
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isLoggedIn) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
-                                    CircleShape,
-                                )
-                                .clickable {
-                                    openHub = if (openHub ==
-                                        HubMenu.ACCOUNT
-                                    ) {
-                                        HubMenu.NONE
-                                    } else {
-                                        HubMenu.ACCOUNT
-                                    }
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Person,
-                                contentDescription = stringResource(MR.strings.reels_account),
-                                tint = if (isLoggedIn) AuroraTheme.colors.accent else Color.White,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
+                        TopBarChromeIconButton(
+                            icon = Icons.Filled.Person,
+                            contentDescription = stringResource(MR.strings.reels_account),
+                            tint = if (isLoggedIn) auroraColors.accent else contentTint,
+                            onClick = {
+                                openHub = if (openHub == HubMenu.ACCOUNT) {
+                                    HubMenu.NONE
+                                } else {
+                                    HubMenu.ACCOUNT
+                                }
+                            },
+                        )
                         if (openHub == HubMenu.ACCOUNT) {
                             ReelsAccountMenu(
                                 isLoggedIn = isLoggedIn,
@@ -486,48 +491,25 @@ fun ReelsTopBar(
                     }
                 }
 
-                // More (settings: auto-advance, aspect, quality)
+                // More (feed shortcuts, playback settings, quality & cache)
                 Box {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(
-                                if (openHub == HubMenu.MORE) {
-                                    AuroraTheme.colors.accent.copy(
-                                        alpha = 0.35f,
-                                    )
-                                } else {
-                                    Color.Black.copy(alpha = 0.5f)
-                                },
-                                CircleShape,
-                            )
-                            .border(
-                                1.dp,
-                                if (openHub ==
-                                    HubMenu.MORE
-                                ) {
-                                    AuroraTheme.colors.accent
-                                } else {
-                                    Color.White.copy(alpha = 0.2f)
-                                },
-                                CircleShape,
-                            )
-                            .clickable { openHub = if (openHub == HubMenu.MORE) HubMenu.NONE else HubMenu.MORE },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(MR.strings.reels_more),
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                    TopBarChromeIconButton(
+                        icon = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(MR.strings.reels_more),
+                        tint = if (openHub == HubMenu.MORE) auroraColors.accent else contentTint,
+                        onClick = {
+                            openHub = if (openHub == HubMenu.MORE) HubMenu.NONE else HubMenu.MORE
+                        },
+                    )
                     if (openHub == HubMenu.MORE) {
                         ReelsMoreMenu(
-                            showFilterRow = !isOffline && showFilter,
                             isAutoAdvance = isAutoAdvance,
                             isCropMode = isCropMode,
                             isHdQuality = isHdQuality,
+                            qualityModeEnabled = qualityModeEnabled,
+                            qualityLabel = qualityLabel,
+                            onOpenQualityVideo = onOpenQualityVideo,
+                            onOpenQualityDefault = onOpenQualityDefault,
                             dataSaverEnabled = dataSaverEnabled,
                             preloadEnabled = preloadEnabled,
                             preloadWifiOnly = preloadWifiOnly,
@@ -545,6 +527,10 @@ fun ReelsTopBar(
                                 onResetForYouHistory()
                                 openHub = HubMenu.NONE
                             },
+                            onOpenFavorites = {
+                                onOpenFavorites()
+                                openHub = HubMenu.NONE
+                            },
                             onOpenHistory = {
                                 onOpenHistory()
                                 openHub = HubMenu.NONE
@@ -552,6 +538,12 @@ fun ReelsTopBar(
                             onOpenHidden = {
                                 onOpenHidden()
                                 openHub = HubMenu.NONE
+                            },
+                            onOpenHide = onOpenHide?.let { openHide ->
+                                {
+                                    openHide()
+                                    openHub = HubMenu.NONE
+                                }
                             },
                             onOpenAlbums = {
                                 onOpenAlbums()
@@ -562,8 +554,10 @@ fun ReelsTopBar(
                                 onToggleNicheAlbum()
                                 openHub = HubMenu.NONE
                             },
-                            onOpenFilter = {
-                                onOpenFilterDialog()
+                            showNicheFollowRow = showNicheFollowRow,
+                            isNicheFollowed = isNicheFollowed,
+                            onToggleNicheFollow = {
+                                onToggleNicheFollow()
                                 openHub = HubMenu.NONE
                             },
                             onOpenSleepDialog = {
@@ -962,10 +956,13 @@ private fun SearchSuggestionTabs(
  */
 @Composable
 private fun ReelsMoreMenu(
-    showFilterRow: Boolean,
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isHdQuality: Boolean,
+    qualityModeEnabled: Boolean = false,
+    qualityLabel: String? = null,
+    onOpenQualityVideo: () -> Unit = {},
+    onOpenQualityDefault: () -> Unit = {},
     dataSaverEnabled: Boolean,
     preloadEnabled: Boolean,
     preloadWifiOnly: Boolean,
@@ -975,12 +972,16 @@ private fun ReelsMoreMenu(
     isTouchLocked: Boolean,
     isReelsIncognito: Boolean,
     isUnseenOnly: Boolean,
+    onOpenFavorites: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenHidden: () -> Unit,
+    onOpenHide: (() -> Unit)?,
     onOpenAlbums: () -> Unit,
     nicheAlbumSaved: Boolean?,
     onToggleNicheAlbum: () -> Unit,
-    onOpenFilter: () -> Unit,
+    showNicheFollowRow: Boolean,
+    isNicheFollowed: Boolean,
+    onToggleNicheFollow: () -> Unit,
     onOpenSleepDialog: () -> Unit,
     onToggleTouchLock: () -> Unit,
     onToggleReelsIncognito: () -> Unit,
@@ -998,9 +999,10 @@ private fun ReelsMoreMenu(
     onDismiss: () -> Unit,
 ) {
     val density = LocalDensity.current
+    val iconTint = MaterialTheme.colorScheme.onSurfaceVariant
     Popup(
         alignment = Alignment.TopEnd,
-        offset = with(density) { IntOffset(x = 0, y = 44.dp.roundToPx()) },
+        offset = with(density) { IntOffset(x = 0, y = 52.dp.roundToPx()) },
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
     ) {
@@ -1012,19 +1014,33 @@ private fun ReelsMoreMenu(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)
                 .clip(RoundedCornerShape(14.dp))
                 .verticalScroll(rememberScrollState())
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f), RoundedCornerShape(14.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                 .padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            // Relocated from the top bar (declutter): local retrospective actions first.
+            // Relocated from the top bar (declutter): favorites & local retrospective actions first.
             MoreMenuSection(stringResource(MR.strings.reels_menu_section_feed))
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        Icons.Outlined.FavoriteBorder,
+                        null,
+                        tint = iconTint,
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                label = stringResource(MR.strings.reels_open_favorites),
+                value = null,
+                checked = null,
+                onClick = onOpenFavorites,
+            )
             MoreMenuRow(
                 icon = {
                     Icon(
                         Icons.Outlined.History,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1038,7 +1054,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.VisibilityOff,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1047,12 +1063,28 @@ private fun ReelsMoreMenu(
                 checked = null,
                 onClick = onOpenHidden,
             )
+            if (onOpenHide != null) {
+                MoreMenuRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.Block,
+                            null,
+                            tint = iconTint,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    label = stringResource(MR.strings.reels_hide_dialog_title),
+                    value = null,
+                    checked = null,
+                    onClick = onOpenHide,
+                )
+            }
             MoreMenuRow(
                 icon = {
                     Icon(
                         Icons.Outlined.Collections,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1067,7 +1099,7 @@ private fun ReelsMoreMenu(
                         Icon(
                             Icons.AutoMirrored.Outlined.PlaylistAdd,
                             null,
-                            tint = Color.White.copy(alpha = 0.8f),
+                            tint = iconTint,
                             modifier = Modifier.size(18.dp),
                         )
                     },
@@ -1083,20 +1115,22 @@ private fun ReelsMoreMenu(
                     onClick = onToggleNicheAlbum,
                 )
             }
-            if (showFilterRow) {
+            if (showNicheFollowRow) {
                 MoreMenuRow(
                     icon = {
                         Icon(
-                            Icons.Filled.FilterList,
+                            if (isNicheFollowed) Icons.Filled.Person else Icons.Filled.PersonAdd,
                             null,
-                            tint = Color.White.copy(alpha = 0.8f),
+                            tint = iconTint,
                             modifier = Modifier.size(18.dp),
                         )
                     },
-                    label = stringResource(MR.strings.action_filter),
+                    label = stringResource(
+                        if (isNicheFollowed) MR.strings.reels_following_niche else MR.strings.reels_follow_niche,
+                    ),
                     value = null,
-                    checked = null,
-                    onClick = onOpenFilter,
+                    checked = isNicheFollowed,
+                    onClick = onToggleNicheFollow,
                 )
             }
             MoreMenuSection(stringResource(MR.strings.reels_menu_section_for_you))
@@ -1105,7 +1139,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.Check,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1119,7 +1153,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Outlined.DeleteSweep,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1134,7 +1168,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.Autorenew,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1148,7 +1182,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Outlined.AspectRatio,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1158,34 +1192,71 @@ private fun ReelsMoreMenu(
                 onClick = onToggleCropMode,
             )
             MoreMenuSection(stringResource(MR.strings.reels_menu_section_quality))
-            MoreMenuRow(
-                icon = {
-                    Icon(
-                        Icons.Outlined.HighQuality,
-                        null,
-                        tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-                label = stringResource(MR.strings.reels_quality),
-                // Audit H11: show the EFFECTIVE quality — with data saver on, HD silently
-                // downgrades to SD on mobile networks and the menu must not lie about it.
-                value = stringResource(
-                    when {
-                        isHdQuality && dataSaverEnabled -> MR.strings.reels_quality_hd_saver
-                        isHdQuality -> MR.strings.reels_quality_hd
-                        else -> MR.strings.reels_quality_sd
+            if (qualityModeEnabled) {
+                MoreMenuRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.HighQuality,
+                            null,
+                            tint = iconTint,
+                            modifier = Modifier.size(18.dp),
+                        )
                     },
-                ),
-                checked = null,
-                onClick = onToggleQuality,
-            )
+                    label = stringResource(AYMR.strings.reels_quality_video),
+                    value = qualityLabel,
+                    checked = null,
+                    onClick = {
+                        onOpenQualityVideo()
+                        onDismiss()
+                    },
+                )
+                MoreMenuRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.AspectRatio,
+                            null,
+                            tint = iconTint,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    label = stringResource(AYMR.strings.reels_quality_default),
+                    value = null,
+                    checked = null,
+                    onClick = {
+                        onOpenQualityDefault()
+                        onDismiss()
+                    },
+                )
+            } else {
+                MoreMenuRow(
+                    icon = {
+                        Icon(
+                            Icons.Outlined.HighQuality,
+                            null,
+                            tint = iconTint,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    label = stringResource(MR.strings.reels_quality),
+                    // Audit H11: show the EFFECTIVE quality — with data saver on, HD silently
+                    // downgrades to SD on mobile networks and the menu must not lie about it.
+                    value = stringResource(
+                        when {
+                            isHdQuality && dataSaverEnabled -> MR.strings.reels_quality_hd_saver
+                            isHdQuality -> MR.strings.reels_quality_hd
+                            else -> MR.strings.reels_quality_sd
+                        },
+                    ),
+                    checked = null,
+                    onClick = onToggleQuality,
+                )
+            }
             MoreMenuRow(
                 icon = {
                     Icon(
                         Icons.Filled.Download,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1199,7 +1270,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.Wifi,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1213,7 +1284,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.DataSaverOn,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1228,7 +1299,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.PrivacyTip,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1244,7 +1315,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Outlined.PictureInPictureAlt,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1258,7 +1329,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Outlined.Timer,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1272,7 +1343,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.Lock,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1287,7 +1358,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Filled.Download,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1303,7 +1374,7 @@ private fun ReelsMoreMenu(
                     Icon(
                         Icons.Outlined.DeleteSweep,
                         null,
-                        tint = Color.White.copy(alpha = 0.8f),
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -1369,12 +1440,22 @@ private fun MoreMenuRow(
     }
 }
 
+private fun formatTopBarTitle(raw: String): String {
+    val trimmed = raw.trim()
+    return if (trimmed.startsWith("@")) {
+        val clean = trimmed.trimStart('@')
+        if (clean.isEmpty()) trimmed else "@$clean"
+    } else {
+        raw
+    }
+}
+
 /** Uppercase group caption inside the More menu (audit UI: sectioned, scannable list). */
 @Composable
 private fun MoreMenuSection(title: String) {
     Text(
         text = title.uppercase(),
-        color = Color.White.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
         fontSize = 10.sp,
         fontWeight = FontWeight.ExtraBold,
         letterSpacing = 0.9.sp,
@@ -1413,15 +1494,15 @@ private fun ReelsAccountMenu(
     val density = LocalDensity.current
     Popup(
         alignment = Alignment.TopEnd,
-        offset = with(density) { IntOffset(x = 0, y = 44.dp.roundToPx()) },
+        offset = with(density) { IntOffset(x = 0, y = 52.dp.roundToPx()) },
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
     ) {
         Column(
             modifier = Modifier
                 .width(220.dp)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f), RoundedCornerShape(14.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                 .padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -1501,7 +1582,7 @@ private fun ReelsAccountMenu(
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                         .height(1.dp)
-                        .background(Color.White.copy(alpha = 0.1f)),
+                        .background(MaterialTheme.colorScheme.outlineVariant),
                 )
                 if (isLoggedIn) {
                     HubMenuRow(
@@ -1526,11 +1607,71 @@ private fun ReelsAccountMenu(
 }
 
 @Composable
+private fun TopBarChromeIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    tint: Color,
+    onClick: () -> Unit,
+    iconSize: Dp = 22.dp,
+    width: Dp = 44.dp,
+    showActiveDot: Boolean = false,
+) {
+    val auroraColors = AuroraTheme.colors
+    val isEInk = auroraColors.isEInk
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(48.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isEInk) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .reelsGlassSurface(
+                        active = showActiveDot,
+                        eInk = true,
+                        eInkColor = auroraColors.cardBackground,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = tint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        } else {
+            ReelsChromeIcon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = tint,
+                size = iconSize,
+                eInk = false,
+            )
+            if (showActiveDot) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 7.dp)
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(auroraColors.accent),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun HubMenuIcon(imageVector: ImageVector) {
     Icon(
         imageVector = imageVector,
         contentDescription = null,
-        tint = Color.White.copy(alpha = 0.8f),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.size(18.dp),
     )
 }

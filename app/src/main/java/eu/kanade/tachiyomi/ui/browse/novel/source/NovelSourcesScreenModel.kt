@@ -67,30 +67,35 @@ class NovelSourcesScreenModel(
                 }
         }
         sourcePreferences.verticalPinnedLayout().changes()
-            .onEach {
-                mutableState.update { state -> state.copy(verticalPinnedLayout = it) }
-                updateState()
+            .onEach { vertical ->
+                updateState { state -> state.copy(verticalPinnedLayout = vertical) }
             }
             .launchIn(screenModelScope)
     }
 
-    private fun updateState() {
+    private fun updateState(transform: (State) -> State = { it }) {
         // BRN-14: compute INSIDE mutableState.update from one rawSources snapshot (the
         // cross-thread read/compute/write was last-writer-wins on stale inputs - manga etalon).
         val snapshot = rawSources
-        mutableState.update { current ->
+        mutableState.update { previous ->
+            val current = transform(previous)
             val query = current.searchQuery
+            val isQueryBlank = query.isBlank()
             val collapsed = current.collapsedLanguages
             val verticalLayout = current.verticalPinnedLayout
 
             val (pinned, others) = when {
-                query.isBlank() && !verticalLayout -> snapshot.partition { Pin.Actual in it.pin }
+                isQueryBlank && !verticalLayout -> snapshot.partition { Pin.Actual in it.pin }
                 else -> Pair(emptyList(), snapshot)
             }
 
-            val filtered = others.filter {
-                query.isBlank() || it.name.contains(query, ignoreCase = true) ||
-                    it.lang.contains(query, ignoreCase = true)
+            val filtered = if (isQueryBlank) {
+                others
+            } else {
+                others.filter {
+                    it.name.contains(query, ignoreCase = true) ||
+                        it.lang.contains(query, ignoreCase = true)
+                }
             }
 
             val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
@@ -106,18 +111,21 @@ class NovelSourcesScreenModel(
             }
             val byLang = filtered.groupByTo(map) {
                 when {
-                    verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
+                    verticalLayout && isQueryBlank && Pin.Actual in it.pin -> PINNED_KEY
                     it.isUsedLast -> LAST_USED_KEY
                     else -> it.lang
                 }
             }
 
-            val uiItems = byLang.flatMap { (lang, langSources) ->
-                if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
-                    listOf(NovelSourceUiModel.Header(lang, isCollapsed = true))
-                } else {
-                    listOf(NovelSourceUiModel.Header(lang, isCollapsed = false)) +
-                        langSources.map { NovelSourceUiModel.Item(it) }
+            val uiItems = buildList(filtered.size + byLang.size) {
+                for ((lang, langSources) in byLang) {
+                    val isCollapsed = lang in collapsed && isQueryBlank && lang != PINNED_KEY
+                    add(NovelSourceUiModel.Header(lang, isCollapsed = isCollapsed))
+                    if (!isCollapsed) {
+                        for (source in langSources) {
+                            add(NovelSourceUiModel.Item(source))
+                        }
+                    }
                 }
             }
 
@@ -130,12 +138,11 @@ class NovelSourcesScreenModel(
     }
 
     fun search(query: String) {
-        mutableState.update { it.copy(searchQuery = query) }
-        updateState()
+        updateState { it.copy(searchQuery = query) }
     }
 
     fun toggleLanguage(language: String) {
-        mutableState.update { state ->
+        updateState { state ->
             val newCollapsed = if (language in state.collapsedLanguages) {
                 state.collapsedLanguages - language
             } else {
@@ -143,7 +150,6 @@ class NovelSourcesScreenModel(
             }
             state.copy(collapsedLanguages = newCollapsed.toImmutableSet())
         }
-        updateState()
     }
 
     fun toggleSource(source: Source) {

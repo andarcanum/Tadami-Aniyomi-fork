@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
@@ -79,6 +80,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import com.tadami.aurora.BuildConfig
 import dev.icerock.moko.resources.StringResource
@@ -86,6 +89,8 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.components.allAuraPalettes
+import eu.kanade.presentation.easteregg.crystal.CrystalTreasuryEntry
+import eu.kanade.presentation.easteregg.crystal.openCrystalCollection
 import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
 import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
@@ -100,6 +105,7 @@ import eu.kanade.tachiyomi.ui.home.components.avatarGlitch
 import kotlinx.coroutines.flow.first
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialIds
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -119,6 +125,8 @@ object SettingsTreasuryScreen : SearchableSettings {
     @Composable
     override fun getPreferences(): List<Preference> {
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val crystalAppearance = eu.kanade.presentation.easteregg.crystal.rememberCrystalAppearance()
+        val crystalVisible = crystalAppearance.receipt.isEligible || crystalAppearance.receipt.isGranted
         val unlockableManager = remember { Injekt.get<UnlockableManager>() }
         val userProfilePreferences = remember { Injekt.get<UserProfilePreferences>() }
 
@@ -743,6 +751,8 @@ object SettingsTreasuryScreen : SearchableSettings {
                                 ),
                             )
                         }
+                        // The equipped local palette overlays the default wash, never changes the app theme.
+                        eu.kanade.presentation.easteregg.crystal.CrystalSilkBackdrop(Modifier.matchParentSize())
 
                         Row(
                             modifier = Modifier
@@ -769,7 +779,10 @@ object SettingsTreasuryScreen : SearchableSettings {
                                     label = "aura-rotation",
                                 )
 
-                                if (avatarFrameStyleKey != "none") {
+                                val isCrystalFrame =
+                                    avatarFrameStyleKey in
+                                        eu.kanade.domain.easteregg.crystal.CrystalAppearancePreferences.FRAME_KEYS
+                                if (avatarFrameStyleKey != "none" && !isCrystalFrame) {
                                     Canvas(
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -807,7 +820,7 @@ object SettingsTreasuryScreen : SearchableSettings {
                                 }
 
                                 val avatarModifier = Modifier
-                                    .size(if (avatarFrameStyleKey != "none") 62.dp else 70.dp)
+                                    .size(if (avatarFrameStyleKey != "none" && !isCrystalFrame) 62.dp else 70.dp)
                                     .clip(CircleShape)
                                     .avatarGlitch(avatarFrameStyleKey)
 
@@ -842,7 +855,9 @@ object SettingsTreasuryScreen : SearchableSettings {
                                     nicknameStyle = activeNicknameStyle,
                                     badgeStyleKey = homeBadgeStyleKey,
                                 )
-                                if (profileTitleKey != "none") {
+                                if (profileTitleKey == CrystalMemorialIds.TITLE) {
+                                    eu.kanade.presentation.easteregg.crystal.CrystalProfileTitle()
+                                } else if (profileTitleKey != "none") {
                                     Box(
                                         modifier = Modifier
                                             .border(
@@ -886,10 +901,15 @@ object SettingsTreasuryScreen : SearchableSettings {
             specialBackgroundPresets,
             tabCustomizationPresets,
             unlockedUnlockables,
+            crystalVisible,
+            crystalAppearance.receipt.isGranted,
         ) {
             calculateTreasuryRewardProgress(
-                unlockedUnlockables = unlockedUnlockables,
+                unlockedUnlockables =
+                unlockedUnlockables +
+                    if (crystalAppearance.receipt.isGranted) CrystalMemorialIds.REWARDS else emptySet(),
                 presetIds = buildList {
+                    if (crystalVisible) addAll(CrystalMemorialIds.REWARDS)
                     addAll(titlePresets.map { it.unlockableId })
                     addAll(profileEffectPresets.map { it.unlockableId })
                     addAll(avatarFramePresets.map { it.unlockableId })
@@ -940,6 +960,21 @@ object SettingsTreasuryScreen : SearchableSettings {
                 )
             },
         )
+
+        if (crystalVisible) {
+            preferences.add(
+                Preference.PreferenceItem.CustomPreference(title = stringResource(AYMR.strings.crystal_section_title)) {
+                    val navigator = LocalNavigator.currentOrThrow
+                    TreasurySectionStage(
+                        title = stringResource(AYMR.strings.crystal_section_title),
+                        subtitle = stringResource(AYMR.strings.crystal_section_subtitle),
+                        accent = TreasuryGold,
+                    ) {
+                        CrystalTreasuryEntry(crystalAppearance) { navigator.openCrystalCollection() }
+                    }
+                },
+            )
+        }
 
         preferences.add(
             Preference.PreferenceItem.CustomPreference(title = stringResource(AYMR.strings.treasury_auras)) {
@@ -1668,11 +1703,20 @@ private fun TreasuryPathCard(
     subtitle: String,
     accent: Color,
     index: String,
+    onClick: (() -> Unit)? = null,
 ) {
     val isDark = AuroraTheme.colors.isDark
     val container = if (isDark) Color.White.copy(alpha = 0.055f) else Color.White.copy(alpha = 0.86f)
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(
+            if (onClick !=
+                null
+            ) {
+                Modifier.clickable(onClick = onClick)
+            } else {
+                Modifier
+            },
+        ),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = container),
         border = BorderStroke(1.dp, accent.copy(alpha = if (isDark) 0.36f else 0.48f)),
@@ -1724,6 +1768,11 @@ private fun TreasuryPathCard(
                         lineHeight = 17.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
                     )
+                }
+                if (onClick !=
+                    null
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = accent)
                 }
             }
         }

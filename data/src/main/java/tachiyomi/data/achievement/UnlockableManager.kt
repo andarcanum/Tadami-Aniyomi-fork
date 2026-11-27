@@ -252,6 +252,12 @@ class UnlockableManager(
      */
     fun getUnlockableNameRes(unlockableId: String): StringResource? {
         return when (unlockableId) {
+            "special_crystal_relic" -> MR.strings.unlockable_special_crystal_relic
+            "avatar_frame_crystal_ears" -> MR.strings.unlockable_avatar_frame_crystal_ears
+            "special_background_crystal_warm_paws" -> MR.strings.unlockable_special_background_crystal_warm_paws
+            "title_crystal_light_keeper" -> MR.strings.unlockable_title_crystal_light_keeper
+            "home_badge_crystal_memory_paw" -> MR.strings.unlockable_home_badge_crystal_memory_paw
+            "profile_crystal_moon_silk" -> MR.strings.unlockable_profile_crystal_moon_silk
             // Themes
             "theme_master" -> MR.strings.unlockable_theme_master
             "theme_ONYX_GOLD" -> MR.strings.unlockable_theme_ONYX_GOLD

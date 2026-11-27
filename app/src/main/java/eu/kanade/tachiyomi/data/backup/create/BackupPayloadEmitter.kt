@@ -6,11 +6,14 @@ import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSeries
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
+import eu.kanade.tachiyomi.data.backup.models.BackupCrystalMemorial
 import eu.kanade.tachiyomi.data.backup.models.BackupCustomButtons
 import eu.kanade.tachiyomi.data.backup.models.BackupDayActivity
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryHidden
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoverySignal
 import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTag
+import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTasteResetEpoch
+import eu.kanade.tachiyomi.data.backup.models.BackupDiscoveryTitleMemory
 import eu.kanade.tachiyomi.data.backup.models.BackupExtension
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepos
 import eu.kanade.tachiyomi.data.backup.models.BackupExtensionStore
@@ -25,6 +28,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupReelsFollow
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
 import eu.kanade.tachiyomi.data.backup.models.BackupStats
+import eu.kanade.tachiyomi.data.backup.models.BackupTranslationConfiguration
 import eu.kanade.tachiyomi.data.backup.models.BackupUserProfile
 import eu.kanade.tachiyomi.data.backup.models.MihonBackupManga
 import eu.kanade.tachiyomi.data.backup.models.TadamiMediaType
@@ -81,6 +85,9 @@ internal object BackupPayloadEmitter {
             backup.backupStats?.let {
                 messageField(603, proto.encodeToByteArray(BackupStats.serializer(), it))
             }
+            backup.backupCrystalMemorial?.let {
+                messageField(604, proto.encodeToByteArray(BackupCrystalMemorial.serializer(), it))
+            }
             messageList(620, backup.backupMangaSeries, BackupMangaSeries.serializer(), proto)
             messageList(621, backup.backupNovelSeries, BackupNovelSeries.serializer(), proto)
             messageList(622, backup.backupFeeds, BackupFeed.serializer(), proto)
@@ -90,6 +97,16 @@ internal object BackupPayloadEmitter {
             messageList(625, backup.backupDiscoveryBlacklistTags, BackupDiscoveryTag.serializer(), proto)
             messageList(627, backup.backupDiscoverySignals, BackupDiscoverySignal.serializer(), proto)
             messageList(628, backup.backupAnimeSeries, BackupAnimeSeries.serializer(), proto)
+            backup.backupTranslationConfiguration?.let {
+                messageField(629, proto.encodeToByteArray(BackupTranslationConfiguration.serializer(), it))
+            }
+            messageList(630, backup.backupDiscoveryTitleMemory, BackupDiscoveryTitleMemory.serializer(), proto)
+            messageList(
+                631,
+                backup.backupDiscoveryTasteResetEpochs,
+                BackupDiscoveryTasteResetEpoch.serializer(),
+                proto,
+            )
         }
     }
 

@@ -32,7 +32,17 @@ class DiscoverySourceRowBuilderConcurrencyTest {
             try {
                 if (delayMs > 0) delay(delayMs)
                 return listOf(
-                    DiscoveryRowItem("Pop $sourceId", "pop $sourceId", null, null, null, "src$sourceId", 0.5),
+                    DiscoveryRowItem(
+                        "Pop $sourceId",
+                        "pop $sourceId",
+                        null,
+                        null,
+                        null,
+                        "src$sourceId",
+                        0.5,
+                        sourceId,
+                        "/popular-$sourceId",
+                    ),
                 )
             } finally {
                 currentConcurrent.decrementAndGet()
@@ -66,7 +76,7 @@ class DiscoverySourceRowBuilderConcurrencyTest {
                         null,
                         null,
                         "src$sourceId",
-                        0.9,
+                        0.9, sourceId = sourceId, sourceUrl = "/latest-$sourceId-$idx",
                     )
                 }
             } finally {
@@ -87,6 +97,7 @@ class DiscoverySourceRowBuilderConcurrencyTest {
             hiddenCleanTitles = emptySet(),
             sourceId = 1L,
             sourceIds = listOf(1L, 2L, 3L, 4L, 5L, 6L),
+            sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L, 2L, 3L, 4L, 5L, 6L)),
             sourceWeights = mapOf(1L to 1.0, 2L to 1.0, 3L to 1.0, 4L to 1.0, 5L to 1.0, 6L to 1.0),
         )
 
@@ -108,6 +119,7 @@ class DiscoverySourceRowBuilderConcurrencyTest {
             hiddenCleanTitles = emptySet(),
             sourceId = 1L,
             sourceIds = listOf(1L),
+            sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L)),
             sourceWeights = mapOf(1L to 1.0),
         )
 
@@ -132,7 +144,19 @@ class DiscoverySourceRowBuilderConcurrencyTest {
                 delay(10_000L)
                 emptyList()
             } else {
-                listOf(DiscoveryRowItem("Responsive Pop", "responsive pop", null, null, null, "S2", 0.5))
+                listOf(
+                    DiscoveryRowItem(
+                        "Responsive Pop",
+                        "responsive pop",
+                        null,
+                        null,
+                        null,
+                        "S2",
+                        0.5,
+                        sourceId,
+                        "/responsive-pop",
+                    ),
+                )
             }
 
             override suspend fun popularWithGenres(
@@ -152,7 +176,19 @@ class DiscoverySourceRowBuilderConcurrencyTest {
                 delay(10_000L)
                 emptyList()
             } else {
-                listOf(DiscoveryRowItem("Responsive Latest", "responsive latest", null, null, null, "S2", 0.9))
+                listOf(
+                    DiscoveryRowItem(
+                        "Responsive Latest",
+                        "responsive latest",
+                        null,
+                        null,
+                        null,
+                        "S2",
+                        0.9,
+                        sourceId,
+                        "/responsive-latest",
+                    ),
+                )
             }
         }
 
@@ -165,6 +201,7 @@ class DiscoverySourceRowBuilderConcurrencyTest {
             hiddenCleanTitles = emptySet(),
             sourceId = 1L,
             sourceIds = listOf(1L, 2L),
+            sourcePolicy = discoveryQueryPolicyFixture(DiscoveryMediaType.MANGA, listOf(1L, 2L)),
             sourceWeights = mapOf(1L to 1.0, 2L to 1.0),
         )
 

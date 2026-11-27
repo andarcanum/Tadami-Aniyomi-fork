@@ -20,6 +20,8 @@ import eu.kanade.domain.track.manga.MapMangaTrackStatusToLibrary
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateConcurrency
+import eu.kanade.tachiyomi.data.library.LibraryUpdateEntryIds
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
@@ -28,9 +30,12 @@ import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorStore
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.util.manga.MangaMemoRepairHelper
+import eu.kanade.tachiyomi.util.manga.getMangaUpdateLocked
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import eu.kanade.tachiyomi.util.system.isCharging
@@ -77,6 +82,15 @@ import java.time.ZonedDateTime
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+
+internal suspend fun MangaSource.fetchMangaLibraryUpdate(manga: SManga, fetchDetails: Boolean): SMangaUpdate {
+    return getMangaUpdateLocked(
+        manga = manga,
+        chapters = emptyList(),
+        fetchDetails = fetchDetails,
+        fetchChapters = true,
+    )
+}
 
 class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
@@ -135,7 +149,9 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             }
         }
 
-        libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())
+        if (!LibraryUpdateEntryIds.hasTargetedEntryIds(inputData)) {
+            libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())
+        }
 
         val categoryId = if (inputData.keyValueMap.containsKey(KEY_CATEGORY)) {
             inputData.getLong(KEY_CATEGORY, -1L)
@@ -249,9 +265,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      */
     private suspend fun addMangaToQueue(categoryId: Long) {
         val libraryManga = getLibraryManga.await()
-        val targetEntryIds = inputData.getLongArray(KEY_ENTRY_IDS)
-            ?.takeIf { it.isNotEmpty() }
-            ?.toSet()
+        val targetEntryIds = LibraryUpdateEntryIds.consumeEntryIds(inputData, context.cacheDir)
 
         val listToUpdate = if (targetEntryIds != null) {
             libraryManga
@@ -273,24 +287,31 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                         .filterNot { it.category == 0L }
                         .distinctBy { it.manga.id }
                 GroupLibraryMode.GLOBAL -> {
-                    val categoriesToUpdate = libraryPreferences.mangaUpdateCategories().get().map { it.toLong() }
+                    val categoriesToUpdate = libraryPreferences.mangaUpdateCategories().get()
+                        .mapTo(HashSet()) { it.toLong() }
                     val includedManga = if (categoriesToUpdate.isNotEmpty()) {
                         libraryManga.filter { it.category in categoriesToUpdate }
                     } else {
                         libraryManga
                     }
 
-                    val categoriesToExclude =
-                        libraryPreferences.mangaUpdateCategoriesExclude().get().map { it.toLong() }
+                    val categoriesToExclude = libraryPreferences.mangaUpdateCategoriesExclude().get()
+                        .mapTo(HashSet()) { it.toLong() }
                     val excludedMangaIds = if (categoriesToExclude.isNotEmpty()) {
-                        libraryManga.filter { it.category in categoriesToExclude }.map { it.manga.id }
+                        libraryManga.asSequence()
+                            .filter { it.category in categoriesToExclude }
+                            .mapTo(HashSet()) { it.manga.id }
                     } else {
-                        emptyList()
+                        emptySet()
                     }
 
-                    includedManga
-                        .filterNot { it.manga.id in excludedMangaIds }
-                        .distinctBy { it.manga.id }
+                    (
+                        if (excludedMangaIds.isEmpty()) {
+                            includedManga
+                        } else {
+                            includedManga.filterNot { it.manga.id in excludedMangaIds }
+                        }
+                        ).distinctBy { it.manga.id }
                 }
             }
         }
@@ -377,7 +398,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      * @return an observable delivering the progress of each update.
      */
     private suspend fun updateChapterList(isManualRun: Boolean) {
-        val semaphore = Semaphore(5)
+        val semaphore = Semaphore(LibraryUpdateConcurrency.maxConcurrentSources(context))
         val progressCount = AtomicInteger(0)
         val currentlyUpdatingManga = CopyOnWriteArrayList<Manga>()
         val newUpdates = CopyOnWriteArrayList<Pair<Manga, Array<Chapter>>>()
@@ -521,11 +542,9 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         // still calls getMangaDetails/getChapterList, while a 1.6 extension can answer both from a
         // single request instead of failing on the legacy entry points it no longer implements.
         val fetchDetails = libraryPreferences.autoUpdateMetadata().get()
-        val update = source.getMangaUpdate(
+        val update = source.fetchMangaLibraryUpdate(
             manga = MangaMemoRepairHelper.getOrRepairMangaRequest(manga, source, updateManga),
-            chapters = emptyList(),
             fetchDetails = fetchDetails,
-            fetchChapters = true,
         )
         if (fetchDetails) {
             updateManga.awaitUpdateFromSource(manga, update.manga, manualFetch = false, coverCache)
@@ -615,7 +634,6 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
          * Key for category to update.
          */
         private const val KEY_CATEGORY = "category"
-        private const val KEY_ENTRY_IDS = "entryIds"
 
         fun cancelAllWorks(context: Context) {
             context.workManager.cancelAllWorkByTag(TAG)
@@ -645,7 +663,16 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             entryIds: LongArray,
         ): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             if (entryIds.isEmpty()) return@withContext false
-            enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
+            val inputData = LibraryUpdateEntryIds.buildInputData(
+                cacheDir = context.cacheDir,
+                mediaTag = TAG,
+                entryIds = entryIds,
+            )
+            val enqueued = enqueueManualUpdate(context, inputData)
+            if (!enqueued) {
+                LibraryUpdateEntryIds.cleanupSpillFile(inputData, context.cacheDir)
+            }
+            enqueued
         }
 
         private fun enqueueManualUpdate(

@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.category.novel.model.NovelCategory
+import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.library.novel.LibraryNovel
@@ -47,6 +48,7 @@ class NovelSeriesScreenModel(
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val seriesCoverCache: SeriesCoverCache = Injekt.get(),
+    private val novelHistoryRepository: NovelHistoryRepository = Injekt.get(),
 ) : ScreenModel {
 
     private val customCoverState = MutableStateFlow(
@@ -95,12 +97,21 @@ class NovelSeriesScreenModel(
         if (wrapper == null) {
             State(isLoading = false, series = null, categories = categories, chapters = chapters)
         } else {
+            val resumeChapterId = wrapper.series.entries.maxByOrNull { it.lastRead }
+                ?.takeIf { it.lastRead > 0L }
+                ?.let { entry ->
+                    novelHistoryRepository.getHistoryByNovelId(entry.id)
+                        .filter { (it.readAt?.time ?: 0L) > 0L }
+                        .maxByOrNull { it.readAt?.time ?: 0L }
+                        ?.chapterId
+                }
             State(
                 isLoading = false,
                 series = wrapper.series,
                 entryIds = wrapper.entryIds,
                 categories = categories,
                 chapters = chapters,
+                resumeChapterId = resumeChapterId,
                 hasCustomCover = customCoverFile?.exists() == true,
                 customCoverFile = customCoverFile,
                 bookStates = bookStates,
@@ -217,6 +228,7 @@ class NovelSeriesScreenModel(
         val hasCustomCover: Boolean = false,
         val customCoverFile: File? = null,
         val searchQuery: String? = null,
+        val resumeChapterId: Long? = null,
         val bookStates: Map<Long, tachiyomi.domain.book.novel.model.NovelBookState> = emptyMap(),
     )
 }

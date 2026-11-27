@@ -1,0 +1,123 @@
+-- Association between a durable candidate payload and one round-robin source slot.
+-- reserved_round/ordinal are set only for turns that are still needed by an unplayed frame slot;
+-- the CHECK keeps the pair atomic.
+CREATE TABLE reels_rr_item (
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    order_key INTEGER NOT NULL,
+    content_key TEXT,
+    checked_context TEXT,
+    validation TEXT NOT NULL,
+    reserved_round INTEGER,
+    ordinal INTEGER,
+    PRIMARY KEY (account_scope_id, source_id, item_id),
+    UNIQUE (account_scope_id, source_id, reserved_round, source_key),
+    FOREIGN KEY (account_scope_id, source_id, item_id)
+        REFERENCES reels_candidate(account_scope_id, source_id, item_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_scope_id, source_id, source_key)
+        REFERENCES reels_rr_source(account_scope_id, source_id, source_key) ON DELETE CASCADE,
+    CHECK ((reserved_round IS NULL AND ordinal IS NULL) OR
+           (reserved_round IS NOT NULL AND ordinal IS NOT NULL))
+);
+
+CREATE INDEX reels_rr_pending ON reels_rr_item(account_scope_id, source_id, source_key, reserved_round, order_key DESC);
+
+all:
+SELECT *
+FROM reels_rr_item
+WHERE account_scope_id = :scope AND source_id = :sourceId
+ORDER BY source_key, order_key DESC, item_id;
+
+countForSource:
+SELECT COUNT(*)
+FROM reels_rr_item
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+stagedForSources:
+SELECT *
+FROM reels_rr_item
+WHERE account_scope_id = :scope
+  AND source_id = :sourceId
+  AND source_key IN :sourceKeys
+  AND reserved_round IS NULL
+ORDER BY order_key DESC;
+
+upsert:
+INSERT INTO reels_rr_item(
+    account_scope_id, source_id, item_id, source_key, order_key, content_key,
+    checked_context, validation, reserved_round, ordinal
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(account_scope_id, source_id, item_id)
+DO UPDATE SET
+    source_key = excluded.source_key,
+    order_key = excluded.order_key,
+    content_key = excluded.content_key,
+    checked_context = excluded.checked_context,
+    validation = excluded.validation,
+    reserved_round = excluded.reserved_round,
+    ordinal = excluded.ordinal;
+
+reassignSourceKey:
+UPDATE reels_rr_item
+SET source_key = :toKey
+WHERE account_scope_id = :scope AND source_id = :sourceId AND source_key = :fromKey;
+
+unreserveFromRound:
+UPDATE reels_rr_item
+SET reserved_round = NULL, ordinal = NULL
+WHERE account_scope_id = :scope AND source_id = :sourceId AND reserved_round = :round;
+
+unreserveForSources:
+UPDATE reels_rr_item
+SET reserved_round = NULL, ordinal = NULL
+WHERE account_scope_id = :scope
+  AND source_id = :sourceId
+  AND source_key IN :sourceKeys;
+
+invalidateAll:
+UPDATE reels_rr_item
+SET validation = 'UNKNOWN',
+    checked_context = NULL,
+    reserved_round = NULL,
+    ordinal = NULL
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+deleteOrphans:
+DELETE FROM reels_rr_item
+WHERE account_scope_id = :scope
+  AND source_id = :sourceId
+  AND NOT EXISTS (
+      SELECT 1
+      FROM reels_candidate AS c
+      WHERE c.account_scope_id = reels_rr_item.account_scope_id
+        AND c.source_id = reels_rr_item.source_id
+        AND c.item_id = reels_rr_item.item_id
+  );
+
+unmappedIds:
+SELECT rr.item_id
+FROM reels_rr_item AS rr
+WHERE rr.account_scope_id = :scope
+  AND rr.source_id = :sourceId
+  AND NOT EXISTS (
+      SELECT 1
+      FROM reels_candidate AS c
+      WHERE c.account_scope_id = rr.account_scope_id
+        AND c.source_id = rr.source_id
+        AND c.item_id = rr.item_id
+  );
+
+deleteForScope:
+DELETE FROM reels_rr_item
+WHERE account_scope_id = :scope;
+
+deleteForSource:
+DELETE FROM reels_rr_item
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+deleteBySourceKey:
+DELETE FROM reels_rr_item
+WHERE account_scope_id = :scope AND source_id = :sourceId AND source_key = :sourceKey;

@@ -57,6 +57,8 @@ internal fun AuroraGlassSection(
     // B-A10: the component is aurora-styled but its default title color came from the raw
     // Material scheme; default to the aurora text color so e-ink/aurora palettes stay coherent.
     titleColor: Color = AuroraTheme.colors.textPrimary,
+    headerAction: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AuroraTheme.colors
@@ -72,18 +74,28 @@ internal fun AuroraGlassSection(
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 5.dp)
             .clip(shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .background(frostBase)
             .border(width = 1.dp, color = auroraRimColor(), shape = shape)
             .padding(vertical = 8.dp),
     ) {
         if (title != null) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = titleColor,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = titleColor,
+                    modifier = Modifier.weight(1f),
+                )
+                headerAction?.invoke()
+            }
             HorizontalDivider(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
                 color = auroraRimColor(),

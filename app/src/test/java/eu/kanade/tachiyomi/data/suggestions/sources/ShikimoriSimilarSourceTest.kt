@@ -56,5 +56,6 @@ class ShikimoriSimilarSourceTest {
         val s = shikimoriSimilarToSuggestion(item, SuggestionMediaType.NOVEL, isRussianLocale = false)
         s?.mediaType shouldBe SuggestionMediaType.NOVEL
         s?.providerUrl shouldBe "https://shikimori.one/ranobe/9"
+        s?.searchQueries shouldBe listOf("Re:Zero", "Re:Zero. Жизнь с нуля")
     }
 }

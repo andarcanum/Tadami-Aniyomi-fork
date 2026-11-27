@@ -1,6 +1,8 @@
 package eu.kanade.presentation.components
 
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -184,7 +186,9 @@ fun TabbedScreenAurora(
     extraSearchToActionsGap: Dp = 0.dp,
     extraActionGapAfterTitle: String? = null,
     extraHeaderContent: @Composable () -> Unit = {},
+    backgroundOverlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
     disablePagerScroll: Boolean = false,
+    beyondViewportPageCount: Int = 0,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
@@ -224,14 +228,25 @@ fun TabbedScreenAurora(
         label = "auroraEdgeBounce",
     )
 
-    val onTabSelected: (Int) -> Unit = { index ->
-        if (tabs.isNotEmpty()) {
-            val targetIndex = index.coerceIn(0, tabs.lastIndex)
-            if (instantTabSwitching) {
-                instantSelectedPage = targetIndex
-            } else {
-                scope.launch {
-                    state.animateScrollToPage(targetIndex)
+    val tabScrollSpec = remember {
+        spring<Float>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = 440f,
+        )
+    }
+    val onTabSelected: (Int) -> Unit = remember(tabs.size, instantTabSwitching, state, scope) {
+        { index ->
+            if (tabs.isNotEmpty()) {
+                val targetIndex = index.coerceIn(0, tabs.lastIndex)
+                if (instantTabSwitching) {
+                    instantSelectedPage = targetIndex
+                } else {
+                    scope.launch {
+                        state.animateScrollToPage(
+                            page = targetIndex,
+                            animationSpec = tabScrollSpec,
+                        )
+                    }
                 }
             }
         }
@@ -239,6 +254,12 @@ fun TabbedScreenAurora(
 
     LaunchedEffect(instantTabSwitching, instantSelectedPage, state.currentPage, tabs.size) {
         if (tabs.isEmpty()) return@LaunchedEffect
+        if (!instantTabSwitching && !previousInstantTabSwitching) {
+            if (instantSelectedPage != state.currentPage) {
+                instantSelectedPage = state.currentPage.coerceIn(0, tabs.lastIndex)
+            }
+            return@LaunchedEffect
+        }
 
         val decision = resolveAuroraInstantTabSync(
             instantTabSwitching = instantTabSwitching,
@@ -267,6 +288,7 @@ fun TabbedScreenAurora(
     AuroraBackground(
         modifier = modifier,
     ) {
+        backgroundOverlay()
         Column(modifier = Modifier.fillMaxSize()) {
             if (applyStatusBarsPadding) {
                 Spacer(modifier = Modifier.statusBarsPadding())
@@ -392,18 +414,22 @@ fun TabbedScreenAurora(
                 }
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    val sharedTabState = remember(tabs, currentPage, onTabSelected) {
+                        TabState(
+                            tabs = tabs,
+                            selectedIndex = currentPage,
+                            onTabSelected = onTabSelected,
+                        )
+                    }
                     HorizontalPager(
                         modifier = Modifier.fillMaxSize(),
                         state = state,
+                        beyondViewportPageCount = beyondViewportPageCount.coerceAtLeast(0),
+                        key = { it },
                         verticalAlignment = Alignment.Top,
                         userScrollEnabled = !disablePagerScroll,
                     ) { page ->
-                        val tabState = TabState(
-                            tabs = tabs,
-                            selectedIndex = state.currentPage,
-                            onTabSelected = onTabSelected,
-                        )
-                        CompositionLocalProvider(LocalTabState provides tabState) {
+                        CompositionLocalProvider(LocalTabState provides sharedTabState) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -629,6 +655,7 @@ internal fun AuroraTabRow(
     scrollable: Boolean,
     showBorder: Boolean = true,
     compact: Boolean = false,
+    horizontalPadding: Dp = 16.dp,
 ) {
     val colors = AuroraTheme.colors
     val scrollState = rememberScrollState()
@@ -638,6 +665,19 @@ internal fun AuroraTabRow(
     val tabPositionsY = remember { mutableStateMapOf<Int, Float>() }
     var containerWidthPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val initialFontSizeSp = resolveAuroraTabInitialFontSizeSp(
+        tabCount = tabs.size,
+        compact = compact,
+        scrollable = scrollable,
+    )
+    var dynamicFontSizeSp by remember(tabs.size, compact, scrollable, containerWidthPx) {
+        mutableFloatStateOf(initialFontSizeSp)
+    }
+    val tabHorizontalPadding = resolveAuroraTabHorizontalPaddingDp(
+        tabCount = tabs.size,
+        compact = compact,
+        scrollable = scrollable,
+    )
 
     // Auto-scroll to center the selected tab when scrollable (except first two).
     LaunchedEffect(selectedIndex, containerWidthPx) {
@@ -702,22 +742,24 @@ internal fun AuroraTabRow(
         auroraTabEdgeSpring(AURORA_TAB_LEADING_STIFFNESS)
     }
 
-    val animatedLeft by animateFloatAsState(
+    // Read animated pill geometry strictly inside drawBehind {} so 120Hz spring
+    // frames never recompose the tab bar or its children.
+    val animatedLeftState = animateFloatAsState(
         targetValue = activeLeft,
         animationSpec = leftSpring,
         label = "tabLeft",
     )
-    val animatedRight by animateFloatAsState(
+    val animatedRightState = animateFloatAsState(
         targetValue = activeRight,
         animationSpec = rightSpring,
         label = "tabRight",
     )
-    val animatedHeight by animateFloatAsState(
+    val animatedHeightState = animateFloatAsState(
         targetValue = activeHeight,
         animationSpec = bodySpring,
         label = "tabHeight",
     )
-    val animatedY by animateFloatAsState(
+    val animatedYState = animateFloatAsState(
         targetValue = activeY,
         animationSpec = bodySpring,
         label = "tabY",
@@ -730,10 +772,49 @@ internal fun AuroraTabRow(
     val showTabGlow =
         showTabGlowPref && (debugBypassLocks || unlockableManager.isUnlockableAvailable("special_tab_glow"))
 
+    val glowCapsulePath = remember { Path() }
+    val lightBgBrush = remember {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.78f),
+                Color.White.copy(alpha = 0.68f),
+                Color.White.copy(alpha = 0.60f),
+            ),
+        )
+    }
+    val lightBorderGlowBrush = remember(colors.accent) {
+        Brush.verticalGradient(
+            listOf(
+                colors.accent.copy(alpha = 0.55f),
+                colors.accent.copy(alpha = 0.28f),
+                colors.accent.copy(alpha = 0.12f),
+            ),
+        )
+    }
+    val lightBorderPlainBrush = remember {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.75f),
+                Color.White.copy(alpha = 0.28f),
+                Color.White.copy(alpha = 0.12f),
+            ),
+        )
+    }
+    val darkCombinedBorderBrush = remember(colors.accent) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.00f to Color.White.copy(alpha = 0.38f),
+                0.35f to Color.White.copy(alpha = 0.15f),
+                0.65f to colors.accent.copy(alpha = 0.15f),
+                1.00f to colors.accent.copy(alpha = 0.50f),
+            ),
+        )
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = horizontalPadding)
             .then(
                 if (showTabGlow && !colors.isEInk) {
                     val glowColor = colors.accent
@@ -746,18 +827,17 @@ internal fun AuroraTabRow(
                             // container from revealing layered "waves" across the tabs, while
                             // still giving an ambient glow that is strongest along the bottom.
                             val radiusPx = size.height / 2f
-                            val capsule = Path().apply {
-                                addRoundRect(
-                                    RoundRect(
-                                        left = 0f,
-                                        top = 0f,
-                                        right = size.width,
-                                        bottom = size.height,
-                                        cornerRadius = CornerRadius(radiusPx, radiusPx),
-                                    ),
-                                )
-                            }
-                            clipPath(capsule, clipOp = ClipOp.Difference) {
+                            glowCapsulePath.reset()
+                            glowCapsulePath.addRoundRect(
+                                RoundRect(
+                                    left = 0f,
+                                    top = 0f,
+                                    right = size.width,
+                                    bottom = size.height,
+                                    cornerRadius = CornerRadius(radiusPx, radiusPx),
+                                ),
+                            )
+                            clipPath(glowCapsulePath, clipOp = ClipOp.Difference) {
                                 // Bottom rim light only. Each thin layer is the capsule shape
                                 // pushed DOWNWARD (and barely widened), so once the capsule is
                                 // clipped out only a soft band below the bar remains. Stacking
@@ -817,34 +897,12 @@ internal fun AuroraTabRow(
                             )
                         }
                         .background(
-                            brush = Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.78f),
-                                    Color.White.copy(alpha = 0.68f),
-                                    Color.White.copy(alpha = 0.60f),
-                                ),
-                            ),
+                            brush = lightBgBrush,
                             shape = tabShape,
                         )
                         .border(
                             width = 1.dp,
-                            brush = if (showTabGlow) {
-                                Brush.verticalGradient(
-                                    listOf(
-                                        colors.accent.copy(alpha = 0.55f),
-                                        colors.accent.copy(alpha = 0.28f),
-                                        colors.accent.copy(alpha = 0.12f),
-                                    ),
-                                )
-                            } else {
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.White.copy(alpha = 0.75f),
-                                        Color.White.copy(alpha = 0.28f),
-                                        Color.White.copy(alpha = 0.12f),
-                                    ),
-                                )
-                            },
+                            brush = if (showTabGlow) lightBorderGlowBrush else lightBorderPlainBrush,
                             shape = tabShape,
                         )
                 } else if (colors.isDark && !colors.isEInk) {
@@ -857,17 +915,9 @@ internal fun AuroraTabRow(
                         )
                         .then(
                             if (showTabGlow) {
-                                val combinedBorderBrush = Brush.verticalGradient(
-                                    colorStops = arrayOf(
-                                        0.00f to Color.White.copy(alpha = 0.38f),
-                                        0.35f to Color.White.copy(alpha = 0.15f),
-                                        0.65f to colors.accent.copy(alpha = 0.15f),
-                                        1.00f to colors.accent.copy(alpha = 0.50f),
-                                    ),
-                                )
                                 Modifier.border(
                                     width = 1.dp,
-                                    brush = combinedBorderBrush,
+                                    brush = darkCombinedBorderBrush,
                                     shape = tabShape,
                                 )
                             } else {
@@ -902,6 +952,10 @@ internal fun AuroraTabRow(
                 .padding(6.dp)
                 .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier)
                 .drawBehind {
+                    val animatedLeft = animatedLeftState.value
+                    val animatedRight = animatedRightState.value
+                    val animatedHeight = animatedHeightState.value
+                    val animatedY = animatedYState.value
                     if (animatedRight > animatedLeft && animatedHeight > 0f) {
                         val minWidth = minOf(activeWidth, animatedHeight)
                         val drawWidth = (animatedRight - animatedLeft).coerceAtLeast(minWidth)
@@ -953,19 +1007,56 @@ internal fun AuroraTabRow(
                     onClick = { onTabSelected(index) },
                     fillAvailableWidth = !scrollable,
                     compact = compact,
+                    horizontalPadding = tabHorizontalPadding,
+                    fontSize = dynamicFontSizeSp.sp,
+                    onTextOverflow = if (!scrollable) {
+                        {
+                            if (dynamicFontSizeSp > 9.5f) {
+                                dynamicFontSizeSp = (dynamicFontSizeSp - 0.5f).coerceAtLeast(9.5f)
+                            }
+                        }
+                    } else {
+                        null
+                    },
                     modifier = tabModifier
                         .onGloballyPositioned { coords ->
-                            tabWidths[index] = coords.size.width.toFloat()
-                            tabHeights[index] = coords.size.height.toFloat()
+                            val w = coords.size.width.toFloat()
+                            val h = coords.size.height.toFloat()
                             val pos = coords.positionInParent()
-                            tabPositionsX[index] = pos.x
-                            tabPositionsY[index] = pos.y
+                            if (tabWidths[index] != w) tabWidths[index] = w
+                            if (tabHeights[index] != h) tabHeights[index] = h
+                            if (tabPositionsX[index] != pos.x) tabPositionsX[index] = pos.x
+                            if (tabPositionsY[index] != pos.y) tabPositionsY[index] = pos.y
                         },
                 )
             }
         }
     }
 } // close AuroraTabRow
+
+internal fun resolveAuroraTabHorizontalPaddingDp(
+    tabCount: Int,
+    compact: Boolean,
+    scrollable: Boolean,
+): Dp {
+    return when {
+        !scrollable && tabCount >= 4 -> 6.dp
+        compact -> 10.dp
+        else -> 16.dp
+    }
+}
+
+internal fun resolveAuroraTabInitialFontSizeSp(
+    tabCount: Int,
+    compact: Boolean,
+    scrollable: Boolean,
+): Float {
+    return when {
+        compact -> 12f
+        !scrollable && tabCount >= 4 -> 12.5f
+        else -> 14f
+    }
+}
 
 @Composable
 internal fun AuroraTab(
@@ -975,6 +1066,9 @@ internal fun AuroraTab(
     onClick: () -> Unit,
     fillAvailableWidth: Boolean = false,
     compact: Boolean = false,
+    horizontalPadding: Dp = if (compact) 10.dp else 16.dp,
+    fontSize: TextUnit = if (compact) 12.sp else 14.sp,
+    onTextOverflow: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -996,7 +1090,7 @@ internal fun AuroraTab(
                 appHaptics.tap()
                 onClick()
             }
-            .padding(horizontal = if (compact) 10.dp else 16.dp, vertical = 10.dp),
+            .padding(horizontal = horizontalPadding, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -1025,12 +1119,17 @@ internal fun AuroraTab(
                 style = resolveAuroraTabTextStyle(
                     baseStyle = MaterialTheme.typography.bodyLarge,
                     isSelected = isSelected,
-                    fontSize = if (compact) 12.sp else 14.sp,
+                    fontSize = fontSize,
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 softWrap = false,
                 textAlign = TextAlign.Center,
+                onTextLayout = { result ->
+                    if (result.hasVisualOverflow) {
+                        onTextOverflow?.invoke()
+                    }
+                },
             )
 
             if (badgeCount != null && badgeCount > 0) {

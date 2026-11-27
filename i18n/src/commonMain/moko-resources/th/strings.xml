@@ -824,7 +824,6 @@
     <string name="pref_flash_style_white_black">สีขาวและสีดำ</string>
     <string name="pref_download_new_unread_chapters_only">ข้ามการดาวน์โหลดบทที่ซ้ำ</string>
     <string name="action_replace_repo_title">กุญแจลายเซ็นระบุตัวตนนี้มีอยู่แล้ว</string>
-    <string name="pref_display_profile">โปรไฟล์การแสดงผลแบบกำหนดเอง</string>
     <string name="action_replace_repo">แทนที่</string>
     <string name="pref_webtoon_disable_zoom_out">ปิดการใช้งานการซูมออก</string>
     <string name="action_view_upcoming">ดูการอัปเดตที่กำลังจะมีขึ้น</string>

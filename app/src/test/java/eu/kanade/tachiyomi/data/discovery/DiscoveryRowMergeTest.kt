@@ -79,6 +79,7 @@ class DiscoveryRowMergeTest {
         hiddenCleanTitles = emptySet(),
         requiredGenres = setOf("Fantasy"),
         sourceIds = listOf(7L),
+        sourcePolicy = discoveryQueryPolicyFixture(media, listOf(7L)),
         existingRowItems = mapOf(tachiyomi.domain.discovery.model.DiscoveryRowType.SOURCE to existing),
     )
 

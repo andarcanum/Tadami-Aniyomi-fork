@@ -33,6 +33,7 @@ data class LegacyBackup(
     @ProtoNumber(601) var backupUserProfile: BackupUserProfile? = null,
     @ProtoNumber(602) var backupActivityLog: List<BackupDayActivity> = emptyList(),
     @ProtoNumber(603) var backupStats: BackupStats? = null,
+    @ProtoNumber(604) var backupCrystalMemorial: BackupCrystalMemorial? = null,
     @ProtoNumber(620) var backupMangaSeries: List<BackupMangaSeries> = emptyList(),
     @ProtoNumber(621) var backupNovelSeries: List<BackupNovelSeries> = emptyList(),
     // Feed
@@ -66,6 +67,7 @@ data class LegacyBackup(
             backupUserProfile = backupUserProfile,
             backupActivityLog = backupActivityLog,
             backupStats = backupStats,
+            backupCrystalMemorial = backupCrystalMemorial,
             backupMangaSeries = backupMangaSeries,
             backupNovelSeries = backupNovelSeries,
             backupAnimeSeries = backupAnimeSeries,
@@ -104,6 +106,7 @@ data class Backup(
     @ProtoNumber(601) var backupUserProfile: BackupUserProfile? = null,
     @ProtoNumber(602) var backupActivityLog: List<BackupDayActivity> = emptyList(),
     @ProtoNumber(603) var backupStats: BackupStats? = null,
+    @ProtoNumber(604) var backupCrystalMemorial: BackupCrystalMemorial? = null,
     @ProtoNumber(620) var backupMangaSeries: List<BackupMangaSeries> = emptyList(),
     @ProtoNumber(621) var backupNovelSeries: List<BackupNovelSeries> = emptyList(),
     // Feed
@@ -117,6 +120,9 @@ data class Backup(
     // Taste Learning Engine: сигнал-лог вкусов (переживает переустановку вместе с остальным discovery).
     @ProtoNumber(627) var backupDiscoverySignals: List<BackupDiscoverySignal> = emptyList(),
     @ProtoNumber(628) var backupAnimeSeries: List<BackupAnimeSeries> = emptyList(),
+    @ProtoNumber(629) var backupTranslationConfiguration: BackupTranslationConfiguration? = null,
+    @ProtoNumber(630) var backupDiscoveryTitleMemory: List<BackupDiscoveryTitleMemory> = emptyList(),
+    @ProtoNumber(631) var backupDiscoveryTasteResetEpochs: List<BackupDiscoveryTasteResetEpoch> = emptyList(),
 )
 
 /**
@@ -142,6 +148,7 @@ internal fun Backup.mergeLegacyPayloadIfPresent(legacy: LegacyBackup): Backup {
         backupUserProfile = backupUserProfile ?: legacy.backupUserProfile,
         backupActivityLog = backupActivityLog.ifEmpty { legacy.backupActivityLog },
         backupStats = backupStats ?: legacy.backupStats,
+        backupCrystalMemorial = backupCrystalMemorial ?: legacy.backupCrystalMemorial,
         backupMangaSeries = backupMangaSeries.ifEmpty { legacy.backupMangaSeries },
         backupNovelSeries = backupNovelSeries.ifEmpty { legacy.backupNovelSeries },
         backupFeeds = backupFeeds.ifEmpty { legacy.backupFeeds },

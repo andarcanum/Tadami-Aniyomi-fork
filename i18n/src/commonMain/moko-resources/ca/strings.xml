@@ -789,7 +789,6 @@
     <string name="action_replace_repo">Substitueix</string>
     <string name="action_replace_repo_title">L’empremta digital de la clau de xifratge ja existeix</string>
     <string name="action_replace_repo_message">La clau de xifratge del repositori %1$s té la mateixa empremta digital que %2$s.\nSi espereu que sigui així, se substituirà %2$s. En cas contrari, contacteu amb el mantenidor del repositori.</string>
-    <string name="pref_display_profile">Perfil de visualització personalitzat</string>
     <string name="action_view_upcoming">Mostra les pròximes actualitzacions</string>
     <string name="upcoming_calendar_prev">Mes anterior</string>
     <string name="pref_flash_duration">Durada del flaix</string>
@@ -821,7 +820,6 @@
     <string name="trackers_updated_summary">Els serveis de seguiment s’han actualitzat al capítol %d</string>
     <string name="pref_auto_update_manga_on_mark_read">Actualitza el progrés en marcar com a llegit</string>
     <string name="pref_hardware_bitmap_threshold_default">Per defecte (%d)</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Afecta el rendiment. Activeu-ho només si en reduir el llindar de mapes de bits no se solucionen els problemes d’imatges buides</string>
     <string name="ext_remove">Elimina</string>
     <string name="ext_confirm_remove">Voleu eliminar l’extensió?</string>
     <string name="remove_private_extension_message">Segur que voleu eliminar l’extensió «%s»?</string>

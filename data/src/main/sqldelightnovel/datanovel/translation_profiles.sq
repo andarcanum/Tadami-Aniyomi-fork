@@ -1,0 +1,164 @@
+import kotlin.Boolean;
+
+CREATE TABLE translation_connections (
+    _id TEXT NOT NULL PRIMARY KEY,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576)
+);
+CREATE TABLE translation_profiles (
+    _id TEXT NOT NULL PRIMARY KEY,
+    connection_id TEXT NOT NULL,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576),
+    FOREIGN KEY(connection_id) REFERENCES translation_connections(_id)
+);
+CREATE INDEX translation_profiles_connection_index ON translation_profiles(connection_id);
+CREATE TABLE translation_retired_credentials (
+    _id TEXT NOT NULL PRIMARY KEY
+);
+CREATE TABLE translation_credential_metadata (
+    _id TEXT NOT NULL PRIMARY KEY,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576)
+);
+CREATE TABLE translation_profile_assignments (
+    scope INTEGER NOT NULL,
+    scope_id INTEGER NOT NULL,
+    profile_id TEXT NOT NULL,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576),
+    PRIMARY KEY(scope, scope_id),
+    FOREIGN KEY(profile_id) REFERENCES translation_profiles(_id)
+);
+CREATE TABLE translation_legacy_credential_refs (
+    provider TEXT NOT NULL,
+    scope INTEGER NOT NULL,
+    scope_id INTEGER NOT NULL,
+    credential_id TEXT NOT NULL,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576),
+    PRIMARY KEY(provider, scope, scope_id),
+    FOREIGN KEY(credential_id) REFERENCES translation_credential_metadata(_id)
+);
+CREATE TABLE translation_routing_state (
+    _id INTEGER NOT NULL PRIMARY KEY CHECK (_id = 1),
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576)
+);
+CREATE TABLE translation_request_ledgers (
+    run_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    connection_snapshot_json TEXT NOT NULL CHECK (length(connection_snapshot_json) <= 1048576),
+    model_id TEXT NOT NULL,
+    policy_json TEXT NOT NULL CHECK (length(policy_json) <= 1048576),
+    reserved_tokens INTEGER NOT NULL DEFAULT 0,
+    unknown_token_reservations INTEGER AS Boolean NOT NULL DEFAULT 0,
+    PRIMARY KEY(run_id, generation),
+    FOREIGN KEY(run_id) REFERENCES translation_queue(_id)
+);
+CREATE TABLE translation_request_reservations (
+    run_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    request_id TEXT NOT NULL,
+    credential_id TEXT,
+    quota_group TEXT NOT NULL,
+    fragments_json TEXT NOT NULL CHECK (length(fragments_json) <= 1048576),
+    token_estimate INTEGER,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(run_id, generation, request_id),
+    FOREIGN KEY(run_id, generation) REFERENCES translation_request_ledgers(run_id, generation)
+);
+CREATE TABLE translation_completed_fragments (
+    run_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    fragment_id TEXT NOT NULL,
+    PRIMARY KEY(run_id, generation, fragment_id),
+    FOREIGN KEY(run_id) REFERENCES translation_queue(_id)
+);
+
+getCatalogRecords:
+SELECT 0 AS record_type, _id AS record_key, NULL AS scope, NULL AS scope_id, record_json
+FROM translation_connections
+UNION ALL SELECT 1, _id, NULL, NULL, record_json FROM translation_profiles
+UNION ALL SELECT 2, _id, NULL, NULL, record_json FROM translation_credential_metadata
+UNION ALL SELECT 3, profile_id, scope, scope_id, record_json FROM translation_profile_assignments
+UNION ALL SELECT 4, provider, scope, scope_id, record_json FROM translation_legacy_credential_refs
+ORDER BY record_type, record_key, scope, scope_id;
+
+getConnection:
+SELECT * FROM translation_connections WHERE _id = :id;
+getProfile:
+SELECT * FROM translation_profiles WHERE _id = :id;
+getRetiredCredential:
+SELECT _id FROM translation_retired_credentials WHERE _id = :id;
+retireCredential:
+INSERT OR IGNORE INTO translation_retired_credentials VALUES (:id);
+removeCredentialMetadata:
+DELETE FROM translation_credential_metadata WHERE _id = :id;
+
+getMetadata:
+SELECT * FROM translation_credential_metadata WHERE _id = :id;
+getLegacyReference:
+SELECT * FROM translation_legacy_credential_refs
+WHERE provider = :provider AND scope = :scope AND scope_id = :scopeId;
+
+putConnection:
+INSERT INTO translation_connections VALUES (:id, :recordJson)
+ON CONFLICT(_id) DO UPDATE SET record_json = excluded.record_json;
+putProfile:
+INSERT INTO translation_profiles VALUES (:id, :connectionId, :recordJson)
+ON CONFLICT(_id) DO UPDATE SET connection_id = excluded.connection_id, record_json = excluded.record_json;
+putMetadata:
+INSERT INTO translation_credential_metadata VALUES (:id, :recordJson)
+ON CONFLICT(_id) DO UPDATE SET record_json = excluded.record_json;
+putAssignment:
+INSERT INTO translation_profile_assignments VALUES (:scope, :scopeId, :profileId, :recordJson)
+ON CONFLICT(scope, scope_id) DO UPDATE SET profile_id = excluded.profile_id, record_json = excluded.record_json;
+putLegacyReference:
+INSERT INTO translation_legacy_credential_refs VALUES (:provider, :scope, :scopeId, :credentialId, :recordJson)
+ON CONFLICT(provider, scope, scope_id) DO UPDATE SET credential_id = excluded.credential_id, record_json = excluded.record_json;
+
+removeAssignmentsForProfile:
+DELETE FROM translation_profile_assignments WHERE profile_id = :profileId;
+removeProfile:
+DELETE FROM translation_profiles WHERE _id = :id;
+removeConnection:
+DELETE FROM translation_connections WHERE _id = :id;
+removeAssignment:
+DELETE FROM translation_profile_assignments WHERE scope = :scope AND scope_id = :scopeId;
+countOrphanNovelAssignments:
+SELECT count(*) FROM translation_profile_assignments
+WHERE scope = :novelScope AND scope_id NOT IN (SELECT _id FROM novels);
+pruneOrphanNovelAssignments:
+DELETE FROM translation_profile_assignments
+WHERE scope = :novelScope AND scope_id NOT IN (SELECT _id FROM novels);
+
+getRoutingState:
+SELECT record_json FROM translation_routing_state WHERE _id = 1;
+putRoutingState:
+INSERT INTO translation_routing_state VALUES (1, :recordJson)
+ON CONFLICT(_id) DO UPDATE SET record_json = excluded.record_json;
+
+getLedger:
+SELECT * FROM translation_request_ledgers WHERE run_id = :runId AND generation = :generation;
+getRequestIds:
+SELECT request_id FROM translation_request_reservations
+WHERE run_id = :runId AND generation = :generation ORDER BY request_id;
+getCompletedIds:
+SELECT fragment_id FROM translation_completed_fragments
+WHERE run_id = :runId AND generation = :generation ORDER BY fragment_id;
+getLedgerReservations:
+SELECT * FROM translation_request_reservations
+WHERE run_id = :runId AND generation = :generation ORDER BY request_id;
+getReservation:
+SELECT * FROM translation_request_reservations
+WHERE run_id = :runId AND generation = :generation AND request_id = :requestId;
+putLedger:
+INSERT INTO translation_request_ledgers VALUES (
+    :runId, :generation, :connectionSnapshotJson, :modelId, :policyJson, :reservedTokens, :unknownTokenReservations
+)
+ON CONFLICT(run_id, generation) DO UPDATE SET
+    reserved_tokens = excluded.reserved_tokens,
+    unknown_token_reservations = excluded.unknown_token_reservations;
+putReservation:
+INSERT INTO translation_request_reservations VALUES (
+    :runId, :generation, :requestId, :credentialId, :quotaGroup, :fragmentsJson, :tokenEstimate, :now
+);
+putCompleted:
+INSERT OR IGNORE INTO translation_completed_fragments VALUES (:runId, :generation, :fragmentId);
+getRunState:
+SELECT _id, generation, status FROM translation_queue WHERE _id = :runId;

@@ -1,0 +1,12 @@
+-- Known titles for the novel recommendation projection: favorites plus real reading history.
+selectKnownTitles:
+SELECT N.source AS source_id, N.url AS source_url,
+       COALESCE(N.custom_title, N.title) AS title,
+       N.author AS author
+FROM novels N
+WHERE N.favorite = 1
+UNION
+SELECT N.source, N.url, COALESCE(N.custom_title, N.title), N.author
+FROM novel_history H
+JOIN novel_chapters C ON H.chapter_id = C._id
+JOIN novels N ON C.novel_id = N._id;

@@ -790,7 +790,6 @@
     <string name="theme_nord">Nord</string>
     <string name="action_replace_repo_message">Repozitoriul %1$s are acceeași amprenta digitală a cheii de semnare ca și %2$s
 \nÎn cazul în care asta este la ce vă așteptați, %2$s va fi înlocuit, altfel contatati întreținătorul repozitoriului.</string>
-    <string name="pref_display_profile">Profil de afișare personalizat</string>
     <string name="action_add_anyway">Adăugați oricum</string>
     <string name="action_migrate_duplicate">Migrați intrare existentă</string>
     <string name="action_replace_repo">Înlocuiți</string>
@@ -835,7 +834,6 @@
     <string name="pref_hardware_bitmap_threshold_default">Implicit (%d)</string>
     <string name="pref_hardware_bitmap_threshold">Prag bitmap hardware personalizat</string>
     <string name="pref_hardware_bitmap_threshold_summary">Dacă cititorul încarcă o imagine goală, reduceți treptat pragul.\nSelectat: %s</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Afectează performanța. Activați numai dacă reducerea pragului bitmap nu rezolvă problemele legate de imaginile goale</string>
     <string name="label_auto">Automatic</string>
     <string name="pref_incognito_mode_extension_summary">Întrerupeți istoricul de lectură pentru extensie</string>
 </resources>

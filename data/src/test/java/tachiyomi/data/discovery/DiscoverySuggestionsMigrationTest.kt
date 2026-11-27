@@ -41,7 +41,15 @@ class DiscoverySuggestionsMigrationTest {
             info.map { it.second } shouldContain "genres"
             // Порядок обязан совпадать с ALTER TABLE из 58.sqm и 61.sqm: колонки в конце, после created_at.
             val names = info.sortedBy { it.first }.map { it.second }
-            names.takeLast(3) shouldBe listOf("source_id", "source_url", "genres")
+            names.takeLast(7) shouldBe listOf(
+                "source_id",
+                "source_url",
+                "genres",
+                "identity_key",
+                "trusted_aliases",
+                "release_status",
+                "metadata_verified_at",
+            )
         } finally {
             driver.close()
         }

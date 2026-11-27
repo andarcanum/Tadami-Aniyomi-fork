@@ -810,7 +810,6 @@
     <string name="pref_flash_style_white">Biały</string>
     <string name="manga_interval_expected_update_null">Ta manga jest zakończona lub nie ma przewidywanej daty wydania.</string>
     <string name="pref_flash_page_interval">Migaj co</string>
-    <string name="pref_display_profile">Niestandardowy profil</string>
     <string name="invalid_backup_file_unknown">Plik kopii zapasowej jest uszkodzony</string>
     <string name="onboarding_permission_analytics_description">Wysyłaj zanonimizowane dane użytkowania aplikacji w celu ulepszenia jej funkcjonalności.</string>
     <string name="action_copy_link">Skopiuj link</string>
@@ -838,6 +837,5 @@
     <string name="pref_download_new_unread_chapters_only">Pomiń pobieranie duplikatów przeczytanych już rozdziałów</string>
     <string name="invalid_backup_file_json">Kopia zapasowa JSON nie jest wspierana</string>
     <string name="pref_hardware_bitmap_threshold">Niestandardowy zakres graniczny bitmapy dla urządzenia</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Wpływa na wydajność. Włącz tylko wtedy, gdy zmniejszenie zakresu granicznego bitmapy nie pomaga przy naprawie nieładujących się obrazów</string>
     <string name="pref_incognito_mode_extension_summary">Wstrzymaj historię dla rozszerzenia</string>
 </resources>

@@ -553,9 +553,13 @@ object KotlinNovelExtensionLoader {
             ?: appLabel.substringAfter("Tsundoku: ").substringAfter("NovelApp: ")
         val versionName = pkgInfo.versionName ?: return null
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo).toInt()
-        val rawLibVersion = appInfo.metaData?.getDouble(METADATA_EXTENSION_LIB)?.takeUnless { it == 0.0 }
-            ?: appInfo.metaData?.getFloat(METADATA_EXTENSION_LIB)?.toDouble()?.takeUnless { it == 0.0 }
-            ?: versionName.substringBeforeLast('.').toDoubleOrNull()
+
+        @Suppress("DEPRECATION") // Bundle.get(String) avoids ClassCastException/log spam when manifest stores Float
+        val rawLibVersion = when (val value = appInfo.metaData?.get(METADATA_EXTENSION_LIB)) {
+            is Number -> value.toDouble().takeUnless { it == 0.0 }
+            is String -> value.toDoubleOrNull()?.takeUnless { it == 0.0 }
+            else -> null
+        } ?: versionName.substringBeforeLast('.').toDoubleOrNull()
         val libVersion = if (rawLibVersion != null) kotlin.math.round(rawLibVersion * 100.0) / 100.0 else null
         if (libVersion == null || libVersion !in SUPPORTED_LIB_VERSIONS) {
             logcat(LogPriority.WARN) { "Kotlin novel extension $pkgName has unsupported lib version $libVersion" }

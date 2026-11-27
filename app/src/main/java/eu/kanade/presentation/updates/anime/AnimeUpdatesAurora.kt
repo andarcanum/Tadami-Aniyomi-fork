@@ -52,6 +52,7 @@ import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -304,7 +305,8 @@ fun AuroraUpdateCard(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
-    val coverRequest = remember(item.update.coverData) {
+    val coverReloadTick = rememberCoverReloadTick()
+    val coverRequest = remember(context, item.update.coverData, coverReloadTick) {
         buildAuroraCoverImageRequest(context, item.update.coverData)
     }
 

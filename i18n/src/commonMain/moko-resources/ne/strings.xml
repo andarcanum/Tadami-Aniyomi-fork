@@ -796,7 +796,6 @@
     <string name="pref_webtoon_disable_zoom_out">जूम आउट असक्षम गर्नुहोस्</string>
     <string name="action_add_anyway">जे भए पनि थप्नुहोस्</string>
     <string name="action_migrate_duplicate">अवस्थित इन्ट्री माइग्रेट गर्नुहोस्</string>
-    <string name="pref_display_profile">कस्टम प्रदर्शन प्रोफाइल</string>
     <string name="action_replace_repo">रिप्लेस</string>
     <string name="action_replace_repo_title">साइन गर्ने की फिंगरप्रिन्ट पहिले नै अवस्थित छ</string>
     <string name="action_replace_repo_message">रिपो %1$s सँग %2$s जस्तै साइन गर्ने की फिंगरप्रिन्ट छ।
@@ -839,10 +838,8 @@
     <string name="pref_hardware_bitmap_threshold_default">पूर्वनिर्धारित (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">यदि पाठकले खाली छवि लोड गर्छ भने क्रमशः threshold घटाउनुहोस्।\nचयन गरिएको: %s</string>
     <string name="pref_hardware_bitmap_threshold">Custom hardware bitmap threshold</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">कार्यसम्पादनमा असर गर्छ। Bitmap threshold घटाउँदा खाली छवि समस्याहरू समाधान गर्दैन भने मात्र सक्षम गर्नुहोस्</string>
     <string name="pref_incognito_mode_extension_summary">एक्सटेन्शनमा पढिएको इतिहास रोक्नुहोस्</string>
     <string name="label_auto">अटो</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">लामो स्ट्रिप रिडरको लागि लिगेसी डिकोडर प्रयोग गर्नुहोस्</string>
     <string name="pref_mark_duplicate_read_chapter_read">पढिएका अध्यायहरूको डुप्लिकेटलाई पढिएको रूपमा चिन्ह लगाउनुहोस्</string>
     <string name="theme_monochrome">मोनोक्रोम</string>
     <string name="action_toggle_private_on">निजी रूपमा ट्र्याक गर्नुहोस्</string>

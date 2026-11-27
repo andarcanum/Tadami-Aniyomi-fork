@@ -226,6 +226,8 @@ internal fun evaluateWebtoonRestoreSettle(
     minStableHeightFrames: Int,
     offsetTolerancePx: Int,
     minReadyFramesFallback: Int,
+    readyElapsedMs: Long = Long.MAX_VALUE,
+    minReadyDurationMsFallback: Long = 0L,
 ): WebtoonRestoreSettleDecision {
     val stableHeightFrames = if (currentPageHeightPx == previousPageHeightPx) {
         previousStableHeightFrames + 1
@@ -235,7 +237,8 @@ internal fun evaluateWebtoonRestoreSettle(
     val readyFrames = if (isPageReady) previousReadyFrames + 1 else 0
     val settled = abs(currentOffsetPx - targetOffsetPx) <= offsetTolerancePx &&
         stableHeightFrames >= minStableHeightFrames
-    val hasReadySignal = imageDecoded || readyFrames >= minReadyFramesFallback
+    val hasReadySignal = imageDecoded ||
+        (readyFrames >= minReadyFramesFallback && readyElapsedMs >= minReadyDurationMsFallback)
 
     return WebtoonRestoreSettleDecision(
         stableHeightFrames = stableHeightFrames,

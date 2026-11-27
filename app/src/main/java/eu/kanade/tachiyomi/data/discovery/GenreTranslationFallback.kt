@@ -42,17 +42,22 @@ class GenreTranslationFallback(
         if (unresolved.isEmpty()) return options.filter { it in selected }
 
         // Known bilingual synonyms (e.g. milf ↔ милфы) are cheaper and safer than
-        // a network translation. One option per unresolved genre: translating a
-        // single genre into several checkboxes can AND-narrow a source to nothing.
+        // a network translation. Try synonyms in priority order so an exact
+        // bilingual translation wins over a broader fallback synonym.
         for (genre in unresolved.toList()) {
             val aliases = synonyms(genre)
                 .map { it.trim() }
                 .filter { it.isNotEmpty() && !it.equals(genre, ignoreCase = true) }
                 .distinct()
             if (aliases.isEmpty()) continue
-            val matched = options.firstOrNull { option ->
-                option !in selected && aliases.any { alias -> GenreMatcher.matchesConstraint(alias, option) }
-            } ?: continue
+            var matched: String? = null
+            for (alias in aliases) {
+                matched = options.firstOrNull { option ->
+                    option !in selected && GenreMatcher.matchesConstraint(alias, option)
+                }
+                if (matched != null) break
+            }
+            if (matched == null) continue
             selected += matched
             unresolved -= genre
             unresolved.removeAll { candidate ->
@@ -79,6 +84,38 @@ class GenreTranslationFallback(
         if (unresolved.isEmpty()) return options.filter { it in selected }
 
         var remaining = maxTranslationsPerCall
+        // First translate unresolved user constraints that are not already in the
+        // canonical ontology (1-3 strings) and match against source options offline
+        // so large checkbox lists do not wait for dozens of option translations.
+        for (genre in unresolved.toList()) {
+            if (GenreMatcher.resolve(genre).isNotEmpty()) continue
+            var translatedForms = cache.get(genre)
+            if (translatedForms == null && remaining > 0) {
+                remaining--
+                val translated = try {
+                    withTimeoutOrNull(translationTimeoutMs) { translate(genre) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+                translatedForms = listOfNotNull(translated?.takeIf { it.isNotBlank() })
+                if (translatedForms.isNotEmpty()) cache.put(genre, translatedForms)
+            }
+            val candidates = translatedForms.orEmpty()
+            if (candidates.isEmpty()) continue
+            val matched = options.firstOrNull { option ->
+                option !in selected && candidates.any { GenreMatcher.matchesConstraint(it, option) }
+            } ?: options.filter { option ->
+                option !in selected && candidates.any { GenreMatcher.matches(it, option) }
+            }.singleOrNull()
+            if (matched != null) {
+                selected += matched
+                unresolved -= genre
+            }
+        }
+        if (unresolved.isEmpty()) return options.filter { it in selected }
+
         for (name in options) {
             if (unresolved.isEmpty()) break
             if (name in selected) continue

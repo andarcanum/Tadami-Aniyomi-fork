@@ -1,0 +1,12 @@
+-- Known titles for the anime recommendation projection: favorites plus real viewing history.
+selectKnownTitles:
+SELECT A.source AS source_id, A.url AS source_url,
+       COALESCE(A.custom_title, A.title) AS title,
+       A.author AS author, A.artist AS artist
+FROM animes A
+WHERE A.favorite = 1
+UNION
+SELECT A.source, A.url, COALESCE(A.custom_title, A.title), A.author, A.artist
+FROM animehistory H
+JOIN episodes EP ON H.episode_id = EP._id
+JOIN animes A ON EP.anime_id = A._id;

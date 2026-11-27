@@ -48,9 +48,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +60,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -106,9 +109,13 @@ import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.home.components.AnimatedNicknameOverlay
 import eu.kanade.tachiyomi.ui.home.components.NicknameBadgeDecorator
 import eu.kanade.tachiyomi.ui.home.components.isTreasury
+import eu.kanade.tachiyomi.util.system.DeviceUtil
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -441,18 +448,21 @@ private const val HOME_HEADER_CANVAS_HEIGHT_ONE_LINE_DP = 72
 private const val HOME_HEADER_CANVAS_HEIGHT_TWO_LINES_DP = 76
 private const val HOME_HEADER_CANVAS_HEIGHT_THREE_LINES_DP = 80
 private const val HOME_HEADER_CANVAS_HEIGHT_FOUR_LINES_DP = 88
+internal const val HOME_HEADER_PROFILE_TITLE_EXTRA_HEIGHT_DP = 22
+internal const val HOME_HEADER_NICKNAME_WITH_TITLE_HEIGHT_PX = 52f
 
 internal fun resolveGreetingLineLimit(measuredLineCount: Int): Int {
     return measuredLineCount.coerceIn(1, 4)
 }
 
-internal fun resolveHomeHeaderCanvasHeightDp(lineLimit: Int): Int {
-    return when (lineLimit.coerceIn(1, 4)) {
+internal fun resolveHomeHeaderCanvasHeightDp(lineLimit: Int, hasProfileTitle: Boolean = false): Int {
+    val baseHeight = when (lineLimit.coerceIn(1, 4)) {
         1 -> HOME_HEADER_CANVAS_HEIGHT_ONE_LINE_DP
         2 -> HOME_HEADER_CANVAS_HEIGHT_TWO_LINES_DP
         3 -> HOME_HEADER_CANVAS_HEIGHT_THREE_LINES_DP
         else -> HOME_HEADER_CANVAS_HEIGHT_FOUR_LINES_DP
     }
+    return if (hasProfileTitle) baseHeight + HOME_HEADER_PROFILE_TITLE_EXTRA_HEIGHT_DP else baseHeight
 }
 
 internal fun resolveGreetingSlotHeightPx(lineLimit: Int): Float {
@@ -651,6 +661,7 @@ internal enum class NicknameEffectPreset(val key: String) {
     }
 }
 
+@Immutable
 internal data class NicknameStyle(
     val font: NicknameFontPreset,
     val fontSize: Int,
@@ -662,6 +673,7 @@ internal data class NicknameStyle(
     val customColorHex: String,
 )
 
+@Immutable
 internal data class GreetingStyle(
     val font: NicknameFontPreset,
     val color: NicknameColorPreset,
@@ -683,8 +695,10 @@ internal data class HomeHubUiState(
      */
     val discoveryPool: List<HomeHubDiscoveryItem> = emptyList(),
     val discoveryEnabled: Boolean = false,
+    val isDiscoveryLoading: Boolean = false,
     val isDiscoveryRefreshing: Boolean = false,
     val isDiscoveryFailed: Boolean = false,
+    val discoveryFailedSourceCount: Int = 0,
     val discoveryLastUpdated: Long? = null,
     val userName: String,
     val userAvatar: String,
@@ -751,6 +765,8 @@ internal data class HomeHubDiscoveryItem(
     // Метка последнего показа (48h-окно): hero-карусель Stage заказывает непоказанное вперёд.
     val shownAt: Long? = null,
     val genres: List<String> = emptyList(),
+    val hasPriorityBoost: Boolean = false,
+    val trustedAliases: Set<String> = emptySet(),
 )
 
 /** Бейдж «откроется напрямую»: только полная привязка (id + непустой url). */
@@ -764,6 +780,7 @@ object HomeHubTab : Tab {
     private val userProfilePreferences: UserProfilePreferences by injectLazy()
     private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
+    private val checkedBindingBackfillInProcess = java.util.concurrent.atomic.AtomicBoolean(false)
 
     override val options: TabOptions
         @Composable
@@ -836,7 +853,16 @@ object HomeHubTab : Tab {
             HomeHubSection.Manga -> mangaScreenModel
             HomeHubSection.Novel -> novelScreenModel
         }
-        val headerState by profileScreenModel.state.collectAsStateWithLifecycle()
+        // Narrow header projection: content updates (history/discovery/recent) inside the active
+        // ScreenModel must not recompose HomeHubTab, TabbedScreenAurora, or the HorizontalPager.
+        val headerSnapshotFlow = remember(profileScreenModel) {
+            profileScreenModel.state
+                .map { it.toHeaderSnapshot() }
+                .distinctUntilChanged()
+        }
+        val headerState by headerSnapshotFlow.collectAsStateWithLifecycle(
+            initialValue = profileScreenModel.state.value.toHeaderSnapshot(),
+        )
         val headerUserName = headerState.userName
         val headerDisplayUserName = headerUserName.ifBlank { resolveHomeHubDefaultNickname(profileSection) }
         val headerUserAvatar = headerState.userAvatar
@@ -976,34 +1002,56 @@ object HomeHubTab : Tab {
             // привязки (source_id NULL) — на них direct open деградировал бы в шторку,
             // пока ленту не обновили вручную. Разовый чек на версию приложения + тихая
             // перегенерация при наличии непривязанных SOURCE-строк.
-            val backfillDoneVersion = discoveryPreferences.bindingBackfillVersion().get()
-            val currentVersion = eu.kanade.tachiyomi.AppInfo.getVersionCode()
-            if (backfillDoneVersion < currentVersion) {
-                discoveryPreferences.bindingBackfillVersion().set(currentVersion)
-                if (discoveryRepository.hasUnboundSourceRows()) {
-                    eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.backfillRefresh(context)
-                }
+            if (checkedBindingBackfillInProcess.compareAndSet(false, true)) {
+                eu.kanade.tachiyomi.data.discovery.scheduleDiscoveryBindingBackfill(
+                    discoveryPreferences,
+                    discoveryRepository,
+                    eu.kanade.tachiyomi.AppInfo.getVersionCode(),
+                ) { eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.backfillRefresh(context) }
+            }
+            if (discoveryPreferences.retirementResetVersion().get() <
+                eu.kanade.domain.discovery.service.DiscoveryPreferences.CURRENT_RETIREMENT_RESET_VERSION
+            ) {
+                val cleared = discoveryRepository.clearRetirementBlocks()
+                logcat { "[DiscoveryReset] cleared $cleared blocked titles" }
+                discoveryPreferences.retirementResetVersion().set(
+                    eu.kanade.domain.discovery.service.DiscoveryPreferences.CURRENT_RETIREMENT_RESET_VERSION,
+                )
             }
         }
         // Per-media bootstrap: если лента активной вкладки никогда не генерировалась —
         // one-shot сразу (фикс дыры: после успеха аниме манга/новеллы ждали бы до 24ч).
         // Анти-шторм: повторная попытка не чаще DISCOVERY_BOOTSTRAP_RETRY_MS — при стойких
         // неудачах (оффлайн, все ряды failed) свайп вкладок не перезапускает генерацию.
-        LaunchedEffect(selectedSection) {
+        LaunchedEffect(selectedSection, profileSection, profileScreenModel) {
+            if (profileSection != selectedSection) return@LaunchedEffect
             val mediaType = when (selectedSection) {
                 HomeHubSection.Anime -> tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME
                 HomeHubSection.Manga -> tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA
                 HomeHubSection.Novel -> tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL
             }
-            if (
-                eu.kanade.tachiyomi.data.discovery.shouldBootstrapDiscoveryFeed(
-                    lastUpdatedAt = discoveryRepository.lastUpdatedAt(mediaType),
-                    lastBootstrapAttemptAt = discoveryPreferences.bootstrapAttemptAt(mediaType).get(),
-                )
-            ) {
-                discoveryPreferences.bootstrapAttemptAt(mediaType).set(System.currentTimeMillis())
-                eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.refreshNow(context, mediaType)
-            }
+            profileScreenModel.state
+                .map { Triple(it.isDiscoveryLoading, it.isDiscoveryRefreshing, it.discoveryPool.isEmpty()) }
+                .distinctUntilChanged()
+                .collectLatest { (isDiscoveryLoading, isDiscoveryRefreshing, isPoolEmpty) ->
+                    if (!discoveryPreferences.discoveryEnabled().get()) return@collectLatest
+                    val lastUpdatedAt = discoveryRepository.lastUpdatedAt(mediaType)
+                    val inventorySettledEmpty = !isDiscoveryLoading && !isDiscoveryRefreshing && isPoolEmpty
+                    val hasStrictFilters = discoveryPreferences.requiredGenres(mediaType).get().isNotBlank() ||
+                        discoveryPreferences.ignoredGenres(mediaType).get().isNotBlank() ||
+                        discoveryPreferences.releaseStatusFilter().get().isNotBlank()
+                    if (
+                        eu.kanade.tachiyomi.data.discovery.shouldBootstrapDiscoveryFeed(
+                            lastUpdatedAt = lastUpdatedAt,
+                            lastBootstrapAttemptAt = discoveryPreferences.bootstrapAttemptAt(mediaType).get(),
+                            hasEligibleVisibleItems = !inventorySettledEmpty,
+                            hasStrictUserFilters = hasStrictFilters,
+                        )
+                    ) {
+                        discoveryPreferences.bootstrapAttemptAt(mediaType).set(System.currentTimeMillis())
+                        eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.bootstrap(context, mediaType)
+                    }
+                }
         }
         var hiddenSnackItem by remember { mutableStateOf<HomeHubDiscoveryItem?>(null) }
         // B2: теговый snackbar — (тег, число скрытых карточек, исходный медиатип для undo).
@@ -1019,18 +1067,19 @@ object HomeHubTab : Tab {
             }
         }
         val onDiscoveryHide: (HomeHubDiscoveryItem) -> Unit = { item ->
-            discoveryHideScope.launch {
-                // mediaType берём из айтема, а не из текущей вкладки: snackbar переживает
-                // свайп между вкладками, и undo обязан целиться в исходный медиатип.
-                discoveryRepository.hide(item.mediaType, item.cleanTitle)
-                // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
-                eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
-                    discoveryRepository,
-                    item.toDiscoverySuggestion(),
-                    tachiyomi.domain.discovery.model.DiscoverySignalType.HIDE,
-                )
-                hiddenSnackItem = item
+            // mediaType берём из айтема, а не из текущей вкладки: snackbar переживает
+            // свайп между вкладками, и undo обязан целиться в исходный медиатип.
+            // Оптимистично убираем карточку и показываем snackbar мгновенно; запись в БД и
+            // негативный сигнал вкуса выполняются в фоне контроллером.
+            when (item.mediaType) {
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL ->
+                    novelScreenModel.hideDiscoveryItem(item)
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA ->
+                    mangaScreenModel.hideDiscoveryItem(item)
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME ->
+                    animeScreenModel.hideDiscoveryItem(item)
             }
+            hiddenSnackItem = item
         }
         val onDiscoveryBlacklistTag: (HomeHubDiscoveryItem, String, Int) -> Unit = { item, tag, count ->
             discoveryHideScope.launch {
@@ -1092,30 +1141,51 @@ object HomeHubTab : Tab {
         }
 
         // Do not persist collapsed header position across app relaunches.
-        var headerOffsetPx by remember { mutableStateOf(0f) }
-        var headerHeightPx by remember { mutableIntStateOf(0) }
+        val headerOffsetPxState = remember { mutableFloatStateOf(0f) }
+        val headerHeightPxState = remember { mutableIntStateOf(0) }
         var scrollResetToken by rememberSaveable { mutableIntStateOf(0) }
 
-        val onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit = { section, deltaY, atTop ->
-            if (!disableHomeHeaderScrollHide && section == selectedSection) {
-                headerOffsetPx = resolveHomeHubHeaderOffset(
-                    currentOffsetPx = headerOffsetPx,
-                    deltaY = deltaY,
-                    maxOffsetPx = headerHeightPx.toFloat(),
-                    isAtTop = atTop,
-                )
+        val currentDisableHeaderScrollHide by rememberUpdatedState(disableHomeHeaderScrollHide)
+        val currentSelectedSection by rememberUpdatedState(selectedSection)
+        val onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit = remember {
+            { section, deltaY, atTop ->
+                if (!currentDisableHeaderScrollHide && section == currentSelectedSection) {
+                    headerOffsetPxState.floatValue = resolveHomeHubHeaderOffset(
+                        currentOffsetPx = headerOffsetPxState.floatValue,
+                        deltaY = deltaY,
+                        maxOffsetPx = headerHeightPxState.intValue.toFloat(),
+                        isAtTop = atTop,
+                    )
+                }
             }
         }
 
-        // PERF: remember the tabs list so that defer flips (which cause parent recompose + re-eval of light vs collect branches)
-        // do not create brand new TabContent instances. This prevents the pager from remounting HomeHub pages,
-        // which was causing repeated content-start logs and transient skeleton states.
-        // Keys chosen so legitimate changes (search, selection, modes) still produce updated list.
-        val tabs = remember(
-            sections, selectedSection, homeHeroCtaMode, homeHubRecentCardMode, homeHeroMode,
-            animeScreenModel, mangaScreenModel, novelScreenModel,
-            animeSearchQuery, mangaSearchQuery, novelSearchQuery, scrollResetToken,
-        ) {
+        // PERF: Keep a stable bridge state so `tabs` is NOT rebuilt on every section switch,
+        // scrollResetToken bump, or search query edit. Rebuilding TabContent lambdas mid-swipe
+        // forced TabbedScreenAurora + HorizontalPager to recompose right at the 50% drag mark.
+        val pagerBridge = remember {
+            HomeHubPagerBridgeState(
+                initialSection = selectedSection,
+                initialHeroCtaMode = homeHeroCtaMode,
+                initialRecentCardMode = homeHubRecentCardMode,
+                initialHeroMode = homeHeroMode,
+            )
+        }
+        pagerBridge.activeSection = selectedSection
+        pagerBridge.scrollResetToken = scrollResetToken
+        pagerBridge.animeSearchQuery = animeSearchQuery
+        pagerBridge.mangaSearchQuery = mangaSearchQuery
+        pagerBridge.novelSearchQuery = novelSearchQuery
+        pagerBridge.heroCtaMode = homeHeroCtaMode
+        pagerBridge.recentCardMode = homeHubRecentCardMode
+        pagerBridge.heroMode = homeHeroMode
+        pagerBridge.hiddenSnackbar = hiddenSnackText
+        pagerBridge.onUndoHidden = onUndoHidden
+        pagerBridge.onDiscoveryHide = onDiscoveryHide
+        pagerBridge.onDiscoveryBlacklistTag = onDiscoveryBlacklistTag
+        pagerBridge.onScrollSignal = onScrollSignal
+
+        val tabs = remember(sections, animeScreenModel, mangaScreenModel, novelScreenModel, pagerBridge) {
             sections.map { section ->
                 when (section) {
                     HomeHubSection.Anime -> TabContent(
@@ -1124,18 +1194,20 @@ object HomeHubTab : Tab {
                         content = { contentPadding, _ ->
                             AnimeHomeHub(
                                 contentPadding = contentPadding,
-                                searchQuery = animeSearchQuery,
-                                heroCtaMode = homeHeroCtaMode,
-                                recentCardMode = homeHubRecentCardMode,
-                                heroMode = homeHeroMode,
-                                hiddenSnackbar = hiddenSnackText,
-                                onUndoHidden = onUndoHidden,
-                                onDiscoveryLongClick = onDiscoveryHide,
-                                onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                searchQuery = pagerBridge.animeSearchQuery,
+                                heroCtaMode = pagerBridge.heroCtaMode,
+                                recentCardMode = pagerBridge.recentCardMode,
+                                heroMode = pagerBridge.heroMode,
+                                hiddenSnackbar = pagerBridge.hiddenSnackbar,
+                                onUndoHidden = { pagerBridge.onUndoHidden() },
+                                onDiscoveryLongClick = { pagerBridge.onDiscoveryHide(it) },
+                                onDiscoveryBlacklistTag = { item, tag, count ->
+                                    pagerBridge.onDiscoveryBlacklistTag(item, tag, count)
+                                },
                                 onDiscoveryItemFocused = { animeScreenModel.markDiscoveryItemShown(it) },
-                                activeSection = selectedSection,
-                                scrollResetToken = scrollResetToken,
-                                onScrollSignal = onScrollSignal,
+                                activeSection = pagerBridge.activeSection,
+                                scrollResetToken = pagerBridge.scrollResetToken,
+                                onScrollSignal = pagerBridge.onScrollSignal,
                                 providedScreenModel = animeScreenModel,
                             )
                         },
@@ -1146,18 +1218,20 @@ object HomeHubTab : Tab {
                         content = { contentPadding, _ ->
                             MangaHomeHub(
                                 contentPadding = contentPadding,
-                                searchQuery = mangaSearchQuery,
-                                heroCtaMode = homeHeroCtaMode,
-                                recentCardMode = homeHubRecentCardMode,
-                                heroMode = homeHeroMode,
-                                hiddenSnackbar = hiddenSnackText,
-                                onUndoHidden = onUndoHidden,
-                                onDiscoveryLongClick = onDiscoveryHide,
-                                onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                searchQuery = pagerBridge.mangaSearchQuery,
+                                heroCtaMode = pagerBridge.heroCtaMode,
+                                recentCardMode = pagerBridge.recentCardMode,
+                                heroMode = pagerBridge.heroMode,
+                                hiddenSnackbar = pagerBridge.hiddenSnackbar,
+                                onUndoHidden = { pagerBridge.onUndoHidden() },
+                                onDiscoveryLongClick = { pagerBridge.onDiscoveryHide(it) },
+                                onDiscoveryBlacklistTag = { item, tag, count ->
+                                    pagerBridge.onDiscoveryBlacklistTag(item, tag, count)
+                                },
                                 onDiscoveryItemFocused = { mangaScreenModel.markDiscoveryItemShown(it) },
-                                activeSection = selectedSection,
-                                scrollResetToken = scrollResetToken,
-                                onScrollSignal = onScrollSignal,
+                                activeSection = pagerBridge.activeSection,
+                                scrollResetToken = pagerBridge.scrollResetToken,
+                                onScrollSignal = pagerBridge.onScrollSignal,
                                 providedScreenModel = mangaScreenModel,
                             )
                         },
@@ -1168,18 +1242,20 @@ object HomeHubTab : Tab {
                         content = { contentPadding, _ ->
                             NovelHomeHub(
                                 contentPadding = contentPadding,
-                                searchQuery = novelSearchQuery,
-                                heroCtaMode = homeHeroCtaMode,
-                                recentCardMode = homeHubRecentCardMode,
-                                heroMode = homeHeroMode,
-                                hiddenSnackbar = hiddenSnackText,
-                                onUndoHidden = onUndoHidden,
-                                onDiscoveryLongClick = onDiscoveryHide,
-                                onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                searchQuery = pagerBridge.novelSearchQuery,
+                                heroCtaMode = pagerBridge.heroCtaMode,
+                                recentCardMode = pagerBridge.recentCardMode,
+                                heroMode = pagerBridge.heroMode,
+                                hiddenSnackbar = pagerBridge.hiddenSnackbar,
+                                onUndoHidden = { pagerBridge.onUndoHidden() },
+                                onDiscoveryLongClick = { pagerBridge.onDiscoveryHide(it) },
+                                onDiscoveryBlacklistTag = { item, tag, count ->
+                                    pagerBridge.onDiscoveryBlacklistTag(item, tag, count)
+                                },
                                 onDiscoveryItemFocused = { novelScreenModel.markDiscoveryItemShown(it) },
-                                activeSection = selectedSection,
-                                scrollResetToken = scrollResetToken,
-                                onScrollSignal = onScrollSignal,
+                                activeSection = pagerBridge.activeSection,
+                                scrollResetToken = pagerBridge.scrollResetToken,
+                                onScrollSignal = pagerBridge.onScrollSignal,
                                 providedScreenModel = novelScreenModel,
                             )
                         },
@@ -1190,33 +1266,139 @@ object HomeHubTab : Tab {
 
         val initialIndex = resolveHomeHubSectionIndex(sections, selectedSection)
         val pagerState = rememberPagerState(initialPage = initialIndex) { tabs.size }
+        val isLowRamDevice = remember(context) {
+            DeviceUtil.isLowRamDevice(context.applicationContext ?: context)
+        }
+        val beyondViewportPageCount = remember(tabs.size, isLowRamDevice) {
+            resolveHomeHubBeyondViewportPageCount(
+                tabCount = tabs.size,
+                isLowRamDevice = isLowRamDevice,
+            )
+        }
+        val tabRibbonSpec = remember { homeHubTabRibbonAnimationSpec() }
+        var pendingTabTargetPage by remember { mutableStateOf<Int?>(null) }
+        var activeTabScrollJob by remember { mutableStateOf<Job?>(null) }
 
+        // Sync external section list / preference changes to the pager without fighting
+        // in-flight user drags or tap-initiated ribbon animations.
         LaunchedEffect(sections, selectedSection, pagerState) {
             val targetIndex = resolveHomeHubSectionIndex(sections, selectedSection)
-            if (targetIndex in tabs.indices && pagerState.currentPage != targetIndex) {
+            if (
+                targetIndex in tabs.indices &&
+                pagerState.currentPage != targetIndex &&
+                pendingTabTargetPage == null &&
+                !pagerState.isScrollInProgress
+            ) {
                 pagerState.scrollToPage(targetIndex)
             }
         }
 
+        // Commit selectedSection, scroll reset, and header expansion ONLY when the pager
+        // settles (not mid-swipe at the 50% drag mark) to keep gestures 100% glitch-free.
         var previousPage by rememberSaveable { mutableIntStateOf(initialIndex) }
-        LaunchedEffect(pagerState.currentPage, sections) {
+        LaunchedEffect(pagerState, sections) {
             if (sections.isEmpty()) return@LaunchedEffect
-            val currentPage = pagerState.currentPage.coerceIn(0, sections.lastIndex)
-            if (shouldResetHomeHubScroll(previousPage, currentPage)) {
-                scrollResetToken += 1
-                headerOffsetPx = 0f
+            snapshotFlow {
+                Triple(pagerState.settledPage, pagerState.isScrollInProgress, pagerState.currentPage)
+            }.collect { (settledPage, isScrollInProgress, _) ->
+                if (isScrollInProgress && pendingTabTargetPage != null && activeTabScrollJob?.isActive != true) {
+                    // User grabbed the pager manually — hand control back immediately.
+                    pendingTabTargetPage = null
+                }
+                if (
+                    shouldCommitSettledHomeHubSection(
+                        settledPage = settledPage,
+                        isScrollInProgress = isScrollInProgress,
+                        pendingTargetPage = pendingTabTargetPage,
+                        lastIndex = sections.lastIndex,
+                    )
+                ) {
+                    if (shouldResetHomeHubScroll(previousPage, settledPage)) {
+                        scrollResetToken += 1
+                        headerOffsetPxState.floatValue = 0f
+                    }
+                    previousPage = settledPage
+                    pendingTabTargetPage = null
+                    sections.getOrNull(settledPage)?.let { settledSection ->
+                        if (selectedSection != settledSection) {
+                            selectedSection = settledSection
+                        }
+                    }
+                }
             }
-            previousPage = currentPage
-            sections.getOrNull(currentPage)?.let { selectedSection = it }
         }
 
-        val onSectionSelected: (Int) -> Unit = { index ->
-            if (shouldSwitchHomeHubSection(pagerState.currentPage, index, tabs.lastIndex)) {
-                selectedSection = sections[index]
-                scope.launch { pagerState.scrollToPage(index) }
+        val onSectionSelected: (Int) -> Unit = remember(sections, pagerState, scope, tabRibbonSpec) {
+            { index ->
+                val effectiveCurrent = pendingTabTargetPage ?: pagerState.currentPage
+                if (shouldSwitchHomeHubSection(effectiveCurrent, index, sections.lastIndex)) {
+                    pendingTabTargetPage = index
+                    activeTabScrollJob?.cancel()
+                    activeTabScrollJob = scope.launch {
+                        try {
+                            pagerState.animateScrollToPage(
+                                page = index,
+                                animationSpec = tabRibbonSpec,
+                            )
+                        } finally {
+                            // Clear even if a user drag cancelled this job while isScrollInProgress
+                            // remained true; newer taps already updated pendingTabTargetPage != index.
+                            if (pendingTabTargetPage == index) {
+                                pendingTabTargetPage = null
+                            }
+                            if (activeTabScrollJob === coroutineContext[Job]) {
+                                activeTabScrollJob = null
+                            }
+                        }
+                    }
+                }
             }
         }
+        val displayedTabIndex = resolveHomeHubDisplayedTabIndex(
+            settledPage = pagerState.settledPage,
+            currentPage = pagerState.currentPage,
+            pendingTargetPage = pendingTabTargetPage,
+            lastIndex = sections.lastIndex,
+        )
         val appHaptics = LocalAppHaptics.current
+        val headerOffsetPxProvider: () -> Float = remember(headerOffsetPxState) {
+            { headerOffsetPxState.floatValue }
+        }
+        val onHeaderHeightMeasured: (Int) -> Unit = remember(headerHeightPxState, headerOffsetPxState) {
+            { measuredHeight ->
+                if (measuredHeight > 0 && headerHeightPxState.intValue != measuredHeight) {
+                    headerHeightPxState.intValue = measuredHeight
+                    val clamped = headerOffsetPxState.floatValue.coerceIn(0f, measuredHeight.toFloat())
+                    if (headerOffsetPxState.floatValue != clamped) {
+                        headerOffsetPxState.floatValue = clamped
+                    }
+                }
+            }
+        }
+        val onHeaderAvatarClick: () -> Unit = remember(appHaptics, photoPickerLauncher) {
+            {
+                appHaptics.tap()
+                photoPickerLauncher.launch("image/*")
+            }
+        }
+        val onHeaderNameClick: () -> Unit = remember(appHaptics) {
+            {
+                appHaptics.tap()
+                showNameDialog = true
+            }
+        }
+        val onHeaderGreetingClick: () -> Unit = remember(appHaptics) {
+            {
+                appHaptics.tap()
+                showGreetingDialog = true
+            }
+        }
+        val onHeaderStreakClick: () -> Unit = remember(appHaptics) {
+            {
+                appHaptics.tap()
+                showStreakStyleDialog = true
+            }
+        }
 
         // Stack: home content (render-effect blurred while the nickname editor is open)
         // followed by the nickname editor overlay. The blur is applied directly to the
@@ -1229,12 +1411,12 @@ object HomeHubTab : Tab {
                     state = pagerState,
                     mangaSearchQuery = mangaSearchQuery,
                     onChangeMangaSearchQuery = { mangaSearchQuery = it },
-                    animeSearchQuery = when (sections.getOrNull(pagerState.currentPage)) {
+                    animeSearchQuery = when (sections.getOrNull(displayedTabIndex)) {
                         HomeHubSection.Novel -> novelSearchQuery
                         else -> animeSearchQuery
                     },
                     onChangeAnimeSearchQuery = {
-                        when (sections.getOrNull(pagerState.currentPage)) {
+                        when (sections.getOrNull(displayedTabIndex)) {
                             HomeHubSection.Novel -> novelSearchQuery = it
                             else -> animeSearchQuery = it
                         }
@@ -1244,16 +1426,20 @@ object HomeHubTab : Tab {
                     showTabs = false,
                     applyStatusBarsPadding = false,
                     instantTabSwitching = false,
+                    beyondViewportPageCount = beyondViewportPageCount,
+                    backgroundOverlay = {
+                        eu.kanade.presentation.easteregg.crystal.CrystalSilkBackdrop(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(340.dp)
+                                .align(Alignment.TopCenter),
+                            openCanvas = true,
+                        )
+                    },
                     extraHeaderContent = {
                         HomeHubPinnedHeader(
-                            headerOffsetPx = headerOffsetPx,
-                            onHeightMeasured = { measuredHeight ->
-                                if (measuredHeight <= 0) return@HomeHubPinnedHeader
-                                if (headerHeightPx != measuredHeight) {
-                                    headerHeightPx = measuredHeight
-                                    headerOffsetPx = headerOffsetPx.coerceIn(0f, measuredHeight.toFloat())
-                                }
-                            },
+                            headerOffsetPxProvider = headerOffsetPxProvider,
+                            onHeightMeasured = onHeaderHeightMeasured,
                             greeting = headerGreeting,
                             userName = headerDisplayUserName,
                             userAvatar = headerUserAvatar,
@@ -1271,24 +1457,12 @@ object HomeHubTab : Tab {
                             nicknameAlignRight = homeHeaderNicknameAlignRight,
                             homeHeaderLayout = homeHeaderLayout,
                             tabs = tabs,
-                            selectedIndex = resolveHomeHubSectionIndex(sections, selectedSection),
+                            selectedIndex = displayedTabIndex,
                             onTabSelected = onSectionSelected,
-                            onAvatarClick = {
-                                appHaptics.tap()
-                                photoPickerLauncher.launch("image/*")
-                            },
-                            onNameClick = {
-                                appHaptics.tap()
-                                showNameDialog = true
-                            },
-                            onGreetingClick = {
-                                appHaptics.tap()
-                                showGreetingDialog = true
-                            },
-                            onStreakClick = {
-                                appHaptics.tap()
-                                showStreakStyleDialog = true
-                            },
+                            onAvatarClick = onHeaderAvatarClick,
+                            onNameClick = onHeaderNameClick,
+                            onGreetingClick = onHeaderGreetingClick,
+                            onStreakClick = onHeaderStreakClick,
                         )
                     },
                 )

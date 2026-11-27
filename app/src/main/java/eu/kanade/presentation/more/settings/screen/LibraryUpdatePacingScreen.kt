@@ -42,6 +42,7 @@ import tachiyomi.presentation.core.components.OutlinedNumericChooser
 import tachiyomi.presentation.core.components.SettingsItemsPaddings
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import tachiyomi.presentation.core.util.plus
 
 data object LibraryUpdatePacingScreen : Screen {
     @Composable
@@ -88,8 +89,7 @@ private fun LibraryUpdatePacingContent(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.padding(contentPadding),
-        contentPadding = PaddingValues(bottom = 16.dp),
+        contentPadding = contentPadding + PaddingValues(bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         item {

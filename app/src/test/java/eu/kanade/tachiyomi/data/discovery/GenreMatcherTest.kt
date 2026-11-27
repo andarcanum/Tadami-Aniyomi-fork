@@ -272,4 +272,53 @@ class GenreMatcherTest {
         GenreMatcher.matchesConstraint("romance", "romantic comedy") shouldBe false
         GenreMatcher.matchesSearch("боевик", "Action") shouldBe true
     }
+
+    @Test
+    fun `онтология не склеивает etchi с hentai и shonen ai с yaoi`() {
+        GenreMatcher.matchesConstraint("etchi", "Ecchi") shouldBe true
+        GenreMatcher.matchesConstraint("etchi", "Hentai") shouldBe false
+        GenreMatcher.matchesConstraint("shonen ai", "Shounen Ai") shouldBe true
+        GenreMatcher.matchesConstraint("shonen ai", "Yaoi") shouldBe false
+    }
+
+    @Test
+    fun `identityKey сохраняет основной словарный ключ и транзитивность RU-EN алиасов`() {
+        GenreMatcher.identityKey("Milf") shouldBe "milf"
+        GenreMatcher.identityKey("Милфа") shouldBe "milf"
+        GenreMatcher.identityKey("Яндэре") shouldBe GenreMatcher.identityKey("Yandere")
+        GenreMatcher.identityKey("Умный гг") shouldBe GenreMatcher.identityKey("Smart MC")
+    }
+
+    @Test
+    fun `normalize collapses arbitrary whitespace, punctuation, and combining diacritics`() {
+        GenreMatcher.normalize(" \u0301Sci--\tFi\n Café! ") shouldBe "sci fi cafe"
+        GenreMatcher.normalize("a\u0301b") shouldBe "ab"
+        GenreMatcher.normalize("a-\u0301-b") shouldBe "a b"
+        GenreMatcher.normalize(" \t\r\n \u0301 ") shouldBe ""
+    }
+
+    @Test
+    fun `cached matches and matchesConstraint preserve exact results across repeated calls`() {
+        val queries = listOf("  Action ", "Экшен", "боевик", "Sci-Fi", "Comedy", "Comédie", "роман", "actoin")
+        val candidates = listOf("ACTION", "adventure", "фантастика", "Комедия", "романтика", "Drama")
+        repeat(3) {
+            for (q in queries) {
+                for (c in candidates) {
+                    val expectedConstraint = when {
+                        q.trim().equals("Action", ignoreCase = true) || q == "Экшен" || q == "боевик" ->
+                            c == "ACTION"
+                        q == "Sci-Fi" -> c == "фантастика"
+                        q == "Comedy" -> c == "Комедия"
+                        else -> false
+                    }
+                    GenreMatcher.matchesConstraint(q, c) shouldBe expectedConstraint
+                }
+            }
+            GenreMatcher.matches("  Action\t", "ACTION") shouldBe true
+            GenreMatcher.matches("actoin", "Action") shouldBe true
+            GenreMatcher.matches("comédie", "Комедия") shouldBe true
+            GenreMatcher.matches("Comédie", "comedy") shouldBe true
+            GenreMatcher.matches("роман", "романтика") shouldBe false
+        }
+    }
 }

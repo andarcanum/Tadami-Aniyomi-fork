@@ -13,7 +13,6 @@ import tachiyomi.domain.reels.anime.model.ReelsSessionStaleException
 import tachiyomi.domain.reels.anime.model.ReelsSessionWindow
 import tachiyomi.domain.reels.anime.repository.ReelsSessionRepository
 import java.util.Date
-import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
 class ReelsSessionRepositoryImpl(
@@ -27,66 +26,23 @@ class ReelsSessionRepositoryImpl(
         reset: Boolean,
     ): ReelsSessionHandle {
         return handler.await(inTransaction = true) { db ->
-            val existing = db.reels_sessionQueries.getSession(key.accountScopeId, key.sourceId).executeAsOneOrNull()
+            ReelsRoundRobinStorage.claimSession(
+                db = db,
+                key = key,
+                ownerNonce = ownerNonce,
+                historyGeneration = historyGeneration,
+                reset = reset,
+                preserveCheckpoint = false,
+                nowMs = System.currentTimeMillis(),
+            )
+        }
+    }
 
-            // Sanitize transport hints for this capable scope/source
-            db.reels_candidateQueries.clearTransportHintsForScope(key.accountScopeId, key.sourceId)
-
-            val canReuse = !reset && existing != null &&
-                existing.context_key == key.contextKey &&
-                existing.history_generation == historyGeneration
-
-            if (canReuse && existing != null) {
-                db.reels_sessionQueries.updateOwnerNonce(
-                    ownerNonce = ownerNonce,
-                    updatedAtMs = System.currentTimeMillis(),
-                    scope = key.accountScopeId,
-                    sourceId = key.sourceId,
-                )
-                ReelsSessionHandle(
-                    key = key,
-                    sessionId = existing.session_id,
-                    ownerNonce = ownerNonce,
-                    historyGeneration = historyGeneration,
-                )
-            } else {
-                val newSessionId = UUID.randomUUID().toString()
-                // Explicitly delete child queue rows to avoid orphans regardless of foreign_keys pragma
-                db.reels_session_queueQueries.deleteForSource(key.accountScopeId, key.sourceId)
-
-                val nowMs = System.currentTimeMillis()
-                db.reels_sessionQueries.claimSession(
-                    account_scope_id = key.accountScopeId,
-                    source_id = key.sourceId,
-                    context_key = key.contextKey,
-                    session_id = newSessionId,
-                    owner_nonce = ownerNonce,
-                    history_generation = historyGeneration,
-                    checkpoint_sequence = 0L,
-                    active_item_id = null,
-                    active_position_ms = 0L,
-                    active_completed = 0L,
-                    active_title = null,
-                    active_author = null,
-                    active_duration_sec = null,
-                    active_has_audio = 0L,
-                    active_tags_json = "[]",
-                    active_web_url = null,
-                    active_created_at_epoch_sec = null,
-                    active_views_count = null,
-                    active_likes_count = null,
-                    active_is_author_verified = 0L,
-                    active_metadata_schema_version = 2L,
-                    updated_at_ms = nowMs,
-                )
-
-                ReelsSessionHandle(
-                    key = key,
-                    sessionId = newSessionId,
-                    ownerNonce = ownerNonce,
-                    historyGeneration = historyGeneration,
-                )
-            }
+    override suspend fun persistedContext(scope: String, sourceId: Long): String? {
+        return handler.await { db ->
+            db.reels_sessionQueries.getSession(scope, sourceId)
+                .executeAsOneOrNull()
+                ?.context_key
         }
     }
 
@@ -181,7 +137,7 @@ class ReelsSessionRepositoryImpl(
             )
         }
 
-        return handler.await { db ->
+        return handler.await(inTransaction = true) { db ->
             val rawRows = db.reels_session_queueQueries.rawQueueWindow(
                 scope = handle.key.accountScopeId,
                 sourceId = handle.key.sourceId,
@@ -205,36 +161,46 @@ class ReelsSessionRepositoryImpl(
             var deferredCount = 0
             val entries = ArrayList<ReelsQueuedCandidate>(rawRows.size)
 
-            for (raw in rawRows) {
-                val candidateRow = db.reels_candidateQueries.getByItem(
+            val rawItemIds = rawRows.map { it.item_id }.distinct()
+            val consumed = HashSet<String>()
+            for (chunk in rawItemIds.chunked(SQLITE_IN_CHUNK_SIZE)) {
+                consumed += db.reels_consumptionQueries.consumedIds(
                     scope = handle.key.accountScopeId,
                     sourceId = handle.key.sourceId,
-                    itemId = raw.item_id,
-                ).executeAsOneOrNull() ?: continue
+                    itemIds = chunk,
+                ).executeAsList()
+            }
+
+            val hidden = db.reels_hiddenQueries.getBySource(handle.key.sourceId).executeAsList()
+            val hiddenItems = hidden.filter {
+                it.kind == "video" || it.kind == "item"
+            }.mapTo(HashSet()) { it.hidden_value }
+            val hiddenAuthors = hidden.filter { it.kind == "author" }.mapTo(HashSet()) { it.hidden_value }
+
+            val candidateMap = HashMap<String, dataanime.Reels_candidate>(rawItemIds.size)
+            for (chunk in rawItemIds.chunked(SQLITE_IN_CHUNK_SIZE)) {
+                db.reels_candidateQueries.getByItems(
+                    scope = handle.key.accountScopeId,
+                    sourceId = handle.key.sourceId,
+                    itemIds = chunk,
+                ).executeAsList().forEach { row ->
+                    candidateMap[row.item_id] = row
+                }
+            }
+
+            for (raw in rawRows) {
+                if (raw.item_id in consumed || raw.item_id in hiddenItems) {
+                    continue
+                }
+
+                val candidateRow = candidateMap[raw.item_id] ?: continue
+
+                if (candidateRow.author != null && candidateRow.author in hiddenAuthors) {
+                    continue
+                }
 
                 if (candidateRow.availability == ReelsCandidate.AVAILABILITY_DEFERRED) {
                     deferredCount++
-                }
-
-                // Check consumption (watched or skipped forward)
-                val consumption = db.reels_consumptionQueries.getByItem(
-                    handle.key.accountScopeId,
-                    handle.key.sourceId,
-                    raw.item_id,
-                ).executeAsOneOrNull()
-
-                if (consumption?.watched_qualified_at != null || consumption?.skipped_forward_at != null) {
-                    continue
-                }
-
-                // Check hidden
-                val isHidden = db.reels_hiddenQueries.isHidden(
-                    sourceId = handle.key.sourceId,
-                    itemId = raw.item_id,
-                    author = candidateRow.author ?: "",
-                ).executeAsOne() > 0
-                if (isHidden) {
-                    continue
                 }
 
                 val candidate = ReelsCandidateWriter.mapCandidate(candidateRow)
@@ -272,13 +238,18 @@ class ReelsSessionRepositoryImpl(
             // Drop incoming items already consumed or explicitly hidden so the session queue
             // never resurrects them for this page (checked inside the append transaction).
             val distinct = candidates.distinctBy { it.itemId }
-            val consumed = db.reels_consumptionQueries.consumedIds(
-                scope = handle.key.accountScopeId,
-                sourceId = handle.key.sourceId,
-                itemIds = distinct.map { it.itemId },
-            ).executeAsList().toHashSet()
+            val consumed = HashSet<String>()
+            for (chunk in distinct.map { it.itemId }.chunked(SQLITE_IN_CHUNK_SIZE)) {
+                consumed += db.reels_consumptionQueries.consumedIds(
+                    scope = handle.key.accountScopeId,
+                    sourceId = handle.key.sourceId,
+                    itemIds = chunk,
+                ).executeAsList()
+            }
             val hidden = db.reels_hiddenQueries.getBySource(handle.key.sourceId).executeAsList()
-            val hiddenItems = hidden.filter { it.kind == "item" }.mapTo(HashSet()) { it.hidden_value }
+            val hiddenItems = hidden.filter {
+                it.kind == "video" || it.kind == "item"
+            }.mapTo(HashSet()) { it.hidden_value }
             val hiddenAuthors = hidden.filter { it.kind == "author" }.mapTo(HashSet()) { it.hidden_value }
             val eligible = distinct.filter { candidate ->
                 candidate.itemId !in consumed &&
@@ -432,13 +403,16 @@ class ReelsSessionRepositoryImpl(
     override suspend fun clearScope(scope: String) {
         try {
             handler.await(inTransaction = true) { db ->
-                db.reels_session_queueQueries.deleteForScope(scope)
-                db.reels_sessionQueries.deleteForScope(scope)
+                ReelsRoundRobinStorage.clearScope(db, scope)
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: SQLiteException) {
             logcat(LogPriority.ERROR, throwable = e) { "Failed to clear reels session scope for $scope" }
         }
+    }
+
+    private companion object {
+        const val SQLITE_IN_CHUNK_SIZE = 500
     }
 }

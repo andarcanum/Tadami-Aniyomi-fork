@@ -3,6 +3,9 @@ package eu.kanade.tachiyomi.ui.reader.novel
 import android.app.Application
 import android.os.SystemClock
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationSessionResults
+import eu.kanade.tachiyomi.data.translation.profile.readerProfileSettings
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
 import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
@@ -12,6 +15,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationArtifactForSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsAudioFocusBridge
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsEngineInfoSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.AndroidNovelTtsPlatformFactory
@@ -41,6 +45,8 @@ import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -82,6 +88,10 @@ internal interface NovelTtsHost {
     fun ttsActiveTranslationChapterId(): Long?
     fun ttsIsGeminiTranslating(): Boolean
     fun ttsGeminiTranslationJob(): Job?
+    suspend fun ttsAwaitGeminiTranslation(chapterId: Long): Boolean {
+        ttsGeminiTranslationJob()?.join()
+        return !ttsIsGeminiTranslating()
+    }
     fun ttsIsGeminiTranslationVisible(): Boolean
     fun ttsIsGoogleTranslationVisible(): Boolean
     fun ttsTranslationHolderEmpty(provider: String): Boolean
@@ -109,6 +119,8 @@ internal class NovelTtsController(
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
     private val ttsChapterRepository: NovelTtsChapterRepository,
     private val sourceManager: tachiyomi.domain.source.novel.service.NovelSourceManager,
+    private val translationQueueManager: TranslationQueueManager? =
+        runCatching { Injekt.get<TranslationQueueManager>() }.getOrNull(),
 ) {
 
     private val ttsChapterModelBuilder = NovelTtsChapterModelBuilder(NovelTtsWordTokenizer)
@@ -153,6 +165,7 @@ internal class NovelTtsController(
         sessionStore = ttsSessionStore,
     )
     private var ttsWordProgressJob: Job? = null
+    private var ttsPlaybackRequestJob: Job? = null
 
     /** True once the current utterance received exact word offsets from the engine. */
     private var ttsExactWordProgressActive = false
@@ -424,9 +437,10 @@ internal class NovelTtsController(
         ttsSessionController.restoreFromCheckpoint()
     }
 
-    private suspend fun resolveTtsChapter(targetChapterId: Long): NovelTtsResolvedChapter? {
+    internal suspend fun resolveTtsChapter(targetChapterId: Long): NovelTtsResolvedChapter? {
         val snapshot = ttsChapterRepository.loadChapterSnapshot(targetChapterId)
         val source = sourceManager.getOrStub(snapshot.novel.source)
+        val enabledReplaceRules = novelReaderPreferences.enabledReplaceRules()
         val normalizedHtml = withContext(Dispatchers.Default) {
             val withHeading = prependChapterHeadingIfMissing(
                 rawHtml = snapshot.rawHtml.normalizeStructuredChapterPayload(),
@@ -438,7 +452,7 @@ internal class NovelTtsController(
             } else {
                 applyReplaceRulesToHtml(
                     rawHtml = sanitized,
-                    rules = novelReaderPreferences.enabledReplaceRules(),
+                    rules = enabledReplaceRules,
                 )
             }
         }
@@ -458,9 +472,10 @@ internal class NovelTtsController(
                 extractTextBlocks(normalizedHtml).map(NovelReaderScreenModel.ContentBlock::Text)
             }
         }
+        val baseSettings = novelReaderPreferences.resolveSettings(snapshot.novel.source)
         val normalizedContent = normalizeHtml(
             rawHtml = normalizedHtml,
-            settings = novelReaderPreferences.resolveSettings(snapshot.novel.source),
+            settings = baseSettings,
             customCss = snapshot.customCss,
             customJs = snapshot.customJs,
         )
@@ -473,7 +488,11 @@ internal class NovelTtsController(
                     pluginSite = snapshot.pluginSite,
                 )
             }
-        val currentSettings = novelReaderPreferences.resolveSettings(snapshot.novel.source)
+        val currentSettings = translationQueueManager?.readerProfileSettings(
+            base = baseSettings,
+            novelId = snapshot.novel.id,
+            rules = enabledReplaceRules,
+        ) ?: baseSettings
         val originalModel = ttsChapterModelBuilder.build(
             chapterId = snapshot.chapter.id,
             chapterTitle = snapshot.chapter.name,
@@ -510,31 +529,27 @@ internal class NovelTtsController(
         settings: NovelReaderSettings,
     ): eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterModel? {
         if (!shouldPreferTranslatedTts(settings)) return null
-        val translatedBlocks = if (chapterId == host.ttsCurrentChapter()?.id) {
-            // Current chapter: use in-memory translation holder (fast path)
-            when {
-                settings.geminiEnabled && !host.ttsTranslationHolderEmpty("gemini") -> {
-                    host.ttsApplyGeminiTranslationToContentBlocks(originalContentBlocks, forceTranslation = true)
-                }
-                settings.googleTranslationEnabled && !host.ttsTranslationHolderEmpty("google") -> {
-                    host.ttsApplyGoogleTranslationToContentBlocks(originalContentBlocks)
-                }
-                else -> return null
-            }
+        val source = originalContentBlocks.filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>().map { it.text }
+        val entry = if (!settings.geminiEnabled) {
+            null
+        } else if (settings.geminiDisableCache) {
+            TranslationSessionResults.store.result(chapterId)
         } else {
-            // Non-current chapter (e.g. next chapter during TTS auto-advance):
-            // The in-memory holder belongs to the current chapter only.
-            // Check the disk cache — the prefetch job may have already written a translation here.
-            if (!settings.geminiEnabled) return null
-            val cached = NovelReaderTranslationDiskCacheStore.get(chapterId) ?: return null
-            val settingsMatch = NovelReaderTranslationCacheResolver.matches(
-                cached = cached,
-                requirements = settings.toTranslationCacheRequirements(
-                    replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
-                ),
+            NovelReaderTranslationDiskCacheStore.get(chapterId)
+        }
+        val artifact =
+            translationArtifactForSource(
+                entry,
+                settings,
+                replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+                source,
             )
-            if (!settingsMatch) return null
-            applyTranslationMapToContentBlocks(originalContentBlocks, cached.translatedByIndex)
+        val translatedBlocks = when {
+            artifact != null -> applyTranslationMapToContentBlocks(originalContentBlocks, artifact.translatedByIndex)
+            chapterId == host.ttsCurrentChapter()?.id && settings.googleTranslationEnabled &&
+                !host.ttsTranslationHolderEmpty("google") ->
+                host.ttsApplyGoogleTranslationToContentBlocks(originalContentBlocks)
+            else -> return null
         }
         return ttsChapterModelBuilder.build(
             chapterId = chapterId,
@@ -694,7 +709,16 @@ internal class NovelTtsController(
     ) {
         val settings = host.ttsReaderSettings() ?: return
         if (!settings.ttsEnabled) return
-        host.ttsScope.launch {
+        if (ttsPlaybackRequestJob?.isActive == true) {
+            ttsPlaybackRequestJob?.cancel()
+            ttsPlaybackRequestJob = null
+            host.ttsScope.launch {
+                ttsSessionController.pause()
+                ttsAudioFocusManager.abandonPlaybackFocus()
+            }
+            return
+        }
+        ttsPlaybackRequestJob = host.ttsScope.launch {
             initializeTtsRuntime()
             val playbackState = ttsSessionController.state.value.playbackState
             when (playbackState) {
@@ -724,13 +748,29 @@ internal class NovelTtsController(
     }
 
     fun stopTtsPlayback() {
+        ttsPlaybackRequestJob?.cancel()
+        ttsPlaybackRequestJob = null
         host.ttsScope.launch {
-            ttsWordProgressJob?.cancel()
-            ttsWordProgressJob = null
-            cancelTtsSleepTimer()
-            ttsAudioFocusManager.abandonPlaybackFocus()
-            ttsSessionController.stop()
+            withContext(NonCancellable) {
+                stopTtsPlaybackInternal()
+            }
         }
+    }
+
+    suspend fun stopTtsPlaybackAndAwait() {
+        ttsPlaybackRequestJob?.cancel()
+        ttsPlaybackRequestJob = null
+        withContext(NonCancellable) {
+            stopTtsPlaybackInternal()
+        }
+    }
+
+    private suspend fun stopTtsPlaybackInternal() {
+        ttsWordProgressJob?.cancel()
+        ttsWordProgressJob = null
+        cancelTtsSleepTimer()
+        ttsAudioFocusManager.abandonPlaybackFocus()
+        ttsSessionController.stop()
     }
 
     /** Arms the session sleep timer countdown; [seconds] below 1 turns an armed timer off. */
@@ -937,17 +977,23 @@ internal class NovelTtsController(
         startRequest: NovelTtsPlaybackStartRequest,
         settings: NovelReaderSettings,
     ) {
-        // Fix: if translation of the current chapter is still in progress and TTS prefers
-        // translated text, wait briefly for it to finish before building the utterance list.
+        val requestedChapterId = host.ttsBookChapterAtReadingPosition()?.id ?: host.ttsCurrentChapter()?.id ?: return
         if (shouldPreferTranslatedTts(settings) && host.ttsIsGeminiTranslating()) {
-            withTimeoutOrNull(5_000) {
-                host.ttsGeminiTranslationJob()?.join()
+            val ready = withTimeoutOrNull(5_000) { host.ttsAwaitGeminiTranslation(requestedChapterId) } == true
+            if (!ready) {
+                withUIContext { application.toast(AYMR.strings.novel_ai_translation_not_ready) }
+                return // Never silently switch a pending translated playback request to the original.
             }
         }
+        if (requestedChapterId != (host.ttsBookChapterAtReadingPosition()?.id ?: host.ttsCurrentChapter()?.id)) return
         // Over a compiled book `currentChapter` is only the session entry point, so playback has to
         // start from the chapter under the reading position instead of the one the reader opened.
         val ttsStartChapterId = host.ttsBookChapterAtReadingPosition()?.id ?: host.ttsCurrentChapter()?.id ?: return
         val resolvedChapter = resolveTtsChapter(targetChapterId = ttsStartChapterId) ?: return
+        if (shouldPreferTranslatedTts(settings) && resolvedChapter.translatedModel == null) {
+            withUIContext { application.toast(AYMR.strings.novel_ai_translation_not_ready) }
+            return
+        }
         val useTranslatedText = shouldPreferTranslatedTts(settings) &&
             resolvedChapter.translatedModel != null
         val sessionModel = if (useTranslatedText) {
@@ -1076,16 +1122,24 @@ internal class NovelTtsController(
 
     /** Tears the TTS runtime down on reader disposal. */
     fun shutdown() {
+        ttsPlaybackRequestJob?.cancel()
+        ttsPlaybackRequestJob = null
         ttsWordProgressJob?.cancel()
         ttsWordProgressJob = null
         pendingTtsStartRequest = null
+        cancelTtsSleepTimer()
         ttsAudioFocusManager.abandonPlaybackFocus()
         ttsEngine.shutdown()
         initializedTtsEnginePackage = null
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { ttsSessionController.stop() }
+        }
     }
 
     /** Resets TTS state that must not survive a chapter switch. */
     fun resetTransientState() {
+        ttsPlaybackRequestJob?.cancel()
+        ttsPlaybackRequestJob = null
         ttsWordProgressJob?.cancel()
         ttsWordProgressJob = null
         pendingTtsStartRequest = null

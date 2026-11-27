@@ -11,6 +11,7 @@ class AudioPreferences(
     fun preferredAudioLanguages() = preferenceStore.getString("pref_audio_lang", "")
     fun enablePitchCorrection() = preferenceStore.getBoolean("pref_audio_pitch_correction", true)
     fun audioChannels() = preferenceStore.getEnum("pref_audio_config", AudioChannels.AutoSafe)
+    fun audioNormalization() = preferenceStore.getBoolean("pref_audio_normalization", false)
     fun volumeBoostCap() = preferenceStore.getInt("pref_audio_volume_boost_cap", 30)
 
     // Non-preferences
@@ -19,8 +20,8 @@ class AudioPreferences(
 }
 
 enum class AudioChannels(val titleRes: StringResource, val property: String, val value: String) {
-    Auto(AYMR.strings.pref_player_audio_channels_auto, "audio-channels", "auto-safe"),
-    AutoSafe(AYMR.strings.pref_player_audio_channels_auto_safe, "audio-channels", "auto"),
+    Auto(AYMR.strings.pref_player_audio_channels_auto, "audio-channels", "auto"),
+    AutoSafe(AYMR.strings.pref_player_audio_channels_auto_safe, "audio-channels", "auto-safe"),
     Mono(AYMR.strings.pref_player_audio_channels_mono, "audio-channels", "mono"),
     Stereo(AYMR.strings.pref_player_audio_channels_stereo, "audio-channels", "stereo"),
     ReverseStereo(AYMR.strings.pref_player_audio_channels_reverse_stereo, "af", "pan=[stereo|c0=c1|c1=c0]"),

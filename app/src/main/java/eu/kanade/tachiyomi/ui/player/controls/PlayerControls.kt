@@ -70,8 +70,11 @@ import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.vivvvek.seeker.Segment
+import eu.kanade.presentation.more.settings.screen.player.custombutton.CustomButtonFetchState
 import eu.kanade.presentation.more.settings.screen.player.custombutton.getButtons
 import eu.kanade.presentation.theme.playerRippleConfiguration
+import eu.kanade.tachiyomi.ui.player.AbLoopState
 import eu.kanade.tachiyomi.ui.player.Dialogs
 import eu.kanade.tachiyomi.ui.player.LongPressGesture
 import eu.kanade.tachiyomi.ui.player.Panels
@@ -83,10 +86,14 @@ import eu.kanade.tachiyomi.ui.player.VideoAspect
 import eu.kanade.tachiyomi.ui.player.controls.components.BrightnessOverlay
 import eu.kanade.tachiyomi.ui.player.controls.components.BrightnessSlider
 import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
+import eu.kanade.tachiyomi.ui.player.controls.components.NextEpisodeCountdownOverlay
 import eu.kanade.tachiyomi.ui.player.controls.components.SeekbarWithTimers
 import eu.kanade.tachiyomi.ui.player.controls.components.TextPlayerUpdate
 import eu.kanade.tachiyomi.ui.player.controls.components.VolumeSlider
+import eu.kanade.tachiyomi.ui.player.controls.components.computeNextEpisodeCountdownSeconds
+import eu.kanade.tachiyomi.ui.player.controls.components.resolveChapterTitleAtPosition
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.toFixed
+import eu.kanade.tachiyomi.ui.player.formatBufferingCaption
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutOrientation
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutRegion
 import eu.kanade.tachiyomi.ui.player.resolveVisibleCustomButton
@@ -95,8 +102,12 @@ import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
 import `is`.xyz.mpv.MPVLib
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -126,8 +137,6 @@ fun PlayerControls(
     val seekBarShown by viewModel.seekBarShown.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val isLoadingEpisode by viewModel.isLoadingEpisode.collectAsStateWithLifecycle()
-    val duration by viewModel.duration.collectAsStateWithLifecycle()
-    val position by viewModel.pos.collectAsStateWithLifecycle()
     val paused by viewModel.paused.collectAsStateWithLifecycle()
     val gestureSeekAmount by viewModel.gestureSeekAmount.collectAsStateWithLifecycle()
     val doubleTapSeekAmount by viewModel.doubleTapSeekAmount.collectAsStateWithLifecycle()
@@ -152,14 +161,32 @@ fun PlayerControls(
     } else {
         PlayerLayoutOrientation.Portrait
     }
-    val bottomLeftLayoutSlots = playerLayoutConfig.slotsForRegion(
-        orientation = activeLayoutOrientation,
-        region = PlayerLayoutRegion.BottomLeft,
-    ).toSet()
-    val bottomRightLayoutSlots = playerLayoutConfig.slotsForRegion(
-        orientation = activeLayoutOrientation,
-        region = PlayerLayoutRegion.BottomRight,
-    ).toSet()
+    val bottomLeftLayoutSlots = remember(playerLayoutConfig, activeLayoutOrientation) {
+        playerLayoutConfig.slotsForRegion(
+            orientation = activeLayoutOrientation,
+            region = PlayerLayoutRegion.BottomLeft,
+        ).toSet()
+    }
+    val bottomRightLayoutSlots = remember(playerLayoutConfig, activeLayoutOrientation) {
+        playerLayoutConfig.slotsForRegion(
+            orientation = activeLayoutOrientation,
+            region = PlayerLayoutRegion.BottomRight,
+        ).toSet()
+    }
+    val chapterSegments = remember(chapters) {
+        chapters.map { it.toSegment() }.toImmutableList()
+    }
+    val currentChapterSegment = remember(currentChapter) {
+        currentChapter?.toSegment()
+    }
+    val controlsBackgroundBrush = remember {
+        Brush.verticalGradient(
+            Pair(0f, Color.Black),
+            Pair(.2f, Color.Transparent),
+            Pair(.7f, Color.Transparent),
+            Pair(1f, Color.Black),
+        )
+    }
 
     LaunchedEffect(
         controlsShown,
@@ -195,12 +222,7 @@ fun PlayerControls(
                 modifier = modifier
                     .fillMaxSize()
                     .background(
-                        Brush.verticalGradient(
-                            Pair(0f, Color.Black),
-                            Pair(.2f, Color.Transparent),
-                            Pair(.7f, Color.Transparent),
-                            Pair(1f, Color.Black),
-                        ),
+                        controlsBackgroundBrush,
                         alpha = transparentOverlay,
                     )
                     .padding(horizontal = MaterialTheme.padding.medium),
@@ -213,6 +235,7 @@ fun PlayerControls(
                 val seekbar = createRef()
                 val (playerUpdates) = createRefs()
                 val speedPill = createRef()
+                val nextEpisodeCard = createRef()
 
                 val hasPreviousEpisode by viewModel.hasPreviousEpisode.collectAsStateWithLifecycle()
                 val hasNextEpisode by viewModel.hasNextEpisode.collectAsStateWithLifecycle()
@@ -378,6 +401,15 @@ fun PlayerControls(
                     },
                 ) {
                     val showLoadingCircle by playerPreferences.showLoadingCircle().collectAsStateWithLifecycle()
+                    val bufferingCaption = rememberBufferingCaption(
+                        isLoading = isLoading,
+                        viewModel = viewModel,
+                    )
+                    val seekChapterTitle = remember(gestureSeekAmount, chapterSegments) {
+                        gestureSeekAmount?.let { (basePos, delta) ->
+                            resolveChapterTitleAtPosition(chapterSegments, (basePos + delta).toFloat())
+                        }
+                    }
                     MiddlePlayerControls(
                         hasPrevious = hasPreviousEpisode,
                         onSkipPrevious = { viewModel.changeEpisode(true) },
@@ -385,11 +417,13 @@ fun PlayerControls(
                         onSkipNext = { viewModel.changeEpisode(false) },
                         isLoading = isLoading,
                         isLoadingEpisode = isLoadingEpisode,
+                        bufferingCaption = bufferingCaption,
                         controlsShown = controlsShown,
                         areControlsLocked = areControlsLocked,
                         showLoadingCircle = showLoadingCircle,
                         paused = paused,
                         gestureSeekAmount = gestureSeekAmount,
+                        gestureSeekChapterTitle = seekChapterTitle,
                         onPlayPauseClick = viewModel::pauseUnpause,
                         enter = fadeIn(playerControlsEnterAnimationSpec()),
                         exit = fadeOut(playerControlsExitAnimationSpec()),
@@ -413,6 +447,8 @@ fun PlayerControls(
                         bottom.linkTo(parent.bottom, spacing.medium)
                     },
                 ) {
+                    val duration by viewModel.duration.collectAsStateWithLifecycle()
+                    val position by viewModel.pos.collectAsStateWithLifecycle()
                     val invertDuration by playerPreferences.invertDuration().collectAsStateWithLifecycle()
                     val readAhead by viewModel.readAhead.collectAsStateWithLifecycle()
                     val preciseSeeking by gesturePreferences.playerSmoothSeek().collectAsStateWithLifecycle()
@@ -429,7 +465,7 @@ fun PlayerControls(
                         timersInverted = Pair(false, invertDuration),
                         durationTimerOnCLick = { playerPreferences.invertDuration().set(!invertDuration) },
                         positionTimerOnClick = {},
-                        chapters = chapters.map { it.toSegment() }.toImmutableList(),
+                        chapters = chapterSegments,
                     )
                 }
                 val mediaTitle by viewModel.mediaTitle.collectAsStateWithLifecycle()
@@ -499,11 +535,44 @@ fun PlayerControls(
                         onScreenshotClick = { viewModel.showSheet(Sheets.Screenshot) },
                     )
                 }
-                // Bottom right controls
+                // Shared actions for customizable bottom control slots
                 val skipIntroButton by viewModel.skipIntroText.collectAsStateWithLifecycle()
                 val customButtonTitle by viewModel.primaryButtonTitle.collectAsStateWithLifecycle()
                 val visibleCustomButton = resolveVisibleCustomButton(showCustomButtons, customButton)
                 val visibleSkipIntroButton = skipIntroButton
+                val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+                val playerActivity = LocalContext.current as PlayerActivity
+                val bottomSlotActions = BottomPlayerSlotActions(
+                    playbackSpeed = playbackSpeed,
+                    customButton = visibleCustomButton,
+                    customButtonTitle = customButtonTitle,
+                    skipIntroButton = visibleSkipIntroButton,
+                    isPipAvailable = playerActivity.isPipSupportedAndEnabled,
+                    onLockControls = viewModel::lockControls,
+                    onCycleRotation = viewModel::cycleScreenRotations,
+                    onPlaybackSpeedTap = { viewModel.showSheet(Sheets.PlaybackSpeed) },
+                    onPlaybackSpeedQuickToggle = {
+                        val nextSpeed = resolveQuickTogglePlaybackSpeed(playbackSpeed)
+                        MPVLib.setPropertyDouble("speed", nextSpeed.toDouble())
+                        playerPreferences.playerSpeed().set(nextSpeed)
+                    },
+                    onPressSkipIntroButton = viewModel::onSkipIntro,
+                    onPipClick = {
+                        if (!viewModel.isLoadingEpisode.value) {
+                            playerActivity.enterPipModeSafely()
+                        }
+                    },
+                    onAspectClick = {
+                        viewModel.changeVideoAspect(
+                            when (aspectRatio) {
+                                VideoAspect.Fit -> VideoAspect.Stretch
+                                VideoAspect.Stretch -> VideoAspect.Crop
+                                VideoAspect.Crop -> VideoAspect.Fit
+                            },
+                        )
+                    },
+                )
+                // Bottom right controls
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {
@@ -523,32 +592,12 @@ fun PlayerControls(
                         end.linkTo(seekbar.end)
                     },
                 ) {
-                    val activity = LocalContext.current as PlayerActivity
                     BottomRightPlayerControls(
                         layoutSlots = bottomRightLayoutSlots,
-                        customButton = visibleCustomButton,
-                        customButtonTitle = customButtonTitle,
-                        skipIntroButton = visibleSkipIntroButton,
-                        onPressSkipIntroButton = viewModel::onSkipIntro,
-                        isPipAvailable = activity.isPipSupportedAndEnabled,
-                        onPipClick = {
-                            if (!viewModel.isLoadingEpisode.value) {
-                                activity.enterPictureInPictureMode(activity.createPipParams())
-                            }
-                        },
-                        onAspectClick = {
-                            viewModel.changeVideoAspect(
-                                when (aspectRatio) {
-                                    VideoAspect.Fit -> VideoAspect.Stretch
-                                    VideoAspect.Stretch -> VideoAspect.Crop
-                                    VideoAspect.Crop -> VideoAspect.Fit
-                                },
-                            )
-                        },
+                        slotActions = bottomSlotActions,
                     )
                 }
                 // Bottom left controls
-                val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {
@@ -572,13 +621,8 @@ fun PlayerControls(
                 ) {
                     BottomLeftPlayerControls(
                         layoutSlots = bottomLeftLayoutSlots,
-                        playbackSpeed = playbackSpeed,
-                        currentChapter = currentChapter?.toSegment(),
-                        onLockControls = viewModel::lockControls,
-                        onCycleRotation = viewModel::cycleScreenRotations,
-                        onPlaybackSpeedChange = {
-                            MPVLib.setPropertyDouble("speed", it.toDouble())
-                        },
+                        slotActions = bottomSlotActions,
+                        currentChapter = currentChapterSegment,
                         onOpenSheet = viewModel::showSheet,
                     )
                 }
@@ -598,91 +642,30 @@ fun PlayerControls(
                 ) {
                     PlaybackSpeedPill(speed = gesturePlaybackSpeed)
                 }
+
+                NextEpisodeCountdownSlot(
+                    viewModel = viewModel,
+                    hasNextEpisode = hasNextEpisode,
+                    autoPlayEnabled = autoPlayEnabled,
+                    areControlsLocked = areControlsLocked,
+                    modifier = Modifier.constrainAs(nextEpisodeCard) {
+                        end.linkTo(parent.end, spacing.medium)
+                        bottom.linkTo(parent.bottom, if (controlsShown) 104.dp else 24.dp)
+                    },
+                )
             }
         }
 
-        val sheetShown by viewModel.sheetShown.collectAsStateWithLifecycle()
-        val dismissSheet by viewModel.dismissSheet.collectAsStateWithLifecycle()
-        val subtitles by viewModel.subtitleTracks.collectAsStateWithLifecycle()
-        val selectedSubtitles by viewModel.selectedSubtitles.collectAsStateWithLifecycle()
-        val subtitleTranslationUiState by viewModel.subtitleTranslationUiState.collectAsStateWithLifecycle()
-        val audioTracks by viewModel.audioTracks.collectAsStateWithLifecycle()
-        val selectedAudio by viewModel.selectedAudio.collectAsStateWithLifecycle()
-        val isLoadingHosters by viewModel.isLoadingHosters.collectAsStateWithLifecycle()
-        val hosterState by viewModel.hosterState.collectAsStateWithLifecycle()
-        val expandedState by viewModel.hosterExpandedList.collectAsStateWithLifecycle()
-        val selectedHosterVideoIndex by viewModel.selectedHosterVideoIndex.collectAsStateWithLifecycle()
-        val decoder by viewModel.currentDecoder.collectAsStateWithLifecycle()
-        val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
-        val sleepTimerTimeRemaining by viewModel.remainingTime.collectAsStateWithLifecycle()
-        val showSubtitles by subtitlePreferences.screenshotSubtitles().collectAsStateWithLifecycle()
-        val currentSource by viewModel.currentSource.collectAsStateWithLifecycle()
-        val showFailedHosters by playerPreferences.showFailedHosters().collectAsStateWithLifecycle()
-        val emptyHosters by playerPreferences.showEmptyHosters().collectAsStateWithLifecycle()
-
-        PlayerSheets(
-            sheetShown = sheetShown,
-            subtitles = subtitles.toImmutableList(),
-            selectedSubtitles = selectedSubtitles.toList().toImmutableList(),
-            onAddSubtitle = viewModel::addSubtitle,
-            onTranslateSubtitle = viewModel::openSubtitleTranslationSheet,
-            subtitleTranslationUiState = subtitleTranslationUiState,
-            onSelectSubtitleTranslationTrack = viewModel::selectSubtitleTranslationTrack,
-            onSelectSubtitleTranslationProvider = viewModel::selectSubtitleTranslationProvider,
-            onSubtitleTranslationSourceLanguageChange = viewModel::setSubtitleTranslationSourceLanguage,
-            onSubtitleTranslationTargetLanguageChange = viewModel::setSubtitleTranslationTargetLanguage,
-            onToggleSubtitleTranslationCache = viewModel::toggleSubtitleTranslationCache,
-            onStartSubtitleTranslation = viewModel::startSubtitleTranslation,
-            onCancelSubtitleTranslation = viewModel::cancelSubtitleTranslation,
-            onSelectSubtitle = viewModel::selectSub,
-            audioTracks = audioTracks.toImmutableList(),
-            selectedAudio = selectedAudio,
-            onAddAudio = viewModel::addAudio,
-            onSelectAudio = viewModel::selectAudio,
-
-            isLoadingHosters = isLoadingHosters,
-
-            hosterState = hosterState,
-            expandedState = expandedState,
-            selectedVideoIndex = selectedHosterVideoIndex,
-            onClickHoster = viewModel::onHosterClicked,
-            onClickVideo = viewModel::onVideoClicked,
-            displayHosters = Pair(showFailedHosters, emptyHosters),
-
-            chapter = currentChapter?.toSegment(),
-            chapters = chapters.map { it.toSegment() }.toImmutableList(),
-            onSeekToChapter = {
-                viewModel.selectChapter(it)
-                viewModel.dismissSheet()
-                viewModel.unpause()
-            },
-            decoder = decoder,
-            onUpdateDecoder = viewModel::updateDecoder,
-            speed = speed,
-            onSpeedChange = { MPVLib.setPropertyDouble("speed", it.toFixed(2).toDouble()) },
-            sleepTimerTimeRemaining = sleepTimerTimeRemaining,
-            onStartSleepTimer = viewModel::startTimer,
-            buttons = if (showCustomButtons) {
-                customButtons.getButtons().toImmutableList()
-            } else {
-                emptyList<tachiyomi.domain.custombuttons.model.CustomButton>().toImmutableList()
-            },
-
-            isLocalSource = currentSource?.id == LocalAnimeSource.ID,
-            showSubtitles = showSubtitles,
-            onToggleShowSubtitles = { subtitlePreferences.screenshotSubtitles().set(it) },
-            cachePath = viewModel.cachePath,
-            onSetAsArt = viewModel::setAsArt,
-            onShare = { viewModel.shareImage(it, viewModel.pos.value.toInt()) },
-            onSave = { viewModel.saveImage(it, viewModel.pos.value.toInt()) },
-            takeScreenshot = viewModel::takeScreenshot,
-            onDismissScreenshot = {
-                viewModel.showSheet(Sheets.None)
-                viewModel.unpause()
-            },
-            onOpenPanel = viewModel::showPanel,
-            onDismissRequest = { viewModel.showSheet(Sheets.None) },
-            dismissSheet = dismissSheet,
+        val hostActivity = LocalContext.current as PlayerActivity
+        PlayerSheetsHost(
+            viewModel = viewModel,
+            playerPreferences = playerPreferences,
+            subtitlePreferences = subtitlePreferences,
+            customButtons = customButtons,
+            showCustomButtons = showCustomButtons,
+            currentChapterSegment = currentChapterSegment,
+            chapterSegments = chapterSegments,
+            onReloadPlayer = hostActivity::reloadPlayerPreservingProgress,
         )
         val panel by viewModel.panelShown.collectAsStateWithLifecycle()
         PlayerPanels(
@@ -714,6 +697,195 @@ fun PlayerControls(
         BrightnessOverlay(
             brightness = currentBrightness,
         )
+    }
+}
+
+@Composable
+private fun NextEpisodeCountdownSlot(
+    viewModel: PlayerViewModel,
+    hasNextEpisode: Boolean,
+    autoPlayEnabled: Boolean,
+    areControlsLocked: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val currentEpisode by viewModel.currentEpisode.collectAsStateWithLifecycle()
+    val episodePlaylist by viewModel.currentPlaylist.collectAsStateWithLifecycle()
+    var dismissedNextOverlayEpisodeId by remember { mutableStateOf<Long?>(null) }
+    val nextEpisodeCountdown by remember(
+        viewModel,
+        hasNextEpisode,
+        autoPlayEnabled,
+        dismissedNextOverlayEpisodeId,
+    ) {
+        combine(
+            viewModel.pos,
+            viewModel.duration,
+            viewModel.repeatEpisode,
+            viewModel.currentEpisode,
+        ) { pos, duration, repeatEpisode, episode ->
+            computeNextEpisodeCountdownSeconds(
+                positionSec = pos,
+                durationSec = duration,
+                hasNextEpisode = hasNextEpisode,
+                autoPlayEnabled = autoPlayEnabled,
+                repeatEpisode = repeatEpisode,
+                dismissedEpisodeId = dismissedNextOverlayEpisodeId,
+                currentEpisodeId = episode?.id,
+            )
+        }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
+    val nextEpisodeName = remember(episodePlaylist, currentEpisode?.id) {
+        val idx = viewModel.getCurrentEpisodeIndex()
+        episodePlaylist.getOrNull(idx + 1)?.name
+    }
+    AnimatedVisibility(
+        visible = nextEpisodeCountdown != null && !areControlsLocked && !nextEpisodeName.isNullOrBlank(),
+        enter = fadeIn(playerControlsEnterAnimationSpec()) +
+            slideInHorizontally(playerControlsEnterAnimationSpec()) { it / 2 },
+        exit = fadeOut(playerControlsExitAnimationSpec()) +
+            slideOutHorizontally(playerControlsExitAnimationSpec()) { it / 2 },
+        modifier = modifier,
+    ) {
+        val countdown = nextEpisodeCountdown
+        if (countdown != null && !nextEpisodeName.isNullOrBlank()) {
+            NextEpisodeCountdownOverlay(
+                nextEpisodeTitle = nextEpisodeName,
+                secondsRemaining = countdown,
+                onPlayNextNow = { viewModel.changeEpisode(previous = false) },
+                onDismiss = { dismissedNextOverlayEpisodeId = currentEpisode?.id },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerSheetsHost(
+    viewModel: PlayerViewModel,
+    playerPreferences: PlayerPreferences,
+    subtitlePreferences: SubtitlePreferences,
+    customButtons: CustomButtonFetchState,
+    showCustomButtons: Boolean,
+    currentChapterSegment: Segment?,
+    chapterSegments: ImmutableList<Segment>,
+    onReloadPlayer: () -> Unit,
+) {
+    val sheetShown by viewModel.sheetShown.collectAsStateWithLifecycle()
+    val dismissSheet by viewModel.dismissSheet.collectAsStateWithLifecycle()
+    val subtitles by viewModel.subtitleTracks.collectAsStateWithLifecycle()
+    val selectedSubtitles by viewModel.selectedSubtitles.collectAsStateWithLifecycle()
+    val subtitleTranslationUiState by viewModel.subtitleTranslationUiState.collectAsStateWithLifecycle()
+    val audioTracks by viewModel.audioTracks.collectAsStateWithLifecycle()
+    val selectedAudio by viewModel.selectedAudio.collectAsStateWithLifecycle()
+    val isLoadingHosters by viewModel.isLoadingHosters.collectAsStateWithLifecycle()
+    val hosterState by viewModel.hosterState.collectAsStateWithLifecycle()
+    val expandedState by viewModel.hosterExpandedList.collectAsStateWithLifecycle()
+    val selectedHosterVideoIndex by viewModel.selectedHosterVideoIndex.collectAsStateWithLifecycle()
+    val decoder by viewModel.currentDecoder.collectAsStateWithLifecycle()
+    val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+    val sleepTimerTimeRemaining = if (sheetShown == Sheets.More) {
+        viewModel.remainingTime.collectAsStateWithLifecycle().value
+    } else {
+        0
+    }
+    val aspectRatio by playerPreferences.aspectState().collectAsStateWithLifecycle()
+    val videoZoom by viewModel.videoZoom.collectAsStateWithLifecycle()
+    val repeatEpisode by viewModel.repeatEpisode.collectAsStateWithLifecycle()
+    val abLoopState by viewModel.abLoopState.collectAsStateWithLifecycle()
+    val showSubtitles by subtitlePreferences.screenshotSubtitles().collectAsStateWithLifecycle()
+    val currentSource by viewModel.currentSource.collectAsStateWithLifecycle()
+    val showFailedHosters by playerPreferences.showFailedHosters().collectAsStateWithLifecycle()
+    val emptyHosters by playerPreferences.showEmptyHosters().collectAsStateWithLifecycle()
+
+    val immutableSubtitles = remember(subtitles) { subtitles.toImmutableList() }
+    val immutableSelectedSubtitles = remember(selectedSubtitles) { selectedSubtitles.toList().toImmutableList() }
+    val immutableAudioTracks = remember(audioTracks) { audioTracks.toImmutableList() }
+    val immutableButtons = remember(showCustomButtons, customButtons) {
+        if (showCustomButtons) {
+            customButtons.getButtons().toImmutableList()
+        } else {
+            persistentListOf()
+        }
+    }
+
+    PlayerSheets(
+        sheetShown = sheetShown,
+        subtitles = immutableSubtitles,
+        selectedSubtitles = immutableSelectedSubtitles,
+        onAddSubtitle = viewModel::addSubtitle,
+        onTranslateSubtitle = viewModel::openSubtitleTranslationSheet,
+        subtitleTranslationUiState = subtitleTranslationUiState,
+        onSelectSubtitleTranslationTrack = viewModel::selectSubtitleTranslationTrack,
+        onSelectSubtitleTranslationProvider = viewModel::selectSubtitleTranslationProvider,
+        onSubtitleTranslationSourceLanguageChange = viewModel::setSubtitleTranslationSourceLanguage,
+        onSubtitleTranslationTargetLanguageChange = viewModel::setSubtitleTranslationTargetLanguage,
+        onToggleSubtitleTranslationCache = viewModel::toggleSubtitleTranslationCache,
+        onStartSubtitleTranslation = viewModel::startSubtitleTranslation,
+        onCancelSubtitleTranslation = viewModel::cancelSubtitleTranslation,
+        onSelectSubtitle = viewModel::selectSub,
+        audioTracks = immutableAudioTracks,
+        selectedAudio = selectedAudio,
+        onAddAudio = viewModel::addAudio,
+        onSelectAudio = viewModel::selectAudio,
+        isLoadingHosters = isLoadingHosters,
+        hosterState = hosterState,
+        expandedState = expandedState,
+        selectedVideoIndex = selectedHosterVideoIndex,
+        onClickHoster = viewModel::onHosterClicked,
+        onClickVideo = viewModel::onVideoClicked,
+        displayHosters = Pair(showFailedHosters, emptyHosters),
+        chapter = currentChapterSegment,
+        chapters = chapterSegments,
+        onSeekToChapter = {
+            viewModel.selectChapter(it)
+            viewModel.dismissSheet()
+            viewModel.unpause()
+        },
+        decoder = decoder,
+        onUpdateDecoder = viewModel::updateDecoder,
+        speed = speed,
+        onSpeedChange = { MPVLib.setPropertyDouble("speed", it.toFixed(2).toDouble()) },
+        sleepTimerTimeRemaining = sleepTimerTimeRemaining,
+        onStartSleepTimer = viewModel::startTimer,
+        aspectRatio = aspectRatio,
+        onSelectAspectRatio = viewModel::changeVideoAspect,
+        videoZoom = videoZoom,
+        onVideoZoomChange = viewModel::setVideoZoom,
+        onResetVideoZoom = viewModel::resetVideoZoom,
+        repeatEpisode = repeatEpisode,
+        onToggleRepeatEpisode = viewModel::toggleRepeatEpisode,
+        abLoopState = abLoopState,
+        onCycleAbLoop = viewModel::cycleAbLoop,
+        onClearAbLoop = viewModel::clearAbLoop,
+        buttons = immutableButtons,
+        isLocalSource = currentSource?.id == LocalAnimeSource.ID,
+        showSubtitles = showSubtitles,
+        onToggleShowSubtitles = { subtitlePreferences.screenshotSubtitles().set(it) },
+        cachePath = viewModel.cachePath,
+        onSetAsArt = viewModel::setAsArt,
+        onShare = { viewModel.shareImage(it, viewModel.pos.value.toInt()) },
+        onSave = { viewModel.saveImage(it, viewModel.pos.value.toInt()) },
+        takeScreenshot = viewModel::takeScreenshot,
+        onDismissScreenshot = {
+            viewModel.showSheet(Sheets.None)
+            viewModel.unpause()
+        },
+        onOpenPanel = viewModel::showPanel,
+        onReloadPlayer = onReloadPlayer,
+        onDismissRequest = { viewModel.showSheet(Sheets.None) },
+        dismissSheet = dismissSheet,
+    )
+}
+
+@Composable
+private fun rememberBufferingCaption(
+    isLoading: Boolean,
+    viewModel: PlayerViewModel,
+): String? {
+    if (!isLoading) return null
+    val bufferingPercent by viewModel.bufferingPercent.collectAsStateWithLifecycle()
+    val cacheSpeedBytesPerSec by viewModel.cacheSpeedBytesPerSec.collectAsStateWithLifecycle()
+    return remember(bufferingPercent, cacheSpeedBytesPerSec) {
+        formatBufferingCaption(bufferingPercent, cacheSpeedBytesPerSec)
     }
 }
 

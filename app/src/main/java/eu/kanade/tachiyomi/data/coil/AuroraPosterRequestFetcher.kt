@@ -11,8 +11,11 @@ import coil3.request.Options
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.interceptor.CoverRequestPolicy
 import eu.kanade.tachiyomi.network.toAsciiUrl
+import eu.kanade.tachiyomi.network.withCoverTimeouts
+import kotlinx.coroutines.delay
 import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.Buffer
 import okio.FileSystem
@@ -85,6 +88,9 @@ class AuroraPosterRequestFetcher(
             return customCoverLoader(file)
         }
         readFromDiskCache()?.let { return it }
+        if (!options.networkCachePolicy.readEnabled) {
+            throw IOException("Network fetch disabled by cache policy")
+        }
 
         val fetched = loadAuroraPosterSource(
             callFactory = data.client ?: callFactoryLazy.value,
@@ -177,64 +183,85 @@ class AuroraPosterRequestFetcher(
     }
 }
 
+private const val AURORA_POSTER_TRANSIENT_ATTEMPTS = 2
+private const val AURORA_POSTER_RETRY_DELAY_MS = 500L
+
 internal suspend fun loadAuroraPosterSource(
     callFactory: Call.Factory,
     fileSystem: FileSystem,
     request: AuroraPosterRequest,
+    retryDelayMs: Long = AURORA_POSTER_RETRY_DELAY_MS,
 ): FetchResult {
     val candidates = buildList {
         request.primaryUrl?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
         request.fallbackUrl?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
     }.distinct()
 
+    val effectiveCallFactory = if (callFactory is OkHttpClient) callFactory.withCoverTimeouts() else callFactory
     var lastError: IOException? = null
+    var activeCandidates = candidates
 
-    for ((attemptIndex, candidate) in candidates.withIndex()) {
-        val httpUrl = candidate.toHttpUrlOrNull()
-        if (httpUrl == null) {
-            lastError = IOException("Invalid poster url: $candidate")
-            continue
-        }
-        if (CoverRequestPolicy.isBlacklisted(httpUrl.host)) {
-            lastError = IOException("Skipped blacklisted cover host: ${httpUrl.host}")
-            continue
-        }
+    for (attemptPass in 0 until AURORA_POSTER_TRANSIENT_ATTEMPTS) {
+        val transientRetryCandidates = mutableListOf<String>()
 
-        val requestBuilder = CoverRequestPolicy.markCoverRequest(
-            Request.Builder().url(httpUrl),
-            fallbackUrl = request.fallbackUrl,
-            attempt = attemptIndex,
-        )
+        for ((attemptIndex, candidate) in activeCandidates.withIndex()) {
+            val httpUrl = candidate.toHttpUrlOrNull()
+            if (httpUrl == null) {
+                lastError = IOException("Invalid poster url: $candidate")
+                continue
+            }
+            if (CoverRequestPolicy.isBlacklisted(httpUrl.host)) {
+                lastError = IOException("Skipped blacklisted cover host: ${httpUrl.host}")
+                continue
+            }
 
-        request.headers?.forEach { (name, value) ->
-            requestBuilder.header(name, value)
-        }
-        request.refererUrl?.trim()?.takeIf { it.isNotBlank() }?.let { referer ->
-            requestBuilder.header("Referer", referer.toAsciiUrl().trimEnd('/') + "/")
-        }
-
-        val response = try {
-            callFactory.newCall(requestBuilder.build()).await()
-        } catch (e: IOException) {
-            lastError = e
-            continue
-        }
-
-        val body = response.body
-        if (response.isSuccessful) {
-            CoverRequestPolicy.clear(httpUrl.host)
-            return SourceFetchResult(
-                source = ImageSource(
-                    source = body.source(),
-                    fileSystem = fileSystem,
-                ),
-                mimeType = body.contentType()?.toString() ?: "image/*",
-                dataSource = if (response.cacheResponse != null) DataSource.DISK else DataSource.NETWORK,
+            val requestBuilder = CoverRequestPolicy.markCoverRequest(
+                Request.Builder().url(httpUrl),
+                fallbackUrl = request.fallbackUrl,
+                attempt = attemptIndex,
             )
+
+            request.headers?.forEach { (name, value) ->
+                requestBuilder.header(name, value)
+            }
+            request.refererUrl?.trim()?.takeIf { it.isNotBlank() }?.let { referer ->
+                requestBuilder.header("Referer", referer.toAsciiUrl().trimEnd('/') + "/")
+            }
+
+            val response = try {
+                effectiveCallFactory.newCall(requestBuilder.build()).await()
+            } catch (e: IOException) {
+                lastError = e
+                if (!CoverRequestPolicy.isBlacklisted(httpUrl.host)) {
+                    transientRetryCandidates += candidate
+                }
+                continue
+            }
+
+            val body = response.body
+            if (response.isSuccessful) {
+                CoverRequestPolicy.clear(httpUrl.host)
+                return SourceFetchResult(
+                    source = ImageSource(
+                        source = body.source(),
+                        fileSystem = fileSystem,
+                    ),
+                    mimeType = body.contentType()?.toString() ?: "image/*",
+                    dataSource = if (response.cacheResponse != null) DataSource.DISK else DataSource.NETWORK,
+                )
+            }
+
+            lastError = IOException("HTTP ${response.code} for $candidate")
+            response.close()
         }
 
-        lastError = IOException("HTTP ${response.code} for $candidate")
-        response.close()
+        if (transientRetryCandidates.isEmpty() || attemptPass >= AURORA_POSTER_TRANSIENT_ATTEMPTS - 1) {
+            break
+        }
+        if (retryDelayMs > 0L) {
+            delay(retryDelayMs)
+        }
+        activeCandidates = transientRetryCandidates
     }
 
     throw (lastError ?: IOException("Failed to load poster"))

@@ -3,13 +3,23 @@ package eu.kanade.tachiyomi.ui.reader.novel.translation
 import eu.kanade.presentation.entries.translation.googleTranslationLanguageCodeFor
 import io.kotest.matchers.maps.shouldContain
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import okhttp3.Call
+import okhttp3.EventListener
 import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class GoogleTranslationServiceTest {
 
@@ -213,5 +223,52 @@ class GoogleTranslationServiceTest {
             "pt"
         googleTranslationLanguageCodeFor("AUTO") shouldBe "auto"
         googleTranslationLanguageCodeFor("Portuguese (Brazil)") shouldBe null
+    }
+
+    @Test
+    fun `cancellation propagates CancellationException and cancels in-flight OkHttp call`() = runBlocking {
+        val requestStarted = CountDownLatch(1)
+        val releaseServer = CountDownLatch(1)
+        val callCanceled = CountDownLatch(1)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                requestStarted.countDown()
+                releaseServer.await(5, TimeUnit.SECONDS)
+                return MockResponse().setBody("""[[["Привет","Hello",null,null,1]],null,"en"]""")
+            }
+        }
+
+        val client = OkHttpClient.Builder()
+            .eventListener(
+                object : EventListener() {
+                    override fun canceled(call: Call) {
+                        callCanceled.countDown()
+                    }
+                },
+            )
+            .build()
+
+        val service = GoogleTranslationService(
+            client = client,
+            translateUrl = server.url("/translate_a/single"),
+            userAgent = "unit-test-agent",
+        )
+
+        val deferred = async(Dispatchers.Default) {
+            service.translateSingle("Hello", "en", "ru")
+        }
+
+        try {
+            requestStarted.await(5, TimeUnit.SECONDS) shouldBe true
+            deferred.cancel()
+
+            val thrown = runCatching { deferred.await() }.exceptionOrNull()
+            (thrown is CancellationException) shouldBe true
+            callCanceled.await(5, TimeUnit.SECONDS) shouldBe true
+            server.requestCount shouldBe 1
+        } finally {
+            releaseServer.countDown()
+        }
     }
 }

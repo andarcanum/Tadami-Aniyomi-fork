@@ -7,10 +7,9 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
-import eu.kanade.core.util.insertSeparators
 import eu.kanade.presentation.updates.novel.NovelUpdatesUiModel
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
-import eu.kanade.tachiyomi.util.lang.toLocalDate
+import eu.kanade.tachiyomi.util.lang.buildDateGroupedUiModels
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
@@ -160,18 +159,16 @@ class NovelUpdatesScreenModel(
         val selected = items.filter { it.selected }
         val selectionMode = selected.isNotEmpty()
 
-        fun getUiModel(): List<NovelUpdatesUiModel> {
-            return items
-                .map { NovelUpdatesUiModel.Item(it) }
-                .insertSeparators { before, after ->
-                    val beforeDate = before?.item?.update?.dateFetch?.toLocalDate()
-                    val afterDate = after?.item?.update?.dateFetch?.toLocalDate()
-                    when {
-                        beforeDate != afterDate && afterDate != null -> NovelUpdatesUiModel.Header(afterDate)
-                        else -> null
-                    }
-                }
+        private val cachedUiModel: List<NovelUpdatesUiModel> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            buildDateGroupedUiModels(
+                items = items,
+                timestampMillis = { it.update.dateFetch },
+                header = NovelUpdatesUiModel::Header,
+                item = NovelUpdatesUiModel::Item,
+            )
         }
+
+        fun getUiModel(): List<NovelUpdatesUiModel> = cachedUiModel
     }
 }
 

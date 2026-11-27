@@ -6,10 +6,26 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.flowOf
+import tachiyomi.domain.discovery.model.DiscoverySourceInventory
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.source.novel.model.StubNovelSource
 
 interface NovelExtensionManager {
+    /** Complete raw inventory, not the first possibly empty source-registration emission. */
+    fun discoverySourceInventory(): DiscoverySourceInventory = DiscoverySourceInventory.Unavailable
+
+    /** App-only current raw owner/SDK identity authority; unavailable defaults never authorize an obsolete adapter. */
+    fun isDiscoverySourceBinding(
+        sourceId: Long,
+        source: Any,
+        allowedOwners: Set<String>,
+        expected: DiscoverySourceInventory,
+    ): Boolean = false
+
+    val discoverySourceInventoryChanges: Flow<DiscoverySourceInventory>
+        get() = flowOf(discoverySourceInventory())
+
     val installedSourcesFlow: Flow<List<NovelSource>>
     val installedPluginsFlow: Flow<List<NovelPlugin.Installed>>
     val availablePluginsFlow: Flow<List<NovelPlugin.Available>>

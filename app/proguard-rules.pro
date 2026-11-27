@@ -88,6 +88,8 @@
 -keep class eu.kanade.tachiyomi.source.novel.** { *; }
 
 # From extensions-lib
+-keep class eu.kanade.tachiyomi.network.HttpException { *; }
+-keep class eu.kanade.tachiyomi.network.ProgressListener { *; }
 -keep,allowoptimization class eu.kanade.tachiyomi.network.interceptor.RateLimitInterceptorKt { public protected *; }
 -keep,allowoptimization class eu.kanade.tachiyomi.network.interceptor.SpecificHostRateLimitInterceptorKt { public protected *; }
 -keep,allowoptimization class eu.kanade.tachiyomi.network.NetworkHelper { public protected *; }

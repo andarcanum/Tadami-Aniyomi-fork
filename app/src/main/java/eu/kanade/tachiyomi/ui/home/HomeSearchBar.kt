@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.home
 
 import android.graphics.drawable.ColorDrawable
+import android.util.LruCache
 import android.view.WindowManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -50,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -69,11 +71,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
@@ -85,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.graphics.drawable.toBitmap
 import coil3.compose.AsyncImage
 import com.tadami.aurora.R
 import eu.kanade.presentation.components.AdaptiveSheet
@@ -95,16 +100,22 @@ import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
+import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.util.TreeMap
 import kotlin.math.roundToInt
 
@@ -386,6 +397,7 @@ internal fun HomeSearchBarWithSourceChip(
         HomeSourcePickerSheet(
             currentSourceId = sourceId,
             sources = availableSources,
+            section = section,
             onDismiss = { showSourcePickerSheet = false },
             onSelectSource = { selectedId, selectedName ->
                 onSelectSource(selectedId, selectedName)
@@ -528,6 +540,7 @@ internal fun HomeSourcePickerSheet(
     onDismiss: () -> Unit,
     onSelectSource: (Long, String?) -> Unit,
     onOpenCatalog: (Long) -> Unit,
+    section: HomeHubSection? = null,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
@@ -536,6 +549,7 @@ internal fun HomeSourcePickerSheet(
     var sheetReveal by remember { mutableFloatStateOf(1f) }
     var sourceQuery by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val iconCache = remember(section) { LruCache<Long, ImageBitmap>(64) }
 
     val filteredSources = remember(sourceQuery, sources) {
         val q = sourceQuery.trim().lowercase()
@@ -785,6 +799,8 @@ internal fun HomeSourcePickerSheet(
                                 isGlobal = false,
                                 isSelected = currentSourceId == source.id,
                                 showCatalogButton = true,
+                                section = section,
+                                iconCache = iconCache,
                                 onClick = {
                                     appHaptics.tap()
                                     onSelectSource(source.id, source.name)
@@ -806,6 +822,8 @@ internal fun HomeSourcePickerSheet(
 @Composable
 private fun HomeSourceIcon(
     item: HomeSourceItem,
+    section: HomeHubSection? = null,
+    iconCache: LruCache<Long, ImageBitmap>? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -813,6 +831,41 @@ private fun HomeSourceIcon(
     val defaultModifier = modifier
         .size(30.dp)
         .clip(iconShape)
+    val iconPx = with(LocalDensity.current) { 30.dp.roundToPx().coerceIn(48, 96) }
+    val needsLazyIcon = section != null &&
+        (section == HomeHubSection.Anime || section == HomeHubSection.Manga) &&
+        item.id != -1L &&
+        !item.isLocal &&
+        item.iconBitmap == null &&
+        item.iconUrl.isNullOrBlank()
+    val lazyIconBitmap by produceState<ImageBitmap?>(
+        initialValue = if (needsLazyIcon) iconCache?.get(item.id) else null,
+        key1 = section,
+        key2 = item.id,
+        key3 = needsLazyIcon,
+    ) {
+        if (!needsLazyIcon || value != null) return@produceState
+        val cached = iconCache?.get(item.id)
+        if (cached != null) {
+            value = cached
+            return@produceState
+        }
+        val loaded = withContext(Dispatchers.IO) {
+            runCatching {
+                val drawable = when (section) {
+                    HomeHubSection.Anime -> Injekt.get<AnimeExtensionManager>().getAppIconForSource(item.id)
+                    HomeHubSection.Manga -> Injekt.get<MangaExtensionManager>().getAppIconForSource(item.id)
+                    HomeHubSection.Novel, null -> null
+                }
+                drawable?.toBitmap(width = iconPx, height = iconPx)?.asImageBitmap()
+            }.getOrNull()
+        }
+        if (loaded != null) {
+            iconCache?.put(item.id, loaded)
+            value = loaded
+        }
+    }
+    val resolvedBitmap = item.iconBitmap ?: lazyIconBitmap
 
     when {
         item.id == -1L -> {
@@ -839,9 +892,9 @@ private fun HomeSourceIcon(
                 modifier = defaultModifier,
             )
         }
-        item.iconBitmap != null -> {
+        resolvedBitmap != null -> {
             Image(
-                bitmap = item.iconBitmap,
+                bitmap = resolvedBitmap,
                 contentDescription = null,
                 modifier = defaultModifier,
             )
@@ -913,6 +966,8 @@ private fun HomeSourceItemRow(
     showCatalogButton: Boolean,
     onClick: () -> Unit,
     onOpenCatalog: () -> Unit,
+    section: HomeHubSection? = null,
+    iconCache: LruCache<Long, ImageBitmap>? = null,
 ) {
     val colors = AuroraTheme.colors
     val rowShape = RoundedCornerShape(12.dp)
@@ -936,7 +991,7 @@ private fun HomeSourceItemRow(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            HomeSourceIcon(item = item)
+            HomeSourceIcon(item = item, section = section, iconCache = iconCache)
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(

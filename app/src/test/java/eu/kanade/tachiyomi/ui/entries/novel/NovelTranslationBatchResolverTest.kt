@@ -71,8 +71,8 @@ class NovelTranslationBatchResolverTest {
     }
 
     @Test
-    fun `unread scope applies global limit`() {
-        val chapters = chapters(count = 8)
+    fun `unread scope ignores first n visible count and excludes read chapters`() {
+        val chapters = chapters(count = 8).map { it.copy(read = it.id in setOf(4L, 7L)) }
 
         val resolved = resolveTranslationBatchChapterIds(
             scope = TranslationBatchScope.UNREAD,
@@ -82,11 +82,11 @@ class NovelTranslationBatchResolverTest {
             downloadedChapterIds = emptySet(),
         )
 
-        resolved shouldBe listOf(1L, 2L, 3L)
+        resolved shouldBe listOf(1L, 2L, 3L, 5L, 6L, 8L)
     }
 
     @Test
-    fun `downloaded scope applies global limit`() {
+    fun `downloaded scope ignores first n visible count`() {
         val chapters = chapters(count = 8).map { chapter -> chapter.copy(id = chapter.id + 100) }
 
         val resolved = resolveTranslationBatchChapterIds(
@@ -97,11 +97,11 @@ class NovelTranslationBatchResolverTest {
             downloadedChapterIds = setOf(101L, 102L, 103L),
         )
 
-        resolved shouldBe listOf(101L, 102L)
+        resolved shouldBe listOf(101L, 102L, 103L)
     }
 
     @Test
-    fun `selected scope applies global limit`() {
+    fun `selected scope ignores first n visible count and keeps visible order`() {
         val resolved = resolveTranslationBatchChapterIds(
             scope = TranslationBatchScope.SELECTED,
             limit = 2,
@@ -110,11 +110,11 @@ class NovelTranslationBatchResolverTest {
             downloadedChapterIds = emptySet(),
         )
 
-        resolved shouldBe listOf(1L, 2L)
+        resolved shouldBe listOf(1L, 2L, 7L, 8L)
     }
 
     @Test
-    fun `range scope applies global limit after range slicing`() {
+    fun `range scope ignores first n visible count after range slicing`() {
         val resolved = resolveTranslationBatchChapterIds(
             scope = TranslationBatchScope.RANGE,
             limit = 2,
@@ -125,22 +125,108 @@ class NovelTranslationBatchResolverTest {
             rangeEnd = 6,
         )
 
-        resolved shouldBe listOf(3L, 4L)
+        resolved shouldBe listOf(3L, 4L, 5L, 6L)
     }
 
     @Test
-    fun `limit zero means unlimited for all scopes`() {
-        val chapters = chapters(count = 4)
+    fun `selected scope retains all 31 selected chapters in reverse visible order`() {
+        val resolved = resolveTranslationBatchChapterIds(
+            scope = TranslationBatchScope.SELECTED,
+            limit = 10,
+            chapters = chapters(count = 35).reversed(),
+            selectedChapterIds = (1L..31L).toSet(),
+            downloadedChapterIds = emptySet(),
+        )
 
-        val unreadUnlimited = resolveTranslationBatchChapterIds(
+        resolved shouldBe (31L downTo 1L).toList()
+    }
+
+    @Test
+    fun `downloaded scope retains all 31 downloaded chapters`() {
+        val resolved = resolveTranslationBatchChapterIds(
+            scope = TranslationBatchScope.DOWNLOADED,
+            limit = 10,
+            chapters = chapters(count = 35),
+            selectedChapterIds = emptySet(),
+            downloadedChapterIds = (1L..31L).toSet(),
+        )
+
+        resolved shouldBe (1L..31L).toList()
+    }
+
+    @Test
+    fun `unread scope retains all 31 unread chapters`() {
+        val resolved = resolveTranslationBatchChapterIds(
             scope = TranslationBatchScope.UNREAD,
-            limit = 0,
-            chapters = chapters,
+            limit = 10,
+            chapters = chapters(count = 35).map { it.copy(read = it.id > 31L) },
             selectedChapterIds = emptySet(),
             downloadedChapterIds = emptySet(),
         )
 
-        unreadUnlimited shouldBe listOf(1L, 2L, 3L, 4L)
+        resolved shouldBe (1L..31L).toList()
+    }
+
+    @Test
+    fun `range 1 through 31 is not truncated by first n visible count`() {
+        val resolved = resolveTranslationBatchChapterIds(
+            scope = TranslationBatchScope.RANGE,
+            limit = 10,
+            chapters = chapters(count = 35),
+            selectedChapterIds = emptySet(),
+            downloadedChapterIds = emptySet(),
+            rangeStart = 1,
+            rangeEnd = 31,
+        )
+
+        resolved shouldBe (1L..31L).toList()
+    }
+
+    @Test
+    fun `first n visible alone limits the batch count in visible order`() {
+        val resolved = resolveTranslationBatchChapterIds(
+            scope = TranslationBatchScope.FIRST_N_VISIBLE,
+            limit = 10,
+            chapters = chapters(count = 31).reversed(),
+            selectedChapterIds = emptySet(),
+            downloadedChapterIds = emptySet(),
+        )
+
+        resolved shouldBe listOf(31L, 30L, 29L, 28L, 27L, 26L, 25L, 24L, 23L, 22L)
+    }
+
+    @Test
+    fun `range stays positional with reversed visible order and unnumbered chapters`() {
+        val resolved = resolveTranslationBatchChapterIds(
+            scope = TranslationBatchScope.RANGE,
+            limit = 10,
+            chapters = chapters(count = 8).reversed().map { it.copy(chapterNumber = -1.0) },
+            selectedChapterIds = emptySet(),
+            downloadedChapterIds = emptySet(),
+            rangeStart = 6,
+            rangeEnd = 3,
+        )
+
+        resolved shouldBe listOf(6L, 5L, 4L, 3L)
+    }
+
+    @Test
+    fun `nonpositive limits retain all matching chapters for every scope`() {
+        for (limit in listOf(0, -1)) {
+            for (scope in TranslationBatchScope.entries) {
+                val resolved = resolveTranslationBatchChapterIds(
+                    scope = scope,
+                    limit = limit,
+                    chapters = chapters(count = 4),
+                    selectedChapterIds = setOf(1L, 2L, 3L, 4L),
+                    downloadedChapterIds = setOf(1L, 2L, 3L, 4L),
+                    rangeStart = 1,
+                    rangeEnd = 4,
+                )
+
+                resolved shouldBe listOf(1L, 2L, 3L, 4L)
+            }
+        }
     }
 
     private fun chapters(count: Int): List<NovelChapter> {

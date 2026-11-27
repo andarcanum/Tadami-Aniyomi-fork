@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.home
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,7 +66,7 @@ import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
-import eu.kanade.presentation.components.buildAuroraCoverImageRequest
+import eu.kanade.presentation.components.buildAuroraCoverImageRequestOrNull
 import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
@@ -244,17 +245,28 @@ internal fun HeroSection(
         val heroContext = LocalContext.current
         val heroCoverReloadTick = rememberCoverReloadTick()
         val heroCoverRequest = remember(heroContext, hero.coverData, heroCoverReloadTick) {
-            buildAuroraCoverImageRequest(heroContext, hero.coverData)
+            buildAuroraCoverImageRequestOrNull(heroContext, hero.coverData)
         }
-        AsyncImage(
-            model = heroCoverRequest,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            colorFilter = rememberAuroraPosterColorFilter(),
-            modifier = Modifier.fillMaxSize(),
-            error = fallbackPainter,
-            fallback = fallbackPainter,
-        )
+        val posterColorFilter = rememberAuroraPosterColorFilter()
+        if (heroCoverRequest != null) {
+            AsyncImage(
+                model = heroCoverRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                colorFilter = posterColorFilter,
+                modifier = Modifier.fillMaxSize(),
+                error = fallbackPainter,
+                fallback = fallbackPainter,
+            )
+        } else {
+            Image(
+                painter = fallbackPainter,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                colorFilter = posterColorFilter,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Box(Modifier.fillMaxSize().background(visuals.overlayGradient))
         Box(Modifier.fillMaxSize().background(visuals.readabilityScrim))
 
@@ -579,17 +591,28 @@ internal fun HomeHubRecentPosterCard(
                 val posterContext = LocalContext.current
                 val posterCoverReloadTick = rememberCoverReloadTick()
                 val posterCoverRequest = remember(posterContext, coverData, posterCoverReloadTick) {
-                    buildAuroraCoverImageRequest(posterContext, coverData)
+                    buildAuroraCoverImageRequestOrNull(posterContext, coverData)
                 }
-                AsyncImage(
-                    model = posterCoverRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    colorFilter = rememberAuroraPosterColorFilter(),
-                    modifier = Modifier.fillMaxSize(),
-                    error = fallbackPainter,
-                    fallback = fallbackPainter,
-                )
+                val posterColorFilter = rememberAuroraPosterColorFilter()
+                if (posterCoverRequest != null) {
+                    AsyncImage(
+                        model = posterCoverRequest,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        colorFilter = posterColorFilter,
+                        modifier = Modifier.fillMaxSize(),
+                        error = fallbackPainter,
+                        fallback = fallbackPainter,
+                    )
+                } else {
+                    Image(
+                        painter = fallbackPainter,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        colorFilter = posterColorFilter,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
 
             Spacer(Modifier.height(posterSpec.textTopSpacingDp.dp))

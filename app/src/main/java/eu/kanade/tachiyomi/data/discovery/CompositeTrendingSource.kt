@@ -20,6 +20,7 @@ class CompositeTrendingSource(
     private val isRussianLocaleProvider: () -> Boolean = {
         java.util.Locale.getDefault().language.equals("ru", ignoreCase = true)
     },
+    private val nsfwFilterProvider: () -> Boolean = ::discoveryNsfwFilterEnabled,
     private val translationServiceProvider: () -> GoogleTranslationService? = {
         try {
             Injekt.get<GoogleTranslationService>()
@@ -48,15 +49,36 @@ class CompositeTrendingSource(
                 "anilist" to suspend { anilist.fetch(mediaType, season, sort, page, releaseStatuses) },
             )
             DiscoveryMediaType.NOVEL -> listOf(
+                "shikimori" to suspend { shikimori.fetch(mediaType, season, sort, page, releaseStatuses) },
                 "anilist" to suspend { anilist.fetch(mediaType, season, sort, page, releaseStatuses) },
             )
         }
-        val merged = fetchMerged(providers.take(2), mediaType)
+        val primary = providers.take(2)
+        val fallback = providers.drop(2)
+        var primaryError: Exception? = null
+        val merged = try {
+            fetchMerged(primary, mediaType)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            primaryError = e
+            emptyList()
+        }
         if (merged.isNotEmpty()) return merged
-        return fetchWithFallback(providers.drop(2), mediaType)
+        if (fallback.isEmpty()) {
+            primaryError?.let { throw it }
+            return emptyList()
+        }
+        return try {
+            fetchWithFallback(fallback, mediaType)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw primaryError ?: e
+        }
     }
 
-    /** Мерж топ-2 провайдеров: primary-first, дедуп по cleanTitle, кап 50; ошибки — пустой вклад. */
+    /** Мерж топ-2 провайдеров: primary-first, дедуп по cleanTitle, кап 50; при падении всех — проброс ошибки. */
     private suspend fun fetchMerged(
         providers: List<Pair<String, suspend () -> List<DiscoveryTrendingItem>>>,
         mediaType: DiscoveryMediaType,
@@ -64,7 +86,7 @@ class CompositeTrendingSource(
         val jobs = providers.map { (name, action) ->
             async {
                 try {
-                    action()
+                    Result.success(action())
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -72,22 +94,31 @@ class CompositeTrendingSource(
                         "[CompositeTrending] failed: provider=" + name + " media=" + mediaType + " error=" +
                             e.message
                     }
-                    emptyList()
+                    Result.failure(e)
                 }
             }
         }
-        val results = jobs.awaitAll()
+        val outcomes = jobs.awaitAll()
+        if (outcomes.isNotEmpty() && outcomes.all { it.isFailure }) {
+            throw outcomes.firstNotNullOfOrNull { it.exceptionOrNull() }
+                ?: IllegalStateException("All trending providers failed")
+        }
         val seen = mutableSetOf<String>()
-        results.flatten().filter { it.cleanTitle.isNotBlank() && seen.add(it.cleanTitle) }.take(50)
+        outcomes.flatMap { it.getOrDefault(emptyList()) }
+            .filter { it.cleanTitle.isNotBlank() && seen.add(it.cleanTitle) }
+            .take(50)
     }
 
     private suspend fun fetchWithFallback(
         providers: List<Pair<String, suspend () -> List<DiscoveryTrendingItem>>>,
         mediaType: DiscoveryMediaType,
     ): List<DiscoveryTrendingItem> {
+        var anySuccess = false
+        var lastError: Exception? = null
         for ((name, action) in providers) {
             try {
                 val results = action()
+                anySuccess = true
                 if (results.isNotEmpty()) {
                     logcat { "[CompositeTrending] $mediaType: provider '$name' returned ${results.size} items" }
                     return results
@@ -95,9 +126,11 @@ class CompositeTrendingSource(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                lastError = e
                 logcat { "[CompositeTrending] $mediaType: provider '$name' failed: ${e.message}" }
             }
         }
+        if (!anySuccess && lastError != null) throw lastError
         return emptyList()
     }
 
@@ -107,28 +140,58 @@ class CompositeTrendingSource(
         sort: TrendSort,
         page: Int,
         releaseStatuses: Set<DiscoveryReleaseStatus>,
+    ): List<DiscoveryTrendingItem> = fetchByGenres(
+        mediaType = mediaType,
+        genres = genres,
+        sort = sort,
+        page = page,
+        releaseStatuses = releaseStatuses,
+        matchMode = RequiredMatchMode.ANY,
+    )
+
+    override suspend fun fetchByGenres(
+        mediaType: DiscoveryMediaType,
+        genres: List<String>,
+        sort: TrendSort,
+        page: Int,
+        releaseStatuses: Set<DiscoveryReleaseStatus>,
+        matchMode: RequiredMatchMode,
     ): List<DiscoveryTrendingItem> {
         val providers: List<Pair<String, suspend () -> List<DiscoveryTrendingItem>>> = when (mediaType) {
             DiscoveryMediaType.ANIME -> listOf(
-                "shikimori" to suspend { shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
-                "anilist" to suspend { anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
+                "shikimori" to suspend {
+                    shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
+                "anilist" to suspend {
+                    anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
             )
             // Жанровой цепочкой MangaDex не владеет (fetchByGenres игнорировал жанры и
             // возвращал популярность) — только реально фильтрующие провайдеры.
             DiscoveryMediaType.MANGA -> listOf(
-                "shikimori" to suspend { shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
-                "anilist" to suspend { anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
+                "shikimori" to suspend {
+                    shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
+                "anilist" to suspend {
+                    anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
             )
             DiscoveryMediaType.NOVEL -> listOf(
-                "anilist" to suspend { anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses) },
+                "shikimori" to suspend {
+                    shikimori.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
+                "anilist" to suspend {
+                    anilist.fetchByGenres(mediaType, genres, sort, page, releaseStatuses, matchMode)
+                },
             )
         }
         return fetchWithFallback(providers, mediaType)
     }
 
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
-        val cacheKey = "${mediaType.key}:${normalizeDiscoveryTitle(title)}"
-        globalMetaCache.get(cacheKey)?.let { return it }
+        val filterNsfw = nsfwFilterProvider()
+        val cacheKey = DiscoveryMetadataCacheKey(mediaType, normalizeDiscoveryTitle(title), filterNsfw)
+        globalMetaCache.get(cacheKey)?.let { return it.takeIf { nsfwFilterProvider() == filterNsfw } }
 
         val isRu = isRussianLocaleProvider()
         val providers: List<Pair<String, suspend () -> DiscoveryMeta?>> = when (mediaType) {
@@ -150,14 +213,22 @@ class CompositeTrendingSource(
                     "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
                 )
             }
-            // Shikimori для NOVEL всегда null (нет ranobe в meta-поиске) — не тратим вызов.
-            DiscoveryMediaType.NOVEL -> listOf(
-                "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
-            )
+            DiscoveryMediaType.NOVEL -> if (isRu) {
+                listOf(
+                    "shikimori" to suspend { shikimori.fetchMeta(title, mediaType) },
+                    "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
+                )
+            } else {
+                listOf(
+                    "anilist" to suspend { anilist.fetchMeta(title, mediaType) },
+                    "shikimori" to suspend { shikimori.fetchMeta(title, mediaType) },
+                )
+            }
         }
         for ((name, action) in providers) {
             try {
                 val meta = action()
+                if (nsfwFilterProvider() != filterNsfw) return null
                 if (meta != null && (!meta.description.isNullOrBlank() || meta.genres.isNotEmpty())) {
                     val resolvedMeta = if (isRu && !meta.description.isNullOrBlank() &&
                         !hasCyrillic(meta.description)
@@ -173,6 +244,7 @@ class CompositeTrendingSource(
                     } else {
                         meta
                     }
+                    if (nsfwFilterProvider() != filterNsfw) return null
                     globalMetaCache.put(cacheKey, resolvedMeta)
                     return resolvedMeta
                 }
@@ -188,11 +260,15 @@ class CompositeTrendingSource(
     private fun hasCyrillic(text: String): Boolean = cyrillicRegex.containsMatchIn(text)
 
     companion object {
-        private val globalMetaCache = DiscoveryLruCache<String, DiscoveryMeta>(100)
+        private val globalMetaCache = DiscoveryLruCache<DiscoveryMetadataCacheKey, DiscoveryMeta>(100)
         private val cyrillicRegex = Regex("[а-яА-ЯёЁ]")
 
         fun getCachedMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
-            val cacheKey = "${mediaType.key}:${normalizeDiscoveryTitle(title)}"
+            val cacheKey = DiscoveryMetadataCacheKey(
+                mediaType,
+                normalizeDiscoveryTitle(title),
+                discoveryNsfwFilterEnabled(),
+            )
             return globalMetaCache.get(cacheKey)
         }
     }

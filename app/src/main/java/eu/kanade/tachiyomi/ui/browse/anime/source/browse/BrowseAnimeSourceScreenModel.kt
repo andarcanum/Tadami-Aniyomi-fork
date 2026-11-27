@@ -282,7 +282,8 @@ class BrowseAnimeSourceScreenModel(
     // BRM-8: was subscribing to the WHOLE library and filtering in memory (manga etalon) -
     // source-scoped interactor instead.
     val favoriteAnimeUrls = getAnimeFavorites.subscribe(sourceId)
-        .map { favorites -> favorites.map { it.url }.toSet() }
+        .map { favorites -> favorites.mapTo(HashSet(favorites.size)) { it.url } }
+        .distinctUntilChanged()
         .stateIn(screenModelScope, SharingStarted.Lazily, emptySet())
 
     /**
@@ -295,6 +296,7 @@ class BrowseAnimeSourceScreenModel(
                 PagingConfig(
                     pageSize = 25,
                     initialLoadSize = 25,
+                    prefetchDistance = 6,
                 ),
             ) {
                 getRemoteAnime.subscribe(sourceId, listing.query ?: "", listing.filters)
@@ -314,8 +316,11 @@ class BrowseAnimeSourceScreenModel(
                     // BRA-4 (РЕШ-10 port): the pref was snapshotted once in the constructor -
                     // toggling the setting did not affect the open browse screen. Read it live
                     // per emission (manga etalon).
-                    val hideLibraryItems = sourcePreferences.hideInAnimeLibraryItems().get()
-                    pagingData.filter { !hideLibraryItems || !it.favorite }
+                    if (sourcePreferences.hideInAnimeLibraryItems().get()) {
+                        pagingData.filter { !it.favorite }
+                    } else {
+                        pagingData
+                    }
                 }
                 .cachedIn(ioCoroutineScope)
         }

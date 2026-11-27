@@ -1,28 +1,56 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.autoscroll
 
-import android.os.CountDownTimer
 import android.os.SystemClock
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.system.logcat
 
 /**
- * Auto-scroll manager for [PagerViewer] that uses a [CountDownTimer] to advance pages
- * at regular intervals based on the configured speed.
+ * Auto-scroll manager for [PagerViewer] that advances pages at regular intervals based on
+ * the configured speed using a coroutine loop.
+ *
+ * Unlike [android.os.CountDownTimer] (which triggers `onTick` immediately at `t = 0`), this
+ * implementation always waits for the full page delay before advancing, waits for the current
+ * page to finish loading before turning it, and notifies [onReachedEnd] when there are no more
+ * pages or chapters ahead.
  *
  * @property viewer The [PagerViewer] instance to control.
  */
 class PagerAutoScrollManager(
     private val viewer: PagerViewer,
+    dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    private val clockMs: () -> Long = SystemClock::elapsedRealtime,
 ) : AutoScrollManager {
+
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     private val _state = MutableStateFlow(AutoScrollState())
     override val state: StateFlow<AutoScrollState> = _state.asStateFlow()
 
-    private var countDownTimer: CountDownTimer? = null
+    override val isRunning: Boolean
+        get() = state.value.isActive &&
+            !state.value.isPaused &&
+            state.value.cooldownUntilMs <= clockMs()
+
+    /**
+     * Invoked when the manager stops itself after reaching the end of readable content,
+     * allowing the viewer to sync UI state.
+     */
+    var onReachedEnd: (() -> Unit)? = null
+
+    private var scrollJob: Job? = null
     private var cooldownUntilMs: Long = 0L
 
     /**
@@ -32,7 +60,7 @@ class PagerAutoScrollManager(
      * @param speed The speed value (1-100).
      * @return The delay in milliseconds before advancing to the next page.
      */
-    private fun calculatePageDelay(speed: Int): Long {
+    internal fun calculatePageDelay(speed: Int): Long {
         // Map speed (1-100) to delay (10000ms - 2000ms)
         // Speed 1 = 10000ms (10s, very slow), Speed 50 = 6000ms (6s, medium)
         // Speed 100 = 2000ms (2s, fast)
@@ -41,14 +69,14 @@ class PagerAutoScrollManager(
     }
 
     override fun setCooldown(delayMs: Long) {
-        cooldownUntilMs = SystemClock.elapsedRealtime() + delayMs
-        _state.update { it.copy(cooldownUntilMs = cooldownUntilMs) }
-
         if (!_state.value.isActive || _state.value.isPaused) {
             return
         }
 
-        startCooldownTimer(delayMs)
+        val safeDelay = delayMs.coerceAtLeast(0L)
+        cooldownUntilMs = clockMs() + safeDelay
+        _state.update { it.copy(cooldownUntilMs = cooldownUntilMs) }
+        scheduleLoop(initialCooldownMs = safeDelay)
     }
 
     override fun start(speed: Int?) {
@@ -56,14 +84,10 @@ class PagerAutoScrollManager(
             _state.update { it.copy(speed = speed.coerceIn(1, 100)) }
         }
 
-        if (_state.value.isActive) {
-            // Already active, just restart timer with potentially new speed
-            stopTimer()
-        }
-
+        stopTimer()
         cooldownUntilMs = 0L
         _state.update { it.copy(isActive = true, isPaused = false, cooldownUntilMs = 0L) }
-        startPageTimer()
+        scheduleLoop(initialCooldownMs = 0L)
         logcat { "PagerAutoScrollManager started with speed ${_state.value.speed}" }
     }
 
@@ -86,12 +110,12 @@ class PagerAutoScrollManager(
         if (!_state.value.isActive || !_state.value.isPaused) return
 
         _state.update { it.copy(isPaused = false) }
-        val remainingCooldown = (cooldownUntilMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-        if (remainingCooldown > 0L) {
-            startCooldownTimer(remainingCooldown)
-        } else {
-            startPageTimer()
+        val remainingCooldown = (cooldownUntilMs - clockMs()).coerceAtLeast(0L)
+        if (remainingCooldown == 0L && cooldownUntilMs != 0L) {
+            cooldownUntilMs = 0L
+            _state.update { it.copy(cooldownUntilMs = 0L) }
         }
+        scheduleLoop(initialCooldownMs = remainingCooldown)
         logcat { "PagerAutoScrollManager resumed" }
     }
 
@@ -105,70 +129,83 @@ class PagerAutoScrollManager(
 
     override fun setSpeed(speed: Int) {
         val clampedSpeed = speed.coerceIn(1, 100)
+        if (_state.value.speed == clampedSpeed) return
         _state.update { it.copy(speed = clampedSpeed) }
 
-        // Restart timer if currently running to apply new speed
+        // If actively running (not in cooldown), restart the delay with the new speed
+        // without immediately skipping the current page.
         if (isRunning) {
-            stopTimer()
-            startPageTimer()
+            scheduleLoop(initialCooldownMs = 0L)
         }
         logcat { "PagerAutoScrollManager speed set to $clampedSpeed" }
     }
 
     override fun destroy() {
         stop()
+        scope.cancel()
     }
 
-    /**
-     * Starts the recurring countdown timer with the current speed setting.
-     */
-    private fun startPageTimer() {
+    private fun scheduleLoop(initialCooldownMs: Long) {
         stopTimer()
-        val pageDelay = calculatePageDelay(_state.value.speed)
-
-        countDownTimer = object : CountDownTimer(Long.MAX_VALUE, pageDelay) {
-            override fun onTick(millisUntilFinished: Long) {
-                viewer.moveToNext()
-            }
-
-            override fun onFinish() {
-                // Timer finished (shouldn't happen with Long.MAX_VALUE)
-                // Restart if still active
-                if (_state.value.isActive && !_state.value.isPaused) {
-                    startPageTimer()
-                }
-            }
-        }.start()
-    }
-
-    /**
-     * Starts a one-shot timer that resumes auto-scroll after a touch cooldown.
-     */
-    private fun startCooldownTimer(delayMs: Long) {
-        stopTimer()
-
-        countDownTimer = object : CountDownTimer(delayMs, delayMs) {
-            override fun onTick(millisUntilFinished: Long) = Unit
-
-            override fun onFinish() {
-                if (!_state.value.isActive || _state.value.isPaused) return
-
+        scrollJob = scope.launch {
+            if (initialCooldownMs > 0L) {
+                delay(initialCooldownMs)
+                if (!isActive || !_state.value.isActive || _state.value.isPaused) return@launch
                 cooldownUntilMs = 0L
                 _state.update { it.copy(cooldownUntilMs = 0L) }
+            }
+
+            while (isActive && _state.value.isActive && !_state.value.isPaused) {
+                if (viewer.isAtAutoScrollEnd()) {
+                    val callback = onReachedEnd
+                    stop()
+                    callback?.invoke()
+                    break
+                }
+
+                delay(calculatePageDelay(_state.value.speed))
+                if (!isActive || !_state.value.isActive || _state.value.isPaused) break
+
+                // Do not flip past a page that is still downloading/decoding.
+                var waitedMs = 0L
+                while (
+                    isActive &&
+                    _state.value.isActive &&
+                    !_state.value.isPaused &&
+                    !viewer.isCurrentPageReady() &&
+                    waitedMs < MAX_READY_WAIT_MS
+                ) {
+                    delay(READY_POLL_INTERVAL_MS)
+                    waitedMs += READY_POLL_INTERVAL_MS
+                }
+                if (!isActive || !_state.value.isActive || _state.value.isPaused) break
+
+                if (viewer.isAtAutoScrollEnd()) {
+                    val callback = onReachedEnd
+                    stop()
+                    callback?.invoke()
+                    break
+                }
+
                 viewer.moveToNext()
 
-                if (_state.value.isActive && !_state.value.isPaused) {
-                    startPageTimer()
+                if (viewer.isAtAutoScrollEnd()) {
+                    val callback = onReachedEnd
+                    stop()
+                    callback?.invoke()
+                    break
                 }
             }
-        }.start()
+        }
     }
 
-    /**
-     * Stops and cleans up the current countdown timer.
-     */
     private fun stopTimer() {
-        countDownTimer?.cancel()
-        countDownTimer = null
+        scrollJob?.cancel()
+        scrollJob = null
+    }
+
+    companion object {
+        private const val READY_POLL_INTERVAL_MS = 250L
+        private const val MAX_READY_WAIT_MS = 15_000L
     }
 }

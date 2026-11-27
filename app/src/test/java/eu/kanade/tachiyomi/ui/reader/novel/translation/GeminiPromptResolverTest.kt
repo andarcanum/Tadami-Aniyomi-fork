@@ -32,13 +32,17 @@ class GeminiPromptResolverTest {
     }
 
     @Test
-    fun `adult prompt ignores family selection`() {
+    fun `adult prompt appends target language override for non russian family`() {
         val resolver = createResolver(adultPromptText = "adult prompt")
 
         resolver.resolveSystemPrompt(
             mode = GeminiPromptMode.ADULT_18,
-            family = NovelTranslationPromptFamily.ENGLISH,
+            family = NovelTranslationPromptFamily.RUSSIAN,
         ) shouldBe "adult prompt"
+        resolver.resolveSystemPrompt(
+            mode = GeminiPromptMode.ADULT_18,
+            family = NovelTranslationPromptFamily.ENGLISH,
+        ) shouldBe "adult prompt" + GeminiPromptResolver.ADULT_NON_RUSSIAN_LANGUAGE_OVERRIDE
     }
 
     private fun createResolver(adultPromptText: String? = null): GeminiPromptResolver {

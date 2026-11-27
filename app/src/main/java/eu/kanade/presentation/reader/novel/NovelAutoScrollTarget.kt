@@ -113,11 +113,13 @@ internal class PageReaderAutoScrollTarget(
     private val pageCount: () -> Int,
     private val characterCount: () -> Int,
     private val onStepPage: suspend (Boolean) -> Unit,
+    private val spreadColumns: () -> Int = { 1 },
 ) : NovelAutoScrollTarget {
 
     override fun isPaginated(): Boolean = true
 
-    override fun canScrollForward(): Boolean = currentPageIndex() < pageCount() - 1
+    override fun canScrollForward(): Boolean =
+        currentPageIndex() + spreadColumns().coerceAtLeast(1) < pageCount()
 
     override suspend fun scrollBy(distancePx: Int): Float = 0f
 

@@ -22,9 +22,11 @@ internal fun buildNovelTranslationUserPrompt(
                 taggedInput
         }
         NovelTranslationPromptFamily.ENGLISH -> {
-            "TRANSLATE from $sourceLang to $targetLang.\n" +
-                "Inject soul into the text. Make the reader believe this was written by a native English author.\n\n" +
-                "Use popular genre terminology and natural English wording where appropriate. " +
+            val targetLabel = targetLang.trim().ifBlank { "English" }
+            "TRANSLATE from $sourceLang to $targetLabel.\n" +
+                "Inject soul into the text. Make the reader believe this was written by a native " +
+                "$targetLabel author.\n\n" +
+                "Use popular genre terminology and natural $targetLabel wording where appropriate. " +
                 "Make it sound like high-quality fiction.\n\n" +
                 "1. Keep the XML structure exactly as is (<s i='...'>...</s>).\n" +
                 "2. Return EXACTLY one <s i='N'>...</s> block for every input block " +

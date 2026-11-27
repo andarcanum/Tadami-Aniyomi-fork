@@ -47,47 +47,63 @@ class GeminiPromptResolver(
                 NovelTranslationPromptFamily.RUSSIAN -> CLASSIC_SYSTEM_PROMPT
                 NovelTranslationPromptFamily.ENGLISH -> CLASSIC_SYSTEM_PROMPT_EN
             }
-            GeminiPromptMode.ADULT_18 -> adultPrompt
+            GeminiPromptMode.ADULT_18 -> adultPromptForFamily(adultPrompt, family)
         }
     }
 
     companion object {
         private const val ADULT_PROMPT_ASSET_PATH = "translation/gemini_prompt_adult_18.txt"
 
+        internal const val ADULT_NON_RUSSIAN_LANGUAGE_OVERRIDE =
+            "\n\n### TARGET LANGUAGE OVERRIDE\n" +
+                "Apply all uncensored literary fidelity and XML formatting rules above, " +
+                "but write the entire translation strictly in the requested target language " +
+                "(not Russian) using natural, idiomatic phrasing for that target language."
+
+        internal fun adultPromptForFamily(
+            baseAdultPrompt: String,
+            family: NovelTranslationPromptFamily,
+        ): String = if (family == NovelTranslationPromptFamily.RUSSIAN) {
+            baseAdultPrompt
+        } else {
+            baseAdultPrompt + ADULT_NON_RUSSIAN_LANGUAGE_OVERRIDE
+        }
+
         internal const val CLASSIC_SYSTEM_PROMPT =
-            "### ROLE\\n" +
-                "You are a professional literary translator for novels and light novels.\\n" +
-                "Your output must read naturally in Russian while preserving tone, intent, and narrative voice.\\n\\n" +
-                "### GOALS\\n" +
-                "1. Preserve meaning, plot details, and character voice.\\n" +
-                "2. Prioritize fluent Russian prose over literal calques.\\n" +
-                "3. Keep terminology consistent across segments.\\n" +
-                "4. Keep honorifics and culture-specific terms only when they are important for context.\\n\\n" +
-                "### STYLE RULES\\n" +
-                "- Prefer idiomatic Russian syntax and punctuation.\\n" +
-                "- Avoid machine-like phrasing and over-literal word order.\\n" +
-                "- Keep dialogue natural and character-appropriate.\\n\\n" +
-                "### OUTPUT FORMAT\\n" +
-                "1. Return ONLY XML tags in the same shape as input: <s i='N'>...</s>.\\n" +
-                "2. No preamble, no explanations, no markdown.\\n" +
+            "### ROLE\n" +
+                "You are a professional literary translator for novels and light novels.\n" +
+                "Your output must read naturally in Russian while preserving tone, intent, and narrative voice.\n\n" +
+                "### GOALS\n" +
+                "1. Preserve meaning, plot details, and character voice.\n" +
+                "2. Prioritize fluent Russian prose over literal calques.\n" +
+                "3. Keep terminology consistent across segments.\n" +
+                "4. Keep honorifics and culture-specific terms only when they are important for context.\n\n" +
+                "### STYLE RULES\n" +
+                "- Prefer idiomatic Russian syntax and punctuation.\n" +
+                "- Avoid machine-like phrasing and over-literal word order.\n" +
+                "- Keep dialogue natural and character-appropriate.\n\n" +
+                "### OUTPUT FORMAT\n" +
+                "1. Return ONLY XML tags in the same shape as input: <s i='N'>...</s>.\n" +
+                "2. No preamble, no explanations, no markdown.\n" +
                 "3. Preserve the same indexes and segment count whenever possible."
 
         internal const val CLASSIC_SYSTEM_PROMPT_EN =
-            "### ROLE\\n" +
-                "You are a professional literary translator for novels and light novels.\\n" +
-                "Your output must read naturally in English while preserving tone, intent, and narrative voice.\\n\\n" +
-                "### GOALS\\n" +
-                "1. Preserve meaning, plot details, and character voice.\\n" +
-                "2. Prioritize fluent English prose over literal calques.\\n" +
-                "3. Keep terminology consistent across segments.\\n" +
-                "4. Keep honorifics and culture-specific terms only when they are important for context.\\n\\n" +
-                "### STYLE RULES\\n" +
-                "- Prefer idiomatic English syntax and punctuation.\\n" +
-                "- Avoid machine-like phrasing and over-literal word order.\\n" +
-                "- Keep dialogue natural and character-appropriate.\\n\\n" +
-                "### OUTPUT FORMAT\\n" +
-                "1. Return ONLY XML tags in the same shape as input: <s i='N'>...</s>.\\n" +
-                "2. No preamble, no explanations, no markdown.\\n" +
+            "### ROLE\n" +
+                "You are a professional literary translator for novels and light novels.\n" +
+                "Your output must read naturally in the requested target language while preserving tone, intent, " +
+                "and narrative voice.\n\n" +
+                "### GOALS\n" +
+                "1. Preserve meaning, plot details, and character voice.\n" +
+                "2. Prioritize fluent prose in the target language over literal calques.\n" +
+                "3. Keep terminology consistent across segments.\n" +
+                "4. Keep honorifics and culture-specific terms only when they are important for context.\n\n" +
+                "### STYLE RULES\n" +
+                "- Prefer idiomatic syntax and punctuation in the target language.\n" +
+                "- Avoid machine-like phrasing and over-literal word order.\n" +
+                "- Keep dialogue natural and character-appropriate.\n\n" +
+                "### OUTPUT FORMAT\n" +
+                "1. Return ONLY XML tags in the same shape as input: <s i='N'>...</s>.\n" +
+                "2. No preamble, no explanations, no markdown.\n" +
                 "3. Preserve the same indexes and segment count whenever possible."
     }
 }

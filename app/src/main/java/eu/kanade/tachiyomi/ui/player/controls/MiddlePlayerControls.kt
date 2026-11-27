@@ -7,13 +7,17 @@ import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -48,11 +52,13 @@ fun MiddlePlayerControls(
     // middle
     isLoading: Boolean,
     isLoadingEpisode: Boolean,
+    bufferingCaption: String? = null,
     controlsShown: Boolean,
     areControlsLocked: Boolean,
     showLoadingCircle: Boolean,
     paused: Boolean,
     gestureSeekAmount: Pair<Int, Int>?,
+    gestureSeekChapterTitle: String? = null,
     onPlayPauseClick: () -> Unit,
 
     // next
@@ -87,22 +93,69 @@ fun MiddlePlayerControls(
         val interaction = remember { MutableInteractionSource() }
         when {
             gestureSeekAmount != null -> {
-                Text(
-                    stringResource(
-                        AYMR.strings.player_gesture_seek_indicator,
-                        if (gestureSeekAmount.second >= 0) '+' else '-',
-                        Utils.prettyTime(abs(gestureSeekAmount.second)),
-                        Utils.prettyTime(gestureSeekAmount.first + gestureSeekAmount.second),
-                    ),
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        shadow = Shadow(Color.Black, blurRadius = 5f),
-                    ),
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        stringResource(
+                            AYMR.strings.player_gesture_seek_indicator,
+                            if (gestureSeekAmount.second >= 0) '+' else '-',
+                            Utils.prettyTime(abs(gestureSeekAmount.second)),
+                            Utils.prettyTime(gestureSeekAmount.first + gestureSeekAmount.second),
+                        ),
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            shadow = Shadow(Color.Black, blurRadius = 5f),
+                        ),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (!gestureSeekChapterTitle.isNullOrBlank()) {
+                        Text(
+                            text = gestureSeekChapterTitle,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White.copy(alpha = 0.92f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                    }
+                }
             }
 
-            (isLoading || isLoadingEpisode) && showLoadingCircle -> CircularProgressIndicator(Modifier.size(96.dp))
+            (isLoading || isLoadingEpisode) && showLoadingCircle -> {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.58f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(38.dp),
+                            strokeWidth = 3.dp,
+                            color = Color.White,
+                        )
+                    }
+                    if (!bufferingCaption.isNullOrBlank()) {
+                        Text(
+                            text = bufferingCaption,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.Black.copy(alpha = 0.58f))
+                                .padding(horizontal = 10.dp, vertical = 3.dp),
+                        )
+                    }
+                }
+            }
             else -> {
                 AnimatedVisibility(
                     visible = controlsShown && !areControlsLocked,

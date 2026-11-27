@@ -64,6 +64,7 @@ object SuggestionCache {
         candidateTitles: List<String> = emptyList(),
         description: String? = null,
         author: String? = null,
+        extraKeys: List<String> = emptyList(),
     ): String {
         val baseKey = "$sourceName:${primaryTitle.lowercase().trim()}:$mediaType"
         val parts = mutableListOf(baseKey)
@@ -79,6 +80,9 @@ object SuggestionCache {
         }
         if (!author.isNullOrBlank()) {
             parts.add("a:" + author.lowercase().trim().hashCode().toString())
+        }
+        if (extraKeys.isNotEmpty()) {
+            extraKeys.filter { it.isNotBlank() }.forEach { parts.add(it.trim()) }
         }
         return parts.joinToString(":")
     }

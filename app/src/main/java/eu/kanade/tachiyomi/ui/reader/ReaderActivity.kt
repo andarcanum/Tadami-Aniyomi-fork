@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ColorMatrix
@@ -15,10 +16,12 @@ import android.graphics.Paint
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.LAYER_TYPE_HARDWARE
+import android.view.View.LAYER_TYPE_NONE
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -36,9 +39,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -66,9 +71,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.google.android.material.transition.platform.MaterialContainerTransform
-import com.hippo.unifile.UniFile
 import com.tadami.aurora.R
 import com.tadami.aurora.databinding.ReaderActivityBinding
 import eu.kanade.core.util.ifMangaSourcesLoaded
@@ -87,11 +90,11 @@ import eu.kanade.presentation.reader.ReadingModeSelectDialog
 import eu.kanade.presentation.reader.appbars.BottomBarButtonFlags
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.components.AutoScrollActionFab
+import eu.kanade.presentation.reader.components.ReaderProgressHairline
 import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialOverlay
 import eu.kanade.presentation.reader.manga.ReaderFinaleOverlay
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.core.common.Constants
-import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
@@ -109,9 +112,12 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderDisplayModeCandidate
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScrubPreviewLoader
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
+import eu.kanade.tachiyomi.ui.reader.viewer.selectScrollBoostModeId
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.hasDisplayCutout
@@ -124,6 +130,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -135,8 +142,6 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
-import tachiyomi.core.common.util.lang.launchNonCancellable
-import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.AchievementProgress
@@ -144,10 +149,10 @@ import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.util.AppHapticsProvider
+import tachiyomi.presentation.core.util.HapticFeedbackMode
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.io.ByteArrayOutputStream
 import tachiyomi.presentation.core.i18n.stringResource as composeStringResource
 
 // Legacy bridge: this activity still hosts the reader while the Compose migration remains partial.
@@ -184,7 +189,7 @@ class ReaderActivity : BaseActivity() {
     private var assistUrl: String? = null
     private var seriesId: Long? = null
 
-    private val hasCutout by lazy { hasDisplayCutout() }
+    private fun hasCutout(): Boolean = hasDisplayCutout()
 
     /**
      * Configuration at reader level, like background color or forced orientation.
@@ -252,30 +257,8 @@ class ReaderActivity : BaseActivity() {
         applyReaderSystemBarIconStyle(viewModel.state.value.menuVisible)
         seriesId = intent.extras?.getLong(Constants.SERIES_EXTRA, -1)?.takeIf { it > 0 }
 
-        if (viewModel.needsInit()) {
-            val manga = intent.extras?.getLong("manga", -1) ?: -1L
-            val chapter = intent.extras?.getLong("chapter", -1) ?: -1L
-            if (manga == -1L || chapter == -1L) {
-                finish()
-                return
-            }
-            NotificationReceiver.dismissNotification(
-                this,
-                manga.hashCode(),
-                Notifications.ID_NEW_CHAPTERS,
-            )
-
-            lifecycleScope.launchNonCancellable {
-                val initResult = viewModel.init(manga, chapter, seriesId)
-                if (!initResult.getOrDefault(false)) {
-                    val exception = initResult.exceptionOrNull() ?: IllegalStateException(
-                        "Unknown err",
-                    )
-                    withUIContext {
-                        setInitialChapterError(exception)
-                    }
-                }
-            }
+        if (viewModel.needsInit() && !initReaderFromIntent(intent)) {
+            return
         }
 
         config = ReaderConfig()
@@ -294,9 +277,9 @@ class ReaderActivity : BaseActivity() {
             .launchIn(lifecycleScope)
 
         viewModel.state
-            .map { it.manga }
+            .map { it.sessionId to it.manga }
             .distinctUntilChanged()
-            .filterNotNull()
+            .filter { it.second != null }
             .onEach { updateViewer() }
             .launchIn(lifecycleScope)
 
@@ -336,12 +319,62 @@ class ReaderActivity : BaseActivity() {
                     is ReaderViewModel.Event.CopyImage -> {
                         onCopyImageResult(event.uri)
                     }
+                    is ReaderViewModel.Event.InitialLoadError -> {
+                        setInitialChapterError(event.exception)
+                    }
                     is ReaderViewModel.Event.SetCoverResult -> {
                         onSetAsCoverResult(event.result)
                     }
                 }
             }
             .launchIn(lifecycleScope)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val newMangaId = intent.extras?.getLong("manga", -1) ?: -1L
+        val newChapterId = intent.extras?.getLong("chapter", -1) ?: -1L
+        if (newMangaId == -1L || newChapterId == -1L) return
+
+        val newSeriesId = intent.extras?.getLong(Constants.SERIES_EXTRA, -1)?.takeIf { it > 0 }
+        val currentMangaId = viewModel.manga?.id
+        val currentChapterId = viewModel.state.value.currentChapter?.chapter?.id
+        if (newMangaId == currentMangaId && newChapterId == currentChapterId && newSeriesId == seriesId) {
+            setIntent(intent)
+            return
+        }
+
+        setIntent(intent)
+        (viewModel.state.value.viewer as? WebtoonViewer)?.let(viewModel::saveWebtoonScrollProgressOnExit)
+        viewModel.state.value.viewer?.destroy()
+        binding.viewerContainer.removeAllViews()
+        viewModel.onViewerLoaded(null)
+        loadingIndicator?.let { binding.readerContainer.removeView(it) }
+        loadingIndicator = null
+        setWindowHdrEnabled(false)
+        assistUrl = null
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache.clear()
+
+        seriesId = newSeriesId
+        viewModel.resetForNewIntent()
+        initReaderFromIntent(intent)
+    }
+
+    private fun initReaderFromIntent(targetIntent: Intent): Boolean {
+        val manga = targetIntent.extras?.getLong("manga", -1) ?: -1L
+        val chapter = targetIntent.extras?.getLong("chapter", -1) ?: -1L
+        if (manga == -1L || chapter == -1L) {
+            finish()
+            return false
+        }
+        NotificationReceiver.dismissNotification(
+            this,
+            manga.hashCode(),
+            Notifications.ID_NEW_CHAPTERS,
+        )
+
+        viewModel.startInit(manga, chapter, seriesId)
+        return true
     }
 
     /**
@@ -390,17 +423,43 @@ class ReaderActivity : BaseActivity() {
     override fun onDestroy() {
         // Allow achievement notifications when exiting reader
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(false)
+        restoreDisplayMode()
         super.onDestroy()
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.clear()
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache.clear()
         viewModel.state.value.viewer?.destroy()
+        setWindowHdrEnabled(false)
         config = null
         menuToggleToast?.cancel()
         readingModeToast?.cancel()
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        viewModel.state.value.viewer?.trimMemory(level)
+        eu.kanade.tachiyomi.ui.reader.viewer.ReaderPreviewCache.trimMemory(level)
+    }
+
+    internal fun setWindowHdrEnabled(enabled: Boolean) {
+        val targetMode = if (enabled) {
+            ActivityInfo.COLOR_MODE_HDR
+        } else {
+            ActivityInfo.COLOR_MODE_DEFAULT
+        }
+        if (window.colorMode != targetMode) {
+            window.colorMode = targetMode
+        }
+    }
+
     override fun onPause() {
-        (viewModel.state.value.viewer as? WebtoonViewer)?.let(viewModel::saveWebtoonScrollProgressOnExit)
+        val viewer = viewModel.state.value.viewer
+        (viewer as? WebtoonViewer)?.let {
+            viewModel.saveWebtoonScrollProgressOnExit(it)
+            it.pausePendingRelativeRestore()
+        }
         viewModel.flushReadTimer()
         viewModel.pauseAutoScroll()
+        viewer?.stopAutoScroll()
         restoreDisplayMode()
         super.onPause()
     }
@@ -413,36 +472,111 @@ class ReaderActivity : BaseActivity() {
         super.onResume()
         viewModel.restartReadTimer()
         setMenuVisibility(viewModel.state.value.menuVisible)
-        requestMaxRefreshRate()
+        (viewModel.state.value.viewer as? WebtoonViewer)?.resumePendingRelativeRestore()
+        configureRefreshRatePolicy()
     }
 
     /**
-     * Reading is motion-sensitive: OEM refresh-rate policies often cap the app below the panel
-     * maximum, which reads as stepping during fling deceleration (measured on device: bimodal
-     * 11.1/16.7 ms frame deltas while capped vs steady 8.3 ms at the maximum rate). While the
-     * reader is in the foreground prefer the fastest mode with the same physical size; the mode is
-     * picked once per resume, so no switch happens mid-gesture.
+     * Configures refresh-rate policy for the active reading session without locking high refresh
+     * rates while the user is stationary:
+     * - API 35+: enables touch refresh-rate boost so Android Adaptive Refresh Rate (ARR) drops
+     *   to low-power LTPO rates between interactions and boosts on touch/scroll.
+     * - API 31–34: avoids pinning a fixed display mode here; [onWebtoonScrollActive] dynamically
+     *   boosts only to seamless alternatives while actively scrolling/flinging in Webtoon mode.
+     * - API < 31 / E-Ink: leaves display mode untouched.
      */
-    private fun requestMaxRefreshRate() {
-        if (isEInkMode()) return
-        val currentDisplay = display ?: return
-        val current = currentDisplay.mode
-        val fastest = currentDisplay.supportedModes
-            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
-            .maxByOrNull { it.refreshRate }
-            ?: return
-        if (fastest.modeId == current.modeId) return
-        savedDisplayModeId = current.modeId
-        window.attributes = window.attributes.apply { preferredDisplayModeId = fastest.modeId }
+    private fun configureRefreshRatePolicy() {
+        if (isEInkMode()) {
+            restoreDisplayMode()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            val attrs = window.attributes
+            if (!hasSavedFrameRateBoostOnTouch) {
+                savedFrameRateBoostOnTouch = attrs.frameRateBoostOnTouchEnabled
+                hasSavedFrameRateBoostOnTouch = true
+            }
+            if (!attrs.frameRateBoostOnTouchEnabled) {
+                window.attributes = attrs.apply { frameRateBoostOnTouchEnabled = true }
+            }
+        }
+    }
+
+    fun onWebtoonScrollActive(active: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+        ) {
+            return
+        }
+        if (::binding.isInitialized) {
+            binding.readerContainer.removeCallbacks(idleRefreshRestoreRunnable)
+        }
+        if (active) {
+            if (isEInkMode()) return
+            val currentDisplay = display ?: return
+            val current = currentDisplay.mode ?: return
+            val supportedModes = currentDisplay.supportedModes.map { mode ->
+                ReaderDisplayModeCandidate(
+                    modeId = mode.modeId,
+                    physicalWidth = mode.physicalWidth,
+                    physicalHeight = mode.physicalHeight,
+                    refreshRate = mode.refreshRate,
+                    alternativeRefreshRates = mode.alternativeRefreshRates,
+                )
+            }
+            val targetModeId = selectScrollBoostModeId(
+                sdkInt = Build.VERSION.SDK_INT,
+                currentModeId = current.modeId,
+                currentWidth = current.physicalWidth,
+                currentHeight = current.physicalHeight,
+                currentRefreshRate = current.refreshRate,
+                alternativeRefreshRates = current.alternativeRefreshRates,
+                supportedModes = supportedModes,
+            ) ?: return
+            if (window.attributes.preferredDisplayModeId == targetModeId) return
+            if (!hasSavedDisplayMode) {
+                savedDisplayModeId = window.attributes.preferredDisplayModeId
+                hasSavedDisplayMode = true
+            }
+            window.attributes = window.attributes.apply { preferredDisplayModeId = targetModeId }
+        } else if (hasSavedDisplayMode && ::binding.isInitialized) {
+            binding.readerContainer.postDelayed(idleRefreshRestoreRunnable, IDLE_REFRESH_RESTORE_DELAY_MS)
+        }
+    }
+
+    private fun restoreWebtoonDisplayMode() {
+        if (::binding.isInitialized) {
+            binding.readerContainer.removeCallbacks(idleRefreshRestoreRunnable)
+        }
+        if (hasSavedDisplayMode) {
+            window.attributes = window.attributes.apply { preferredDisplayModeId = savedDisplayModeId }
+            savedDisplayModeId = 0
+            hasSavedDisplayMode = false
+        }
     }
 
     private fun restoreDisplayMode() {
-        if (savedDisplayModeId == 0) return
-        window.attributes = window.attributes.apply { preferredDisplayModeId = savedDisplayModeId }
-        savedDisplayModeId = 0
+        restoreWebtoonDisplayMode()
+        if (hasSavedFrameRateBoostOnTouch) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                if (window.attributes.frameRateBoostOnTouchEnabled != savedFrameRateBoostOnTouch) {
+                    window.attributes = window.attributes.apply {
+                        frameRateBoostOnTouchEnabled = savedFrameRateBoostOnTouch
+                    }
+                }
+            }
+            savedFrameRateBoostOnTouch = false
+            hasSavedFrameRateBoostOnTouch = false
+        }
     }
 
     private var savedDisplayModeId = 0
+    private var hasSavedDisplayMode = false
+    private var savedFrameRateBoostOnTouch = false
+    private var hasSavedFrameRateBoostOnTouch = false
+    private val idleRefreshRestoreRunnable = Runnable {
+        restoreDisplayMode()
+    }
 
     /**
      * Called when the window focus changes. It sets the menu visibility to the last known state
@@ -559,11 +693,13 @@ class ReaderActivity : BaseActivity() {
                     .collectAsStateWithLifecycle()
 
                 if (!state.menuVisible && showPageNumber) {
-                    PageIndicatorText(
-                        currentPage = state.currentPage,
-                        totalPages = state.totalPages,
-                        estimatedMinutesLeft = if (showReadingTimeLeft) state.estimatedMinutesLeft else null,
-                    )
+                    Box(modifier = Modifier.navigationBarsPadding()) {
+                        PageIndicatorText(
+                            currentPage = state.currentPage,
+                            totalPages = state.totalPages,
+                            estimatedMinutesLeft = if (showReadingTimeLeft) state.estimatedMinutesLeft else null,
+                        )
+                    }
                 }
             }
         }
@@ -580,7 +716,7 @@ class ReaderActivity : BaseActivity() {
                 val settingsScreenModel = remember {
                     ReaderSettingsScreenModel(
                         readerState = viewModel.state,
-                        hasDisplayCutout = hasCutout,
+                        hasDisplayCutout = hasCutout(),
                         onChangeReadingMode = viewModel::setReadingModePreference,
                         onChangeOrientation = viewModel::setOrientationPreference,
                         onSetSeriesViewerOverride = viewModel::setSeriesViewerOverrideEnabled,
@@ -636,6 +772,21 @@ class ReaderActivity : BaseActivity() {
                     val navigatorShowTickMarks by readerPreferences
                         .navigatorShowTickMarks()
                         .collectAsStateWithLifecycle()
+                    val navigatorScrubPreview by readerPreferences
+                        .navigatorScrubPreview()
+                        .collectAsStateWithLifecycle()
+                    val showThinProgressBar by readerPreferences
+                        .showThinProgressBar()
+                        .collectAsStateWithLifecycle()
+                    val loadScrubPreview: suspend (Int) -> Bitmap? = remember(state.currentChapter, cropEnabled) {
+                        val pages = state.currentChapter?.pages
+                        { pageIndex ->
+                            ReaderScrubPreviewLoader.loadPreview(
+                                page = pages?.getOrNull(pageIndex),
+                                cropBorders = cropEnabled,
+                            )
+                        }
+                    }
 
                     // Bottom bar button visibility preferences
                     val showBottomBarReadingMode by readerPreferences
@@ -674,20 +825,31 @@ class ReaderActivity : BaseActivity() {
                     val pageActionLabelColor by pageActionLabelColorPref.collectAsStateWithLifecycle()
                     val bottomBarPosition by readerPreferences.bottomBarPosition().collectAsStateWithLifecycle()
 
-                    // Auto-scroll effect - start/stop based on state
-                    LaunchedEffect(state.autoScrollEnabled, state.autoScrollSpeed, state.viewer) {
-                        val viewer = state.viewer
-                        if (viewer != null && state.autoScrollEnabled) {
+                    // Auto-scroll effect - start/stop based on enabled state or viewer change
+                    LaunchedEffect(state.autoScrollEnabled, state.viewer) {
+                        val viewer = state.viewer ?: return@LaunchedEffect
+                        if (state.autoScrollEnabled) {
                             // Hide menu when auto-scroll starts
                             setMenuVisibility(false)
                             when (viewer) {
                                 is PagerViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
                                 is WebtoonViewer -> viewer.startAutoScroll(state.autoScrollSpeed)
                             }
-                        } else if (viewer != null) {
+                        } else {
                             when (viewer) {
                                 is PagerViewer -> viewer.stopAutoScroll()
                                 is WebtoonViewer -> viewer.stopAutoScroll()
+                            }
+                        }
+                    }
+
+                    // Apply auto-scroll speed updates live without closing the menu or restarting
+                    LaunchedEffect(state.autoScrollSpeed, state.viewer) {
+                        val viewer = state.viewer ?: return@LaunchedEffect
+                        if (state.autoScrollEnabled) {
+                            when (viewer) {
+                                is PagerViewer -> viewer.setAutoScrollSpeed(state.autoScrollSpeed)
+                                is WebtoonViewer -> viewer.setAutoScrollSpeed(state.autoScrollSpeed)
                             }
                         }
                     }
@@ -780,6 +942,8 @@ class ReaderActivity : BaseActivity() {
                         navigatorHeight = navigatorHeight,
                         navigatorCornerRadius = navigatorCornerRadius,
                         navigatorShowTickMarks = navigatorShowTickMarks,
+                        navigatorShowScrubPreview = navigatorScrubPreview,
+                        loadScrubPreview = loadScrubPreview,
                     )
 
                     if (flashOnPageChange && eInkProfile.isEnabled) {
@@ -931,7 +1095,6 @@ class ReaderActivity : BaseActivity() {
                                                 seriesId,
                                             ),
                                         )
-                                        finish()
                                     }
                                 }
                             }
@@ -967,10 +1130,27 @@ class ReaderActivity : BaseActivity() {
                             setMenuVisibility(true)
                             viewModel.toggleAutoScrollExpand()
                         },
+                        speed = state.autoScrollSpeed,
+                        onSpeedChange = viewModel::setAutoScrollSpeed,
+                        isPagerMode = state.viewer is PagerViewer,
+                        dimWhenActive = true,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
+                            .navigationBarsPadding()
+                            .displayCutoutPadding()
                             .padding(16.dp),
                     )
+                    if (!state.menuVisible && showThinProgressBar) {
+                        ReaderProgressHairline(
+                            currentPage = state.currentPage,
+                            totalPages = state.totalPages,
+                            isRtl = state.viewer is R2LPagerViewer,
+                            sliderColor = navigatorSliderColor,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding(),
+                        )
+                    }
                 }
             }
         }
@@ -1027,23 +1207,17 @@ class ReaderActivity : BaseActivity() {
         if (prevViewer != null) {
             prevViewer.destroy()
             binding.viewerContainer.removeAllViews()
+            if (prevViewer is WebtoonViewer && newViewer !is WebtoonViewer) {
+                restoreWebtoonDisplayMode()
+            }
         }
+        setWindowHdrEnabled(false)
         viewModel.onViewerLoaded(newViewer)
         updateViewerInset(
             readerPreferences.fullscreen().get(),
             readerPreferences.cutoutShort().get(),
         )
 
-        // Touch cooldown: pause auto-scroll briefly on any touch in the active viewer.
-        newViewer.getView().setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                when (newViewer) {
-                    is PagerViewer -> newViewer.setAutoScrollCooldown(2000L)
-                    is WebtoonViewer -> newViewer.setAutoScrollCooldown(2000L)
-                }
-            }
-            false
-        }
         binding.viewerContainer.addView(newViewer.getView())
 
         if (readerPreferences.showReadingMode().get()) {
@@ -1054,6 +1228,7 @@ class ReaderActivity : BaseActivity() {
             }
         }
 
+        loadingIndicator?.let(binding.readerContainer::removeView)
         loadingIndicator = ReaderProgressIndicator(this)
         binding.readerContainer.addView(loadingIndicator)
     }
@@ -1157,12 +1332,25 @@ class ReaderActivity : BaseActivity() {
      * Tells the presenter to load the next chapter and mark it as active. The progress dialog
      * should be automatically shown.
      */
+    private fun performChapterBoundaryHaptic() {
+        if (isEInkMode()) return
+        if (!readerPreferences.chapterChangeHaptics().get()) return
+        if (uiPreferences.hapticFeedbackMode().get() != HapticFeedbackMode.FULL) return
+        val constant = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            HapticFeedbackConstants.CONFIRM
+        } else {
+            HapticFeedbackConstants.CLOCK_TICK
+        }
+        binding.root.performHapticFeedback(constant)
+    }
+
     private fun loadNextChapter() {
         lifecycleScope.launch {
             // WEBTOON-ARROWS (H2): re-anchor ONLY when the switch actually happened - the
             // unconditional moveToPageIndex(0) used to scroll the CURRENT chapter to its start
             // whenever the load silently no-op'd (no next chapter / swallowed error).
             if (viewModel.loadNextChapter()) {
+                performChapterBoundaryHaptic()
                 moveToPageIndex(0)
             }
         }
@@ -1176,6 +1364,7 @@ class ReaderActivity : BaseActivity() {
         lifecycleScope.launch {
             // WEBTOON-ARROWS (H2): see loadNextChapter.
             if (viewModel.loadPreviousChapter()) {
+                performChapterBoundaryHaptic()
                 moveToPageIndex(0)
             }
         }
@@ -1315,7 +1504,9 @@ class ReaderActivity : BaseActivity() {
         cutoutShort: Boolean,
     ) {
         val insets = when {
-            !fullscreen -> windowInsets?.getInsets(WindowInsetsCompat.Type.systemBars())
+            !fullscreen -> windowInsets?.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
             !cutoutShort -> windowInsets?.getInsets(WindowInsetsCompat.Type.displayCutout())
             else -> null
         }
@@ -1329,21 +1520,41 @@ class ReaderActivity : BaseActivity() {
      */
     private inner class ReaderConfig {
 
-        private fun getCombinedPaint(grayscale: Boolean, invertedColors: Boolean): Paint {
+        private fun getCombinedPaint(
+            grayscale: Boolean,
+            invertedColors: Boolean,
+            smartInvertColors: Boolean,
+            whitePoint: Int,
+            gammaContrast: Int,
+            blackPoint: Int,
+        ): Paint {
             return Paint().apply {
                 colorFilter = ColorMatrixColorFilter(
                     ColorMatrix().apply {
+                        if (whitePoint > 0 || blackPoint > 0 || gammaContrast != 0) {
+                            val bp = (blackPoint / 100f) * 0.35f
+                            val wp = (1f - (whitePoint / 100f) * 0.45f).coerceAtLeast(bp + 0.10f)
+                            val scale = (1f / (wp - bp)) * (1f + (gammaContrast / 50f) * 0.45f)
+                            val offset = -bp * 255f * scale
+                            postConcat(
+                                ColorMatrix(
+                                    floatArrayOf(
+                                        scale, 0f, 0f, 0f, offset,
+                                        0f, scale, 0f, 0f, offset,
+                                        0f, 0f, scale, 0f, offset,
+                                        0f, 0f, 0f, 1f, 0f,
+                                    ),
+                                ),
+                            )
+                        }
                         if (grayscale) {
-                            setSaturation(0f)
+                            postConcat(ColorMatrix().apply { setSaturation(0f) })
                         }
                         if (invertedColors) {
                             postConcat(
                                 ColorMatrix(
-                                    floatArrayOf(
-                                        -1f, 0f, 0f, 0f, 255f,
-                                        0f, -1f, 0f, 0f, 255f,
-                                        0f, 0f, -1f, 0f, 255f,
-                                        0f, 0f, 0f, 1f, 0f,
+                                    eu.kanade.tachiyomi.ui.reader.setting.ReaderVisualPreset.invertColorMatrixValues(
+                                        smartInvert = smartInvertColors && !grayscale,
                                     ),
                                 ),
                             )
@@ -1370,13 +1581,13 @@ class ReaderActivity : BaseActivity() {
                 }
                 .launchIn(lifecycleScope)
 
-            preferences.displayProfile().changes()
-                .onEach { setDisplayProfile(it) }
-                .launchIn(lifecycleScope)
-
             merge(
                 readerPreferences.grayscale().changes(),
                 readerPreferences.invertedColors().changes(),
+                readerPreferences.smartInvertColors().changes(),
+                readerPreferences.paperWhitePoint().changes(),
+                readerPreferences.paperGammaContrast().changes(),
+                readerPreferences.paperBlackPoint().changes(),
                 uiPreferences.eInkProfile().changes(),
             )
                 .onEach {
@@ -1391,9 +1602,26 @@ class ReaderActivity : BaseActivity() {
                 readerPreferences.sharpening().changes(),
                 readerPreferences.denoise().changes(),
                 readerPreferences.binarization().changes(),
+                readerPreferences.paperWhitePoint().changes(),
+                readerPreferences.paperGammaContrast().changes(),
+                readerPreferences.paperBlackPoint().changes(),
             )
                 .onEach {
                     applyRenderEffects()
+                }
+                .launchIn(lifecycleScope)
+
+            readerPreferences.rgb565ForGrayscale().changes()
+                .onEach { enabled ->
+                    com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.setPreferredBitmapConfig(
+                        if (enabled) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888,
+                    )
+                }
+                .launchIn(lifecycleScope)
+
+            readerPreferences.decoderThreadCount().changes()
+                .onEach { count ->
+                    com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.setDefaultExecutorMaxThreads(count)
                 }
                 .launchIn(lifecycleScope)
 
@@ -1439,31 +1667,14 @@ class ReaderActivity : BaseActivity() {
             }
         }
 
-        /**
-         * Sets the display profile to [path].
-         */
-        private fun setDisplayProfile(path: String) {
-            val file = UniFile.fromUri(baseContext, path.toUri())
-            if (file != null && file.exists()) {
-                val inputStream = file.openInputStream()
-                val outputStream = ByteArrayOutputStream()
-                inputStream.use { input ->
-                    outputStream.use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                val data = outputStream.toByteArray()
-                SubsamplingScaleImageView.setDisplayProfile(data)
-                TachiyomiImageDecoder.displayProfile = data
-            }
-        }
-
         private fun setCutoutShort(enabled: Boolean) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
 
-            window.attributes.layoutInDisplayCutoutMode = when (enabled) {
-                true -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                false -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = when (enabled) {
+                    true -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    false -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+                }
             }
 
             // Trigger relayout
@@ -1523,8 +1734,21 @@ class ReaderActivity : BaseActivity() {
             viewModel.setBrightnessOverlayValue(value)
         }
         private fun setLayerPaint(grayscale: Boolean, invertedColors: Boolean) {
-            val paint = if (grayscale || invertedColors) getCombinedPaint(grayscale, invertedColors) else null
-            binding.viewerContainer.setLayerType(LAYER_TYPE_HARDWARE, paint)
+            val useLegacyLevels = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+            val whitePoint = if (useLegacyLevels) readerPreferences.paperWhitePoint().get() else 0
+            val gammaContrast = if (useLegacyLevels) readerPreferences.paperGammaContrast().get() else 0
+            val blackPoint = if (useLegacyLevels) readerPreferences.paperBlackPoint().get() else 0
+            val hasLevels = whitePoint > 0 || blackPoint > 0 || gammaContrast != 0
+            val smartInvert = readerPreferences.smartInvertColors().get()
+            val paint = if (grayscale || invertedColors || hasLevels) {
+                getCombinedPaint(grayscale, invertedColors, smartInvert, whitePoint, gammaContrast, blackPoint)
+            } else {
+                null
+            }
+            val layerType = if (paint != null) LAYER_TYPE_HARDWARE else LAYER_TYPE_NONE
+            if (binding.viewerContainer.layerType != layerType || paint != null) {
+                binding.viewerContainer.setLayerType(layerType, paint)
+            }
         }
 
         private fun applyRenderEffects() {
@@ -1532,13 +1756,20 @@ class ReaderActivity : BaseActivity() {
                 val sharpeningVal = readerPreferences.sharpening().get() / 100f
                 val denoiseVal = readerPreferences.denoise().get() / 100f
                 val binarizationVal = readerPreferences.binarization().get() / 100f
+                val whitePointVal = readerPreferences.paperWhitePoint().get() / 100f
+                val gammaContrastVal = readerPreferences.paperGammaContrast().get() / 50f
+                val blackPointVal = readerPreferences.paperBlackPoint().get() / 100f
 
-                ReaderRenderEffectsApi33.apply(
-                    container = binding.viewerContainer,
+                eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.update(
                     sharpeningVal = sharpeningVal,
                     denoiseVal = denoiseVal,
                     binarizationVal = binarizationVal,
+                    whitePointVal = whitePointVal,
+                    gammaContrastVal = gammaContrastVal,
+                    blackPointVal = blackPointVal,
                 )
+                binding.viewerContainer.setRenderEffect(null)
+                eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects.applyToHierarchy(binding.viewerContainer)
             }
         }
     }
@@ -1889,140 +2120,4 @@ internal fun resolveReaderLightStatusBars(
     return defaultLightStatusBars
 }
 
-private const val SHARPEN_SHADER = """
-    uniform shader inputShader;
-    uniform float sharpness;
-
-    half4 main(float2 coords) {
-        half4 center = inputShader.eval(coords);
-        half4 left = inputShader.eval(coords + float2(-1.0, 0.0));
-        half4 right = inputShader.eval(coords + float2(1.0, 0.0));
-        half4 top = inputShader.eval(coords + float2(0.0, -1.0));
-        half4 bottom = inputShader.eval(coords + float2(0.0, 1.0));
-
-        half4 sharp = center * 5.0 - (left + right + top + bottom);
-        return center + (sharp - center) * sharpness;
-    }
-"""
-
-private const val DENOISE_SHADER = """
-    uniform shader inputShader;
-    uniform float denoise;
-
-    half4 main(float2 coords) {
-        half4 color = inputShader.eval(coords);
-        half4 sum = color;
-        float count = 1.0;
-
-        for (int x = -1; x <= 1; x++) {
-            for (int y = -1; y <= 1; y++) {
-                if (x == 0 && y == 0) continue;
-                half4 neighbor = inputShader.eval(coords + float2(x, y));
-                if (distance(neighbor.rgb, color.rgb) < 0.15) {
-                    sum += neighbor;
-                    count += 1.0;
-                }
-            }
-        }
-        half4 smoothColor = sum / count;
-        return color + (smoothColor - color) * denoise;
-    }
-"""
-
-private const val BINARIZATION_SHADER = """
-    uniform shader inputShader;
-    uniform float binarization;
-
-    half4 main(float2 coords) {
-        half4 center = inputShader.eval(coords);
-        float centerLuma = (center.r + center.g + center.b) * 0.3333;
-
-        float sum = centerLuma;
-        float minVal = centerLuma;
-        float maxVal = centerLuma;
-
-        // Разреженная сетка 3x3 с шагом 2.0 (всего 8 дополнительных выборок вместо 24)
-        float2 offsets[8];
-        offsets[0] = float2(-2.0, -2.0);
-        offsets[1] = float2( 0.0, -2.0);
-        offsets[2] = float2( 2.0, -2.0);
-        offsets[3] = float2(-2.0,  0.0);
-        offsets[4] = float2( 2.0,  0.0);
-        offsets[5] = float2(-2.0,  2.0);
-        offsets[6] = float2( 0.0,  2.0);
-        offsets[7] = float2( 2.0,  2.0);
-
-        for (int i = 0; i < 8; i++) {
-            half4 col = inputShader.eval(coords + offsets[i]);
-            float luma = (col.r + col.g + col.b) * 0.3333;
-            sum += luma;
-            minVal = min(minVal, luma);
-            maxVal = max(maxVal, luma);
-        }
-
-        float mean = sum * 0.1111; // 1.0 / 9.0
-        float contrast = maxVal - minVal;
-
-        // Локальная бинаризация
-        float binaryLuma = step(mean, centerLuma);
-
-        // Бинаризация для областей с очень низким контрастом (сплошной фон)
-        float lowContrastLuma = step(0.5, centerLuma);
-
-        // Безветвленный выбор (branch-free) на основе уровня контраста
-        float isLowContrast = step(contrast, 0.15);
-        float finalLuma = mix(binaryLuma, lowContrastLuma, isLowContrast);
-
-        // Смешивание с оригиналом на основе ползунка интенсивности
-        float mixedLuma = mix(centerLuma, finalLuma, binarization);
-        return half4(mixedLuma, mixedLuma, mixedLuma, center.a);
-    }
-"""
-
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-private object ReaderRenderEffectsApi33 {
-    fun apply(
-        container: View,
-        sharpeningVal: Float,
-        denoiseVal: Float,
-        binarizationVal: Float,
-    ) {
-        var effect: android.graphics.RenderEffect? = null
-
-        if (sharpeningVal > 0f) {
-            val sharpShader = android.graphics.RuntimeShader(SHARPEN_SHADER)
-            sharpShader.setFloatUniform("sharpness", sharpeningVal)
-            effect = android.graphics.RenderEffect.createRuntimeShaderEffect(sharpShader, "inputShader")
-        }
-
-        if (denoiseVal > 0f) {
-            val denoiseShader = android.graphics.RuntimeShader(DENOISE_SHADER)
-            denoiseShader.setFloatUniform("denoise", denoiseVal)
-            val denoiseEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
-                denoiseShader,
-                "inputShader",
-            )
-            effect = if (effect != null) {
-                android.graphics.RenderEffect.createChainEffect(denoiseEffect, effect)
-            } else {
-                denoiseEffect
-            }
-        }
-
-        if (binarizationVal > 0f) {
-            val binarizationShader = android.graphics.RuntimeShader(BINARIZATION_SHADER)
-            binarizationShader.setFloatUniform("binarization", binarizationVal)
-            val binarizationEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
-                binarizationShader,
-                "inputShader",
-            )
-            effect = if (effect != null) {
-                android.graphics.RenderEffect.createChainEffect(binarizationEffect, effect)
-            } else {
-                binarizationEffect
-            }
-        }
-
-        container.setRenderEffect(effect)
-    }
-}
+private const val IDLE_REFRESH_RESTORE_DELAY_MS = 1_500L

@@ -103,6 +103,9 @@ class ReelsSessionContinuity(
     private var lastOrdinal: Long = 0L
     private var contextObserver: Job? = null
 
+    @Volatile
+    private var lastFlushJob: Job? = null
+
     suspend fun restore(
         source: AnimeFeedReplaySource,
         key: ReelsSessionKey,
@@ -352,6 +355,15 @@ class ReelsSessionContinuity(
         flushCheckpoint(completed = isCompletedLatch)
     }
 
+    /**
+     * Flushes the active visit and waits for the write, so a caller that is about to [detach]
+     * (stop/reattach) does not lose the coalesced position.
+     */
+    suspend fun flushActiveVisitNow() {
+        flushCheckpoint(completed = isCompletedLatch)
+        lastFlushJob?.join()
+    }
+
     fun detach(): ReelsSessionHandle? {
         contextObserver?.cancel()
         contextObserver = null
@@ -400,7 +412,7 @@ class ReelsSessionContinuity(
             if (activeHandle == handle && activePersistEligible && isCurrentKey(handle.key)) {
                 repository.checkpoint(handle, checkpoint)
             }
-        }
+        }.also { lastFlushJob = it }
     }
 
     private fun ReelsCandidate.toShortVideoItem(): ShortVideoItem {

@@ -1,7 +1,10 @@
 package eu.kanade.presentation.more.settings.screen.discovery
 
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import io.kotest.matchers.shouldBe
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 
 class DiscoverySourcesLogicTest {
 
@@ -61,5 +64,22 @@ class DiscoverySourcesLogicTest {
         )
         selectedFirst(entries).map { it.pluginKey } shouldBe listOf("p1", "p3", "p2", "p4")
         selectedFirst(emptyList()) shouldBe emptyList()
+    }
+
+    @Test
+    fun `sources screen media type persists across reopen and falls back on invalid value`() {
+        val store = PersistingPreferenceStore()
+        val prefs = DiscoveryPreferences(store)
+
+        resolveSourcesMediaType(prefs.lastSourcesMediaType().get()) shouldBe DiscoveryMediaType.ANIME
+
+        prefs.lastSourcesMediaType().set(DiscoveryMediaType.MANGA.key)
+        val reopenedPrefs = DiscoveryPreferences(store)
+        resolveSourcesMediaType(reopenedPrefs.lastSourcesMediaType().get()) shouldBe DiscoveryMediaType.MANGA
+
+        reopenedPrefs.lastSourcesMediaType().set(DiscoveryMediaType.NOVEL.key)
+        resolveSourcesMediaType(reopenedPrefs.lastSourcesMediaType().get()) shouldBe DiscoveryMediaType.NOVEL
+
+        resolveSourcesMediaType("unknown") shouldBe DiscoveryMediaType.ANIME
     }
 }

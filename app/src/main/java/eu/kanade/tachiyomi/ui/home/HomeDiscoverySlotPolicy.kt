@@ -23,3 +23,32 @@ internal fun shouldKeepDiscoveryHeroSlot(
         HomeHeroMode.Stage, HomeHeroMode.Collage, HomeHeroMode.Hybrid -> true
     }
 }
+
+internal enum class DiscoveryHeroSkeletonStyle {
+    STAGE,
+    COLLAGE,
+    HYBRID,
+    TEASER_ROW,
+}
+
+/**
+ * Resolves the cold-start / refreshing skeleton geometry matching the user's selected
+ * hero discovery style so there is no layout jump when cards arrive.
+ */
+internal fun resolveDiscoveryHeroSkeletonStyle(
+    preferredMode: HomeHeroMode,
+    discoveryEnabled: Boolean,
+    isFiltering: Boolean,
+    keepDiscoveryHeroSlot: Boolean,
+): DiscoveryHeroSkeletonStyle {
+    if (!discoveryEnabled || isFiltering || !keepDiscoveryHeroSlot) {
+        return DiscoveryHeroSkeletonStyle.TEASER_ROW
+    }
+    return when (preferredMode) {
+        HomeHeroMode.Stage -> DiscoveryHeroSkeletonStyle.STAGE
+        HomeHeroMode.Collage -> DiscoveryHeroSkeletonStyle.COLLAGE
+        HomeHeroMode.Hybrid -> DiscoveryHeroSkeletonStyle.HYBRID
+        HomeHeroMode.Auto -> DiscoveryHeroSkeletonStyle.STAGE
+        HomeHeroMode.Continue -> DiscoveryHeroSkeletonStyle.TEASER_ROW
+    }
+}

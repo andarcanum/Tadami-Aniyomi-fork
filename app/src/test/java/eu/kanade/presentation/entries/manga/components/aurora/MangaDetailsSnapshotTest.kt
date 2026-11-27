@@ -100,7 +100,7 @@ class MangaDetailsSnapshotTest {
     }
 
     @Test
-    fun `progress respects partial read chapters via lastPageRead`() {
+    fun `partial chapters do not count as completed chapters`() {
         val chapters = listOf(
             Chapter.create().copy(
                 id = 1L,
@@ -121,8 +121,21 @@ class MangaDetailsSnapshotTest {
         )
 
         val snapshot = resolveMangaProgressSnapshot(chapters)
+        snapshot?.progressText shouldBe "0 / 2"
+        snapshot?.percent shouldBe null
+        snapshot?.isCompleted shouldBe false
+    }
+
+    @Test
+    fun `starting the final chapter does not complete the manga`() {
+        val chapters = listOf(
+            Chapter.create().copy(id = 1, read = true),
+            Chapter.create().copy(id = 2, read = false, lastPageRead = 900_000_000_000_001L),
+        )
+
+        val snapshot = resolveMangaProgressSnapshot(chapters)
         snapshot?.progressText shouldBe "1 / 2 (50%)"
-        snapshot?.percent shouldBe 0.5f
+        snapshot?.isCompleted shouldBe false
     }
 
     @Test

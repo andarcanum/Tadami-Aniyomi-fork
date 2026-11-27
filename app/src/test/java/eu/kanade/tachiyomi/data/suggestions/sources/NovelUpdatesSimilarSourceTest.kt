@@ -36,4 +36,36 @@ class NovelUpdatesSimilarSourceTest {
         assertTrue(source.name.isNotBlank())
         assertEquals("NovelUpdates", source.name)
     }
+
+    @Test
+    fun `parseRecommendationsHtml extracts only recommendations section and ignores sidebar links`() {
+        val html = """
+            <html><body>
+            <div class="content">
+              <h5 class="seriesother">Related Series</h5>
+              <div class="seriesother"><a href="https://www.novelupdates.com/series/related-one/">Related One</a></div>
+              <h5 class="seriesother">Recommendations</h5>
+              <div class="seriesother">
+                <a href="https://www.novelupdates.com/series/rec-one/">Rec One</a>
+                <a href="https://www.novelupdates.com/series/seed-slug/">Seed Self</a>
+                <a href="https://www.novelupdates.com/series/rec-two/">Rec Two</a>
+              </div>
+              <h5 class="seriesother">Recommendation Lists</h5>
+              <div class="seriesother"><a href="https://www.novelupdates.com/series/list-leak/">List Leak</a></div>
+            </div>
+            <aside id="sidebar">
+              <a href="https://www.novelupdates.com/series/sidebar-leak/">Sidebar Leak</a>
+            </aside>
+            </body></html>
+        """.trimIndent()
+        val source = NovelUpdatesSimilarSource(SuggestionMediaType.NOVEL)
+        val recs = source.parseRecommendationsHtml(html, "seed-slug")
+        assertEquals(
+            listOf(
+                NovelUpdatesSimilarSource.NuRecommendation("rec-one", "Rec One"),
+                NovelUpdatesSimilarSource.NuRecommendation("rec-two", "Rec Two"),
+            ),
+            recs,
+        )
+    }
 }

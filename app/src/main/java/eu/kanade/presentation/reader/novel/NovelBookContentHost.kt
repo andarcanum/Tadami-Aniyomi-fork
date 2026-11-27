@@ -24,17 +24,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.BookSeekRequest
 import eu.kanade.tachiyomi.ui.reader.novel.NovelBlockAnchor
@@ -153,6 +158,13 @@ internal fun NovelBookContentHost(
         (handle.surface != null || nativeEntries.isNotEmpty())
     val ttsBlockPositions = handle.ttsBlockPositions
     val appliedSeekId = remember(state.novel.id) { longArrayOf(0L) }
+    var nativeListWidthPx by remember(state.novel.id) { mutableIntStateOf(0) }
+    var settledNativeAnchor by remember(state.novel.id) {
+        mutableStateOf<NovelNativeScrollViewportAnchor?>(null)
+    }
+    var pendingWidthReflowAnchor by remember(state.novel.id) {
+        mutableStateOf<NovelNativeScrollViewportAnchor?>(null)
+    }
     val latestEntries by androidx.compose.runtime.rememberUpdatedState(nativeEntries)
     val latestUseNativeRenderer by androidx.compose.runtime.rememberUpdatedState(useNativeBookScroll)
     val ttsNavigationAdapter = remember(state.novel.id, spine) {
@@ -260,10 +272,31 @@ internal fun NovelBookContentHost(
         var lastSectionIndex = -1
         var lastSectionFraction = -1f
         snapshotFlow {
-            textListState.firstVisibleItemIndex to textListState.firstVisibleItemScrollOffset
+            Triple(
+                textListState.firstVisibleItemIndex,
+                textListState.firstVisibleItemScrollOffset,
+                pendingWidthReflowAnchor,
+            )
         }
             .distinctUntilChanged()
             .collect {
+                if (pendingWidthReflowAnchor != null) return@collect
+                if (nativeListWidthPx > 0) {
+                    val visibleIndex = textListState.firstVisibleItemIndex
+                    val visibleOffsetPx = textListState.firstVisibleItemScrollOffset
+                    val visibleItemHeightPx = textListState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.index == visibleIndex }
+                        ?.size
+                        ?: 0
+                    settledNativeAnchor = NovelNativeScrollViewportAnchor(
+                        firstVisibleItemIndex = visibleIndex,
+                        withinItemFraction = resolveNativeScrollItemFraction(
+                            scrollOffsetPx = visibleOffsetPx,
+                            itemHeightPx = visibleItemHeightPx,
+                        ),
+                        viewportWidthPx = nativeListWidthPx,
+                    )
+                }
                 val viewportItems = textListState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
                     val entry = nativeEntries.getOrNull(item.index) as? NovelBookNativeEntry.Block
                         ?: return@mapNotNull null
@@ -334,15 +367,58 @@ internal fun NovelBookContentHost(
         }
     }
 
+    LaunchedEffect(useNativeBookScroll, pendingWidthReflowAnchor, nativeListWidthPx) {
+        val anchor = pendingWidthReflowAnchor ?: return@LaunchedEffect
+        if (!useNativeBookScroll || nativeListWidthPx <= 0) return@LaunchedEffect
+        val maxIndex = (nativeEntries.size - 1).coerceAtLeast(0)
+        val targetIndex = anchor.firstVisibleItemIndex.coerceIn(0, maxIndex)
+        val restored = restoreNovelNativeScrollViewportAnchor(textListState, anchor, targetIndex)
+        if (restored) {
+            settledNativeAnchor = NovelNativeScrollViewportAnchor(
+                firstVisibleItemIndex = targetIndex,
+                withinItemFraction = anchor.withinItemFraction,
+                viewportWidthPx = nativeListWidthPx,
+            )
+        }
+        // This effect is still active, so only this captured request can be pending. If a newer
+        // width replaced it the effect was cancelled and the helper propagated that cancellation.
+        if (pendingWidthReflowAnchor === anchor) pendingWidthReflowAnchor = null
+    }
+    val horizontalSafeInsets = rememberNovelHorizontalSafeInsets()
+    val layoutDirection = LocalLayoutDirection.current
+    val nativeSafeStartDp = if (layoutDirection == LayoutDirection.Rtl) {
+        horizontalSafeInsets.right
+    } else {
+        horizontalSafeInsets.left
+    }
+    val nativeSafeEndDp = if (layoutDirection == LayoutDirection.Rtl) {
+        horizontalSafeInsets.left
+    } else {
+        horizontalSafeInsets.right
+    }
     if (useNativeBookScroll) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { newSize ->
+                    val newWidth = newSize.width
+                    if (newWidth <= 0) return@onSizeChanged
+                    if (nativeListWidthPx > 0 &&
+                        newWidth != nativeListWidthPx &&
+                        pendingWidthReflowAnchor == null
+                    ) {
+                        settledNativeAnchor?.let { anchor ->
+                            pendingWidthReflowAnchor = anchor
+                        }
+                    }
+                    nativeListWidthPx = newWidth
+                },
             state = textListState,
             contentPadding = PaddingValues(
                 top = contentPaddingTop,
                 bottom = contentPaddingBottom,
-                start = state.readerSettings.margin.dp,
-                end = state.readerSettings.margin.dp,
+                start = state.readerSettings.margin.dp + nativeSafeStartDp,
+                end = state.readerSettings.margin.dp + nativeSafeEndDp,
             ),
         ) {
             novelBookNativeContent(

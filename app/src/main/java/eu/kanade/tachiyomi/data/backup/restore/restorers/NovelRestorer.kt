@@ -316,7 +316,7 @@ class NovelRestorer(
     ): Novel {
         restoreCategories(novel, categories, backupCategories)
         restoreChapters(novel, chapters)
-        restoreHistory(history)
+        restoreHistory(novel.id, history)
         restoreExcludedScanlators(novel, excludedScanlators)
         restoreBookState(novel, bookState)
         restoreHighlights(novel, highlights)
@@ -423,13 +423,17 @@ class NovelRestorer(
         }
     }
 
-    private suspend fun restoreHistory(backupHistory: List<BackupHistory>) {
+    private suspend fun restoreHistory(novelId: Long, backupHistory: List<BackupHistory>) {
         val toUpdate = backupHistory.mapNotNull { history ->
-            val dbHistory = handler.awaitOneOrNull { db -> db.novel_historyQueries.getHistoryByChapterUrl(history.url) }
+            val dbHistory = handler.awaitOneOrNull { db ->
+                db.novel_historyQueries.getHistoryByChapterUrlAndNovelId(history.url, novelId)
+            }
             val item = history.getNovelHistoryImpl()
 
             if (dbHistory == null) {
-                val chapter = handler.awaitOneOrNull { db -> db.novel_chaptersQueries.getChapterByUrl(history.url) }
+                val chapter = handler.awaitOneOrNull { db ->
+                    db.novel_chaptersQueries.getChapterByUrlAndNovelId(history.url, novelId)
+                }
                 return@mapNotNull if (chapter == null) {
                     // Chapter doesn't exist; skip
                     null

@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.view.Surface
 import android.view.TextureView
+import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -27,57 +28,75 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.request.transformations
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.ui.reels.ReelsHlsDownloader
+import eu.kanade.tachiyomi.ui.reels.components.computeScrubThumbnailSize
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import logcat.LogPriority
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 /**
- * Vertical-feed video player backed by ExoPlayer.
+ * Vertical-feed video player backed by a pooled [ExoPlayer] and [ReelsDynamicLoadControl].
  *
- * - [isActive]: the settled page. The player renders video and follows [isPlaying].
- * - [isPreload]: an adjacent (next) page. The player is prepared with `playWhenReady = false`
- *   and no surface so the first seconds are buffered before the user swipes to it.
+ * - [isActive]: the settled page. The player renders video, unlocks the 50 s buffer ceiling, and
+ *   follows [isPlaying] gated by foreground lifecycle / PiP.
+ * - [isPreload]: an adjacent (next) page. A pooled player + pre-attached [TextureView] prepare
+ *   with `playWhenReady = false` and a 15 s preload buffer cap so frame-0 is already decoded on
+ *   the surface the moment the user starts swiping.
  *
- * Switching [videoUrl] (e.g. HD/SD quality toggle) rebuilds the player and restores the
- * playback position captured right before the rebuild.
+ * Switching [videoUrl] / [mediaIdentity] (quality toggle or expired-URL refresh) swaps the
+ * [MediaSource] in-place on the live player with `seekTo(currentPos)` — zero decoder teardown and
+ * zero poster flash.
  */
+@OptIn(UnstableApi::class)
 @Composable
 fun ReelsPlayerView(
     videoUrl: String,
@@ -94,11 +113,15 @@ fun ReelsPlayerView(
     // The page knows no stream can arrive (blank URL without a usable resolver): keep the
     // poster but drop the loading spinner that would otherwise spin forever.
     isMediaUnplayable: Boolean = false,
-    seekToFraction: Float?,
+    seekToFraction: Float? = null,
+    seekRequest: ReelsSeekRequest? = null,
     seekToPositionMs: Long? = null,
     onSeekPositionConsumed: () -> Unit = {},
+    isScrubbing: Boolean = false,
+    onScrubFrameCaptured: ((fraction: Float, bitmap: ImageBitmap) -> Unit)? = null,
     onRenderedFirstFrame: () -> Unit = {},
     onProgressUpdate: (Float) -> Unit,
+    onBufferUpdate: (Float) -> Unit = {},
     onVideoCompleted: () -> Unit,
     // Increment to re-prepare the current media from 0 after a playback error (retry action).
     retrySignal: Int = 0,
@@ -107,8 +130,15 @@ fun ReelsPlayerView(
     // Stable progressive-stream cache key (sourceId:videoId:quality) so re-watches hit the
     // disk cache even after signed CDN URLs rotate.
     cacheKey: String? = null,
+    // Contract v29: identity of the clip (dwell/visit) and of the actual media bytes. A
+    // quality switch must replace the player source even when the URL string is unchanged;
+    // the clip identity keeps dwell/visit scoped to the item, not the rendition.
+    clipIdentity: String? = null,
+    mediaIdentity: String? = null,
     // TalkBack description of the playing video (title/author from the item).
     videoDescription: String? = null,
+    // Feed metadata duration in seconds, used as fallback when ExoPlayer reports C.TIME_UNSET.
+    knownDurationSec: Float = 0f,
     onDurationKnown: (Float) -> Unit = {},
     // Fired from onVideoSizeChanged once real dimensions are known: true for
     // landscape reels (the only ones offered the landscape-fullscreen affordance).
@@ -121,13 +151,41 @@ fun ReelsPlayerView(
     // Actual Player.isPlaying changes of this player (buffering, audio-focus loss, lifecycle
     // pause, end): the feed needs the REAL playback state, not only the play intent.
     onPlaybackRunningChanged: (Boolean) -> Unit = {},
+    // Smart self-recovery hooks: silent URL re-signing on 401/403/410 and SD/H.264 fallback on
+    // hardware decoder errors. Return true when recovery was initiated (suppresses error toast).
+    onRefreshExpiredUrl: (() -> Boolean)? = null,
+    onCodecFallback: (() -> Boolean)? = null,
+    isInPictureInPicture: Boolean = false,
+    isMeteredNetwork: Boolean = false,
     playbackSpeed: Float = 1f,
+    zoomScale: Float = 1f,
+    zoomOffsetX: Float = 0f,
+    zoomOffsetY: Float = 0f,
     headers: Map<String, String> = emptyMap(),
+    playbackHeadersProvider: (() -> Map<String, String>)? = null,
     // Item page URL (e.g. https://fikfap.com/post/123): origin used as the Referer fallback
     // when the feed source exposes no headers of its own.
     webUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    // Per-clip recovery and resume state MUST live above the blank-URL spinner return so
+    // transient URL clearing during codec fallback or quality switches keeps position & flags.
+    val recoveryScopeKey = clipIdentity ?: videoUrl.takeIf { it.isNotBlank() } ?: ""
+    var expiredUrlRefreshAttempted by remember(recoveryScopeKey) { mutableStateOf(false) }
+    var codecFallbackAttempted by remember(recoveryScopeKey) { mutableStateOf(false) }
+    var lastSafePositionMs by remember(recoveryScopeKey) { mutableLongStateOf(0L) }
+    var isFirstFrameRendered by remember(recoveryScopeKey) { mutableStateOf(false) }
+    var firstFrameReportedForActive by remember(recoveryScopeKey) { mutableStateOf(false) }
+    val dwellClock = remember(recoveryScopeKey) { ReelsWatchClock() }
+    var endHold by remember(recoveryScopeKey) { mutableStateOf<ReelsEndHold?>(null) }
+    var videoWidth by remember(recoveryScopeKey) { mutableIntStateOf(0) }
+    var videoHeight by remember(recoveryScopeKey) { mutableIntStateOf(0) }
+    var videoPixelRatio by remember(recoveryScopeKey) { mutableFloatStateOf(1f) }
+    var restorePositionMs by remember(recoveryScopeKey) { mutableLongStateOf(0L) }
+    val seekScopeKey = clipIdentity?.substringAfterLast(':') ?: recoveryScopeKey
+    var pendingSeekFraction by remember(seekScopeKey) { mutableFloatStateOf(-1f) }
+    var pendingSeekPositionMs by remember(seekScopeKey) { mutableLongStateOf(-1L) }
+
     // Lazy signing (balbums v6+): a blank url means the stream is signed just-in-time by the
     // page; show the poster layer with a spinner until the resolved url arrives instead of
     // building a player around an empty MediaItem (which would surface a playback error).
@@ -141,7 +199,7 @@ fun ReelsPlayerView(
             AsyncImage(
                 model = posterUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = if (isCropMode) ContentScale.Crop else ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
             if (!isMediaUnplayable) {
@@ -153,15 +211,49 @@ fun ReelsPlayerView(
         return
     }
     val context = LocalContext.current
-    // P02: delayed retries read the LIVE page intent, not the values captured when the
-    // player listener was created.
+    // Live state snapshots: Player.Listener and surface callbacks are attached once per pooled
+    // player instance and MUST read current composition values, never stale preload-time captures.
     val currentIsActive by rememberUpdatedState(isActive)
+    val currentIsPreload by rememberUpdatedState(isPreload)
     val currentIsPlaying by rememberUpdatedState(isPlaying)
+    val currentIsMuted by rememberUpdatedState(isMuted)
+    val currentIsAutoAdvance by rememberUpdatedState(isAutoAdvance)
+    val currentIsLastPage by rememberUpdatedState(isLastPage)
+    val currentCropMode by rememberUpdatedState(isCropMode)
+    val currentZoomScale by rememberUpdatedState(zoomScale)
+    val currentZoomOffsetX by rememberUpdatedState(zoomOffsetX)
+    val currentZoomOffsetY by rememberUpdatedState(zoomOffsetY)
+    val currentPlaybackSpeed by rememberUpdatedState(playbackSpeed)
+    val currentPlaybackHeadersProvider by rememberUpdatedState(playbackHeadersProvider)
+    val currentInPip by rememberUpdatedState(isInPictureInPicture)
+    val currentIsMeteredNetwork by rememberUpdatedState(isMeteredNetwork)
+    val currentOnSeekPositionConsumed by rememberUpdatedState(onSeekPositionConsumed)
+    val currentOnRenderedFirstFrame by rememberUpdatedState(onRenderedFirstFrame)
+    val currentOnProgressUpdate by rememberUpdatedState(onProgressUpdate)
+    val currentOnBufferUpdate by rememberUpdatedState(onBufferUpdate)
+    val currentOnVideoCompleted by rememberUpdatedState(onVideoCompleted)
+    val currentKnownDurationSec by rememberUpdatedState(knownDurationSec)
+    val currentOnDurationKnown by rememberUpdatedState(onDurationKnown)
+    val currentOnVideoLandscapeKnown by rememberUpdatedState(onVideoLandscapeKnown)
+    val currentOnVideoSizeKnown by rememberUpdatedState(onVideoSizeKnown)
+    val currentOnPlaybackError by rememberUpdatedState(onPlaybackError)
+    val currentOnBufferingChanged by rememberUpdatedState(onBufferingChanged)
+    val currentOnPlaybackRunningChanged by rememberUpdatedState(onPlaybackRunningChanged)
+    val currentOnRefreshExpiredUrl by rememberUpdatedState(onRefreshExpiredUrl)
+    val currentOnCodecFallback by rememberUpdatedState(onCodecFallback)
+    val currentIsScrubbing by rememberUpdatedState(isScrubbing)
+    val currentOnScrubFrameCaptured by rememberUpdatedState(onScrubFrameCaptured)
+    var lastScrubCaptureAtMs by remember { mutableLongStateOf(0L) }
+    var lastRequestedScrubFraction by remember { mutableFloatStateOf(0f) }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     var isLifecycleStarted by remember(lifecycleOwner) {
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
-    var player by remember { mutableStateOf<ExoPlayer?>(null) }
+    val currentLifecycleStarted by rememberUpdatedState(isLifecycleStarted)
+    var pooledPlayer by remember { mutableStateOf<PooledReelsPlayer?>(null) }
+    var attachedListener by remember { mutableStateOf<Player.Listener?>(null) }
+    val player: ExoPlayer? = pooledPlayer?.player
 
     // P01: a real background stop clears the play intent even while BUFFERING, where
     // Player.isPlaying is false but playWhenReady is still true. PiP is the one stop state
@@ -173,17 +265,45 @@ fun ReelsPlayerView(
             isLifecycleStarted = event.targetState.isAtLeast(Lifecycle.State.STARTED)
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
-                    val inPip = (context as? Activity)?.isInPictureInPictureMode == true
+                    val inPip = currentInPip || (context as? Activity)?.isInPictureInPictureMode == true
                     if (reelsShouldPauseOnStop(inPictureInPicture = inPip)) {
-                        player?.pause()
+                        dwellClock.stop(SystemClock.elapsedRealtime())
+                        pooledPlayer?.loadControl?.isBackgrounded = true
+                        pooledPlayer?.player?.let { p ->
+                            val pos = p.currentPosition
+                            val effDur = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                            if (shouldResetReelRestorePosition(p.playbackState, endHold != null, pos, effDur)) {
+                                restorePositionMs = 0L
+                                lastSafePositionMs = 0L
+                            } else if (pos > 0L) {
+                                lastSafePositionMs = pos
+                                restorePositionMs = pos
+                            }
+                            p.pause()
+                            p.stop()
+                        }
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    player?.playWhenReady = reelsShouldRunPlayback(
-                        isActive = currentIsActive,
-                        isPlaying = currentIsPlaying,
-                        lifecycleStarted = true,
-                    )
+                    pooledPlayer?.loadControl?.isBackgrounded = false
+                    pooledPlayer?.player?.let { p ->
+                        if (p.playbackState == Player.STATE_IDLE && p.mediaItemCount > 0) {
+                            val resumeTargetMs = when {
+                                restorePositionMs > 0L -> restorePositionMs
+                                lastSafePositionMs > 0L -> lastSafePositionMs
+                                else -> 0L
+                            }
+                            if (resumeTargetMs > 0L) {
+                                p.seekTo(resumeTargetMs)
+                            }
+                            p.prepare()
+                        }
+                        p.playWhenReady = reelsShouldRunPlayback(
+                            isActive = currentIsActive,
+                            isPlaying = currentIsPlaying,
+                            lifecycleStarted = true,
+                        )
+                    }
                 }
                 else -> Unit
             }
@@ -198,54 +318,81 @@ fun ReelsPlayerView(
     if (isStill ?: isReelImageUrl(videoUrl)) {
         val photoClock = remember(videoUrl) { ReelsWatchClock() }
         var photoCompleted by remember(videoUrl) { mutableStateOf(false) }
-        // A still has no player: its playback state is the page intent gated by the same
-        // foreground contract as a video (pause and background stop the dwell).
-        val photoEligible = isActive && isPlaying && isLifecycleStarted && !photoCompleted
+        var photoReady by remember(videoUrl) { mutableStateOf(false) }
+        LaunchedEffect(videoUrl) {
+            if (!photoReady) {
+                delay(STILL_READY_GRACE_MS)
+                photoReady = true
+            }
+        }
+        val photoEligible = reelsStillDwellEligible(
+            isActive = isActive,
+            isPlaying = isPlaying,
+            lifecycleStarted = isLifecycleStarted || isInPictureInPicture,
+            completed = photoCompleted,
+            mediaReady = photoReady,
+        )
         Box(
             modifier = modifier
                 .fillMaxSize()
+                .clipToBounds()
                 .background(Color.Black),
             contentAlignment = androidx.compose.ui.Alignment.Center,
         ) {
+            val stillScale = if (isCropMode) ContentScale.Crop else ContentScale.Fit
+            val stillZoomMod = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoomScale
+                    scaleY = zoomScale
+                    translationX = zoomOffsetX
+                    translationY = zoomOffsetY
+                    clip = true
+                }
+            if (posterUrl.isNotBlank()) {
+                AsyncImage(
+                    model = posterUrl,
+                    contentDescription = null,
+                    contentScale = stillScale,
+                    modifier = stillZoomMod,
+                )
+            }
             AsyncImage(
                 model = videoUrl,
                 contentDescription = videoDescription,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
+                contentScale = stillScale,
+                modifier = stillZoomMod,
+                onSuccess = { photoReady = true },
+                onError = { photoReady = true },
             )
         }
-        // Dwell accumulates only eligible time: 2 s of foreground playback followed by a
-        // 10 s pause/background is still 2 s of the minimum 5 s, never 12 s.
         LaunchedEffect(photoEligible) {
             val now = SystemClock.elapsedRealtime()
             if (!photoEligible) {
                 photoClock.stop(now)
-                onPlaybackRunningChanged(false)
-                onBufferingChanged(false)
+                currentOnPlaybackRunningChanged(false)
+                currentOnBufferingChanged(false)
                 return@LaunchedEffect
             }
-            onBufferingChanged(false)
-            onPlaybackRunningChanged(true)
+            currentOnBufferingChanged(false)
+            currentOnPlaybackRunningChanged(true)
+            currentOnRenderedFirstFrame()
             photoClock.start(now)
             while (true) {
                 val dwellMs = photoClock.elapsedMs(SystemClock.elapsedRealtime())
-                onProgressUpdate((dwellMs.toFloat() / REELS_MIN_DWELL_MS).coerceIn(0f, 1f))
+                currentOnProgressUpdate((dwellMs.toFloat() / REELS_MIN_DWELL_MS).coerceIn(0f, 1f))
                 if (dwellMs >= REELS_MIN_DWELL_MS) break
-                delay(250)
+                delay(STILL_PROGRESS_POLL_MS)
             }
             photoClock.stop(SystemClock.elapsedRealtime())
-            onProgressUpdate(1f)
+            currentOnProgressUpdate(1f)
             photoCompleted = true
         }
-        // A completed still advances only when there is somewhere to go; with auto-advance
-        // off or on the last page it stays at full progress, mirroring a looping video.
         LaunchedEffect(photoCompleted, isActive, isLifecycleStarted, isAutoAdvance, isLastPage) {
             if (photoCompleted && isActive && isLifecycleStarted && isAutoAdvance && !isLastPage) {
-                onVideoCompleted()
+                currentOnVideoCompleted()
             }
         }
-        // A fresh appearance starts a fresh dwell: returning to a still shows it for the
-        // minimum time again instead of advancing instantly on the accumulated total.
         LaunchedEffect(isActive) {
             if (!isActive) {
                 photoCompleted = false
@@ -254,331 +401,571 @@ fun ReelsPlayerView(
         }
         return
     }
-    val networkClient = remember { Injekt.get<NetworkHelper>().client }
-    // Listener and surface callbacks are created once with the player; they must read the
-    // CURRENT composition values, not the ones captured on first composition.
-    val currentCropMode by rememberUpdatedState(isCropMode)
-    // CDN rate-limit (429) auto-recovery: silent backoff re-prepares before the error
-    // snackbar is allowed to surface (device logcat evidence). The counter and the pending
-    // attempt belong to one media URL; replacing the player drops both.
+
+    val networkClient = ReelsPlayerPool.sharedNetworkClient
+    val blurTransformation = remember { ReelsBlurTransformation() }
+
+    // Per-clip retry budgets; keyed on videoUrl so URL changes reset HTTP retry counts.
     var autoRetry429Count by remember(videoUrl) { mutableIntStateOf(0) }
     var pending429Retry by remember(videoUrl) { mutableIntStateOf(0) }
-    var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
-    // P05: playback visibility time for the minimum-dwell rule — wall clock, pauses and
-    // buffering no longer count (see reelsEndHold).
-    val dwellClock = remember(videoUrl) { ReelsWatchClock() }
-    // Non-null while holding a finished still/short reel on screen before advancing.
-    var endHold by remember(videoUrl) { mutableStateOf<ReelsEndHold?>(null) }
+    var autoRetryIoCount by remember(videoUrl) { mutableIntStateOf(0) }
+    var pendingIoRetry by remember(videoUrl) { mutableIntStateOf(0) }
     var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
     var currentSurface by remember { mutableStateOf<Surface?>(null) }
 
-    var videoWidth by remember { mutableIntStateOf(0) }
-    var videoHeight by remember { mutableIntStateOf(0) }
-
-    // Playback position to restore after a quality (URL) switch within the same page.
-    var restorePositionMs by remember { mutableLongStateOf(0L) }
-    // A seek request that arrived while the player was still cold (duration unknown) is
-    // parked here and applied by the listener at STATE_READY — otherwise the B3.1 resume
-    // seek is silently dropped on a directly activated (non-preloaded) clip.
-    var pendingSeekFraction by remember { mutableFloatStateOf(-1f) }
-    var pendingSeekPositionMs by remember { mutableLongStateOf(-1L) }
-    // The media URL the current player instance was built for, so a URL change (quality
-    // toggle) is handled explicitly inside the lifecycle effect instead of via the
-    // DisposableEffect disposal order.
     var createdForUrl by remember { mutableStateOf<String?>(null) }
+    var createdForMediaIdentity by remember { mutableStateOf<String?>(null) }
 
-    fun updateMatrix(tv: TextureView?, vw: Int, vh: Int, crop: Boolean) {
-        if (tv == null || vw <= 0 || vh <= 0) return
-        val viewW = tv.width.toFloat()
-        val viewH = tv.height.toFloat()
-        if (viewW <= 0 || viewH <= 0) return
+    fun updateMatrix(
+        tv: TextureView?,
+        vw: Int,
+        vh: Int,
+        crop: Boolean,
+        viewWOverride: Float? = null,
+        viewHOverride: Float? = null,
+        pixelRatio: Float = videoPixelRatio,
+        userZoom: Float = currentZoomScale,
+        panX: Float = currentZoomOffsetX,
+        panY: Float = currentZoomOffsetY,
+    ) {
+        if (tv == null) return
+        val fallbackSize = pooledPlayer?.player?.videoSize
+        val resolvedVw = if (vw > 0) vw else (fallbackSize?.width ?: 0)
+        val resolvedVh = if (vh > 0) vh else (fallbackSize?.height ?: 0)
+        if (resolvedVw <= 0 || resolvedVh <= 0) return
+        val resolvedPixelRatio = pixelRatio.takeIf { it.isFinite() && it > 0f }
+            ?: fallbackSize?.pixelWidthHeightRatio?.takeIf { it.isFinite() && it > 0f }
+            ?: 1f
 
+        val viewW = (viewWOverride?.takeIf { it > 0f } ?: tv.width.toFloat())
+        val viewH = (viewHOverride?.takeIf { it > 0f } ?: tv.height.toFloat())
+        val (sx, sy) = calculateReelTextureScale(
+            vw = resolvedVw,
+            vh = resolvedVh,
+            viewW = viewW,
+            viewH = viewH,
+            crop = crop,
+            pixelRatio = resolvedPixelRatio,
+        ) ?: return
+
+        val safeZoom = ReelsZoom.normalizeScale(userZoom)
         val matrix = Matrix()
-        val sx: Float
-        val sy: Float
-
-        val videoRatio = vw.toFloat() / vh.toFloat()
-        val viewRatio = viewW / viewH
-
-        if (crop) {
-            // Fill screen by cropping
-            if (videoRatio > viewRatio) {
-                sx = (viewH * vw / vh) / viewW
-                sy = 1f
-            } else {
-                sx = 1f
-                sy = (viewW * vh / vw) / viewH
-            }
-        } else {
-            // Fit screen preserving full aspect ratio
-            if (videoRatio > viewRatio) {
-                sx = 1f
-                sy = (viewW * vh / vw) / viewH
-            } else {
-                sx = (viewH * vw / vh) / viewW
-                sy = 1f
-            }
+        matrix.setScale(sx * safeZoom, sy * safeZoom, viewW / 2f, viewH / 2f)
+        if (ReelsZoom.isZoomed(safeZoom)) {
+            val (clampedX, clampedY) = ReelsZoom.clampOffset(panX, panY, safeZoom, viewW, viewH)
+            matrix.postTranslate(clampedX, clampedY)
         }
-
-        matrix.setScale(sx, sy, viewW / 2f, viewH / 2f)
         tv.setTransform(matrix)
+        tv.invalidate()
+        (tv.parent as? android.view.View)?.invalidate()
+        tv.postInvalidateOnAnimation()
     }
 
-    // Player lifecycle: create for active or preloaded pages, release otherwise.
-    LaunchedEffect(videoUrl, isActive, isPreload) {
+    fun buildMediaSource(url: String, key: String?) = run {
+        // Re-read cheap v30 context at media-source construction, after any JIT resolution,
+        // rather than retaining the composition snapshot from before account/UA import.
+        val requestHeaders = reelsRequestHeaders(headers, webUrl, currentPlaybackHeadersProvider)
+        val loopback = isLoopbackReelUrl(url)
+        val dataSourceFactory: DataSource.Factory = if (loopback) {
+            // Tag loopback proxy requests with the reel's live role (active vs preload) so
+            // Telegram's download coordinator prioritizes the focused stream over +1 preload.
+            val appCtx = context.applicationContext
+            DataSource.Factory {
+                val role = if (currentIsActive) "active" else "preload"
+                val httpFactory = OkHttpDataSource.Factory(networkClient)
+                    .setDefaultRequestProperties(requestHeaders + ("X-Reels-Role" to role))
+                DefaultDataSource.Factory(appCtx, httpFactory).createDataSource()
+            }
+        } else {
+            val upstream = DefaultDataSource.Factory(
+                context.applicationContext,
+                OkHttpDataSource.Factory(networkClient)
+                    .setDefaultRequestProperties(requestHeaders),
+            )
+            CacheDataSource.Factory()
+                .setCache(getReelsVideoCache(context.applicationContext))
+                .setUpstreamDataSourceFactory(upstream)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        }
+        val isProgressiveContainer = isProgressiveReelUrl(url)
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .apply {
+                if (key != null && isProgressiveContainer && !loopback) {
+                    setCustomCacheKey(key)
+                }
+            }
+            .build()
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
+        DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory).createMediaSource(mediaItem)
+    }
+
+    // Player lifecycle: acquire from pool for active or preloaded pages, return to pool otherwise.
+    LaunchedEffect(videoUrl, isActive, isPreload, mediaIdentity) {
         val needed = isActive || isPreload
         if (!needed) {
             dwellClock.stop(SystemClock.elapsedRealtime())
-            player?.let { p ->
-                if (p.duration > 0) restorePositionMs = p.currentPosition
-                p.release()
+            pooledPlayer?.let { entry ->
+                val p = entry.player
+                val pos = p.currentPosition
+                val effDur = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                if (shouldResetReelRestorePosition(p.playbackState, endHold != null, pos, effDur)) {
+                    restorePositionMs = 0L
+                    lastSafePositionMs = 0L
+                } else if (pos > 0L) {
+                    restorePositionMs = pos
+                }
+                ReelsPlayerPool.release(entry, attachedListener)
             }
-            player = null
+            dwellClock.reset()
+            pooledPlayer = null
+            attachedListener = null
             createdForUrl = null
+            createdForMediaIdentity = null
             isFirstFrameRendered = false
+            firstFrameReportedForActive = false
             endHold = null
             return@LaunchedEffect
         }
-
-        if (createdForUrl != null && createdForUrl != videoUrl) {
-            // Quality switch within the page: capture the position BEFORE releasing so it
-            // seeks back once the new source reaches STATE_READY.
-            player?.let { p ->
-                if (p.duration > 0) restorePositionMs = p.currentPosition
-                p.release()
-            }
-            player = null
-            isFirstFrameRendered = false
+        if (videoUrl.isBlank()) {
+            return@LaunchedEffect
         }
 
-        if (player == null) {
-            // A re-created player starts a new retry budget; a pending 429 attempt for the
-            // released instance must never fire against this one.
+        val existingEntry = pooledPlayer
+        if (existingEntry == null) {
             autoRetry429Count = 0
             pending429Retry = 0
-            // Short clips: cap buffering so a preload player doesn't hoard tens of MB /
-            // compete with the active video for bandwidth (media3 default is ~50s).
-            // minBufferMs must be >= both playback thresholds (media3 assertion).
-            val loadControl = DefaultLoadControl.Builder()
-                .setBufferDurationsMs(5_000, 15_000, 2_500, 5_000)
-                .build()
-            val exoPlayer = ExoPlayer.Builder(context)
-                // Request audio focus only while the reel is AUDIBLE (audit H4): a muted feed
-                // must not duck/pause the user's music. Unmuting re-requests focus below;
-                // audible reels still arbitrate with calls and concurrent page players.
-                .setAudioAttributes(reelsAudioAttributes(), /* handleAudioFocus = */ !isMuted)
-                .setHandleAudioBecomingNoisy(true)
-                .setLoadControl(loadControl)
-                .build()
-                .apply {
-                    repeatMode = if (isAutoAdvance && !isLastPage) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
-                    volume = if (isMuted) 0f else 1f
-                    // App network stack (cookies/DoH/proxy) + disk cache for repeat watches.
-                    // Feed plugins implement AnimeFeedSource (not AnimeHttpSource), so `headers`
-                    // is empty for them and Bunny-CDN 403s the media requests: fall back to a
-                    // generic same-origin Referer derived from the item's page URL.
-                    val requestHeaders = reelsRequestHeaders(headers, webUrl)
-                    // DefaultDataSource routes file:///content:// (B3.3 offline copies) to local readers and
-                    // delegates http(s) to the OkHttp factory — OkHttp alone rejects file:// URLs.
-                    val upstream = DefaultDataSource.Factory(
-                        context,
-                        OkHttpDataSource.Factory(networkClient)
-                            .setDefaultRequestProperties(requestHeaders),
-                    )
-                    val dataSourceFactory = CacheDataSource.Factory()
-                        .setCache(getReelsVideoCache(context.applicationContext))
-                        .setUpstreamDataSourceFactory(upstream)
-                        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-                    // DefaultMediaSourceFactory infers the type (progressive today, HLS/DASH
-                    // ready); customCacheKey keys the progressive cache by the stable reel id
-                    // instead of the signed CDN URL. setCustomCacheKey is only valid for
-                    // progressive content — media3 rejects it for adaptive sources — so the
-                    // key applies only to a whitelist of container suffixes; everything else
-                    // (m3u8/mpd manifests, unknown containers) keeps the URL-derived key.
-                    val isProgressiveContainer = isProgressiveReelUrl(videoUrl)
-                    val mediaItem = MediaItem.Builder()
-                        .setUri(videoUrl)
-                        .apply { if (cacheKey != null && isProgressiveContainer) setCustomCacheKey(cacheKey) }
-                        .build()
-                    setMediaSource(DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(mediaItem))
-                    playWhenReady = false
-                    // P03: callbacks from a replaced/released instance must never report the
-                    // previous player's state over the live one.
-                    val owner = this
-                    addListener(object : Player.Listener {
-                        override fun onPlaybackStateChanged(playbackState: Int) {
-                            onBufferingChanged(playbackState == Player.STATE_BUFFERING)
-                            when (playbackState) {
-                                Player.STATE_READY -> {
-                                    autoRetry429Count = 0
-                                    val durSec = duration.toFloat() / 1000f
-                                    if (durSec > 0) onDurationKnown(durSec)
-                                    if (restorePositionMs > 0) {
-                                        seekTo(restorePositionMs)
-                                        restorePositionMs = 0L
-                                    }
-                                    // Apply a seek parked while the player was cold (resume-seek or absolute seek).
-                                    if (pendingSeekPositionMs >= 0L && duration > 0) {
-                                        seekTo(pendingSeekPositionMs.coerceIn(0L, duration))
-                                        pendingSeekPositionMs = -1L
-                                        onSeekPositionConsumed()
-                                    } else if (pendingSeekFraction >= 0f && duration > 0) {
-                                        seekTo((pendingSeekFraction * duration).toLong())
-                                        pendingSeekFraction = -1f
-                                    }
-                                }
-                                Player.STATE_ENDED -> {
-                                    // repeatMode==ONE (auto-advance off, or the last page) never
-                                    // reaches ENDED and a preload player has playWhenReady=false,
-                                    // so reaching ENDED here means the active page finished ->
-                                    // advance. Do NOT capture isActive/isAutoAdvance (they go
-                                    // stale on preload->active).
-                                    // Stills and very short clips reach ENDED within moments and
-                                    // would flip to the next page before they can be seen: hold
-                                    // them for the minimum dwell, looping real videos meanwhile.
-                                    // P05: only visible playback accrues — the clock is stopped
-                                    // by pause/buffering/background and ignores loading time.
-                                    val dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime())
-                                    val hold = reelsEndHold(
-                                        durationMs = duration.coerceAtLeast(0L),
-                                        dwellMs = dwellMs,
-                                        minDwellMs = REELS_MIN_DWELL_MS,
-                                    )
-                                    if (hold == null) {
-                                        onVideoCompleted()
-                                    } else {
-                                        if (hold.loop) repeatMode = Player.REPEAT_MODE_ONE
-                                        endHold = hold
-                                    }
-                                }
-                            }
-                        }
+            autoRetryIoCount = 0
+            pendingIoRetry = 0
 
-                        override fun onVideoSizeChanged(videoSize: VideoSize) {
-                            videoWidth = videoSize.width
-                            videoHeight = videoSize.height
-                            updateMatrix(textureViewRef, videoSize.width, videoSize.height, currentCropMode)
-                            if (videoSize.width > 0 && videoSize.height > 0) {
-                                onVideoSizeKnown(videoSize.width, videoSize.height)
-                                onVideoLandscapeKnown(videoSize.width > videoSize.height)
-                            }
-                        }
+            val entry = ReelsPlayerPool.acquire(
+                context = context,
+                isActive = isActive,
+                isMuted = currentIsMuted,
+            )
+            entry.loadControl.isMeteredNetwork = currentIsMeteredNetwork
+            entry.loadControl.isBackgrounded = !(currentLifecycleStarted || currentInPip)
+            val exoPlayer = entry.player
+            val owner = exoPlayer
+            val listener = object : Player.Listener {
+                private var lastReportedDurationMs = C.TIME_UNSET
 
-                        override fun onRenderedFirstFrame() {
-                            isFirstFrameRendered = true
-                            // The dwell clock measures visible playback: a player can already
-                            // be playing while the first frame is still being decoded.
-                            if (owner.isPlaying) dwellClock.start(SystemClock.elapsedRealtime())
-                            onRenderedFirstFrame()
-                        }
-
-                        override fun onIsPlayingChanged(isPlaying: Boolean) {
-                            // P03: isPlaying is the REAL state (READY + playWhenReady +
-                            // not suppressed). playWhenReady alone reported buffering,
-                            // audio-focus suppression and ended clips as "running".
-                            if (player !== owner) return
-                            if (isPlaying && isFirstFrameRendered) {
-                                dwellClock.start(SystemClock.elapsedRealtime())
+                private fun syncDurationAndPendingSeeks() {
+                    val playerDurationMs = owner.duration
+                    if (playerDurationMs > 0L && playerDurationMs != lastReportedDurationMs) {
+                        lastReportedDurationMs = playerDurationMs
+                        currentOnDurationKnown(playerDurationMs.toFloat() / 1000f)
+                    }
+                    if (owner.playbackState != Player.STATE_READY) return
+                    val effectiveDurationMs = resolveReelDurationMs(playerDurationMs, currentKnownDurationSec)
+                    if (restorePositionMs > 0L) {
+                        if (shouldResetReelRestorePosition(
+                                Player.STATE_READY,
+                                false,
+                                restorePositionMs,
+                                effectiveDurationMs,
+                            )
+                        ) {
+                            restorePositionMs = 0L
+                        } else {
+                            val targetPos = if (effectiveDurationMs > 0L) {
+                                restorePositionMs.coerceIn(0L, effectiveDurationMs)
                             } else {
-                                dwellClock.stop(SystemClock.elapsedRealtime())
+                                restorePositionMs
                             }
-                            onPlaybackRunningChanged(isPlaying)
+                            owner.seekTo(targetPos)
+                            restorePositionMs = 0L
                         }
+                    }
+                    if (pendingSeekPositionMs >= 0L && effectiveDurationMs > 0L) {
+                        owner.seekTo(pendingSeekPositionMs.coerceIn(0L, effectiveDurationMs))
+                        pendingSeekPositionMs = -1L
+                        currentOnSeekPositionConsumed()
+                    } else if (pendingSeekFraction >= 0f && effectiveDurationMs > 0L) {
+                        val targetMs = resolveReelSeekPositionMs(pendingSeekFraction, effectiveDurationMs)
+                        pendingSeekFraction = -1f
+                        if (kotlin.math.abs(owner.currentPosition - targetMs) > 250L) {
+                            owner.seekTo(targetMs)
+                        }
+                    }
+                }
 
-                        override fun onPlayerError(error: PlaybackException) {
-                            logcat(LogPriority.ERROR) {
-                                "Reels player error ${error.errorCodeName} on $videoUrl"
+                override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                    if (pooledPlayer?.player !== owner) return
+                    syncDurationAndPendingSeeks()
+                }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (pooledPlayer?.player !== owner) return
+                    currentOnBufferingChanged(playbackState == Player.STATE_BUFFERING)
+                    when (playbackState) {
+                        Player.STATE_READY -> {
+                            autoRetry429Count = 0
+                            autoRetryIoCount = 0
+                            if (owner.currentPosition > 0) {
+                                lastSafePositionMs = owner.currentPosition
                             }
-                            // CDN rate limit (device logcat: HTTP 429 on the media GET with a
-                            // valid signed URL): back off and re-prepare silently a few times,
-                            // keeping the buffering spinner up, before surfacing the error.
-                            var cause: Throwable? = error
-                            var rateLimited = false
-                            while (cause != null) {
-                                if (cause is HttpDataSource.InvalidResponseCodeException &&
-                                    cause.responseCode == 429
-                                ) {
-                                    rateLimited = true
-                                    break
-                                }
-                                cause = cause.cause
+                            syncDurationAndPendingSeeks()
+                        }
+                        Player.STATE_ENDED -> {
+                            val dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime())
+                            val hold = reelsEndHold(
+                                durationMs = resolveReelDurationMs(owner.duration, currentKnownDurationSec),
+                                dwellMs = dwellMs,
+                                minDwellMs = REELS_MIN_DWELL_MS,
+                            )
+                            if (hold == null) {
+                                restorePositionMs = 0L
+                                lastSafePositionMs = 0L
+                                dwellClock.reset()
+                                currentOnVideoCompleted()
+                            } else {
+                                if (hold.loop) owner.repeatMode = Player.REPEAT_MODE_ONE
+                                endHold = hold
                             }
-                            if (rateLimited && autoRetry429Count < MAX_PLAYBACK_429_RETRIES) {
-                                autoRetry429Count++
-                                pending429Retry = autoRetry429Count
-                                onBufferingChanged(true)
+                        }
+                    }
+                }
+
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    if (pooledPlayer?.player !== owner) return
+                    videoWidth = videoSize.width
+                    videoHeight = videoSize.height
+                    videoPixelRatio = videoSize.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+                    updateMatrix(
+                        tv = textureViewRef,
+                        vw = videoSize.width,
+                        vh = videoSize.height,
+                        crop = currentCropMode,
+                        pixelRatio = videoPixelRatio,
+                    )
+                    if (videoSize.width > 0 && videoSize.height > 0) {
+                        currentOnVideoSizeKnown(videoSize.width, videoSize.height)
+                        currentOnVideoLandscapeKnown(videoSize.width > videoSize.height)
+                    }
+                }
+
+                override fun onRenderedFirstFrame() {
+                    if (pooledPlayer?.player !== owner) return
+                    isFirstFrameRendered = true
+                    if (currentIsActive) {
+                        firstFrameReportedForActive = true
+                        if (owner.isPlaying) dwellClock.start(SystemClock.elapsedRealtime())
+                        currentOnRenderedFirstFrame()
+                    }
+                }
+
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    if (pooledPlayer?.player !== owner) return
+                    if (playing && isFirstFrameRendered && currentIsActive) {
+                        dwellClock.start(SystemClock.elapsedRealtime())
+                        if (owner.currentPosition > 0) {
+                            lastSafePositionMs = owner.currentPosition
+                        }
+                    } else {
+                        dwellClock.stop(SystemClock.elapsedRealtime())
+                    }
+                    currentOnPlaybackRunningChanged(playing)
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    if (pooledPlayer?.player !== owner) return
+                    logcat(LogPriority.ERROR) {
+                        "Reels player error ${error.errorCodeName} on $videoUrl"
+                    }
+                    val category = classifyPlaybackError(error)
+                    if (category == PlaybackErrorCategory.CODEC_ERROR && !codecFallbackAttempted) {
+                        val fallback = currentOnCodecFallback
+                        if (fallback != null) {
+                            codecFallbackAttempted = true
+                            val pos = owner.currentPosition.coerceAtLeast(0L)
+                            if (pos > 0L) restorePositionMs = pos
+                            if (fallback.invoke()) {
+                                currentOnBufferingChanged(true)
                                 return
                             }
-                            onPlaybackError(error.localizedMessage ?: error.errorCodeName)
                         }
-                    })
-                    prepare()
+                    }
+                    if (category == PlaybackErrorCategory.EXPIRED_URL && !expiredUrlRefreshAttempted) {
+                        val refresher = currentOnRefreshExpiredUrl
+                        if (refresher != null) {
+                            expiredUrlRefreshAttempted = true
+                            val pos = owner.currentPosition.coerceAtLeast(0L)
+                            if (pos > 0L) restorePositionMs = pos
+                            if (refresher.invoke()) {
+                                currentOnBufferingChanged(true)
+                                return
+                            }
+                        }
+                    }
+                    if (category == PlaybackErrorCategory.RATE_LIMITED &&
+                        autoRetry429Count < MAX_PLAYBACK_429_RETRIES
+                    ) {
+                        autoRetry429Count++
+                        pending429Retry = autoRetry429Count
+                        currentOnBufferingChanged(true)
+                        return
+                    }
+                    if (category == PlaybackErrorCategory.TRANSIENT_IO ||
+                        (category == PlaybackErrorCategory.EXPIRED_URL && isHttp403(error))
+                    ) {
+                        if (autoRetryIoCount < MAX_PLAYBACK_IO_RETRIES) {
+                            autoRetryIoCount++
+                            pendingIoRetry = autoRetryIoCount
+                            currentOnBufferingChanged(true)
+                            return
+                        }
+                        val currentPos = owner.currentPosition
+                        val fallback = calculateIoFallbackPosition(currentPos, lastSafePositionMs)
+                        if (fallback != null) {
+                            logcat(LogPriority.WARN) {
+                                "Reels player IO error exhausted at ${currentPos}ms on $videoUrl; falling back to ${fallback}ms"
+                            }
+                            autoRetryIoCount = 0
+                            pendingIoRetry = 0
+                            evictConnectionsAsync(networkClient)
+                            owner.seekTo(fallback)
+                            owner.prepare()
+                            owner.playWhenReady = reelsShouldRunPlayback(
+                                isActive = currentIsActive,
+                                isPlaying = currentIsPlaying,
+                                lifecycleStarted = currentLifecycleStarted || currentInPip,
+                            )
+                            currentOnBufferingChanged(true)
+                            return
+                        }
+                    }
+                    currentOnPlaybackError(error.localizedMessage ?: error.errorCodeName)
                 }
-            player = exoPlayer
+            }
+            exoPlayer.apply {
+                repeatMode = if (currentIsAutoAdvance && !currentIsLastPage) {
+                    Player.REPEAT_MODE_OFF
+                } else {
+                    Player.REPEAT_MODE_ONE
+                }
+                volume = if (currentIsMuted) 0f else 1f
+                setAudioAttributes(ReelsPlayerPool.reelsAudioAttributes(), /* handleAudioFocus = */ !currentIsMuted)
+                setPlaybackSpeed(currentPlaybackSpeed)
+                setMediaSource(buildMediaSource(videoUrl, cacheKey))
+                playWhenReady = false
+                addListener(listener)
+                currentSurface?.takeIf { it.isValid }?.let { setVideoSurface(it) }
+                prepare()
+            }
+            attachedListener = listener
+            pooledPlayer = entry
             createdForUrl = videoUrl
-            // P03: a fresh instance has not confirmed playback yet. Without this the feed
-            // would keep the previous reel's running state while the new one buffers.
-            onPlaybackRunningChanged(false)
+            createdForMediaIdentity = mediaIdentity
+            currentOnPlaybackRunningChanged(false)
+        } else if (
+            createdForUrl != null &&
+            (createdForUrl != videoUrl || createdForMediaIdentity != mediaIdentity)
+        ) {
+            // In-place quality switch / expired-URL refresh: keep the live ExoPlayer and its
+            // rendered frame (no poster flash, no MediaCodec teardown) and seek seamlessly.
+            autoRetry429Count = 0
+            pending429Retry = 0
+            autoRetryIoCount = 0
+            pendingIoRetry = 0
+            val p = existingEntry.player
+            val currentPos = p.currentPosition.coerceAtLeast(0L)
+            if (currentPos > 0L) restorePositionMs = currentPos
+            p.setMediaSource(buildMediaSource(videoUrl, cacheKey))
+            if (restorePositionMs > 0L) p.seekTo(restorePositionMs)
+            p.prepare()
+            createdForUrl = videoUrl
+            createdForMediaIdentity = mediaIdentity
         }
 
-        player?.let { p ->
+        // Update dynamic buffer ceiling & playback state on active <-> preload transitions.
+        pooledPlayer?.let { entry ->
+            entry.loadControl.isActivePage = isActive
+            val p = entry.player
+            currentSurface?.takeIf { it.isValid }?.let { p.setVideoSurface(it) }
+            val vs = p.videoSize
+            if (vs.width > 0 && vs.height > 0) {
+                videoWidth = vs.width
+                videoHeight = vs.height
+                videoPixelRatio = vs.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+                updateMatrix(textureViewRef, vs.width, vs.height, currentCropMode, pixelRatio = videoPixelRatio)
+            }
             if (isActive) {
-                currentSurface?.takeIf { it.isValid }?.let { p.setVideoSurface(it) }
-                p.playWhenReady = isPlaying
+                // If frame-0 was already pre-decoded during preload, report firstFrame now.
+                if (isFirstFrameRendered && !firstFrameReportedForActive) {
+                    firstFrameReportedForActive = true
+                    currentOnRenderedFirstFrame()
+                }
+                if (p.playbackState == Player.STATE_ENDED) {
+                    restorePositionMs = 0L
+                    lastSafePositionMs = 0L
+                    dwellClock.reset()
+                    p.seekTo(0)
+                }
+                val shouldRun = reelsShouldRunPlayback(
+                    isActive = true,
+                    isPlaying = currentIsPlaying,
+                    lifecycleStarted = currentLifecycleStarted || currentInPip,
+                )
+                p.playWhenReady = shouldRun
+                if (p.isPlaying && isFirstFrameRendered) {
+                    dwellClock.start(SystemClock.elapsedRealtime())
+                }
+                currentOnPlaybackRunningChanged(p.isPlaying)
             } else {
-                // Preload: buffer without rendering or playing audio.
-                p.setVideoSurface(null)
+                // Preload: keep surface attached so frame-0 pre-decodes, never play audio.
                 p.playWhenReady = false
+                firstFrameReportedForActive = false
+                dwellClock.stop(SystemClock.elapsedRealtime())
             }
         }
     }
 
-    // Minimum-dwell hold: keep a finished short clip looping / a still image on screen,
-    // then advance. Re-evaluated against auto-advance, pause and the foreground state so
-    // the feed never moves on by itself in the background or while the user switched
-    // auto-advance off or paused to look at the frame.
+    // Minimum-dwell hold for finished short clips.
     endHold?.let { hold ->
         LaunchedEffect(hold, isAutoAdvance, isPlaying, isActive, isLifecycleStarted) {
             if (isAutoAdvance && isPlaying && isActive && isLifecycleStarted) {
                 delay(hold.remainingMs)
                 endHold = null
-                onVideoCompleted()
+                restorePositionMs = 0L
+                lastSafePositionMs = 0L
+                dwellClock.reset()
+                currentOnVideoCompleted()
             }
         }
     }
 
-    // React to Surface becoming available or updated.
-    LaunchedEffect(currentSurface) {
+    // React to Surface becoming available or updated (for BOTH active and preload pages).
+    LaunchedEffect(currentSurface, player, isActive, isPreload) {
         val s = currentSurface
-        if (s != null && s.isValid && isActive) {
-            player?.setVideoSurface(s)
+        if (s != null && s.isValid && (isActive || isPreload)) {
+            player?.let { p ->
+                p.setVideoSurface(s)
+                val vs = p.videoSize
+                if (vs.width > 0 && vs.height > 0) {
+                    videoWidth = vs.width
+                    videoHeight = vs.height
+                    videoPixelRatio = vs.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+                }
+                updateMatrix(textureViewRef, videoWidth, videoHeight, currentCropMode, pixelRatio = videoPixelRatio)
+            }
         }
     }
 
-    // React to crop mode changes.
-    LaunchedEffect(isCropMode, videoWidth, videoHeight, textureViewRef) {
-        updateMatrix(textureViewRef, videoWidth, videoHeight, isCropMode)
+    // React to crop mode, manual zoom/pan, and video size changes.
+    LaunchedEffect(
+        isCropMode,
+        videoWidth,
+        videoHeight,
+        videoPixelRatio,
+        textureViewRef,
+        zoomScale,
+        zoomOffsetX,
+        zoomOffsetY,
+    ) {
+        updateMatrix(
+            tv = textureViewRef,
+            vw = videoWidth,
+            vh = videoHeight,
+            crop = isCropMode,
+            pixelRatio = videoPixelRatio,
+            userZoom = zoomScale,
+            panX = zoomOffsetX,
+            panY = zoomOffsetY,
+        )
     }
 
-    // React to seek request.
-    LaunchedEffect(seekToFraction) {
+    fun captureScrubFrame(tv: TextureView?, force: Boolean = false) {
+        val callback = currentOnScrubFrameCaptured ?: return
+        if (tv == null || !tv.isAvailable) return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastScrubCaptureAtMs < SCRUB_FRAME_CAPTURE_INTERVAL_MS) return
+        val (targetW, targetH) = computeScrubThumbnailSize(
+            videoWidth = videoWidth.takeIf { it > 0 } ?: tv.width,
+            videoHeight = videoHeight.takeIf { it > 0 } ?: tv.height,
+        )
+        val bitmap = runCatching { tv.getBitmap(targetW, targetH) }.getOrNull() ?: return
+        lastScrubCaptureAtMs = now
+        val p = pooledPlayer?.player
+        val effectiveDurationMs = p?.let { resolveReelDurationMs(it.duration, currentKnownDurationSec) } ?: 0L
+        val capturedFraction = if (p != null && effectiveDurationMs > 0L) {
+            (p.currentPosition.toFloat() / effectiveDurationMs.toFloat()).coerceIn(0f, 1f)
+        } else {
+            lastRequestedScrubFraction
+        }
+        callback(capturedFraction, bitmap.asImageBitmap())
+    }
+
+    LaunchedEffect(isScrubbing, textureViewRef) {
+        if (isScrubbing) {
+            captureScrubFrame(textureViewRef, force = true)
+        }
+    }
+
+    // React to monotonic seek requests (double-tap ±10s, live keyframe scrub, final commit).
+    LaunchedEffect(seekRequest?.id, player) {
+        val req = seekRequest ?: return@LaunchedEffect
+        val frac = req.fraction.coerceIn(0f, 1f)
+        if (req.liveScrub) {
+            lastRequestedScrubFraction = frac
+        }
+        val p = player
+        if (p == null) {
+            if (!req.liveScrub) {
+                pendingSeekFraction = frac
+            }
+            return@LaunchedEffect
+        }
+        p.setSeekParameters(if (req.liveScrub) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT)
+        val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+        if (p.playbackState == Player.STATE_READY && effectiveDurationMs > 0L) {
+            pendingSeekFraction = -1f
+            p.seekTo(resolveReelSeekPositionMs(frac, effectiveDurationMs))
+        } else {
+            // While the clip is still loading/buffering (before STATE_READY), keep
+            // pendingSeekFraction armed even if metadata duration is already known:
+            // otherwise an early seek before the container moov/timeline is ready
+            // gets overwritten by 0 when STATE_READY arrives.
+            if (!req.liveScrub) {
+                pendingSeekFraction = frac
+            }
+            if (effectiveDurationMs > 0L) {
+                p.seekTo(resolveReelSeekPositionMs(frac, effectiveDurationMs))
+            }
+        }
+    }
+
+    // Backward-compatible seekToFraction support for callers not using seekRequest.
+    LaunchedEffect(seekToFraction, player) {
         seekToFraction?.let { frac ->
-            player?.let { p ->
-                if (p.duration > 0) {
-                    p.seekTo((frac.coerceIn(0f, 1f) * p.duration).toLong())
-                } else {
-                    pendingSeekFraction = frac.coerceIn(0f, 1f)
+            val clamped = frac.coerceIn(0f, 1f)
+            val p = player
+            if (p == null) {
+                pendingSeekFraction = clamped
+                return@LaunchedEffect
+            }
+            p.setSeekParameters(SeekParameters.DEFAULT)
+            val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+            if (p.playbackState == Player.STATE_READY && effectiveDurationMs > 0L) {
+                pendingSeekFraction = -1f
+                p.seekTo(resolveReelSeekPositionMs(clamped, effectiveDurationMs))
+            } else {
+                pendingSeekFraction = clamped
+                if (effectiveDurationMs > 0L) {
+                    p.seekTo(resolveReelSeekPositionMs(clamped, effectiveDurationMs))
                 }
             }
         }
     }
 
-    LaunchedEffect(seekToPositionMs) {
+    LaunchedEffect(seekToPositionMs, player) {
         seekToPositionMs?.let { ms ->
             player?.let { p ->
-                if (p.playbackState == Player.STATE_READY && p.duration > 0) {
-                    p.seekTo(ms.coerceIn(0L, p.duration))
-                    onSeekPositionConsumed()
+                val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                if (p.playbackState == Player.STATE_READY && effectiveDurationMs > 0L) {
+                    p.seekTo(ms.coerceIn(0L, effectiveDurationMs))
+                    currentOnSeekPositionConsumed()
                 } else {
                     pendingSeekPositionMs = ms
                 }
@@ -586,44 +973,44 @@ fun ReelsPlayerView(
         }
     }
 
-    // React to auto-advance / last-page changes dynamically.
-    LaunchedEffect(isAutoAdvance, isLastPage) {
+    // React to auto-advance / last-page changes dynamically — bound to player instance!
+    LaunchedEffect(isAutoAdvance, isLastPage, player) {
         player?.repeatMode = if (isAutoAdvance && !isLastPage) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
     }
 
-    // Manual retry after a surfaced playback error: explicit restart from 0. P02: the play
-    // intent still comes from the live eligibility gate — a stale snackbar action must not
-    // start a paused, backgrounded, or already-replaced page.
+    // Manual retry after a surfaced playback error: explicit restart from 0.
     LaunchedEffect(retrySignal) {
         if (retrySignal > 0 && currentIsActive) {
             autoRetry429Count = 0
             pending429Retry = 0
+            autoRetryIoCount = 0
+            pendingIoRetry = 0
+            expiredUrlRefreshAttempted = false
+            codecFallbackAttempted = false
             player?.apply {
                 seekTo(0)
                 prepare()
                 playWhenReady = reelsShouldRunPlayback(
                     isActive = currentIsActive,
                     isPlaying = currentIsPlaying,
-                    lifecycleStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
+                    lifecycleStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) ||
+                        currentInPip,
                 )
             }
         }
     }
 
     // 429 backoff: re-prepare WITHOUT resetting the position and WITHOUT forcing playback.
-    // A pause, background stop, page change, or player replacement cancels the wait; the
-    // attempt stays parked and is retried once playback is eligible again.
     LaunchedEffect(pending429Retry, player, isActive, isPlaying, isLifecycleStarted) {
         val attempt = pending429Retry
         val retryPlayer = player
         if (attempt <= 0 || retryPlayer == null) return@LaunchedEffect
-        if (!reelsShouldRunPlayback(isActive, isPlaying, isLifecycleStarted)) {
-            // No spinner over a reel that is not allowed to retry right now.
-            onBufferingChanged(false)
+        if (!reelsShouldRunPlayback(isActive, isPlaying, isLifecycleStarted || isInPictureInPicture)) {
+            currentOnBufferingChanged(false)
             return@LaunchedEffect
         }
         delay(PLAYBACK_429_BACKOFF_MS * attempt)
-        val stillStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        val stillStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || currentInPip
         if (player !== retryPlayer || !reelsShouldRunPlayback(currentIsActive, currentIsPlaying, stillStarted)) {
             return@LaunchedEffect
         }
@@ -632,120 +1019,236 @@ fun ReelsPlayerView(
         pending429Retry = 0
     }
 
-    // React to play / pause changes.
-    LaunchedEffect(isPlaying, isActive) {
+    // Transient IO / seek error recovery: re-prepare WITHOUT resetting the position.
+    LaunchedEffect(pendingIoRetry, player, isActive, isPlaying, isLifecycleStarted) {
+        val attempt = pendingIoRetry
+        val retryPlayer = player
+        if (attempt <= 0 || retryPlayer == null) return@LaunchedEffect
+        if (!reelsShouldRunPlayback(isActive, isPlaying, isLifecycleStarted || isInPictureInPicture)) {
+            currentOnBufferingChanged(false)
+            return@LaunchedEffect
+        }
+        evictConnectionsAsync(networkClient)
+        delay(PLAYBACK_IO_BACKOFF_MS * attempt)
+        val stillStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || currentInPip
+        if (player !== retryPlayer || !reelsShouldRunPlayback(currentIsActive, currentIsPlaying, stillStarted)) {
+            return@LaunchedEffect
+        }
+        retryPlayer.prepare()
+        retryPlayer.playWhenReady = true
+        pendingIoRetry = 0
+    }
+
+    // React to play / pause / lifecycle changes — ALWAYS gated by lifecycleStarted / PiP!
+    LaunchedEffect(isPlaying, isActive, isLifecycleStarted, isInPictureInPicture, player) {
         player?.let { p ->
-            if (isActive) p.playWhenReady = isPlaying
+            if (isActive) {
+                p.playWhenReady = reelsShouldRunPlayback(
+                    isActive = true,
+                    isPlaying = isPlaying,
+                    lifecycleStarted = isLifecycleStarted || isInPictureInPicture,
+                )
+            } else {
+                p.playWhenReady = false
+            }
         }
     }
 
-    // React to mute / unmute changes. Audit H4: focus follows audibility — muting ABANDONS
-    // audio focus (the user's music resumes), unmuting re-requests it.
-    LaunchedEffect(isMuted) {
+    // React to mute / unmute changes — bound to player instance!
+    LaunchedEffect(isMuted, player) {
         player?.apply {
             volume = if (isMuted) 0f else 1f
-            setAudioAttributes(reelsAudioAttributes(), /* handleAudioFocus = */ !isMuted)
+            setAudioAttributes(ReelsPlayerPool.reelsAudioAttributes(), /* handleAudioFocus = */ !isMuted)
         }
     }
 
-    // React to speed changes (long-press 2x).
-    LaunchedEffect(playbackSpeed) {
+    // React to speed changes (long-press 2x, drawer speed) — bound to player instance!
+    LaunchedEffect(playbackSpeed, player) {
         player?.setPlaybackSpeed(playbackSpeed)
     }
 
-    // Track playback progress. Runs while the page is active (also while paused) so seek
-    // math and the scrubber stay correct when playback is stopped.
-    LaunchedEffect(isActive) {
+    LaunchedEffect(isMeteredNetwork, pooledPlayer) {
+        pooledPlayer?.loadControl?.isMeteredNetwork = isMeteredNetwork
+    }
+
+    // ~30fps playback progress tracking while actively playing in foreground/PiP; 4Hz when paused; completely stopped in background.
+    LaunchedEffect(isActive, player, isLifecycleStarted, isInPictureInPicture) {
+        if (!isActive || player == null || (!isLifecycleStarted && !isInPictureInPicture)) {
+            return@LaunchedEffect
+        }
         while (isActive) {
-            player?.let { p ->
-                val duration = p.duration
-                if (duration > 0) {
-                    onProgressUpdate((p.currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
-                } else if (isFirstFrameRendered) {
-                    // No media duration: run the bar over the same playback dwell window.
-                    val dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime())
-                    onProgressUpdate((dwellMs.toFloat() / REELS_MIN_DWELL_MS).coerceIn(0f, 1f))
+            val p = player
+            val isActivelyRunning = p.isPlaying
+            val effectiveDurationMs = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+            if (effectiveDurationMs > 0L) {
+                if (isActivelyRunning && p.currentPosition > 0) {
+                    lastSafePositionMs = p.currentPosition
                 }
+                currentOnBufferUpdate(
+                    (p.bufferedPosition.toFloat() / effectiveDurationMs.toFloat()).coerceIn(0f, 1f),
+                )
             }
-            delay(250)
+            val progress = if (pendingSeekFraction >= 0f) {
+                pendingSeekFraction.coerceIn(0f, 1f)
+            } else {
+                resolveReelPlaybackProgress(
+                    currentPositionMs = p.currentPosition,
+                    effectiveDurationMs = effectiveDurationMs,
+                    isFirstFrameRendered = isFirstFrameRendered,
+                    isEndedOrHolding = endHold != null || p.playbackState == Player.STATE_ENDED,
+                    dwellMs = dwellClock.elapsedMs(SystemClock.elapsedRealtime()),
+                )
+            }
+            if (progress != null) {
+                currentOnProgressUpdate(progress)
+            }
+            if (isActivelyRunning) {
+                delay(ACTIVE_PROGRESS_POLL_MS)
+            } else {
+                delay(PAUSED_PROGRESS_POLL_MS)
+            }
         }
     }
 
-    // Unmount-only release: URL changes are handled explicitly inside the lifecycle effect
-    // (createdForUrl) so the position capture cannot race the disposal order.
+    // Unmount-only release back to pool.
     DisposableEffect(Unit) {
         onDispose {
             dwellClock.stop(SystemClock.elapsedRealtime())
-            player?.let { p ->
-                if (p.duration > 0) restorePositionMs = p.currentPosition
-                p.release()
+            pooledPlayer?.let { entry ->
+                val p = entry.player
+                val pos = p.currentPosition
+                val effDur = resolveReelDurationMs(p.duration, currentKnownDurationSec)
+                if (shouldResetReelRestorePosition(p.playbackState, endHold != null, pos, effDur)) {
+                    restorePositionMs = 0L
+                    lastSafePositionMs = 0L
+                } else if (pos > 0L) {
+                    restorePositionMs = pos
+                }
+                ReelsPlayerPool.release(entry, attachedListener)
             }
-            player = null
-            // The Surface belongs to the TextureView and is released in onSurfaceTextureDestroyed;
-            // do not release it here so a URL change (quality toggle) keeps the render target.
+            pooledPlayer = null
+            attachedListener = null
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        // 1. Ambient Blurred Background (Aurora glow behind letterboxed videos).
-        // Blur a small downsampled bitmap once (cached by Coil) instead of a full-screen
-        // RenderEffect blur that re-renders on every pager scroll frame.
+    Box(modifier = modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
+        // 1. Ambient Blurred Background (Coil downsampled StackBlur cached once off-main-thread).
+        // Zero per-frame GPU RenderEffect overhead on scroll, consistent look on API 26–35+.
         if (posterUrl.isNotBlank()) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(posterUrl)
-                    // Same size as the placeholder overlay so Coil dedupes to a single decode.
-                    .size(POSTER_DECODE_SIZE, POSTER_DECODE_SIZE)
+                    .size(ReelsBlurTransformation.DEFAULT_MAX_DIMENSION, ReelsBlurTransformation.DEFAULT_MAX_DIMENSION)
+                    .transformations(blurTransformation)
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(36.dp)
-                    .alpha(0.4f),
+                    .alpha(0.45f),
             )
         }
 
-        // 2. Video Surface Layer with Matrix Aspect Ratio control
-        if (isActive) {
+        // 2. Video Surface Layer — mounted for BOTH active AND preload cards so frame-0 is already
+        // decoded onto the TextureView surface before the user starts swiping.
+        if (isActive || isPreload) {
             AndroidView(
                 factory = { ctx ->
                     TextureView(ctx).apply {
                         textureViewRef = this
+                        addOnLayoutChangeListener {
+                                view,
+                                left,
+                                top,
+                                right,
+                                bottom,
+                                oldLeft,
+                                oldTop,
+                                oldRight,
+                                oldBottom,
+                            ->
+                            val newW = (right - left).toFloat()
+                            val newH = (bottom - top).toFloat()
+                            val oldW = (oldRight - oldLeft).toFloat()
+                            val oldH = (oldBottom - oldTop).toFloat()
+                            if (newW > 0f && newH > 0f && (newW != oldW || newH != oldH)) {
+                                updateMatrix(
+                                    tv = view as? TextureView,
+                                    vw = videoWidth,
+                                    vh = videoHeight,
+                                    crop = currentCropMode,
+                                    viewWOverride = newW,
+                                    viewHOverride = newH,
+                                    pixelRatio = videoPixelRatio,
+                                )
+                            }
+                        }
                         surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                             override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
                                 val s = Surface(st)
                                 currentSurface = s
-                                player?.setVideoSurface(s)
-                                updateMatrix(this@apply, videoWidth, videoHeight, currentCropMode)
+                                if (currentIsActive || currentIsPreload) {
+                                    pooledPlayer?.player?.setVideoSurface(s)
+                                }
+                                updateMatrix(
+                                    tv = this@apply,
+                                    vw = videoWidth,
+                                    vh = videoHeight,
+                                    crop = currentCropMode,
+                                    viewWOverride = width.toFloat(),
+                                    viewHOverride = height.toFloat(),
+                                    pixelRatio = videoPixelRatio,
+                                )
                             }
 
                             override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {
-                                updateMatrix(this@apply, videoWidth, videoHeight, currentCropMode)
+                                updateMatrix(
+                                    tv = this@apply,
+                                    vw = videoWidth,
+                                    vh = videoHeight,
+                                    crop = currentCropMode,
+                                    viewWOverride = width.toFloat(),
+                                    viewHOverride = height.toFloat(),
+                                    pixelRatio = videoPixelRatio,
+                                )
                             }
 
                             override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-                                // Detach the player BEFORE releasing the Surface so the render
-                                // thread never draws into a released Surface (crash window).
-                                player?.setVideoSurface(null)
+                                pooledPlayer?.player?.setVideoSurface(null)
                                 currentSurface?.release()
                                 currentSurface = null
                                 textureViewRef = null
                                 isFirstFrameRendered = false
+                                firstFrameReportedForActive = false
                                 dwellClock.stop(SystemClock.elapsedRealtime())
                                 return true
                             }
 
                             override fun onSurfaceTextureUpdated(st: SurfaceTexture) {
                                 isFirstFrameRendered = true
+                                if (currentIsActive && pooledPlayer?.player?.isPlaying == true) {
+                                    dwellClock.start(SystemClock.elapsedRealtime())
+                                }
+                                if (currentIsScrubbing) {
+                                    captureScrubFrame(this@apply)
+                                }
                             }
                         }
                     }
                 },
                 update = { tv ->
                     textureViewRef = tv
-                    updateMatrix(tv, videoWidth, videoHeight, currentCropMode)
+                    updateMatrix(
+                        tv = tv,
+                        vw = videoWidth,
+                        vh = videoHeight,
+                        crop = isCropMode,
+                        pixelRatio = videoPixelRatio,
+                        userZoom = zoomScale,
+                        panX = zoomOffsetX,
+                        panY = zoomOffsetY,
+                    )
                 },
                 modifier = Modifier
                     .fillMaxSize()
@@ -759,11 +1262,11 @@ fun ReelsPlayerView(
             )
         }
 
-        // 3. Poster / Thumbnail placeholder overlay (hides only AFTER the first video frame renders)
+        // 3. Poster / Thumbnail placeholder overlay (hides once frame-0 renders, even during preload)
         AnimatedVisibility(
             visible = !isFirstFrameRendered && posterUrl.isNotBlank(),
             enter = fadeIn(tween(100)),
-            exit = fadeOut(tween(250)),
+            exit = fadeOut(tween(180)),
             modifier = Modifier.fillMaxSize(),
         ) {
             AsyncImage(
@@ -788,51 +1291,202 @@ private val PROGRESSIVE_CONTAINER_EXTENSIONS = setOf("mp4", "m4v", "webm", "mov"
 
 private const val REELS_CACHE_DIR = "reels_video"
 
-// One decode size shared by the blurred background and the placeholder overlay.
+// One decode size for the placeholder overlay.
 private const val POSTER_DECODE_SIZE = 480
 
 /** 429 auto-recovery: this many silent backoff re-prepares before the error surfaces. */
 private const val MAX_PLAYBACK_429_RETRIES = 3
 private const val PLAYBACK_429_BACKOFF_MS = 3_000L
 
+/** Transient IO / seek auto-recovery. */
+private const val MAX_PLAYBACK_IO_RETRIES = 3
+private const val PLAYBACK_IO_BACKOFF_MS = 1_000L
+
+/** ConnectionPool.evictAll() closes sockets (network IO): never call it on the main thread. */
+private fun evictConnectionsAsync(client: OkHttpClient) {
+    Thread { client.connectionPool.evictAll() }.start()
+}
+
+enum class PlaybackErrorCategory {
+    RATE_LIMITED,
+    EXPIRED_URL,
+    CODEC_ERROR,
+    TRANSIENT_IO,
+    FATAL,
+}
+
+private fun isHttp403(error: Throwable?): Boolean {
+    var cause: Throwable? = error
+    while (cause != null) {
+        if (cause is HttpDataSource.InvalidResponseCodeException && cause.responseCode == 403) return true
+        cause = cause.cause
+    }
+    return false
+}
+
+internal fun classifyPlaybackError(error: Throwable?): PlaybackErrorCategory {
+    if (error is PlaybackException) {
+        when (error.errorCode) {
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            -> return PlaybackErrorCategory.CODEC_ERROR
+        }
+    }
+    var cause: Throwable? = error
+    while (cause != null) {
+        if (cause is HttpDataSource.InvalidResponseCodeException) {
+            return when (cause.responseCode) {
+                429 -> PlaybackErrorCategory.RATE_LIMITED
+                401, 403, 410 -> PlaybackErrorCategory.EXPIRED_URL
+                408, 416, 500, 502, 503, 504 -> PlaybackErrorCategory.TRANSIENT_IO
+                else -> PlaybackErrorCategory.FATAL
+            }
+        } else if (cause is java.io.IOException || cause is HttpDataSource.HttpDataSourceException) {
+            return PlaybackErrorCategory.TRANSIENT_IO
+        }
+        cause = cause.cause
+    }
+    return PlaybackErrorCategory.FATAL
+}
+
+internal fun calculateIoFallbackPosition(
+    currentPositionMs: Long,
+    lastSafePositionMs: Long,
+): Long? {
+    if (currentPositionMs <= 0L) return null
+    return if (lastSafePositionMs in 1L until (currentPositionMs - 5_000L)) {
+        lastSafePositionMs
+    } else {
+        0L
+    }
+}
+
 /** Minimum time a reel stays on screen before auto-advance moves on (stills/short clips). */
 const val REELS_MIN_DWELL_MS = 5_000L
 
 /**
- * What the player should do when the active reel reaches its natural end while
- * auto-advance is on: [remainingMs] of hold before advancing, and whether a real
- * video should loop meanwhile (stills have nothing to loop).
+ * After this long a still's poster counts as the visible media even if the full-size photo
+ * request has not completed: a hung CDN call must not stall the feed's auto-advance.
  */
+internal const val STILL_READY_GRACE_MS = 6_000L
+
 data class ReelsEndHold(val remainingMs: Long, val loop: Boolean)
 
-/**
- * Decides the end-of-reel action. Stills (unknown/zero duration) and clips shorter
- * than [minDwellMs] would otherwise flip to the next page before they can be seen.
- *
- * @param durationMs media duration at the end (<= 0 / unset for stills)
- * @param dwellMs accumulated visible PLAYBACK time (a [ReelsWatchClock] stopped by pauses,
- *   buffering and background), so only time the user could actually see counts
- * @return null to advance right away once the dwell is satisfied
- */
 internal fun reelsEndHold(durationMs: Long, dwellMs: Long, minDwellMs: Long = REELS_MIN_DWELL_MS): ReelsEndHold? {
     val remainingMs = minDwellMs - dwellMs
     if (remainingMs <= 0) return null
     return ReelsEndHold(remainingMs = remainingMs, loop = durationMs > 0)
 }
 
+/**
+ * True when a finished (or near-EOF) clip must reset its saved resume offset to 0:00 so
+ * swiping back to it replays from the start instead of seeking to EOF and immediately
+ * auto-advancing forward again.
+ */
+internal fun shouldResetReelRestorePosition(
+    playbackState: Int,
+    hasEndHold: Boolean,
+    positionMs: Long,
+    effectiveDurationMs: Long,
+): Boolean {
+    if (playbackState == Player.STATE_ENDED || hasEndHold) return true
+    if (effectiveDurationMs <= 0L) return false
+    return if (effectiveDurationMs > 2_000L) {
+        positionMs >= effectiveDurationMs - 1_000L
+    } else {
+        positionMs >= effectiveDurationMs
+    }
+}
+
+/**
+ * Resolves the effective playback duration in milliseconds.
+ *
+ * ExoPlayer's [playerDurationMs] is authoritative whenever positive (not [C.TIME_UNSET] or 0).
+ * When ExoPlayer cannot determine duration upfront (e.g. fragmented/streamed long videos without
+ * header duration), falls back to the feed item's [fallbackDurationSec] so progress and seeking
+ * remain functional instead of dropping into the 5-second still-dwell timer.
+ */
+internal fun resolveReelDurationMs(
+    playerDurationMs: Long,
+    fallbackDurationSec: Float,
+): Long {
+    if (playerDurationMs > 0L) return playerDurationMs
+    if (fallbackDurationSec.isFinite() && fallbackDurationSec > 0f) {
+        return (fallbackDurationSec * 1000f).toLong().coerceAtLeast(1L)
+    }
+    return 0L
+}
+
+/**
+ * Converts a normalized seek [fraction] (`0f..1f`) into a safe target position in milliseconds.
+ *
+ * Clamps the upper bound [eofMarginMs] before the exact end of the container (`effectiveDurationMs`)
+ * whenever the clip is longer than [eofMarginMs], so rapid `+10s` double-tap seeks or 100% scrubs
+ * never seek to exact byte EOF (`offset == fileSize`), avoiding empty HTTP ranges and C++ stream
+ * downloader assertions at the end boundary.
+ */
+internal fun resolveReelSeekPositionMs(
+    fraction: Float,
+    effectiveDurationMs: Long,
+    eofMarginMs: Long = 250L,
+): Long {
+    if (effectiveDurationMs <= 0L) return 0L
+    val clampedFraction = fraction.coerceIn(0f, 1f)
+    val maxPositionMs = if (effectiveDurationMs > eofMarginMs) {
+        effectiveDurationMs - eofMarginMs
+    } else {
+        effectiveDurationMs
+    }
+    return (clampedFraction * effectiveDurationMs).toLong().coerceIn(0L, maxPositionMs)
+}
+
+/**
+ * Computes normalized `[0f, 1f]` progress for the seekbar.
+ *
+ * Only falls back to `dwellMs / minDwellMs` when duration is unknown AND the clip has ended or
+ * is holding minimum dwell; an actively playing video with unknown duration stays at `0f`
+ * instead of racing the bar to 100% in 5 seconds.
+ */
+internal fun resolveReelPlaybackProgress(
+    currentPositionMs: Long,
+    effectiveDurationMs: Long,
+    isFirstFrameRendered: Boolean,
+    isEndedOrHolding: Boolean,
+    dwellMs: Long,
+    minDwellMs: Long = REELS_MIN_DWELL_MS,
+): Float? {
+    if (effectiveDurationMs > 0L) {
+        return (currentPositionMs.coerceAtLeast(0L).toFloat() / effectiveDurationMs.toFloat())
+            .coerceIn(0f, 1f)
+    }
+    if (isFirstFrameRendered && isEndedOrHolding && minDwellMs > 0L) {
+        return (dwellMs.coerceAtLeast(0L).toFloat() / minDwellMs.toFloat()).coerceIn(0f, 1f)
+    }
+    return if (isFirstFrameRendered) 0f else null
+}
+
 /** P01: a real background stop clears the play intent; PiP is the only exempt stop state. */
 internal fun reelsShouldPauseOnStop(inPictureInPicture: Boolean): Boolean = !inPictureInPicture
 
-/** P02: the single playback-eligibility gate every retry path must derive its intent from. */
+/** P02: the single playback-eligibility gate every playback/retry path derives its intent from. */
 internal fun reelsShouldRunPlayback(isActive: Boolean, isPlaying: Boolean, lifecycleStarted: Boolean): Boolean =
     isActive && isPlaying && lifecycleStarted
 
+internal fun reelsStillDwellEligible(
+    isActive: Boolean,
+    isPlaying: Boolean,
+    lifecycleStarted: Boolean,
+    completed: Boolean,
+    mediaReady: Boolean,
+): Boolean = isActive && isPlaying && lifecycleStarted && !completed && mediaReady
+
 private val reelsVideoCacheOwner = ReelsCacheOwner<SimpleCache>()
 
-// Process-wide LRU disk cache so re-watching a reel doesn't hit the network again.
-// Must be called with an application context: StandaloneDatabaseProvider is a
-// SQLiteOpenHelper that would otherwise retain the first Activity forever.
-private fun getReelsVideoCache(context: android.content.Context): SimpleCache {
+@OptIn(UnstableApi::class)
+internal fun getReelsVideoCache(context: android.content.Context): SimpleCache {
     return reelsVideoCacheOwner.getOrCreate {
         SimpleCache(
             File(context.cacheDir, REELS_CACHE_DIR),
@@ -843,14 +1497,66 @@ private fun getReelsVideoCache(context: android.content.Context): SimpleCache {
 }
 
 /**
- * Empties the reels video disk cache; returns the freed bytes. While the process-wide
- * SimpleCache is live, spans are removed through it — deleting files under an active
- * index would corrupt it. A reel playing over a removed span falls back to the network
- * (FLAG_IGNORE_CACHE_ON_ERROR). With no live instance the folder (index included) is
- * deleted outright; that decision and the first cache creation are serialized by
- * [ReelsCacheOwner], so the directory cannot disappear under an initializing cache.
- * File IO: call from a background dispatcher.
+ * Opens a zero-network [InputStream] straight from the process-wide [SimpleCache] when 100% of a
+ * progressive reel is already cached on disk. Returns null on cache miss or partial cache.
  */
+internal data class CachedReelStream(
+    val inputStream: InputStream,
+    val contentLength: Long,
+)
+
+@OptIn(UnstableApi::class)
+internal fun openCachedReelStreamIfComplete(
+    context: android.content.Context,
+    cacheKeys: List<String>,
+): CachedReelStream? {
+    val cache = reelsVideoCacheOwner.current() ?: return null
+    for (key in cacheKeys) {
+        if (key.isBlank()) continue
+        val contentLength = ContentMetadata.getContentLength(cache.getContentMetadata(key))
+        if (contentLength <= 0L) continue
+        if (!cache.isCached(key, 0L, contentLength)) continue
+        val dataSource = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(null)
+            .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE)
+            .createDataSource()
+        val spec = DataSpec.Builder()
+            .setUri(Uri.EMPTY)
+            .setKey(key)
+            .setPosition(0L)
+            .setLength(contentLength)
+            .build()
+        return try {
+            dataSource.open(spec)
+            CachedReelStream(
+                inputStream = object : InputStream() {
+                    private val oneByte = ByteArray(1)
+                    override fun read(): Int {
+                        val n = read(oneByte, 0, 1)
+                        return if (n == -1) -1 else (oneByte[0].toInt() and 0xFF)
+                    }
+
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        val n = dataSource.read(b, off, len)
+                        return if (n == C.RESULT_END_OF_INPUT) -1 else n
+                    }
+
+                    override fun close() {
+                        runCatching { dataSource.close() }
+                    }
+                },
+                contentLength = contentLength,
+            )
+        } catch (_: Exception) {
+            runCatching { dataSource.close() }
+            null
+        }
+    }
+    return null
+}
+
+@OptIn(UnstableApi::class)
 internal fun clearReelsVideoCache(context: android.content.Context): Long {
     val dir = File(context.cacheDir, REELS_CACHE_DIR)
     val freedWithoutCache = reelsVideoCacheOwner.clearIfAbsent {
@@ -860,8 +1566,6 @@ internal fun clearReelsVideoCache(context: android.content.Context): Long {
     }
     if (freedWithoutCache != null) return freedWithoutCache
 
-    // The owner never releases a created cache, so this is non-null once clearIfAbsent
-    // declined to run.
     val cache = reelsVideoCacheOwner.current() ?: return 0L
     var freed = 0L
     for (key in cache.keys.toList()) {
@@ -873,19 +1577,13 @@ internal fun clearReelsVideoCache(context: android.content.Context): Long {
     return freed
 }
 
-/** Shared media audio attributes; focus handling follows audibility (audit H4). */
-private fun reelsAudioAttributes(): AudioAttributes = AudioAttributes.Builder()
-    .setUsage(C.USAGE_MEDIA)
-    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-    .build()
-
-/**
- * Reel media request headers: the feed's own headers, or — when none carries a Referer (feed
- * plugins implement AnimeFeedSource, not AnimeHttpSource, so Bunny-CDN-style checks reject
- * their media requests) — a generic same-origin Referer derived from the item's page URL.
- */
-internal fun reelsRequestHeaders(headers: Map<String, String>, webUrl: String?): Map<String, String> {
-    if (headers.keys.any { it.equals("Referer", ignoreCase = true) }) return headers
+internal fun reelsRequestHeaders(
+    headers: Map<String, String>,
+    webUrl: String?,
+    playbackHeadersProvider: (() -> Map<String, String>)? = null,
+): Map<String, String> {
+    val currentHeaders = playbackHeadersProvider?.invoke() ?: headers
+    if (currentHeaders.keys.any { it.equals("Referer", ignoreCase = true) }) return currentHeaders
     val referer = runCatching {
         val page = Uri.parse(webUrl)
         val host = page.host?.takeIf { it.isNotBlank() }
@@ -895,8 +1593,8 @@ internal fun reelsRequestHeaders(headers: Map<String, String>, webUrl: String?):
         } else {
             null
         }
-    }.getOrNull() ?: return headers
-    return headers + ("Referer" to referer)
+    }.getOrNull() ?: return currentHeaders
+    return currentHeaders + ("Referer" to referer)
 }
 
 /** The progressive-container whitelist check for a media URL (stable customCacheKey is safe). */
@@ -904,6 +1602,12 @@ internal fun isProgressiveReelUrl(url: String): Boolean =
     Uri.parse(url).lastPathSegment
         ?.substringAfterLast('.', "")
         ?.lowercase() in PROGRESSIVE_CONTAINER_EXTENSIONS
+
+/** Detects HLS playlists so head-prewarm can warm the manifest + first segment. */
+internal fun isHlsReelUrl(url: String): Boolean =
+    Uri.parse(url).lastPathSegment
+        ?.substringAfterLast('.', "")
+        ?.lowercase() == "m3u8"
 
 /** Photo-reel detection: still-image containers ride the feed as dwell-held stills. */
 internal fun isReelImageUrl(url: String): Boolean =
@@ -913,26 +1617,26 @@ internal fun isReelImageUrl(url: String): Boolean =
 
 private val STILL_IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif")
 
+/** Detects local loopback proxy URLs (127.0.0.1 / localhost / ::1) that manage their own cache. */
+internal fun isLoopbackReelUrl(url: String): Boolean {
+    val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: return false
+    return host == "localhost" ||
+        host == "127.0.0.1" ||
+        host.startsWith("127.") ||
+        host == "::1" ||
+        host == "[::1]"
+}
+
 /** Head-prewarm chunk: how many leading bytes of a reel are warmed ahead of the player window. */
 internal const val HEAD_PREWARM_BYTES = 512L * 1024L
 
 /**
- * C-intermediate (audit): warms the first [HEAD_PREWARM_BYTES] of a reel into the SAME
- * process-wide video cache under the SAME [cacheKey] the player will later use, so deep
- * swipes (beyond the single-player preload window) start from disk instead of a cold CDN
- * round-trip. No player, no decoder — bytes only, which is why the forward player preload
- * stays at one neighbor (three live decoders competed for bandwidth).
- *
- * Skips non-http URLs (offline copies are already local) and non-progressive containers
- * (their cache key is URL-derived, a stable-key prewarm would never be read back), and
- * anything already cached. Failures are swallowed: prewarm is best-effort.
- * Blocking network + file IO: call from a background dispatcher.
- *
- * [isCancelled] is checked between chunks so a source switch or a fast scroll stops pulling
- * traffic promptly; the dedicated client's call timeout bounds a hung open/read too, and the
- * DataSource is closed even when open() itself fails.
+ * Warms the first [HEAD_PREWARM_BYTES] of a progressive reel (under [cacheKey]) OR the manifest
+ * and first segment of an HLS (.m3u8) reel (under URL-derived keys matching ExoPlayer) into the
+ * shared [SimpleCache]. Best-effort; call from a background dispatcher.
  */
-internal fun prewarmReelHead(
+@OptIn(UnstableApi::class)
+internal suspend fun prewarmReelHead(
     context: android.content.Context,
     url: String,
     cacheKey: String,
@@ -941,14 +1645,101 @@ internal fun prewarmReelHead(
     isCancelled: () -> Boolean = { false },
 ) {
     if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) return
-    if (!isProgressiveReelUrl(url)) return
+    // Never prewarm local streaming proxies (e.g. TDLib on 127.0.0.1): background head pulls
+    // compete directly with the active video's download slots and hold proxy cache leases.
+    if (isLoopbackReelUrl(url)) return
     val appContext = context.applicationContext
+    val resolvedHeaders = reelsRequestHeaders(headers, webUrl)
+
+    if (isHlsReelUrl(url)) {
+        prewarmHlsHead(appContext, url, resolvedHeaders, isCancelled)
+        return
+    }
+    if (!isProgressiveReelUrl(url)) return
+    prewarmUrlBytes(
+        appContext = appContext,
+        url = url,
+        cacheKey = cacheKey,
+        headers = resolvedHeaders,
+        maxBytes = HEAD_PREWARM_BYTES,
+        isCancelled = isCancelled,
+    )
+}
+
+@OptIn(UnstableApi::class)
+private suspend fun prewarmHlsHead(
+    appContext: android.content.Context,
+    manifestUrl: String,
+    headers: Map<String, String>,
+    isCancelled: () -> Boolean,
+) {
+    if (isCancelled()) return
+    // 1. Warm the master/media manifest URL into SimpleCache (URL-derived key matches ExoPlayer HLS).
+    prewarmUrlBytes(
+        appContext = appContext,
+        url = manifestUrl,
+        cacheKey = null,
+        headers = headers,
+        maxBytes = 128L * 1024L,
+        isCancelled = isCancelled,
+    )
+    if (isCancelled()) return
+    // 2. Resolve media playlist + first segment and prewarm them into SimpleCache.
+    val playlist = runCatching {
+        ReelsHlsDownloader.resolveMediaPlaylist(prewarmNetworkClient, manifestUrl, headers)
+    }.getOrNull() ?: return
+    if (isCancelled()) return
+    if (playlist.mediaPlaylistUrl != manifestUrl) {
+        prewarmUrlBytes(
+            appContext = appContext,
+            url = playlist.mediaPlaylistUrl,
+            cacheKey = null,
+            headers = headers,
+            maxBytes = 128L * 1024L,
+            isCancelled = isCancelled,
+        )
+    }
+    if (isCancelled()) return
+    playlist.initSegmentUrl?.let { initUrl ->
+        prewarmUrlBytes(
+            appContext = appContext,
+            url = initUrl,
+            cacheKey = null,
+            headers = headers,
+            maxBytes = 128L * 1024L,
+            isCancelled = isCancelled,
+        )
+    }
+    if (isCancelled()) return
+    playlist.segmentUrls.firstOrNull()?.let { firstSegUrl ->
+        prewarmUrlBytes(
+            appContext = appContext,
+            url = firstSegUrl,
+            cacheKey = null,
+            headers = headers,
+            maxBytes = HEAD_PREWARM_BYTES,
+            isCancelled = isCancelled,
+        )
+    }
+}
+
+@OptIn(UnstableApi::class)
+private suspend fun prewarmUrlBytes(
+    appContext: android.content.Context,
+    url: String,
+    cacheKey: String?,
+    headers: Map<String, String>,
+    maxBytes: Long,
+    isCancelled: () -> Boolean,
+) {
+    currentCoroutineContext().ensureActive()
     val cache = getReelsVideoCache(appContext)
-    if (cache.isCached(cacheKey, 0, HEAD_PREWARM_BYTES)) return
+    val effectiveKey = cacheKey ?: url
+    if (cache.isCached(effectiveKey, 0, maxBytes)) return
     val upstream = DefaultDataSource.Factory(
         appContext,
         OkHttpDataSource.Factory(prewarmNetworkClient)
-            .setDefaultRequestProperties(reelsRequestHeaders(headers, webUrl)),
+            .setDefaultRequestProperties(headers),
     )
     val dataSource = CacheDataSource.Factory()
         .setCache(cache)
@@ -957,34 +1748,69 @@ internal fun prewarmReelHead(
         .createDataSource()
     val spec = DataSpec.Builder()
         .setUri(url)
-        .setKey(cacheKey)
-        .setLength(HEAD_PREWARM_BYTES)
+        .apply { if (cacheKey != null) setKey(cacheKey) }
+        .setLength(maxBytes)
         .build()
     try {
         dataSource.open(spec)
-        // CacheDataSource writes spans into the cache as bytes are pulled through read();
-        // the length-bounded spec stops the drain at HEAD_PREWARM_BYTES even when the CDN
-        // ignores the Range hint and offers the whole body.
         val buffer = ByteArray(64 * 1024)
         while (!isCancelled()) {
+            currentCoroutineContext().ensureActive()
             if (dataSource.read(buffer, 0, buffer.size) == C.RESULT_END_OF_INPUT) break
         }
     } catch (_: Exception) {
         // Prewarm is best-effort; a failed chunk is simply a cache miss later.
     } finally {
-        // open() can fail after allocating the upstream: close covers that path too.
         runCatching { dataSource.close() }
     }
 }
 
-/**
- * Prewarm must not hold a socket for minutes when the user has already swiped away: the
- * shared client's timeouts are meant for playback, where a long body read is expected.
- */
 private val prewarmNetworkClient: OkHttpClient by lazy {
+    val prewarmDispatcher = Dispatcher().apply {
+        maxRequests = 12
+        maxRequestsPerHost = 4
+    }
     Injekt.get<NetworkHelper>().client.newBuilder()
+        .cache(null)
+        .dispatcher(prewarmDispatcher)
+        .connectionPool(ConnectionPool())
         .callTimeout(HEAD_PREWARM_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         .build()
 }
 
 private const val HEAD_PREWARM_TIMEOUT_MS = 20_000L
+
+internal fun calculateReelTextureScale(
+    vw: Int,
+    vh: Int,
+    viewW: Float,
+    viewH: Float,
+    crop: Boolean,
+    pixelRatio: Float = 1f,
+): Pair<Float, Float>? {
+    if (vw <= 0 || vh <= 0 || viewW <= 0f || viewH <= 0f) return null
+    val safePixelRatio = pixelRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+    val displayVw = vw.toFloat() * safePixelRatio
+    val displayVh = vh.toFloat()
+    val videoRatio = displayVw / displayVh
+    val viewRatio = viewW / viewH
+
+    return if (crop) {
+        if (videoRatio > viewRatio) {
+            ((viewH * displayVw / displayVh) / viewW) to 1f
+        } else {
+            1f to ((viewW * displayVh / displayVw) / viewH)
+        }
+    } else {
+        if (videoRatio > viewRatio) {
+            1f to ((viewW * displayVh / displayVw) / viewH)
+        } else {
+            ((viewH * displayVw / displayVh) / viewW) to 1f
+        }
+    }
+}
+
+private const val SCRUB_FRAME_CAPTURE_INTERVAL_MS = 65L
+private const val ACTIVE_PROGRESS_POLL_MS = 33L
+private const val PAUSED_PROGRESS_POLL_MS = 250L
+private const val STILL_PROGRESS_POLL_MS = 50L

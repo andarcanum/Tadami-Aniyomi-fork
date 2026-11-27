@@ -56,6 +56,11 @@ class SyncNovelChapterProgressWithTrackTest {
         )
 
         assertEquals(listOf(1L, 2L), chapterUpdatesSlot.captured.map { it.id })
+        chapterUpdatesSlot.captured.forEach {
+            assertEquals(null, it.bookmark)
+            assertEquals(null, it.lastPageRead)
+            assertEquals(null, it.version)
+        }
         coVerify(exactly = 1) { repository.updateAllChapters(any()) }
         coVerify(exactly = 0) { tracker.update(any(), any()) }
         coVerify(exactly = 0) { insertTrack.await(any()) }
@@ -170,6 +175,48 @@ class SyncNovelChapterProgressWithTrackTest {
         coVerify(exactly = 0) { repository.updateAllChapters(any()) }
         coVerify(exactly = 0) { tracker.update(any(), any()) }
         coVerify(exactly = 0) { insertTrack.await(any()) }
+    }
+
+    @Test
+    fun `read chapters beyond a gap push maximum recognized progress`() = runTest {
+        val novelId = 42L
+        val repository = mockk<NovelChapterRepository>(relaxed = true)
+        val insertTrack = mockk<InsertNovelTrack>(relaxed = true)
+        val getNovelChapters = mockk<GetNovelChapters>()
+        val tracker = mockk<MangaTracker>(relaxed = true)
+        val trackPreferences = mockk<TrackPreferences>()
+        val pullPreference = mockk<Preference<Boolean>>()
+        val updatedTrackSlot = slot<eu.kanade.tachiyomi.data.database.models.manga.MangaTrack>()
+
+        coEvery { getNovelChapters.await(novelId) } returns listOf(
+            chapter(id = 4, novelId = novelId, chapterNumber = 4.5, read = true),
+            chapter(id = 1, novelId = novelId, chapterNumber = 1.0, read = false),
+            chapter(id = 2, novelId = novelId, chapterNumber = 2.0, read = true),
+            chapter(id = 3, novelId = novelId, chapterNumber = 3.0, read = false),
+            chapter(id = 5, novelId = novelId, chapterNumber = 5.0, read = false).copy(lastPageRead = 8),
+            chapter(id = 6, novelId = novelId, chapterNumber = -1.0, read = true),
+        )
+        every { trackPreferences.autoSyncProgressFromTracker() } returns pullPreference
+        every { pullPreference.get() } returns true
+        coEvery { tracker.update(capture(updatedTrackSlot), any()) } answers { firstArg() }
+
+        val interactor = SyncNovelChapterProgressWithTrack(
+            novelChapterRepository = repository,
+            insertTrack = insertTrack,
+            getNovelChapters = getNovelChapters,
+            trackPreferences = trackPreferences,
+            resolveTrackProgressSync = ResolveTrackProgressSync(),
+        )
+
+        interactor.await(
+            novelId = novelId,
+            remoteTrack = track(novelId = novelId, lastChapterRead = 1.0),
+            tracker = tracker,
+        )
+
+        assertEquals(4.5, updatedTrackSlot.captured.last_chapter_read)
+        coVerify(exactly = 1) { tracker.update(any(), any()) }
+        coVerify(exactly = 1) { insertTrack.await(any()) }
     }
 
     private fun chapter(

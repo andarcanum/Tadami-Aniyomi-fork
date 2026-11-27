@@ -3,6 +3,7 @@ package eu.kanade.presentation.reader.novel
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
@@ -11,6 +12,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.decodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTapZoneAction
 import eu.kanade.tachiyomi.ui.reader.novel.setting.resolveConfiguredNovelReaderTapAction
@@ -488,14 +492,58 @@ internal fun resolveInitialNativeReaderIndex(
     nativeLastSavedIndex: Int,
     savedPageReaderProgress: PageReaderProgress?,
     itemCount: Int,
+    chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+    savedWebProgressPercent: Int? = null,
 ): Int {
     val safeItemCount = itemCount.coerceAtLeast(1)
     val lastItemIndex = safeItemCount - 1
-    val savedProgress = savedPageReaderProgress ?: return nativeLastSavedIndex.coerceIn(0, lastItemIndex)
-    if (safeItemCount == 1 || savedProgress.totalItems <= 1) return 0
-    val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
-    val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
-    return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+    when (chapterHandoffTarget) {
+        NovelReaderPageReaderHandoffTarget.START -> return 0
+        NovelReaderPageReaderHandoffTarget.END -> return lastItemIndex
+        NovelReaderPageReaderHandoffTarget.SAVED -> Unit
+    }
+    savedPageReaderProgress?.let { savedProgress ->
+        if (safeItemCount == 1 || savedProgress.totalItems <= 1) return 0
+        val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
+        val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
+        return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+    }
+    if (nativeLastSavedIndex <= 0 && savedWebProgressPercent != null && savedWebProgressPercent > 0) {
+        if (safeItemCount == 1) return 0
+        val normalizedProgress = savedWebProgressPercent.coerceIn(0, 100) / 100f
+        return (normalizedProgress * lastItemIndex.toFloat()).roundToInt().coerceIn(0, lastItemIndex)
+    }
+    return nativeLastSavedIndex.coerceIn(0, lastItemIndex)
+}
+
+internal fun resolveInitialWebViewProgressPercent(
+    savedWebProgressPercent: Int,
+    chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
+    savedRawProgress: Long? = null,
+): Int {
+    when (chapterHandoffTarget) {
+        NovelReaderPageReaderHandoffTarget.START -> return 0
+        NovelReaderPageReaderHandoffTarget.END -> return 100
+        NovelReaderPageReaderHandoffTarget.SAVED -> Unit
+    }
+    if (savedWebProgressPercent > 0 || savedRawProgress == null) {
+        return savedWebProgressPercent.coerceIn(0, 100)
+    }
+    decodeWebScrollProgressPercent(savedRawProgress)?.let { return it.coerceIn(0, 100) }
+    decodePageReaderProgress(savedRawProgress)?.let { saved ->
+        if (saved.totalItems <= 1) return 0
+        return ((saved.index.toFloat() / (saved.totalItems - 1).toFloat()) * 100f)
+            .roundToInt()
+            .coerceIn(0, 100)
+    }
+    decodeNativeScrollProgress(savedRawProgress)?.let { saved ->
+        val totalItems = saved.totalItems ?: return 0
+        if (totalItems <= 1) return 0
+        return ((saved.index.toFloat() / (totalItems - 1).toFloat()) * 100f)
+            .roundToInt()
+            .coerceIn(0, 100)
+    }
+    return savedWebProgressPercent.coerceIn(0, 100)
 }
 
 internal fun shouldUseRichNativeScrollRenderer(
@@ -559,6 +607,71 @@ internal fun shouldUseComposePagerBoundaryPreview(
         NovelPageTransitionStyle.CURL,
         -> false
     }
+}
+
+internal fun resolveComposePagerBoundaryPagesEnabled(
+    @Suppress("UNUSED_PARAMETER") seamlessChapterTransitionEnabled: Boolean,
+    activePageTransitionStyle: NovelPageTransitionStyle,
+): Boolean {
+    // Keep the virtual boundary slots active for all animated pager styles (SLIDE, DEPTH,
+    // BOOK_FLIP) in seamless mode as well: they render the preloaded adjacent chapter page (or a
+    // clean paper surface) instead of the interstitial card, so the transition animates smoothly
+    // rather than stalling behind overscroll and snapping abruptly.
+    return shouldUseComposePagerBoundaryPreview(activePageTransitionStyle)
+}
+
+internal fun resolvePageTurnBoundarySlotsEnabled(
+    showBoundaryChapterPages: Boolean,
+    seamlessBoundaryPages: Boolean,
+): Boolean {
+    return showBoundaryChapterPages || seamlessBoundaryPages
+}
+
+internal fun resolvePageTurnAnimateBoundaryTransition(
+    transitionStyle: NovelPageTransitionStyle,
+    showBoundaryChapterPages: Boolean,
+    seamlessBoundaryPages: Boolean,
+): Boolean {
+    if (!resolvePageTurnBoundarySlotsEnabled(showBoundaryChapterPages, seamlessBoundaryPages)) {
+        return false
+    }
+    return transitionStyle == NovelPageTransitionStyle.CURL || seamlessBoundaryPages
+}
+
+internal fun resolveEffectivePageReaderViewportSize(
+    measuredWidthPx: Int,
+    measuredHeightPx: Int,
+    configWidthPx: Int,
+    configHeightPx: Int,
+): IntSize {
+    val safeConfigWidth = configWidthPx.coerceAtLeast(1)
+    val safeConfigHeight = configHeightPx.coerceAtLeast(1)
+    if (measuredWidthPx <= 0 || measuredHeightPx <= 0) {
+        return IntSize(safeConfigWidth, safeConfigHeight)
+    }
+    if (safeConfigWidth == safeConfigHeight || measuredWidthPx == measuredHeightPx) {
+        return IntSize(measuredWidthPx, measuredHeightPx)
+    }
+    val measuredIsLandscape = measuredWidthPx > measuredHeightPx
+    val configIsLandscape = safeConfigWidth > safeConfigHeight
+    return if (measuredIsLandscape == configIsLandscape) {
+        IntSize(measuredWidthPx, measuredHeightPx)
+    } else {
+        // Configuration flips orientation one frame before `.onSizeChanged` runs; swap the measured
+        // dimensions so pagination and spread column count immediately match the new orientation.
+        IntSize(measuredHeightPx, measuredWidthPx)
+    }
+}
+
+internal fun resolvePageTurnRendererSyncedSlot(
+    syncedContentPageIndex: Int?,
+    contentPageCount: Int,
+    spreadColumns: Int,
+): Int {
+    val safePageCount = contentPageCount.coerceAtLeast(1)
+    val slotCount = resolveSpreadSlotCount(safePageCount, spreadColumns)
+    val safePageIndex = (syncedContentPageIndex ?: 0).coerceIn(0, safePageCount - 1)
+    return resolveSpreadSlotForPageIndex(safePageIndex, spreadColumns).coerceIn(0, slotCount - 1)
 }
 
 /**
@@ -663,17 +776,29 @@ internal fun resolveActivePageTransitionStyle(
     return requestedStyle
 }
 
+@Suppress("UNUSED_PARAMETER")
 internal fun shouldShowNovelAtmosphereBackground(
     usePageReader: Boolean,
     activePageTransitionStyle: NovelPageTransitionStyle,
     isBookMode: Boolean = false,
 ): Boolean {
-    // The Compose-pager Book Flip draws opaque page cards, so the atmosphere layer behind them
-    // was skipped there. The book engine's flip is a CSS turn INSIDE the transparent WebView:
-    // the atmosphere layer behind the document is exactly what the reader must see through it,
-    // and the engine stylesheet already forces html/body transparent, so it can never double.
-    if (isBookMode) return true
-    return !usePageReader || activePageTransitionStyle != NovelPageTransitionStyle.BOOK_FLIP
+    // Moving page surfaces carry their own paper, but resize/remount/fold gaps must expose the
+    // same full-viewport background, never just the solid window fallback. Keep it in every route.
+    return true
+}
+
+internal fun shouldReportPageReaderProgressOnDispose(
+    hasCompletedInitialLayout: Boolean,
+    isInitialPositionRestored: Boolean,
+    isPagedReflowPending: Boolean,
+    requestedPage: Int,
+    totalItems: Int,
+): Boolean {
+    return hasCompletedInitialLayout &&
+        isInitialPositionRestored &&
+        !isPagedReflowPending &&
+        requestedPage < 0 &&
+        totalItems > 0
 }
 
 internal enum class NovelPageReaderRendererRoute {
@@ -845,9 +970,9 @@ internal fun dispatchConfiguredReaderTapAction(
     }
 }
 
-private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS = 1500
-private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS = 1000
-private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS = 500
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_SLOW_MILLIS = 780
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_NORMAL_MILLIS = 520
+private const val BOOK_FLIP_EDGE_TAP_ANIMATION_DURATION_FAST_MILLIS = 320
 
 internal fun resolveBookFlipPageAnimationDurationMillis(
     transitionStyle: NovelPageTransitionStyle,
@@ -861,6 +986,28 @@ internal fun resolveBookFlipPageAnimationDurationMillis(
     }
 }
 
+internal fun resolveComposePagerPageTurnAnimationDurationMillis(
+    transitionStyle: NovelPageTransitionStyle,
+    bookFlipAnimationSpeed: NovelBookFlipAnimationSpeed,
+    pageTurnSpeed: NovelPageTurnSpeed,
+): Int? {
+    return when (transitionStyle) {
+        NovelPageTransitionStyle.BOOK_FLIP -> resolveBookFlipPageAnimationDurationMillis(
+            transitionStyle = transitionStyle,
+            animationSpeed = bookFlipAnimationSpeed,
+        )
+        NovelPageTransitionStyle.SLIDE,
+        NovelPageTransitionStyle.DEPTH,
+        -> resolveNovelPageTurnPreset(
+            style = transitionStyle,
+            speed = pageTurnSpeed,
+            intensity = NovelPageTurnIntensity.MEDIUM,
+            shadowIntensity = NovelPageTurnShadowIntensity.MEDIUM,
+        ).animationDurationMillis
+        else -> null
+    }
+}
+
 internal fun resolveBookFlipEdgeTapAnimationDurationMillis(
     transitionStyle: NovelPageTransitionStyle,
     animationSpeed: NovelBookFlipAnimationSpeed,
@@ -871,4 +1018,168 @@ internal fun resolveBookFlipEdgeTapAnimationDurationMillis(
         transitionStyle = transitionStyle,
         animationSpeed = animationSpeed,
     )
+}
+
+internal data class NovelPageReaderAnchor(
+    val sourceBlockIndex: Int?,
+    val sourceTextStart: Int,
+    val imageUrl: String? = null,
+    val normalizedPageFraction: Float = 0f,
+)
+
+internal fun capturePageReaderAnchor(
+    contentPages: List<NovelPageContentPage>,
+    pageIndex: Int,
+): NovelPageReaderAnchor {
+    if (contentPages.isEmpty()) {
+        return NovelPageReaderAnchor(
+            sourceBlockIndex = null,
+            sourceTextStart = 0,
+            normalizedPageFraction = 0f,
+        )
+    }
+    val safeIndex = pageIndex.coerceIn(0, contentPages.lastIndex)
+    val page = contentPages[safeIndex]
+    val fraction = if (contentPages.size <= 1) {
+        0f
+    } else {
+        safeIndex.toFloat() / (contentPages.size - 1).toFloat()
+    }
+    val firstTextBlock = page.blocks.firstNotNullOfOrNull { block ->
+        when (block) {
+            is NovelPageContentBlock.Plain ->
+                block.sourceBlockIndex.takeIf { it >= 0 }?.let { idx -> idx to (block.sourceTextStart ?: 0) }
+            is NovelPageContentBlock.Rich ->
+                block.sourceBlockIndex.takeIf { it >= 0 }?.let { idx -> idx to (block.sourceTextStart ?: 0) }
+            is NovelPageContentBlock.Image -> null
+        }
+    }
+    if (firstTextBlock != null) {
+        return NovelPageReaderAnchor(
+            sourceBlockIndex = firstTextBlock.first,
+            sourceTextStart = firstTextBlock.second.coerceAtLeast(0),
+            normalizedPageFraction = fraction,
+        )
+    }
+    val firstImage = page.blocks.filterIsInstance<NovelPageContentBlock.Image>().firstOrNull()
+    return NovelPageReaderAnchor(
+        sourceBlockIndex = null,
+        sourceTextStart = 0,
+        imageUrl = firstImage?.imageUrl,
+        normalizedPageFraction = fraction,
+    )
+}
+
+internal fun resolveAnchoredPageReaderPageIndex(
+    anchor: NovelPageReaderAnchor,
+    contentPages: List<NovelPageContentPage>,
+): Int {
+    if (contentPages.isEmpty()) return 0
+    val targetBlockIndex = anchor.sourceBlockIndex
+    if (targetBlockIndex != null) {
+        var exactBlockLastMatch: Int? = null
+        var firstLaterBlockMatch: Int? = null
+        contentPages.forEachIndexed { index, page ->
+            for (block in page.blocks) {
+                val (blockIndex, start, endExclusive) = when (block) {
+                    is NovelPageContentBlock.Plain -> Triple(
+                        block.sourceBlockIndex,
+                        block.sourceTextStart ?: 0,
+                        block.sourceTextEndExclusive ?: Int.MAX_VALUE,
+                    )
+                    is NovelPageContentBlock.Rich -> Triple(
+                        block.sourceBlockIndex,
+                        block.sourceTextStart ?: 0,
+                        block.sourceTextEndExclusive ?: Int.MAX_VALUE,
+                    )
+                    is NovelPageContentBlock.Image -> continue
+                }
+                if (blockIndex < 0) continue
+                if (blockIndex == targetBlockIndex) {
+                    exactBlockLastMatch = index
+                    if (anchor.sourceTextStart in start until endExclusive || start > anchor.sourceTextStart) {
+                        return index
+                    }
+                } else if (blockIndex > targetBlockIndex && firstLaterBlockMatch == null) {
+                    firstLaterBlockMatch = index
+                }
+            }
+        }
+        exactBlockLastMatch?.let { return it }
+        firstLaterBlockMatch?.let { return it }
+    }
+    val targetImageUrl = anchor.imageUrl
+    if (!targetImageUrl.isNullOrBlank()) {
+        val imagePageIndex = contentPages.indexOfFirst { page ->
+            page.blocks.any { block ->
+                block is NovelPageContentBlock.Image && block.imageUrl == targetImageUrl
+            }
+        }
+        if (imagePageIndex >= 0) return imagePageIndex
+    }
+    return (anchor.normalizedPageFraction.coerceIn(0f, 1f) * (contentPages.size - 1))
+        .roundToInt()
+        .coerceIn(0, contentPages.lastIndex)
+}
+
+/**
+ * Preserves the reader's existing fine-grained paragraph/offset anchor when pagination reflows
+ * (for instance Portrait -> Landscape), only synthesizing an anchor if none exists yet.
+ * Capturing the start of the new wider page would collapse a mid-page anchor back to page 0's
+ * first paragraph and rewind on rotating back.
+ */
+internal fun resolvePageReaderAnchorAfterReflow(
+    existingAnchor: NovelPageReaderAnchor?,
+    contentPages: List<NovelPageContentPage>,
+    targetPageIndex: Int,
+): NovelPageReaderAnchor {
+    return existingAnchor ?: capturePageReaderAnchor(contentPages, targetPageIndex)
+}
+
+/**
+ * Updates [existingAnchor] only once the reader moves outside the spread slot that currently
+ * contains [existingAnchor], preserving exact intra-page / intra-spread block offsets until the
+ * user turns a page.
+ */
+internal fun resolveNextPageReaderAnchor(
+    existingAnchor: NovelPageReaderAnchor?,
+    contentPages: List<NovelPageContentPage>,
+    settledPageIndex: Int,
+    spreadColumns: Int,
+): NovelPageReaderAnchor? {
+    if (contentPages.isEmpty()) return existingAnchor
+    val safeIndex = settledPageIndex.coerceIn(0, contentPages.lastIndex)
+    if (existingAnchor != null) {
+        val existingPageInCurrentLayout = resolveAnchoredPageReaderPageIndex(existingAnchor, contentPages)
+        val existingSlot = resolveSpreadSlotForPageIndex(existingPageInCurrentLayout, spreadColumns)
+        val currentSlot = resolveSpreadSlotForPageIndex(safeIndex, spreadColumns)
+        if (existingSlot == currentSlot) {
+            return existingAnchor
+        }
+    }
+    return capturePageReaderAnchor(contentPages, safeIndex)
+}
+
+internal data class NovelNativeScrollViewportAnchor(
+    val firstVisibleItemIndex: Int,
+    val withinItemFraction: Float,
+    val viewportWidthPx: Int,
+)
+
+internal fun resolveNativeScrollItemFraction(
+    scrollOffsetPx: Int,
+    itemHeightPx: Int,
+): Float {
+    if (scrollOffsetPx <= 0 || itemHeightPx <= 0) return 0f
+    return (scrollOffsetPx.toFloat() / itemHeightPx.toFloat()).coerceIn(0f, 0.999f)
+}
+
+internal fun resolveAnchoredNativeScrollOffsetPx(
+    withinItemFraction: Float,
+    newItemHeightPx: Int,
+): Int {
+    if (withinItemFraction <= 0f || newItemHeightPx <= 0) return 0
+    return (withinItemFraction.coerceIn(0f, 0.999f) * newItemHeightPx.toFloat())
+        .roundToInt()
+        .coerceIn(0, (newItemHeightPx - 1).coerceAtLeast(0))
 }

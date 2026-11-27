@@ -2,9 +2,12 @@ package eu.kanade.tachiyomi.di
 
 import android.app.Application
 import android.content.Context
+import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteDatabaseCorruptException
 import android.os.Build
 import android.util.Log
+import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import aniyomi.core.common.torrent.TorrentServerApi
@@ -101,6 +104,7 @@ import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationCoo
 import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationDiskCache
 import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationProviderId
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.util.system.DeviceUtil
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -118,6 +122,7 @@ import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.achievement.database.AchievementsDatabase
+import tachiyomi.data.easteregg.crystal.CrystalProgressDataSource
 import tachiyomi.data.extension.novel.AndroidNovelPluginKeyValueStore
 import tachiyomi.data.extension.novel.NetworkNovelPluginDownloader
 import tachiyomi.data.extension.novel.NovelPluginDownloader
@@ -152,6 +157,9 @@ import uy.kohesive.injekt.api.addSingleton
 import uy.kohesive.injekt.api.addSingletonFactory
 import uy.kohesive.injekt.api.get
 import java.io.File
+import io.requery.android.database.DatabaseErrorHandler as RequeryDatabaseErrorHandler
+import io.requery.android.database.sqlite.SQLiteDatabase as RequerySQLiteDatabase
+import io.requery.android.database.sqlite.SQLiteDatabaseConfiguration as RequerySQLiteDatabaseConfiguration
 
 class AppModule(val app: Application) : InjektModule {
     companion object {
@@ -160,57 +168,142 @@ class AppModule(val app: Application) : InjektModule {
 
     /**
      * If a previous/dev build created an incompatible or partially initialized SQLite file
-     * (e.g. correct user_version but missing tables after an interrupted migration), the app
-     * will crash on the first query. Self-heal by deleting the file so SQLDelight recreates it.
+     * (e.g. non-zero user_version but missing required tables after an interrupted migration),
+     * or the file is explicitly corrupted, self-heal by deleting it so SQLDelight recreates it.
      *
-     * This helper is intentionally generic: pass the database file name and one required table
-     * name. If the table is absent (or the file cannot be opened), the DB files are deleted.
+     * CRITICAL:
+     * 1. Always inspect with the same SQLite engine that owns the file (Requery in release builds)
+     *    and with OPEN_READWRITE, NEVER OPEN_READONLY: WAL-mode databases with an uncheckpointed
+     *    `-wal` or missing `-shm` (e.g. after OEM background kill or app update) fail to open in
+     *    read-only mode.
+     * 2. Never delete user databases on transient open errors (lock contention, I/O errors,
+     *    WAL recovery errors) — only on verified missing-table schema (user_version > 0) or
+     *    explicit SQLite corruption.
      */
-    private fun ensureDatabaseIsUsable(context: Context, dbName: String, requiredTable: String) {
+    private fun ensureDatabaseIsUsable(
+        context: Context,
+        dbName: String,
+        requiredTable: String,
+        useFrameworkSqlite: Boolean,
+    ) {
         val dbFile = context.getDatabasePath(dbName)
         if (!dbFile.exists()) return
 
-        val shouldDelete = runCatching {
-            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-            val cursor = db.rawQuery(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
-                arrayOf(requiredTable),
-            )
-            val hasRequiredTable = cursor.moveToFirst()
-            cursor.close()
-            db.close()
-            !hasRequiredTable
-        }.getOrElse { true }
+        val outcome = inspectDatabaseUsability(
+            dbFile = dbFile,
+            requiredTable = requiredTable,
+            useFrameworkSqlite = useFrameworkSqlite,
+        )
 
-        if (shouldDelete) {
-            // `Context.deleteDatabase()` can fail if the DB is locked/open in another process.
-            // Be aggressive: try deleteDatabase first, then delete DB/WAL/SHM files directly.
-            Log.w(LOG_TAG, "DB '$dbName' missing required table '$requiredTable', recreating: ${dbFile.absolutePath}")
+        when (outcome) {
+            DatabaseUsabilityOutcome.Usable -> return
+            DatabaseUsabilityOutcome.KeepOnTransientError -> {
+                Log.w(
+                    LOG_TAG,
+                    "Transient error inspecting DB '$dbName'; keeping existing files so SQLDelight can open/recover it: ${dbFile.absolutePath}",
+                )
+                return
+            }
+            DatabaseUsabilityOutcome.RecreateMissingRequiredTable,
+            DatabaseUsabilityOutcome.RecreateCorrupted,
+            -> {
+                Log.w(
+                    LOG_TAG,
+                    "DB '$dbName' unusable ($outcome, requiredTable='$requiredTable'), recreating: ${dbFile.absolutePath}",
+                )
 
-            runCatching { context.deleteDatabase(dbName) }
+                runCatching { context.deleteDatabase(dbName) }
 
-            // Defensive cleanup to avoid the "no such table" crash loop.
-            runCatching { dbFile.delete() }
-            runCatching { File(dbFile.absolutePath + "-wal").delete() }
-            runCatching { File(dbFile.absolutePath + "-shm").delete() }
+                // Defensive cleanup to avoid the "no such table" / corruption crash loop.
+                runCatching { dbFile.delete() }
+                runCatching { File(dbFile.absolutePath + "-wal").delete() }
+                runCatching { File(dbFile.absolutePath + "-shm").delete() }
 
-            if (dbFile.exists()) {
-                Log.e(LOG_TAG, "Failed to delete DB file '$dbName'; app may crash. path=${dbFile.absolutePath}")
+                if (dbFile.exists()) {
+                    Log.e(LOG_TAG, "Failed to delete DB file '$dbName'; app may crash. path=${dbFile.absolutePath}")
+                }
             }
         }
     }
 
-    private fun ensureNovelDatabaseIsUsable(context: Context) =
-        ensureDatabaseIsUsable(context, "tachiyomi.noveldb", "novelsources")
+    private fun inspectDatabaseUsability(
+        dbFile: File,
+        requiredTable: String,
+        useFrameworkSqlite: Boolean,
+    ): DatabaseUsabilityOutcome {
+        var corruptionReported = false
+        return runCatching {
+            if (useFrameworkSqlite) {
+                SQLiteDatabase.openDatabase(
+                    dbFile.absolutePath,
+                    null,
+                    SQLiteDatabase.OPEN_READWRITE,
+                    DatabaseErrorHandler { corruptionReported = true },
+                ).use { db ->
+                    if (corruptionReported) {
+                        return@use DatabaseUsabilityOutcome.RecreateCorrupted
+                    }
+                    val userVersion = db.version
+                    val hasRequiredTable = db.rawQuery(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+                        arrayOf(requiredTable),
+                    ).use { cursor ->
+                        cursor.moveToFirst()
+                    }
+                    classifyDatabaseUsability(
+                        hasRequiredTable = hasRequiredTable,
+                        userVersion = userVersion,
+                    )
+                }
+            } else {
+                val config = RequerySQLiteDatabaseConfiguration(
+                    dbFile.absolutePath,
+                    RequerySQLiteDatabase.OPEN_READWRITE,
+                )
+                RequerySQLiteDatabase.openDatabase(
+                    config,
+                    null,
+                    RequeryDatabaseErrorHandler { corruptionReported = true },
+                ).use { db ->
+                    if (corruptionReported) {
+                        return@use DatabaseUsabilityOutcome.RecreateCorrupted
+                    }
+                    val userVersion = db.version
+                    val hasRequiredTable = db.query(
+                        SimpleSQLiteQuery(
+                            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+                            arrayOf<Any>(requiredTable),
+                        ),
+                    ).use { cursor ->
+                        cursor.moveToFirst()
+                    }
+                    classifyDatabaseUsability(
+                        hasRequiredTable = hasRequiredTable,
+                        userVersion = userVersion,
+                    )
+                }
+            }
+        }.getOrElse { error ->
+            Log.w(LOG_TAG, "DB usability inspection threw for '${dbFile.name}'", error)
+            if (corruptionReported) {
+                DatabaseUsabilityOutcome.RecreateCorrupted
+            } else {
+                classifyDatabaseInspectionFailure(error)
+            }
+        }
+    }
 
-    private fun ensureMangaDatabaseIsUsable(context: Context) =
-        ensureDatabaseIsUsable(context, "tachiyomi.db", "mangas")
+    private fun ensureNovelDatabaseIsUsable(context: Context, useFrameworkSqlite: Boolean) =
+        ensureDatabaseIsUsable(context, "tachiyomi.noveldb", "novelsources", useFrameworkSqlite)
 
-    private fun ensureAnimeDatabaseIsUsable(context: Context) =
-        ensureDatabaseIsUsable(context, "tachiyomi.animedb", "animes")
+    private fun ensureMangaDatabaseIsUsable(context: Context, useFrameworkSqlite: Boolean) =
+        ensureDatabaseIsUsable(context, "tachiyomi.db", "mangas", useFrameworkSqlite)
 
-    private fun ensureAchievementsDatabaseIsUsable(context: Context) =
-        ensureDatabaseIsUsable(context, AchievementsDatabase.NAME, "achievements")
+    private fun ensureAnimeDatabaseIsUsable(context: Context, useFrameworkSqlite: Boolean) =
+        ensureDatabaseIsUsable(context, "tachiyomi.animedb", "animes", useFrameworkSqlite)
+
+    private fun ensureAchievementsDatabaseIsUsable(context: Context, useFrameworkSqlite: Boolean) =
+        ensureDatabaseIsUsable(context, AchievementsDatabase.NAME, "achievements", useFrameworkSqlite)
 
     private fun ensureNotesSchema(
         db: SupportSQLiteDatabase,
@@ -369,116 +462,108 @@ class AppModule(val app: Application) : InjektModule {
         return NovelPluginRuntimeOverrides.fromJson(json, payload)
     }
 
+    private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
+        val cursor = db.query("PRAGMA $pragma")
+        try {
+            cursor.moveToFirst()
+        } finally {
+            cursor.close()
+        }
+    }
+
+    private fun configureSqlitePerformancePragmas(db: SupportSQLiteDatabase, isLowRam: Boolean) {
+        setPragma(db, "foreign_keys = ON")
+        setPragma(db, "journal_mode = WAL")
+        setPragma(db, "synchronous = NORMAL")
+        setPragma(db, "busy_timeout = 5000")
+        setPragma(db, "temp_store = MEMORY")
+        setPragma(db, "cache_size = ${if (isLowRam) -8000 else -16000}")
+        setPragma(db, "mmap_size = ${if (isLowRam) 0 else 33554432}")
+    }
+
     override fun InjektRegistrar.registerInjectables() {
         addSingleton(app)
 
-        ensureMangaDatabaseIsUsable(app)
-        ensureAnimeDatabaseIsUsable(app)
-        ensureNovelDatabaseIsUsable(app)
-        ensureAchievementsDatabaseIsUsable(app)
-
-        val sqlDriverManga = AndroidSqliteDriver(
-            schema = Database.Schema,
-            context = app,
-            name = "tachiyomi.db",
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val isLowRam by lazy { DeviceUtil.isLowRamDevice(app) }
+        val useFrameworkSqlite = BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+        val sqliteFactory = {
+            if (useFrameworkSqlite) {
                 // Support database inspector in Android Studio
                 FrameworkSQLiteOpenHelperFactory()
             } else {
                 RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(Database.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                    migrateMangaNotesSchema(db)
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+            }
+        }
 
-        val sqlDriverAnime = AndroidSqliteDriver(
-            schema = AnimeDatabase.Schema,
-            context = app,
-            name = "tachiyomi.animedb",
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Support database inspector in Android Studio
-                FrameworkSQLiteOpenHelperFactory()
-            } else {
-                RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(AnimeDatabase.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                    migrateAnimeNotesSchema(db)
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+        // Defer ensure*DatabaseIsUsable() out of attachBaseContext() on the main thread:
+        // each DB file is validated lazily (OPEN_READWRITE using the matching SQLite engine)
+        // only when its driver is first requested.
+        val sqlDriverManga by lazy {
+            ensureMangaDatabaseIsUsable(app, useFrameworkSqlite)
+            AndroidSqliteDriver(
+                schema = Database.Schema,
+                context = app,
+                name = "tachiyomi.db",
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(Database.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                        migrateMangaNotesSchema(db)
+                    }
+                },
+            )
+        }
 
-        val sqlDriverAchievements = AndroidSqliteDriver(
-            schema = tachiyomi.db.achievement.AchievementsDatabase.Schema,
-            context = app,
-            name = AchievementsDatabase.NAME,
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Support database inspector in Android Studio
-                FrameworkSQLiteOpenHelperFactory()
-            } else {
-                RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(tachiyomi.db.achievement.AchievementsDatabase.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+        val sqlDriverAnime by lazy {
+            ensureAnimeDatabaseIsUsable(app, useFrameworkSqlite)
+            AndroidSqliteDriver(
+                schema = AnimeDatabase.Schema,
+                context = app,
+                name = "tachiyomi.animedb",
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(AnimeDatabase.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                        migrateAnimeNotesSchema(db)
+                    }
+                },
+            )
+        }
 
-        val sqlDriverNovel = AndroidSqliteDriver(
-            schema = NovelDatabase.Schema,
-            context = app,
-            name = "tachiyomi.noveldb",
-            factory = if (BuildConfig.DEBUG && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Support database inspector in Android Studio
-                FrameworkSQLiteOpenHelperFactory()
-            } else {
-                RequerySQLiteOpenHelperFactory()
-            },
-            callback = object : AndroidSqliteDriver.Callback(NovelDatabase.Schema) {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    super.onOpen(db)
-                    setPragma(db, "foreign_keys = ON")
-                    setPragma(db, "journal_mode = WAL")
-                    setPragma(db, "synchronous = NORMAL")
-                    migrateNovelNotesSchema(db)
-                }
-                private fun setPragma(db: SupportSQLiteDatabase, pragma: String) {
-                    val cursor = db.query("PRAGMA $pragma")
-                    cursor.moveToFirst()
-                    cursor.close()
-                }
-            },
-        )
+        val sqlDriverAchievements by lazy {
+            ensureAchievementsDatabaseIsUsable(app, useFrameworkSqlite)
+            AndroidSqliteDriver(
+                schema = tachiyomi.db.achievement.AchievementsDatabase.Schema,
+                context = app,
+                name = AchievementsDatabase.NAME,
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(tachiyomi.db.achievement.AchievementsDatabase.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                    }
+                },
+            )
+        }
+
+        val sqlDriverNovel by lazy {
+            ensureNovelDatabaseIsUsable(app, useFrameworkSqlite)
+            AndroidSqliteDriver(
+                schema = NovelDatabase.Schema,
+                context = app,
+                name = "tachiyomi.noveldb",
+                factory = sqliteFactory(),
+                callback = object : AndroidSqliteDriver.Callback(NovelDatabase.Schema) {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        configureSqlitePerformancePragmas(db, isLowRam)
+                        migrateNovelNotesSchema(db)
+                    }
+                },
+            )
+        }
 
         addSingletonFactory {
             Database(
@@ -890,7 +975,11 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { ExternalIntents() }
 
         // Translation system
-        addSingletonFactory { TranslationQueueManager() }
+        addSingletonFactory {
+            TranslationQueueManager(
+                profileRepository = eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.repository,
+            )
+        }
         addSingletonFactory { TranslationNotificationManager(app) }
 
         // Achievement system repositories
@@ -918,6 +1007,40 @@ class AppModule(val app: Application) : InjektModule {
             )
         }
 
+        addSingletonFactory<tachiyomi.domain.easteregg.crystal.CrystalMemorialRepository> {
+            val unlockables = get<tachiyomi.data.achievement.UnlockableManager>()
+            tachiyomi.data.easteregg.crystal.CrystalMemorialRepositoryImpl(
+                database = get(),
+                synchronizeCosmetics = { granted ->
+                    tachiyomi.domain.easteregg.crystal.CrystalMemorialIds.REWARDS.forEach { id ->
+                        if (granted) unlockables.setUnlockableUnlocked(id) else unlockables.removeUnlockable(id)
+                    }
+                },
+            )
+        }
+
+        addSingletonFactory<tachiyomi.domain.easteregg.crystal.CrystalProgressSource> {
+            CrystalProgressDataSource(get(), get(), get(), trackerCatalog = { trackerId ->
+                when (trackerId) {
+                    1L -> "myanimelist"
+                    TrackerManager.ANILIST -> "anilist"
+                    else -> null
+                }
+            })
+        }
+        addSingletonFactory {
+            eu.kanade.domain.easteregg.crystal.CrystalCampaignController(
+                repository = get(),
+                progressSource = get(),
+                versionCode = BuildConfig.VERSION_CODE,
+                productionRelease = eu.kanade.domain.easteregg.crystal.CrystalCampaignConfig.isProductionRelease,
+                releaseCodes = eu.kanade.domain.easteregg.crystal.CrystalCampaignConfig.targetReleaseCodes,
+                debugAllowed = BuildConfig.DEBUG && BuildConfig.BUILD_TYPE == "debug",
+            )
+        }
+        addSingletonFactory { eu.kanade.domain.easteregg.crystal.CrystalAppearancePreferences(get()) }
+        addSingletonFactory { eu.kanade.domain.easteregg.crystal.CrystalMemorialManager(get(), get(), get()) }
+
         // Sync preferences and Google Drive service
         addSingletonFactory { SyncPreferences(get()) }
         addSingletonFactory { GoogleDriveService(app) }
@@ -939,4 +1062,50 @@ class AppModule(val app: Application) : InjektModule {
             get<AnimeDownloadManager>()
         }
     }
+}
+
+internal enum class DatabaseUsabilityOutcome {
+    Usable,
+    RecreateMissingRequiredTable,
+    RecreateCorrupted,
+    KeepOnTransientError,
+}
+
+internal fun classifyDatabaseUsability(
+    hasRequiredTable: Boolean,
+    userVersion: Int,
+): DatabaseUsabilityOutcome {
+    return if (!hasRequiredTable && userVersion > 0) {
+        DatabaseUsabilityOutcome.RecreateMissingRequiredTable
+    } else {
+        DatabaseUsabilityOutcome.Usable
+    }
+}
+
+internal fun classifyDatabaseInspectionFailure(error: Throwable): DatabaseUsabilityOutcome {
+    return if (isExplicitDatabaseCorruption(error)) {
+        DatabaseUsabilityOutcome.RecreateCorrupted
+    } else {
+        DatabaseUsabilityOutcome.KeepOnTransientError
+    }
+}
+
+internal fun isExplicitDatabaseCorruption(error: Throwable): Boolean {
+    var current: Throwable? = error
+    val visited = HashSet<Throwable>()
+    while (current != null && visited.add(current)) {
+        val simpleName = current::class.java.simpleName
+        val message = current.message.orEmpty()
+        if (
+            current is SQLiteDatabaseCorruptException ||
+            simpleName == "SQLiteDatabaseCorruptException" ||
+            simpleName == "SQLiteNotADatabaseException" ||
+            message.contains("file is not a database", ignoreCase = true) ||
+            message.contains("database disk image is malformed", ignoreCase = true)
+        ) {
+            return true
+        }
+        current = current.cause
+    }
+    return false
 }

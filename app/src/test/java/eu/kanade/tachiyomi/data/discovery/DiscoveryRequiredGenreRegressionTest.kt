@@ -25,12 +25,23 @@ class DiscoveryRequiredGenreRegressionTest {
         unattempted: Int = items.count { it.genres.isEmpty() },
         metadataUnavailable: Int = 0,
         failures: Int = 0,
-    ) = DiscoveryGenrePage(items, verified, unattempted, metadataUnavailable, failures)
+        pending: List<DiscoveryRowItem> = emptyList(),
+        hasNextPage: Boolean = true,
+    ) = DiscoveryGenrePage(
+        items = items,
+        verified = verified,
+        unattempted = unattempted,
+        metadataUnavailable = metadataUnavailable,
+        transientFailures = failures,
+        pending = pending,
+        hasNextPage = hasNextPage,
+    )
 
     private class Catalog(
         val answer: suspend (Long, Int) -> DiscoveryGenrePage,
     ) : DiscoverySourceCatalog {
         val genreCalls = mutableListOf<Long>()
+        val genrePages = mutableListOf<Pair<Long, Int>>()
         var unfilteredCalls = 0
 
         override suspend fun popular(
@@ -61,7 +72,8 @@ class DiscoveryRequiredGenreRegressionTest {
             releaseStatuses: Set<DiscoveryReleaseStatus>,
         ): List<DiscoveryRowItem> {
             genreCalls += sourceId
-            return answer(sourceId, page).items
+            genrePages += sourceId to page
+            return boundPage(sourceId, page).items
         }
 
         override suspend fun popularWithGenresVerified(
@@ -73,18 +85,30 @@ class DiscoveryRequiredGenreRegressionTest {
             budget: DiscoveryVerificationBudget?,
         ): DiscoveryGenrePage {
             genreCalls += sourceId
-            return answer(sourceId, page)
+            genrePages += sourceId to page
+            return boundPage(sourceId, page)
+        }
+        private suspend fun boundPage(sourceId: Long, page: Int): DiscoveryGenrePage {
+            val response = answer(sourceId, page)
+            fun bind(
+                items: List<DiscoveryRowItem>,
+            ) = items.map { it.copy(sourceId = sourceId, sourceUrl = it.sourceUrl ?: "/fixture/" + it.cleanTitle) }
+            return response.copy(items = bind(response.items), pending = bind(response.pending))
         }
     }
 
-    private fun context() = DiscoveryBuildContext(
-        mediaType = media,
+    private fun context(
+        mediaType: DiscoveryMediaType = media,
+        ids: List<Long> = (1L..10L).toList(),
+    ) = DiscoveryBuildContext(
+        mediaType = mediaType,
         seeds = emptyList(),
         libraryCleanTitles = emptySet(),
         historyCleanTitles = emptySet(),
         hiddenCleanTitles = emptySet(),
         requiredGenres = setOf("Fantasy"),
-        sourceIds = (1L..10L).toList(),
+        sourceIds = ids,
+        sourcePolicy = discoveryQueryPolicyFixture(mediaType, ids),
     )
 
     private fun noExternal() = object : DiscoveryTrendingSource {
@@ -120,6 +144,28 @@ class DiscoveryRequiredGenreRegressionTest {
     }
 
     @Test
+    fun `multi-source required query is not capped at twenty four per source`() = runTest {
+        val catalog = Catalog { id, _ ->
+            page((1..30).map { item("${id}_$it", listOf("Fantasy")) }, hasNextPage = false)
+        }
+
+        val results = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(1L, 2L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policy,
+            targetItems = 60,
+            budget = DiscoveryVerificationBudget(maxDetails = 160),
+        )
+
+        results.forEach { it.summary.items.size shouldBe 30 }
+        results.sumOf { it.summary.items.size } shouldBe 60
+    }
+
+    @Test
     fun `taste row does not truncate the source list at six`() = runTest {
         val catalog = Catalog { id, _ ->
             if (id == 7L) page(listOf(item("Match", listOf("Fantasy")))) else page(emptyList())
@@ -150,7 +196,7 @@ class DiscoveryRequiredGenreRegressionTest {
             )
         }
         val catalog = Catalog { _, _ -> error("the shared query must be used") }
-        val sharedContext = context().copy(
+        val sharedContext = context(ids = listOf(7L)).copy(
             sourceIds = listOf(7L),
             sharedGenreQuery = sharedQuery,
         )
@@ -254,7 +300,7 @@ class DiscoveryRequiredGenreRegressionTest {
                     page(emptyList())
                 }
             }
-            val result = DiscoverySourceRowBuilder(catalog).build(context().copy(mediaType = kind))
+            val result = DiscoverySourceRowBuilder(catalog).build(context(mediaType = kind))
             result.single().title shouldBe "FromDetails"
             result.single().genres shouldBe listOf("Fantasy")
         }
@@ -363,9 +409,132 @@ class DiscoveryRequiredGenreRegressionTest {
     }
 
     @Test
+    fun `paging continues while genre matches are retired and admits the next page`() = runTest {
+        val excluded = (1..20).mapTo(HashSet()) { "retired$it".lowercase() }
+        val catalog = Catalog { _, pageNumber ->
+            when (pageNumber) {
+                1 -> page((1..20).map { item("Retired$it", listOf("Fantasy")) })
+                2 -> page((1..5).map { item("Fresh$it", listOf("Fantasy")) }, hasNextPage = false)
+                else -> page(emptyList())
+            }
+        }
+
+        val result = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policy,
+            pages = 5,
+            excludedKeys = excluded,
+        ).single()
+
+        result.summary.items.map { it.cleanTitle }.toSet() shouldBe
+            (1..5).mapTo(HashSet()) { "fresh$it" }
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2)
+    }
+
+    @Test
+    fun `unknown genres on the first page do not stop paging`() = runTest {
+        val unknown = item("Unknown").copy(genres = emptyList())
+        val catalog = Catalog { _, pageNumber ->
+            when (pageNumber) {
+                1 -> page(listOf(unknown), unattempted = 1, pending = listOf(unknown))
+                else -> page(listOf(item("Match", listOf("Fantasy"))))
+            }
+        }
+
+        val result = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policy,
+            pages = 5,
+        ).single()
+
+        catalog.genrePages.map { it.second }.contains(2) shouldBe true
+        result.summary.items.map { it.cleanTitle }.contains("match") shouldBe true
+    }
+
+    @Test
+    fun `an alias of a retired title does not consume a slot and paging continues`() = runTest {
+        val aliased = item("Primary", listOf("Fantasy")).copy(altCleanTitles = listOf("alternate name"))
+        val catalog = Catalog { _, pageNumber ->
+            when (pageNumber) {
+                1 -> page(listOf(aliased))
+                else -> page(listOf(item("Fresh", listOf("Fantasy"))))
+            }
+        }
+
+        val result = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policy,
+            pages = 5,
+            excludedKeys = setOf("alternate name"),
+        ).single()
+
+        catalog.genrePages.map { it.second }.contains(2) shouldBe true
+        result.summary.items.map { it.cleanTitle }.toSet() shouldBe setOf("fresh")
+    }
+
+    @Test
+    fun `two filtered empty pages do not hide productive continuation`() = runTest {
+        val catalog = Catalog { _, pageNumber ->
+            when (pageNumber) {
+                1 -> page(listOf(item("First", listOf("Fantasy"))))
+                4 -> page(listOf(item("Second", listOf("Fantasy"))), hasNextPage = false)
+                else -> page(emptyList())
+            }
+        }
+
+        queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policy,
+            pages = 10,
+        )
+
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2, 3, 4)
+    }
+
+    @Test
+    fun `filtered pages continue until the source reports its end`() = runTest {
+        val catalog = Catalog { _, pageNumber ->
+            page(listOf(item("Drama$pageNumber", listOf("Drama"))), hasNextPage = pageNumber == 1)
+        }
+
+        queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = policy,
+            pages = 5,
+        )
+
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2)
+    }
+
+    @Test
     fun `verified empty with full coverage stays an honest empty result`() = runTest {
         val result = queryDiscoveryGenreSources(
-            Catalog { _, _ -> page((1..20).map { item("wrong$it", listOf("Drama")) }) },
+            Catalog { _, _ -> page((1..20).map { item("wrong$it", listOf("Drama")) }, hasNextPage = false) },
             media,
             listOf(7L),
             listOf("Fantasy"),
@@ -457,15 +626,16 @@ class DiscoveryRequiredGenreRegressionTest {
     }
 
     @Test
-    fun `a matching second page is reachable with strict required`() = runTest {
+    fun `first page without genre matches continues to a matching second page`() = runTest {
+        val catalog = Catalog { _, pageNumber ->
+            if (pageNumber == 1) {
+                page(listOf(item("Wrong", listOf("Drama"))))
+            } else {
+                page(listOf(item("Match", listOf("Fantasy"))), hasNextPage = false)
+            }
+        }
         val result = queryDiscoveryGenreSources(
-            Catalog { _, pageNumber ->
-                if (pageNumber == 1) {
-                    page(listOf(item("Wrong", listOf("Drama"))))
-                } else {
-                    page(listOf(item("Match", listOf("Fantasy"))))
-                }
-            },
+            catalog,
             media,
             listOf(7L),
             listOf("Fantasy"),
@@ -473,7 +643,8 @@ class DiscoveryRequiredGenreRegressionTest {
             emptySet(),
             policy,
         ).single().summary
-        result.items.single().title shouldBe "Match"
+        result.items.map { it.title } shouldBe listOf("Match")
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2)
     }
 
     @Test
@@ -513,5 +684,138 @@ class DiscoveryRequiredGenreRegressionTest {
         }
         requests shouldBe 0
         result.items.single().genres shouldBe listOf("Fantasy")
+    }
+
+    @Test
+    fun `best effort required continues to page two when page one fills target with fallback items`() = runTest {
+        val catalog = Catalog { _, pageNumber ->
+            if (pageNumber == 1) {
+                page((1..25).map { item("Drama $it", listOf("Drama")) }, hasNextPage = true)
+            } else {
+                page(listOf(item("Fantasy Hit", listOf("Fantasy"))), hasNextPage = false)
+            }
+        }
+        val bestEffort = DiscoveryCandidatePolicy(
+            requiredGenres = setOf("Fantasy"),
+            requiredEnforcement = RequiredEnforcement.BEST_EFFORT,
+        )
+        val result = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Fantasy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = bestEffort,
+            targetItems = 20,
+        ).single().summary
+        catalog.genrePages.map { it.second } shouldBe listOf(1, 2)
+        result.items.first().title shouldBe "Fantasy Hit"
+    }
+
+    @Test
+    fun `multi-branch ANY query keeps successful branch items when sibling branch fails`() = runTest {
+        val catalog = object : DiscoverySourceCatalog {
+            override suspend fun popular(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun popularWithGenres(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                genres: List<String>,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ): List<DiscoveryRowItem> {
+                if ("Drama" in genres) throw IOException("drama branch down")
+                return listOf(item("Fantasy Match", listOf("Fantasy")))
+            }
+
+            override suspend fun latest(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+        }
+        val anyPolicy = DiscoveryCandidatePolicy(
+            requiredGenres = linkedSetOf("Fantasy", "Drama"),
+            requiredMatchMode = RequiredMatchMode.ANY,
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val result = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Fantasy", "Drama"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = anyPolicy,
+            matchMode = RequiredMatchMode.ANY,
+        ).single()
+        result.failure shouldBe null
+        result.summary.items.map { it.title } shouldBe listOf("Fantasy Match")
+        result.summary.hasIncompletePages shouldBe true
+    }
+
+    @Test
+    fun `multi-branch ANY merge keeps branch transient failure count`() = runTest {
+        val catalog = object : DiscoverySourceCatalog {
+            override suspend fun popular(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun latest(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun popularWithGenres(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                genres: List<String>,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+            ) = emptyList<DiscoveryRowItem>()
+
+            override suspend fun popularWithGenresVerified(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                genres: List<String>,
+                page: Int,
+                releaseStatuses: Set<DiscoveryReleaseStatus>,
+                budget: DiscoveryVerificationBudget?,
+            ) = if ("Action" in genres) {
+                page(items = emptyList(), verified = 1, failures = 1, hasNextPage = false)
+            } else {
+                page(items = emptyList(), verified = 0, failures = 0, hasNextPage = false)
+            }
+        }
+        val anyPolicy = DiscoveryCandidatePolicy(
+            requiredGenres = linkedSetOf("Action", "Comedy"),
+            requiredMatchMode = RequiredMatchMode.ANY,
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val result = queryDiscoveryGenreSources(
+            catalog = catalog,
+            media = media,
+            sourceIds = listOf(7L),
+            genres = listOf("Action", "Comedy"),
+            page = 1,
+            releaseStatuses = emptySet(),
+            policy = anyPolicy,
+            matchMode = RequiredMatchMode.ANY,
+        ).single()
+        result.failure shouldBe null
+        result.summary.failedCount shouldBe 1
+        result.canRewardReliability shouldBe false
     }
 }

@@ -1,10 +1,13 @@
 # Reels Feed Contract
 
-**Current version: 27** (`extensionLib` 12.0–27.0 accepted by the host; v24–v26 are
-purely additive and stay below the v27 ceiling) ·
+**Current version: 31** (`extensionLib` 12.0–31.0 accepted by the host; v24–v31 are
+purely additive) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
+[`AnimeFeedLifecycleSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedLifecycleSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
+[`AnimeCreatorDisplaySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorDisplaySource.kt),
+[`AnimeFeedPlaybackHeadersSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedPlaybackHeadersSource.kt),
 [`AnimeReelsFeedbackSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeReelsFeedbackSource.kt),
 [`AnimeFeedLoginSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedLoginSource.kt),
 [`AnimeCustomFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCustomFeedSource.kt),
@@ -38,6 +41,8 @@ API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/anime
 [`AnimeFeedReplaySource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedReplaySource.kt),
 [`FeedReplayContext`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayContext.kt),
 [`FeedReplayItemResult`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedReplayItemResult.kt),
+[`AnimeFeedRoundRobinSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedRoundRobinSource.kt),
+[`FeedRoundRobin`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedRoundRobin.kt),
 [`ContentPreferenceOption`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ContentPreferenceOption.kt)
 
 This document is the standalone reference for authors of short-video feed
@@ -91,6 +96,39 @@ they simply don't opt in.
   the identical `(page, cursor)` pair.
 - A nonexistent/deleted creator should return an empty `FeedPage`, not throw.
 - Implementing the capability means bumping `extensionLib` to 18.0.
+
+## Creator display and playback headers (v30 additive capabilities)
+
+```kotlin
+interface AnimeCreatorDisplaySource {
+    fun creatorDisplayName(creatorId: String): String?
+}
+
+interface AnimeFeedPlaybackHeadersSource {
+    fun playbackHeaders(): Map<String, String>
+}
+```
+
+Both interfaces are optional and have abstract methods, not new default members on an
+existing interface. Implementing either requires `extensionLib` 30.0 so older hosts reject
+the plugin before class loading; plugins declaring 12.0–29.0 remain accepted unchanged.
+`ShortVideoItem` constructor and storage schema are unchanged.
+
+- `ShortVideoItem.author` remains the opaque source-issued creator ID. New Pornhub video
+  IDs are canonical `/model/<slug>`, `/pornstar/<slug>` or `/channels/<slug>` routes.
+- The display method is a cheap local lookup only (no HTTP or blocking disk reads), returning
+  null for unknown identities. Creator requests, routing, follows and new hidden-author rows
+  always retain the original ID. Unknown legacy IDs remain stored: no migration/deletion
+  or ambiguous alias guessing.
+- For opted-in sources, old display-name hides also match the current cheap local label,
+  preserving their former name-wide collision behavior without resolving names to routes.
+  Canonical route hides remain exact-ID only. This compatibility check never writes rows.
+- Playback headers are a fresh local snapshot of public `User-Agent`, `Origin`, `Referer`
+  context after session/UA changes. The host accepts only those names and rejects CR/LF;
+  never expose cookies, Authorization or session secrets to redirected media requests.
+  Empty provider output is authoritative. An opted-in provider failure fails closed to an
+  empty map, never raw HTTP credentials. Only sources without the capability keep their
+  legacy `AnimeHttpSource.headers` behavior.
 
 ## View & like feedback (v18 capability interface)
 
@@ -310,7 +348,137 @@ Rules for the source:
   for playable URLs and re-resolves before playback; never require a persisted secret or a
   process-local token to resolve an item.
 - All members are abstract. Implementing the capability requires `extensionLib` 27.0;
-  `LIB_VERSION_MAX` is 27.0, and older plugins inside `12.0..27.0` keep loading.
+  `LIB_VERSION_MAX` became 27.0 in that release, and older plugins inside `12.0..27.0` keep
+  loading.
+
+## Round-robin scanning (v28 capability interface)
+
+`AnimeFeedRoundRobinSource` is an optional capability for feeds that rotate over many chats/sources
+instead of one backend stream. It extends `AnimeFeedReplaySource`, so the v26 account scope and the
+v27 replay-context checks stay in force; hosts detect it with
+`rawSource is AnimeFeedRoundRobinSource` and keep the ordinary feed for every source without it.
+All members are abstract, no default members are added to older interfaces, and the v28
+request/result models are transport values — they are never stored as a whole in the database.
+
+```kotlin
+interface AnimeFeedRoundRobinSource : AnimeFeedReplaySource {
+    fun isRoundRobinEnabled(filters: AnimeFilterList): Boolean
+    suspend fun prepareRoundRobin(): FeedRoundRobinReadiness
+    fun identifyRoundRobinItem(itemId: String): FeedRoundRobinIdentity?
+    suspend fun getRoundRobinCatalog(
+        expectedContext: FeedReplayContext,
+        forceRefresh: Boolean,
+    ): FeedRoundRobinCatalogResult
+    suspend fun scanRoundRobinSource(request: FeedRoundRobinScanRequest): FeedRoundRobinScanResult
+}
+```
+
+`FeedRoundRobinReadiness` has exactly three states:
+
+- `SignedOut` — confirmed unauthorized: the source has no authorized session. This is not an
+  empty feed, must not be reported as a chat `Unavailable`, and is not `Pending`. Only this
+  state keeps the legacy unauthenticated web feed as the host fallback.
+- `Pending(retryAtEpochMillis)` — identity/TDLib is still resolving, not signed out. The host
+  must not fall back to the legacy/web feed while pending; null lets the host use its default
+  backoff.
+- `Ready(context, storageKey)` — a scan may run. `context` is the ordinary v27
+  `FeedReplayContext`; `storageKey` is a **separate** stable, non-secret identifier of the
+  round-robin backend/format (Telegram: `tdlib-rr-v1`) without the subscription list, ports, epochs
+  or timestamps. It is independent from the mutable v27 context: it stays stable when the context
+  changes, so two `Ready` values with different contexts can carry the same storage key.
+
+Host keys: account scope is still `accountScopeId()`. The host derives its session context key with
+the existing `ReelsSessionContext.computeContextKey` from the frozen filters/unseen set and uses
+`storageKey + ':rr:1'` as the round-robin continuity key. The source checkpoint is bound to
+`storageKey`, `accountId`, `sourceKey` and the filter fingerprint — never to the mutable v27
+continuity key. When `replayContextChanges` emits, the host calls `prepareRoundRobin()` again on
+IO: the same account/storage key refreshes the expected transport/replay context and the catalog
+without resetting the round; a different account/storage key fences the old scan stream and opens
+the new context safely.
+
+`getRoundRobinCatalog` returns `Snapshot(catalog)`, `Deferred(retryAtEpochMillis)` or
+`ContextChanged`. A 401 or any context loss is `ContextChanged` (readiness is redone), never a
+provider-wide outage. `FeedRoundRobinCatalog` carries the context, a `revision`, `complete`, the
+source list and an optional `retryAtEpochMillis`. Each `FeedRoundRobinSourceRef` has `key`, `title`,
+`author`, `contentRevision`, `excluded` and `previousKeys` (former keys that still identify the same
+chat).
+
+Scans are bounded and per chat:
+
+- `FeedRoundRobinScanRequest.maxCandidates` is always in `1..2`; with zero free slots the host does
+  not call the scanner at all. A returned page contains at most that many candidates, every
+  identity uses the requested `sourceKey`, item ids are non-empty and order keys are positive.
+- `Page.checkpoint` is opaque and non-empty even when `historyExhausted` is true; later head checks
+  pass it back. The same empty checkpoint without exhaustion or a retry window is a protocol stall,
+  not a reason for a tight retry loop.
+- `Deferred(reason, retryAtEpochMillis, providerWide)` uses `NETWORK`, `RATE_LIMIT`, `TIME_BUDGET`
+  or `UPSTREAM_PENDING`. Telegram 420/429 is `RATE_LIMIT` with `providerWide = true`; even a manual
+  refresh must not cancel `retryAtEpochMillis`.
+- `Unavailable` means this chat cannot be scanned (deleted/left); it is not an outage of the whole
+  provider. If a message disappears during the separate head recovery, drop that head from the
+  cursor and continue scanning the chat.
+- `ContextChanged` repeats the v27 rule: redo readiness instead of failing every chat.
+  `InvalidCheckpoint` restarts that chat's scan from a fresh checkpoint.
+
+Telegram identity and content rules: `sourceKey` is `chatId.toString()` (never an `@username`),
+`orderKey` is the TDLib `message.id` compared descending inside one chat, and the stable item id
+stays `tdlib:chatId/messageId`. Video/animation items and explicitly allowed rounds are merged by
+`message.id`; documents and private chats are not included. A null duration still follows the
+existing `DurationRange` policy. `contentKey` is a durable stable TDLib remote unique file id when
+available, otherwise null; a local `file.id` is not a durable global identity.
+
+Implementing the capability requires `extensionLib` 28.0; the host ceiling (`LIB_VERSION_MAX`)
+is 28.0, and every plugin inside `12.0..28.0` keeps loading unchanged.
+
+## Video quality (v29 capability interface)
+
+`AnimeFeedVideoQualitySource` is an optional capability for feeds that can expose the real
+renditions of one item. It extends `AnimeFeedReplaySource`, so the v26 account scope and the v27
+readiness/replay context stay in force; hosts detect it with
+`rawSource is AnimeFeedVideoQualitySource` and keep the legacy single-URL path for every source
+without it. All members are abstract; existing model descriptors are unchanged.
+
+```kotlin
+interface AnimeFeedVideoQualitySource : AnimeFeedReplaySource {
+    fun supportsVideoQuality(itemId: String): Boolean
+    suspend fun getVideoQualities(itemId: String, expectedAccountId: String): FeedVideoQualitiesResult
+    suspend fun resolveVideoQuality(
+        itemId: String,
+        variantId: String,
+        expectedAccountId: String,
+    ): FeedVideoQualityResult
+}
+```
+
+`supportsVideoQuality` is a pure, non-suspending domain check (no IO/network/account lookup):
+the host calls it before requiring a proven account. False keeps the legacy path and must not
+wait for native readiness. `getVideoQualities` returns a catalog, not a playable binding:
+`Available(itemId, accountId, variants)` echoes the request; `Retry`, `NeedsAuth`,
+`ContextChanged`, `Unavailable` and `Unsupported` are distinct terminal states. `Available` never
+means that a URL is already bound; the host resolves one variant separately.
+
+`FeedVideoQualityVariant` has `id`, nullable `width`/`height`/`codec`/`sizeBytes`, and
+`isSource`; exactly one catalog variant is the Source. `resolveVideoQuality` returns
+`Available(itemId, accountId, variant, videoUrl, cacheIdentity)`; the variant id and cache
+identity must match the requested selection so a stale response can be fenced.
+
+Contract rules:
+
+- Resolution is the shorter reported edge: 1080x1920 is 1080p. A missing requested exact
+  resolution falls back to Source, never to a nearest resolution. Source is the message's main
+  file, not a promise of a camera original or a fixed resolution.
+- Unknown metadata is not absence: `sizeBytes = 0` is published as null; an empty remote
+  `uniqueId` is an ephemeral byte identity, not a reason to hide a variant. A usable progressive
+  file is required; HLS-only variants are not offered by this version.
+- A quality URI must carry the exact confirmed size; approximate `expectedSize` is not an HTTP
+  Content-Length. If the exact size cannot be proven, return `Retry`, not a fake successful body.
+- `cacheIdentity` identifies bytes, never a requested label, token, port or signed URL. The host
+  builds its q29 cache key from owner account/source + item id + this identity.
+- The source must not read host preferences/history, must not decide what the user has watched,
+  and must not change feed delivery/order. The capability is media-only.
+
+Implementing the capability requires `extensionLib` 29.0; the host ceiling (`LIB_VERSION_MAX`)
+is 29.0, and every plugin inside `12.0..29.0` keeps loading unchanged.
 
 ## Delivery is not consumption (what a feed source must NOT infer)
 
@@ -518,6 +686,9 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 31 | Optional capability `AnimeFeedLifecycleSource.onFeedActiveChanged(active: Boolean)`: allows stateful feed plugins (e.g. persistent MTProto/TDLib engines) to suspend background networking and periodic maintenance while Reels is hidden or backgrounded, and resume cleanly when active again. Abstract member, no default methods on existing interfaces. Implementing requires `extensionLib` 31.0; `LIB_VERSION_MAX` becomes 31.0, while older plugins inside `12.0..30.0` keep loading. |
+| 29 | Optional capability `AnimeFeedVideoQualitySource` (`supportsVideoQuality`, `getVideoQualities`, `resolveVideoQuality`): real per-item rendition catalogs and one resolved playback binding, with Source/exact-resolution semantics and byte cache identity. Models `FeedVideoQualityVariant`, `FeedVideoQualitiesResult` (`Available`/`Retry`/`NeedsAuth`/`ContextChanged`/`Unavailable`/`Unsupported`) and `FeedVideoQualityResult`. All members abstract; the v27/v28 descriptors and old models are unchanged. Implementing requires `extensionLib` 29.0; `LIB_VERSION_MAX` becomes 29.0, while older plugins inside `12.0..28.0` keep loading. |
+| 28 | Optional capability `AnimeFeedRoundRobinSource` (`isRoundRobinEnabled`, `prepareRoundRobin`, `identifyRoundRobinItem`, `getRoundRobinCatalog`, `scanRoundRobinSource`): per-chat round-robin scanning with a stable `storageKey` independent from the mutable v27 replay context and bounded 1..2 candidate scans. Models `FeedRoundRobinReadiness` (`SignedOut`/`Pending`/`Ready`), `FeedRoundRobinIdentity`, `FeedRoundRobinSourceRef`, `FeedRoundRobinCatalog`, `FeedRoundRobinCatalogResult`, `FeedRoundRobinCandidate`, `FeedRoundRobinScanRequest`, `FeedRoundRobinDeferral`, `FeedRoundRobinScanResult`. All members abstract, no default members added to existing interfaces; the v27 interfaces and model descriptors are unchanged. Implementing requires `extensionLib` 28.0; `LIB_VERSION_MAX` becomes 28.0, while older plugins inside `12.0..27.0` keep loading. |
 | 27 | Optional capability `AnimeFeedReplaySource` (`replayContextChanges: Flow<FeedReplayContext?>`, `prepareReplay()`, `resolveReplayItem(itemId, expectedContext, filters)`): session continuity and safe item rehydration without process tokens. Models `FeedReplayContext` (accountId, continuityKey) and `FeedReplayItemResult` (`Available`, `FilteredOut`, `Unavailable`, `Deferred`, `ContextChanged`). All members abstract, no default methods on existing interfaces. `LIB_VERSION_MAX` becomes 27.0; older plugins stay inside `12.0..27.0` and keep loading. |
 | 26 | Optional capability `AnimeFeedAccountIdentitySource.accountScopeId()`: a stable, non-secret account id so the host can key its durable watched/skipped summary per account instead of per source (display labels and session tokens are explicitly rejected). `null` = unproven identity → source-scoped history. Also documents the host-side For You rules a source must not violate: delivery (proxy `Range`, `DownloadFile`, prefetch, decode) is never a view, replay caches are not history, an empty cache is not EOF, `id` must be delivery-independent, and the source never pre-filters seen items. Instanceof-detected, no default members, existing constructors unchanged. A plugin that implements it declares `extensionLib` 26.0 and the host's `LIB_VERSION_MAX` becomes 26.0 (older plugins stay inside `12.0..26.0` and keep loading). |
 | 25 | Optional capabilities `AnimeFeedMediaDescriptorSource` (per-item `FeedMediaDescriptor`: media kind, lazy-resolution permission, HD fallback, offline support) and `AnimeFeedErrorClassifierSource` (typed `FeedError` verdicts: `ExpiredCursor`, `AuthRequired`, `RateLimited(retryAtEpochMillis)`, `Transient`, `Terminal`). Both instanceof-detected, no default members, existing constructors unchanged; `null` verdicts and absent capabilities keep the legacy host behavior. Additive: `LIB_VERSION_MAX` stays at 23.0. |
@@ -531,3 +702,24 @@ class MyFeed : AnimeFeedSource {
 | 18 | Optional creator-feed capability: `AnimeCreatorFeedSource.getCreatorFeed(creator, page, cursor)` and optional feedback capability `AnimeReelsFeedbackSource` (both instanceof-detected, no default members added to existing interfaces). Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 18.0 as the discipline stamp. |
 | 17 | Sticky cursor pagination (`FeedPage.nextCursor`, `cursor` parameters), `getSearchFeed` default, URL semantics flip (`videoUrl` base + optional `videoUrlHd`). Breaking: all feed plugins rebuild. |
 | ≤16 | Initial feed contract (page-int pagination, `videoUrlHd` required). |
+
+### v29 build artifacts (2026-11-01)
+
+Built from this worktree with `LIB_VERSION_MAX = 29.0`. Sizes and hashes below are the actual
+files produced by the final gate; a rebuild will produce different hashes. The `:source-api` row is
+the current compile jar (`bundleAndroidMainClassesToCompileJar`), copied byte-identically into the
+plugin. Host APKs were rebuilt at 2026-11-01 21:24 (+05:00); the Telegram plugin at 21:11.
+
+| Artifact | Version | Size | SHA-256 |
+|---|---|---|---|
+| `:source-api` compile jar (`source-api/build/intermediates/compile_library_classes_jar/androidMain/bundleAndroidMainClassesToCompileJar/classes.jar`) | contract 29 | 1,286,413 B | `705f4bee382512ca280a003165a8154c034d5fe35812ddf1d61da63fd6ee94ae` |
+| Host `app-arm64-v8a-debug.apk` | versionCode 219 / `0.63.2-10422` | 171,342,750 B | `875a0f0fbded746b0f41e9eee6c51db0414dfbce811386d11fccdebbb0ff7465` |
+| Telegram plugin `telegram-debug.apk` | versionCode 28 / `29.0.28`, `extensionLib` 29.0 | 21,837,587 B | `e5c6433865f6a224fc4656c617eaa145c6310923b839cfe4c31ee89a63e3d4de` |
+
+The same `assembleDebug` run also produced `app-armeabi-v7a-debug.apk` (160,506,000 B),
+`app-x86-debug.apk` (171,282,360 B), `app-x86_64-debug.apk` (178,089,729 B) and
+`app-universal-debug.apk` (372,578,840 B; SHA-256
+`1c3e29e512199ca1e1ea9ffeae01b8a6d22c1de3c7ac90da286a1617a8cd1ec9`).
+
+Real-device validation of Telegram transcoded variants, codecs, audio/seek and FLOOD_WAIT was
+not run in this gate; the host/plugin builds and JVM tests do not prove those runtime properties.

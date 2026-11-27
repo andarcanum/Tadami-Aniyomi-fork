@@ -29,3 +29,7 @@ WHERE suppressed_at < ?;
 deleteAllByMedia:
 DELETE FROM discovery_suppressions
 WHERE media_type = ?;
+
+deleteByTitle:
+DELETE FROM discovery_suppressions
+WHERE media_type = ? AND clean_title = ?;

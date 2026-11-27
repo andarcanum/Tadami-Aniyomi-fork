@@ -1,12 +1,28 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.discovery.model.DiscoveryEligibilitySnapshot
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoveryQueryEvidence
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySourcePolicy
+import tachiyomi.domain.discovery.model.canonicalDiscoveryKey
+import tachiyomi.domain.discovery.model.legacyDiscoveryKey
+import kotlin.coroutines.ContinuationInterceptor
 
 data class DiscoveryFeed(
     val mediaType: DiscoveryMediaType,
@@ -16,6 +32,10 @@ data class DiscoveryFeed(
     val generatedAt: Long,
     /** Builder output before coordinator filtering; diagnostics only. */
     val rawCandidates: Map<DiscoveryRowType, List<DiscoveryRowItem>> = emptyMap(),
+    val exhaustionEvidence: List<DiscoveryQueryEvidence>? = null,
+    val failedSourceIds: Set<Long> = emptySet(),
+    val degradedSourceIds: Set<Long> = emptySet(),
+    val successfulSourceIds: Set<Long> = emptySet(),
 )
 
 /**
@@ -33,142 +53,220 @@ class DiscoveryCoordinator(
 
     suspend fun streamFeed(
         context: DiscoveryBuildContext,
+        collectTimeoutMs: Long? = null,
         onRowAvailable: suspend (DiscoveryRowType, List<DiscoveryRowItem>) -> Unit,
-    ): DiscoveryFeed = supervisorScope {
+    ): DiscoveryFeed {
+        val callerContext = currentCoroutineContext()
+        callerContext.ensureActive()
+        val dispatcher = callerContext[ContinuationInterceptor] ?: Dispatchers.IO
+        val detachedJob = SupervisorJob()
+        val parentHandle = callerContext[Job]?.invokeOnCompletion { cause ->
+            if (cause != null) {
+                detachedJob.cancel(
+                    cause as? CancellationException ?: CancellationException("Parent cancelled", cause),
+                )
+            }
+        }
+        val scope = CoroutineScope(detachedJob + dispatcher)
+
         val channel = Channel<Triple<DiscoveryRowType, List<DiscoveryRowItem>?, Boolean>>(Channel.UNLIMITED)
         val failed = mutableSetOf<DiscoveryRowType>()
         val degraded = mutableSetOf<DiscoveryRowType>()
+        val settledTypes = mutableSetOf<DiscoveryRowType>()
         val excluded = context.libraryCleanTitles + context.historyCleanTitles + context.hiddenCleanTitles
         val rawCandidates = mutableMapOf<DiscoveryRowType, List<DiscoveryRowItem>>()
         val finalRows = mutableMapOf<DiscoveryRowType, List<DiscoveryRowItem>>()
 
         val jobs = rowBuilders.map { builder ->
-            launch {
-                val items = try {
-                    builder.build(context)
+            scope.launch {
+                var items: List<DiscoveryRowItem>? = null
+                try {
+                    items = builder.build(context)
                 } catch (e: CancellationException) {
-                    throw e
+                    if (!scope.isActive) throw e
+                    logcat { "[DiscoveryCoordinator] row ${builder.rowType} cancelled: ${e.message}" }
                 } catch (e: Exception) {
                     logcat { "[DiscoveryCoordinator] row ${builder.rowType} FAILED: ${e.message}" }
-                    null
+                } finally {
+                    if (scope.isActive) {
+                        channel.trySend(Triple(builder.rowType, items, builder.isDegraded))
+                    }
                 }
-                channel.send(Triple(builder.rowType, items, builder.isDegraded))
             }
         }
 
         var completed = 0
-        repeat(rowBuilders.size) {
-            val (type, items, isDegraded) = channel.receive()
-            completed++
-            val stage = when (type) {
-                DiscoveryRowType.LIKE -> "Подбор похожего"
-                DiscoveryRowType.TASTE -> "Анализ предпочтений"
-                DiscoveryRowType.TREND -> "Загрузка трендов"
-                DiscoveryRowType.SOURCE -> "Опрос источников"
-            }
-            DiscoveryProgressTracker.update(
-                isRunning = true,
-                mediaType = context.mediaType,
-                stageText = "$stage ($completed/${rowBuilders.size})",
-                current = completed,
-                total = rowBuilders.size,
-            )
-            if (items == null) {
-                failed += type
-            } else {
-                if (isDegraded) {
-                    degraded += type
+        suspend fun receiveSettled() {
+            repeat(rowBuilders.size) {
+                val (type, items, isDegraded) = channel.receive()
+                settledTypes += type
+                completed++
+                val stage = when (type) {
+                    DiscoveryRowType.LIKE -> "Подбор похожего"
+                    DiscoveryRowType.TASTE -> "Анализ предпочтений"
+                    DiscoveryRowType.TREND -> "Загрузка трендов"
+                    DiscoveryRowType.SOURCE -> "Опрос источников"
                 }
-                rawCandidates[type] = items
-
-                // Пересчитываем все полученные ряды в строгом порядке приоритета enum: LIKE > TASTE > TREND > SOURCE.
-                val seenSoFar = mutableSetOf<String>()
-                val updatedRows = mutableListOf<Pair<DiscoveryRowType, List<DiscoveryRowItem>>>()
-
-                for (pType in DiscoveryRowType.entries) {
-                    val candidates = rawCandidates[pType] ?: continue
-                    val policyFiltered = context.candidatePolicy.filterRowCandidates(
-                        candidates,
-                        genresSelector = { it.genres },
-                    )
-                    val selected = selectRowItems(
-                        policyFiltered,
-                        excluded,
-                        seenSoFar,
-                        context.recentCleanTitles,
-                        context.shownCutoffMap,
-                        context.currentFeedCleanTitles,
-                    )
-                    logcat {
-                        "[DiscoverySelection] media=${context.mediaType} row=$pType raw=${candidates.size} " +
-                            "genre=${policyFiltered.size} selected=${selected.size} " +
-                            "excludedCurrent=${context.currentFeedCleanTitles.size} " +
-                            "excludedKnown=${excluded.size} seenAcrossRows=${seenSoFar.size}"
+                DiscoveryProgressTracker.update(
+                    isRunning = true,
+                    mediaType = context.mediaType,
+                    stageText = "$stage ($completed/${rowBuilders.size})",
+                    current = completed,
+                    total = rowBuilders.size,
+                )
+                if (items == null) {
+                    failed += type
+                } else {
+                    if (isDegraded) {
+                        degraded += type
                     }
-                    selected.forEach {
-                        seenSoFar += it.cleanTitle
-                        seenSoFar += it.altCleanTitles
+                    rawCandidates[type] = items
+
+                    // Пересчитываем все полученные ряды в строгом порядке приоритета enum: LIKE > TASTE > TREND > SOURCE.
+                    val seenSoFar = mutableSetOf<String>()
+                    val updatedRows = mutableListOf<Pair<DiscoveryRowType, List<DiscoveryRowItem>>>()
+
+                    for (pType in DiscoveryRowType.entries) {
+                        val candidates = rawCandidates[pType] ?: continue
+                        val eligible = filterEligibleRowItems(
+                            items = candidates,
+                            mediaType = context.mediaType,
+                            rowType = pType,
+                            sourcePolicy = context.sourcePolicy,
+                            excluded = excluded,
+                            seen = seenSoFar,
+                            recentCleanTitles = context.recentCleanTitles,
+                            currentFeedCleanTitles = context.currentFeedCleanTitles,
+                            eligibilitySnapshot = context.eligibilitySnapshot,
+                        )
+                        val policyFiltered = context.candidatePolicy.filterRowCandidates(
+                            eligible,
+                            genresSelector = { it.genres },
+                            fillTarget = if (!context.candidatePolicy.isStrictRequired) rowLimit else null,
+                        )
+                        val selected = selectRowItems(policyFiltered)
+                        logcat {
+                            "[DiscoverySelection] media=${context.mediaType} row=$pType raw=${candidates.size} " +
+                                "genre=${policyFiltered.size} selected=${selected.size} " +
+                                "excludedCurrent=${context.currentFeedCleanTitles.size} " +
+                                "excludedKnown=${excluded.size} seenAcrossRows=${seenSoFar.size}"
+                        }
+                        selected.forEach {
+                            seenSoFar += it.cleanTitle
+                            seenSoFar += it.altCleanTitles
+                        }
+
+                        if (finalRows[pType] != selected) {
+                            finalRows[pType] = selected
+                            updatedRows.add(pType to selected)
+                        }
                     }
 
-                    if (finalRows[pType] != selected) {
-                        finalRows[pType] = selected
-                        updatedRows.add(pType to selected)
+                    for ((updatedType, updatedItems) in updatedRows) {
+                        onRowAvailable(updatedType, updatedItems)
                     }
-                }
-
-                for ((updatedType, updatedItems) in updatedRows) {
-                    onRowAvailable(updatedType, updatedItems)
                 }
             }
         }
 
-        jobs.forEach { it.join() }
+        return try {
+            val completedWithinDeadline = if (collectTimeoutMs == null) {
+                receiveSettled()
+                true
+            } else {
+                withTimeoutOrNull(collectTimeoutMs.coerceAtLeast(1L)) {
+                    receiveSettled()
+                } != null
+            }
 
-        DiscoveryFeed(
-            mediaType = context.mediaType,
-            rows = finalRows,
-            failedRows = failed,
-            degradedRows = degraded,
-            generatedAt = System.currentTimeMillis(),
-            rawCandidates = rawCandidates.toMap(),
-        )
+            if (completedWithinDeadline) {
+                jobs.forEach { it.join() }
+            } else {
+                detachedJob.cancel(CancellationException("Discovery collect deadline ${collectTimeoutMs}ms"))
+                withContext(NonCancellable) { yield() }
+                val unfinished = rowBuilders.map { it.rowType }.filterNot { it in settledTypes }
+                failed += unfinished
+                logcat {
+                    "[DiscoveryCoordinator] collect deadline ${collectTimeoutMs}ms reached; " +
+                        "settled=$settledTypes unfinished=$unfinished"
+                }
+            }
+
+            val settledBuilders = rowBuilders.filter { it.rowType in settledTypes }
+            DiscoveryFeed(
+                mediaType = context.mediaType,
+                rows = finalRows,
+                failedRows = failed,
+                degradedRows = degraded,
+                generatedAt = System.currentTimeMillis(),
+                rawCandidates = rawCandidates.toMap(),
+                exhaustionEvidence = if (settledBuilders.size == rowBuilders.size &&
+                    settledBuilders.all { it.exhaustionEvidence != null }
+                ) {
+                    settledBuilders.flatMap { it.exhaustionEvidence.orEmpty() }.distinctBy { it.queryKey }
+                } else {
+                    null
+                },
+                failedSourceIds = settledBuilders.flatMap { it.failedSourceIds }.toSet(),
+                degradedSourceIds = settledBuilders.flatMap { it.degradedSourceIds }.toSet(),
+                successfulSourceIds = settledBuilders.flatMap { it.successfulSourceIds }.toSet(),
+            )
+        } catch (e: CancellationException) {
+            detachedJob.cancel(e)
+            withContext(NonCancellable) { yield() }
+            throw e
+        } finally {
+            parentHandle?.dispose()
+        }
     }
 
     suspend fun buildFeed(context: DiscoveryBuildContext): DiscoveryFeed =
         streamFeed(context) { _, _ -> }
 
-    private fun selectRowItems(
+    private fun filterEligibleRowItems(
         items: List<DiscoveryRowItem>,
+        mediaType: DiscoveryMediaType,
+        rowType: DiscoveryRowType,
+        sourcePolicy: DiscoverySourcePolicy,
         excluded: Set<String>,
         seen: Set<String>,
         recentCleanTitles: Set<String>,
-        shownCutoffMap: Map<String, Long>,
         currentFeedCleanTitles: Set<String> = emptySet(),
+        eligibilitySnapshot: DiscoveryEligibilitySnapshot? = null,
     ): List<DiscoveryRowItem> {
-        val valid = items
+        val blockedEligibility = eligibilitySnapshot
+            ?.takeIf { it.mediaType == mediaType }
+            ?.let { it.excludedIdentityKeys + it.excludedLookupKeys }
+            .orEmpty()
+        return items
             .filterNot { item ->
+                if (sourcePolicy.mediaType != mediaType ||
+                    !sourcePolicy.allows(rowType, item.sourceId, item.provider)
+                ) {
+                    return@filterNot true
+                }
                 val keys = listOf(item.cleanTitle) + item.altCleanTitles
-                keys.any { it.isBlank() || it in excluded || it in seen }
+                if (keys.any {
+                        it.isBlank() || it in excluded || it in seen ||
+                            it in currentFeedCleanTitles || it in recentCleanTitles
+                    }
+                ) {
+                    return@filterNot true
+                }
+                if (blockedEligibility.isNotEmpty()) {
+                    val canonical = canonicalDiscoveryKey(mediaType, item.sourceId, item.sourceUrl, item.cleanTitle)
+                    if (canonical in blockedEligibility) return@filterNot true
+                    if (keys.any { key ->
+                            key in blockedEligibility || legacyDiscoveryKey(mediaType, key) in blockedEligibility
+                        }
+                    ) {
+                        return@filterNot true
+                    }
+                }
+                false
             }
-            .distinctBy { it.cleanTitle }
-
-        val clustered = filterFranchiseClustering(valid, maxPerSeries = 2)
-
-        return if (recentCleanTitles.isNotEmpty()) {
-            val fresh = clustered.filterNot { it.cleanTitle in recentCleanTitles }
-            if (fresh.size >= rowLimit) {
-                fresh.take(rowLimit)
-            } else {
-                // Добираем показанными: дольше всего не показанные первыми; без таймстампа — в конец.
-                // Тайтлы ТЕКУЩЕЙ ленты (ручной рефреш) в добор не возвращаются —
-                // наполнение ряда реально сменяется, а не «новые + всё старое».
-                val stale = clustered
-                    .filter { it.cleanTitle in recentCleanTitles && it.cleanTitle !in currentFeedCleanTitles }
-                    .sortedBy { shownCutoffMap[it.cleanTitle] ?: Long.MAX_VALUE }
-                (fresh + stale).take(rowLimit)
-            }
-        } else {
-            clustered.take(rowLimit)
-        }
     }
+
+    private fun selectRowItems(items: List<DiscoveryRowItem>): List<DiscoveryRowItem> =
+        filterFranchiseClustering(items.distinctBy { it.cleanTitle }, maxPerSeries = 2).take(rowLimit)
 }

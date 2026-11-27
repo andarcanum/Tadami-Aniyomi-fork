@@ -15,6 +15,9 @@ import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.toSMangaUpdateRequest
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.source.MangaSource
+import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.util.manga.getMangaUpdateLocked
 import eu.kanade.tachiyomi.util.system.isRunning
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
@@ -35,6 +38,15 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+
+internal suspend fun MangaSource.fetchMangaMetadataUpdate(manga: SManga): SManga {
+    return getMangaUpdateLocked(
+        manga = manga,
+        chapters = emptyList(),
+        fetchDetails = true,
+        fetchChapters = false,
+    ).manga
+}
 
 class MangaMetadataUpdateJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
@@ -121,12 +133,9 @@ class MangaMetadataUpdateJob(private val context: Context, workerParams: WorkerP
                                 ) {
                                     val source = sourceManager.get(manga.source) ?: return@withUpdateNotification
                                     try {
-                                        val networkManga = source.getMangaUpdate(
+                                        val networkManga = source.fetchMangaMetadataUpdate(
                                             manga = manga.toSMangaUpdateRequest(),
-                                            chapters = emptyList(),
-                                            fetchDetails = true,
-                                            fetchChapters = false,
-                                        ).manga
+                                        )
                                         try {
                                             // One cover policy everywhere: same shouldUpdateCover and
                                             // custom-cover rules as the library update path.

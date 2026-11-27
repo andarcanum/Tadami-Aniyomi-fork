@@ -29,19 +29,27 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationBatchEnqueueResult
+import eu.kanade.tachiyomi.data.translation.TranslationBatchRequest
+import eu.kanade.tachiyomi.data.translation.TranslationProgressUpdate
 import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueProfileSnapshot
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheRequirements
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +58,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.setMain
@@ -90,6 +99,11 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
+import tachiyomi.domain.translation.profile.ConnectionProfile
+import tachiyomi.domain.translation.profile.ProfileAuth
+import tachiyomi.domain.translation.profile.ProfileCatalog
+import tachiyomi.domain.translation.profile.TranslationProfileRepository
+import tachiyomi.domain.translation.profile.TranslationProtocol
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
@@ -140,6 +154,14 @@ class NovelScreenModelTest {
                     every {
                         translationQueueManager.activeTranslation
                     } returns MutableStateFlow<TranslationQueueItem?>(null)
+                    // This singleton outlives the class: suites resolving the queue from Injekt
+                    // must receive completing flows, never relaxed mocks that suspend forever.
+                    every { translationQueueManager.observeProgress(any()) } returns emptyFlow()
+                    every { translationQueueManager.progressUpdates } returns emptyFlow()
+                    every { translationQueueManager.repository } returns mockk(relaxed = true) {
+                        coEvery { getByChapterId(any()) } returns null
+                        every { observeRuns(any()) } returns flowOf(emptyList())
+                    }
                     Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
                 }
             runCatching { Injekt.get<TrackNovelChapter>() }
@@ -157,6 +179,24 @@ class NovelScreenModelTest {
                     }
                     val downloadPreferences = mockk<DownloadPreferences>(relaxed = true).also { prefs ->
                         every { prefs.downloadOnlyOverWifi() } returns wifiOnly
+                        // This singleton outlives the class: the reader's progress flush reads the
+                        // removal preferences, and a relaxed Preference<Boolean> erases to Object.
+                        every { prefs.removeAfterMarkedAsRead() } returns mockk(relaxed = true) {
+                            every { get() } returns false
+                            every { changes() } returns MutableStateFlow(false)
+                        }
+                        every { prefs.removeAfterReadSlots() } returns mockk(relaxed = true) {
+                            every { get() } returns -1
+                            every { changes() } returns MutableStateFlow(-1)
+                        }
+                        every { prefs.removeBookmarkedChapters() } returns mockk(relaxed = true) {
+                            every { get() } returns false
+                            every { changes() } returns MutableStateFlow(false)
+                        }
+                        every { prefs.removeExcludeNovelCategories() } returns mockk(relaxed = true) {
+                            every { get() } returns emptySet<String>()
+                            every { changes() } returns MutableStateFlow(emptySet<String>())
+                        }
                     }
                     Injekt.addSingleton(fullType<DownloadPreferences>(), downloadPreferences)
                 }
@@ -1742,7 +1782,13 @@ class NovelScreenModelTest {
             )
             try {
                 awaitResumeScreenModel(screenModel)
-                delay(700) // let syncDownloadedState land the mocked listing
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds !=
+                        setOf(1L, 2L)
+                    ) {
+                        delay(10)
+                    }
+                }
 
                 screenModel.deleteDownloadedChapters(NovelDownloadDeletionMode.ALL)
                 delay(200)
@@ -1778,7 +1824,13 @@ class NovelScreenModelTest {
             )
             try {
                 awaitResumeScreenModel(screenModel)
-                delay(700)
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)?.downloadedChapterIds !=
+                        setOf(1L, 2L)
+                    ) {
+                        delay(10)
+                    }
+                }
                 screenModel.toggleSelection(1L)
                 screenModel.markChaptersRead(true)
                 delay(200)
@@ -1788,6 +1840,328 @@ class NovelScreenModelTest {
                 state.downloadedChapterIds shouldBe setOf(2L)
             } finally {
                 screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `v2 profile resolves batch skip check and observeCatalog refreshes chapter action badges`() {
+        runBlocking {
+            val novel = novelForResumeTests(2032L)
+            val chapters = listOf(
+                novelChapter(id = 10L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 20L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val spanishSnapshot = TranslationQueueProfileSnapshot(
+                snapshotVersion = 2,
+                geminiEnabled = true,
+                geminiModel = "v2-model",
+                geminiTargetLang = "Spanish",
+            )
+            val frenchSnapshot = spanishSnapshot.copy(geminiTargetLang = "French")
+            var currentSnapshot = spanishSnapshot
+            val capturedRequests = mutableListOf<TranslationBatchRequest>()
+            val queueManager = mockk<TranslationQueueManager>(relaxed = true).also { manager ->
+                every { manager.queue } returns MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+                every { manager.activeTranslation } returns MutableStateFlow<TranslationQueueItem?>(null)
+                every { manager.progressUpdates } returns emptyFlow()
+                coEvery { manager.freezeProfileSnapshot(any(), any(), any()) } answers { currentSnapshot }
+                coEvery { manager.enqueueTranslationBatch(capture(capturedRequests)) } returns
+                    TranslationBatchEnqueueResult(
+                        batchToken = "batch-v2",
+                        requestedCount = 1,
+                        enqueuedCount = 1,
+                        skippedAlreadyTranslatedCount = 1,
+                    )
+            }
+            val catalogFlow = MutableStateFlow(ProfileCatalog())
+            val translationProfiles = mockk<TranslationProfileRepository> {
+                every { observeCatalog() } returns catalogFlow
+            }
+            mockkObject(NovelReaderTranslationDiskCacheStore)
+            every { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any<String>()) } answers {
+                if (secondArg<String>() == "Spanish") setOf(10L) else emptySet()
+            }
+            every {
+                NovelReaderTranslationDiskCacheStore.chapterIds(
+                    any(),
+                    any<NovelReaderTranslationCacheRequirements>(),
+                )
+            } answers {
+                if (secondArg<NovelReaderTranslationCacheRequirements>().targetLang ==
+                    "Spanish"
+                ) {
+                    setOf(10L)
+                } else {
+                    emptySet()
+                }
+            }
+            every {
+                NovelReaderTranslationDiskCacheStore.has(any(), any<NovelReaderTranslationCacheRequirements>())
+            } answers {
+                firstArg<Long>() == 10L && secondArg<NovelReaderTranslationCacheRequirements>().targetLang == "Spanish"
+            }
+            every { NovelReaderTranslationDiskCacheStore.has(any(), any<String>()) } answers {
+                firstArg<Long>() == 10L && secondArg<String>() == "Spanish"
+            }
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                translationQueueManager = queueManager,
+                geminiEnabled = false,
+                snackbarHostState = mockk(relaxed = true),
+                translationProfiles = translationProfiles,
+            )
+            try {
+                awaitResumeScreenModel(screenModel)
+                withTimeout(5_000) {
+                    while (true) {
+                        val state = screenModel.state.value as? NovelScreenModel.State.Success
+                        if (state?.geminiEnabled == true &&
+                            state.chapterActionStates[10L]?.translateState == NovelChapterActionIconState.Active
+                        ) {
+                            break
+                        }
+                        delay(10)
+                    }
+                }
+
+                screenModel.toggleSelection(10L)
+                screenModel.toggleSelection(20L)
+                screenModel.enqueueTranslationBatch(
+                    anchorChapterId = 10L,
+                    scope = TranslationBatchScope.SELECTED,
+                    limit = 10,
+                    rangeStart = 1,
+                    rangeEnd = 2,
+                    forceRetranslate = false,
+                )
+
+                coVerify(timeout = 5_000, exactly = 1) { queueManager.enqueueTranslationBatch(any()) }
+                capturedRequests.single().chapterIds shouldBe listOf(20L)
+                capturedRequests.single().profileSnapshot.geminiTargetLang shouldBe "Spanish"
+
+                currentSnapshot = frenchSnapshot
+                catalogFlow.value = ProfileCatalog(
+                    connections = listOf(
+                        ConnectionProfile(
+                            id = "00000000-0000-0000-0000-000000000099",
+                            name = "French connection",
+                            protocol = TranslationProtocol.GEMINI_GENERATE,
+                            baseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                            auth = ProfileAuth.X_GOOG_API_KEY,
+                        ),
+                    ),
+                )
+
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates?.get(10L)?.translateState != NovelChapterActionIconState.Neutral
+                    ) {
+                        delay(10)
+                    }
+                }
+            } finally {
+                screenModel.onDispose()
+                unmockkObject(NovelReaderTranslationDiskCacheStore)
+            }
+        }
+    }
+
+    @Test
+    fun `paused queue status clears translating chapter badge and excludes paused chapters`() {
+        runBlocking {
+            val novel = novelForResumeTests(2033L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val pausedTwo = TranslationQueueItem(
+                id = 2L,
+                chapterId = 2L,
+                novelId = novel.id,
+                status = TranslationStatus.PAUSED,
+                progress = 40,
+                errorMessage = "Paused",
+                retryCount = 0,
+                createdAt = 1L,
+                updatedAt = 2L,
+            )
+            val pendingOne = TranslationQueueItem(
+                id = 1L,
+                chapterId = 1L,
+                novelId = novel.id,
+                status = TranslationStatus.PENDING,
+                progress = 0,
+                errorMessage = null,
+                retryCount = 0,
+                createdAt = 1L,
+                updatedAt = 2L,
+            )
+            val queueFlow = MutableStateFlow(listOf(pendingOne, pausedTwo))
+            val progressFlow = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 8)
+            val queueManager = mockk<TranslationQueueManager>(relaxed = true).also { manager ->
+                every { manager.queue } returns queueFlow
+                every { manager.activeTranslation } returns MutableStateFlow<TranslationQueueItem?>(null)
+                every { manager.progressUpdates } returns progressFlow
+            }
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                translationQueueManager = queueManager,
+                geminiEnabled = true,
+            )
+            try {
+                awaitResumeScreenModel(screenModel)
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates?.get(1L)?.translateState != NovelChapterActionIconState.InProgress
+                    ) {
+                        delay(10)
+                    }
+                }
+
+                val initialState = screenModel.state.value as NovelScreenModel.State.Success
+                initialState.chapterActionStates[2L]?.translateState shouldBe NovelChapterActionIconState.Neutral
+
+                queueFlow.value = listOf(pendingOne.copy(status = TranslationStatus.PAUSED), pausedTwo)
+                progressFlow.emit(
+                    TranslationProgressUpdate(
+                        chapterId = 1L,
+                        novelId = novel.id,
+                        status = TranslationStatus.PAUSED,
+                        progress = 50,
+                        currentChunk = 1,
+                        totalChunks = 2,
+                        chapterName = "Chapter 1",
+                        errorMessage = "Paused",
+                    ),
+                )
+
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates?.get(1L)?.translateState != NovelChapterActionIconState.Neutral
+                    ) {
+                        delay(10)
+                    }
+                }
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `repeated progress ticks do not rescan all chapter caches`() {
+        runBlocking {
+            val novel = novelForResumeTests(2034L)
+            val chapters = (1L..5L).map { id ->
+                novelChapter(id = id, novelId = novel.id, chapterNumber = id.toDouble(), read = false)
+            }
+            val progressFlow = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 32)
+            val queueManager = mockk<TranslationQueueManager>(relaxed = true).also { manager ->
+                every { manager.queue } returns MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+                every { manager.activeTranslation } returns MutableStateFlow<TranslationQueueItem?>(null)
+                every { manager.progressUpdates } returns progressFlow
+            }
+            mockkObject(NovelReaderTranslationDiskCacheStore)
+            every { NovelReaderTranslationDiskCacheStore.chapterIds(any(), any<String>()) } returns emptySet()
+            every {
+                NovelReaderTranslationDiskCacheStore.chapterIds(
+                    any(),
+                    any<NovelReaderTranslationCacheRequirements>(),
+                )
+            } returns emptySet()
+            var cachedChapterOne = false
+            every { NovelReaderTranslationDiskCacheStore.has(any(), any<String>()) } answers {
+                cachedChapterOne && firstArg<Long>() == 1L
+            }
+            every {
+                NovelReaderTranslationDiskCacheStore.has(any(), any<NovelReaderTranslationCacheRequirements>())
+            } answers {
+                cachedChapterOne && firstArg<Long>() == 1L
+            }
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                translationQueueManager = queueManager,
+                geminiEnabled = true,
+            )
+            try {
+                awaitResumeScreenModel(screenModel)
+                delay(300)
+                clearMocks(NovelReaderTranslationDiskCacheStore, answers = false, recordedCalls = true)
+
+                repeat(10) { step ->
+                    progressFlow.emit(
+                        TranslationProgressUpdate(
+                            chapterId = 1L,
+                            novelId = novel.id,
+                            status = TranslationStatus.IN_PROGRESS,
+                            progress = (step + 1) * 9,
+                            currentChunk = step + 1,
+                            totalChunks = 10,
+                            chapterName = "Chapter 1",
+                            errorMessage = null,
+                        ),
+                    )
+                }
+
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates?.get(1L)?.translateState != NovelChapterActionIconState.InProgress
+                    ) {
+                        delay(10)
+                    }
+                }
+                delay(100)
+
+                verify(exactly = 0) {
+                    NovelReaderTranslationDiskCacheStore.chapterIds(
+                        any(),
+                        any<NovelReaderTranslationCacheRequirements>(),
+                    )
+                }
+                verify(exactly = 0) {
+                    NovelReaderTranslationDiskCacheStore.has(any(), any<NovelReaderTranslationCacheRequirements>())
+                }
+
+                cachedChapterOne = true
+                progressFlow.emit(
+                    TranslationProgressUpdate(
+                        chapterId = 1L,
+                        novelId = novel.id,
+                        status = TranslationStatus.COMPLETED,
+                        progress = 100,
+                        currentChunk = 10,
+                        totalChunks = 10,
+                        chapterName = "Chapter 1",
+                        errorMessage = null,
+                    ),
+                )
+
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates?.get(1L)?.translateState != NovelChapterActionIconState.Active
+                    ) {
+                        delay(10)
+                    }
+                }
+
+                verify(exactly = 0) {
+                    NovelReaderTranslationDiskCacheStore.chapterIds(
+                        any(),
+                        any<NovelReaderTranslationCacheRequirements>(),
+                    )
+                }
+                verify(exactly = 1) {
+                    NovelReaderTranslationDiskCacheStore.has(1L, any<NovelReaderTranslationCacheRequirements>())
+                }
+            } finally {
+                screenModel.onDispose()
+                unmockkObject(NovelReaderTranslationDiskCacheStore)
             }
         }
     }
@@ -1812,7 +2186,9 @@ class NovelScreenModelTest {
         novelHistoryRepository: NovelHistoryRepository = FakeNovelHistoryRepository(),
         downloadCacheChanges: Flow<NovelDownloadCacheEvent> = MutableSharedFlow(replay = 1, extraBufferCapacity = 1),
         downloadQueueState: Flow<NovelDownloadQueueState> = MutableStateFlow(NovelDownloadQueueState()),
-        novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
+        // A real manager derives its legacy root from the Injekt Application mock, whose filesDir
+        // is a pathless child mock; the resulting NPE leaks into whichever suite runs next.
+        novelDownloadManager: NovelDownloadManager = mockk(relaxed = true),
         downloadPreferences: DownloadPreferences = mockk {
             every { removeAfterMarkedAsRead() } returns mockk { every { get() } returns false }
             every { removeBookmarkedChapters() } returns mockk { every { get() } returns false }
@@ -1821,7 +2197,14 @@ class NovelScreenModelTest {
         },
         getNovelWithChaptersOverride: GetNovelWithChapters? = null,
         novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
-        translationQueueManager: TranslationQueueManager = Injekt.get(),
+        translationQueueManager: TranslationQueueManager = mockk<TranslationQueueManager>(
+            relaxed = true,
+        ).also { manager ->
+            // Injekt bindings are process-wide and may belong to a disposed reader test.
+            every { manager.queue } returns MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+            every { manager.activeTranslation } returns MutableStateFlow<TranslationQueueItem?>(null)
+            every { manager.progressUpdates } returns emptyFlow()
+        },
         geminiEnabled: Boolean = false,
         excludedScanlators: Set<String> = emptySet(),
         refreshNovelTracks: RefreshNovelTracks = mockk(relaxed = true),
@@ -1836,6 +2219,7 @@ class NovelScreenModelTest {
         source: NovelSource? = null,
         activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository = mockk(relaxed = true),
         initialBookState: NovelBookState? = null,
+        translationProfiles: TranslationProfileRepository? = null,
     ): NovelScreenModel {
         val novelRepository = FakeNovelRepository(novel)
         val preferenceStore = FakePreferenceStore()
@@ -1971,6 +2355,7 @@ class NovelScreenModelTest {
             ),
             getNovelBookState = getNovelBookState,
             setNovelBookEnabledInteractor = mockk<SetNovelBookEnabled>(relaxed = true),
+            translationProfiles = translationProfiles,
         ).also(::trackScreenModel)
     }
 

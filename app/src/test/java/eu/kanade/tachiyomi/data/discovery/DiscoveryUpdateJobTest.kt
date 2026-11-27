@@ -326,6 +326,20 @@ class DiscoveryUpdateJobTest {
     }
 
     @Test
+    fun `scheduleRefill enqueues work request with KEY_TOP_UP set to true`() {
+        DiscoveryUpdateJob.scheduleRefill(context, DiscoveryMediaType.NOVEL)
+        val requestSlot = io.mockk.slot<OneTimeWorkRequest>()
+        verify {
+            workManager.enqueueUniqueWork(
+                "DiscoveryRefillAfterConsumed:novel",
+                ExistingWorkPolicy.REPLACE,
+                capture(requestSlot),
+            )
+        }
+        requestSlot.captured.workSpec.input.getBoolean(DiscoveryUpdateJob.KEY_TOP_UP, false) shouldBe true
+    }
+
+    @Test
     fun `cancelAllManualRefreshes cancels manual tags and notification`() {
         DiscoveryUpdateJob.cancelAllManualRefreshes(context)
 

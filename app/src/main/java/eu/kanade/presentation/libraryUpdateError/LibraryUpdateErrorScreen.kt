@@ -75,6 +75,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AuroraTabRow
@@ -208,12 +209,16 @@ fun LibraryUpdateErrorScreen(
             SettingsUiStyle.Aurora -> {
                 val layoutDirection = LocalLayoutDirection.current
                 val topBarState = rememberTopAppBarState()
+                val hazeState = remember { HazeState() }
                 val topBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(topBarState)
                 Scaffold(
                     topBarScrollBehavior = topBarScrollBehavior,
                     containerColor = Color.Transparent,
                     topBar = { scrollBehavior ->
-                        AuroraSettingsTopBarChrome(scrollBehavior) {
+                        AuroraSettingsTopBarChrome(
+                            scrollBehavior = scrollBehavior,
+                            hazeState = hazeState,
+                        ) {
                             AuroraLibraryUpdateErrorTopBar(
                                 state = state,
                                 onBackPressed = onBackPressed,
@@ -232,7 +237,10 @@ fun LibraryUpdateErrorScreen(
                         )
                     },
                 ) { contentPadding ->
-                    SettingsAuroraBackground(modifier = Modifier.fillMaxSize()) {
+                    SettingsAuroraBackground(
+                        modifier = Modifier.fillMaxSize(),
+                        hazeState = hazeState,
+                    ) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             LibraryUpdateErrorContent(
                                 state = state,

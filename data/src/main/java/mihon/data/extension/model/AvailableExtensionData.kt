@@ -13,6 +13,7 @@ data class AvailableExtensionData(
     val versionName: String,
     val lang: String,
     val isNsfw: Boolean,
+    val isTorrent: Boolean = false,
     val sources: List<Source>,
     val store: ExtensionStore,
 ) {

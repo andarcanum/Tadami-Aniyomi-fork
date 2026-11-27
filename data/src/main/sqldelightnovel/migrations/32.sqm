@@ -1,0 +1,73 @@
+-- Add profile metadata and reader-owned pause state without rebuilding legacy translation data.
+ALTER TABLE translation_queue ADD COLUMN implicit_paused INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_queue ADD COLUMN action_paused INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_queue ADD COLUMN action_pause_reason TEXT;
+CREATE TABLE translation_connections (
+    _id TEXT NOT NULL PRIMARY KEY,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576)
+);
+CREATE TABLE translation_profiles (
+    _id TEXT NOT NULL PRIMARY KEY,
+    connection_id TEXT NOT NULL,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576),
+    FOREIGN KEY(connection_id) REFERENCES translation_connections(_id)
+);
+CREATE INDEX translation_profiles_connection_index ON translation_profiles(connection_id);
+CREATE TABLE translation_retired_credentials (
+    _id TEXT NOT NULL PRIMARY KEY
+);
+CREATE TABLE translation_credential_metadata (
+    _id TEXT NOT NULL PRIMARY KEY,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576)
+);
+CREATE TABLE translation_profile_assignments (
+    scope INTEGER NOT NULL,
+    scope_id INTEGER NOT NULL,
+    profile_id TEXT NOT NULL,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576),
+    PRIMARY KEY(scope, scope_id),
+    FOREIGN KEY(profile_id) REFERENCES translation_profiles(_id)
+);
+CREATE TABLE translation_legacy_credential_refs (
+    provider TEXT NOT NULL,
+    scope INTEGER NOT NULL,
+    scope_id INTEGER NOT NULL,
+    credential_id TEXT NOT NULL,
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576),
+    PRIMARY KEY(provider, scope, scope_id),
+    FOREIGN KEY(credential_id) REFERENCES translation_credential_metadata(_id)
+);
+CREATE TABLE translation_routing_state (
+    _id INTEGER NOT NULL PRIMARY KEY CHECK (_id = 1),
+    record_json TEXT NOT NULL CHECK (length(record_json) <= 1048576)
+);
+CREATE TABLE translation_request_ledgers (
+    run_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    connection_snapshot_json TEXT NOT NULL CHECK (length(connection_snapshot_json) <= 1048576),
+    model_id TEXT NOT NULL,
+    policy_json TEXT NOT NULL CHECK (length(policy_json) <= 1048576),
+    reserved_tokens INTEGER NOT NULL DEFAULT 0,
+    unknown_token_reservations INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(run_id, generation),
+    FOREIGN KEY(run_id) REFERENCES translation_queue(_id)
+);
+CREATE TABLE translation_request_reservations (
+    run_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    request_id TEXT NOT NULL,
+    credential_id TEXT,
+    quota_group TEXT NOT NULL,
+    fragments_json TEXT NOT NULL CHECK (length(fragments_json) <= 1048576),
+    token_estimate INTEGER,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(run_id, generation, request_id),
+    FOREIGN KEY(run_id, generation) REFERENCES translation_request_ledgers(run_id, generation)
+);
+CREATE TABLE translation_completed_fragments (
+    run_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    fragment_id TEXT NOT NULL,
+    PRIMARY KEY(run_id, generation, fragment_id),
+    FOREIGN KEY(run_id) REFERENCES translation_queue(_id)
+);

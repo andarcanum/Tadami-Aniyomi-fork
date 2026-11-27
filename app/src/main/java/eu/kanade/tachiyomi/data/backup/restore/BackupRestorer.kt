@@ -2,9 +2,12 @@ package eu.kanade.tachiyomi.data.backup.restore
 
 import android.content.Context
 import android.net.Uri
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.backup.BackupDecoder
 import eu.kanade.tachiyomi.data.backup.BackupDiagnosticLog
+import eu.kanade.tachiyomi.data.backup.BackupImportPolicy
 import eu.kanade.tachiyomi.data.backup.BackupNotifier
+import eu.kanade.tachiyomi.data.backup.DecodedBackup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCustomButtons
@@ -15,6 +18,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
+import eu.kanade.tachiyomi.data.backup.models.BackupTranslationConfiguration
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AchievementRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeExtensionRepoRestorer
@@ -38,15 +42,24 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelSeriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFavoritesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFollowsRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.TranslationConfigurationRestorer
+import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
+import eu.kanade.tachiyomi.data.discovery.reconcileDiscoverySourcePreferences
+import eu.kanade.tachiyomi.data.translation.profile.LegacyMigrationStatus
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.service.DiscoverySourcePolicyProvider
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Collections
@@ -88,6 +101,13 @@ class BackupRestorer(
     private val discoveryRestorer: DiscoveryRestorer = DiscoveryRestorer(),
     private val extensionsRestorer: ExtensionsRestorer = ExtensionsRestorer(context),
     private val achievementRestorer: AchievementRestorer = AchievementRestorer(),
+    private val translationConfigurationRestorer: TranslationConfigurationRestorer = TranslationConfigurationRestorer(),
+    private val decodeBackup: (Uri, BackupImportPolicy) -> DecodedBackup = { uri, policy ->
+        BackupDecoder(context).decodeDetailed(uri, policy)
+    },
+    private val afterRestoreDiscovery: suspend (Set<DiscoveryMediaType>) -> Unit = { media ->
+        settleRestoredDiscovery(context, media)
+    },
 ) {
 
     private var restoreAmount = 0
@@ -126,22 +146,19 @@ class BackupRestorer(
     private var novelSourceMapping: Map<Long, String> = emptyMap()
 
     suspend fun restore(uri: Uri, options: RestoreOptions) {
-        val startTime = System.currentTimeMillis()
-
-        restoreFromFile(uri, options)
-        verifyCompleteness()
-
-        val time = System.currentTimeMillis() - startTime
-
-        val logFile = writeErrorLog()
-
-        notifier.showRestoreComplete(
-            time,
-            errors.size,
-            logFile.parent,
-            logFile.name,
-            isSync,
-        )
+        val monitor = eu.kanade.domain.easteregg.crystal.CrystalRestoreState.monitor
+        monitor.begin()
+        try {
+            val startTime = System.currentTimeMillis()
+            restoreFromFile(uri, options)
+            verifyCompleteness()
+            val time = System.currentTimeMillis() - startTime
+            val logFile = writeErrorLog()
+            notifier.showRestoreComplete(time, errors.size, logFile.parent, logFile.name, isSync)
+        } finally {
+            // restoreFromFile awaits its complete coroutineScope, including achievement restore.
+            monitor.end()
+        }
     }
 
     /**
@@ -168,8 +185,8 @@ class BackupRestorer(
         BackupDiagnosticLog.log(context, "restore_summary", summary)
     }
 
-    private suspend fun restoreFromFile(uri: Uri, options: RestoreOptions) {
-        val decoded = BackupDecoder(context).decodeDetailed(uri, options.importPolicy())
+    internal suspend fun restoreFromFile(uri: Uri, options: RestoreOptions) {
+        val decoded = decodeBackup(uri, options.importPolicy())
         val backup = decoded.backup
 
         BackupDiagnosticLog.log(
@@ -241,6 +258,7 @@ class BackupRestorer(
         }
         if (options.appSettings) {
             restoreAmount += 1
+            if (backup.backupTranslationConfiguration != null) restoreAmount += 1
         }
         if (options.extensionRepoSettings) {
             restoreAmount += animeExtensionRepoBackups.size + animeExtensionStoreBackups.size
@@ -277,7 +295,12 @@ class BackupRestorer(
                 )
             }
             if (options.appSettings) {
-                restoreAppPreferences(backup.backupPreferences, backup.backupCategories.takeIf { options.categories })
+                restoreAppPreferences(
+                    preferences = backup.backupPreferences,
+                    mangaCategories = backup.backupCategories.takeIf { shouldRestoreMangaCategories },
+                    animeCategories = backup.backupAnimeCategories.takeIf { shouldRestoreAnimeCategories },
+                    novelCategories = backup.backupNovelCategories.takeIf { shouldRestoreNovelCategories },
+                )
             }
             if (options.sourceSettings) {
                 restoreSourcePreferences(backup.backupSourcePreferences)
@@ -351,13 +374,17 @@ class BackupRestorer(
                 (
                     backup.backupDiscoveryHidden.isNotEmpty() ||
                         backup.backupDiscoveryBlacklistTags.isNotEmpty() ||
-                        backup.backupDiscoverySignals.isNotEmpty()
+                        backup.backupDiscoverySignals.isNotEmpty() ||
+                        backup.backupDiscoveryTitleMemory.isNotEmpty() ||
+                        backup.backupDiscoveryTasteResetEpochs.isNotEmpty()
                     )
             ) {
                 discoveryRestorer.restoreDiscovery(
-                    backup.backupDiscoveryHidden,
-                    backup.backupDiscoveryBlacklistTags,
-                    backup.backupDiscoverySignals,
+                    hidden = backup.backupDiscoveryHidden,
+                    tags = backup.backupDiscoveryBlacklistTags,
+                    signals = backup.backupDiscoverySignals,
+                    titleMemory = backup.backupDiscoveryTitleMemory,
+                    tasteResetEpochs = backup.backupDiscoveryTasteResetEpochs,
                 )
             }
 
@@ -368,22 +395,81 @@ class BackupRestorer(
                     userProfile = backup.backupUserProfile.takeIf { options.achievements },
                     activityLog = if (options.achievements) backup.backupActivityLog else emptyList(),
                     stats = backup.backupStats.takeIf { options.stats },
+                    memorial = backup.backupCrystalMemorial.takeIf { options.achievements },
                 )
             }
 
             // TODO: optionally trigger online library + tracker update
         }
+        // Await the entire scope first: restored preferences and stable novel identities must exist.
+        if (options.appSettings) {
+            restoreTranslationConfiguration(backup.backupTranslationConfiguration, options)
+        }
+        kotlin.coroutines.coroutineContext.ensureActive()
+        val affected = buildSet {
+            if (shouldRestoreAnime && backup.backupAnime.isNotEmpty()) add(DiscoveryMediaType.ANIME)
+            if (shouldRestoreManga && backup.backupManga.isNotEmpty()) add(DiscoveryMediaType.MANGA)
+            if (shouldRestoreNovel && backup.backupNovel.isNotEmpty()) add(DiscoveryMediaType.NOVEL)
+            if (options.appSettings) {
+                backup.backupPreferences.forEach { preference ->
+                    val key = preference.key
+                    if (eu.kanade.domain.discovery.service.DiscoveryPreferences.isRuntimeStateKey(key)) {
+                        return@forEach
+                    }
+                    val perMedia = DiscoveryMediaType.entries.firstOrNull { type ->
+                        key.endsWith("_" + type.key) && (
+                            key.startsWith("discovery_source_") ||
+                                key.startsWith("discovery_priority_genres_") ||
+                                key.startsWith("discovery_required_genres_") ||
+                                key.startsWith("discovery_ignored_genres_")
+                            )
+                    }
+                    when {
+                        perMedia != null -> add(perMedia)
+                        key == "suggestions_use_mangaupdates_novel" -> {
+                            add(DiscoveryMediaType.MANGA)
+                            add(DiscoveryMediaType.NOVEL)
+                        }
+                        key == "suggestions_use_novelupdates" -> add(DiscoveryMediaType.NOVEL)
+                        key == "suggestions_use_shikimori" ||
+                            eu.kanade.domain.discovery.service.DiscoveryPreferences.isGenerationConfigKey(key) ->
+                            addAll(DiscoveryMediaType.entries)
+                    }
+                }
+            }
+            if (options.extensions && backup.backupExtensions.isNotEmpty()) {
+                addAll(DiscoveryMediaType.entries)
+            }
+            if (options.discoveryData) {
+                backup.backupDiscoveryHidden.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoveryBlacklistTags.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoverySignals.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoveryTitleMemory.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+                backup.backupDiscoveryTasteResetEpochs.forEach { entry ->
+                    DiscoveryMediaType.fromKey(entry.mediaType)?.let(::add)
+                }
+            }
+        }
+        if (affected.isNotEmpty()) afterRestoreDiscovery(affected)
     }
 
-    private fun CoroutineScope.restoreCategories(
+    private suspend fun restoreCategories(
         backupAnimeCategories: List<BackupCategory>,
         backupMangaCategories: List<BackupCategory>,
         backupNovelCategories: List<BackupCategory>,
         restoreAnimeCategories: Boolean,
         restoreMangaCategories: Boolean,
         restoreNovelCategories: Boolean,
-    ) = launch {
-        ensureActive()
+    ) {
+        kotlin.coroutines.coroutineContext.ensureActive()
         if (restoreAnimeCategories) {
             if (backupAnimeCategories.isNotEmpty()) {
                 animeCategoriesRestorer(backupAnimeCategories)
@@ -432,6 +518,7 @@ class BackupRestorer(
                     animeRestorer.restore(it, backupAnimeCategories, seasons)
                     markRestored(TYPE_ANIME)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     markFailed(TYPE_ANIME)
                     val sourceName = animeSourceMapping[it.source] ?: it.source.toString()
                     errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
@@ -453,6 +540,7 @@ class BackupRestorer(
                     mangaRestorer.restore(it, backupMangaCategories)
                     markRestored(TYPE_MANGA)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     markFailed(TYPE_MANGA)
                     val sourceName = mangaSourceMapping[it.source] ?: it.source.toString()
                     errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
@@ -474,6 +562,7 @@ class BackupRestorer(
                     novelRestorer.restore(it, backupNovelCategories)
                     markRestored(TYPE_NOVEL)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     markFailed(TYPE_NOVEL)
                     val sourceName = novelSourceMapping[it.source] ?: it.source.toString()
                     errors.add(Date() to "${it.title} [$sourceName]: ${e.message}")
@@ -487,9 +576,11 @@ class BackupRestorer(
         backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupAnimeSeries>,
     ) {
         backupSeries.forEach {
+            kotlin.coroutines.coroutineContext.ensureActive()
             try {
                 animeSeriesRestorer.restore(listOf(it))
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errors.add(
                     Date() to "Anime series '${it.title}': ${e.message}",
                 )
@@ -502,9 +593,11 @@ class BackupRestorer(
         backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupMangaSeries>,
     ) {
         backupSeries.forEach {
+            kotlin.coroutines.coroutineContext.ensureActive()
             try {
                 mangaSeriesRestorer.restore(listOf(it))
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errors.add(
                     Date() to "Manga series '${it.title}': ${e.message}",
                 )
@@ -517,9 +610,11 @@ class BackupRestorer(
         backupSeries: List<eu.kanade.tachiyomi.data.backup.models.BackupNovelSeries>,
     ) {
         backupSeries.forEach {
+            kotlin.coroutines.coroutineContext.ensureActive()
             try {
                 novelSeriesRestorer.restore(listOf(it))
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errors.add(
                     Date() to "Novel series '${it.title}': ${e.message}",
                 )
@@ -528,14 +623,62 @@ class BackupRestorer(
         }
     }
 
+    private suspend fun restoreTranslationConfiguration(
+        backup: BackupTranslationConfiguration?,
+        options: RestoreOptions,
+    ) {
+        try {
+            val result = translationConfigurationRestorer.restore(backup, options) ?: return
+            if (result.configurationFailed) {
+                errors.add(Date() to "AI translator: configuration could not be restored")
+            }
+            if (result.unresolvedNovelAssignments > 0) {
+                errors.add(
+                    Date() to "AI translator: " + result.unresolvedNovelAssignments +
+                        " novel assignment(s) had no matching source and URL",
+                )
+            }
+            if (result.missingCredentials > 0) {
+                errors.add(
+                    Date() to "AI translator: " + result.missingCredentials +
+                        " credential(s) are missing; re-enter keys in Connections",
+                )
+            }
+            val inaccessible = result.unavailableCredentials + result.corruptCredentials
+            if (inaccessible > 0) {
+                errors.add(Date() to "AI translator: " + inaccessible + " credential(s) are unavailable or corrupt")
+            }
+            result.legacyMigration?.takeIf { it.status != LegacyMigrationStatus.COMPLETE }?.let {
+                errors.add(Date() to "AI translator: restored legacy credentials require attention (" + it.status + ")")
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // No imported JSON, URL, key value or platform exception is echoed into the user log.
+            errors.add(Date() to "AI translator: configuration could not be restored")
+        }
+        if (backup != null) {
+            notifier.showRestoreProgress(
+                context.stringResource(MR.strings.app_settings),
+                advanceProgress(),
+                restoreAmount,
+                isSync,
+            )
+        }
+    }
+
     private fun CoroutineScope.restoreAppPreferences(
         preferences: List<BackupPreference>,
-        categories: List<BackupCategory>?,
+        mangaCategories: List<BackupCategory>?,
+        animeCategories: List<BackupCategory>?,
+        novelCategories: List<BackupCategory>?,
     ) = launch {
         ensureActive()
         preferenceRestorer.restoreApp(
-            preferences,
-            categories,
+            preferences = preferences,
+            backupCategories = mangaCategories,
+            backupAnimeCategories = animeCategories,
+            backupNovelCategories = novelCategories,
         )
 
         notifier.showRestoreProgress(
@@ -570,6 +713,7 @@ class BackupRestorer(
                 try {
                     animeExtensionRepoRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Anime Repo: ${it.name} : ${e.message}",
                     )
@@ -590,6 +734,7 @@ class BackupRestorer(
                 try {
                     mangaExtensionRepoRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Manga Repo: ${it.name} : ${e.message}",
                     )
@@ -610,6 +755,7 @@ class BackupRestorer(
                 try {
                     novelExtensionRepoRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Novel Repo: ${it.name} : ${e.message}",
                     )
@@ -636,6 +782,7 @@ class BackupRestorer(
                 try {
                     animeExtensionStoreRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Anime Store: ${it.name} : ${e.message}",
                     )
@@ -656,6 +803,7 @@ class BackupRestorer(
                 try {
                     mangaExtensionStoreRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Manga Store: ${it.name} : ${e.message}",
                     )
@@ -676,6 +824,7 @@ class BackupRestorer(
                 try {
                     novelExtensionStoreRestorer(it)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     errors.add(
                         Date() to "Error Adding Novel Store: ${it.name} : ${e.message}",
                     )
@@ -719,9 +868,14 @@ class BackupRestorer(
         userProfile: eu.kanade.tachiyomi.data.backup.models.BackupUserProfile?,
         activityLog: List<eu.kanade.tachiyomi.data.backup.models.BackupDayActivity>,
         stats: eu.kanade.tachiyomi.data.backup.models.BackupStats?,
+        memorial: eu.kanade.tachiyomi.data.backup.models.BackupCrystalMemorial?,
     ) = launch {
         ensureActive()
-        achievementRestorer.restoreAchievements(achievements, userProfile, activityLog, stats)
+        try {
+            achievementRestorer.restoreAchievements(achievements, userProfile, activityLog, stats, memorial)
+        } catch (e: tachiyomi.domain.easteregg.crystal.CrystalMemorialRestoreException) {
+            errors.add(Date() to (e.message ?: "Invalid Crystal memorial backup"))
+        }
     }
 
     private fun writeErrorLog(): File {
@@ -756,4 +910,24 @@ internal fun legacyExtensionRepoBackupsToRestore(
     storeBackups: List<BackupExtensionStore>,
 ): List<BackupExtensionRepos> {
     return if (storeBackups.isEmpty()) repoBackups else emptyList()
+}
+
+/** Settles current ownership after the entire restore scope, without pretending an Android installer has finished. */
+internal suspend fun settleRestoredDiscovery(
+    context: Context,
+    mediaTypes: Set<DiscoveryMediaType>,
+    preferences: DiscoveryPreferences = Injekt.get(),
+    sourcePolicies: DiscoverySourcePolicyProvider = Injekt.get(),
+    reschedule: () -> Unit = { DiscoveryUpdateJob.setupTask(context) },
+    refresh: (DiscoveryMediaType) -> Unit = { DiscoveryUpdateJob.refreshConfiguration(context, it) },
+) {
+    if (mediaTypes.isEmpty()) return
+    kotlin.coroutines.coroutineContext.ensureActive()
+    reschedule()
+    for (media in mediaTypes) {
+        kotlin.coroutines.coroutineContext.ensureActive()
+        val policy = sourcePolicies.current(media)
+        if (policy.inventoryComplete) reconcileDiscoverySourcePreferences(preferences, media, policy.pluginMembers.keys)
+        refresh(media)
+    }
 }

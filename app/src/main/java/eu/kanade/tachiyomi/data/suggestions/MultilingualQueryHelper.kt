@@ -102,7 +102,7 @@ object MultilingualQueryHelper {
         "revenge" to listOf("месть"),
         "friendship" to listOf("дружба"),
         "family" to listOf("семья"),
-        "milf" to listOf("милфы", "милфа", "мамочки", "зрелые женщины"),
+        "milf" to listOf("милфы", "милфа", "милф", "cougar"),
         "love triangle" to listOf("любовный треугольник"),
         "slow romance" to listOf("медленная романтика", "медленное развитие отношений"),
         "forced marriage" to listOf("брак по расчету", "вынужденный брак"),
@@ -219,8 +219,8 @@ object MultilingualQueryHelper {
         "disguise" to listOf("маскировка", "переодевание"),
         "gender bender" to listOf("смена пола", "гендерная интрига"),
         "crossdressing" to listOf("кроссдрессинг", "переодевание"),
-        "yuri" to listOf("юри", "сёдзё-ай"),
-        "yaoi" to listOf("яой", "сёнэн-ай"),
+        "yuri" to listOf("юри"),
+        "yaoi" to listOf("яой"),
         "shounen-ai" to listOf("сёнэн-ай"),
         "shoujo-ai" to listOf("сёдзё-ай"),
         "reverse harem" to listOf("реверс-гарем", "обратный гарем"),
@@ -301,6 +301,60 @@ object MultilingualQueryHelper {
         }
 
         return results.distinct()
+    }
+
+    private val dictionaryPrimaryKeys: Map<String, String> by lazy {
+        val parent = HashMap<String, String>()
+        val isMapKey = HashSet<String>()
+        fun find(x: String): String {
+            var cur = parent.getOrPut(x) { x }
+            while (cur != parent.getValue(cur)) {
+                cur = parent.getValue(cur)
+            }
+            var node = x
+            while (node != cur) {
+                val next = parent.getValue(node)
+                parent[node] = cur
+                node = next
+            }
+            return cur
+        }
+        fun union(a: String, b: String) {
+            val ra = find(a)
+            val rb = find(b)
+            if (ra != rb) parent[rb] = ra
+        }
+        for ((key, aliases) in genreMap) {
+            val normKey = eu.kanade.tachiyomi.data.discovery.GenreMatcher.normalize(key)
+            if (normKey.isEmpty()) continue
+            isMapKey += normKey
+            find(normKey)
+            for (alias in aliases) {
+                val normAlias = eu.kanade.tachiyomi.data.discovery.GenreMatcher.normalize(alias)
+                if (normAlias.isNotEmpty()) {
+                    union(normKey, normAlias)
+                }
+            }
+        }
+        val components = parent.keys.groupBy { find(it) }
+        buildMap {
+            for (nodes in components.values) {
+                val rep = nodes.filter { it in isMapKey }.minOrNull() ?: nodes.minOrNull() ?: continue
+                for (node in nodes) {
+                    put(node, rep)
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolves a bilingual dictionary genre or any of its aliases onto a deterministic,
+     * symmetric primary dictionary key (preferring declared English map keys over synonym values).
+     */
+    internal fun canonicalDictionaryKey(genre: String): String? {
+        val norm = eu.kanade.tachiyomi.data.discovery.GenreMatcher.normalize(genre)
+        if (norm.isEmpty()) return null
+        return dictionaryPrimaryKeys[norm]
     }
 
     /**

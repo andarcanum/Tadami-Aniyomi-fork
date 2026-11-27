@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.UUID
@@ -32,6 +33,28 @@ internal enum class DiscoveryProviderSetting {
     SHIKIMORI,
     MANGA_UPDATES,
     NOVEL_UPDATES,
+}
+
+/** Completion belongs to the actual binding postcondition, not a transferable preference marker. */
+internal suspend fun scheduleDiscoveryBindingBackfill(
+    preferences: DiscoveryPreferences,
+    repository: DiscoveryRepository,
+    currentVersion: Int,
+    enqueue: () -> Unit,
+) {
+    if (!repository.hasUnboundSourceRows()) {
+        markDiscoveryBindingBackfillComplete(preferences, currentVersion)
+    } else if (preferences.discoveryEnabled().get()) {
+        enqueue()
+    }
+}
+
+private fun markDiscoveryBindingBackfillComplete(preferences: DiscoveryPreferences, currentVersion: Int) {
+    if (preferences.bindingBackfillVersion().get() <
+        currentVersion
+    ) {
+        preferences.bindingBackfillVersion().set(currentVersion)
+    }
 }
 
 internal fun resolveWorkResult(
@@ -90,7 +113,8 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         val preferences = Injekt.get<DiscoveryPreferences>()
         if (!preferences.discoveryEnabled().get()) return Result.success()
         val isConfiguration = inputData.getBoolean(KEY_CONFIGURATION_REFRESH, false)
-        val isManual = tags.contains(TAG_MANUAL) && !isConfiguration
+        val isTopUp = inputData.getBoolean(KEY_TOP_UP, false)
+        val isManual = tags.contains(TAG_MANUAL) && !isConfiguration && !isTopUp
         if (isManual) {
             setForegroundSafely()
         }
@@ -124,21 +148,39 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                     null
                 }
                 try {
+                    val batchStartedAt = System.currentTimeMillis()
                     val completed = withTimeoutOrNull(WORKER_TIMEOUT_MS) {
                         Injekt.get<DiscoveryRunner>().run(
                             mediaTypes,
                             isManualRefresh = isManual,
                             totalBudgetMs = WORKER_TIMEOUT_MS,
                             isConfigurationRefresh = isConfiguration,
+                            topUp = isTopUp,
                         )
                     }
                     if (completed != null) {
-                        resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)
+                        if (tags.contains(TAG_BACKFILL)) {
+                            val generationSucceeded = completed.values.all { it.isSuccess || it.isSkipped }
+                            val bindingComplete =
+                                generationSucceeded && !Injekt.get<DiscoveryRepository>().hasUnboundSourceRows()
+                            if (bindingComplete) {
+                                markDiscoveryBindingBackfillComplete(
+                                    preferences,
+                                    eu.kanade.tachiyomi.AppInfo.getVersionCode(),
+                                )
+                            }
+                            resolveWorkResult(false, runAttemptCount, isSuccess = bindingComplete)
+                        } else {
+                            resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)
+                        }
                     } else {
                         logcat { "[DiscoveryUpdateJob] TIMEOUT after ${WORKER_TIMEOUT_MS}ms" }
+                        val timedOutAt = System.currentTimeMillis()
                         mediaTypes.forEach { mediaType ->
-                            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
-                            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+                            if (preferences.lastGenerationAt(mediaType).get() < batchStartedAt) {
+                                preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
+                                preferences.lastGenerationAt(mediaType).set(timedOutAt)
+                            }
                         }
                         resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
                     }
@@ -165,7 +207,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
     }
 
     companion object {
-        private const val TAG_AUTO = "DiscoveryUpdate"
+        internal const val TAG_AUTO = "DiscoveryUpdate"
         private const val TAG_AFTER_LIBRARY = "DiscoveryUpdateAfterLibrary"
         const val TAG_MANUAL = "DiscoveryUpdateManual"
         const val WORKER_TIMEOUT_MS = 120_000L
@@ -180,6 +222,8 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             } else {
                 wm.cancelUniqueWork(manualWorkName(mediaType))
                 wm.cancelUniqueWork(configurationWorkName(mediaType))
+                wm.cancelUniqueWork(bootstrapWorkName(mediaType))
+                wm.cancelUniqueWork(refillWorkName(mediaType))
                 Injekt.get<DiscoveryPreferences>().clearManualRefreshAt(mediaType)
                 DiscoveryNotifier(context).cancel(mediaType)
             }
@@ -239,6 +283,8 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
 
         const val KEY_TARGET_MEDIA_TYPE = "target_media_type"
         const val KEY_CONFIGURATION_REFRESH = "configuration_refresh"
+        const val KEY_TOP_UP = "top_up"
+        internal const val CONFIGURATION_DEBOUNCE_DELAY_SECONDS = 15L
 
         fun configurationWorkName(mediaType: DiscoveryMediaType): String =
             "DiscoveryUpdateConfiguration:${mediaType.key}"
@@ -253,11 +299,21 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         }
 
         /** Revalidate settings from page one without manual anti-repeat or rotation accounting. */
-        internal fun refreshConfiguration(context: Context, mediaType: DiscoveryMediaType) {
+        internal fun refreshConfiguration(
+            context: Context,
+            mediaType: DiscoveryMediaType,
+            initialDelaySeconds: Long = CONFIGURATION_DEBOUNCE_DELAY_SECONDS,
+        ) {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
+            preferences.clearGenerationDiagnostics(mediaType)
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
                 .addTag(configurationWorkName(mediaType))
+                .apply {
+                    if (initialDelaySeconds > 0L) {
+                        setInitialDelay(initialDelaySeconds, TimeUnit.SECONDS)
+                    }
+                }
                 .setInputData(
                     Data.Builder()
                         .putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)
@@ -286,6 +342,35 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
 
         fun manualWorkTag(mediaType: DiscoveryMediaType): String = manualWorkName(mediaType)
 
+        private const val TAG_BOOTSTRAP = "DiscoveryUpdateBootstrap"
+
+        fun bootstrapWorkName(mediaType: DiscoveryMediaType): String = "$TAG_BOOTSTRAP:${mediaType.key}"
+
+        /**
+         * Лёгкий фоновый bootstrap первого показа: без TAG_MANUAL, без foreground-уведомления
+         * и без 20-страничного обхода; KEEP не перезапускает уже идущую генерацию.
+         */
+        fun bootstrap(context: Context, mediaType: DiscoveryMediaType): UUID? {
+            val preferences = Injekt.get<DiscoveryPreferences>()
+            if (!preferences.discoveryEnabled().get()) return null
+            val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
+                .addTag(TAG_BOOTSTRAP)
+                .addTag(bootstrapWorkName(mediaType))
+                .setInputData(Data.Builder().putString(KEY_TARGET_MEDIA_TYPE, mediaType.key).build())
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(networkType(preferences))
+                        .build(),
+                )
+                .build()
+            context.workManager.enqueueUniqueWork(
+                bootstrapWorkName(mediaType),
+                ExistingWorkPolicy.KEEP,
+                request,
+            )
+            return request.id
+        }
+
         fun refreshNow(context: Context, mediaType: DiscoveryMediaType? = null): Map<DiscoveryMediaType, UUID> {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return emptyMap()
@@ -311,7 +396,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             }
         }
 
-        private const val TAG_BACKFILL = "DiscoveryUpdateBackfill"
+        internal const val TAG_BACKFILL = "DiscoveryUpdateBackfill"
 
         /**
          * Разовая тихая перегенерация после апгрейда: SOURCE-строки кэша до миграции 58
@@ -329,7 +414,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                         .build(),
                 )
                 .build()
-            context.workManager.enqueueUniqueWork(TAG_BACKFILL, ExistingWorkPolicy.REPLACE, request)
+            context.workManager.enqueueUniqueWork(TAG_BACKFILL, ExistingWorkPolicy.KEEP, request)
         }
 
         private const val TAG_AFTER_CONSUMED = "DiscoveryRefillAfterConsumed"
@@ -337,7 +422,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         fun refillWorkName(mediaType: DiscoveryMediaType): String = "$TAG_AFTER_CONSUMED:${mediaType.key}"
 
         /**
-         * Дебаунс-дозаполнение ленты после явного сигнала («просмотрено», LIKE): 10 минут
+         * Дебаунс-дозаполнение ленты после явного сигнала («просмотрено», LIKE): 60 секунд
          * REPLACE-очередью — каждое новое действие сдвигает окно, шторма обновлений нет
          * (не более одного прогона на очередь). Прогон фоновый: consumed-тайтл исключён,
          * liked-тайтл входит в сиды похожих рекомендаций, ряды добираются свежим.
@@ -346,10 +431,13 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
-                .setInitialDelay(10, TimeUnit.MINUTES)
+                .setInitialDelay(60, TimeUnit.SECONDS)
                 .addTag(TAG_AFTER_CONSUMED)
                 .setInputData(
-                    Data.Builder().putString(KEY_TARGET_MEDIA_TYPE, mediaType.key).build(),
+                    Data.Builder()
+                        .putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)
+                        .putBoolean(KEY_TOP_UP, true)
+                        .build(),
                 )
                 .setConstraints(
                     Constraints.Builder()
@@ -384,8 +472,11 @@ internal fun shouldBootstrapDiscoveryFeed(
     lastBootstrapAttemptAt: Long,
     now: Long = System.currentTimeMillis(),
     retryMs: Long = DISCOVERY_BOOTSTRAP_RETRY_MS,
+    hasEligibleVisibleItems: Boolean = true,
+    hasStrictUserFilters: Boolean = false,
 ): Boolean {
-    if (lastUpdatedAt != null) return false
+    val needsRefresh = lastUpdatedAt == null || (!hasEligibleVisibleItems && !hasStrictUserFilters)
+    if (!needsRefresh) return false
     val sinceAttempt = now - lastBootstrapAttemptAt
     return sinceAttempt < 0L || sinceAttempt >= retryMs
 }

@@ -40,15 +40,53 @@ class GenreTranslationFallbackTest {
     fun `известный синоним матчит чекбокс без сетевого перевода`(): Unit = runBlocking {
         val fb = GenreTranslationFallback(
             translate = { error("synonym match must not translate") },
-            synonyms = { genre -> if (genre == "milf") listOf("милфы") else emptyList() },
+            synonyms = { genre -> if (genre == "customtag") listOf("редкий тег") else emptyList() },
         )
 
         val result = fb.selectSourceGenres(
-            userGenres = listOf("milf"),
-            sourceGenreNames = listOf("Романтика", "Милфы"),
+            userGenres = listOf("customtag"),
+            sourceGenreNames = listOf("Романтика", "Редкий тег"),
         )
 
-        result.shouldContainExactly("Милфы")
+        result.shouldContainExactly("Редкий тег")
+    }
+
+    @Test
+    fun `приоритет синонимов выбирает точный синоним раньше широкого`(): Unit = runBlocking {
+        val fb = GenreTranslationFallback(
+            translate = { null },
+            synonyms = { genre ->
+                if (genre == "customtag") listOf("точный синоним", "широкий синоним") else emptyList()
+            },
+        )
+
+        val result = fb.selectSourceGenres(
+            userGenres = listOf("customtag"),
+            sourceGenreNames = listOf("Широкий синоним", "Точный синоним"),
+        )
+
+        result.shouldContainExactly("Точный синоним")
+    }
+
+    @Test
+    fun `перевод пользовательского жанра находит чекбокс в большом списке за один запрос`(): Unit = runBlocking {
+        val calls = mutableListOf<String>()
+        val fb = GenreTranslationFallback(
+            translate = { text ->
+                calls += text
+                if (text == "РедкаяТема") "RareTheme" else null
+            },
+            maxTranslationsPerCall = 12,
+        )
+        val largeOptions = (1..100).map { "TagOption$it" } + listOf("RareTheme")
+
+        val result = fb.selectSourceGenres(
+            userGenres = listOf("РедкаяТема"),
+            sourceGenreNames = largeOptions,
+        )
+
+        result.shouldContainExactly("RareTheme")
+        calls.shouldContainExactly("РедкаяТема")
     }
 
     @Test

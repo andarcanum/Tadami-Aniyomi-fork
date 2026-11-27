@@ -1,7 +1,21 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.identityKeys
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
+import kotlin.coroutines.ContinuationInterceptor
 
 data class DiscoveryMixQuotas(
     val similar: Int = 20,
@@ -17,9 +31,64 @@ internal inline fun <T> runCatchingUnlessCancelled(block: () -> T): Result<T> = 
     Result.success(block())
 } catch (e: kotlinx.coroutines.CancellationException) {
     throw e
+} catch (e: VirtualMachineError) {
+    throw e
 } catch (e: Throwable) {
     Result.failure(e)
 }
+
+private class TimeoutValueBox<out T>(val value: T)
+
+/**
+ * Bounds wall-time even when [block] performs blocking I/O that ignores coroutine
+ * cancellation (e.g. legacy plugin HTTP calls). Cancels the detached child job on
+ * timeout or parent cancellation and returns `null` immediately without waiting for
+ * non-cooperative blocking frames to unwind, while yielding once under [NonCancellable]
+ * so cooperative `finally` blocks run cleanly on the same scheduler tick.
+ */
+internal suspend fun <T> withHardTimeoutOrNull(
+    timeoutMs: Long,
+    block: suspend CoroutineScope.() -> T,
+): T? {
+    if (timeoutMs <= 0L) return null
+    val callerContext = currentCoroutineContext()
+    callerContext.ensureActive()
+    val parentJob = callerContext[Job]
+    val dispatcher = callerContext[ContinuationInterceptor] ?: Dispatchers.IO
+    val detachedJob = SupervisorJob()
+    val parentHandle = parentJob?.invokeOnCompletion { cause ->
+        if (cause != null) {
+            detachedJob.cancel(
+                cause as? CancellationException ?: CancellationException("Parent cancelled", cause),
+            )
+        }
+    }
+    val scope = CoroutineScope(detachedJob + dispatcher)
+    val deferred = scope.async { TimeoutValueBox(block()) }
+    return try {
+        val boxed = withTimeoutOrNull(timeoutMs) {
+            deferred.await()
+        }
+        if (boxed == null) {
+            detachedJob.cancel(CancellationException("Hard timeout after ${timeoutMs}ms"))
+            withContext(NonCancellable) { yield() }
+            null
+        } else {
+            boxed.value
+        }
+    } catch (e: CancellationException) {
+        detachedJob.cancel(e)
+        withContext(NonCancellable) { yield() }
+        throw e
+    } finally {
+        parentHandle?.dispose()
+    }
+}
+
+/** Извлекает нормализованный первичный жанр для анти-кластеризации и диверсификации. */
+internal fun primaryGenreOf(item: DiscoveryRowItem): String? =
+    item.genres.firstOrNull()?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        ?: item.reason?.substringBefore(",")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
 /**
  * Смешанный поток: round-robin по квотам сигналов (LIKE → TASTE → TREND → SOURCE),
@@ -27,6 +96,7 @@ internal inline fun <T> runCatchingUnlessCancelled(block: () -> T): Result<T> = 
  * автоматически (round-robin просто пропускает пустой пул), остаток до [total]
  * добивается по убыванию [rrf]-скоров (ранговая fusion — шкалы сигналов несопоставимы),
  * а при rrf = null — по сырому скору (прежнее поведение).
+ * Предотвращает затяжные серии (> 2) одного первичного жанра при наличии альтернатив (MMR).
  */
 internal fun interleaveMix(
     rows: Map<DiscoveryRowType, List<DiscoveryRowItem>>,
@@ -41,43 +111,124 @@ internal fun interleaveMix(
         DiscoveryRowType.SOURCE to quotas.source,
     )
     val pools = DiscoveryRowType.entries.associateWith { type ->
-        ArrayDeque(rows[type].orEmpty())
+        ArrayList(rows[type].orEmpty())
     }
     val out = mutableListOf<DiscoveryRowItem>()
     val seen = mutableSetOf<String>()
     val taken = mutableMapOf<DiscoveryRowType, Int>()
+    var lastPrimaryGenre: String? = null
+    var consecutiveSameGenre = 0
     var progressed = true
+
     while (out.size < total && progressed) {
         progressed = false
         for (type in DiscoveryRowType.entries) {
             if (out.size >= total) break
             if ((taken[type] ?: 0) >= (quotaOf[type] ?: 0)) continue
             val pool = pools[type] ?: continue
-            var candidate: DiscoveryRowItem? = null
-            while (pool.isNotEmpty()) {
-                val next = pool.removeFirst()
-                if (next.cleanTitle !in seen) {
-                    candidate = next
-                    break
+
+            while (pool.isNotEmpty() && pool.first().cleanTitle in seen) {
+                pool.removeAt(0)
+            }
+            if (pool.isEmpty()) continue
+
+            var candidateIndex = -1
+            if (consecutiveSameGenre >= 2 && lastPrimaryGenre != null) {
+                candidateIndex = pool.indexOfFirst {
+                    it.cleanTitle !in seen && (primaryGenreOf(it) == null || primaryGenreOf(it) != lastPrimaryGenre)
                 }
             }
-            if (candidate == null) continue
+            if (candidateIndex == -1) {
+                candidateIndex = pool.indexOfFirst { it.cleanTitle !in seen }
+            }
+            if (candidateIndex == -1) {
+                pool.clear()
+                continue
+            }
+
+            val candidate = pool[candidateIndex]
+            val candidateGenre = primaryGenreOf(candidate)
+
+            if (consecutiveSameGenre >= 2 && candidateGenre != null && candidateGenre == lastPrimaryGenre) {
+                val hasAlternativeInOtherPools = DiscoveryRowType.entries.any { otherType ->
+                    if (otherType == type) return@any false
+                    if ((taken[otherType] ?: 0) >= (quotaOf[otherType] ?: 0)) return@any false
+                    val otherPool = pools[otherType] ?: return@any false
+                    otherPool.any {
+                        it.cleanTitle !in seen &&
+                            (primaryGenreOf(it) == null || primaryGenreOf(it) != lastPrimaryGenre)
+                    }
+                }
+                if (hasAlternativeInOtherPools) {
+                    continue
+                }
+            }
+
+            pool.removeAt(candidateIndex)
             out += candidate
             seen += candidate.cleanTitle
             taken[type] = (taken[type] ?: 0) + 1
+            if (candidateGenre != null && candidateGenre == lastPrimaryGenre) {
+                consecutiveSameGenre++
+            } else {
+                lastPrimaryGenre = candidateGenre
+                consecutiveSameGenre = if (candidateGenre != null) 1 else 0
+            }
             progressed = true
         }
+
+        if (!progressed && out.size < total) {
+            for (type in DiscoveryRowType.entries) {
+                if ((taken[type] ?: 0) >= (quotaOf[type] ?: 0)) continue
+                val pool = pools[type] ?: continue
+                val idx = pool.indexOfFirst { it.cleanTitle !in seen }
+                if (idx != -1) {
+                    val candidate = pool.removeAt(idx)
+                    out += candidate
+                    seen += candidate.cleanTitle
+                    taken[type] = (taken[type] ?: 0) + 1
+                    val candidateGenre = primaryGenreOf(candidate)
+                    if (candidateGenre != null && candidateGenre == lastPrimaryGenre) {
+                        consecutiveSameGenre++
+                    } else {
+                        lastPrimaryGenre = candidateGenre
+                        consecutiveSameGenre = if (candidateGenre != null) 1 else 0
+                    }
+                    progressed = true
+                    break
+                }
+            }
+        }
     }
+
     if (out.size < total) {
-        pools.values.flatten()
+        val remaining = pools.values.flatten()
             .filterNot { it.cleanTitle in seen }
             .distinctBy { it.cleanTitle }
             .sortedByDescending { rrf?.get(it.cleanTitle) ?: it.score }
-            .take(total - out.size)
-            .forEach { item ->
-                out += item
-                seen += item.cleanTitle
+            .toMutableList()
+
+        while (out.size < total && remaining.isNotEmpty()) {
+            val candidateIndex = if (consecutiveSameGenre >= 2 && lastPrimaryGenre != null) {
+                val altIdx = remaining.indexOfFirst {
+                    val g = primaryGenreOf(it)
+                    g == null || g != lastPrimaryGenre
+                }
+                if (altIdx != -1) altIdx else 0
+            } else {
+                0
             }
+            val item = remaining.removeAt(candidateIndex)
+            out += item
+            seen += item.cleanTitle
+            val g = primaryGenreOf(item)
+            if (g != null && g == lastPrimaryGenre) {
+                consecutiveSameGenre++
+            } else {
+                lastPrimaryGenre = g
+                consecutiveSameGenre = if (g != null) 1 else 0
+            }
+        }
     }
     return out
 }
@@ -124,6 +275,20 @@ internal fun mergeNormalized(
         .map { it.first }
 }
 
+/** One whole observed copy per title; conflicting known copies retain their existing first-known precedence. */
+internal fun seedResultRepresentatives(perSeed: List<List<DiscoveryRowItem>>): Map<String, DiscoveryRowItem> {
+    val representatives = LinkedHashMap<String, DiscoveryRowItem>()
+    perSeed.forEach { items ->
+        items.forEach { item ->
+            val previous = representatives[item.cleanTitle]
+            if (previous == null || (previous.genres.isEmpty() && item.genres.isNotEmpty())) {
+                representatives[item.cleanTitle] = item
+            }
+        }
+    }
+    return representatives
+}
+
 /**
  * Комбинаторика пересечений: cleanTitle, рекомендованный k разными сидами,
  * получает score = maxScore * (1 + overlapMultiplier * (k - 1)); в reason-payload
@@ -135,29 +300,31 @@ internal fun mergeSeedResults(
     perSeedCap: Int = 15,
     overlapMultiplier: Double = 0.5,
 ): List<DiscoveryRowItem> {
-    class Acc(val template: DiscoveryRowItem) {
-        var maxScore: Double = template.score
+    class Acc(val template: DiscoveryRowItem, score: Double) {
+        var maxScore: Double = score
         val seeds = linkedSetOf<String>()
     }
-
+    val representatives = seedResultRepresentatives(perSeed)
     val byTitle = LinkedHashMap<String, Acc>()
-    perSeed.forEach { seedItems ->
-        seedItems.take(perSeedCap).forEach { item ->
-            val seedTitle = item.seedTitle ?: return@forEach
-            val acc = byTitle.getOrPut(item.cleanTitle) { Acc(item) }
+    perSeed.forEach { items ->
+        val selectedTitles = LinkedHashSet<String>()
+        items.forEach { item ->
+            val seed = item.seedTitle ?: return@forEach
+            if (item.cleanTitle !in selectedTitles) {
+                if (selectedTitles.size >= perSeedCap) return@forEach
+                selectedTitles += item.cleanTitle
+            }
+            val acc = byTitle.getOrPut(item.cleanTitle) { Acc(representatives.getValue(item.cleanTitle), item.score) }
             acc.maxScore = maxOf(acc.maxScore, item.score)
-            acc.seeds += seedTitle
+            acc.seeds += seed
         }
     }
-    return byTitle.values
-        .map { acc ->
-            val k = acc.seeds.size
-            acc.template.copy(
-                score = acc.maxScore * (1.0 + overlapMultiplier * (k - 1)),
-                seedTitle = acc.seeds.take(2).joinToString(", "),
-            )
-        }
-        .sortedByDescending { it.score }
+    return byTitle.values.map { acc ->
+        acc.template.copy(
+            score = acc.maxScore * (1.0 + overlapMultiplier * (acc.seeds.size - 1)),
+            seedTitle = acc.seeds.take(2).joinToString(", "),
+        )
+    }.sortedByDescending { it.score }
 }
 
 /** Вклад дропнутого тайтла в каждый его жанр вместо положительного freshness. */
@@ -165,7 +332,7 @@ internal const val DROPPED_GENRE_PENALTY = 0.5
 
 /** Категория жанра: фундаментальные вкусы живут годами, трендовые приедаются. */
 internal fun genreDecayDays(genre: String): Double {
-    val g = genre.trim().lowercase()
+    val g = GenreMatcher.identityKey(genre)
     return when (g) {
         in FUNDAMENTAL_GENRES -> 180.0
         in TRENDY_GENRES -> 20.0
@@ -205,21 +372,25 @@ internal fun buildTasteProfile(
 ): List<Pair<String, Double>> {
     val windowStart = nowMs - windowDays * DAY_MS
     val weights = mutableMapOf<String, Double>()
+    val displayNames = mutableMapOf<String, String>()
     candidates.forEach { candidate ->
         val interaction = (candidate.lastInteraction ?: candidate.dateAdded)
         if (interaction < windowStart) return@forEach
         val ageDays = ((nowMs - interaction) / DAY_MS).coerceAtLeast(0)
-        candidate.genres.forEach { genre ->
-            val freshness = 1.0 / (1.0 + ageDays / genreDecayDays(genre))
+        candidate.genres.distinctBy(GenreMatcher::identityKey).forEach genreLoop@{ genre ->
+            val key = GenreMatcher.identityKey(genre)
+            if (key.isEmpty()) return@genreLoop
+            displayNames.putIfAbsent(key, genre)
+            val freshness = 1.0 / (1.0 + ageDays / genreDecayDays(key))
             val contribution = if (candidate.isDropped) -DROPPED_GENRE_PENALTY else freshness
-            weights[genre] = (weights[genre] ?: 0.0) + contribution
+            weights[key] = (weights[key] ?: 0.0) + contribution
         }
     }
     return weights.entries
         .filter { it.value > 0.0 }
         .sortedByDescending { it.value }
         .take(topN)
-        .map { it.key to it.value }
+        .map { displayNames.getValue(it.key) to it.value }
 }
 
 /**
@@ -242,23 +413,20 @@ internal fun expandGenreSet(genres: List<String>): Set<String> {
     return out
 }
 
-private fun genreVariants(genre: String): Set<String> = expandGenreSet(listOf(genre))
-
-/** Веса профиля, развёрнутые по всем языковым вариантам каждого жанра. */
+/** Веса по семантической идентичности: эквивалентные алиасы не складываются. */
 internal fun expandedTasteWeights(profile: List<Pair<String, Double>>): Map<String, Double> {
     val map = mutableMapOf<String, Double>()
     profile.forEach { (genre, weight) ->
-        genreVariants(genre).forEach { variant ->
-            map[variant] = maxOf(map[variant] ?: 0.0, weight)
-        }
+        val key = GenreMatcher.identityKey(genre)
+        if (key.isNotEmpty()) map[key] = maxOf(map[key] ?: 0.0, weight)
     }
     return map
 }
 
-/** Скор кандидата по профилю вкуса: сумма весов совпавших жанров с учётом RU↔EN переводов. */
+/** Скор кандидата: один вклад на совпавший жанр независимо от языка и числа его алиасов. */
 internal fun tasteScore(itemGenres: List<String>, profile: List<Pair<String, Double>>): Double {
     val weights = expandedTasteWeights(profile)
-    return itemGenres.mapTo(HashSet()) { it.trim().lowercase() }
+    return itemGenres.mapTo(HashSet(), GenreMatcher::identityKey)
         .sumOf { weights[it] ?: 0.0 }
 }
 
@@ -268,9 +436,9 @@ internal fun tasteScore(itemGenres: List<String>, profile: List<Pair<String, Dou
  */
 internal fun matchedGenres(itemGenres: List<String>, profile: List<Pair<String, Double>>): List<String> {
     return itemGenres.mapNotNull { itemGenre ->
-        val key = itemGenre.trim().lowercase()
+        val key = GenreMatcher.identityKey(itemGenre)
         if (key.isEmpty()) return@mapNotNull null
-        profile.firstOrNull { (genre, _) -> key in genreVariants(genre) }?.first
+        profile.firstOrNull { (genre, _) -> key == GenreMatcher.identityKey(genre) }?.first
     }.distinct().take(2)
 }
 
@@ -284,9 +452,18 @@ private const val DAY_MS = 24L * 60 * 60 * 1000
  */
 internal fun dedupeCrossRow(
     items: List<tachiyomi.domain.discovery.model.DiscoverySuggestion>,
-): List<tachiyomi.domain.discovery.model.DiscoverySuggestion> = items
-    .sortedBy { it.rowType.ordinal }
-    .distinctBy { it.cleanTitle }
+): List<tachiyomi.domain.discovery.model.DiscoverySuggestion> {
+    val sorted = items.sortedBy { it.rowType.ordinal }
+    val seenKeys = HashSet<String>()
+    val result = ArrayList<tachiyomi.domain.discovery.model.DiscoverySuggestion>(items.size)
+    for (item in sorted) {
+        val keys = item.identityKeys() + item.cleanTitle
+        if (keys.any { it in seenKeys }) continue
+        result += item
+        seenKeys += keys
+    }
+    return result
+}
 
 /**
  * Матчит ли хоть один жанр айтема против набора целевых жанров (обычно уже
@@ -327,7 +504,8 @@ internal fun boostedTasteScore(
 ): Double {
     val base = tasteScore(itemGenres, profile)
     if (priorityGenres.isEmpty() || itemGenres.isEmpty()) return base
-    val hasPriority = itemGenres.any { g -> priorityGenres.any { pri -> GenreMatcher.matches(pri, g) } }
+    val expanded = expandGenreSet(priorityGenres.toList())
+    val hasPriority = itemGenres.any { g -> expanded.any { pri -> GenreMatcher.matchesConstraint(pri, g) } }
     return if (hasPriority) base * 1.5 else base
 }
 
@@ -363,14 +541,13 @@ internal fun serializeGenreFilterCsv(canonical: Set<String>, raw: List<String>):
 
 /**
  * V3: резолв введённого пользователем жанра: канонический → canonical key;
- * незнакомый → raw string «как есть».
+ * незнакомый или неоднозначный → raw string «как есть».
  */
 internal fun resolveUserGenreInput(input: String): Pair<String, Boolean> {
     // Запятая — разделитель CSV-хранилища: в жанре она превратится в пробел,
     // иначе raw-строка распадётся на два битых элемента при следующем чтении.
-    val trimmed = input.trim().replace(',', ' ').replace('\n', ' ').trim()
-    if (trimmed.isEmpty()) return "" to false
-    val canonical = GenreMatcher.resolve(trimmed).firstOrNull()
+    val trimmed = GenreMatcher.normalizeRawConstraint(input) ?: return "" to false
+    val canonical = GenreMatcher.resolve(trimmed).singleOrNull()
     return if (canonical != null) canonical to true else trimmed to false
 }
 
@@ -480,7 +657,7 @@ internal fun filterGenreClustering(
     val overflow = mutableListOf<DiscoveryRowItem>()
     val genreCounts = mutableMapOf<String, Int>()
     for (item in items) {
-        val primaryGenre = item.reason?.substringBefore(",")?.trim()?.lowercase().orEmpty()
+        val primaryGenre = primaryGenreOf(item).orEmpty()
         val count = genreCounts.getOrDefault(primaryGenre, 0)
         if (primaryGenre.isEmpty() || count < maxPerGenre) {
             result.add(item)

@@ -35,7 +35,7 @@ isHidden:
 SELECT COUNT(*)
 FROM reels_hidden
 WHERE source_id = :sourceId AND (
-    (kind = 'item' AND hidden_value = :itemId) OR
+    (kind IN ('video', 'item') AND hidden_value = :itemId) OR
     (kind = 'author' AND hidden_value = :author)
 );
 

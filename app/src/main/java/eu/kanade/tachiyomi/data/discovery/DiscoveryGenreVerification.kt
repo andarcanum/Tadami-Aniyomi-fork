@@ -34,6 +34,7 @@ data class GenreVerificationSummary(
     val unattemptedCount: Int,
     val metadataUnavailableCount: Int,
     val failedCount: Int,
+    val hasIncompletePages: Boolean = false,
 ) {
     val outcome: GenreVerificationOutcome
         get() = when {
@@ -41,13 +42,13 @@ data class GenreVerificationSummary(
             failedCount > 0 && verifiedCount == 0 &&
                 metadataUnavailableCount == 0 && unattemptedCount == 0 -> GenreVerificationOutcome.FAILED
             failedCount > 0 || metadataUnavailableCount > 0 ||
-                unattemptedCount > 0 -> GenreVerificationOutcome.INCOMPLETE
+                unattemptedCount > 0 || hasIncompletePages -> GenreVerificationOutcome.INCOMPLETE
             else -> GenreVerificationOutcome.VERIFIED_EMPTY
         }
 
     /** True when the row can be shown but its coverage is not complete. */
     val hasCoverageGap: Boolean
-        get() = unattemptedCount > 0 || metadataUnavailableCount > 0 || failedCount > 0
+        get() = unattemptedCount > 0 || metadataUnavailableCount > 0 || failedCount > 0 || hasIncompletePages
 
     companion object {
         fun empty(
@@ -88,6 +89,12 @@ data class DiscoveryGenrePage(
     val detailsUsed: Int = 0,
     val page: Int = 1,
     val queryKey: String = "",
+    /** Null when the caller did not ask for a genre query; true when the source filter accepted it. */
+    val genreFilterApplied: Boolean? = null,
+    /** True when the cards came from a text search for the requested genre rather than a browse. */
+    val genreSearchApplied: Boolean = false,
+    /** True when the source itself applied server-side exclusion for EVERY requested excluded genre. */
+    val excludedGenresApplied: Boolean = false,
 )
 
 /** Verification result for a single selected source. */
@@ -101,4 +108,13 @@ internal data class GenreSourceVerification(
     val detailsUsed: Int = 0,
     val hasNextPage: Boolean = true,
     val queryKey: String = "",
-)
+    /** Positive transport evidence: catalogue pages actually returned during this pass. */
+    val successfulPages: Int = 0,
+) {
+    val canRewardReliability: Boolean
+        get() = successfulPages > 0 && failure == null && pending == 0 && !summary.hasCoverageGap &&
+            (
+                stopReason == DiscoveryFillStopReason.TARGET_REACHED ||
+                    stopReason == DiscoveryFillStopReason.SOURCE_EXHAUSTED
+                )
+}

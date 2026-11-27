@@ -13,4 +13,7 @@ data class TranslationQueueItem(
     val batchToken: String = "",
     val batchOrder: Int = 0,
     val profileSnapshotJson: String? = null,
+    val generation: Long = 0,
+    val nextAttemptAt: Long = 0,
+    val sourceFingerprint: String? = null,
 )

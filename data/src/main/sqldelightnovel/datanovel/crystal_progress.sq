@@ -1,0 +1,29 @@
+-- The EXISTS dependency deliberately observes saved child flags even when _id/title stay equal.
+getCandidates:
+SELECT P._id, P.title
+FROM novels P
+WHERE EXISTS (
+    SELECT 1 FROM novel_chapters C
+    WHERE C.novel_id = P._id AND C.read = 1
+);
+
+-- Re-read title and local bindings with the children in a per-entry transaction.
+getCandidate:
+SELECT _id, title
+FROM novels
+WHERE _id = :parentId;
+
+getLocalTracks:
+SELECT novel_id, sync_id, remote_id, title
+FROM novel_sync;
+
+getTracksForEntry:
+SELECT sync_id, remote_id, title
+FROM novel_sync
+WHERE novel_id = :parentId;
+
+-- Unread copies must remain available to connect duplicate logical identities.
+getItemsForEntry:
+SELECT _id, chapter_number, url, read
+FROM novel_chapters
+WHERE novel_id = :parentId;

@@ -206,9 +206,10 @@ class CompositeTrendingSourceTest {
     }
 
     @Test
-    fun `novel fetchMeta skips shikimori even in russian locale`() = runTest {
+    fun `novel fetchMeta prefers shikimori in russian locale and falls back to anilist`() = runTest {
+        val shikiMeta = DiscoveryMeta("Описание ранобэ", listOf("Фэнтези"), "Re:Zero")
         val aniMeta = DiscoveryMeta("LN description", listOf("Fantasy"), null)
-        val shikimori = MockTrendingSource("shikimori", meta = DiscoveryMeta("wrong", emptyList(), null))
+        val shikimori = MockTrendingSource("shikimori", meta = shikiMeta)
         val anilist = MockTrendingSource("anilist", meta = aniMeta)
 
         val composite = CompositeTrendingSource(
@@ -220,9 +221,43 @@ class CompositeTrendingSourceTest {
         )
 
         val result = composite.fetchMeta("Re:Zero", DiscoveryMediaType.NOVEL)
-        result shouldBe aniMeta
-        shikimori.fetchMetaCalled shouldBe false
-        anilist.fetchMetaCalled shouldBe true
+        result shouldBe shikiMeta
+        shikimori.fetchMetaCalled shouldBe true
+        anilist.fetchMetaCalled shouldBe false
+
+        val compositeFallback = CompositeTrendingSource(
+            shikimori = MockTrendingSource("shikimori", meta = null),
+            mangadex = MockTrendingSource("mangadex"),
+            jikan = MockTrendingSource("jikan"),
+            anilist = anilist,
+            isRussianLocaleProvider = { true },
+        )
+        compositeFallback.fetchMeta("Fallback Novel", DiscoveryMediaType.NOVEL) shouldBe aniMeta
+    }
+
+    @Test
+    fun `fetch and fetchByGenres throw when all providers fail`() = runTest {
+        val composite = CompositeTrendingSource(
+            shikimori = MockTrendingSource("shikimori", shouldFail = true),
+            mangadex = MockTrendingSource("mangadex", shouldFail = true),
+            jikan = MockTrendingSource("jikan", shouldFail = true),
+            anilist = MockTrendingSource("anilist", shouldFail = true),
+        )
+        var fetchThrew = false
+        try {
+            composite.fetch(DiscoveryMediaType.NOVEL)
+        } catch (_: IOException) {
+            fetchThrew = true
+        }
+        fetchThrew shouldBe true
+
+        var genreThrew = false
+        try {
+            composite.fetchByGenres(DiscoveryMediaType.NOVEL, listOf("Fantasy"))
+        } catch (_: IOException) {
+            genreThrew = true
+        }
+        genreThrew shouldBe true
     }
 
     @Test

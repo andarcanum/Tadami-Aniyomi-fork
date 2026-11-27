@@ -8,6 +8,7 @@ import coil3.request.ImageRequest
 import com.tadami.aurora.R
 import eu.kanade.presentation.theme.LocalIsAuroraTheme
 import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.entries.manga.model.Manga
@@ -52,6 +53,17 @@ fun resolveAuroraCoverPlaceholderMemoryCacheKey(data: Any?): String? {
     return when (val candidate = resolveAuroraCoverModelCandidate(data)) {
         null -> null
         is String -> candidate
+        is AuroraPosterRequest -> buildString {
+            append("aurora-poster;")
+            append(candidate.primaryUrl.orEmpty())
+            append(';')
+            append(candidate.fallbackUrl.orEmpty())
+            append(';')
+            append(candidate.coverLastModified)
+            if (candidate.customCoverFile?.exists() == true) {
+                append(";custom")
+            }
+        }
         is Anime -> "anime;${candidate.id};${candidate.thumbnailUrl};${candidate.coverLastModified}"
         is AnimeCover -> "anime;${candidate.animeId};${candidate.url};${candidate.lastModified}"
         is Manga -> "manga;${candidate.id};${candidate.thumbnailUrl};${candidate.coverLastModified}"
@@ -69,6 +81,19 @@ fun buildAuroraCoverImageRequest(
 ): ImageRequest {
     return ImageRequest.Builder(context)
         .data(resolveAuroraCoverModel(data))
+        .placeholderMemoryCacheKey(resolveAuroraCoverPlaceholderMemoryCacheKey(data))
+        .apply(configure)
+        .build()
+}
+
+fun buildAuroraCoverImageRequestOrNull(
+    context: Context,
+    data: Any?,
+    configure: ImageRequest.Builder.() -> Unit = {},
+): ImageRequest? {
+    val resolved = resolveAuroraCoverModel(data) ?: return null
+    return ImageRequest.Builder(context)
+        .data(resolved)
         .placeholderMemoryCacheKey(resolveAuroraCoverPlaceholderMemoryCacheKey(data))
         .apply(configure)
         .build()

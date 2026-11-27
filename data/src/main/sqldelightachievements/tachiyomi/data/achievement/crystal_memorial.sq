@@ -1,0 +1,48 @@
+CREATE TABLE crystal_memorial (
+    campaign_key TEXT NOT NULL PRIMARY KEY,
+    eligibility_reason TEXT,
+    eligible_at INTEGER,
+    automatic_presentation_consumed_at INTEGER,
+    granted_at INTEGER,
+    granted_xp INTEGER NOT NULL DEFAULT 0 CHECK (granted_xp IN (0, 999)),
+    ceremony_acknowledged_at INTEGER,
+    generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+    CHECK ((granted_at IS NULL AND granted_xp = 0) OR (granted_at IS NOT NULL AND granted_xp = 999))
+);
+
+getState:
+SELECT * FROM crystal_memorial WHERE campaign_key = :campaign_key;
+
+ensureState:
+INSERT OR IGNORE INTO crystal_memorial(campaign_key) VALUES (:campaign_key);
+
+makeEligible:
+UPDATE crystal_memorial SET eligibility_reason = :reason, eligible_at = :now
+WHERE campaign_key = :campaign_key AND eligible_at IS NULL;
+
+acknowledgePresentation:
+UPDATE crystal_memorial SET automatic_presentation_consumed_at = :now
+WHERE campaign_key = :campaign_key AND eligible_at IS NOT NULL AND automatic_presentation_consumed_at IS NULL;
+
+claimGrant:
+UPDATE crystal_memorial SET granted_at = :now, granted_xp = 999
+WHERE campaign_key = :campaign_key AND eligible_at IS NOT NULL AND granted_at IS NULL AND generation = :generation;
+
+acknowledgeCeremony:
+UPDATE crystal_memorial SET ceremony_acknowledged_at = :now
+WHERE campaign_key = :campaign_key AND granted_at IS NOT NULL AND ceremony_acknowledged_at IS NULL;
+
+reset:
+UPDATE crystal_memorial SET eligibility_reason = NULL, eligible_at = NULL,
+    automatic_presentation_consumed_at = NULL, granted_at = NULL, granted_xp = 0,
+    ceremony_acknowledged_at = NULL, generation = generation + 1
+WHERE campaign_key = :campaign_key;
+
+restoreState:
+INSERT INTO crystal_memorial(campaign_key, eligibility_reason, eligible_at, automatic_presentation_consumed_at,
+    granted_at, granted_xp, ceremony_acknowledged_at, generation)
+VALUES (:campaign_key, :eligibility_reason, :eligible_at, :automatic_presentation_consumed_at,
+    :granted_at, :granted_xp, :ceremony_acknowledged_at, :generation)
+ON CONFLICT(campaign_key) DO UPDATE SET eligibility_reason = :eligibility_reason, eligible_at = :eligible_at,
+    automatic_presentation_consumed_at = :automatic_presentation_consumed_at, granted_at = :granted_at,
+    granted_xp = :granted_xp, ceremony_acknowledged_at = :ceremony_acknowledged_at, generation = :generation;

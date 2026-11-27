@@ -1,7 +1,5 @@
 package eu.kanade.tachiyomi.ui.player
 
-import android.widget.Toast
-import eu.kanade.tachiyomi.util.system.toast
 import `is`.xyz.mpv.MPVLib
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -15,6 +13,7 @@ class PlayerObserver(val activity: PlayerActivity) :
     }
 
     override fun eventProperty(property: String, value: Long) {
+        if (property == "cache-speed" && !activity.shouldDispatchCacheSpeed()) return
         activity.runOnUiThread { activity.onObserverEvent(property, value) }
     }
 
@@ -42,7 +41,7 @@ class PlayerObserver(val activity: PlayerActivity) :
         }
         logcat(LogPriority.ERROR) { errorMessage }
         activity.runOnUiThread {
-            activity.toast(errorMessage, Toast.LENGTH_LONG)
+            activity.onPlaybackError(errorMessage)
         }
     }
 

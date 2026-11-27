@@ -121,6 +121,23 @@ class SuggestionCacheTest {
     }
 
     @Test
+    fun `makeKey differs when extraKeys change`() {
+        val keyNsfwFiltered = SuggestionCache.makeKey(
+            "AniList",
+            "Overlord",
+            "NOVEL",
+            extraKeys = listOf("nsfw=true"),
+        )
+        val keyNsfwUnfiltered = SuggestionCache.makeKey(
+            "AniList",
+            "Overlord",
+            "NOVEL",
+            extraKeys = listOf("nsfw=false"),
+        )
+        assertNotEquals(keyNsfwFiltered, keyNsfwUnfiltered)
+    }
+
+    @Test
     fun `TTL is 24 hours`() {
         // This guards the production setting; the actual expiry test is
         // hard to write without time mocking, so we just verify that the

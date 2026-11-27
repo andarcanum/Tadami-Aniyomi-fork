@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.library.AURORA_LARGE_GRID_PERFORMANCE_THRESHOLD
+import eu.kanade.presentation.library.components.AuroraLibraryListBadgeData
+import eu.kanade.presentation.library.components.AuroraLibraryListRow
+import eu.kanade.presentation.library.components.AuroraLibraryListRowDivider
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
@@ -34,6 +37,7 @@ import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicat
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.presentation.library.manga.components.SeriesStackedCoverCard
+import eu.kanade.presentation.library.resolveAuroraLibraryListRowMetrics
 import eu.kanade.presentation.library.resolveMangaLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -43,6 +47,7 @@ import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
+import tachiyomi.domain.library.model.AuroraLibraryListStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.series.model.SeriesCoverMode
@@ -58,7 +63,7 @@ import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.lazy.items as listItems
+import androidx.compose.foundation.lazy.itemsIndexed as listItemsIndexed
 
 @Composable
 fun MangaLibraryAuroraContent(
@@ -83,7 +88,10 @@ fun MangaLibraryAuroraContent(
     gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
-    val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsState()
+    val auroraCardStyle by remember(libraryPreferences) { libraryPreferences.auroraLibraryCardStyle() }.collectAsState()
+    val auroraListStyle by remember(libraryPreferences) { libraryPreferences.auroraLibraryListStyle() }.collectAsState()
+    val auroraListSize by remember(libraryPreferences) { libraryPreferences.auroraLibraryListSize() }.collectAsState()
+    val showUnreadBadge by remember(libraryPreferences) { libraryPreferences.unreadBadge() }.collectAsState()
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val enabledAuras by uiPreferences.enabledAuras().collectAsState()
     val useGlowContourCards = auroraCardStyle == AuroraLibraryCardStyle.GlowContour
@@ -128,6 +136,9 @@ fun MangaLibraryAuroraContent(
                 onClickContinueReading = onContinueReadingClicked,
                 listMaxWidthDp = auroraAdaptiveSpec.listMaxWidthDp,
                 horizontalPaddingDp = auroraAdaptiveSpec.contentHorizontalPaddingDp,
+                listStyle = auroraListStyle,
+                listSize = auroraListSize,
+                showUnreadBadge = showUnreadBadge,
                 state = listState,
             )
         }
@@ -244,23 +255,37 @@ private fun MangaLibraryAuroraList(
     onClickContinueReading: ((LibraryManga) -> Unit)?,
     listMaxWidthDp: Int?,
     horizontalPaddingDp: Int,
+    listStyle: AuroraLibraryListStyle,
+    listSize: Int,
+    showUnreadBadge: Boolean,
     state: LazyListState,
 ) {
     val colors = AuroraTheme.colors
     val showPinnedSection = remember(items) { items.containsAtLeastMatches(requiredCount = 2) { it.pinned } }
+    val isBanner = listStyle == AuroraLibraryListStyle.Banner
+    val rowMetrics = remember(listStyle, listSize) {
+        resolveAuroraLibraryListRowMetrics(style = listStyle, sizeSetting = listSize)
+    }
 
     FastScrollLazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = contentPadding + PaddingValues(horizontal = horizontalPaddingDp.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = if (isBanner) {
+            contentPadding + PaddingValues(horizontal = horizontalPaddingDp.dp, vertical = 12.dp)
+        } else {
+            contentPadding + PaddingValues(vertical = 8.dp)
+        },
+        verticalArrangement = if (isBanner) Arrangement.spacedBy(12.dp) else Arrangement.Top,
     ) {
         item {
             if (!searchQuery.isNullOrEmpty()) {
                 GlobalSearchItem(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .auroraCenteredMaxWidth(listMaxWidthDp),
+                        .auroraCenteredMaxWidth(listMaxWidthDp)
+                        .then(
+                            if (isBanner) Modifier else Modifier.padding(horizontal = horizontalPaddingDp.dp),
+                        ),
                     searchQuery = searchQuery,
                     onClick = onGlobalSearchClicked,
                 )
@@ -272,16 +297,19 @@ private fun MangaLibraryAuroraList(
                 PinnedSectionHeader(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .auroraCenteredMaxWidth(listMaxWidthDp),
+                        .auroraCenteredMaxWidth(listMaxWidthDp)
+                        .then(
+                            if (isBanner) Modifier else Modifier.padding(horizontal = horizontalPaddingDp.dp),
+                        ),
                 )
             }
         }
 
-        listItems(
+        listItemsIndexed(
             items = items,
-            key = { it.id },
-            contentType = { "manga_library_aurora_list_item" },
-        ) { libraryItem ->
+            key = { _, item -> item.id },
+            contentType = { _, _ -> "manga_library_aurora_list_${listStyle.name}" },
+        ) { index, libraryItem ->
             val isSeries = libraryItem is MangaLibraryItem.Series
             val libraryManga = libraryItem.libraryManga
             val targetManga = if (isSeries) {
@@ -302,8 +330,9 @@ private fun MangaLibraryAuroraList(
             } else {
                 null
             }
+            val visibleUnreadCount = libraryItem.unreadCount.takeIf { showUnreadBadge && it > 0 }
             val hasBadge = libraryItem.downloadCount > 0 ||
-                libraryItem.unreadCount > 0 ||
+                visibleUnreadCount != null ||
                 libraryItem.isLocal ||
                 libraryItem.sourceLanguage.isNotBlank()
             val seriesHeaderText = if (isSeries) {
@@ -321,95 +350,133 @@ private fun MangaLibraryAuroraList(
                     lastModified = manga.coverLastModified,
                 )
             }
-            AuroraCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .auroraCenteredMaxWidth(listMaxWidthDp)
-                    .aspectRatio(2.2f),
-                title = title,
-                coverData = coverData,
-
-                subtitle = subtitle,
-                seriesHeaderText = seriesHeaderText,
-                customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
-                    {
-                        SeriesStackedCoverCard(
-                            covers = libraryItem.covers,
-                            isSelected = selectedIds.contains(libraryItem.id),
-                        )
-                    }
+            val onItemClick = {
+                if (isSeries && selection.isEmpty()) {
+                    onSeriesClicked(libraryItem.librarySeries.id)
                 } else {
-                    null
-                },
+                    onClick(libraryItem)
+                }
+            }
+            val continueAction: (() -> Unit)? = if (
+                shouldShowContinueViewingAction(
+                    hasContinueAction = onClickContinueReading != null,
+                    remainingCount = libraryItem.unreadCount,
+                )
+            ) {
+                { onClickContinueReading?.invoke(targetManga) }
+            } else {
+                null
+            }
 
-                badge = if (hasBadge) {
-                    {
-                        BadgeGroup {
-                            if (libraryItem.downloadCount > 0) {
-                                Badge(
-                                    text = libraryItem.downloadCount.toString(),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                            }
-                            if (libraryItem.unreadCount > 0) {
-                                Badge(
-                                    text = libraryItem.unreadCount.toString(),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                            }
-                            if (libraryItem.isLocal) {
-                                Badge(
-                                    text = stringResource(AYMR.strings.aurora_local),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                            } else if (libraryItem.sourceLanguage.isNotBlank()) {
-                                Badge(
-                                    text = libraryItem.sourceLanguage.uppercase(),
-                                    color = colors.accent,
-                                    textColor = colors.textOnAccent,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
+            if (isBanner) {
+                AuroraCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp)
+                        .aspectRatio(2.2f),
+                    title = title,
+                    coverData = coverData,
+                    subtitle = subtitle,
+                    seriesHeaderText = seriesHeaderText,
+                    customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
+                        {
+                            SeriesStackedCoverCard(
+                                covers = libraryItem.covers,
+                                isSelected = selectedIds.contains(libraryItem.id),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    badge = if (hasBadge) {
+                        {
+                            BadgeGroup {
+                                if (libraryItem.downloadCount > 0) {
+                                    Badge(
+                                        text = libraryItem.downloadCount.toString(),
+                                        color = colors.accent,
+                                        textColor = colors.textOnAccent,
+                                        shape = RoundedCornerShape(4.dp),
+                                    )
+                                }
+                                if (visibleUnreadCount != null) {
+                                    Badge(
+                                        text = visibleUnreadCount.toString(),
+                                        color = colors.accent,
+                                        textColor = colors.textOnAccent,
+                                        shape = RoundedCornerShape(4.dp),
+                                    )
+                                }
+                                if (libraryItem.isLocal) {
+                                    Badge(
+                                        text = stringResource(AYMR.strings.aurora_local),
+                                        color = colors.accent,
+                                        textColor = colors.textOnAccent,
+                                        shape = RoundedCornerShape(4.dp),
+                                    )
+                                } else if (libraryItem.sourceLanguage.isNotBlank()) {
+                                    Badge(
+                                        text = libraryItem.sourceLanguage.uppercase(java.util.Locale.ROOT),
+                                        color = colors.accent,
+                                        textColor = colors.textOnAccent,
+                                        shape = RoundedCornerShape(4.dp),
+                                    )
+                                }
                             }
                         }
-                    }
-                } else {
-                    null
-                },
-                topEndBadge = if (libraryItem.pinned) {
-                    { PinnedBadge() }
-                } else {
-                    null
-                },
-                menuContent = null,
-                onClick = {
-                    if (isSeries && selection.isEmpty()) {
-                        onSeriesClicked(libraryItem.librarySeries.id)
                     } else {
-                        onClick(libraryItem)
-                    }
-                },
-                onLongClick = { onLongClick(libraryItem) },
-                onClickContinueViewing = if (
-                    shouldShowContinueViewingAction(
-                        hasContinueAction = onClickContinueReading != null,
-                        remainingCount = libraryItem.unreadCount,
-                    )
+                        null
+                    },
+                    topEndBadge = if (libraryItem.pinned) {
+                        { PinnedBadge() }
+                    } else {
+                        null
+                    },
+                    menuContent = null,
+                    onClick = onItemClick,
+                    onLongClick = { onLongClick(libraryItem) },
+                    onClickContinueViewing = continueAction,
+                    isSelected = selectedIds.contains(libraryItem.id),
+                    coverHeightFraction = 0.62f,
+                    titleMaxLines = 1,
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(listMaxWidthDp),
                 ) {
-                    { onClickContinueReading?.invoke(targetManga) }
-                } else {
-                    null
-                },
-                isSelected = selectedIds.contains(libraryItem.id),
-
-                coverHeightFraction = 0.62f,
-                titleMaxLines = 1,
-            )
+                    if (index > 0) {
+                        AuroraLibraryListRowDivider()
+                    }
+                    AuroraLibraryListRow(
+                        title = title,
+                        coverData = coverData,
+                        metrics = rowMetrics,
+                        seriesHeaderText = seriesHeaderText,
+                        subtitle = subtitle,
+                        progressPercent = if (rowMetrics.showProgressBar) {
+                            resolveMangaLibraryCardProgressPercent(
+                                readCount = libraryItem.readCount,
+                                totalCount = libraryItem.totalChapters,
+                            )
+                        } else {
+                            null
+                        },
+                        badgeData = AuroraLibraryListBadgeData(
+                            downloadLabel = libraryItem.downloadCount.takeIf { it > 0 }?.toString(),
+                            unreadCount = visibleUnreadCount,
+                            isLocal = libraryItem.isLocal,
+                            language = libraryItem.sourceLanguage.takeIf { !libraryItem.isLocal && it.isNotBlank() },
+                        ),
+                        isPinned = libraryItem.pinned,
+                        isSelected = selectedIds.contains(libraryItem.id),
+                        onClick = onItemClick,
+                        onLongClick = { onLongClick(libraryItem) },
+                        onClickContinueViewing = continueAction,
+                    )
+                }
+            }
         }
     }
 }
@@ -694,7 +761,7 @@ private fun MangaAuroraBadgeGroup(
             )
         } else if (item.sourceLanguage.isNotBlank()) {
             Badge(
-                text = item.sourceLanguage.uppercase(),
+                text = item.sourceLanguage.uppercase(java.util.Locale.ROOT),
                 color = badgeContainerColor,
                 textColor = badgeTextColor,
                 shape = RoundedCornerShape(4.dp),

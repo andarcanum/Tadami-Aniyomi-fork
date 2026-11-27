@@ -1,10 +1,11 @@
-﻿package eu.kanade.tachiyomi.extension.anime
+package eu.kanade.tachiyomi.extension.anime
 
 import android.content.Context
 import android.graphics.drawable.Drawable
 import androidx.core.content.pm.PackageInfoCompat
 import eu.kanade.domain.extension.anime.interactor.TrustAnimeExtension
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.extension.ExtensionUpdateNotifier
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.anime.api.AnimeExtensionApi
@@ -40,6 +41,8 @@ import logcat.LogPriority
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.discovery.model.DiscoverySourceInventory
+import tachiyomi.domain.discovery.model.DiscoverySourcePlugin
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
@@ -95,7 +98,58 @@ class AnimeExtensionManager(
     private var sourceIdToPackageName = emptyMap<Long, String>()
 
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, AnimeExtension.Installed>())
-    val installedExtensionsFlow = installedExtensionsMapFlow.mapExtensions(scope)
+    val installedExtensionsFlow: StateFlow<List<AnimeExtension.Installed>> by lazy {
+        installedExtensionsMapFlow.mapExtensions(scope)
+    }
+
+    @Volatile
+    private var cachedDiscoveryInventory: Pair<Map<String, AnimeExtension.Installed>, DiscoverySourceInventory>? = null
+
+    /** Raw installed inventory is loaded synchronously before this manager is published. */
+    fun discoverySourceInventory(): DiscoverySourceInventory {
+        val currentMap = installedExtensionsMapFlow.value
+        cachedDiscoveryInventory?.takeIf { it.first === currentMap }?.let { return it.second }
+        return discoveryInventory(currentMap.values).also { inventory ->
+            cachedDiscoveryInventory = currentMap to inventory
+        }
+    }
+
+    internal fun isDiscoverySourceBinding(
+        sourceId: Long,
+        source: Any,
+        allowedOwners: Set<String>,
+        expected: DiscoverySourceInventory,
+    ): Boolean {
+        val currentMap = installedExtensionsMapFlow.value
+        val inventory = discoverySourceInventory()
+        val matchesExpected = inventory === expected ||
+            (inventory.complete == expected.complete && inventory.plugins == expected.plugins)
+        return matchesExpected &&
+            currentMap.values.any { extension ->
+                extension.pkgName in allowedOwners && extension.sources.any {
+                    it is AnimeCatalogueSource && it.id == sourceId && it === source
+                }
+            }
+    }
+
+    val discoverySourceInventoryChanges: Flow<DiscoverySourceInventory> = installedExtensionsMapFlow.map {
+        discoverySourceInventory()
+    }
+
+    private fun discoveryInventory(extensions: Collection<AnimeExtension.Installed>): DiscoverySourceInventory =
+        DiscoverySourceInventory(
+            complete = true,
+            plugins = extensions.mapNotNull { extension ->
+                val sources = extension.sources.filterIsInstance<AnimeCatalogueSource>()
+                if (sources.isEmpty()) return@mapNotNull null
+                DiscoverySourcePlugin(
+                    key = extension.pkgName,
+                    sourceIds = sources.map { it.id },
+                    langs = sources.associate { it.id to it.lang },
+                    version = extension.versionCode.toString(),
+                )
+            },
+        )
 
     private val availableExtensionsStateFlow = MutableStateFlow(emptyList<AnimeExtension.Available>())
     val availableExtensionsFlow: StateFlow<List<AnimeExtension.Available>> = availableExtensionsStateFlow.asStateFlow()
@@ -147,7 +201,9 @@ class AnimeExtensionManager(
             )
         }
     }
-    val untrustedExtensionsFlow = untrustedExtensionsMapFlow.mapExtensions(scope)
+    val untrustedExtensionsFlow: StateFlow<List<AnimeExtension.Untrusted>> by lazy {
+        untrustedExtensionsMapFlow.mapExtensions(scope)
+    }
 
     init {
         initAnimeExtensions()

@@ -40,7 +40,6 @@ import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
-import eu.kanade.presentation.series.manga.mangaChapterResumeComparator
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapterFromSorted
 import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.presentation.util.formattedMessage
@@ -71,6 +70,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.TtlCache
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.manga.MangaMemoRepairHelper
+import eu.kanade.tachiyomi.util.manga.getMangaUpdateLocked
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
@@ -644,7 +644,7 @@ class MangaScreenModel(
             // Individual updates continue to come via observeDownloads().
             screenModelScope.launchIO {
                 val hasDownloads = downloadManager.getDownloadCount(manga) > 0 ||
-                    downloadManager.getQueuedDownloadOrNull(manga.id) != null
+                    downloadManager.queueState.value.any { it.manga.id == manga.id }
                 if (hasDownloads) {
                     val hydrated = rawChapters.toChapterListItems(manga)
                     updateSuccessState { current ->
@@ -680,14 +680,17 @@ class MangaScreenModel(
                     val availableScanlatorsAsync = async { getAvailableScanlators.await(mangaId) }
                     val scanlatorChapterCountsAsync = async { getScanlatorChapterCounts.await(mangaId) }
                     val excludedScanlatorsAsync = async { getExcludedScanlators.await(mangaId) }
+                    val availableScanlators = availableScanlatorsAsync.await()
+                    val scanlatorChapterCounts = scanlatorChapterCountsAsync.await()
+                    val excludedScanlators = excludedScanlatorsAsync.await()
                     updateSuccessState { current ->
                         if (current.manga.id != manga.id) {
                             current
                         } else {
                             current.copy(
-                                availableScanlators = availableScanlatorsAsync.await(),
-                                scanlatorChapterCounts = scanlatorChapterCountsAsync.await(),
-                                excludedScanlators = excludedScanlatorsAsync.await(),
+                                availableScanlators = availableScanlators,
+                                scanlatorChapterCounts = scanlatorChapterCounts,
+                                excludedScanlators = excludedScanlators,
                             )
                         }
                     }
@@ -700,9 +703,11 @@ class MangaScreenModel(
                     }
             }
 
-            // Fetch suggestions asynchronously after source refresh has been started.
-            // If metadata is loading right now and not cached, defer to launchMetadataLoad to use the rich seed.
-            if (!willLoadMetadata || hasCachedMetadata) {
+            // Defer below-the-fold suggestions until source refresh completes when opening an
+            // uninitialized/from-source title so primary info & chapters don't fight for sockets
+            // and suggestions get populated genres/metadata on the first attempt.
+            val deferSuggestionsUntilSourceRefresh = needRefreshInfo || needRefreshChapter
+            if (!deferSuggestionsUntilSourceRefresh && (!willLoadMetadata || hasCachedMetadata)) {
                 loadSuggestions(
                     buildSuggestionSeed(manga, cachedMetadata),
                     manga = manga,
@@ -718,6 +723,16 @@ class MangaScreenModel(
             launchMetadataLoad(mangaId)
 
             fetchFromSourceTasks.awaitAll()
+
+            if (deferSuggestionsUntilSourceRefresh && (!willLoadMetadata || hasCachedMetadata)) {
+                val refreshedManga = successState?.manga ?: manga
+                val latestMetadata = successState?.mangaMetadata ?: cachedMetadata
+                loadSuggestions(
+                    buildSuggestionSeed(refreshedManga, latestMetadata),
+                    manga = refreshedManga,
+                    source = refreshedManga.toCatalogueSource(),
+                )
+            }
 
             metadataLoadJob?.join()
 
@@ -823,7 +838,7 @@ class MangaScreenModel(
             val fresh = try {
                 withIOContext {
                     sourceUpdateMutex.withLock {
-                        state.source.getMangaUpdate(
+                        state.source.getMangaUpdateLocked(
                             manga = MangaMemoRepairHelper.getOrRepairMangaRequest(
                                 state.manga,
                                 state.source,
@@ -863,7 +878,7 @@ class MangaScreenModel(
                 // Combined API: unchanged for 1.4/1.5 extensions (its default calls
                 // getMangaDetails), and works for 1.6 extensions that only implement this one.
                 val networkManga = prefetched?.manga ?: sourceUpdateMutex.withLock {
-                    state.source.getMangaUpdate(
+                    state.source.getMangaUpdateLocked(
                         manga = MangaMemoRepairHelper.getOrRepairMangaRequest(state.manga, state.source, updateManga),
                         chapters = emptyList(),
                         fetchDetails = true,
@@ -1326,7 +1341,7 @@ class MangaScreenModel(
                 // Combined API: unchanged for 1.4/1.5 extensions, and the only entry point a
                 // 1.6 extension implements - calling getChapterList there throws.
                 val sourceChapters = prefetched?.chapters ?: sourceUpdateMutex.withLock {
-                    state.source.getMangaUpdate(
+                    state.source.getMangaUpdateLocked(
                         manga = MangaMemoRepairHelper.getOrRepairMangaRequest(state.manga, state.source, updateManga),
                         chapters = emptyList(),
                         fetchDetails = false,
@@ -1340,49 +1355,42 @@ class MangaScreenModel(
 
                 // Preview for display only: list becomes visible right after parse (before full sync cost).
                 // Real chapters (with persisted ids) will come via DB flow / collector later.
-                val previewItems = sourceChapters.mapIndexed { idx, sCh ->
-                    val dummy = Chapter(
-                        id = -(1000000000L + idx),
-                        mangaId = state.manga.id,
-                        read = false,
-                        bookmark = false,
-                        lastPageRead = 0L,
-                        dateFetch = 0L,
-                        sourceOrder = 0L,
-                        url = sCh.url,
-                        name = sCh.name,
-                        dateUpload = sCh.date_upload,
-                        chapterNumber = sCh.chapter_number.toDouble(),
-                        scanlator = sCh.scanlator,
-                        lastModifiedAt = 0L,
-                        version = 0L,
-                    )
-                    ChapterList.Item(
-                        chapter = dummy,
-                        downloadState = MangaDownload.State.NOT_DOWNLOADED,
-                        downloadProgress = 0,
-                        selected = false,
-                    )
-                }
-                updateSuccessState { current ->
-                    if (current.manga.id ==
-                        state.manga.id
-                    ) {
-                        // DECISION-10: show the source preview only while the DB list is empty.
-                        // Pushing it unconditionally replaced the real list (read states,
-                        // download/bookmark badges) with an all-unread dummy on EVERY manual
-                        // refresh for the whole sync duration of big titles.
-                        if (current.chapters.isEmpty()) {
+                // DECISION-10: only allocate and push preview items while the DB list is still empty.
+                if (successState?.chapters.isNullOrEmpty()) {
+                    val previewItems = sourceChapters.mapIndexed { idx, sCh ->
+                        val dummy = Chapter(
+                            id = -(1000000000L + idx),
+                            mangaId = state.manga.id,
+                            read = false,
+                            bookmark = false,
+                            lastPageRead = 0L,
+                            dateFetch = 0L,
+                            sourceOrder = 0L,
+                            url = sCh.url,
+                            name = sCh.name,
+                            dateUpload = sCh.date_upload,
+                            chapterNumber = sCh.chapter_number.toDouble(),
+                            scanlator = sCh.scanlator,
+                            lastModifiedAt = 0L,
+                            version = 0L,
+                        )
+                        ChapterList.Item(
+                            chapter = dummy,
+                            downloadState = MangaDownload.State.NOT_DOWNLOADED,
+                            downloadProgress = 0,
+                            selected = false,
+                        )
+                    }
+                    updateSuccessState { current ->
+                        if (current.manga.id == state.manga.id && current.chapters.isEmpty()) {
                             current.copy(chapterSourcePreview = previewItems)
                         } else {
                             current
                         }
-                    } else {
-                        current
                     }
-                }
-                logcat(LogPriority.DEBUG) {
-                    "TADAMI_PERF_MANGA_TITLE preview-pushed id=${state.manga.id} count=${previewItems.size}"
+                    logcat(LogPriority.DEBUG) {
+                        "TADAMI_PERF_MANGA_TITLE preview-pushed id=${state.manga.id} count=${previewItems.size}"
+                    }
                 }
 
                 val syncStart = System.currentTimeMillis()
@@ -1549,26 +1557,13 @@ class MangaScreenModel(
             .maxByOrNull { it.readAt?.time ?: Long.MIN_VALUE }
             ?.chapterId
         resolveMangaResumeChapterFromSorted(
-            sortedChapters = sortedResumeChapters(successState.chapters),
+            sortedChapters = resumeChapterCache.get(successState.chapters, successState.manga),
             fromChapterId = historyChapterId,
         )
     }
 
-    // PERF: cache the resume-order sorted chapter list across CTA taps; invalidated by the
-    // reference of the state list (a new list instance is created on every state update).
-    private var sortedResumeChaptersOwner: Any? = null
-    private var sortedResumeChaptersCache: List<Chapter> = emptyList()
-
-    private fun sortedResumeChapters(chapters: List<ChapterList.Item>): List<Chapter> {
-        val owner: Any = chapters
-        if (sortedResumeChaptersOwner !== owner) {
-            sortedResumeChaptersCache = chapters
-                .map { it.chapter }
-                .sortedWith(mangaChapterResumeComparator)
-            sortedResumeChaptersOwner = owner
-        }
-        return sortedResumeChaptersCache
-    }
+    // Cache keys include both chapter-list identity and the configured reading sort.
+    private val resumeChapterCache = MangaResumeChapterCache()
 
     fun saveScrollPosition(index: Int, offset: Int) {
         updateSuccessState { it.copy(scrollIndex = index, scrollOffset = offset) }
@@ -2260,12 +2255,13 @@ class MangaScreenModel(
                 val unreadFilter = manga.unreadFilter
                 val downloadedFilter = manga.effectiveDownloadedFilter(downloadedOnly)
                 val bookmarkedFilter = manga.bookmarkedFilter
+                val chapterSort = getChapterSort(manga)
                 return asSequence()
                     .filter { (chapter) -> applyFilter(unreadFilter) { !chapter.read } }
                     .filter { (chapter) -> applyFilter(bookmarkedFilter) { chapter.bookmark } }
                     .filter { applyFilter(downloadedFilter) { it.isDownloaded || isLocalManga } }
                     .sortedWith { (chapter1), (chapter2) ->
-                        getChapterSort(manga).invoke(
+                        chapterSort.invoke(
                             chapter1,
                             chapter2,
                         )
@@ -2333,8 +2329,16 @@ class MangaScreenModel(
         }
 
         @Synchronized
+        fun clearMemoryCaches() {
+            stateCache.clear()
+            lastCacheWriteMs.clear()
+            MangaSuggestionsSessionCache.clear()
+        }
+
+        @Synchronized
         internal fun clearStateCacheForTest() {
             stateCache.clear()
+            lastCacheWriteMs.clear()
         }
 
         @Synchronized
@@ -2489,6 +2493,7 @@ sealed class ChapterList {
  */
 private object MangaSuggestionsSessionCache {
     private const val TTL_MS = 12 * 60 * 60 * 1000L
+    private const val MAX_ENTRIES = 48
 
     private data class Entry(
         val seed: SuggestionSeed,
@@ -2496,8 +2501,13 @@ private object MangaSuggestionsSessionCache {
         val cachedAt: Long,
     )
 
-    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+    private val entries = object : java.util.LinkedHashMap<Long, Entry>(MAX_ENTRIES + 1, 1f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Entry>?): Boolean {
+            return size > MAX_ENTRIES
+        }
+    }
 
+    @Synchronized
     fun get(mangaId: Long, seed: SuggestionSeed? = null): SuggestionState.Success? {
         val entry = entries[mangaId] ?: return null
         if (System.currentTimeMillis() - entry.cachedAt > TTL_MS) {
@@ -2508,7 +2518,13 @@ private object MangaSuggestionsSessionCache {
         return entry.state
     }
 
+    @Synchronized
     fun put(mangaId: Long, seed: SuggestionSeed, state: SuggestionState.Success) {
         entries[mangaId] = Entry(seed, state, System.currentTimeMillis())
+    }
+
+    @Synchronized
+    fun clear() {
+        entries.clear()
     }
 }

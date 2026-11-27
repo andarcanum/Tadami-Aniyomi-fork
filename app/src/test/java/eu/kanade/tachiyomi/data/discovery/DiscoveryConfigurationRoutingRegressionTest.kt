@@ -6,7 +6,9 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import eu.kanade.presentation.more.settings.screen.DiscoveryGenreFilterValues
 import eu.kanade.presentation.more.settings.screen.applyDiscoveryGenreFilters
+import eu.kanade.presentation.more.settings.screen.changedDiscoveryGenreFilters
 import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
 import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
@@ -42,6 +44,12 @@ class DiscoveryConfigurationRoutingRegressionTest {
     private val requests = mutableMapOf<String, OneTimeWorkRequest>()
     private lateinit var preferences: DiscoveryPreferences
 
+    private fun genreFilters(prefix: String) = DiscoveryGenreFilterValues(
+        priorityCsv = "$prefix-priority",
+        requiredCsv = "$prefix-required",
+        ignoredCsv = "$prefix-ignored",
+    )
+
     @Before
     fun setup() {
         preferences = DiscoveryPreferences(PersistingPreferenceStore())
@@ -53,9 +61,9 @@ class DiscoveryConfigurationRoutingRegressionTest {
         } answers {
             secondArg<ExistingWorkPolicy>() shouldBe ExistingWorkPolicy.REPLACE
             // All three values must be saved before the first request is published.
-            preferences.priorityGenres().get() shouldBe "romance"
-            preferences.requiredGenres().get() shouldBe "fantasy"
-            preferences.ignoredGenres().get() shouldBe "horror"
+            preferences.priorityGenres(DiscoveryMediaType.NOVEL).get() shouldBe "romance"
+            preferences.requiredGenres(DiscoveryMediaType.NOVEL).get() shouldBe "fantasy"
+            preferences.ignoredGenres(DiscoveryMediaType.NOVEL).get() shouldBe "horror"
             requests[firstArg()] = thirdArg()
             mockk(relaxed = true)
         }
@@ -67,30 +75,61 @@ class DiscoveryConfigurationRoutingRegressionTest {
     }
 
     @Test
-    fun `real genre Apply callback queues configuration work for all media without manual ownership`() {
+    fun `genre dialog diff ignores an unchanged snapshot`() {
+        val initial = DiscoveryMediaType.entries.associateWith { genreFilters(it.key) }
+
+        changedDiscoveryGenreFilters(initial, initial) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `genre dialog diff reports one changed media`() {
+        val initial = DiscoveryMediaType.entries.associateWith { genreFilters(it.key) }
+        val updated = initial + (DiscoveryMediaType.MANGA to genreFilters("changed-manga"))
+
+        changedDiscoveryGenreFilters(initial, updated) shouldBe mapOf(
+            DiscoveryMediaType.MANGA to genreFilters("changed-manga"),
+        )
+    }
+
+    @Test
+    fun `genre dialog diff preserves multiple changed media`() {
+        val initial = DiscoveryMediaType.entries.associateWith { genreFilters(it.key) }
+        val updated = initial + mapOf(
+            DiscoveryMediaType.ANIME to genreFilters("changed-anime"),
+            DiscoveryMediaType.NOVEL to genreFilters("changed-novel"),
+        )
+
+        changedDiscoveryGenreFilters(initial, updated) shouldBe mapOf(
+            DiscoveryMediaType.ANIME to genreFilters("changed-anime"),
+            DiscoveryMediaType.NOVEL to genreFilters("changed-novel"),
+        )
+    }
+
+    @Test
+    fun `real genre Apply callback queues configuration work only for selected media`() {
         val media = DiscoveryMediaType.NOVEL
         preferences.manualRefreshAt(media).set(123L)
         preferences.manualRefreshCount(media).set(7)
         preferences.manualRefreshWorkId(media).set("old-manual")
-        applyDiscoveryGenreFilters(context, preferences, "romance", "fantasy", "horror")
-        requests.keys shouldBe DiscoveryMediaType.entries.map { DiscoveryUpdateJob.configurationWorkName(it) }.toSet()
-        for (target in DiscoveryMediaType.entries) {
-            val request = requests.getValue(DiscoveryUpdateJob.configurationWorkName(target))
-            request.tags.contains(DiscoveryUpdateJob.TAG_MANUAL) shouldBe false
-            request.tags.contains(DiscoveryUpdateJob.configurationWorkName(target)) shouldBe true
-            request.workSpec.input.getBoolean(DiscoveryUpdateJob.KEY_CONFIGURATION_REFRESH, false) shouldBe true
-            request.workSpec.input.getString(DiscoveryUpdateJob.KEY_TARGET_MEDIA_TYPE) shouldBe target.key
-        }
+        applyDiscoveryGenreFilters(context, preferences, media, "romance", "fantasy", "horror")
+        requests.keys shouldBe setOf(DiscoveryUpdateJob.configurationWorkName(media))
+        val request = requests.getValue(DiscoveryUpdateJob.configurationWorkName(media))
+        request.tags.contains(DiscoveryUpdateJob.TAG_MANUAL) shouldBe false
+        request.tags.contains(DiscoveryUpdateJob.configurationWorkName(media)) shouldBe true
+        request.workSpec.input.getBoolean(DiscoveryUpdateJob.KEY_CONFIGURATION_REFRESH, false) shouldBe true
+        request.workSpec.input.getString(DiscoveryUpdateJob.KEY_TARGET_MEDIA_TYPE) shouldBe media.key
         preferences.manualRefreshAt(media).get() shouldBe 123L
         preferences.manualRefreshCount(media).get() shouldBe 7
         preferences.manualRefreshWorkId(media).get() shouldBe "old-manual"
+        preferences.priorityGenres(DiscoveryMediaType.ANIME).get() shouldBe ""
+        preferences.priorityGenres(DiscoveryMediaType.MANGA).get() shouldBe ""
     }
 
     @Test
     fun `manual request remains manual rather than configuration`() {
-        preferences.priorityGenres().set("romance")
-        preferences.requiredGenres().set("fantasy")
-        preferences.ignoredGenres().set("horror")
+        preferences.priorityGenres(DiscoveryMediaType.NOVEL).set("romance")
+        preferences.requiredGenres(DiscoveryMediaType.NOVEL).set("fantasy")
+        preferences.ignoredGenres(DiscoveryMediaType.NOVEL).set("horror")
         DiscoveryUpdateJob.refreshNow(context, DiscoveryMediaType.NOVEL)
         val request = requests.getValue(DiscoveryUpdateJob.manualWorkName(DiscoveryMediaType.NOVEL))
         request.tags.contains(DiscoveryUpdateJob.TAG_MANUAL) shouldBe true

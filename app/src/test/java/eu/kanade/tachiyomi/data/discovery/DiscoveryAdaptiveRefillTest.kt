@@ -161,7 +161,7 @@ class DiscoveryAdaptiveRefillTest {
         catalog.allocations.size shouldBe 10
         // The productive source is queried again for its next page, so compare initial shares.
         catalog.allocations.values.map { it.first() }.sum() shouldBe 48
-        catalog.allocations.values.flatten().all { it in 4..5 } shouldBe true
+        catalog.allocations.values.map { it.first() }.all { it in 4..5 } shouldBe true
         results.last().summary.items.single().title shouldBe "Late"
     }
 
@@ -191,7 +191,7 @@ class DiscoveryAdaptiveRefillTest {
     }
 
     @Test
-    fun `rich required source fills thirty cards across pages`() = runTest {
+    fun `rich required source fills fifty cards across pages`() = runTest {
         val catalog = Catalog { _, pageNumber ->
             val start = (pageNumber - 1) * 10
             page((1..10).map { item("card${start + it}", listOf("Fantasy")) })
@@ -199,19 +199,19 @@ class DiscoveryAdaptiveRefillTest {
 
         val summary = query(catalog, targetItems = 50).single().summary
 
-        summary.items.size shouldBe RICH_SOURCE_TARGET
-        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2, 3)
+        summary.items.size shouldBe 50
+        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2, 3, 4, 5)
     }
 
     @Test
-    fun `two empty required pages stop the source before the page cap`() = runTest {
-        val catalog = Catalog { _, _ -> page(emptyList()) }
+    fun `an empty page stops only when the source reports no continuation`() = runTest {
+        val catalog = Catalog { _, _ -> page(emptyList(), hasNextPage = false) }
 
         val result = query(catalog, targetItems = 50).single()
 
-        catalog.pageCalls.map { it.second } shouldBe listOf(1, 2)
-        result.stopReason shouldBe DiscoveryFillStopReason.PAGE_BUDGET_EXHAUSTED
-        result.exhausted shouldBe false
+        catalog.pageCalls.map { it.second } shouldBe listOf(1)
+        result.stopReason shouldBe DiscoveryFillStopReason.SOURCE_EXHAUSTED
+        result.exhausted shouldBe true
     }
 
     @Test
@@ -225,33 +225,27 @@ class DiscoveryAdaptiveRefillTest {
 
         results.map { it.sourceId } shouldBe listOf(1L)
         catalog.allocations.keys shouldBe setOf(1L)
-        // One source gets the probe allowance on every page it opens; the probe
-        // is only widened to the whole pool in the refill wave.
-        catalog.allocations.getValue(1L) shouldBe listOf(6, 6, 6)
+        catalog.allocations.getValue(1L).all { it <= budget.detailsAllowance.toInt() } shouldBe true
         catalog.pageCalls.map { it.first }.distinct() shouldBe listOf(1L)
     }
 
     @Test
-    fun `productive source gets a refill beyond the equal probe`() = runTest {
+    fun productiveSourceContinuesAfterOtherSourcesExhaust() = runTest {
         val budget = DiscoveryVerificationBudget(maxDetails = 48)
         val catalog = Catalog { id, pageNumber ->
             if (id == 1L) {
-                page(listOf(item("card$pageNumber", listOf("Fantasy"))), detailsUsed = 10)
+                page(listOf(item("card$pageNumber", listOf("Fantasy"))), hasNextPage = pageNumber < 6)
             } else {
-                page(emptyList(), detailsUsed = 10)
+                page(emptyList(), hasNextPage = false)
             }
         }
 
-        val results = query(catalog, sourceIds = listOf(1L, 2L, 3L), budget = budget)
+        val results = query(catalog, sourceIds = listOf(1L, 2L, 3L), budget = budget, targetItems = 6)
 
-        catalog.allocations.getValue(1L).first() shouldBe 6
-        catalog.allocations.getValue(2L) shouldBe listOf(6)
-        catalog.allocations.getValue(3L) shouldBe listOf(6)
-        // The refill wave opens with the whole pool; later pages spend what the
-        // fake page reports as used.
-        catalog.allocations.getValue(1L)[1] shouldBe 48
-        results.first().summary.items.size shouldBe 6
-        results.first().summary.items.map { it.title }.distinct().size shouldBe 6
+        catalog.pageCalls.filter { it.first == 2L || it.first == 3L }.map { it.second } shouldBe listOf(1, 1)
+        results.first().summary.items.map { it.title } shouldBe
+            listOf("card1", "card2", "card3", "card4", "card5", "card6")
+        budget.detailsUsed shouldBe 0
     }
 
     @Test
@@ -375,6 +369,140 @@ class DiscoveryAdaptiveRefillTest {
 
         catalog.pageCalls.map { it.second } shouldBe listOf(5)
         result.stopReason shouldBe DiscoveryFillStopReason.SOURCE_EXHAUSTED
+    }
+
+    @Test
+    fun `details exhaustion stops page fetches instead of walking the catalogue`() = runTest {
+        val budget = DiscoveryVerificationBudget(maxDetails = 2)
+        val unknown = (1..5).map { item("unknown$it") }
+        val catalog = Catalog { _, _ ->
+            budget.tryAcquireDetail()
+            page(
+                items = emptyList(),
+                unattempted = unknown.size,
+                pending = unknown,
+                hasNextPage = true,
+                detailsUsed = 1,
+            )
+        }
+
+        val results = query(catalog, sourceIds = listOf(1L, 2L), budget = budget)
+
+        catalog.pageCalls.size shouldBe 4
+        catalog.pageCalls.map { it.second }.distinct().sorted() shouldBe listOf(1, 2)
+        budget.remainingDetails shouldBe 0
+        results.all { it.stopReason == DiscoveryFillStopReason.PASS_BUDGET_EXHAUSTED } shouldBe true
+    }
+
+    @Test
+    fun `productive source gets the refill pool while a dry source only walks detail-free pages`() = runTest {
+        val budget = DiscoveryVerificationBudget(maxDetails = 24)
+        val catalog = Catalog { id, pageNumber ->
+            if (id == 1L) {
+                page(listOf(item("match$pageNumber", listOf("Fantasy"))))
+            } else {
+                page(listOf(item("dry$pageNumber", listOf("Drama"))))
+            }
+        }
+
+        val results = query(catalog, sourceIds = listOf(1L, 2L), budget = budget, targetItems = 10)
+
+        catalog.pageCalls.filter { it.first == 2L }.map { it.second } shouldBe listOf(1, 2, 3, 4, 5)
+        results.first().summary.items.size shouldBe 10
+        results.last().summary.items shouldBe emptyList()
+    }
+
+    @Test
+    fun `genreless source is not admitted without verification`() = runTest {
+        val cards = (1..8).map { item("card$it") }
+        val searched = page(
+            items = cards,
+            metadataUnavailable = 6,
+            pending = cards,
+            detailsUsed = 6,
+            hasNextPage = false,
+        )
+
+        val result = query(
+            Catalog { _, _ -> searched.copy(genreSearchApplied = true) },
+            budget = DiscoveryVerificationBudget(maxDetails = 24),
+        ).single()
+
+        result.summary.items shouldBe emptyList()
+    }
+
+    @Test
+    fun `second probe verifies pending cards once and leaves coverage visible`() = runTest {
+        val pending = (1..13).map { item("pending$it") }
+        val firstPage = page(
+            items = (1..6).map { item("seen$it", listOf("Drama")) },
+            verified = 6,
+            unattempted = 13,
+            pending = pending,
+            detailsUsed = 6,
+            hasNextPage = true,
+        )
+        val catalog = Catalog(
+            hydrateAnswer = { items ->
+                page(
+                    items = emptyList(),
+                    verified = 6,
+                    unattempted = items.size - 6,
+                    pending = items.drop(6),
+                    detailsUsed = 6,
+                    hasNextPage = true,
+                )
+            },
+            answer = { _, _ -> firstPage },
+        )
+
+        val result = query(catalog, budget = DiscoveryVerificationBudget(maxDetails = 24)).single()
+
+        result.summary.verifiedCount shouldBe 12
+        result.pending shouldBe 7
+        result.detailsUsed shouldBe 12
+        result.summary.hasCoverageGap shouldBe true
+        catalog.hydrateCalls.size shouldBe 1
+    }
+
+    @Test
+    fun `no productive source bounds the retry to six plus six details`() = runTest {
+        val pending = (1..13).map { item("pending$it") }
+        val firstPage = page(
+            items = (1..6).map { item("seen$it", listOf("Drama")) },
+            verified = 6,
+            unattempted = 13,
+            pending = pending,
+            detailsUsed = 6,
+            hasNextPage = true,
+        )
+        val catalog = Catalog(
+            hydrateAnswer = { items ->
+                page(
+                    items = emptyList(),
+                    verified = 6,
+                    unattempted = items.size - 6,
+                    pending = items.drop(6),
+                    detailsUsed = 6,
+                    hasNextPage = true,
+                )
+            },
+            answer = { _, _ -> firstPage },
+        )
+
+        val results = query(
+            catalog,
+            sourceIds = listOf(1L, 2L),
+            budget = DiscoveryVerificationBudget(maxDetails = 160),
+            targetItems = 50,
+        )
+
+        results.forEach { result ->
+            result.detailsUsed shouldBe 12
+            result.pending shouldBe 7
+            result.summary.verifiedCount shouldBe 12
+        }
+        catalog.hydrateCalls.size shouldBe 2
     }
 
     @Test

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup.create.creators
 import androidx.compose.ui.util.fastDistinctBy
 import androidx.compose.ui.util.fastFilter
 import eu.kanade.tachiyomi.data.backup.models.BackupAchievement
+import eu.kanade.tachiyomi.data.backup.models.BackupCrystalMemorial
 import eu.kanade.tachiyomi.data.backup.models.BackupDayActivity
 import eu.kanade.tachiyomi.data.backup.models.BackupStats
 import eu.kanade.tachiyomi.data.backup.models.BackupUserProfile
@@ -16,7 +17,9 @@ import eu.kanade.tachiyomi.ui.stats.StatsCalculations
 import eu.kanade.tachiyomi.ui.stats.WatchProgress
 import kotlinx.coroutines.flow.first
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.data.achievement.UserProfileManager
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialIds
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialRepository
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialRestoreException
 import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
 import tachiyomi.domain.history.manga.interactor.GetTotalReadDuration
@@ -39,7 +42,6 @@ class AchievementBackupCreator(
     private val achievementRepository: tachiyomi.domain.achievement.repository.AchievementRepository = Injekt.get(),
     private val activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository = Injekt.get(),
     private val achievementsDatabase: tachiyomi.data.achievement.database.AchievementsDatabase = Injekt.get(),
-    private val userProfileManager: UserProfileManager = Injekt.get(),
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val getLibraryAnime: GetLibraryAnime = Injekt.get(),
     private val getTotalReadDuration: GetTotalReadDuration = Injekt.get(),
@@ -50,6 +52,7 @@ class AchievementBackupCreator(
     private val getEpisodesByAnimeId: GetEpisodesByAnimeId = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val preferences: LibraryPreferences = Injekt.get(),
+    private val memorialRepository: CrystalMemorialRepository = Injekt.get(),
 ) {
 
     /**
@@ -60,8 +63,33 @@ class AchievementBackupCreator(
      * - Full statistics
      */
     suspend operator fun invoke(options: eu.kanade.tachiyomi.data.backup.create.BackupOptions): AchievementBackupData {
-        val achievements = if (options.achievements) backupAchievements() else emptyList()
-        val userProfile = if (options.achievements) backupUserProfile() else null
+        val definitions = if (options.achievements) backupAchievements() else emptyList()
+        val snapshot = if (options.achievements) memorialRepository.snapshotForBackup() else null
+        val state = snapshot?.state
+        val snapshotProfile = snapshot?.profile
+        if (state?.isGranted == true &&
+            (
+                snapshotProfile == null || snapshotProfile.totalXP < state.grantedXp ||
+                    definitions.none { it.id == CrystalMemorialIds.GRANT_KEY }
+                )
+        ) {
+            throw CrystalMemorialRestoreException("Cannot export an incomplete memorial/profile snapshot")
+        }
+        val achievements = definitions.map { item ->
+            if (item.id != CrystalMemorialIds.GRANT_KEY) {
+                item
+            } else {
+                val progress = snapshot?.progress
+                item.copy(
+                    progress = progress?.progress ?: 0,
+                    maxProgress = 1,
+                    isUnlocked = state?.isGranted == true,
+                    unlockedAt = state?.grantedAt,
+                    lastUpdated = progress?.lastUpdated ?: item.lastUpdated,
+                )
+            }
+        }
+        val userProfile = snapshot?.profile?.let(BackupUserProfile::fromUserProfile)
         val activityLog = if (options.achievements) backupActivityLog() else emptyList()
         val stats = if (options.stats) backupStats() else null
 
@@ -70,6 +98,7 @@ class AchievementBackupCreator(
             userProfile = userProfile,
             activityLog = activityLog,
             stats = stats,
+            crystalMemorial = BackupCrystalMemorial.fromState(state),
         )
     }
 
@@ -90,19 +119,6 @@ class AchievementBackupCreator(
         } catch (e: Exception) {
             logcat(throwable = e) { "[BACKUP] Error backing up achievements" }
             emptyList()
-        }
-    }
-
-    /**
-     * Backup user profile
-     */
-    private suspend fun backupUserProfile(): BackupUserProfile? {
-        return try {
-            val profile = userProfileManager.getCurrentProfile()
-            BackupUserProfile.fromUserProfile(profile)
-        } catch (e: Exception) {
-            logcat(throwable = e) { "[BACKUP] Error backing up user profile" }
-            null
         }
     }
 
@@ -425,4 +441,5 @@ data class AchievementBackupData(
     val userProfile: BackupUserProfile?,
     val activityLog: List<BackupDayActivity>,
     val stats: BackupStats?,
+    val crystalMemorial: BackupCrystalMemorial? = null,
 )

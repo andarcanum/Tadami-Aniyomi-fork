@@ -81,7 +81,8 @@ fun AuroraCard(
     val normalizedCoverHeightFraction = coverHeightFraction.coerceIn(0.01f, 1f)
     val showTextContent = normalizedCoverHeightFraction < 1f
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
-    val coverRequest = remember(coverData) {
+    val coverReloadTick = rememberCoverReloadTick()
+    val coverRequest = remember(context, coverData, coverReloadTick) {
         buildAuroraCoverImageRequest(context, coverData)
     }
 

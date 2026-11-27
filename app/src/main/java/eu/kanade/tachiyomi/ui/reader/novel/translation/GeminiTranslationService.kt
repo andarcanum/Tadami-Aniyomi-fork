@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 import eu.kanade.tachiyomi.network.POST
-import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.jsonMime
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
@@ -14,13 +13,14 @@ import kotlinx.serialization.json.put
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
-import tachiyomi.core.common.util.lang.withIOContext
 
 class GeminiTranslationService(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val json: Json,
     private val promptResolver: GeminiPromptResolver,
+    private val baseUrl: String = "https://generativelanguage.googleapis.com",
 ) {
+    private val transport = TranslationHttpTransport(client, json)
 
     suspend fun translateBatch(
         segments: List<String>,
@@ -29,6 +29,7 @@ class GeminiTranslationService(
     ): List<String?>? {
         if (segments.isEmpty()) return emptyList()
         if (params.apiKey.isBlank()) return null
+        validateTranslationCredential(params.apiKey)
 
         val usePrivateBridge =
             params.provider == NovelTranslationProvider.GEMINI_PRIVATE &&
@@ -47,8 +48,8 @@ class GeminiTranslationService(
             resolveNovelTranslationPromptFamily(params.targetLang)
         }
         val taggedInput = preparedSegments.mapIndexed { index, text ->
-            "<s i='$index'>$text</s>"
-        }.joinToString("\\n")
+            "<s i='$index'>${escapeTranslationSource(text)}</s>"
+        }.joinToString("\n")
         val plainChapterInput = preparedSegments.joinToString("\n\n")
 
         val effectiveModifiers = if (usePrivateBridge && GeminiPrivateBridge.disablePromptModifiers()) {
@@ -73,7 +74,7 @@ class GeminiTranslationService(
         } else {
             defaultSystemPrompt
         }
-        val fullPrompt = "$systemPrompt\\n\\n$userPrompt"
+        val fullPrompt = "$systemPrompt\n\n$userPrompt"
         val userContentText = when {
             usePrivatePythonLikeMode -> plainChapterInput
             usePrivateBridge -> taggedInput
@@ -85,47 +86,9 @@ class GeminiTranslationService(
         } else {
             params.model
         }
-        val requestTemperature = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestTemperatureOverride(params.temperature)
-        } else {
-            params.temperature
-        }
-        val requestTopP = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestTopPOverride(params.topP)
-        } else {
-            params.topP
-        }
-        val requestTopK = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestTopKOverride(params.topK)
-        } else {
-            params.topK
-        }
-        val requestMaxOutputTokens = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestMaxOutputTokensOverride(GEMINI_TRANSLATION_MAX_OUTPUT_TOKENS)
-        } else {
-            GEMINI_TRANSLATION_MAX_OUTPUT_TOKENS
-        }
-        val requestFrequencyPenalty = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestFrequencyPenaltyOverride(0f)
-        } else {
-            0f
-        }
-        val requestPresencePenalty = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestPresencePenaltyOverride(0f)
-        } else {
-            0f
-        }
-        val requestThinkingLevel: String? = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestThinkingLevelOverride(params.reasoningEffort)
-        } else {
-            // Dynamic model list: an unknown model resolves to null and the request omits
-            // thinkingConfig instead of sending a thinking level the model may reject.
-            normalizeTranslationReasoningEffort(
-                provider = params.provider,
-                model = params.model.normalizeGeminiModelId(),
-                value = params.reasoningEffort,
-            )
-        }
+        val capabilities = resolveGeminiModelCapabilities(requestModel)
+        val modelMetadata = GeminiModelMetadataStore.lookup(requestModel)
+        val knownModel = capabilities.thinking != GeminiThinkingContract.Unknown || modelMetadata != null
         if (usePrivatePythonLikeMode) {
             onLog?.invoke("🧪 GeminiNSFW python-like mode enabled (plain chapter payload, parse full response)")
         }
@@ -163,174 +126,108 @@ class GeminiTranslationService(
             )
             put(
                 "generationConfig",
-                buildJsonObject {
-                    put("maxOutputTokens", requestMaxOutputTokens)
-                    put("temperature", requestTemperature)
-                    put("topP", requestTopP)
-                    put("topK", requestTopK)
-                    if (usePrivateBridge) {
-                        put("frequencyPenalty", requestFrequencyPenalty)
-                        put("presencePenalty", requestPresencePenalty)
-                    }
-                    if (usePrivateBridge || !requestThinkingLevel.isNullOrBlank()) {
+                if (!usePrivateBridge) {
+                    params.frozenGenerationConfig?.let(::validateFrozenGeminiGenerationConfig)
+                        ?: buildPublicGeminiGenerationConfig(params)
+                } else {
+                    buildJsonObject {
+                        put(
+                            "maxOutputTokens",
+                            GeminiPrivateBridge.requestMaxOutputTokensOverride(GEMINI_TRANSLATION_MAX_OUTPUT_TOKENS),
+                        )
+                        put(
+                            "temperature",
+                            GeminiPrivateBridge.requestTemperatureOverride(params.temperature)
+                                .coerceIn(0f, capabilities.maxTemperature ?: 2f),
+                        )
+                        put(
+                            "topP",
+                            GeminiPrivateBridge.requestTopPOverride(params.topP).coerceIn(0f, 1f),
+                        )
+                        put("topK", GeminiPrivateBridge.requestTopKOverride(params.topK))
+                        put("frequencyPenalty", GeminiPrivateBridge.requestFrequencyPenaltyOverride(0f))
+                        put("presencePenalty", GeminiPrivateBridge.requestPresencePenaltyOverride(0f))
                         put(
                             "thinkingConfig",
                             buildJsonObject {
-                                // Match lnreader behavior: send only thinkingLevel.
-                                put("thinkingLevel", requestThinkingLevel)
+                                put(
+                                    "thinkingLevel",
+                                    GeminiPrivateBridge.requestThinkingLevelOverride(params.reasoningEffort),
+                                )
                             },
                         )
                     }
                 },
             )
-            put(
-                "safetySettings",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("category", "HARM_CATEGORY_HATE_SPEECH")
-                            put("threshold", "BLOCK_NONE")
-                        },
-                    )
-                    add(
-                        buildJsonObject {
-                            put("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT")
-                            put("threshold", "BLOCK_NONE")
-                        },
-                    )
-                    add(
-                        buildJsonObject {
-                            put("category", "HARM_CATEGORY_DANGEROUS_CONTENT")
-                            put("threshold", "BLOCK_NONE")
-                        },
-                    )
-                    add(
-                        buildJsonObject {
-                            put("category", "HARM_CATEGORY_HARASSMENT")
-                            put("threshold", "BLOCK_NONE")
-                        },
-                    )
-                    add(
-                        buildJsonObject {
-                            put("category", "HARM_CATEGORY_CIVIC_INTEGRITY")
-                            put("threshold", "BLOCK_NONE")
-                        },
-                    )
-                },
+            if (usePrivateBridge ||
+                (knownModel && requestModel.trim().removePrefix("models/").lowercase().startsWith("gemini-"))
+            ) {
+                put("safetySettings", geminiSafetySettingsJsonArray())
+            }
+        }
+
+        val modelId = requestModel.trim().removePrefix("models/")
+        if (!Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,199}").matches(modelId)) {
+            throw tachiyomi.domain.translation.model.TranslationAttemptException(
+                tachiyomi.domain.translation.model.TranslationFailure(
+                    tachiyomi.domain.translation.model.TranslationFailureKind.CONFIGURATION,
+                    "Invalid Gemini model ID",
+                ),
             )
         }
-
-        val responseText = runCatching {
-            withIOContext {
-                val url = buildString {
-                    append("https://generativelanguage.googleapis.com/v1beta/models/")
-                    append(requestModel)
-                    append(":generateContent?key=")
-                    append(params.apiKey)
-                }
-                val request = POST(
-                    url = url,
-                    headers = headersOf("Content-Type", "application/json"),
-                    body = requestBody.toString().toRequestBody(jsonMime),
-                )
-                val response = client.newCall(request).await()
-                response.use {
-                    if (!it.isSuccessful) {
-                        val rawBody = it.body.string()
-                        val modelError = extractGeminiApiErrorMessage(rawBody)
-                        val details = modelError ?: rawBody.take(1200)
-                        onLog?.invoke("🚫 Gemini API error ${it.code}: $details")
-                        return@withIOContext null
-                    }
-                    it.body.string()
-                }
-            }
-        }.onFailure { error ->
-            onLog?.invoke("🚫 Gemini request exception: ${formatAiTranslationThrowableForLog(error)}")
-        }.getOrNull() ?: return null
-
-        val payload = runCatching { json.parseToJsonElement(responseText) as? JsonObject }
-            .getOrNull()
-            ?: run {
-                onLog?.invoke("🚫 Gemini response is not valid JSON object. Raw: ${responseText.take(600)}")
-                return null
-            }
-
-        payload["promptFeedback"]?.asObjectOrNull()?.let { feedback ->
-            onLog?.invoke("🛡️ Prompt feedback: ${feedback.toString().take(240)}")
+        val normalizedBaseUrl = normalizeGeminiBaseUrl(baseUrl)
+        val request = POST(
+            url = validatedTranslationUrl("$normalizedBaseUrl/models/$modelId:generateContent"),
+            headers = headersOf("Content-Type", "application/json", "x-goog-api-key", params.apiKey),
+            body = requestBody.toString().toRequestBody(jsonMime),
+        )
+        val raw = transport.execute(request, "Gemini", params.apiKey)
+        val payload = parseTranslationPayload(raw, json, "Gemini", secret = params.apiKey)
+        if (!payload["promptFeedback"].asObjectOrNull()?.get("blockReason").asStringOrNull().isNullOrBlank()) {
+            throw tachiyomi.domain.translation.model.TranslationAttemptException(
+                tachiyomi.domain.translation.model.TranslationFailure(
+                    tachiyomi.domain.translation.model.TranslationFailureKind.REFUSED,
+                    "Gemini declined the request",
+                ),
+            )
         }
-        payload["usageMetadata"]?.asObjectOrNull()?.let { usage ->
-            onLog?.invoke("🧠 Usage: ${usage.toString().take(240)}")
-        }
-
-        val firstCandidate = payload["candidates"]
-            .asArrayOrNull()
-            ?.firstOrNull()
-            ?.asObjectOrNull()
-
-        if (firstCandidate == null) {
-            onLog?.invoke("🚫 Gemini response has no candidates. Payload: ${payload.toString().take(600)}")
-            return null
-        }
-
-        val parts = firstCandidate["content"]
-            .asObjectOrNull()
-            ?.get("parts")
-            .asArrayOrNull()
-
-        val rawCandidateText = parts
-            .extractTextParts()
-            .let { texts ->
-                // Prefer fragment that actually looks like XML payload.
-                texts.firstOrNull { it.contains("<s i='") || it.contains("<s i=\"") }
-                    ?: texts.firstOrNull()
-            }
-            .orEmpty()
-            .trim()
-        if (usePrivateBridge && rawCandidateText.isNotBlank()) {
-            onLog?.invoke("📥 GeminiNSFW raw response:")
-            logLargeTextToGeminiLog(rawCandidateText, onLog, prefix = "📥")
-        }
-        val candidateText = rawCandidateText
-
-        if (candidateText.isBlank()) {
-            val finishReason = firstCandidate["finishReason"].asStringOrNull()
-            if (finishReason != null) {
-                onLog?.invoke("🚫 Gemini empty candidate, finishReason=$finishReason")
+        val candidate = payload["candidates"].asArrayOrNull()?.firstOrNull().asObjectOrNull()
+            ?: throw tachiyomi.domain.translation.model.TranslationAttemptException(
+                tachiyomi.domain.translation.model.TranslationFailure(
+                    tachiyomi.domain.translation.model.TranslationFailureKind.INVALID_RESPONSE,
+                    "Gemini returned no candidate",
+                ),
+            )
+        validateTranslationFinish(candidate["finishReason"].asStringOrNull(), "Gemini")
+        val parts = candidate["content"].asObjectOrNull()?.get("parts").asArrayOrNull().orEmpty()
+        val answer = parts.mapNotNull { part ->
+            val obj = part.asObjectOrNull() ?: return@mapNotNull null
+            if ((obj["thought"] as? kotlinx.serialization.json.JsonPrimitive)?.content ==
+                "true"
+            ) {
+                null
             } else {
-                onLog?.invoke("🚫 Gemini candidate has no text parts")
+                obj["text"].asStringOrNull()
             }
-            onLog?.invoke("🧩 Candidate payload: ${firstCandidate.toString().take(600)}")
-            val safetyRatings = firstCandidate["safetyRatings"]?.asArrayOrNull()?.toString()
-            if (!safetyRatings.isNullOrBlank()) {
-                onLog?.invoke("🛡️ Safety ratings: ${safetyRatings.take(240)}")
-            }
-            return null
+        }.joinToString("").trim()
+        if (answer.isBlank()) {
+            throw tachiyomi.domain.translation.model.TranslationAttemptException(
+                tachiyomi.domain.translation.model.TranslationFailure(
+                    tachiyomi.domain.translation.model.TranslationFailureKind.INVALID_RESPONSE,
+                    "Gemini returned no answer text",
+                ),
+            )
         }
-
         val parsed = if (usePrivatePythonLikeMode) {
-            val parsedPlain = GeminiXmlSegmentParser.parsePlaintext(
-                rawResponse = candidateText,
-                expectedCount = preparedSegments.size,
-            )
-            val translatedCount = parsedPlain.count { !it.isNullOrBlank() }
-            if (translatedCount < preparedSegments.size) {
-                onLog?.invoke(
-                    "⚠️ GeminiNSFW python-like: expected ${preparedSegments.size}, got $translatedCount",
-                )
-            }
-            parsedPlain
+            GeminiXmlSegmentParser.parsePlaintext(answer, preparedSegments.size)
         } else {
-            GeminiXmlSegmentParser.parse(candidateText, expectedCount = preparedSegments.size)
+            GeminiXmlSegmentParser.parseValidated(answer, preparedSegments.size, allowSinglePlaintext = true)
         }
-        if (parsed.all { it.isNullOrBlank() }) {
-            if (usePrivatePythonLikeMode) {
-                onLog?.invoke("⚠️ Gemini parse warning: python-like response is empty")
-            } else {
-                onLog?.invoke("⚠️ Gemini parse warning: no XML segments found in candidate text")
-            }
-            onLog?.invoke("🧾 Candidate text preview: ${candidateText.take(600)}")
-        }
+        onLog?.invoke(
+            "Gemini response: ${parsed.count {
+                !it.isNullOrBlank()
+            }}/${preparedSegments.size} valid text blocks",
+        )
         return parsed
     }
 
@@ -341,7 +238,7 @@ class GeminiTranslationService(
     ): String {
         val basePrompt = promptResolver.resolveSystemPrompt(mode, family = family)
         if (modifiers.isBlank()) return basePrompt
-        return basePrompt + "\\n\\n" + modifiers.trim()
+        return basePrompt + "\n\n" + modifiers.trim()
     }
 
     private fun buildUserPrompt(
@@ -356,32 +253,5 @@ class GeminiTranslationService(
             taggedInput = taggedInput,
             family = family,
         )
-    }
-}
-
-private fun JsonArray?.extractTextParts(): List<String> {
-    return this.orEmpty().mapNotNull { part ->
-        part.asObjectOrNull()
-            ?.get("text")
-            .asStringOrNull()
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-    }
-}
-
-private fun logLargeTextToGeminiLog(
-    text: String,
-    onLog: ((String) -> Unit)?,
-    prefix: String,
-    chunkSize: Int = 1200,
-) {
-    if (onLog == null) return
-    if (text.isBlank()) {
-        onLog("$prefix <empty>")
-        return
-    }
-    val chunks = text.chunked(chunkSize.coerceAtLeast(200))
-    chunks.forEachIndexed { index, chunk ->
-        onLog("$prefix [${index + 1}/${chunks.size}] $chunk")
     }
 }

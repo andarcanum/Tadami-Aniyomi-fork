@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer
 
 import android.content.Context
 import android.graphics.PointF
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.BitmapDrawable
@@ -12,13 +13,13 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.annotation.AttrRes
 import androidx.annotation.CallSuper
 import androidx.annotation.StyleRes
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.os.postDelayed
 import androidx.core.view.isVisible
-import coil3.BitmapImage
 import coil3.asDrawable
 import coil3.dispose
 import coil3.imageLoader
@@ -26,22 +27,23 @@ import coil3.request.CachePolicy
 import coil3.request.Disposable
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import coil3.size.Precision
-import coil3.size.ViewSizeResolver
 import com.davemorrissey.labs.subscaleview.ImageSource
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_IN_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.EASE_OUT_QUAD
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE
+import com.davemorrissey.labs.subscaleview.decoder.ImageRegionDecoder
+import com.davemorrissey.labs.subscaleview.provider.StreamInputProvider
 import com.github.chrisbanes.photoview.PhotoView
-import eu.kanade.domain.base.BasePreferences
-import eu.kanade.tachiyomi.data.coil.cropBorders
-import eu.kanade.tachiyomi.data.coil.customDecoder
+import eu.kanade.tachiyomi.data.coil.AnimatedNativeDrawable
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerSubsamplingImageView
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.MangaPanelDetector
+import eu.kanade.tachiyomi.ui.reader.viewer.panel.PanelRect
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,8 +54,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
+import java.io.Closeable
+import java.io.InputStream
 
 /**
  * A wrapper view for showing page image.
@@ -71,16 +73,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private val isWebtoon: Boolean = false,
 ) : FrameLayout(context, attrs, defStyleAttrs, defStyleRes) {
 
-    private val alwaysDecodeLongStripWithSSIV by lazy {
-        Injekt.get<BasePreferences>().alwaysDecodeLongStripWithSSIV().get()
-    }
-
     private var pageView: View? = null
 
     private var config: Config? = null
 
     private var scope: CoroutineScope? = null
     private var smartFitJob: Job? = null
+    private var pendingSmartFit: PendingSmartFit? = null
+    private var pendingAnimatedImage: PendingSmartFit? = null
     private var landscapeZoomRunnable: Runnable? = null
 
     /**
@@ -89,6 +89,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
      * marking a healthy page as failed or overwriting the new image.
      */
     private var coilDisposable: Disposable? = null
+    private var isInViewport: Boolean = true
+
+    fun setInViewport(visible: Boolean) {
+        if (isInViewport == visible) return
+        isInViewport = visible
+        val animatable = (pageView as? ImageView)?.drawable as? Animatable ?: return
+        if (visible && isAttachedToWindow) {
+            if (!animatable.isRunning) {
+                animatable.start()
+            }
+        } else if (!visible) {
+            if (animatable.isRunning) {
+                animatable.stop()
+            }
+        }
+    }
 
     private fun cancelCoilRequest() {
         coilDisposable?.dispose()
@@ -98,6 +114,26 @@ open class ReaderPageImageView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        (pageView as? SubsamplingScaleImageView)?.setHardwareTilesEnabled(
+            isHardwareAccelerated && (config?.hardwareTilesEnabled ?: true),
+        )
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            applyPageRenderEffect(ReaderRenderEffects.currentEffect as? android.graphics.RenderEffect)
+        }
+        if (isInViewport) {
+            val animatable = (pageView as? ImageView)?.drawable as? Animatable
+            if (animatable != null && !animatable.isRunning) {
+                animatable.start()
+            }
+        }
+        val pending = pendingSmartFit
+        if (pending != null && smartFitJob == null) {
+            setNonAnimatedImage(pending.data, pending.config)
+        }
+        val pendingAnim = pendingAnimatedImage
+        if (pendingAnim != null && coilDisposable == null) {
+            setAnimatedImage(pendingAnim.data, pendingAnim.config)
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -110,7 +146,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
         scope = null
         smartFitJob?.cancel()
         smartFitJob = null
+        cancelCoilRequest()
         cancelLandscapeZoom()
+        val animatable = (pageView as? ImageView)?.drawable as? Animatable
+        if (animatable != null && animatable.isRunning) {
+            animatable.stop()
+        }
     }
 
     private fun cancelLandscapeZoom() {
@@ -118,10 +159,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
         landscapeZoomRunnable = null
     }
 
+    private var tileLoadErrorDispatched: Boolean = false
+
     var onImageLoaded: (() -> Unit)? = null
     var onImageLoadError: (() -> Unit)? = null
+    var onTileLoadError: ((Exception) -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
+    var onCenterChanged: ((newCenter: PointF?) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
+    var onHdrChanged: ((Boolean) -> Unit)? = null
+
+    val isHdr: Boolean
+        get() = when (val view = pageView) {
+            is SubsamplingScaleImageView -> view.isHdr
+            is AppCompatImageView -> (view.drawable as? AnimatedNativeDrawable)?.isHdr == true
+            else -> false
+        }
 
     /**
      * For automatic background. Will be set as background color when [onImageLoaded] is called.
@@ -140,8 +193,26 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     @CallSuper
+    open fun onTileLoadError(e: Exception) {
+        if (tileLoadErrorDispatched) return
+        tileLoadErrorDispatched = true
+        (pageView as? SubsamplingScaleImageView)?.let { view ->
+            view.trimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
+            if (view.isHardwareTilesEnabled) {
+                view.setHardwareTilesEnabled(false)
+            }
+        }
+        onTileLoadError?.invoke(e)
+    }
+
+    @CallSuper
     open fun onScaleChanged(newScale: Float) {
         onScaleChanged?.invoke(newScale)
+    }
+
+    @CallSuper
+    open fun onCenterChanged(newCenter: PointF?) {
+        onCenterChanged?.invoke(newCenter)
     }
 
     @CallSuper
@@ -162,11 +233,20 @@ open class ReaderPageImageView @JvmOverloads constructor(
                             (this@with as? PagerSubsamplingImageView)?.applySmartScaleIfNeeded()
                             setupZoom(config)
                             landscapeZoom(forward)
+                            this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
                             this@ReaderPageImageView.onImageLoaded()
                         }
 
+                        override fun onImageLoaded() {
+                            this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
+                        }
+
                         override fun onImageLoadError(e: Exception) {
-                            onImageLoadError()
+                            this@ReaderPageImageView.onImageLoadError()
+                        }
+
+                        override fun onTileLoadError(e: Exception) {
+                            this@ReaderPageImageView.onTileLoadError(e)
                         }
                     },
                 )
@@ -190,7 +270,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
             cancelLandscapeZoom()
             val runnable = Runnable {
                 landscapeZoomRunnable = null
-                val point = when (config!!.zoomStartPosition) {
+                if (!isReady || sHeight <= 0 || height <= 0) return@Runnable
+                val currentConfig = config ?: return@Runnable
+                val point = when (currentConfig.zoomStartPosition) {
                     ZoomStartPosition.LEFT -> if (forward) {
                         PointF(0F, 0F)
                     } else {
@@ -211,11 +293,12 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 }
 
                 val targetScale = height.toFloat() / sHeight.toFloat()
-                animateScaleAndCenter(targetScale, point)!!
-                    .withDuration(500)
-                    .withEasing(EASE_IN_OUT_QUAD)
-                    .withInterruptible(true)
-                    .start()
+                animateScaleAndCenter(targetScale, point)?.apply {
+                    withDuration(500)
+                        .withEasing(EASE_IN_OUT_QUAD)
+                        .withInterruptible(true)
+                        .start()
+                }
             }
             landscapeZoomRunnable = runnable
             handler?.postDelayed(runnable, 500)
@@ -223,7 +306,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     fun setImage(drawable: Drawable, config: Config) {
+        cancelLandscapeZoom()
         this.config = config
+        pendingSmartFit = null
+        pendingAnimatedImage = null
         smartFitJob?.cancel()
         smartFitJob = null
         cancelCoilRequest()
@@ -237,31 +323,80 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     fun setImage(source: BufferedSource, isAnimated: Boolean, config: Config) {
+        setImageInternal(source, isAnimated, config)
+    }
+
+    fun setImage(streamFn: () -> InputStream, isAnimated: Boolean, config: Config) {
+        setImageInternal(StreamSource(streamFn), isAnimated, config)
+    }
+
+    private fun setImageInternal(data: Any, isAnimated: Boolean, config: Config) {
+        cancelLandscapeZoom()
         this.config = config
+        tileLoadErrorDispatched = false
+        pendingSmartFit = null
+        pendingAnimatedImage = null
         smartFitJob?.cancel()
         smartFitJob = null
         cancelCoilRequest()
         if (isAnimated) {
             prepareAnimatedImageView()
-            setAnimatedImage(source, config)
+            setAnimatedImage(data, config)
         } else {
             prepareNonAnimatedImageView()
-            setNonAnimatedImage(source, config)
+            setNonAnimatedImage(data, config)
         }
     }
 
-    fun recycle() {
+    open fun recycle() {
+        isInViewport = true
+        tileLoadErrorDispatched = false
+        pendingSmartFit = null
+        pendingAnimatedImage = null
         smartFitJob?.cancel()
         smartFitJob = null
         cancelLandscapeZoom()
         cancelCoilRequest()
+        onHdrChanged?.invoke(false)
         pageView?.let {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                it.setRenderEffect(null)
+            }
             when (it) {
                 is SubsamplingScaleImageView -> it.recycle()
-                is AppCompatImageView -> it.dispose()
+                is AppCompatImageView -> releaseAnimatedDrawable(it)
             }
             it.isVisible = false
         }
+    }
+
+    internal fun applyPageRenderEffect(effect: android.graphics.RenderEffect?) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            pageView?.setRenderEffect(effect)
+        }
+    }
+
+    private fun releaseAnimatedDrawable(view: AppCompatImageView) {
+        val current = view.drawable
+        view.setImageDrawable(null)
+        (current as? Animatable)?.stop()
+        (current as? Closeable)?.close()
+        view.dispose()
+    }
+
+    private var decodePriorityBoost: Boolean = true
+
+    fun setDecodePriorityBoost(boost: Boolean) {
+        decodePriorityBoost = boost
+        (pageView as? SubsamplingScaleImageView)?.setDecodePriorityBoost(boost)
+    }
+
+    fun trimMemory(level: Int) {
+        (pageView as? SubsamplingScaleImageView)?.trimMemory(level)
+    }
+
+    fun retryFailedTiles(): Boolean {
+        return (pageView as? SubsamplingScaleImageView)?.retryFailedTiles() == true
     }
 
     /**
@@ -303,6 +438,50 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     /**
+     * Smoothly animates the subsampling image viewport to frame [panel] in guided panel mode.
+     * Returns true if the animation was started.
+     */
+    fun animateToPanel(panel: PanelRect, durationMs: Int = 320): Boolean {
+        val view = pageView as? SubsamplingScaleImageView ?: return false
+        if (!view.isReady || view.width <= 0 || view.height <= 0) return false
+        val target = MangaPanelDetector.computeCameraTarget(
+            panel = panel,
+            sourceWidth = view.sWidth,
+            sourceHeight = view.sHeight,
+            viewWidth = view.width,
+            viewHeight = view.height,
+            minScale = view.minScale,
+            maxScale = view.maxScale,
+        ) ?: return false
+        val anim = view.animateScaleAndCenter(
+            target.scale,
+            PointF(target.centerX, target.centerY),
+        ) ?: return false
+        anim.withDuration(durationMs.getSystemScaledDuration().toLong())
+            .withEasing(EASE_IN_OUT_QUAD)
+            .withInterruptible(true)
+            .start()
+        return true
+    }
+
+    /**
+     * Smoothly returns the subsampling image viewport back to full-page overview.
+     */
+    fun resetToFullPage(durationMs: Int = 260): Boolean {
+        val view = pageView as? SubsamplingScaleImageView ?: return false
+        if (!view.isReady || view.sWidth <= 0 || view.sHeight <= 0) return false
+        val anim = view.animateScaleAndCenter(
+            view.minScale,
+            PointF(view.sWidth * 0.5f, view.sHeight * 0.5f),
+        ) ?: return false
+        anim.withDuration(durationMs.getSystemScaledDuration().toLong())
+            .withEasing(EASE_OUT_QUAD)
+            .withInterruptible(true)
+            .start()
+        return true
+    }
+
+    /**
      * Pans the image.
      * @param fn a function that computes the new center of the image
      */
@@ -320,6 +499,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     private fun prepareNonAnimatedImageView() {
         if (pageView is SubsamplingScaleImageView) return
+        (pageView as? AppCompatImageView)?.let(::releaseAnimatedDrawable)
         removeView(pageView)
 
         pageView = if (isWebtoon) {
@@ -327,17 +507,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
         } else {
             PagerSubsamplingImageView(context)
         }.apply {
-            setMaxTileSize(ImageUtil.hardwareBitmapThreshold)
+            setMaxTileSize(minOf(ImageUtil.hardwareBitmapThreshold, 2048))
+            setHardwareTilesEnabled(this@ReaderPageImageView.isHardwareAccelerated)
             setDoubleTapZoomStyle(SubsamplingScaleImageView.ZOOM_FOCUS_CENTER)
             setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
             setMinimumTileDpi(180)
-            if (isWebtoon) {
-                // Defer high-res tile decoding until gestures/flings settle. This
-                // reduces decode churn while scrolling through long strips, which
-                // is a major source of dropped frames on high refresh rate
-                // displays (90/120Hz+).
-                setEagerLoadingEnabled(false)
-            }
             setOnStateChangedListener(
                 object : SubsamplingScaleImageView.OnStateChangedListener {
                     override fun onScaleChanged(newScale: Float, origin: Int) {
@@ -345,24 +519,39 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     }
 
                     override fun onCenterChanged(newCenter: PointF?, origin: Int) {
-                        // Not used
+                        this@ReaderPageImageView.onCenterChanged(newCenter)
                     }
                 },
             )
             setOnClickListener { this@ReaderPageImageView.onViewClicked() }
         }
         addView(pageView, MATCH_PARENT, MATCH_PARENT)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            applyPageRenderEffect(ReaderRenderEffects.currentEffect as? android.graphics.RenderEffect)
+        }
     }
 
     private fun SubsamplingScaleImageView.setupZoom(config: Config?) {
+        val baseScale = if (this is PagerSubsamplingImageView && isSmartFitEnabled) minScale else scale
         // 5x zoom
-        maxScale = scale * MAX_ZOOM_SCALE
-        setDoubleTapZoomScale(scale * 2)
+        maxScale = baseScale * MAX_ZOOM_SCALE
+        val doubleTapMultiplier = config?.doubleTapZoomScale ?: 2f
+        setDoubleTapZoomScale((baseScale * doubleTapMultiplier).coerceAtMost(maxScale))
+
+        val lockedRatio = config?.lockedZoomRatio
+        val initialScale = if (lockedRatio != null && lockedRatio > 1.01f) {
+            (baseScale * lockedRatio).coerceAtMost(maxScale)
+        } else {
+            baseScale
+        }
 
         when (config?.zoomStartPosition) {
-            ZoomStartPosition.LEFT -> setScaleAndCenter(scale, PointF(0F, 0F))
-            ZoomStartPosition.RIGHT -> setScaleAndCenter(scale, PointF(sWidth.toFloat(), 0F))
-            ZoomStartPosition.CENTER -> setScaleAndCenter(scale, center)
+            ZoomStartPosition.LEFT -> setScaleAndCenter(initialScale, PointF(0F, 0F))
+            ZoomStartPosition.RIGHT -> setScaleAndCenter(initialScale, PointF(sWidth.toFloat(), 0F))
+            ZoomStartPosition.CENTER -> setScaleAndCenter(
+                initialScale,
+                center ?: PointF(sWidth / 2F, sHeight / 2F),
+            )
             null -> {}
         }
     }
@@ -376,6 +565,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
         setZoomEnabled(config.enablePinchToZoom)
         setDoubleTapZoomDuration(config.zoomDuration.getSystemScaledDuration())
+        setHardwareTilesEnabled(this@ReaderPageImageView.isHardwareAccelerated && config.hardwareTilesEnabled)
+        setDecodePriorityBoost(this@ReaderPageImageView.decodePriorityBoost)
         if (isSmartFit) {
             val initialType = if (width > 0 && height > 0 && isReady) {
                 ReaderScaleUtil.resolveSmartScaleType(width, height, sWidth, sHeight)
@@ -394,11 +585,22 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     (this@apply as? PagerSubsamplingImageView)?.applySmartScaleIfNeeded()
                     setupZoom(config)
                     if (isVisibleOnScreen()) landscapeZoom(true)
+                    this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
                     this@ReaderPageImageView.onImageLoaded()
+                }
+
+                override fun onImageLoaded() {
+                    // When a cached preview triggers onReady() before TilesInitTask finishes,
+                    // propagate decoder HDR state once the base tile layer is loaded.
+                    this@ReaderPageImageView.onHdrChanged?.invoke(isHdr)
                 }
 
                 override fun onImageLoadError(e: Exception) {
                     this@ReaderPageImageView.onImageLoadError()
+                }
+
+                override fun onTileLoadError(e: Exception) {
+                    this@ReaderPageImageView.onTileLoadError(e)
                 }
             },
         )
@@ -406,85 +608,154 @@ open class ReaderPageImageView @JvmOverloads constructor(
         when (data) {
             is BitmapDrawable -> {
                 val bitmap = data.bitmap
-                if (config.webtoonSmartFit && scope != null) {
-                    smartFitJob = scope?.launch {
-                        val bounds = withContext(Dispatchers.Default) {
-                            WebtoonBorderDetector.detectContentBounds(bitmap)
+                val precomputed = config.precomputedSmartFitBounds
+                if (precomputed != null) {
+                    val image = ImageSource.bitmap(bitmap)
+                    if (!precomputed.isEmpty) image.region(precomputed)
+                    setImage(image)
+                    isVisible = true
+                } else if (config.webtoonSmartFit) {
+                    pendingSmartFit = PendingSmartFit(data, config)
+                    scope?.let { activeScope ->
+                        smartFitJob = activeScope.launch {
+                            val bounds = try {
+                                withContext(Dispatchers.Default) {
+                                    WebtoonBorderDetector.detectContentBounds(bitmap)
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Throwable) {
+                                if (!isActive) return@launch
+                                pendingSmartFit = null
+                                smartFitJob = null
+                                onImageLoadError()
+                                return@launch
+                            }
+                            pendingSmartFit = null
+                            smartFitJob = null
+                            val image = ImageSource.bitmap(bitmap)
+                            if (!bounds.isEmpty) image.region(bounds)
+                            setImage(image)
+                            isVisible = true
                         }
-                        setImage(ImageSource.bitmap(bitmap).region(bounds))
-                        isVisible = true
                     }
                 } else {
                     setImage(ImageSource.bitmap(bitmap))
                     isVisible = true
                 }
             }
-            is BufferedSource -> {
-                val supportsHardwareBitmap = config.canUseHardwareBitmap
-                    ?: ImageUtil.canUseHardwareBitmap(data)
-                if (
-                    !isWebtoon ||
-                    alwaysDecodeLongStripWithSSIV ||
-                    (config.isTallImage ?: ImageUtil.isTallImage(data)) ||
-                    !supportsHardwareBitmap
-                ) {
-                    setHardwareConfig(supportsHardwareBitmap)
-                    if (config.webtoonSmartFit && scope != null) {
-                        smartFitJob = scope?.launch {
-                            val bounds = withContext(Dispatchers.IO) {
-                                WebtoonBorderDetector.detectContentBounds(data.peek().inputStream())
+            is StreamSource -> {
+                val precomputed = config.precomputedSmartFitBounds
+                val cachedPreview = if (config.regionDecoderFactory == null) {
+                    config.previewKey?.let(ReaderPreviewCache::get)
+                } else {
+                    null
+                }
+                val makeImage = {
+                    ImageSource.provider(StreamInputProvider { data.open() })
+                        .decoderFactory(config.regionDecoderFactory)
+                }
+                if (precomputed != null) {
+                    val image = makeImage()
+                    if (!precomputed.isEmpty) {
+                        image.region(precomputed)
+                        setImage(image)
+                    } else if (cachedPreview != null) {
+                        image.dimensions(cachedPreview.sourceWidth, cachedPreview.sourceHeight)
+                        setImage(image, cachedPreview.bitmap, null)
+                    } else {
+                        setImage(image)
+                    }
+                    isVisible = true
+                } else if (config.webtoonSmartFit) {
+                    pendingSmartFit = PendingSmartFit(data, config)
+                    scope?.let { activeScope ->
+                        smartFitJob = activeScope.launch {
+                            val bounds = try {
+                                withContext(Dispatchers.IO) {
+                                    data.open().use { stream ->
+                                        WebtoonBorderDetector.detectContentBounds(
+                                            stream,
+                                            config.cropBorders,
+                                        )
+                                    }
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Throwable) {
+                                if (!isActive) return@launch
+                                pendingSmartFit = null
+                                smartFitJob = null
+                                onImageLoadError()
+                                return@launch
                             }
-                            // A-LOW (smartFit): the detector returns an EMPTY Rect on failure
-                            // (undecodable/odd stream); that zero-size region was passed to the
-                            // image source and blanked the page. Fall back to the full image.
+                            pendingSmartFit = null
+                            smartFitJob = null
+                            val image = makeImage()
                             if (!bounds.isEmpty) {
-                                setImage(ImageSource.inputStream(data.inputStream()).region(bounds))
+                                image.region(bounds)
+                                setImage(image)
+                            } else if (cachedPreview != null) {
+                                image.dimensions(cachedPreview.sourceWidth, cachedPreview.sourceHeight)
+                                setImage(image, cachedPreview.bitmap, null)
                             } else {
-                                setImage(ImageSource.inputStream(data.inputStream()))
+                                setImage(image)
                             }
                             isVisible = true
                         }
+                    }
+                } else {
+                    val image = makeImage()
+                    if (cachedPreview != null) {
+                        image.dimensions(cachedPreview.sourceWidth, cachedPreview.sourceHeight)
+                        setImage(image, cachedPreview.bitmap, null)
                     } else {
-                        setImage(ImageSource.inputStream(data.inputStream()))
-                        isVisible = true
+                        setImage(image)
                     }
-                    return@apply
+                    isVisible = true
                 }
-
-                ImageRequest.Builder(context)
-                    .data(data)
-                    .memoryCachePolicy(CachePolicy.DISABLED)
-                    .diskCachePolicy(CachePolicy.DISABLED)
-                    .target(
-                        onSuccess = { result ->
-                            val image = result as BitmapImage
-                            val bitmap = image.bitmap
-                            if (config.webtoonSmartFit && scope != null) {
-                                smartFitJob = scope?.launch {
-                                    val bounds = withContext(Dispatchers.Default) {
-                                        WebtoonBorderDetector.detectContentBounds(bitmap)
-                                    }
-                                    setImage(ImageSource.bitmap(bitmap).region(bounds))
-                                    isVisible = true
+            }
+            is BufferedSource -> {
+                // Preserve original pixels for zoom, even for short webtoon pages. A fixed Coil
+                // viewport bitmap cannot recover details when its RecyclerView parent is scaled.
+                val precomputed = config.precomputedSmartFitBounds
+                if (precomputed != null) {
+                    val image = ImageSource.inputStream(data.inputStream())
+                    if (!precomputed.isEmpty) image.region(precomputed)
+                    setImage(image)
+                    isVisible = true
+                } else if (config.webtoonSmartFit) {
+                    pendingSmartFit = PendingSmartFit(data, config)
+                    scope?.let { activeScope ->
+                        smartFitJob = activeScope.launch {
+                            val bounds = try {
+                                withContext(Dispatchers.IO) {
+                                    WebtoonBorderDetector.detectContentBounds(
+                                        data.peek().inputStream(),
+                                        config.cropBorders,
+                                    )
                                 }
-                            } else {
-                                setImage(ImageSource.bitmap(bitmap))
-                                isVisible = true
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Throwable) {
+                                if (!isActive) return@launch
+                                pendingSmartFit = null
+                                smartFitJob = null
+                                onImageLoadError()
+                                return@launch
                             }
-                        },
-                        onError = {
-                            onImageLoadError()
-                        },
-                    )
-                    .size(ViewSizeResolver(this@ReaderPageImageView))
-                    .precision(Precision.INEXACT)
-                    .cropBorders(config.cropBorders)
-                    .customDecoder(true)
-                    .crossfade(false)
-                    .build()
-                    .let { request ->
-                        coilDisposable = context.imageLoader.enqueue(request)
+                            pendingSmartFit = null
+                            smartFitJob = null
+                            val image = ImageSource.inputStream(data.inputStream())
+                            if (!bounds.isEmpty) image.region(bounds)
+                            setImage(image)
+                            isVisible = true
+                        }
                     }
+                } else {
+                    setImage(ImageSource.inputStream(data.inputStream()))
+                    isVisible = true
+                }
             }
             else -> {
                 throw IllegalArgumentException("Not implemented for class ${data::class.simpleName}")
@@ -494,6 +765,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     private fun prepareAnimatedImageView() {
         if (pageView is AppCompatImageView) return
+        (pageView as? SubsamplingScaleImageView)?.recycle()
         removeView(pageView)
 
         pageView = if (isWebtoon) {
@@ -529,6 +801,9 @@ open class ReaderPageImageView @JvmOverloads constructor(
             }
         }
         addView(pageView, MATCH_PARENT, MATCH_PARENT)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            applyPageRenderEffect(ReaderRenderEffects.currentEffect as? android.graphics.RenderEffect)
+        }
     }
 
     private fun setAnimatedImage(
@@ -540,25 +815,46 @@ open class ReaderPageImageView @JvmOverloads constructor(
             isZoomable = config.enablePinchToZoom
         }
 
+        if (drawable !== data) {
+            releaseAnimatedDrawable(this)
+        }
+        this@ReaderPageImageView.pendingAnimatedImage = PendingSmartFit(data, config)
+        val requestData = if (data is BufferedSource) data.peek() else data
         val request = ImageRequest.Builder(context)
-            .data(data)
+            .data(requestData)
             .memoryCachePolicy(CachePolicy.DISABLED)
             .diskCachePolicy(CachePolicy.DISABLED)
             .target(
                 onSuccess = { result ->
-                    val drawable = result.asDrawable(context.resources)
-                    setImageDrawable(drawable)
-                    (drawable as? Animatable)?.start()
+                    this@ReaderPageImageView.pendingAnimatedImage = null
+                    this@ReaderPageImageView.coilDisposable = null
+                    val newDrawable = result.asDrawable(context.resources)
+                    if (drawable !== newDrawable) {
+                        releaseAnimatedDrawable(this)
+                    }
+                    setImageDrawable(newDrawable)
+                    if (this@ReaderPageImageView.isInViewport) {
+                        (newDrawable as? Animatable)?.start()
+                    }
                     isVisible = true
+                    this@ReaderPageImageView.onHdrChanged?.invoke(
+                        (newDrawable as? AnimatedNativeDrawable)?.isHdr == true,
+                    )
                     this@ReaderPageImageView.onImageLoaded()
                 },
                 onError = {
+                    this@ReaderPageImageView.pendingAnimatedImage = null
+                    this@ReaderPageImageView.coilDisposable = null
+                    this@ReaderPageImageView.onHdrChanged?.invoke(false)
                     this@ReaderPageImageView.onImageLoadError()
                 },
             )
             .crossfade(false)
             .build()
-        coilDisposable = context.imageLoader.enqueue(request)
+        val disposable = context.imageLoader.enqueue(request)
+        if (this@ReaderPageImageView.pendingAnimatedImage != null) {
+            coilDisposable = disposable
+        }
     }
 
     private fun Int.getSystemScaledDuration(): Int {
@@ -576,13 +872,19 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val zoomStartPosition: ZoomStartPosition = ZoomStartPosition.CENTER,
         val landscapeZoom: Boolean = false,
         val enablePinchToZoom: Boolean = true,
-        /**
-         * Image traits precomputed off the UI thread by callers that already inspect the image
-         * on IO. When null, they are computed on demand (which touches image headers on the
-         * calling thread).
-         */
-        val isTallImage: Boolean? = null,
-        val canUseHardwareBitmap: Boolean? = null,
+        val precomputedSmartFitBounds: Rect? = null,
+        val regionDecoderFactory: (() -> ImageRegionDecoder)? = null,
+        val lockedZoomRatio: Float? = null,
+        val hardwareTilesEnabled: Boolean = true,
+        val previewKey: String? = null,
+        val doubleTapZoomScale: Float = 2f,
+    )
+
+    private class StreamSource(val open: () -> InputStream)
+
+    private data class PendingSmartFit(
+        val data: Any,
+        val config: Config,
     )
 
     enum class ZoomStartPosition {
@@ -603,6 +905,11 @@ private const val MAX_ZOOM_SCALE = 5F
  * (or re-encoded fallback) byte stream.
  */
 internal sealed interface ProcessedPageImage {
+    data class Streamed(
+        val streamFn: () -> InputStream,
+        val regionDecoderFactory: (() -> ImageRegionDecoder)? = null,
+    ) : ProcessedPageImage
+
     data class Encoded(val source: BufferedSource) : ProcessedPageImage
     data class Decoded(val bitmap: android.graphics.Bitmap) : ProcessedPageImage
 }

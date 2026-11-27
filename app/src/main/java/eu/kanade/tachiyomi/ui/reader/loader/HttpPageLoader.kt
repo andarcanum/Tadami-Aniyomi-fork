@@ -13,19 +13,33 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
-import okio.Buffer
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.ImageUtil
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.PriorityBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * Loader used to load chapters from an online source.
@@ -38,6 +52,9 @@ internal class HttpPageLoader(
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     // SY <--
     private val readerPreferences: ReaderPreferences = Injekt.get(),
+    private val loadPageTimeoutMs: Long = DEFAULT_LOAD_PAGE_TIMEOUT_MS,
+    private val downloadStallTimeoutMs: Long = DEFAULT_DOWNLOAD_STALL_TIMEOUT_MS,
+    private val stallRetryThresholdMs: Long = DEFAULT_STALL_RETRY_THRESHOLD_MS,
 ) : PageLoader() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,6 +74,13 @@ internal class HttpPageLoader(
      */
     private val queuedPages = mutableMapOf<ReaderPage, PriorityPage>()
 
+    /**
+     * Active per-page download jobs keyed by page, paired with their last observed activity
+     * timestamp so stalled downloads can be detected and cancelled on retry without killing
+     * the shared worker pool.
+     */
+    private val inFlightEntries = ConcurrentHashMap<ReaderPage, InFlightEntry>()
+
     private val preloadPagesBefore: Int
         get() = readerPreferences.preloadPagesBefore().get()
 
@@ -75,14 +99,29 @@ internal class HttpPageLoader(
         // modest while a stalled worker no longer starves the rest.
         repeat(PAGE_DOWNLOAD_WORKERS) {
             scope.launchIO {
-                while (true) {
+                while (isActive) {
                     val queuedPage = runInterruptible { queue.take() }
+                    val page = queuedPage.page
+                    synchronized(queuedPages) {
+                        queuedPage.dequeued = true
+                    }
+                    var entry: InFlightEntry? = null
                     try {
-                        if (queuedPage.page.status == Page.State.QUEUE) {
-                            internalLoadPage(queuedPage.page)
+                        if (page.status == Page.State.QUEUE) {
+                            val activeEntry = InFlightEntry(
+                                lastActivityMs = System.currentTimeMillis(),
+                            )
+                            val job = scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
+                                internalLoadPage(page, activeEntry)
+                            }
+                            activeEntry.job = job
+                            entry = activeEntry
+                            inFlightEntries[page] = activeEntry
+                            job.join()
                         }
                     } finally {
                         removeQueuedPage(queuedPage)
+                        entry?.let { inFlightEntries.remove(page, it) }
                     }
                 }
             }
@@ -99,15 +138,15 @@ internal class HttpPageLoader(
         val domainChapter = chapter.chapter.toDomainChapter()!!
         val cachedPages = chapterCache.getPageListFromCache(domainChapter)
         // SY -->
-        val pages = if (cachedPages.isNotEmpty()) {
-            if (cachedPages.any { it.imageUrl?.contains("?t=") == true }) {
-                // Signed URLs may have stale HMAC tokens; re-fetch from server
-                source.getPageList(chapter.chapter)
-            } else {
-                cachedPages
-            }
+        val pages = if (cachedPages.isNotEmpty() && cachedPages.none { hasSignedQueryToken(it.imageUrl) }) {
+            cachedPages
         } else {
-            source.getPageList(chapter.chapter)
+            source.getPageList(chapter.chapter).also { fetched ->
+                runCatching {
+                    val pagesToSave = fetched.map { Page(it.index, it.url, it.imageUrl) }
+                    chapterCache.putPageListToCache(domainChapter, pagesToSave)
+                }
+            }
         }
         // SY <--
         return pages.mapIndexed { index, page ->
@@ -132,8 +171,10 @@ internal class HttpPageLoader(
             page.status = Page.State.QUEUE
         }
 
-        // Automatically retry failed pages when subscribed to this page
+        // Automatically retry failed pages when subscribed to this page; evict any broken
+        // cached copy so decode failures fetch a clean image instead of looping.
         if (page.status == Page.State.ERROR) {
+            clearPageCacheAndMetadata(page)
             page.status = Page.State.QUEUE
         }
 
@@ -158,21 +199,73 @@ internal class HttpPageLoader(
      * Retries a page. This method is only called from user interaction on the viewer.
      */
     override fun retryPage(page: ReaderPage) {
+        if (isRecycled) return
+
         // READY is included on purpose: a cached file evicted under a READY page, or a decode
         // failure the holder surfaced while the status stayed READY, both left the worker
         // skipping the re-offered page (it only processes QUEUE) - Retry was a dead button.
-        // Pages genuinely in flight (QUEUE/LOAD_PAGE/DOWNLOAD_IMAGE) are left alone to avoid
-        // double fetches.
+        // Orphaned QUEUE pages (dropped from the queue while a holder still waited) and
+        // stalled LOAD_PAGE/DOWNLOAD_IMAGE requests are also recoverable.
         when (page.status) {
-            Page.State.ERROR, Page.State.READY -> page.status = Page.State.QUEUE
-            else -> return
+            Page.State.ERROR, Page.State.READY -> {
+                val active = inFlightEntries[page]
+                if (active != null) {
+                    if (!active.retryRequested.compareAndSet(false, true)) return
+                    requeueAfterCancel(page, active)
+                    return
+                }
+            }
+            Page.State.QUEUE -> {
+                val isQueued = synchronized(queuedPages) { queuedPages.containsKey(page) }
+                if (isQueued || inFlightEntries.containsKey(page)) return
+            }
+            Page.State.LOAD_PAGE, Page.State.DOWNLOAD_IMAGE -> {
+                val active = inFlightEntries[page]
+                if (active != null) {
+                    val idleMs = System.currentTimeMillis() - active.lastActivityMs
+                    if (idleMs < stallRetryThresholdMs) return
+                    if (!active.retryRequested.compareAndSet(false, true)) return
+                    requeueAfterCancel(page, active)
+                    return
+                }
+            }
         }
+
+        clearPageCacheAndMetadata(page)
+        page.status = Page.State.QUEUE
         offerPage(page, 2)
+    }
+
+    private fun requeueAfterCancel(page: ReaderPage, active: InFlightEntry) {
+        active.job?.cancel(PageRetryCancellationException())
+        scope.launch {
+            // Wait until the aborted worker exits putImageToCache's finally block (aborting any
+            // open DiskLruCache.Editor) before clearing cache metadata and re-offering the page.
+            active.job?.join()
+            if (isRecycled) return@launch
+            synchronized(queuedPages) {
+                if (queuedPages[page]?.dequeued == true) {
+                    queuedPages.remove(page)
+                }
+            }
+            clearPageCacheAndMetadata(page)
+            page.status = Page.State.QUEUE
+            offerPage(page, 2)
+        }
+    }
+
+    private fun clearPageCacheAndMetadata(page: ReaderPage) {
+        page.imageUrl?.let { chapterCache.removeImageFromCache(it) }
+        page.imageDimensions = null
+        page.smartFitBounds = null
+        page.isAnimatedImage = false
+        page.progress = 0
     }
 
     override fun recycle() {
         super.recycle()
         scope.cancel()
+        inFlightEntries.clear()
         queue.clear()
         synchronized(queuedPages) {
             queuedPages.clear()
@@ -225,8 +318,12 @@ internal class HttpPageLoader(
         return synchronized(queuedPages) {
             val existing = queuedPages[page]
             if (existing != null) {
-                if (existing.priority >= priority) {
+                if (existing.dequeued) {
                     return@synchronized null
+                }
+                if (existing.priority >= priority) {
+                    existing.subscribers++
+                    return@synchronized existing
                 }
                 if (!queue.remove(existing)) {
                     return@synchronized null
@@ -242,15 +339,18 @@ internal class HttpPageLoader(
 
     private fun cancelQueuedPage(priorityPage: PriorityPage) {
         synchronized(queuedPages) {
-            if (queuedPages[priorityPage.page] == priorityPage && queue.remove(priorityPage)) {
-                queuedPages.remove(priorityPage.page)
+            if (queuedPages[priorityPage.page] === priorityPage && !priorityPage.dequeued) {
+                priorityPage.subscribers--
+                if (priorityPage.subscribers <= 0 && queue.remove(priorityPage)) {
+                    queuedPages.remove(priorityPage.page)
+                }
             }
         }
     }
 
     private fun removeQueuedPage(priorityPage: PriorityPage) {
         synchronized(queuedPages) {
-            if (queuedPages[priorityPage.page] == priorityPage) {
+            if (queuedPages[priorityPage.page] === priorityPage) {
                 queuedPages.remove(priorityPage.page)
             }
         }
@@ -262,54 +362,174 @@ internal class HttpPageLoader(
      *
      * @param page the page whose source image has to be downloaded.
      */
-    private suspend fun internalLoadPage(page: ReaderPage) {
+    private suspend fun internalLoadPage(page: ReaderPage, entry: InFlightEntry) {
         try {
             if (page.imageUrl.isNullOrEmpty()) {
                 page.status = Page.State.LOAD_PAGE
-                page.imageUrl = source.getImageUrl(page)
+                entry.lastActivityMs = System.currentTimeMillis()
+                page.imageUrl = withTimeout(loadPageTimeoutMs) {
+                    source.getImageUrl(page)
+                }
+                entry.lastActivityMs = System.currentTimeMillis()
             }
             val imageUrl = page.imageUrl!!
 
             if (!chapterCache.isImageInCache(imageUrl)) {
                 page.status = Page.State.DOWNLOAD_IMAGE
-                val imageResponse = source.getImage(page, dataSaver)
-                chapterCache.putImageToCache(imageUrl, imageResponse)
+                page.progress = 0
+                entry.lastActivityMs = System.currentTimeMillis()
+                downloadImageWithStallWatchdog(page, imageUrl, entry)
             }
 
             // Sniff the pixel size while the file is still hot in the page cache: preloaded
             // pages then bind with a correct placeholder height and do not relayout on decode.
             // Animated pages are skipped: their height comes from the decoded drawable, and a
             // pre-set size would route them into the non-animated image path.
+            var isAnimated = false
             if (page.imageDimensions == null) {
                 page.imageDimensions = runCatching {
-                    chapterCache.getImageFile(imageUrl).inputStream().use { stream ->
-                        val source = Buffer().readFrom(stream)
-                        if (ImageUtil.isAnimatedAndSupported(source)) {
+                    chapterCache.openImageStream(imageUrl).use { stream ->
+                        val metadata = ImageUtil.sniffImageMetadata(stream)
+                        isAnimated = metadata.isAnimated
+                        if (isAnimated) {
+                            page.isAnimatedImage = true
                             null
                         } else {
-                            ImageUtil.getImageDimensions(source)
+                            metadata.dimensions
                         }
                     }
                 }.getOrNull()
             }
 
-            page.stream = { chapterCache.getImageFile(imageUrl).inputStream() }
+            if (!isAnimated && !page.isAnimatedImage && page.smartFitBounds == null &&
+                readerPreferences.webtoonSmartFit().get()
+            ) {
+                val cropBorders = readerPreferences.cropBordersWebtoon().get()
+                runCatching {
+                    chapterCache.openImageStream(imageUrl).use { stream ->
+                        eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector.detectContentBounds(
+                            stream,
+                            cropBorders,
+                        )
+                    }
+                }.getOrNull()?.takeIf { !it.isEmpty }?.let { bounds ->
+                    page.smartFitBounds = cropBorders to bounds
+                }
+            }
+
+            page.stream = { chapterCache.openImageStream(imageUrl) }
             page.status = Page.State.READY
-        } catch (e: Throwable) {
+        } catch (_: PageRetryCancellationException) {
+            // Superseded by an explicit retryPage() call: keep the freshly queued state
+            // intact and let the worker continue serving the queue.
+        } catch (_: PageStallTimeoutException) {
             page.status = Page.State.ERROR
-            if (e is CancellationException) {
-                throw e
+        } catch (_: TimeoutCancellationException) {
+            page.status = Page.State.ERROR
+        } catch (e: CancellationException) {
+            if (!entry.retryRequested.get() && !isRecycled && scope.isActive) {
+                page.status = Page.State.ERROR
+            }
+            throw e
+        } catch (_: Throwable) {
+            page.status = Page.State.ERROR
+        }
+    }
+
+    private suspend fun downloadImageWithStallWatchdog(
+        page: ReaderPage,
+        imageUrl: String,
+        entry: InFlightEntry,
+    ) {
+        var stallException: PageStallTimeoutException? = null
+        coroutineScope {
+            val downloadJob = launch {
+                val imageResponse = source.getImage(page, dataSaver)
+                var writeError: Throwable? = null
+                val writeJob = launch(Dispatchers.IO) {
+                    try {
+                        entry.lastActivityMs = System.currentTimeMillis()
+                        chapterCache.putImageToCache(imageUrl, imageResponse)
+                        entry.lastActivityMs = System.currentTimeMillis()
+                    } catch (t: Throwable) {
+                        writeError = t
+                        if (t is CancellationException) throw t
+                    } finally {
+                        runCatching { imageResponse.close() }
+                    }
+                }
+                try {
+                    suspendCancellableCoroutine<Unit> { cont ->
+                        cont.invokeOnCancellation {
+                            runCatching { imageResponse.close() }
+                        }
+                        writeJob.invokeOnCompletion { cause ->
+                            if (!cont.isCompleted) {
+                                val failure = writeError ?: cause
+                                if (failure == null) {
+                                    cont.resume(Unit)
+                                } else {
+                                    cont.resumeWithException(failure)
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    withContext(NonCancellable) {
+                        writeJob.join()
+                    }
+                    runCatching { imageResponse.close() }
+                }
+            }
+            val progressObserver = launch {
+                page.progressFlow.collect {
+                    entry.lastActivityMs = System.currentTimeMillis()
+                }
+            }
+            val pollIntervalMs = (downloadStallTimeoutMs / 4L).coerceIn(10L, 2_000L)
+            val watchdog = launch {
+                while (downloadJob.isActive) {
+                    delay(pollIntervalMs)
+                    val idleMs = System.currentTimeMillis() - entry.lastActivityMs
+                    if (idleMs >= downloadStallTimeoutMs) {
+                        val timeout = PageStallTimeoutException(
+                            "Image download stalled for ${idleMs}ms: $imageUrl",
+                        )
+                        stallException = timeout
+                        downloadJob.cancel(timeout)
+                        break
+                    }
+                }
+            }
+            try {
+                downloadJob.join()
+            } finally {
+                watchdog.cancel()
+                progressObserver.cancel()
             }
         }
+        stallException?.let { throw it }
     }
 }
 
 /**
  * Data class used to keep ordering of pages in order to maintain priority.
  */
+private class InFlightEntry(
+    @Volatile var job: Job? = null,
+    @Volatile var lastActivityMs: Long,
+    val retryRequested: AtomicBoolean = AtomicBoolean(false),
+)
+
+private class PageRetryCancellationException : CancellationException("Page retry requested")
+
+private class PageStallTimeoutException(message: String) : CancellationException(message)
+
 private class PriorityPage(
     val page: ReaderPage,
     val priority: Int,
+    var subscribers: Int = 1,
+    var dequeued: Boolean = false,
 ) : Comparable<PriorityPage> {
     companion object {
         private val idGenerator = AtomicInteger()
@@ -323,8 +543,20 @@ private class PriorityPage(
     }
 }
 
+private val SIGNED_URL_PARAM_REGEX =
+    Regex("(^|&)(t|exp|expires|token|sig|signature|hdnea|x-amz-[a-z0-9-]+)=", RegexOption.IGNORE_CASE)
+
+internal fun hasSignedQueryToken(url: String?): Boolean {
+    val query = url?.substringAfter('?', "") ?: return false
+    if (query.isEmpty()) return false
+    return SIGNED_URL_PARAM_REGEX.containsMatchIn(query)
+}
+
 /**
  * Concurrent page-download workers per chapter loader. 3 balances visible-page latency
  * (a stalled worker no longer starves the queue) against connection pressure on sources.
  */
 private const val PAGE_DOWNLOAD_WORKERS = 3
+private const val DEFAULT_LOAD_PAGE_TIMEOUT_MS = 30_000L
+private const val DEFAULT_DOWNLOAD_STALL_TIMEOUT_MS = 45_000L
+private const val DEFAULT_STALL_RETRY_THRESHOLD_MS = 10_000L

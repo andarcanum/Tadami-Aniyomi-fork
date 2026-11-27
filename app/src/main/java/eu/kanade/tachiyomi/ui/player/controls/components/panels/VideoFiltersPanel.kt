@@ -19,6 +19,7 @@ package eu.kanade.tachiyomi.ui.player.controls.components.panels
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.constraintlayout.compose.ConstraintLayout
 import eu.kanade.presentation.player.components.SliderItem
+import eu.kanade.tachiyomi.ui.player.VideoFilterPreset
+import eu.kanade.tachiyomi.ui.player.VideoFilterSnapshot
 import eu.kanade.tachiyomi.ui.player.VideoFilters
 import eu.kanade.tachiyomi.ui.player.controls.CARDS_MAX_WIDTH
 import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
@@ -114,6 +118,31 @@ fun FiltersCard(
                     Text(text = stringResource(MR.strings.action_reset))
                 }
                 ControlsButton(Icons.Default.Close, onClose)
+            }
+        }
+        val brightness by decoderPreferences.brightnessFilter().collectAsState()
+        val saturation by decoderPreferences.saturationFilter().collectAsState()
+        val contrast by decoderPreferences.contrastFilter().collectAsState()
+        val gamma by decoderPreferences.gammaFilter().collectAsState()
+        val hue by decoderPreferences.hueFilter().collectAsState()
+        val activeFilterPreset = remember(brightness, saturation, contrast, gamma, hue) {
+            VideoFilterPreset.resolveActive(
+                VideoFilterSnapshot(brightness, saturation, contrast, gamma, hue),
+            )
+        }
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MaterialTheme.padding.medium, vertical = MaterialTheme.padding.extraSmall),
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+        ) {
+            VideoFilterPreset.entries.forEach { preset ->
+                FilterChip(
+                    selected = activeFilterPreset == preset,
+                    onClick = { preset.applyTo(decoderPreferences, applyLiveToMpv = true) },
+                    label = { Text(text = stringResource(preset.titleRes)) },
+                )
             }
         }
         LazyColumn {

@@ -98,7 +98,7 @@ class AnimeExtensionApiTest {
     }
 
     @Test
-    fun `supported library versions accept the full 12-26 range including minor versions`() {
+    fun `supported library versions accept the full 12-28 range including minor versions`() {
         (12.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.4 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
@@ -112,7 +112,9 @@ class AnimeExtensionApiTest {
         // The reels feed-contract v21 addendum raised LIB_VERSION_MAX to 21.0,
         // the v22 addendum (login instrumentation + video resolver) to 22.0,
         // the v23 addendum (paginated album search) to 23.0,
-        // the v26 addendum (account identity for durable history) to 26.0.
+        // the v26 addendum (account identity for durable history) to 26.0,
+        // the v27 addendum (session continuity/replay) to 27.0,
+        // the v28 addendum (round-robin scanning) to 28.0.
         (20.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (21.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (21.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
@@ -120,12 +122,16 @@ class AnimeExtensionApiTest {
         (22.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (23.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         // v24/v25 stayed additive (instanceof-only, no plugin links against them), so a
-        // plugin may legitimately declare any version up to the v26 ceiling.
+        // plugin may legitimately declare any version up to the current ceiling.
         (24.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (25.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (26.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (26.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (27.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (27.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (28.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (11.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
-        (26.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
+        (28.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
     }
 
     @Test
@@ -142,7 +148,7 @@ class AnimeExtensionApiTest {
                 badgeLabel = "Beta Store",
             )
             coEvery { storeRepository.getAll() } returns listOf(alphaStore, betaStore)
-            coEvery { storeFetcher.fetchExtensions(any()) } returns ExtensionStoreFetchResult(
+            coEvery { storeFetcher.fetchExtensions(any(), any()) } returns ExtensionStoreFetchResult(
                 extensions = listOf(
                     availableExtension(alphaStore, versionCode = 10),
                     availableExtension(betaStore, versionCode = 11),
@@ -249,7 +255,7 @@ class AnimeExtensionApiTest {
         val storeFetcher = mockk<ExtensionStoreFetcher>()
         val store = legacyStore(baseUrl = "https://alpha.example", badgeLabel = "Alpha Store")
         coEvery { storeRepository.getAll() } returns listOf(store)
-        coEvery { storeFetcher.fetchExtensions(any()) } returns ExtensionStoreFetchResult(
+        coEvery { storeFetcher.fetchExtensions(any(), any()) } returns ExtensionStoreFetchResult(
             extensions = listOf(
                 availableExtension(store, versionCode = 20).copy(pkgName = "pkg.example-123456789"),
             ),

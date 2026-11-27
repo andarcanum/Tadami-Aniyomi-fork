@@ -80,6 +80,9 @@ import eu.kanade.presentation.components.AppStateBanners
 import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
 import eu.kanade.presentation.components.IncognitoModeBannerBackgroundColor
 import eu.kanade.presentation.components.IndexingBannerBackgroundColor
+import eu.kanade.presentation.easteregg.crystal.CrystalDebugReleaseRequest
+import eu.kanade.presentation.easteregg.crystal.CrystalDebugReleaseSimulation
+import eu.kanade.presentation.easteregg.crystal.CrystalMemorialScreen
 import eu.kanade.presentation.more.UpdatedChangelogScreen
 import eu.kanade.presentation.more.settings.screen.SettingsTreasuryScreen
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionStoreScreen
@@ -100,7 +103,9 @@ import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
 import eu.kanade.tachiyomi.data.updater.AppUpdateJob
 import eu.kanade.tachiyomi.data.updater.GITHUB_REPO
 import eu.kanade.tachiyomi.data.updater.RELEASE_URL
+import eu.kanade.tachiyomi.data.updater.UpdatedChangelogPromptDecision
 import eu.kanade.tachiyomi.data.updater.resolveUpdatedChangelogPrompt
+import eu.kanade.tachiyomi.data.updater.shouldCommitUpdatedChangelogImmediately
 import eu.kanade.tachiyomi.extension.ExtensionAutoUpdateRunner
 import eu.kanade.tachiyomi.extension.anime.api.AnimeExtensionApi
 import eu.kanade.tachiyomi.extension.manga.api.MangaExtensionApi
@@ -127,6 +132,7 @@ import eu.kanade.tachiyomi.ui.player.PlayerActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reels.ReelsFullscreen
 import eu.kanade.tachiyomi.ui.reels.ReelsPip
+import eu.kanade.tachiyomi.ui.reels.ReelsVolumeKeyHandler
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
@@ -148,6 +154,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import mihon.core.migration.Migrator
 import tachiyomi.core.common.util.lang.launchIO
@@ -391,7 +398,12 @@ class MainActivity : BaseActivity() {
                             NovelReaderBackdropSession.update(null)
                         }
                     }
-                    val scaffoldInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
+                    val isNovelReaderActive = navigator.lastItem is NovelReaderScreen
+                    val scaffoldInsets = if (isNovelReaderActive) {
+                        WindowInsets(0, 0, 0, 0)
+                    } else {
+                        WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
+                    }
                     Scaffold(
                         containerColor = readerBackdropColor ?: MaterialTheme.colorScheme.background,
                         topBar = {
@@ -447,9 +459,11 @@ class MainActivity : BaseActivity() {
                                 )
                             }
                             // Draw navigation bar scrim when needed. Reels software
-                            // fullscreen owns the window; its generic scrim must not cover
-                            // the video (audit U07).
-                            if (remember { isNavigationBarNeedsScrim() } && !ReelsFullscreen.isActive) {
+                            // fullscreen and NovelReaderScreen own the window; generic scrims must
+                            // not cover the video (audit U07) or reader bottom bar/pages.
+                            if (remember { isNavigationBarNeedsScrim() } && !ReelsFullscreen.isActive &&
+                                !isNovelReaderActive
+                            ) {
                                 Spacer(
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)
@@ -504,45 +518,79 @@ class MainActivity : BaseActivity() {
 
                         HandleOnNewIntent(context = context, navigator = navigator)
 
-                        CheckForUpdates()
+                        val updatesSettled = CheckForUpdates()
                         ShowOnboarding()
 
                         // PERF: moved the migration/changelog inside the Navigator to lighten
                         // the outer setComposeContent composition (faster to HomeScreen.Content)
                         var showChangelog by remember { mutableStateOf(false) }
+                        var changelogSettled by remember { mutableStateOf(false) }
+                        var changelogDismissed by remember { mutableStateOf(false) }
                         var installedRelease by remember { mutableStateOf<Release?>(null) }
-                        LaunchedEffect(migrationReady.value) {
-                            if (migrationReady.value) {
-                                val shouldShowChangelog = withContext(Dispatchers.IO) {
+                        var pendingChangelogDecision by remember {
+                            mutableStateOf<UpdatedChangelogPromptDecision?>(null)
+                        }
+                        var changelogCommitted by remember { mutableStateOf(false) }
+                        val commitChangelogSeen: () -> Unit = {
+                            val decisionToCommit = pendingChangelogDecision
+                            if (!changelogCommitted && decisionToCommit != null) {
+                                changelogCommitted = true
+                                lifecycleScope.launchIO {
                                     val appUpdatePreferences = Injekt.get<AppUpdatePreferences>()
                                     val seenVersionPreference =
                                         appUpdatePreferences.lastSeenUpdatedChangelogVersionCode()
                                     val pendingPreviousVersionPreference =
                                         appUpdatePreferences.pendingUpdatedChangelogPreviousVersionCode()
-                                    val decision = resolveUpdatedChangelogPrompt(
-                                        currentVersionCode = BuildConfig.VERSION_CODE,
-                                        lastSeenVersionCode = seenVersionPreference.get(),
-                                        pendingPreviousVersionCode = pendingPreviousVersionPreference.get(),
-                                        isDebug = BuildConfig.DEBUG,
-                                    )
-
-                                    if (decision.nextSeenVersionCode != seenVersionPreference.get()) {
-                                        seenVersionPreference.set(decision.nextSeenVersionCode)
+                                    if (decisionToCommit.nextSeenVersionCode != seenVersionPreference.get()) {
+                                        seenVersionPreference.set(decisionToCommit.nextSeenVersionCode)
                                     }
-                                    if (decision.nextPendingPreviousVersionCode !=
+                                    if (decisionToCommit.nextPendingPreviousVersionCode !=
                                         pendingPreviousVersionPreference.get()
                                     ) {
                                         pendingPreviousVersionPreference.set(
-                                            decision.nextPendingPreviousVersionCode,
+                                            decisionToCommit.nextPendingPreviousVersionCode,
                                         )
                                     }
-
-                                    decision.shouldPrompt
                                 }
+                            }
+                        }
+                        LaunchedEffect(migrationReady.value) {
+                            if (!migrationReady.value) {
+                                changelogSettled = false
+                                return@LaunchedEffect
+                            }
+                            val decision = withContext(Dispatchers.IO) {
+                                val appUpdatePreferences = Injekt.get<AppUpdatePreferences>()
+                                val seenVersionPreference =
+                                    appUpdatePreferences.lastSeenUpdatedChangelogVersionCode()
+                                val pendingPreviousVersionPreference =
+                                    appUpdatePreferences.pendingUpdatedChangelogPreviousVersionCode()
+                                val resolved = resolveUpdatedChangelogPrompt(
+                                    currentVersionCode = BuildConfig.VERSION_CODE,
+                                    lastSeenVersionCode = seenVersionPreference.get(),
+                                    pendingPreviousVersionCode = pendingPreviousVersionPreference.get(),
+                                    isDebug = BuildConfig.DEBUG,
+                                )
+                                if (shouldCommitUpdatedChangelogImmediately(resolved)) {
+                                    if (resolved.nextSeenVersionCode != seenVersionPreference.get()) {
+                                        seenVersionPreference.set(resolved.nextSeenVersionCode)
+                                    }
+                                    if (resolved.nextPendingPreviousVersionCode !=
+                                        pendingPreviousVersionPreference.get()
+                                    ) {
+                                        pendingPreviousVersionPreference.set(
+                                            resolved.nextPendingPreviousVersionCode,
+                                        )
+                                    }
+                                }
+                                resolved
+                            }
 
-                                if (shouldShowChangelog) {
-                                    installedRelease = withContext(Dispatchers.IO) {
-                                        runCatching {
+                            if (decision.shouldPrompt) {
+                                pendingChangelogDecision = decision
+                                installedRelease = withTimeoutOrNull(3_500L) {
+                                    withContext(Dispatchers.IO) {
+                                        try {
                                             Injekt.get<GetApplicationRelease>().awaitCurrent(
                                                 GetApplicationRelease.Arguments(
                                                     isPreview = isPreviewBuildType,
@@ -552,9 +600,73 @@ class MainActivity : BaseActivity() {
                                                     forceCheck = true,
                                                 ),
                                             )
-                                        }.getOrNull()
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (_: Exception) {
+                                            null
+                                        }
+                                    }
+                                }
+                                showChangelog = true
+                            } else {
+                                changelogSettled = true
+                            }
+                        }
+                        LaunchedEffect(changelogDismissed) {
+                            if (changelogDismissed && !changelogSettled) {
+                                delay(550L)
+                                changelogSettled = true
+                            }
+                        }
+                        if (BuildConfig.DEBUG && BuildConfig.BUILD_TYPE == "debug") {
+                            val debugSimRequest by CrystalDebugReleaseSimulation.request.collectAsStateWithLifecycle()
+                            var pendingDebugMemorial by remember {
+                                mutableStateOf<CrystalDebugReleaseRequest?>(null)
+                            }
+                            LaunchedEffect(debugSimRequest.nonce) {
+                                if (debugSimRequest.nonce > 0) {
+                                    HomeScreen.openTab(HomeScreen.Tab.HomeHub)
+                                    pendingDebugMemorial = debugSimRequest
+                                    changelogDismissed = false
+                                    changelogSettled = false
+                                    delay(350L)
+                                    installedRelease = withTimeoutOrNull(3_500L) {
+                                        withContext(Dispatchers.IO) {
+                                            try {
+                                                Injekt.get<GetApplicationRelease>().awaitCurrent(
+                                                    GetApplicationRelease.Arguments(
+                                                        isPreview = isPreviewBuildType,
+                                                        commitCount = BuildConfig.COMMIT_COUNT.toInt(),
+                                                        versionName = BuildConfig.VERSION_NAME,
+                                                        repository = GITHUB_REPO,
+                                                        forceCheck = true,
+                                                    ),
+                                                )
+                                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                                throw e
+                                            } catch (_: Exception) {
+                                                null
+                                            }
+                                        }
                                     }
                                     showChangelog = true
+                                }
+                            }
+                            LaunchedEffect(pendingDebugMemorial, changelogSettled, showChangelog, navigator.lastItem) {
+                                val pending = pendingDebugMemorial
+                                if (pending != null &&
+                                    changelogSettled &&
+                                    !showChangelog &&
+                                    navigator.lastItem == HomeScreen
+                                ) {
+                                    pendingDebugMemorial = null
+                                    navigator.push(
+                                        CrystalMemorialScreen(
+                                            replay = false,
+                                            portrait = pending.portrait,
+                                            front = pending.front,
+                                        ),
+                                    )
                                 }
                             }
                         }
@@ -564,10 +676,23 @@ class MainActivity : BaseActivity() {
                                 versionName = release?.version ?: "v${BuildConfig.VERSION_NAME}",
                                 releaseDate = release?.releaseDate.orEmpty(),
                                 changelogInfo = release?.info.orEmpty(),
-                                onOpenInBrowser = { openInBrowser(release?.releaseLink ?: RELEASE_URL) },
-                                onDismiss = { showChangelog = false },
+                                onOpenInBrowser = {
+                                    commitChangelogSeen()
+                                    openInBrowser(release?.releaseLink ?: RELEASE_URL)
+                                },
+                                onDismiss = {
+                                    commitChangelogSeen()
+                                    showChangelog = false
+                                    changelogDismissed = true
+                                },
                             )
                         }
+                        eu.kanade.presentation.easteregg.crystal.CrystalCampaignHost(
+                            navigator = navigator,
+                            migrationsReady = migrationReady.value,
+                            startupSettled = updatesSettled && changelogSettled && !showChangelog,
+                            incognito = effectiveIncognito,
+                        )
                     } // end deferSideEffects
                 }
             }
@@ -576,8 +701,7 @@ class MainActivity : BaseActivity() {
         val startTime = System.currentTimeMillis()
         splashScreen?.setKeepOnScreenCondition {
             val elapsed = System.currentTimeMillis() - startTime
-            elapsed <= SPLASH_MIN_DURATION ||
-                ((!ready || !migrationReady.value) && elapsed <= SPLASH_MAX_DURATION)
+            (!ready || !migrationReady.value) && elapsed <= SPLASH_MAX_DURATION
         }
         setSplashScreenExitAnimation(splashScreen)
 
@@ -633,7 +757,7 @@ class MainActivity : BaseActivity() {
             val duration = System.currentTimeMillis() - startTime
             // Only record if session was longer than 5 seconds (filter out accidental opens)
             if (duration > 5000) {
-                lifecycleScope.launch {
+                lifecycleScope.launchIO {
                     activityDataRepository.recordAppSession(duration)
                 }
             }
@@ -647,6 +771,13 @@ class MainActivity : BaseActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         ReelsPip.handler?.invoke()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) {
+            ReelsVolumeKeyHandler.onVolumeUp?.invoke()
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onPictureInPictureModeChanged(
@@ -670,6 +801,8 @@ class MainActivity : BaseActivity() {
     override fun onStop() {
         super.onStop()
         eu.kanade.tachiyomi.ui.home.HomeHubScreenModel.saveOnExit()
+        eu.kanade.tachiyomi.ui.home.MangaHomeHubScreenModel.saveOnExit()
+        eu.kanade.tachiyomi.ui.home.NovelHomeHubScreenModel.saveOnExit()
     }
 
     override fun onProvideAssistContent(outContent: AssistContent) {
@@ -695,9 +828,10 @@ class MainActivity : BaseActivity() {
     }
 
     @Composable
-    private fun CheckForUpdates() {
+    private fun CheckForUpdates(): Boolean {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
+        var checkSettled by remember { mutableStateOf(!updaterEnabled) }
 
         // App updates
         LaunchedEffect(Unit) {
@@ -728,7 +862,10 @@ class MainActivity : BaseActivity() {
                     }
                     updateScreen?.let(navigator::push)
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     logcat(LogPriority.ERROR, e)
+                } finally {
+                    checkSettled = true
                 }
             }
         }
@@ -764,6 +901,7 @@ class MainActivity : BaseActivity() {
                     }
             }
         }
+        return checkSettled
     }
 
     @Composable
@@ -837,16 +975,11 @@ class MainActivity : BaseActivity() {
             Constants.SHORTCUT_LIBRARY -> HomeScreen.Tab.Library()
             Constants.SHORTCUT_MANGA -> {
                 val idToOpen = intent.extras?.getLong(Constants.MANGA_EXTRA) ?: return false
-                navigator.popUntilRoot()
                 HomeScreen.Tab.Library(idToOpen)
             }
-            Constants.SHORTCUT_NOVEL -> {
-                navigator.popUntilRoot()
-                HomeScreen.Tab.NovelLib()
-            }
+            Constants.SHORTCUT_NOVEL -> HomeScreen.Tab.NovelLib()
             Constants.SHORTCUT_ANIME -> {
                 val idToOpen = intent.extras?.getLong(Constants.ANIME_EXTRA) ?: return false
-                navigator.popUntilRoot()
                 HomeScreen.Tab.AnimeLib(idToOpen)
             }
             Constants.SHORTCUT_UPDATES -> HomeScreen.Tab.Updates
@@ -854,14 +987,8 @@ class MainActivity : BaseActivity() {
             Constants.SHORTCUT_SOURCES -> HomeScreen.Tab.Browse(false)
             Constants.SHORTCUT_ANIMEEXTENSIONS -> HomeScreen.Tab.Browse(true, true)
             Constants.SHORTCUT_EXTENSIONS -> HomeScreen.Tab.Browse(true)
-            Constants.SHORTCUT_DOWNLOADS -> {
-                navigator.popUntilRoot()
-                HomeScreen.Tab.More(toDownloads = true)
-            }
-            Constants.SHORTCUT_ANIME_DOWNLOADS -> {
-                navigator.popUntilRoot()
-                HomeScreen.Tab.More(toDownloads = true)
-            }
+            Constants.SHORTCUT_DOWNLOADS -> HomeScreen.Tab.More(toDownloads = true)
+            Constants.SHORTCUT_ANIME_DOWNLOADS -> HomeScreen.Tab.More(toDownloads = true)
             Intent.ACTION_SEARCH, Intent.ACTION_SEND, "com.google.android.gms.actions.SEARCH_ACTION" -> {
                 // If the intent match the "standard" Android search intent
                 // or the Google-specific search intent (triggered by saying or typing "search *query* on *Tachiyomi*" in Google Search/Google Assistant)
@@ -994,6 +1121,7 @@ class MainActivity : BaseActivity() {
         }
 
         if (tabToOpen != null) {
+            navigator.popUntilRoot()
             lifecycleScope.launch { HomeScreen.openTab(tabToOpen) }
         }
 
@@ -1121,7 +1249,6 @@ internal fun resolveMainActivityWindowBackgroundArgb(
 }
 
 // Splash screen
-private const val SPLASH_MIN_DURATION = 500 // ms
 private const val SPLASH_MAX_DURATION = 5000 // ms
 private const val SPLASH_EXIT_ANIM_DURATION = 400L // ms
 private const val MIGRATION_STARTUP_TIMEOUT = 15_000L // ms

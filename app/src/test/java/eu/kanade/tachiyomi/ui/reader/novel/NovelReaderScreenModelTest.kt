@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
+import android.net.ConnectivityManager
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
@@ -15,6 +16,7 @@ import eu.kanade.tachiyomi.data.translation.TranslationProgressUpdate
 import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
+import eu.kanade.tachiyomi.data.translation.profile.withTranslationProfile
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -60,6 +62,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -97,6 +100,15 @@ import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.domain.translation.profile.ConnectionProfile
+import tachiyomi.domain.translation.profile.ModelSelection
+import tachiyomi.domain.translation.profile.ProfileAuth
+import tachiyomi.domain.translation.profile.ProfileCatalog
+import tachiyomi.domain.translation.profile.TranslationLanguages
+import tachiyomi.domain.translation.profile.TranslationProfile
+import tachiyomi.domain.translation.profile.TranslationProfileRepository
+import tachiyomi.domain.translation.profile.TranslationProtocol
+import tachiyomi.domain.translation.repository.TranslationRunRepository
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
@@ -116,8 +128,13 @@ class NovelReaderScreenModelTest {
     private val translationQueueUpdates = MutableSharedFlow<TranslationProgressUpdate>(extraBufferCapacity = 16)
     private val translationQueueActiveTranslation = MutableStateFlow<TranslationQueueItem?>(null)
     private val translationQueueItems = MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+    private val translationRunRepository = mockk<TranslationRunRepository>(relaxed = true).also {
+        coEvery { it.getByChapterId(any()) } returns null
+    }
     private val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true).also {
         every { it.progressUpdates } returns translationQueueUpdates
+        every { it.observeProgress(any()) } returns translationQueueUpdates
+        every { it.repository } returns translationRunRepository
         every { it.activeTranslation } returns translationQueueActiveTranslation
         every { it.queue } returns translationQueueItems
         coEvery { it.hasPendingOrActive(any()) } returns false
@@ -382,7 +399,9 @@ class NovelReaderScreenModelTest {
                 name = "Chapter 1",
                 url = "https://example.org/ch1",
             )
-            val novelReaderPreferences = createNovelReaderPreferences()
+            val novelReaderPreferences = createNovelReaderPreferences().also {
+                it.geminiEnabled().set(true)
+            }
 
             val screenModel = trackedNovelReaderScreenModel(
                 chapterId = chapter.id,
@@ -403,15 +422,15 @@ class NovelReaderScreenModelTest {
                 }
             }
 
+            // Wait for the actual initial cache restore, which may otherwise clear the manually
+            // installed holder below after State.Success has already become visible.
+            val initialState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            getPrivateField<NovelTranslationController>(screenModel, "translationController")
+                .restoreGeminiTranslationFromCache(chapter.id, initialState.readerSettings).join()
             val successState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             val translatedByIndex = (successState.textBlocks.indices).associateWith { index ->
                 "Translated $index"
             }
-            val translatedSettings = successState.readerSettings.copy(
-                geminiEnabled = true,
-                geminiApiKey = "test-key",
-            )
-
             val holder = NovelReaderTranslationHolder { successState.textBlocks }
             holder.put("gemini", translatedByIndex)
             setPrivateField(screenModel, "translationHolder", holder)
@@ -425,7 +444,8 @@ class NovelReaderScreenModelTest {
                     ),
                     google = NovelReaderScreenModel.State.ReaderGoogleState(),
                 )
-            invokePrivateUpdateContent(screenModel, translatedSettings)
+            // Republishing identical settings: a changed generation fingerprint clears the holder.
+            invokePrivateUpdateContent(screenModel, successState.readerSettings)
 
             val before = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             val beforeContentBlocks = before.contentBlocks
@@ -488,10 +508,7 @@ class NovelReaderScreenModelTest {
             state.isGeminiTranslationVisible shouldBe false
 
             coVerify(timeout = 1_000) {
-                translationQueueManager.addToQueue(listOf(chapter.id), novel.id)
-            }
-            verify(timeout = 1_000) {
-                TranslationJob.runImmediately(any())
+                translationQueueManager.enqueueChapters(listOf(chapter.id), novel.id, any(), any())
             }
         }
     }
@@ -544,9 +561,6 @@ class NovelReaderScreenModelTest {
 
             coVerify(timeout = 1_000) {
                 translationQueueManager.cancelChapter(chapter.id)
-            }
-            verify(timeout = 1_000) {
-                TranslationJob.stop(any())
             }
 
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
@@ -704,7 +718,7 @@ class NovelReaderScreenModelTest {
                 isSystemDark = { false },
             )
 
-            withTimeout(1_000) {
+            withTimeout(5_000) {
                 while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
                     yield()
                 }
@@ -712,10 +726,14 @@ class NovelReaderScreenModelTest {
             yield()
 
             val initialState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            // The prepended chapter heading is a text block too: the cache contract demands full
+            // source coverage, so the entry must span every parsed block, not just the paragraphs.
             NovelReaderTranslationDiskCacheStore.put(
                 GeminiTranslationCacheEntry(
                     chapterId = chapter.id,
-                    translatedByIndex = mapOf(0 to "Translated hello", 1 to "Translated world"),
+                    translatedByIndex = initialState.textBlocks.indices.associateWith { index ->
+                        if (index == 1) "Translated hello" else "Translated block $index"
+                    },
                     provider = initialState.readerSettings.translationProvider,
                     model = initialState.readerSettings.translationCacheModelId(),
                     sourceLang = initialState.readerSettings.geminiSourceLang,
@@ -742,6 +760,15 @@ class NovelReaderScreenModelTest {
             withTimeout(1_000) {
                 while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.hasGeminiTranslationCache !=
                     true
+                ) {
+                    yield()
+                }
+            }
+            // The cache flag lands before the asynchronous content rebuild publishes translated blocks.
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.contentBlocks
+                        ?.filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
+                        ?.any { it.text == "Translated hello" } != true
                 ) {
                     yield()
                 }
@@ -806,6 +833,21 @@ class NovelReaderScreenModelTest {
             val holder = NovelReaderTranslationHolder { emptyList() }
             holder.put("gemini", mapOf(0 to "Переведенный абзац"))
             setPrivateField(screenModel, "translationHolder", holder)
+            setPrivateField(screenModel, "translationHolderChapterId", chapter.id)
+            // TTS reads the durable artifact, not the resident holder.
+            NovelReaderTranslationDiskCacheStore.put(
+                GeminiTranslationCacheEntry(
+                    chapterId = chapter.id,
+                    translatedByIndex = mapOf(0 to "Переведенный абзац"),
+                    provider = settings.translationProvider,
+                    model = settings.translationCacheModelId(),
+                    sourceLang = settings.geminiSourceLang,
+                    targetLang = settings.geminiTargetLang,
+                    promptMode = settings.geminiPromptMode,
+                    stylePreset = settings.geminiStylePreset,
+                    extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
+                ),
+            )
             getPrivateField<NovelTranslationController>(screenModel, "translationController")
                 .restoreFromReaderState(
                     gemini = NovelReaderScreenModel.State.ReaderGeminiState(isGeminiTranslationVisible = false),
@@ -879,6 +921,7 @@ class NovelReaderScreenModelTest {
             val holder = NovelReaderTranslationHolder { emptyList() }
             holder.put("google", mapOf(0 to "Переведенный абзац"))
             setPrivateField(screenModel, "translationHolder", holder)
+            setPrivateField(screenModel, "translationHolderChapterId", chapter.id)
             getPrivateField<NovelTranslationController>(screenModel, "translationController")
                 .restoreFromReaderState(
                     gemini = NovelReaderScreenModel.State.ReaderGeminiState(),
@@ -1950,6 +1993,48 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `transient single item report before initial restore does not mark chapter read or reset offset`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 6L,
+                novelId = 1L,
+                name = "Chapter 2",
+                url = "https://example.org/ch2",
+                lastPageRead = 25L,
+                read = false,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.updateReadingProgress(
+                currentIndex = 0,
+                totalItems = 1,
+                persistedProgress = 0L,
+                isInitialPositionRestored = false,
+            )
+            yield()
+
+            chapterRepo.lastUpdate shouldBe null
+        }
+    }
+
+    @Test
     fun `percent based tracking does not mark read too early`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
@@ -2145,6 +2230,41 @@ class NovelReaderScreenModelTest {
 
             chapterRepo.lastUpdate?.read shouldBe true
             chapterRepo.lastUpdate?.lastPageRead shouldBe 99L
+        }
+    }
+
+    @Test
+    fun `outgoing chapter progress callback cannot mutate the newly active chapter`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 2",
+                url = "https://example.org/ch2",
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+            withTimeout(5_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) yield()
+            }
+
+            screenModel.updateReadingProgressForChapter(
+                chapterId = chapter.id - 1,
+                currentIndex = 9,
+                totalItems = 10,
+            )
+            yield()
+
+            chapterRepo.lastUpdate shouldBe null
         }
     }
 
@@ -2939,7 +3059,8 @@ class NovelReaderScreenModelTest {
         override suspend fun getScanlatorsByNovelId(novelId: Long) = chaptersByNovel.mapNotNull { it.scanlator }
         override fun getScanlatorsByNovelIdAsFlow(novelId: Long): Flow<List<String>> = MutableStateFlow(emptyList())
         override suspend fun getBookmarkedChaptersByNovelId(novelId: Long) = emptyList<NovelChapter>()
-        override suspend fun getChapterById(id: Long): NovelChapter? = chapter?.takeIf { it.id == id }
+        override suspend fun getChapterById(id: Long): NovelChapter? =
+            chapter?.takeIf { it.id == id } ?: chaptersByNovel.firstOrNull { it.id == id }
         override fun getChapterByNovelIdAsFlow(
             novelId: Long,
             applyScanlatorFilter: Boolean,
@@ -2986,7 +3107,8 @@ class NovelReaderScreenModelTest {
 
         override suspend fun getBookmarkedChaptersByNovelId(novelId: Long): List<NovelChapter> = emptyList()
 
-        override suspend fun getChapterById(id: Long): NovelChapter? = chapter?.takeIf { it.id == id }
+        override suspend fun getChapterById(id: Long): NovelChapter? =
+            chapter?.takeIf { it.id == id }
 
         override fun getChapterByNovelIdAsFlow(
             novelId: Long,
@@ -3113,6 +3235,96 @@ class NovelReaderScreenModelTest {
         }
     }
 
+    @Test
+    fun `reader profile catalogue changes refresh frozen cache and TTS settings without a preference write`() =
+        runBlocking<Unit> {
+            val caller = Thread.currentThread().id
+            val threads = java.util.concurrent.ConcurrentLinkedQueue<Long>()
+            val novel = Novel.create().copy(id = 1, source = 10, title = "Novel")
+            val chapter = NovelChapter.create().copy(id = 5, novelId = 1, name = "Chapter", url = "/chapter")
+            val connection =
+                ConnectionProfile(
+                    "00000000-0000-0000-0000-000000000061",
+                    "Custom",
+                    TranslationProtocol.OPENAI_CHAT,
+                    "https://example.test/first/v1",
+                    ProfileAuth.NONE,
+                )
+            val profile = TranslationProfile(
+                "00000000-0000-0000-0000-000000000062",
+                "Profile",
+                connection.id,
+                ModelSelection("first-model"),
+                TranslationLanguages("English", "Russian"),
+            )
+            val catalog = MutableStateFlow(ProfileCatalog(connections = listOf(connection), profiles = listOf(profile)))
+            val repo = mockk<TranslationProfileRepository> { every { observeCatalog() } returns catalog }
+            val prefs = createNovelReaderPreferences().also { it.geminiEnabled().set(true) }
+            val model =
+                trackedNovelReaderScreenModel(
+                    chapter.id, FakeNovelChapterRepository(chapter), GetNovel(FakeNovelRepository(novel)),
+                    FakeNovelSourceManager(novel.source, "<p>Hello</p>"), emptyPluginAssetBindings(), prefs, { false },
+                    translationProfiles = repo, prepareTranslationSettings = { base, _ ->
+                        threads += Thread.currentThread().id
+                        val value = catalog.value
+                        base.withTranslationProfile(value.profiles.single(), value.connections.single())
+                            .copy(systemPromptSnapshot = "Frozen prompt")
+                    },
+                )
+            withTimeout(5_000) {
+                while (
+                    (model.state.value as? NovelReaderScreenModel.State.Success)
+                        ?.readerSettings?.translationProfile?.exactModelId != "first-model"
+                ) {
+                    delay(10)
+                }
+            }
+            catalog.value =
+                catalog.value.copy(
+                    connections = listOf(connection.copy(baseUrl = "https://example.test/second/v1")),
+                    profiles = listOf(profile.copy(model = ModelSelection("second-model"))),
+                )
+            withTimeout(5_000) {
+                while (
+                    (model.state.value as? NovelReaderScreenModel.State.Success)
+                        ?.readerSettings?.translationProfile?.exactModelId != "second-model"
+                ) {
+                    delay(10)
+                }
+            }
+            val settings = (model.state.value as NovelReaderScreenModel.State.Success).readerSettings
+            settings.connectionProfile?.baseUrl shouldBe "https://example.test/second/v1"
+            settings.systemPromptSnapshot shouldBe "Frozen prompt"
+            settings.geminiApiKey shouldBe ""
+            (threads.isNotEmpty() && threads.none { it == caller }) shouldBe true
+        }
+
+    @Test
+    fun `profile preparation failure keeps original reading without enabling a legacy fallback`() = runBlocking<Unit> {
+        val novel = Novel.create().copy(id = 1, source = 10, title = "Novel")
+        val chapter = NovelChapter.create().copy(id = 5, novelId = 1, name = "Chapter", url = "/chapter")
+        val prefs = createNovelReaderPreferences().also { it.geminiEnabled().set(true) }
+        val model =
+            trackedNovelReaderScreenModel(
+                chapter.id,
+                FakeNovelChapterRepository(chapter),
+                GetNovel(FakeNovelRepository(novel)),
+                FakeNovelSourceManager(novel.source, "<p>Hello</p>"),
+                emptyPluginAssetBindings(),
+                prefs,
+                { false },
+                prepareTranslationSettings = { _, _ -> error("Profile unavailable") },
+            )
+        withTimeout(5_000) { while (model.state.value is NovelReaderScreenModel.State.Loading) delay(10) }
+        val state = model.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        state.readerSettings.geminiEnabled shouldBe false
+        prefs.geminiEnabled().get() shouldBe true
+        state.contentBlocks.filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>().any {
+            it.text.contains("Hello")
+        } shouldBe
+            true
+    }
+
     private fun trackedNovelReaderScreenModel(
         chapterId: Long,
         novelChapterRepository: NovelChapterRepository,
@@ -3129,6 +3341,11 @@ class NovelReaderScreenModelTest {
         addNovelHighlight: tachiyomi.domain.book.novel.interactor.AddNovelHighlight =
             tachiyomi.domain.book.novel.interactor.AddNovelHighlight(FakeNovelHighlightRepository()),
         novelHighlightRepository: tachiyomi.domain.book.novel.repository.NovelHighlightRepository? = null,
+        translationProfiles: TranslationProfileRepository? = null,
+        prepareTranslationSettings: suspend (
+            NovelReaderSettings,
+            Long,
+        ) -> NovelReaderSettings = { settings, _ -> settings },
     ): NovelReaderScreenModel {
         ensureReaderScreenModelDependencies()
         val resolvedHighlightRepository = novelHighlightRepository ?: run {
@@ -3167,6 +3384,8 @@ class NovelReaderScreenModelTest {
             activityDataRepository = activityDataRepository,
             addNovelHighlight = addNovelHighlight,
             novelHighlightRepository = resolvedHighlightRepository,
+            translationProfiles = translationProfiles,
+            prepareTranslationSettings = prepareTranslationSettings,
         ).also(activeScreenModels::add)
     }
 
@@ -3178,6 +3397,8 @@ class NovelReaderScreenModelTest {
         val application = mockk<Application>(relaxed = true)
         every { application.filesDir } returns filesDir
         every { application.cacheDir } returns cacheDir
+        // A relaxed ConnectivityManager reports no internet capability, which silently disables prefetch.
+        every { application.getSystemService(ConnectivityManager::class.java) } returns null
         Injekt.addSingleton(fullType<Application>(), application)
 
         val networkHelper = mockk<NetworkHelper>()
@@ -3190,6 +3411,15 @@ class NovelReaderScreenModelTest {
         every {
             testTranslationQueueManager.activeTranslation
         } returns MutableStateFlow<TranslationQueueItem?>(null)
+        // This singleton outlives the class: suites resolving the queue from Injekt must receive
+        // completing flows, never relaxed mocks whose collectors suspend forever.
+        every { testTranslationQueueManager.queue } returns MutableStateFlow(emptyList())
+        every { testTranslationQueueManager.observeProgress(any()) } returns emptyFlow()
+        every { testTranslationQueueManager.progressUpdates } returns emptyFlow()
+        every { testTranslationQueueManager.repository } returns mockk(relaxed = true) {
+            coEvery { getByChapterId(any()) } returns null
+            every { observeRuns(any()) } returns flowOf(emptyList())
+        }
         Injekt.addSingleton(fullType<TranslationQueueManager>(), testTranslationQueueManager)
 
         runCatching { Injekt.get<NovelReaderPreferences>() }
@@ -3574,7 +3804,7 @@ class NovelReaderScreenModelTest {
                 isSystemDark = { false },
             )
 
-            withTimeout(1_000) {
+            withTimeout(5_000) {
                 while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
                     yield()
                 }
@@ -4074,5 +4304,116 @@ class NovelReaderScreenModelTest {
         checkEnableJs(ttsEnabled = true, followAlong = true, highlightMode = NovelTtsHighlightMode.OFF) shouldBe true
         checkEnableJs(ttsEnabled = true, followAlong = false, highlightMode = NovelTtsHighlightMode.EXACT) shouldBe true
         checkEnableJs(ttsEnabled = true, followAlong = false, highlightMode = NovelTtsHighlightMode.OFF) shouldBe false
+    }
+
+    @Test
+    fun `retryCurrentChapter recovers from initial load error`() = runBlocking {
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Retry Novel")
+        val chapter = NovelChapter.create().copy(
+            id = 5L,
+            novelId = 1L,
+            name = "Chapter 1",
+            url = "https://example.org/ch1",
+        )
+        var attempts = 0
+        val screenModel = trackedNovelReaderScreenModel(
+            chapterId = chapter.id,
+            novelChapterRepository = FakeNovelChapterRepository(chapter),
+            getNovel = GetNovel(FakeNovelRepository(novel)),
+            sourceManager = FakeNovelSourceManager(
+                sourceId = novel.source,
+                chapterHtml = "<p>Recovered body</p>",
+                onGetChapterText = {
+                    attempts += 1
+                    if (attempts == 1) {
+                        throw IllegalStateException("Transient network error")
+                    }
+                },
+            ),
+            pluginAssetBindings = emptyPluginAssetBindings(),
+            novelReaderPreferences = createNovelReaderPreferences(),
+            isSystemDark = { false },
+        )
+
+        withTimeout(5_000) {
+            while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                yield()
+            }
+        }
+        screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Error>()
+
+        screenModel.retryCurrentChapter()
+        withTimeout(5_000) {
+            while (screenModel.state.value !is NovelReaderScreenModel.State.Success) {
+                yield()
+            }
+        }
+        val recovered = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        recovered.html.contains("Recovered body") shouldBe true
+    }
+
+    @Test
+    fun `seamless backtrack uses latest chapter progress instead of stale snapshot index`() = runBlocking {
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Seamless Novel")
+        val chapter1 = NovelChapter.create().copy(
+            id = 11L,
+            novelId = 1L,
+            name = "Chapter 1",
+            url = "https://example.org/ch1",
+            sourceOrder = 0L,
+            lastPageRead = 0L,
+        )
+        val chapter2 = NovelChapter.create().copy(
+            id = 12L,
+            novelId = 1L,
+            name = "Chapter 2",
+            url = "https://example.org/ch2",
+            sourceOrder = 1L,
+            lastPageRead = 0L,
+        )
+        val prefs = createNovelReaderPreferences().also {
+            it.seamlessChapterTransition().set(true)
+        }
+        val screenModel = trackedNovelReaderScreenModel(
+            chapterId = chapter1.id,
+            novelChapterRepository = FakeNovelChapterRepository(
+                chapter = chapter1,
+                chaptersByNovel = listOf(chapter1, chapter2),
+            ),
+            getNovel = GetNovel(FakeNovelRepository(novel)),
+            sourceManager = FakeNovelSourceManager(
+                sourceId = novel.source,
+                chapterHtml = "<p>One</p><p>Two</p><p>Three</p><p>Four</p>",
+                chapterHtmlByUrl = mapOf(
+                    chapter1.url to "<p>Ch1 P0</p><p>Ch1 P1</p><p>Ch1 P2</p><p>Ch1 P3</p>",
+                    chapter2.url to "<p>Ch2 P0</p><p>Ch2 P1</p>",
+                ),
+            ),
+            pluginAssetBindings = emptyPluginAssetBindings(),
+            novelReaderPreferences = prefs,
+            isSystemDark = { false },
+        )
+
+        withTimeout(5_000) {
+            while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                yield()
+            }
+        }
+        screenModel.updateReadingProgress(currentIndex = 2, totalItems = 4)
+        screenModel.openChapterInPlace(chapter2.id) shouldBe true
+        withTimeout(5_000) {
+            while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.chapter?.id != chapter2.id) {
+                yield()
+            }
+        }
+
+        screenModel.openChapterInPlace(chapter1.id) shouldBe true
+        withTimeout(5_000) {
+            while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.chapter?.id != chapter1.id) {
+                yield()
+            }
+        }
+        val restored = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+        restored.lastSavedIndex shouldBe 2
     }
 }

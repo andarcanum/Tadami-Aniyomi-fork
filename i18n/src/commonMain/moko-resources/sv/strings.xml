@@ -792,7 +792,6 @@
     <string name="pref_webtoon_disable_zoom_out">Inaktivera utzoomning</string>
     <string name="action_add_anyway">Lägg till ändå</string>
     <string name="action_replace_repo">Ersätt</string>
-    <string name="pref_display_profile">Anpassad skärmprofil</string>
     <string name="label_upcoming">Kommande</string>
     <string name="upcoming_calendar_prev">Föregående månad</string>
     <string name="upcoming_calendar_next">Nästa månad</string>
@@ -822,7 +821,6 @@
     <string name="pref_security">Säkerhet</string>
     <string name="add_repo_confirmation">Vill du verkligen lägga till förrådet \"%s\"?</string>
     <string name="pref_hardware_bitmap_threshold_summary">Om läsaren laddar en tom bild, minska stegvis tröskelvärdet.\nVal: %s</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Påverkar prestandan. Aktivera endast om minskning av bitmapströskeln inte fixar problem gällande tomma bilder</string>
     <string name="pref_auto_update_manga_on_mark_read">Uppdatera läsförlopp vid markering som läst</string>
     <string name="ext_remove">Ta bort</string>
     <string name="ext_confirm_remove">Ta bort tillägg?</string>

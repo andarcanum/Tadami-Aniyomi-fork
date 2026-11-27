@@ -25,8 +25,8 @@ class GeminiPromptModifiersTest {
             family = NovelTranslationPromptFamily.ENGLISH,
         )
 
-        text shouldContain "Use modern English internet slang and memes where fitting"
-        text shouldContain "Tsukkomi/boke dynamics should feel natural in English"
+        text shouldContain "Use modern internet slang and memes natural to the target language where fitting"
+        text shouldContain "Tsukkomi/boke dynamics should feel natural in the target language"
     }
 
     @Test

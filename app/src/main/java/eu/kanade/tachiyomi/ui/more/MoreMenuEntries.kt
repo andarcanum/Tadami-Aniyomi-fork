@@ -32,6 +32,7 @@ enum class MoreEntryId {
     DEBUG_RESET_HEART,
     DEBUG_RESET_LATTICE,
     DEBUG_FORCE_BREACH,
+    DEBUG_CRYSTAL,
     HELP,
     ;
 
@@ -54,6 +55,7 @@ private val DEBUG_ENTRIES = setOf(
     MoreEntryId.DEBUG_RESET_HEART,
     MoreEntryId.DEBUG_RESET_LATTICE,
     MoreEntryId.DEBUG_FORCE_BREACH,
+    MoreEntryId.DEBUG_CRYSTAL,
 )
 
 /** Entries that can appear on the screen right now; conditional ones follow their runtime flags. */

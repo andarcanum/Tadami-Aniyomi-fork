@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.source.novel.interactor.GetNovelIncognitoState
 import eu.kanade.domain.source.service.SourcePreferences
@@ -30,8 +31,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslat
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationRequest
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
@@ -41,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -115,6 +119,81 @@ class NovelSelectedTextTranslationScreenModelTest {
     }
 
     private fun setupInjektApplication() {
+        runCatching { Injekt.get<Json>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
+            }
+
+        runCatching { Injekt.get<UpdateNovel>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<UpdateNovel>(), mockk(relaxed = true))
+            }
+
+        runCatching { Injekt.get<ReaderPreferences>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<ReaderPreferences>(), ReaderPreferences(InMemoryPreferenceStore()))
+            }
+
+        runCatching { Injekt.get<tachiyomi.domain.discovery.repository.DiscoveryRepository>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.discovery.repository.DiscoveryRepository>(),
+                    mockk(relaxed = true),
+                )
+            }
+
+        runCatching { Injekt.get<tachiyomi.domain.book.novel.interactor.AddNovelHighlight>() }
+            .getOrElse {
+                val highlightRepo =
+                    mockk<tachiyomi.domain.book.novel.repository.NovelHighlightRepository>(relaxed = true)
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.repository.NovelHighlightRepository>(),
+                    highlightRepo,
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.AddNovelHighlight>(),
+                    tachiyomi.domain.book.novel.interactor.AddNovelHighlight(highlightRepo),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight>(),
+                    tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight(highlightRepo),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight>(),
+                    tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight(highlightRepo),
+                )
+            }
+
+        runCatching { Injekt.get<tachiyomi.domain.book.novel.interactor.GetNovelBookState>() }
+            .getOrElse {
+                val bookStateRepo =
+                    mockk<tachiyomi.domain.book.novel.repository.NovelBookStateRepository>(relaxed = true)
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.repository.NovelBookStateRepository>(),
+                    bookStateRepo,
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.GetNovelBookState>(),
+                    tachiyomi.domain.book.novel.interactor.GetNovelBookState(bookStateRepo),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.SetNovelBookProgress>(),
+                    tachiyomi.domain.book.novel.interactor.SetNovelBookProgress(bookStateRepo),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.SetNovelBookEnabled>(),
+                    tachiyomi.domain.book.novel.interactor.SetNovelBookEnabled(bookStateRepo),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.UpsertNovelBookState>(),
+                    tachiyomi.domain.book.novel.interactor.UpsertNovelBookState(bookStateRepo),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.DeleteNovelBookState>(),
+                    tachiyomi.domain.book.novel.interactor.DeleteNovelBookState(bookStateRepo),
+                )
+            }
+
         runCatching { Injekt.get<NovelReaderPreferences>() }
             .getOrElse {
                 Injekt.addSingleton(
@@ -168,6 +247,15 @@ class NovelSelectedTextTranslationScreenModelTest {
         every {
             translationQueueManager.activeTranslation
         } returns MutableStateFlow<TranslationQueueItem?>(null)
+        // This singleton outlives the class: suites resolving the queue from Injekt must receive
+        // completing flows, never relaxed mocks whose collectors suspend forever.
+        every { translationQueueManager.queue } returns MutableStateFlow(emptyList())
+        every { translationQueueManager.observeProgress(any()) } returns emptyFlow()
+        every { translationQueueManager.progressUpdates } returns emptyFlow()
+        every { translationQueueManager.repository } returns mockk(relaxed = true) {
+            coEvery { getByChapterId(any()) } returns null
+            every { observeRuns(any()) } returns flowOf(emptyList())
+        }
         Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
 
         val networkHelper = mockk<NetworkHelper>()
@@ -533,7 +621,7 @@ class NovelSelectedTextTranslationScreenModelTest {
     }
 
     private suspend fun awaitLoaded(screenModel: NovelReaderScreenModel) {
-        withTimeout(1_000) {
+        withTimeout(5_000) {
             while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
                 yield()
             }

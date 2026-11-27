@@ -797,7 +797,6 @@
     <string name="action_replace_repo_title">A impressão digital da chave de assinatura já existe</string>
     <string name="action_replace_repo_message">O repositório %1$s tem a mesma impressão digital da chave de assinatura que %2$s.
 \nSe isso for esperado, %2$s será substituído, caso contrário, entre em contato com o mantenedor do repositório.</string>
-    <string name="pref_display_profile">Perfil de exibição personalizado</string>
     <string name="action_view_upcoming">Exibir as próximas atualizações</string>
     <string name="upcoming_guide">Guia de próximos lançamentos</string>
     <string name="upcoming_calendar_next">Próximo mês</string>

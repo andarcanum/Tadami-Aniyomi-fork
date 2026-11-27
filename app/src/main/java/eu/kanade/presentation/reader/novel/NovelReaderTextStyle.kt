@@ -193,15 +193,10 @@ internal fun isNativeChapterTitleText(
     blockText: String,
     chapterName: String,
 ): Boolean {
-    val normalizedBlock = blockText
-        .replace('\u00A0', ' ')
-        .replace(Regex("\\s+"), " ")
-        .trim()
-    val normalizedChapter = chapterName
-        .replace('\u00A0', ' ')
-        .replace(Regex("\\s+"), " ")
-        .trim()
-    return normalizedBlock.isNotBlank() && normalizedBlock == normalizedChapter
+    return eu.kanade.tachiyomi.ui.reader.novel.isChapterTitleMatch(
+        candidateText = blockText,
+        referenceTitle = chapterName,
+    )
 }
 
 internal fun resolveNativeReaderTextAlign(

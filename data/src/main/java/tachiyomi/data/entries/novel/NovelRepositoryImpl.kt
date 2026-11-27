@@ -7,6 +7,8 @@ import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementEvent
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.service.DiscoveryMutationFence
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.entries.novel.repository.NovelRepository
@@ -75,7 +77,9 @@ class NovelRepositoryImpl(
         }
     }
 
-    override suspend fun insertNovel(novel: Novel): Long? {
+    override suspend fun insertNovel(novel: Novel): Long? = fenced { insertNovelDirect(novel) }
+
+    private suspend fun insertNovelDirect(novel: Novel): Long? {
         return handler.await(inTransaction = true) { db ->
             val existing = db.novelsQueries
                 .getNovelByUrlAndSource(novel.url, novel.source, NovelMapper::mapNovel)
@@ -111,7 +115,11 @@ class NovelRepositoryImpl(
         }
     }
 
-    override suspend fun insertNetworkNovels(novels: List<Novel>, autoFavorite: Boolean): List<Novel> {
+    override suspend fun insertNetworkNovels(novels: List<Novel>, autoFavorite: Boolean): List<Novel> = fenced {
+        insertNetworkNovelsDirect(novels, autoFavorite)
+    }
+
+    private suspend fun insertNetworkNovelsDirect(novels: List<Novel>, autoFavorite: Boolean): List<Novel> {
         if (novels.isEmpty()) return emptyList()
         return handler.await(inTransaction = true) { db ->
             novels.map { novel ->
@@ -156,37 +164,41 @@ class NovelRepositoryImpl(
                     } else {
                         local.thumbnailUrl
                     }
-                    val updated = local.copy(
-                        title = novel.title,
-                        thumbnailUrl = thumbnailUrl,
-                    )
-                    db.novelsQueries.update(
-                        source = updated.source,
-                        url = updated.url,
-                        author = updated.author,
-                        description = updated.description,
-                        notes = updated.notes,
-                        genre = updated.genre,
-                        title = updated.title,
-                        status = updated.status,
-                        thumbnailUrl = updated.thumbnailUrl,
-                        favorite = updated.favorite,
-                        pinned = updated.pinned,
-                        lastUpdate = updated.lastUpdate,
-                        nextUpdate = updated.nextUpdate,
-                        calculateInterval = updated.fetchInterval.toLong(),
-                        initialized = updated.initialized,
-                        viewer = updated.viewerFlags,
-                        chapterFlags = updated.chapterFlags,
-                        coverLastModified = updated.coverLastModified,
-                        dateAdded = updated.dateAdded,
-                        novelId = updated.id,
-                        updateStrategy = updated.updateStrategy,
-                        version = updated.version,
-                        isSyncing = 0,
-                        completedAt = updated.completedAt,
-                    )
-                    updated
+                    if (local.title == novel.title && local.thumbnailUrl == thumbnailUrl) {
+                        local
+                    } else {
+                        val updated = local.copy(
+                            title = novel.title,
+                            thumbnailUrl = thumbnailUrl,
+                        )
+                        db.novelsQueries.update(
+                            source = updated.source,
+                            url = updated.url,
+                            author = updated.author,
+                            description = updated.description,
+                            notes = updated.notes,
+                            genre = updated.genre,
+                            title = updated.title,
+                            status = updated.status,
+                            thumbnailUrl = updated.thumbnailUrl,
+                            favorite = updated.favorite,
+                            pinned = updated.pinned,
+                            lastUpdate = updated.lastUpdate,
+                            nextUpdate = updated.nextUpdate,
+                            calculateInterval = updated.fetchInterval.toLong(),
+                            initialized = updated.initialized,
+                            viewer = updated.viewerFlags,
+                            chapterFlags = updated.chapterFlags,
+                            coverLastModified = updated.coverLastModified,
+                            dateAdded = updated.dateAdded,
+                            novelId = updated.id,
+                            updateStrategy = updated.updateStrategy,
+                            version = updated.version,
+                            isSyncing = 0,
+                            completedAt = updated.completedAt,
+                        )
+                        updated
+                    }
                 } else if (autoFavorite && !local.favorite) {
                     val updated = local.copy(favorite = true, dateAdded = System.currentTimeMillis())
                     db.novelsQueries.update(
@@ -303,6 +315,17 @@ class NovelRepositoryImpl(
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+    ): Boolean = fenced {
+        updateNovelMetadataDirect(novelId, customTitle, customAuthor, customDescription, customGenre, customStatus)
+    }
+
+    private suspend fun updateNovelMetadataDirect(
+        novelId: Long,
+        customTitle: String?,
+        customAuthor: String?,
+        customDescription: String?,
+        customGenre: List<String>?,
+        customStatus: Long?,
     ): Boolean {
         return try {
             handler.await { db ->
@@ -322,7 +345,11 @@ class NovelRepositoryImpl(
         }
     }
 
-    private suspend fun partialUpdateNovel(vararg novelUpdates: NovelUpdate) {
+    private suspend fun partialUpdateNovel(vararg novelUpdates: NovelUpdate) = fenced {
+        partialUpdateNovelDirect(*novelUpdates)
+    }
+
+    private suspend fun partialUpdateNovelDirect(vararg novelUpdates: NovelUpdate) {
         // E-M6 (novel mirror): emit only REAL favorite flips, after the transaction commits.
         val pendingEvents = mutableListOf<AchievementEvent>()
         handler.await(inTransaction = true) { db ->
@@ -372,4 +399,6 @@ class NovelRepositoryImpl(
         }
         pendingEvents.forEach { eventBus.tryEmit(it) }
     }
+    private suspend fun <T> fenced(block: suspend () -> T): T =
+        DiscoveryMutationFence.withMutation(DiscoveryMediaType.NOVEL, block)
 }

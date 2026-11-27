@@ -1,15 +1,24 @@
 package eu.kanade.tachiyomi.data.backup.restore.restorers
 
 import eu.kanade.tachiyomi.data.backup.models.BackupAchievement
+import eu.kanade.tachiyomi.data.backup.models.BackupCrystalMemorial
 import eu.kanade.tachiyomi.data.backup.models.BackupDayActivity
 import eu.kanade.tachiyomi.data.backup.models.BackupStats
 import eu.kanade.tachiyomi.data.backup.models.BackupUserProfile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.firstOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.data.achievement.UserProfileManager
+import tachiyomi.domain.achievement.model.AchievementCategory
+import tachiyomi.domain.achievement.model.AchievementType
+import tachiyomi.domain.achievement.model.RewardType
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialIds
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialRepository
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialRestoreException
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialSnapshot
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -19,6 +28,7 @@ class AchievementRestorer(
     private val userProfileRepository: tachiyomi.domain.achievement.repository.UserProfileRepository = Injekt.get(),
     private val userProfileManager: UserProfileManager = Injekt.get(),
     private val unlockableManager: UnlockableManager = Injekt.get(),
+    private val memorialRepository: CrystalMemorialRepository = Injekt.get(),
 ) {
 
     /**
@@ -30,26 +40,43 @@ class AchievementRestorer(
         backupUserProfile: BackupUserProfile?,
         backupActivityLog: List<BackupDayActivity>,
         backupStats: BackupStats? = null,
+        backupCrystalMemorial: BackupCrystalMemorial? = null,
     ) {
         if (backupAchievements.isEmpty() &&
             backupUserProfile == null &&
             backupActivityLog.isEmpty() &&
-            backupStats == null
+            backupStats == null && backupCrystalMemorial == null
         ) {
             logcat { "[BACKUP] No achievement data to restore; rehydrating derived unlockable state" }
             rehydrateUnlockables()
+            memorialRepository.repairProjections()
             return
         }
 
         try {
-            restoreAchievementsList(backupAchievements)
-            restoreUserProfile(backupUserProfile)
+            val crystalEntry = backupAchievements.firstOrNull { it.id == CrystalMemorialIds.GRANT_KEY }
+            val state = backupCrystalMemorial?.toState()
+            ensureMemorialDefinition(crystalEntry)
+            restoreAchievementsList(backupAchievements.filterNot { it.id == CrystalMemorialIds.GRANT_KEY })
+            if (backupUserProfile != null || state != null || crystalEntry?.isUnlocked == true) {
+                memorialRepository.restoreSnapshot(
+                    CrystalMemorialSnapshot(
+                        state,
+                        backupUserProfile?.toUserProfile(),
+                        crystalEntry?.toAchievementProgress(),
+                    ),
+                )
+            }
             restoreActivityLog(backupActivityLog)
             restoreStats(backupStats)
             rehydrateUnlockables()
+            memorialRepository.repairProjections()
             logcat { "[BACKUP] Achievement data restored successfully" }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat(throwable = e) { "[BACKUP] Error restoring achievement data" }
+            if (e is CrystalMemorialRestoreException) throw e
         }
     }
 
@@ -102,58 +129,31 @@ class AchievementRestorer(
         }
     }
 
-    /**
-     * Restore user profile
-     * Strategy: Merge - take max values for XP and unlocked items
-     */
-    private suspend fun restoreUserProfile(backupUserProfile: BackupUserProfile?) {
-        if (backupUserProfile == null) return
-
-        try {
-            val currentProfile = userProfileRepository.getProfileSync("default")
-            val backupProfile = backupUserProfile.toUserProfile()
-
-            if (currentProfile == null) {
-                // No existing profile - restore backup as-is
-                userProfileRepository.saveProfile(backupProfile)
-                logcat {
-                    "[BACKUP] User profile restored (new): level ${backupProfile.level}, XP ${backupProfile.totalXP}"
-                }
-                return
-            }
-
-            // Merge strategy: take max values
-            val mergedProfile = currentProfile.copy(
-                username = backupProfile.username ?: currentProfile.username,
-                level = maxOf(currentProfile.level, backupProfile.level),
-                totalXP = maxOf(currentProfile.totalXP, backupProfile.totalXP),
-                currentXP = if (backupProfile.level > currentProfile.level) {
-                    backupProfile.currentXP
-                } else {
-                    maxOf(currentProfile.currentXP, backupProfile.currentXP)
-                },
-                xpToNextLevel = if (backupProfile.level > currentProfile.level) {
-                    backupProfile.xpToNextLevel
-                } else {
-                    currentProfile.xpToNextLevel
-                },
-                // Merge lists - combine and deduplicate
-                titles = (currentProfile.titles + backupProfile.titles).distinct(),
-                badges = (currentProfile.badges + backupProfile.badges).distinct(),
-                unlockedThemes = (currentProfile.unlockedThemes + backupProfile.unlockedThemes).distinct(),
-                achievementsUnlocked = maxOf(currentProfile.achievementsUnlocked, backupProfile.achievementsUnlocked),
-                totalAchievements = maxOf(currentProfile.totalAchievements, backupProfile.totalAchievements),
-                // Keep earliest join date
-                joinDate = minOf(currentProfile.joinDate, backupProfile.joinDate),
+    /** Restore only the canonical immutable gift definition; the receipt owns its progress and XP. */
+    private suspend fun ensureMemorialDefinition(entry: BackupAchievement?) {
+        if (entry == null) return
+        if (entry.type != AchievementType.EVENT.ordinal || entry.points != CrystalMemorialIds.XP ||
+            entry.rewards.map { it.id }.toSet() != CrystalMemorialIds.REWARDS ||
+            entry.rewards.any { it.type == RewardType.EXPERIENCE.ordinal }
+        ) {
+            throw CrystalMemorialRestoreException("Invalid memorial catalog definition in backup")
+        }
+        val existing = achievementRepository.getAll().firstOrNull().orEmpty().any {
+            it.id ==
+                CrystalMemorialIds.GRANT_KEY
+        }
+        if (!existing) {
+            achievementRepository.insertAchievement(
+                entry.toAchievement().copy(
+                    id = CrystalMemorialIds.GRANT_KEY,
+                    type = AchievementType.EVENT,
+                    category = AchievementCategory.SECRET,
+                    threshold = 1,
+                    points = CrystalMemorialIds.XP,
+                    isHidden = true,
+                    isSecret = true,
+                ),
             )
-
-            // Save merged profile directly to database
-            userProfileRepository.saveProfile(mergedProfile)
-            logcat {
-                "[BACKUP] User profile restored (merged): level ${mergedProfile.level}, XP ${mergedProfile.totalXP}"
-            }
-        } catch (e: Exception) {
-            logcat(throwable = e) { "[BACKUP] Error restoring user profile" }
         }
     }
 

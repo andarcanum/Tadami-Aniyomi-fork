@@ -56,13 +56,12 @@ internal object AnimeExtensionLoader {
     /**
      * Highest `tachiyomix.extensionLib` the host accepts.
      *
-     * Raised to 27.0 by the reels feed-contract v27 capability
-     * (`AnimeFeedReplaySource`): a plugin that *implements* a new interface links
-     * against it, so an older host must refuse that plugin instead of failing to load its
-     * class. Raising the ceiling is non-breaking for every already-published plugin — their
-     * declared lib versions stay inside `12.0..27.0`.
+     * Raised to 31.0 by the reels feed-contract v31 capability (`AnimeFeedLifecycleSource`):
+     * a plugin implementing the new interface links against it, so an older host must refuse it
+     * instead of failing to load its class. Raising the ceiling is non-breaking for every
+     * already-published plugin — their declared lib versions stay inside `12.0..30.0`.
      */
-    const val LIB_VERSION_MAX = 27.0
+    const val LIB_VERSION_MAX = 31.0
 
     val SUPPORTED_LIB_VERSIONS: ClosedFloatingPointRange<Double> = LIB_VERSION_MIN..LIB_VERSION_MAX
 
@@ -372,10 +371,15 @@ internal object AnimeExtensionLoader {
             return AnimeLoadResult.Error
         }
 
-        // Validate lib version
-        val rawLibVersion = appInfo.metaData?.getDouble(METADATA_EXTENSION_LIB)?.takeUnless { it == 0.0 }
-            ?: appInfo.metaData?.getFloat(METADATA_EXTENSION_LIB)?.toDouble()?.takeUnless { it == 0.0 }
-            ?: versionName.substringBeforeLast('.').toDoubleOrNull()
+        // Validate lib version. MetaData values can be stored as Float, Double or String
+        // depending on how the extension manifest declares them; typed Bundle getters throw
+        // (and log a warning) on a mismatch, so read the raw value and convert explicitly.
+        @Suppress("DEPRECATION") // Bundle.get(String) is deprecated in API 33; no raw-value replacement exists
+        val rawLibVersion = when (val value = appInfo.metaData?.get(METADATA_EXTENSION_LIB)) {
+            is Number -> value.toDouble().takeUnless { it == 0.0 }
+            is String -> value.toDoubleOrNull()?.takeUnless { it == 0.0 }
+            else -> null
+        } ?: versionName.substringBeforeLast('.').toDoubleOrNull()
         val libVersion = if (rawLibVersion != null) kotlin.math.round(rawLibVersion * 100.0) / 100.0 else null
         if (libVersion == null || libVersion !in SUPPORTED_LIB_VERSIONS) {
             logcat(LogPriority.WARN) {

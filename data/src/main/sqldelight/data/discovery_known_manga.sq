@@ -1,0 +1,12 @@
+-- Known titles for the manga recommendation projection: favorites plus real reading history.
+selectKnownTitles:
+SELECT M.source AS source_id, M.url AS source_url,
+       COALESCE(M.custom_title, M.title) AS title,
+       M.author AS author, M.artist AS artist
+FROM mangas M
+WHERE M.favorite = 1
+UNION
+SELECT M.source, M.url, COALESCE(M.custom_title, M.title), M.author, M.artist
+FROM history H
+JOIN chapters C ON H.chapter_id = C._id
+JOIN mangas M ON C.manga_id = M._id;

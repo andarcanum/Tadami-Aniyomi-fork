@@ -94,11 +94,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
-import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.HazeColorEffect
-import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
@@ -108,7 +104,7 @@ import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
 import eu.kanade.presentation.components.auroraCelestialBar
 import eu.kanade.presentation.components.auroraCelestialHalo
 import eu.kanade.presentation.components.auroraCelestialRail
-import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.auroraGlassBar
 import eu.kanade.presentation.components.latticeCircuitBar
 import eu.kanade.presentation.components.latticeCircuitRail
 import eu.kanade.presentation.components.rememberAuroraCelestialNavbarUnlocked
@@ -116,6 +112,8 @@ import eu.kanade.presentation.components.rememberLatticeCircuitNavbarUnlocked
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
+import eu.kanade.presentation.theme.LocalLiveBackdropBlurEnabled
+import eu.kanade.presentation.theme.shouldUseLiveBackdropBlur
 import eu.kanade.presentation.tutorial.coachAnchorForTab
 import eu.kanade.presentation.util.BottomNavVisibilityController
 import eu.kanade.presentation.util.LocalBottomNavVisibilityController
@@ -132,6 +130,7 @@ import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryTab
 import eu.kanade.tachiyomi.ui.more.MoreTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesTab
+import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.powerManager
 import kotlinx.coroutines.channels.BufferOverflow
@@ -224,6 +223,13 @@ object HomeScreen : Screen() {
 
         val navigator = LocalNavigator.currentOrThrow
         val bottomNavVisibilityController = remember { BottomNavVisibilityController() }
+        val isLowRamDevice = remember(context) { DeviceUtil.isLowRamDevice(context.applicationContext ?: context) }
+        val liveBlurEnabled = shouldUseLiveBackdropBlur(
+            sdkInt = android.os.Build.VERSION.SDK_INT,
+            isEInkMode = isEInkMode,
+            isLowRamDevice = isLowRamDevice,
+            isPowerSaveMode = context.powerManager.isPowerSaveMode,
+        )
         val hazeState = remember { HazeState() }
         val homeOverlayContent = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
         eu.kanade.presentation.tutorial.TutorialHost {
@@ -272,7 +278,8 @@ object HomeScreen : Screen() {
                 CompositionLocalProvider(
                     LocalNavigator provides navigator,
                     LocalBottomNavVisibilityController provides bottomNavVisibilityController,
-                    LocalHomeHazeState provides hazeState,
+                    LocalLiveBackdropBlurEnabled provides liveBlurEnabled,
+                    LocalHomeHazeState provides hazeState.takeIf { liveBlurEnabled },
                     LocalHomeOverlayHost provides homeOverlayContent,
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -283,7 +290,7 @@ object HomeScreen : Screen() {
                                     if (isAuroraTheme && useAuroraBottomNav && !isEInkMode) {
                                         AuroraNavigationRail(
                                             tabs = navStyle.tabs,
-                                            hazeState = hazeState,
+                                            hazeState = hazeState.takeIf { liveBlurEnabled },
                                             circuitDecoration = circuitRail,
                                         )
                                     } else {
@@ -335,7 +342,11 @@ object HomeScreen : Screen() {
                                         Modifier
                                             .windowInsetsPadding(NavigationBarDefaults.windowInsets)
                                             .padding(horizontal = 12.dp, vertical = 6.dp)
-                                            .auroraGlassNav(auroraColors!!, navBarShape, hazeState)
+                                            .auroraGlassNav(
+                                                colors = auroraColors!!,
+                                                shape = navBarShape,
+                                                hazeState = hazeState.takeIf { liveBlurEnabled },
+                                            )
                                     } else {
                                         Modifier
                                     }
@@ -473,7 +484,7 @@ object HomeScreen : Screen() {
                                         end = contentPadding.calculateEndPadding(layoutDirection),
                                     )
                                     .consumeWindowInsets(contentPadding)
-                                    .hazeSource(hazeState),
+                                    .then(if (liveBlurEnabled) Modifier.hazeSource(hazeState) else Modifier),
                             ) {
                                 CompositionLocalProvider(
                                     LocalHostScaffoldContentPadding provides PaddingValues(
@@ -875,64 +886,17 @@ object HomeScreen : Screen() {
     private fun Modifier.auroraGlassNav(
         colors: AuroraColors,
         shape: Shape,
-        hazeState: HazeState,
-    ): Modifier {
-        val hazeStyle = HazeBlurStyle {
-            backgroundColor(colors.background)
-            colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.65f))))
-            blurRadius(24.dp)
-            noiseFactor(0.12f)
-        }
-        return if (colors.isDark) {
-            this
-                .shadow(
-                    elevation = 10.dp,
-                    shape = shape,
-                    ambientColor = Color.White.copy(alpha = 0.12f),
-                    spotColor = Color.White.copy(alpha = 0.08f),
-                )
-                .shadow(
-                    elevation = 3.dp,
-                    shape = shape,
-                    ambientColor = Color.White.copy(alpha = 0.18f),
-                    spotColor = Color.White.copy(alpha = 0.12f),
-                )
-                .clip(shape)
-                // Opaque base under the frost: on first frames after navigation
-                // (e.g. popping back to home) the haze layer has not captured
-                // content yet, so without this the bar flashes transparent.
-                .background(colors.background, shape)
-                .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
-                .border(
-                    BorderStroke(width = 1.dp, brush = auroraMenuRimLightBrush(colors)),
-                    shape = shape,
-                )
-        } else {
-            this
-                .shadow(elevation = 8.dp, shape = shape)
-                .clip(shape)
-                // Opaque base under the frost (see dark branch comment).
-                .background(colors.background, shape)
-                .hazeBlur(input = HazeInput.Sources(hazeState), style = hazeStyle)
-                .border(
-                    BorderStroke(
-                        width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.80f),
-                                Color.White.copy(alpha = 0.20f),
-                            ),
-                        ),
-                    ),
-                    shape = shape,
-                )
-        }
-    }
+        hazeState: HazeState?,
+    ): Modifier = auroraGlassBar(
+        colors = colors,
+        shape = shape,
+        hazeState = hazeState,
+    )
 
     @Composable
     private fun AuroraNavigationRail(
         tabs: List<eu.kanade.presentation.util.Tab>,
-        hazeState: HazeState,
+        hazeState: HazeState?,
         circuitDecoration: Boolean,
     ) {
         val auroraColors = AuroraTheme.colorsForCurrentTheme()

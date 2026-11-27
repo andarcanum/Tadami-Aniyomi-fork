@@ -7,7 +7,11 @@ import tachiyomi.domain.discovery.model.DiscoveryRowType
 
 class HomeHubStageHeroOrderTest {
 
-    private fun item(title: String, shownAt: Long? = null) = HomeHubDiscoveryItem(
+    private fun item(
+        title: String,
+        shownAt: Long? = null,
+        hasPriorityBoost: Boolean = false,
+    ) = HomeHubDiscoveryItem(
         title = title,
         cleanTitle = title.lowercase(),
         coverUrl = null,
@@ -17,6 +21,7 @@ class HomeHubStageHeroOrderTest {
         rowType = DiscoveryRowType.TREND,
         mediaType = DiscoveryMediaType.NOVEL,
         shownAt = shownAt,
+        hasPriorityBoost = hasPriorityBoost,
     )
 
     @Test
@@ -116,5 +121,18 @@ class HomeHubStageHeroOrderTest {
         patched[2].cleanTitle shouldBe "x" // replaced in slot 2 where "c" was
         patched[3].cleanTitle shouldBe "d"
         patched[4].cleanTitle shouldBe "e"
+    }
+
+    @Test
+    fun `priority boosted fresh items appear before non-boosted fresh items`() {
+        val items = listOf(
+            item("normal 1", hasPriorityBoost = false),
+            item("boosted 1", hasPriorityBoost = true),
+            item("normal 2", hasPriorityBoost = false),
+            item("boosted 2", hasPriorityBoost = true),
+        )
+        val ordered = stageHeroOrder(items, seed = 7)
+        ordered.take(2).all { it.hasPriorityBoost } shouldBe true
+        ordered.drop(2).none { it.hasPriorityBoost } shouldBe true
     }
 }

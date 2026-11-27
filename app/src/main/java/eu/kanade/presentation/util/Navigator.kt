@@ -6,6 +6,7 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,6 +32,11 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.ScreenTransitionContent
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
+import eu.kanade.presentation.easteregg.crystal.CrystalCollectionScreen
+import eu.kanade.presentation.easteregg.crystal.CrystalLunarIris
+import eu.kanade.presentation.easteregg.crystal.CrystalLunarVeil
+import eu.kanade.presentation.easteregg.crystal.CrystalMemorialScreen
+import eu.kanade.presentation.easteregg.crystal.CrystalPortalTransition
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
@@ -126,8 +132,19 @@ fun DefaultNavigatorScreenTransition(
             } else {
                 when {
                     // System (or user) has disabled animations altogether.
-                    resolvedMode == ResolvedNavigationTransitionMode.NONE ->
+                    resolvedMode == ResolvedNavigationTransitionMode.NONE -> {
+                        CrystalPortalTransition.clear()
                         EnterTransition.None togetherWith ExitTransition.None
+                    }
+                    // Cat-face Lunar Iris diaphragm portal from 1D Ceremony -> Crystal's Living Corner.
+                    initialState is CrystalMemorialScreen &&
+                        targetState is CrystalCollectionScreen &&
+                        CrystalPortalTransition.consumeNavigatorPortal() -> crystalIrisPortalTransition()
+                    // Slow cinematic twilight entrance into Crystal Memorial.
+                    isForward && targetState is CrystalMemorialScreen -> crystalMemorialEnter()
+                    // Velvety entrance into Crystal's Living Corner from Treasury.
+                    isForward && targetState.isCrystalScreen() -> crystalScreenEnter()
+                    !isForward && initialState.isCrystalScreen() -> crystalScreenExit()
                     // Dedicated title-screen entrance: Deep Zoom (scale + fade),
                     // only when pushing an entry screen forward and the option
                     // is enabled. Everything else keeps the configured mode.
@@ -160,6 +177,108 @@ fun DefaultNavigatorScreenTransition(
 
 private fun Screen.isTitleScreen(): Boolean =
     this is MangaScreen || this is AnimeScreen || this is NovelScreen
+
+private fun Screen.isCrystalScreen(): Boolean =
+    this is CrystalCollectionScreen || this is CrystalMemorialScreen
+
+private fun AnimatedContentTransitionScope<Screen>.crystalMemorialEnter(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = CrystalLunarVeil.NAV_ENTER_MS,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = CrystalLunarVeil.NAV_EXIT_MS,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    ) + scaleOut(
+        targetScale = CrystalLunarVeil.NAV_EXIT_SCALE,
+        animationSpec = tween(
+            durationMillis = CrystalLunarVeil.NAV_ENTER_MS,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
+
+private fun AnimatedContentTransitionScope<Screen>.crystalIrisPortalTransition(): ContentTransform {
+    // CrystalCollectionScreen draws its own circular iris clip mask starting at radius 0px;
+    // keep the container opaque immediately while the live constellation stays visible underneath.
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = 1,
+            easing = LinearEasing,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = CrystalLunarIris.EXIT_FADE_MS,
+            delayMillis = CrystalLunarIris.EXIT_DELAY_MS,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    ) + scaleOut(
+        targetScale = CrystalLunarIris.EXIT_SCALE,
+        animationSpec = tween(
+            durationMillis = CrystalLunarIris.DURATION_MS,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
+
+private fun AnimatedContentTransitionScope<Screen>.crystalScreenEnter(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = 480,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    ) + scaleIn(
+        initialScale = 0.96f,
+        animationSpec = tween(
+            durationMillis = 480,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = 360,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
+
+private fun AnimatedContentTransitionScope<Screen>.crystalScreenExit(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = 380,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = 420,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    ) + scaleOut(
+        targetScale = 0.975f,
+        animationSpec = tween(
+            durationMillis = 420,
+            easing = CrystalLunarVeil.CINEMATIC_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
 
 private fun AnimatedContentTransitionScope<Screen>.titleScreenDeepZoom(): ContentTransform {
     val enter = fadeIn(

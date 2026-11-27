@@ -52,6 +52,10 @@ class DiscoveryUnboundBindingQueryTest {
             source_id = sourceId,
             source_url = if (sourceId != null) "/u" else null,
             genres = null,
+            identity_key = null,
+            trusted_aliases = null,
+            release_status = null,
+            metadata_verified_at = null,
         )
     }
 

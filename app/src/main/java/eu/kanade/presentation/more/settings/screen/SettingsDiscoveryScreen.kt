@@ -66,12 +66,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.presentation.components.AuroraFrostCancel
 import eu.kanade.presentation.components.AuroraFrostConfirm
 import eu.kanade.presentation.components.AuroraFrostDialog
+import eu.kanade.presentation.components.AuroraTabRow
+import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.discovery.DiscoverySourcesScreen
@@ -84,6 +88,13 @@ import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -98,14 +109,46 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
+private fun countGenreCsvEntries(csv: String): Int {
+    val (canonical, raw) = parseGenreFilterCsv(csv)
+    return canonical.size + raw.mapNotNullTo(HashSet()) { it.trim().takeIf(String::isNotEmpty) }.size
+}
+
+@Composable
+private fun rememberActiveGenreFilterCounts(
+    discoveryPreferences: DiscoveryPreferences,
+): Map<DiscoveryMediaType, Int> {
+    val flow = remember(discoveryPreferences) {
+        val perMediaFlows = DiscoveryMediaType.entries.map { media ->
+            combine(
+                discoveryPreferences.priorityGenres(media).changes(),
+                discoveryPreferences.requiredGenres(media).changes(),
+                discoveryPreferences.ignoredGenres(media).changes(),
+            ) { priority, required, ignored ->
+                media to (
+                    countGenreCsvEntries(priority) +
+                        countGenreCsvEntries(required) +
+                        countGenreCsvEntries(ignored)
+                    )
+            }
+        }
+        combine(perMediaFlows) { pairs -> pairs.toMap() }
+            .flowOn(Dispatchers.Default)
+    }
+    return flow.collectAsStateWithLifecycle(initialValue = emptyMap()).value
+}
+
 internal fun changeDiscoveryProviderSetting(
     context: android.content.Context,
     preference: tachiyomi.core.common.preference.Preference<Boolean>,
     setting: DiscoveryProviderSetting,
     value: Boolean,
+    refreshImmediately: Boolean = true,
 ): Boolean {
     preference.set(value)
-    DiscoveryUpdateJob.refreshAfterProviderChange(context, setting)
+    if (refreshImmediately) {
+        DiscoveryUpdateJob.refreshAfterProviderChange(context, setting)
+    }
     return false
 }
 
@@ -114,6 +157,13 @@ internal fun changeDiscoveryProviderSetting(
  * мастер-выключатель серит все группы; выключенный ряд серит свои подустановки.
  */
 object SettingsDiscoveryScreen : SearchableSettings {
+
+    @Composable
+    override fun Content() {
+        val context = LocalContext.current
+        rememberScreenModel { SettingsDiscoverySessionScreenModel(context.applicationContext) }
+        super.Content()
+    }
 
     @ReadOnlyComposable
     @Composable
@@ -142,11 +192,20 @@ object SettingsDiscoveryScreen : SearchableSettings {
         var tasteSignalCount by remember { mutableStateOf(0) }
         var tasteTopGenres by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
         val reloadTaste: suspend () -> Unit = {
-            val allSignals = DiscoveryMediaType.entries.flatMap { repository.getSignals(it) }
-            tasteSignalCount = allSignals.size
-            tasteTopGenres = eu.kanade.tachiyomi.data.discovery.foldLearnedTasteProfile(allSignals)
-                .genres.filter { it.second > 0.0 }
-                .take(5)
+            val (count, topGenres) = withContext(Dispatchers.IO) {
+                val allSignals = coroutineScope {
+                    DiscoveryMediaType.entries.map { media ->
+                        async { repository.getSignals(media) }
+                    }.awaitAll().flatten()
+                }
+                val count = allSignals.count { it.signalType.weight != 0.0 }
+                val topGenres = eu.kanade.tachiyomi.data.discovery.foldLearnedTasteProfile(allSignals)
+                    .genres.filter { it.second > 0.0 }
+                    .take(5)
+                count to topGenres
+            }
+            tasteSignalCount = count
+            tasteTopGenres = topGenres
         }
         LaunchedEffect(Unit) { reloadTaste() }
 
@@ -174,6 +233,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
         val seedActive14 by discoveryPreferences.seedActive14().collectAsStateWithLifecycle()
         val homeHeroMode by discoveryPreferences.homeHeroMode().collectAsStateWithLifecycle()
         val externalProviders by discoveryPreferences.externalProvidersEnabled().collectAsStateWithLifecycle()
+        val releaseStatusCsv by discoveryPreferences.releaseStatusFilter().collectAsStateWithLifecycle()
+        val genreCountsByMedia = rememberActiveGenreFilterCounts(discoveryPreferences)
         val isCollageMode = homeHeroMode == "collage"
         // Auto резолвится в Stage при включённом «Для тебя» — stage-поднастройки видны и в авто-режиме.
         val isStageMode = homeHeroMode == "stage" || (homeHeroMode == "auto" && enabled)
@@ -226,9 +287,9 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         onClick = {
                             showResetTasteDialog = false
                             scope.launchIO {
-                                // Сброс только выученного вкуса: кэш ленты, hidden и
-                                // блэклист не трогаются — «вкусы» и «лента» независимы.
-                                repository.clearAllSignals()
+                                // Сброс только выученного вкуса: consumed-исключения, кэш ленты,
+                                // hidden и блэклист не трогаются — «вкусы» и «лента» независимы.
+                                repository.clearTaste(null)
                                 reloadTaste()
                             }
                         },
@@ -319,7 +380,9 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         label = stringResource(AYMR.strings.pref_discovery_consumed_reset),
                         onClick = {
                             scope.launchIO {
-                                consumedSignals.forEach { repository.removeSignal(it.mediaType, it.cleanTitle) }
+                                consumedSignals.forEach {
+                                    repository.clearConsumedSignal(it.mediaType, it.cleanTitle, it.identityKey)
+                                }
                                 reloadConsumed()
                                 reloadTaste()
                             }
@@ -345,7 +408,11 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                     .clickable {
                                         scope.launchIO {
                                             // Undo consumed: тайтл снова может попасть в ленту.
-                                            repository.removeSignal(signal.mediaType, signal.cleanTitle)
+                                            repository.clearConsumedSignal(
+                                                signal.mediaType,
+                                                signal.cleanTitle,
+                                                signal.identityKey,
+                                            )
                                             reloadConsumed()
                                             reloadTaste()
                                         }
@@ -381,22 +448,44 @@ object SettingsDiscoveryScreen : SearchableSettings {
                 onApply = { csv ->
                     discoveryPreferences.releaseStatusFilter().set(csv)
                     showStatusDialog = false
-                    DiscoveryMediaType.entries.forEach { media ->
-                        DiscoveryUpdateJob.refreshConfiguration(context, media)
-                    }
                 },
                 onDismiss = { showStatusDialog = false },
             )
         }
 
-        // V3: диалог жанров (игнор / приоритет / обязательные).
+        // V3: диалог жанров (игнор / приоритет / обязательные), отдельно для каждого медиараздела.
         if (showGenreDialog) {
+            val initialFilters = remember(showGenreDialog) {
+                DiscoveryMediaType.entries.associateWith { mediaType ->
+                    DiscoveryGenreFilterValues(
+                        priorityCsv = discoveryPreferences.priorityGenres(mediaType).get(),
+                        requiredCsv = discoveryPreferences.requiredGenres(mediaType).get(),
+                        ignoredCsv = discoveryPreferences.ignoredGenres(mediaType).get(),
+                    )
+                }
+            }
+            val initialMediaType = remember(showGenreDialog) {
+                resolveGenreDialogMediaType(discoveryPreferences.lastGenreDialogMediaType().get())
+            }
             GenreFilterDialog(
-                priorityCsv = discoveryPreferences.priorityGenres().get(),
-                requiredCsv = discoveryPreferences.requiredGenres().get(),
-                ignoredCsv = discoveryPreferences.ignoredGenres().get(),
-                onApply = { priCsv, reqCsv, ignCsv ->
-                    applyDiscoveryGenreFilters(context, discoveryPreferences, priCsv, reqCsv, ignCsv)
+                initialFilters = initialFilters,
+                initialMediaType = initialMediaType,
+                onMediaTypeChange = { selectedMedia ->
+                    discoveryPreferences.lastGenreDialogMediaType().set(selectedMedia.key)
+                },
+                onApply = { updatedFilters ->
+                    val filtersChanged = changedDiscoveryGenreFilters(initialFilters, updatedFilters)
+                    filtersChanged.forEach { (mediaType, filters) ->
+                        applyDiscoveryGenreFilters(
+                            context = context,
+                            preferences = discoveryPreferences,
+                            mediaType = mediaType,
+                            priorityCsv = filters.priorityCsv,
+                            requiredCsv = filters.requiredCsv,
+                            ignoredCsv = filters.ignoredCsv,
+                            refreshImmediately = false,
+                        )
+                    }
                     showGenreDialog = false
                 },
                 onDismiss = { showGenreDialog = false },
@@ -442,6 +531,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                     discoveryPreferences.externalProvidersEnabled(),
                                     DiscoveryProviderSetting.EXTERNAL,
                                     value,
+                                    refreshImmediately = false,
                                 )
                             },
                         ),
@@ -590,6 +680,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                 sourcePreferences.suggestionsUseShikimori(),
                                 DiscoveryProviderSetting.SHIKIMORI,
                                 value,
+                                refreshImmediately = false,
                             )
                         },
                     ),
@@ -604,6 +695,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                 sourcePreferences.suggestionsUseMangaUpdatesNovel(),
                                 DiscoveryProviderSetting.MANGA_UPDATES,
                                 value,
+                                refreshImmediately = false,
                             )
                         },
                     ),
@@ -618,6 +710,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                                 sourcePreferences.suggestionsUseNovelUpdates(),
                                 DiscoveryProviderSetting.NOVEL_UPDATES,
                                 value,
+                                refreshImmediately = false,
                             )
                         },
                     ),
@@ -640,7 +733,11 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             "both" to stringResource(AYMR.strings.pref_discovery_trend_season_both),
                         ),
                         title = stringResource(AYMR.strings.pref_discovery_trend_season),
-                        subtitleProvider = { value, entries -> entries[value] },
+                        subtitleProvider = { value, entries ->
+                            entries[value]?.let {
+                                context.contextStringResource(AYMR.strings.pref_discovery_trend_season_summary, it)
+                            }
+                        },
                         enabled = enabled && rowTrend && externalProviders,
                     ),
                     Preference.PreferenceItem.ListPreference(
@@ -674,7 +771,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                         title = stringResource(AYMR.strings.pref_discovery_sources_title),
                         subtitle = stringResource(AYMR.strings.pref_discovery_sources_summary),
                         icon = Icons.Outlined.Tune,
-                        onClick = { navigator.push(DiscoverySourcesScreen()) },
+                        onClick = { navigator.push(DiscoverySourcesScreen(deferRefreshToParentSession = true)) },
                         enabled = enabled,
                     ),
                 ),
@@ -692,9 +789,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             val anonsLabel = stringResource(AYMR.strings.pref_discovery_release_status_anons)
                             val pausedLabel = stringResource(AYMR.strings.pref_discovery_release_status_paused)
                             val allLabel = stringResource(AYMR.strings.pref_discovery_release_status_summary_all)
-                            val statuses = DiscoveryReleaseStatus.parseCsv(
-                                discoveryPreferences.releaseStatusFilter().get(),
-                            )
+                            val statuses = DiscoveryReleaseStatus.parseCsv(releaseStatusCsv)
                             if (statuses.isEmpty()) {
                                 allLabel
                             } else {
@@ -723,19 +818,40 @@ object SettingsDiscoveryScreen : SearchableSettings {
                     // V3: жанры подборки — приоритетные/обязательные.
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.pref_discovery_genre_filters),
-                        subtitle = run {
-                            val priCsv = discoveryPreferences.priorityGenres().get()
-                                .splitToSequence(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.count()
-                            val reqCsv = discoveryPreferences.requiredGenres().get()
-                                .splitToSequence(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.count()
-                            if (priCsv == 0 && reqCsv == 0) {
-                                stringResource(AYMR.strings.pref_discovery_genre_filters_summary)
-                            } else {
-                                "$priCsv приорит · $reqCsv обязат"
-                            }
+                        subtitle = if (genreCountsByMedia.values.sum() == 0) {
+                            stringResource(AYMR.strings.pref_discovery_genre_filters_summary_per_media)
+                        } else {
+                            stringResource(
+                                AYMR.strings.pref_discovery_genre_filters_summary_counts,
+                                genreCountsByMedia[DiscoveryMediaType.ANIME] ?: 0,
+                                genreCountsByMedia[DiscoveryMediaType.MANGA] ?: 0,
+                                genreCountsByMedia[DiscoveryMediaType.NOVEL] ?: 0,
+                            )
                         },
                         onClick = { showGenreDialog = true },
                         enabled = enabled,
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = discoveryPreferences.requiredEnforcement(),
+                        entries = persistentMapOf(
+                            "STRICT" to stringResource(AYMR.strings.discovery_enforcement_strict),
+                            "BEST_EFFORT" to stringResource(AYMR.strings.discovery_enforcement_best_effort),
+                        ),
+                        title = stringResource(AYMR.strings.discovery_enforcement_label),
+                        subtitleProvider = { value, entries -> entries[value] },
+                        enabled = enabled,
+                        onValueChanged = { true },
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = discoveryPreferences.requiredMatchMode(),
+                        entries = persistentMapOf(
+                            "ALL" to stringResource(AYMR.strings.discovery_match_mode_all),
+                            "ANY" to stringResource(AYMR.strings.discovery_match_mode_any),
+                        ),
+                        title = stringResource(AYMR.strings.discovery_match_mode_label),
+                        subtitleProvider = { value, entries -> entries[value] },
+                        enabled = enabled,
+                        onValueChanged = { true },
                     ),
                 ),
             ),
@@ -774,6 +890,12 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             DiscoveryUpdateJob.setupTask(context)
                             true
                         },
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = discoveryPreferences.eagerRefill(),
+                        title = stringResource(AYMR.strings.pref_discovery_eager_refill),
+                        subtitle = stringResource(AYMR.strings.pref_discovery_eager_refill_summary),
+                        enabled = enabled,
                     ),
                 ),
             ),
@@ -826,8 +948,11 @@ object SettingsDiscoveryScreen : SearchableSettings {
                             if (signals == 0) {
                                 stringResource(AYMR.strings.pref_discovery_taste_empty)
                             } else {
-                                stringResource(AYMR.strings.pref_discovery_taste_signal_count, signals) +
-                                    " · " + tasteTopGenres.joinToString { it.first }
+                                val topSuffix = tasteTopGenres.takeIf { it.isNotEmpty() }
+                                    ?.joinToString { it.first }
+                                    ?.let { " · $it" }
+                                    .orEmpty()
+                                stringResource(AYMR.strings.pref_discovery_taste_signal_count, signals) + topSuffix
                             }
                         },
                         icon = Icons.Outlined.AutoAwesome,
@@ -969,10 +1094,12 @@ private fun ReleaseStatusFilterDialog(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GenreFilterDialog(
-    priorityCsv: String,
-    requiredCsv: String,
-    ignoredCsv: String,
-    onApply: (priorityCsv: String, requiredCsv: String, ignoredCsv: String) -> Unit,
+    initialFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+    initialMediaType: DiscoveryMediaType,
+    onMediaTypeChange: (DiscoveryMediaType) -> Unit,
+    onApply: (
+        updatedFilters: Map<DiscoveryMediaType, DiscoveryGenreFilterValues>,
+    ) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = eu.kanade.presentation.theme.AuroraTheme.colors
@@ -984,6 +1111,9 @@ private fun GenreFilterDialog(
             .sortedBy { (it.value.second ?: it.value.first).lowercase() }
             .toList()
     }
+    val displayNameByKey = remember(allGenres) {
+        allGenres.associate { it.key to genreDisplayLabel(it.value) }
+    }
     // «Популярные» — курированный порядок реально частых жанров, НЕ take(N) по алфавиту.
     val popular = remember {
         listOf(
@@ -991,20 +1121,63 @@ private fun GenreFilterDialog(
             "romance", "sci-fi", "slice of life", "mystery", "thriller",
         ).mapNotNull { key -> allGenres.firstOrNull { it.key == key } }
     }
+    val mediaTypes = remember { DiscoveryMediaType.entries }
+    val mediaTabs = remember {
+        persistentListOf(
+            TabContent(titleRes = AYMR.strings.label_anime, content = { _, _ -> }),
+            TabContent(titleRes = AYMR.strings.label_manga, content = { _, _ -> }),
+            TabContent(titleRes = AYMR.strings.label_novel, content = { _, _ -> }),
+        )
+    }
 
+    var mediaType by remember(initialMediaType) { mutableStateOf(initialMediaType) }
     var mode by remember { mutableStateOf(1) } // 0=ignored, 1=priority, 2=required
     var search by remember { mutableStateOf("") }
 
-    val (priCanonInit, priRawInit) = remember { parseGenreFilterCsv(priorityCsv) }
-    val (reqCanonInit, reqRawInit) = remember { parseGenreFilterCsv(requiredCsv) }
-    val (ignCanonInit, ignRawInit) = remember { parseGenreFilterCsv(ignoredCsv) }
-    // Snapshot-коллекции: add/remove триггерит рекомпозицию.
-    val priorityCan = remember { mutableStateSetOf<String>().apply { addAll(priCanonInit) } }
-    val priorityRaw = remember { priRawInit.toMutableStateList() }
-    val requiredCan = remember { mutableStateSetOf<String>().apply { addAll(reqCanonInit) } }
-    val requiredRaw = remember { reqRawInit.toMutableStateList() }
-    val ignoredCan = remember { mutableStateSetOf<String>().apply { addAll(ignCanonInit) } }
-    val ignoredRaw = remember { ignRawInit.toMutableStateList() }
+    // Каждый медиараздел владеет своими snapshot-коллекциями; переключение таба не теряет черновик.
+    val priorityCanByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (canonical, _) = parseGenreFilterCsv(initialFilters[media]?.priorityCsv.orEmpty())
+            mutableStateSetOf<String>().apply { addAll(canonical) }
+        }
+    }
+    val priorityRawByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (_, raw) = parseGenreFilterCsv(initialFilters[media]?.priorityCsv.orEmpty())
+            raw.toMutableStateList()
+        }
+    }
+    val requiredCanByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (canonical, _) = parseGenreFilterCsv(initialFilters[media]?.requiredCsv.orEmpty())
+            mutableStateSetOf<String>().apply { addAll(canonical) }
+        }
+    }
+    val requiredRawByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (_, raw) = parseGenreFilterCsv(initialFilters[media]?.requiredCsv.orEmpty())
+            raw.toMutableStateList()
+        }
+    }
+    val ignoredCanByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (canonical, _) = parseGenreFilterCsv(initialFilters[media]?.ignoredCsv.orEmpty())
+            mutableStateSetOf<String>().apply { addAll(canonical) }
+        }
+    }
+    val ignoredRawByMedia = remember(initialFilters) {
+        mediaTypes.associateWith { media ->
+            val (_, raw) = parseGenreFilterCsv(initialFilters[media]?.ignoredCsv.orEmpty())
+            raw.toMutableStateList()
+        }
+    }
+
+    val priorityCan = priorityCanByMedia.getValue(mediaType)
+    val priorityRaw = priorityRawByMedia.getValue(mediaType)
+    val requiredCan = requiredCanByMedia.getValue(mediaType)
+    val requiredRaw = requiredRawByMedia.getValue(mediaType)
+    val ignoredCan = ignoredCanByMedia.getValue(mediaType)
+    val ignoredRaw = ignoredRawByMedia.getValue(mediaType)
 
     val activeCanon: MutableSet<String> = when (mode) {
         0 -> ignoredCan
@@ -1016,25 +1189,44 @@ private fun GenreFilterDialog(
         1 -> priorityRaw
         else -> requiredRaw
     }
-    // «Занят другим режимом»: жанр состоит в любом из двух прочих наборов.
+    // «Занят другим режимом»: жанр (включая raw-эквивалент) состоит в любом из двух прочих наборов.
     val othersCanon: Set<String> = when (mode) {
-        0 -> priorityCan + requiredCan
-        1 -> ignoredCan + requiredCan
-        else -> ignoredCan + priorityCan
+        0 -> (
+            priorityCan + requiredCan + (priorityRaw + requiredRaw).mapNotNull {
+                eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it).takeIf(String::isNotEmpty)
+            }
+            ).toSet()
+        1 -> (
+            ignoredCan + requiredCan + (ignoredRaw + requiredRaw).mapNotNull {
+                eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it).takeIf(String::isNotEmpty)
+            }
+            ).toSet()
+        else -> (
+            ignoredCan + priorityCan + (ignoredRaw + priorityRaw).mapNotNull {
+                eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it).takeIf(String::isNotEmpty)
+            }
+            ).toSet()
     }
     val selectedColor = colors.accent
+
+    val selectCanon: (String) -> Unit = { key ->
+        // Сначала взаимоисключение: жанр вычищается из всех наборов (включая активный),
+        // и только затем добавляется в активный. Иначе remove из активного набора
+        // гасил только что сделанный add — чипы не подсвечивались.
+        moveDiscoveryGenreSelection(
+            key,
+            true,
+            mode,
+            listOf(ignoredCan, priorityCan, requiredCan),
+            listOf(ignoredRaw, priorityRaw, requiredRaw),
+        )
+    }
 
     val toggleCanon: (String) -> Unit = { key ->
         if (activeCanon.contains(key)) {
             activeCanon.remove(key)
         } else {
-            // Сначала взаимоисключение: жанр вычищается из всех наборов (включая активный),
-            // и только затем добавляется в активный. Иначе remove из активного набора
-            // гасил только что сделанный add — чипы не подсвечивались.
-            priorityCan.remove(key)
-            requiredCan.remove(key)
-            ignoredCan.remove(key)
-            activeCanon.add(key)
+            selectCanon(key)
         }
     }
 
@@ -1142,6 +1334,33 @@ private fun GenreFilterDialog(
                     }
                 }
                 Spacer(Modifier.height(14.dp))
+                Text(
+                    text = stringResource(AYMR.strings.pref_discovery_genre_media_label),
+                    color = colors.textSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                )
+                AuroraTabRow(
+                    tabs = mediaTabs,
+                    selectedIndex = mediaTypes.indexOf(mediaType).coerceAtLeast(0),
+                    onTabSelected = { index ->
+                        mediaTypes.getOrNull(index)?.let { selectedMedia ->
+                            mediaType = selectedMedia
+                            onMediaTypeChange(selectedMedia)
+                        }
+                    },
+                    scrollable = false,
+                    compact = true,
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = stringResource(AYMR.strings.pref_discovery_genre_mode_label),
+                    color = colors.textSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                )
 
                 // Табы режимов: эталон AuroraTabRow (scrollable=false) — капсула-желоб на
                 // всю ширину, табы weight(1f) по центру; активный — accent темы во всех режимах.
@@ -1413,8 +1632,8 @@ private fun GenreFilterDialog(
                         }
                     }
 
-                    val chipGenres = if (search.isBlank()) {
-                        popular
+                    val visibleChips = if (search.isBlank()) {
+                        filterAvailablePopularGenres(popular, activeCanon) { it.key }
                     } else {
                         val q = search.trim().lowercase()
                         allGenres.filter { (key, names) ->
@@ -1424,7 +1643,7 @@ private fun GenreFilterDialog(
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    if (search.isBlank()) {
+                    if (search.isBlank() && visibleChips.isNotEmpty()) {
                         Text(
                             stringResource(AYMR.strings.pref_discovery_genre_popular),
                             fontSize = 11.sp,
@@ -1433,15 +1652,16 @@ private fun GenreFilterDialog(
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
                     }
-                    if (chipGenres.isEmpty()) {
+                    if (search.isNotBlank() && visibleChips.isEmpty()) {
                         Text(
                             stringResource(AYMR.strings.pref_discovery_genre_empty),
                             fontSize = 12.sp,
                             color = colors.textSecondary,
                         )
-                        // Совпадений нет — предлагаем добавить запрос как есть в активный
-                        // режим: каноническим ключом, если матчер резолвит, иначе raw-строкой.
-                        if (search.isNotBlank()) {
+                        val pendingCustom = resolveUserGenreInput(search)
+                        if (pendingCustom.first.isNotBlank()) {
+                            // Совпадений нет — предлагаем добавить валидный запрос в активный
+                            // режим: каноническим ключом, если матчер резолвит, иначе raw-строкой.
                             Spacer(Modifier.height(10.dp))
                             Row(
                                 Modifier
@@ -1461,12 +1681,18 @@ private fun GenreFilterDialog(
                                         val (resolved, isCanonical) = resolveUserGenreInput(search)
                                         if (resolved.isNotBlank()) {
                                             if (isCanonical) {
-                                                toggleCanon(resolved)
+                                                selectCanon(resolved)
                                             } else {
-                                                activeRaw.add(resolved)
+                                                moveDiscoveryGenreSelection(
+                                                    resolved,
+                                                    false,
+                                                    mode,
+                                                    listOf(ignoredCan, priorityCan, requiredCan),
+                                                    listOf(ignoredRaw, priorityRaw, requiredRaw),
+                                                )
                                             }
+                                            search = ""
                                         }
-                                        search = ""
                                     }
                                     .padding(horizontal = 14.dp, vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1488,13 +1714,13 @@ private fun GenreFilterDialog(
                                 )
                             }
                         }
-                    } else {
+                    } else if (visibleChips.isNotEmpty()) {
                         FlowRow(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            chipGenres.forEach { (key, names) ->
+                            visibleChips.forEach { (key, names) ->
                                 GenreFrostChip(
                                     label = genreDisplayLabel(names),
                                     selected = key in activeCanon,
@@ -1505,53 +1731,48 @@ private fun GenreFilterDialog(
                                 )
                             }
                         }
+                        if (visibleChips.any { (key, _) -> key in othersCanon }) {
+                            Text(
+                                stringResource(AYMR.strings.discovery_genre_move_hint),
+                                color = colors.textSecondary,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
                     }
 
-                    if (activeRaw.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
+                    val selectedPills = buildSelectedGenrePills(
+                        selectedCanonical = activeCanon,
+                        selectedRaw = activeRaw,
+                        labelForKey = { key -> displayNameByKey[key] ?: key },
+                    )
+                    if (selectedPills.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            stringResource(AYMR.strings.pref_discovery_genre_selected),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
                         FlowRow(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            activeRaw.forEach { rawGenre ->
-                                Row(
-                                    Modifier
-                                        .clip(CircleShape)
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(
-                                                    selectedColor.copy(alpha = if (colors.isDark) 0.12f else 0.08f),
-                                                    selectedColor.copy(alpha = if (colors.isDark) 0.04f else 0.03f),
-                                                ),
-                                            ),
-                                            CircleShape,
-                                        )
-                                        .border(1.dp, selectedColor.copy(alpha = 0.30f), CircleShape)
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Text("«»", fontSize = 9.sp, color = selectedColor.copy(alpha = 0.7f))
-                                    Text(
-                                        rawGenre,
-                                        color = selectedColor,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                    )
-                                    Icon(
-                                        Icons.Outlined.Close,
-                                        contentDescription = null,
-                                        tint = colors.textSecondary,
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable {
-                                                appHaptics.tap()
-                                                activeRaw.remove(rawGenre)
-                                            },
-                                    )
-                                }
+                            selectedPills.forEach { pill ->
+                                SelectedGenreFrostChip(
+                                    label = pill.label,
+                                    isCustom = pill.isCustom,
+                                    selectedColor = selectedColor,
+                                    onRemove = {
+                                        if (pill.isCustom) {
+                                            activeRaw.remove(pill.keyOrRaw)
+                                        } else {
+                                            activeCanon.remove(pill.keyOrRaw)
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
@@ -1605,9 +1826,22 @@ private fun GenreFilterDialog(
                     Button(
                         onClick = {
                             onApply(
-                                serializeGenreFilterCsv(priorityCan.toSet(), priorityRaw.toList()),
-                                serializeGenreFilterCsv(requiredCan.toSet(), requiredRaw.toList()),
-                                serializeGenreFilterCsv(ignoredCan.toSet(), ignoredRaw.toList()),
+                                mediaTypes.associateWith { media ->
+                                    DiscoveryGenreFilterValues(
+                                        priorityCsv = serializeGenreFilterCsv(
+                                            priorityCanByMedia.getValue(media).toSet(),
+                                            priorityRawByMedia.getValue(media).toList(),
+                                        ),
+                                        requiredCsv = serializeGenreFilterCsv(
+                                            requiredCanByMedia.getValue(media).toSet(),
+                                            requiredRawByMedia.getValue(media).toList(),
+                                        ),
+                                        ignoredCsv = serializeGenreFilterCsv(
+                                            ignoredCanByMedia.getValue(media).toSet(),
+                                            ignoredRawByMedia.getValue(media).toList(),
+                                        ),
+                                    )
+                                },
                             )
                         },
                         shape = CircleShape,
@@ -1642,10 +1876,6 @@ private fun genreDisplayLabel(names: Pair<String, String?>): String {
     return ru ?: en
 }
 
-/**
- * Haze Frost чип жанра (рецепт FeedTabs): стеклянный градиент, градиентная рамка,
- * точка-индикатор у выбранных; «занят другим режимом» — приглушён, без клика.
- */
 @Composable
 private fun GenreFrostChip(
     label: String,
@@ -1736,7 +1966,7 @@ private fun GenreFrostChip(
             .background(bgBrush, shape)
             .border(1.dp, borderBrush, shape)
             .then(
-                if (occupied || !enabled) {
+                if (!enabled) {
                     Modifier
                 } else {
                     Modifier.clickable {
@@ -1771,6 +2001,137 @@ private fun GenreFrostChip(
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
+        )
+    }
+}
+
+internal data class SelectedGenrePill(
+    val keyOrRaw: String,
+    val label: String,
+    val isCustom: Boolean,
+)
+
+/** Explicit moves clear only equal semantic identities, not a partially overlapping ambiguous constraint. */
+internal fun moveDiscoveryGenreSelection(
+    value: String,
+    isCanonical: Boolean,
+    mode: Int,
+    canonicalSets: List<MutableSet<String>>,
+    rawLists: List<MutableList<String>>,
+) {
+    val identity = eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(value)
+    if (identity.isEmpty()) return
+    val target = when (mode) {
+        0 -> 0
+        1 -> 1
+        else -> 2
+    }
+    canonicalSets.forEach { values ->
+        values.removeAll {
+            eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it) ==
+                identity
+        }
+    }
+    rawLists.forEach { values ->
+        values.removeAll {
+            eu.kanade.tachiyomi.data.discovery.GenreMatcher.identityKey(it) ==
+                identity
+        }
+    }
+    if (isCanonical) canonicalSets[target].add(value) else rawLists[target].add(value)
+}
+
+internal fun resolveGenreDialogMediaType(savedKey: String): DiscoveryMediaType =
+    DiscoveryMediaType.fromKey(savedKey) ?: DiscoveryMediaType.ANIME
+
+internal fun <T> filterAvailablePopularGenres(
+    popular: List<T>,
+    selectedCanonical: Set<String>,
+    keyOf: (T) -> String,
+): List<T> = popular.filter { keyOf(it) !in selectedCanonical }
+
+internal fun buildSelectedGenrePills(
+    selectedCanonical: Set<String>,
+    selectedRaw: List<String>,
+    labelForKey: (String) -> String,
+): List<SelectedGenrePill> {
+    val canonicalPills = selectedCanonical
+        .map { key -> SelectedGenrePill(keyOrRaw = key, label = labelForKey(key), isCustom = false) }
+        .sortedBy { it.label.lowercase() }
+    val rawPills = selectedRaw
+        .map { raw -> SelectedGenrePill(keyOrRaw = raw, label = raw, isCustom = true) }
+    return canonicalPills + rawPills
+}
+
+@Composable
+private fun SelectedGenreFrostChip(
+    label: String,
+    isCustom: Boolean,
+    selectedColor: Color,
+    onRemove: () -> Unit,
+) {
+    val colors = eu.kanade.presentation.theme.AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    val shape = CircleShape
+
+    val bgBrush = if (colors.isEInk) {
+        Brush.verticalGradient(listOf(colors.textPrimary, colors.textPrimary))
+    } else {
+        Brush.verticalGradient(
+            listOf(
+                selectedColor.copy(alpha = if (colors.isDark) 0.22f else 0.16f),
+                selectedColor.copy(alpha = if (colors.isDark) 0.08f else 0.05f),
+            ),
+        )
+    }
+    val borderBrush = if (colors.isEInk) {
+        Brush.verticalGradient(listOf(colors.textPrimary, colors.textPrimary))
+    } else {
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = if (colors.isDark) 0.50f else 0.80f),
+                selectedColor.copy(alpha = if (colors.isDark) 0.35f else 0.35f),
+            ),
+        )
+    }
+    val contentColor = when {
+        colors.isEInk -> colors.background
+        colors.isDark -> Color.White
+        else -> selectedColor
+    }
+
+    Row(
+        Modifier
+            .clip(shape)
+            .background(bgBrush, shape)
+            .border(1.dp, borderBrush, shape)
+            .clickable {
+                appHaptics.tap()
+                onRemove()
+            }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (isCustom) {
+            Text(
+                "«»",
+                fontSize = 9.sp,
+                color = contentColor.copy(alpha = 0.7f),
+            )
+        }
+        Text(
+            label,
+            color = contentColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        Icon(
+            Icons.Outlined.Close,
+            contentDescription = null,
+            tint = contentColor.copy(alpha = 0.8f),
+            modifier = Modifier.size(15.dp),
         )
     }
 }

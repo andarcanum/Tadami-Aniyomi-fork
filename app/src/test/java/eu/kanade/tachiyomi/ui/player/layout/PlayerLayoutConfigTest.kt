@@ -41,4 +41,25 @@ class PlayerLayoutConfigTest {
         val encoded = config.toPreferenceValue()
         PlayerLayoutConfig.fromPreferenceValue(encoded) shouldBe config
     }
+
+    @Test
+    fun `summaryFor uses localized empty label for regions with no slots`() {
+        val config = PlayerLayoutConfig()
+        val summary = config.summaryFor(
+            orientation = PlayerLayoutOrientation.Portrait,
+            emptyLabel = "Пусто",
+        )
+        summary.contains("hidden: Пусто") shouldBe true
+    }
+
+    @Test
+    fun `layout presets apply and match cleanly per orientation`() {
+        val minimal = PlayerLayoutPreset.Minimal.applyTo(
+            PlayerLayoutConfig(),
+            PlayerLayoutOrientation.Landscape,
+        )
+        PlayerLayoutPreset.Minimal.matches(minimal, PlayerLayoutOrientation.Landscape) shouldBe true
+        minimal.regionFor(PlayerLayoutOrientation.Landscape, PlayerLayoutSlot.PictureInPicture) shouldBe
+            PlayerLayoutRegion.Hidden
+    }
 }

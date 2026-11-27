@@ -38,8 +38,7 @@ object ReelsPip {
      * real dimensions, and the source rect is the displayed content area (letterboxed in fit
      * mode, the whole window in crop mode) instead of the full portrait window. Without a
      * measured frame the old orientation fallback still applies; when even that is unknown
-     * the system default stands. A software-rotated subtree (landscape fullscreen) covers
-     * the window, so its content rect is the window itself.
+     * the system default stands.
      */
     fun buildParams(
         activity: Activity,
@@ -47,7 +46,6 @@ object ReelsPip {
         videoHeight: Int,
         cropMode: Boolean,
         landscapeFallback: Boolean?,
-        rotated: Boolean,
     ): PictureInPictureParams {
         val decor = activity.window?.decorView
         val windowWidth = decor?.width?.takeIf { it > 0 }
@@ -64,12 +62,9 @@ object ReelsPip {
         )
         if (geometry != null) {
             builder.setAspectRatio(Rational(geometry.aspectWidth, geometry.aspectHeight))
-            val sourceRect = if (rotated) {
-                Rect(0, 0, windowWidth, windowHeight)
-            } else {
-                Rect(geometry.left, geometry.top, geometry.right, geometry.bottom)
-            }
-            builder.setSourceRectHint(sourceRect)
+            builder.setSourceRectHint(
+                Rect(geometry.left, geometry.top, geometry.right, geometry.bottom),
+            )
         } else {
             reelsPipAspectRatio(landscapeFallback)?.let { (width, height) ->
                 builder.setAspectRatio(Rational(width, height))
@@ -77,4 +72,15 @@ object ReelsPip {
         }
         return builder.build()
     }
+}
+
+/**
+ * Hardware Volume-Up hook for the active Reels feed (Instagram / TikTok standard).
+ *
+ * When the feed is muted and the user presses the physical Volume Up button, the feed unmutes
+ * automatically while letting Android adjust the system media volume normally.
+ */
+object ReelsVolumeKeyHandler {
+    @Volatile
+    var onVolumeUp: (() -> Unit)? = null
 }

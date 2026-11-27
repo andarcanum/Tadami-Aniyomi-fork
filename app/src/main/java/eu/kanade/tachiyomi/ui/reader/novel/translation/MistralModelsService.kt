@@ -10,9 +10,10 @@ import tachiyomi.core.common.util.lang.withIOContext
 import java.io.IOException
 
 class MistralModelsService(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val json: Json,
 ) {
+    private val client = client.translationSafeClient().newBuilder().cache(null).build()
 
     suspend fun fetchModels(
         baseUrl: String,
@@ -21,6 +22,7 @@ class MistralModelsService(
         val normalizedBaseUrl = normalizeMistralBaseUrl(baseUrl)
         if (normalizedBaseUrl.isBlank()) return emptyList()
         if (apiKey.isBlank()) return emptyList()
+        validateTranslationCredential(apiKey)
 
         val responseText = withIOContext {
             val response = client.newCall(
@@ -46,12 +48,5 @@ class MistralModelsService(
     }
 }
 
-internal fun normalizeMistralBaseUrl(baseUrl: String): String {
-    val trimmed = baseUrl.trim().trimEnd('/')
-    if (trimmed.isBlank()) return ""
-    val lower = trimmed.lowercase()
-    return when {
-        lower.endsWith("/v1") -> trimmed
-        else -> "$trimmed/v1"
-    }
-}
+internal fun normalizeMistralBaseUrl(baseUrl: String): String =
+    normalizeOpenAiBaseUrlRoot(baseUrl, "/v1")

@@ -239,6 +239,30 @@ class ReaderPreferences(
 
     fun binarization() = preferenceStore.getInt("pref_binarization", 0)
 
+    fun paperWhitePoint() = preferenceStore.getInt("pref_paper_white_point", 0)
+
+    fun paperGammaContrast() = preferenceStore.getInt("pref_paper_gamma_contrast", 0)
+
+    fun paperBlackPoint() = preferenceStore.getInt("pref_paper_black_point", 0)
+
+    fun webtoonPageGapDp() = preferenceStore.getInt("pref_webtoon_page_gap_dp", -1)
+
+    fun webtoonCompactChapterTransition() = preferenceStore.getBoolean("pref_webtoon_compact_transition", false)
+
+    fun zoomLockEnabled() = preferenceStore.getBoolean("pref_zoom_lock_enabled", false)
+
+    fun guidedPanelMode() = preferenceStore.getBoolean("pref_guided_panel_mode", false)
+
+    fun dualPageSmartGutter() = preferenceStore.getBoolean("pref_dual_page_smart_gutter", true)
+
+    fun hardwareTilesEnabled() = preferenceStore.getBoolean("pref_reader_hardware_tiles", true)
+
+    fun rgb565ForGrayscale() = preferenceStore.getBoolean("pref_reader_rgb565_tiles", false)
+
+    fun pauseShadersOnFling() = preferenceStore.getBoolean("pref_reader_pause_shaders_on_fling", false)
+
+    fun decoderThreadCount() = preferenceStore.getInt("pref_reader_decoder_threads", 0)
+
     fun dualPageSplitWebtoon() = preferenceStore.getBoolean("pref_dual_page_split_webtoon", false)
 
     fun dualPageInvertWebtoon() = preferenceStore.getBoolean("pref_dual_page_invert_webtoon", false)
@@ -278,6 +302,8 @@ class ReaderPreferences(
 
     fun invertedColors() = preferenceStore.getBoolean("pref_inverted_colors", false)
 
+    fun smartInvertColors() = preferenceStore.getBoolean("pref_smart_invert_colors", true)
+
     // endregion
 
     // region Controls
@@ -290,6 +316,20 @@ class ReaderPreferences(
         "reader_volume_keys_inverted",
         false,
     )
+
+    fun volumeKeysAdjustAutoScroll() = preferenceStore.getBoolean(
+        "reader_volume_keys_adjust_auto_scroll",
+        true,
+    )
+
+    fun edgeTapGuardDp() = preferenceStore.getInt("reader_edge_tap_guard_dp", 0)
+
+    fun doubleTapZoomScalePercent() = preferenceStore.getInt(
+        "reader_double_tap_zoom_scale_percent",
+        200,
+    )
+
+    fun chapterChangeHaptics() = preferenceStore.getBoolean("reader_chapter_change_haptics", true)
 
     fun navigationModePager() = preferenceStore.getInt("reader_navigation_mode_pager", 0)
 
@@ -345,6 +385,16 @@ class ReaderPreferences(
     fun navigatorShowTickMarks() = preferenceStore.getBoolean(
         "pref_navigator_show_tick_marks",
         true,
+    )
+
+    fun navigatorScrubPreview() = preferenceStore.getBoolean(
+        "pref_navigator_scrub_preview",
+        true,
+    )
+
+    fun showThinProgressBar() = preferenceStore.getBoolean(
+        "pref_reader_thin_progress_bar",
+        false,
     )
 
     fun bottomBarPosition() = preferenceStore.getEnum(

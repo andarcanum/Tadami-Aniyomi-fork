@@ -1,21 +1,20 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
-import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
-import eu.kanade.tachiyomi.novelsource.NovelSource
-import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
+import eu.kanade.tachiyomi.data.translation.TranslationBatchRequest
+import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationQueueProfileSnapshot
+import eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices
+import eu.kanade.tachiyomi.data.translation.profile.freezeForProbe
+import eu.kanade.tachiyomi.data.translation.toTranslationQueueProfileSnapshot
+import eu.kanade.tachiyomi.ui.reader.novel.replace.ReplaceRule
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
-import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.effectiveTranslationBatchSize
-import eu.kanade.tachiyomi.ui.reader.novel.translation.formatAiTranslationThrowableForLog
 import eu.kanade.tachiyomi.ui.reader.novel.translation.hasConfiguredTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toDeepSeekTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toGeminiTranslationParams
@@ -23,55 +22,42 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.toMistralTranslationParam
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toNvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOllamaCloudTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOpenRouterTranslationParams
-import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationConcurrencyLimit
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationPromptModifiersFingerprint
-import eu.kanade.tachiyomi.ui.reader.novel.translation.translationRequestConfigLog
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.source.novel.service.NovelSourceManager
-import java.util.concurrent.ConcurrentHashMap
+import tachiyomi.domain.translation.credentials.CredentialSecret
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Dispatches translation batches and next-chapter prefetch to the service of the configured
- * provider.
- *
- * Owns the provider translation services and the next-chapter gemini prefetch state (trigger flag,
- * job, reusable-cache checks) so [NovelReaderScreenModel] stays focused on reader orchestration.
- */
+/** Reader access shared by direct connection checks and durable speculative next-chapter work. */
 internal interface NovelTranslationBatchHost {
     fun batchReaderSettings(): NovelReaderSettings?
-
     fun batchCurrentNovel(): Novel?
-
     fun batchCurrentChapter(): NovelChapter?
-
     fun batchSourceManager(): NovelSourceManager
-
     fun batchFindNextChapter(chapter: NovelChapter): NovelChapter?
-
     fun batchCoroutineScope(): CoroutineScope
-
     fun batchCacheReadChapters(): Boolean
-
-    /** Identity of the replace rules applied to source HTML before extraction (cache key part). */
     fun batchReplaceRulesFingerprint(): String
-
+    fun batchReplaceRules(): List<ReplaceRule> = emptyList()
     fun batchAddAiTranslationLog(message: String)
 }
 
+/** Connection checks use provider services; prefetch owns only a named, low-priority queue member. */
 internal class NovelTranslationBatchExecutor(
     private val host: NovelTranslationBatchHost,
     private val geminiTranslationService: GeminiTranslationService,
@@ -80,151 +66,182 @@ internal class NovelTranslationBatchExecutor(
     private val mistralTranslationService: MistralTranslationService,
     private val nvidiaTranslationService: NvidiaTranslationService,
     private val ollamaCloudTranslationService: OllamaCloudTranslationService,
-    /** Applies user text-replacement rules to sanitized chapter markup. */
-    private val replaceTextHtml: (String) -> String = { it },
+    private val translationQueueManager: TranslationQueueManager = Injekt.get(),
+    private val resolveCredential: suspend (NovelTranslationProvider, Long?) -> CredentialSecret? =
+        { provider, sourceId -> TranslationProfileServices.legacyCredentials.resolveLegacyOrNull(provider, sourceId) },
 ) {
-    private var hasTriggeredNextChapterGeminiPrefetch: Boolean = false
-    private var nextChapterGeminiPrefetchJob: Job? = null
+    private var hasTriggeredNextChapterGeminiPrefetch = false
+    private var nextChapterPrefetch: NextChapterPrefetch? = null
 
-    /** Resets the one-shot prefetch trigger when a chapter is restored. */
+    private class NextChapterPrefetch(val request: TranslationBatchRequest, val sourceId: Long) {
+        val admissionFinished = CompletableDeferred<Unit>()
+        val cleanupScheduled = AtomicBoolean(false)
+        var enqueueJob: Job? = null
+
+        @Volatile var cleanupRequested = false
+
+        // Protected by this record's monitor; accepting activation cannot race a started detach.
+        var wanted = false
+        var detaching = false
+    }
+
     fun resetNextChapterGeminiPrefetchTriggered() {
         hasTriggeredNextChapterGeminiPrefetch = false
     }
 
-    /** Cancels the running next-chapter prefetch job (e.g. on dispose). */
+    /** Cancels only this speculative owner, never a chapter or another batch/reader owner. */
     fun cancelNextChapterGeminiPrefetchJob() {
-        nextChapterGeminiPrefetchJob?.cancel()
+        val prefetch = nextChapterPrefetch ?: return
+        prefetch.cleanupRequested = true
+        prefetch.enqueueJob?.cancel()
+        schedulePrefetchCleanup(prefetch)
     }
 
-    /** Clears all chapter-scoped prefetch state: job, trigger flag. */
     fun clearChapterScopedPrefetchState() {
-        nextChapterGeminiPrefetchJob?.cancel()
-        nextChapterGeminiPrefetchJob = null
+        cancelNextChapterGeminiPrefetchJob()
+        nextChapterPrefetch = null
         hasTriggeredNextChapterGeminiPrefetch = false
     }
 
-    fun maybePrefetchNextChapterGeminiTranslationOnProgress(
-        currentIndex: Int,
-        totalItems: Int,
-    ) {
-        if (hasTriggeredNextChapterGeminiPrefetch) return
-        if (!hasReachedGeminiNextChapterTranslationPrefetchThreshold(currentIndex, totalItems)) return
-        val settings = host.batchReaderSettings() ?: return
-        if (!settings.geminiEnabled || !settings.geminiPrefetchNextChapterTranslation) return
-        if (settings.geminiDisableCache) return
-        if (!settings.hasConfiguredTranslationProvider()) return
-        val novel = host.batchCurrentNovel() ?: return
-        val chapter = host.batchCurrentChapter() ?: return
-        val source = host.batchSourceManager().get(novel.source) ?: return
-        val nextChapter = host.batchFindNextChapter(chapter) ?: return
-        if (hasReusableTranslationCache(nextChapter.id, settings)) return
-        hasTriggeredNextChapterGeminiPrefetch = true
-        scheduleNextChapterGeminiTranslationPrefetch(
-            nextChapter = nextChapter,
-            source = source,
-            settings = settings,
-        )
-    }
-
-    private fun scheduleNextChapterGeminiTranslationPrefetch(
-        nextChapter: NovelChapter,
-        source: NovelSource,
-        settings: NovelReaderSettings,
-    ) {
-        if (hasReusableTranslationCache(nextChapter.id, settings)) return
-        nextChapterGeminiPrefetchJob?.cancel()
-        nextChapterGeminiPrefetchJob = host.batchCoroutineScope().launch(Dispatchers.IO) {
-            runCatching {
-                if (hasReusableTranslationCache(nextChapter.id, settings)) return@runCatching
-                val cacheReadChapters = host.batchCacheReadChapters()
-                val nextHtml = NovelReaderChapterPrefetchCache.get(nextChapter.id)?.takeIf { it.isNotBlank() }
-                    ?: source.getChapterText(nextChapter.toSNovelChapter()).also { fetchedHtml ->
-                        if (fetchedHtml.isNotBlank()) {
-                            NovelReaderChapterPrefetchCache.put(nextChapter.id, fetchedHtml)
-                            if (cacheReadChapters) {
-                                NovelReaderChapterDiskCacheStore.put(nextChapter.id, fetchedHtml)
-                            }
-                        }
-                    }
-                if (nextHtml.isBlank()) return@runCatching
-                val normalizedNextHtml = prependChapterHeadingIfMissing(
-                    rawHtml = nextHtml.normalizeStructuredChapterPayload(),
-                    chapterName = nextChapter.name,
-                )
-                val sanitizedNextHtml = replaceTextHtml(
-                    sanitizeChapterHtmlForReader(normalizedNextHtml).ifBlank { normalizedNextHtml },
-                )
-                val nextTextBlocks = extractTextBlocks(sanitizedNextHtml)
-                if (nextTextBlocks.isEmpty()) return@runCatching
-                val chunkSize = settings.effectiveTranslationBatchSize()
-                val chunks = nextTextBlocks.chunked(chunkSize)
-                val semaphore = Semaphore(settings.translationConcurrencyLimit())
-                val translated = ConcurrentHashMap<Int, String>()
-                host.batchAddAiTranslationLog("🌐 ${settings.translationRequestConfigLog()} (prefetch)")
-                coroutineScope {
-                    chunks.mapIndexed { chunkIndex, chunk ->
-                        async {
-                            semaphore.withPermit {
-                                val result = requestTranslationBatch(
-                                    segments = chunk,
-                                    settings = settings,
-                                ) { message ->
-                                    host.batchAddAiTranslationLog("?? Next chapter: $message")
-                                }
-                                if (result == null && !settings.geminiRelaxedMode) {
-                                    throw IllegalStateException(
-                                        "${settings.translationProvider} returned empty response for prefetched chunk ${chunkIndex + 1}",
-                                    )
-                                }
-                                result.orEmpty().forEachIndexed { localIndex, text ->
-                                    if (!text.isNullOrBlank()) {
-                                        val globalIndex = chunkIndex * chunkSize + localIndex
-                                        translated[globalIndex] = text
-                                    }
-                                }
-                            }
-                        }
-                    }.awaitAll()
+    /** Called before old reader fields are cleared; freezes acceptance of the incoming intent. */
+    fun onChapterBecomingActive(chapterId: Long) {
+        val prefetch = nextChapterPrefetch ?: return
+        val novel = host.batchCurrentNovel()
+        val settings = host.batchReaderSettings()
+        val compatible = chapterId == prefetch.request.chapterIds.single() &&
+            novel != null && novel.id == prefetch.request.novelId && novel.source == prefetch.sourceId &&
+            settings != null &&
+            runCatching { freezeProfile(settings) == prefetch.request.profileSnapshot }.getOrDefault(false)
+        if (compatible) {
+            val accepted = synchronized(prefetch) {
+                if (prefetch.detaching) {
+                    false
+                } else {
+                    prefetch.wanted = true
+                    true
                 }
-                if (translated.isEmpty()) return@runCatching
-                NovelReaderTranslationDiskCacheStore.put(
-                    GeminiTranslationCacheEntry(
-                        chapterId = nextChapter.id,
-                        translatedByIndex = translated.toMap(),
-                        provider = settings.translationProvider,
-                        model = settings.translationCacheModelId(),
-                        sourceLang = settings.geminiSourceLang,
-                        targetLang = settings.geminiTargetLang,
-                        promptMode = settings.geminiPromptMode,
-                        stylePreset = settings.geminiStylePreset,
-                        extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
-                        promptModifiersFingerprint = settings.translationPromptModifiersFingerprint(),
-                        replaceRulesFingerprint = host.batchReplaceRulesFingerprint(),
-                        sourceSegmentCount = nextTextBlocks.size,
-                    ),
-                )
-                host.batchAddAiTranslationLog(
-                    "?? Cached ${settings.translationProvider} translation for next chapter ${nextChapter.id}",
-                )
-            }.onFailure { error ->
-                logcat(LogPriority.WARN, error) { "Failed to prefetch AI translation for next chapter" }
-                host.batchAddAiTranslationLog(
-                    "?? Next chapter prefetch failed: ${formatAiTranslationThrowableForLog(error)}",
-                )
             }
+            if (accepted) {
+                prefetch.cleanupRequested = true
+                schedulePrefetchCleanup(prefetch)
+            }
+        } else {
+            // An already accepted reader intent must finish joining before its named owner leaves.
+            cancelNextChapterGeminiPrefetchJob()
         }
     }
 
-    private fun hasReusableTranslationCache(
-        chapterId: Long,
-        settings: NovelReaderSettings,
-    ): Boolean {
-        return NovelReaderTranslationDiskCacheStore.has(
-            chapterId = chapterId,
-            requirements = settings.toTranslationCacheRequirements(
-                replaceRulesFingerprint = host.batchReplaceRulesFingerprint(),
+    fun maybePrefetchNextChapterGeminiTranslationOnProgress(currentIndex: Int, totalItems: Int) {
+        if (hasTriggeredNextChapterGeminiPrefetch) return
+        if (!hasReachedGeminiNextChapterTranslationPrefetchThreshold(currentIndex, totalItems)) return
+        val settings = host.batchReaderSettings() ?: return
+        if (!settings.geminiEnabled || !settings.geminiPrefetchNextChapterTranslation ||
+            settings.geminiDisableCache
+        ) {
+            return
+        }
+        val novel = host.batchCurrentNovel() ?: return
+        if (!settings.hasConfiguredTranslationProvider(novel.id)) return
+        val chapter = host.batchCurrentChapter() ?: return
+        if (chapter.novelId != novel.id) return
+        val next = host.batchFindNextChapter(chapter) ?: return
+        if (next.novelId != novel.id || next.id == chapter.id) return
+        hasTriggeredNextChapterGeminiPrefetch = true
+        val snapshot = try {
+            freezeProfile(settings)
+        } catch (_: Exception) {
+            host.batchAddAiTranslationLog("Next-chapter translation settings could not be frozen")
+            return
+        }
+        cancelNextChapterGeminiPrefetchJob()
+        val prefetch = NextChapterPrefetch(
+            TranslationBatchRequest(
+                novelId = novel.id,
+                batchToken = "prefetch-" + UUID.randomUUID(),
+                chapterIds = listOf(next.id),
+                profileSnapshot = snapshot,
+                forceRetranslate = false,
+                priority = 0,
             ),
+            sourceId = novel.source,
         )
+        nextChapterPrefetch = prefetch
+        // Install completion handling before dispatch, including cancellation before body entry.
+        val job = host.batchCoroutineScope().launch(start = CoroutineStart.LAZY) {
+            try {
+                // DB admission may commit despite reader cancellation. Observe settlement first;
+                // an early cancelBatch on a missing row cannot revoke a later committed member.
+                withContext(NonCancellable) {
+                    translationQueueManager.enqueueTranslationBatch(prefetch.request)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                prefetch.cleanupRequested = true
+                if (currentCoroutineContext().isActive) {
+                    host.batchAddAiTranslationLog("Next-chapter translation could not be queued")
+                }
+            } finally {
+                val cancelled = !currentCoroutineContext().isActive
+                withContext(NonCancellable) {
+                    if (cancelled) prefetch.cleanupRequested = true
+                    prefetch.admissionFinished.complete(Unit)
+                    if (prefetch.cleanupRequested) schedulePrefetchCleanup(prefetch)
+                }
+            }
+        }
+        prefetch.enqueueJob = job
+        job.invokeOnCompletion { cause ->
+            prefetch.admissionFinished.complete(Unit)
+            if (cause != null) prefetch.cleanupRequested = true
+            if (prefetch.cleanupRequested) schedulePrefetchCleanup(prefetch)
+        }
+        job.start()
+    }
+
+    private fun freezeProfile(settings: NovelReaderSettings): TranslationQueueProfileSnapshot {
+        val rules = host.batchReplaceRules().toList()
+        return settings.toTranslationQueueProfileSnapshot(host.batchReplaceRulesFingerprint(), rules).copy(
+            geminiEnabledPromptModifiers = settings.geminiEnabledPromptModifiers.toList(),
+        )
+    }
+
+    private fun schedulePrefetchCleanup(prefetch: NextChapterPrefetch) {
+        if (!prefetch.cleanupScheduled.compareAndSet(false, true)) return
+        translationQueueManager.launchCleanup {
+            withContext(NonCancellable) {
+                prefetch.admissionFinished.await()
+                val promote = synchronized(prefetch) {
+                    if (!prefetch.wanted) prefetch.detaching = true
+                    prefetch.wanted
+                }
+                if (promote) {
+                    try {
+                        // This manager seam transactionally guards the existing generation,
+                        // membership, profile and nonterminal state; it never starts a rerun.
+                        translationQueueManager.promotePrefetch(
+                            prefetch.request.profileSnapshot,
+                            prefetch.request.chapterIds.single(),
+                            prefetch.request.novelId,
+                            prefetch.request.batchToken,
+                        )
+                    } catch (_: Exception) {
+                        // Do not delete the only wanted owner when an implicit join was not
+                        // acknowledged. A later explicit cleanup call can retry the handoff.
+                        prefetch.cleanupScheduled.set(false)
+                        logcat(LogPriority.WARN) { "Unable to transfer AI prefetch ownership" }
+                        return@withContext
+                    }
+                    synchronized(prefetch) { prefetch.detaching = true }
+                }
+                try {
+                    translationQueueManager.cancelBatch(prefetch.request.batchToken)
+                } catch (_: Exception) {
+                    prefetch.cleanupScheduled.set(false)
+                    logcat(LogPriority.WARN) { "Unable to release AI prefetch membership" }
+                }
+            }
+        }
     }
 
     suspend fun requestTranslationBatch(
@@ -232,56 +249,85 @@ internal class NovelTranslationBatchExecutor(
         settings: NovelReaderSettings,
         onLog: ((String) -> Unit)? = null,
     ): List<String?>? {
-        return when (settings.translationProvider) {
-            NovelTranslationProvider.GEMINI -> {
-                geminiTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toGeminiTranslationParams(),
-                    onLog = onLog,
-                )
+        if (settings.connectionProfile != null && settings.translationProfile != null) {
+            val snapshot = settings.toTranslationQueueProfileSnapshot().freezeForProbe()
+            return TranslationProfileServices.probeTranslation(snapshot, segments)
+        }
+        val credential = resolveCredential(settings.translationProvider, settings.translationSourceId)
+        try {
+            return when (settings.translationProvider) {
+                NovelTranslationProvider.GEMINI -> {
+                    geminiTranslationService.translateBatch(
+                        segments = segments,
+                        params = settings.toGeminiTranslationParams(
+                            apiKey =
+                            credential?.reveal() ?: settings.geminiApiKey,
+                        ),
+                        onLog = onLog,
+                    )
+                }
+                NovelTranslationProvider.GEMINI_PRIVATE -> {
+                    geminiTranslationService.translateBatch(
+                        segments = segments,
+                        params = settings.toGeminiTranslationParams(
+                            apiKey =
+                            credential?.reveal() ?: settings.geminiApiKey,
+                        ),
+                        onLog = onLog,
+                    )
+                }
+                NovelTranslationProvider.OPENROUTER -> {
+                    openRouterTranslationService.translateBatch(
+                        segments = segments,
+                        params = settings.toOpenRouterTranslationParams(
+                            apiKey =
+                            credential?.reveal() ?: settings.openRouterApiKey,
+                        ),
+                        onLog = onLog,
+                    )
+                }
+                NovelTranslationProvider.DEEPSEEK -> {
+                    deepSeekTranslationService.translateBatch(
+                        segments = segments,
+                        params = settings.toDeepSeekTranslationParams(
+                            apiKey =
+                            credential?.reveal() ?: settings.deepSeekApiKey,
+                        ),
+                        onLog = onLog,
+                    )
+                }
+                NovelTranslationProvider.MISTRAL -> {
+                    mistralTranslationService.translateBatch(
+                        segments = segments,
+                        params = settings.toMistralTranslationParams(
+                            apiKey = credential?.reveal() ?: settings.mistralApiKey,
+                        ),
+                        onLog = onLog,
+                    )
+                }
+                NovelTranslationProvider.NVIDIA -> {
+                    nvidiaTranslationService.translateBatch(
+                        segments = segments,
+                        params = settings.toNvidiaTranslationParams(
+                            apiKey =
+                            credential?.reveal() ?: settings.nvidiaApiKey,
+                        ),
+                        onLog = onLog,
+                    )
+                }
+                NovelTranslationProvider.OLLAMA_CLOUD -> {
+                    ollamaCloudTranslationService.translateBatch(
+                        segments = segments,
+                        params = settings.toOllamaCloudTranslationParams(
+                            apiKey =
+                            credential?.reveal() ?: settings.ollamaCloudApiKey,
+                        ),
+                        onLog = onLog,
+                    )
+                }
             }
-            NovelTranslationProvider.GEMINI_PRIVATE -> {
-                geminiTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toGeminiTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.OPENROUTER -> {
-                openRouterTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toOpenRouterTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.DEEPSEEK -> {
-                deepSeekTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toDeepSeekTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.MISTRAL -> {
-                mistralTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toMistralTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.NVIDIA -> {
-                nvidiaTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toNvidiaTranslationParams(),
-                    onLog = onLog,
-                )
-            }
-            NovelTranslationProvider.OLLAMA_CLOUD -> {
-                ollamaCloudTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toOllamaCloudTranslationParams(),
-                    onLog = onLog,
-                )
-            }
+        } finally {
+            credential?.close()
         }
     }
 }

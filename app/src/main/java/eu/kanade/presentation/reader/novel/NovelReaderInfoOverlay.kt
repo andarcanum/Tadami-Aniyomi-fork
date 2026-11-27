@@ -5,7 +5,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,9 +48,15 @@ internal fun NovelReaderInfoOverlay(
         visible = visible,
         enter = fadeIn(),
         exit = fadeOut(),
-        modifier = modifier.padding(
-            bottom = with(density) { bottomBarHeightPx.toDp() } + MaterialTheme.padding.small,
-        ),
+        modifier = modifier
+            .windowInsetsPadding(
+                WindowInsets.displayCutout
+                    .union(WindowInsets.navigationBars)
+                    .only(WindowInsetsSides.Horizontal),
+            )
+            .padding(
+                bottom = with(density) { bottomBarHeightPx.toDp() } + MaterialTheme.padding.small,
+            ),
     ) {
         Surface(
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),

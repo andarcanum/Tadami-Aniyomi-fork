@@ -69,6 +69,7 @@ fun MoreScreen(
     onClickOpenLatticeGrid: () -> Unit,
     showReelsEntry: Boolean = false,
     onClickReels: () -> Unit = {},
+    onClickDebugCrystal: () -> Unit = {},
 ) {
     TutorialScreenEntry(TipAnchor.MORE_TAB)
     Scaffold { contentPadding ->
@@ -239,6 +240,14 @@ fun MoreScreen(
                 }
             }
             if (BuildConfig.DEBUG) {
+                item {
+                    TextPreferenceWidget(
+                        title = stringResource(AYMR.strings.crystal_debug_title),
+                        subtitle = stringResource(AYMR.strings.crystal_debug_description),
+                        icon = Icons.Outlined.NewReleases,
+                        onPreferenceClick = onClickDebugCrystal,
+                    )
+                }
                 item {
                     TextPreferenceWidget(
                         title = stringResource(AYMR.strings.debug_app_update_preview),

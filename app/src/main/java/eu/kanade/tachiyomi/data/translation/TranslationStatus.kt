@@ -6,4 +6,6 @@ enum class TranslationStatus {
     COMPLETED,
     FAILED,
     CANCELLED,
+    WAITING,
+    PAUSED,
 }

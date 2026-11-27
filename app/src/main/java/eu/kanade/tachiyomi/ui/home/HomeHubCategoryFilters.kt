@@ -119,6 +119,46 @@ internal inline fun <T : Any> takeHomeHubHistoryExcluding(
     return result
 }
 
+/**
+ * Selects up to [limit] items with the largest [keySelector] values in descending order
+ * (preserving input order on equal keys, matching Kotlin's stable `sortedByDescending().take(limit)`)
+ * in O(N * limit) without allocating or sorting a full copy of [items].
+ */
+internal inline fun <T : Any> takeTopKDescendingByLong(
+    items: List<T>,
+    limit: Int,
+    crossinline keySelector: (T) -> Long,
+): List<T> {
+    if (limit <= 0 || items.isEmpty()) return emptyList()
+    if (items.size <= limit) return items.sortedByDescending { keySelector(it) }
+
+    val topItems = ArrayList<T>(limit)
+    val topKeys = LongArray(limit)
+    var count = 0
+
+    for (item in items) {
+        val key = keySelector(item)
+        if (count == limit && key <= topKeys[count - 1]) {
+            continue
+        }
+        var insertAt = count
+        while (insertAt > 0 && key > topKeys[insertAt - 1]) {
+            insertAt--
+        }
+        if (count < limit) {
+            topItems.add(item)
+            count++
+        }
+        for (i in count - 1 downTo insertAt + 1) {
+            topItems[i] = topItems[i - 1]
+            topKeys[i] = topKeys[i - 1]
+        }
+        topItems[insertAt] = item
+        topKeys[insertAt] = key
+    }
+    return topItems
+}
+
 private fun isHomeHubEntryVisible(
     categoryIds: List<Long>?,
     hiddenCategoryIds: Set<Long>,

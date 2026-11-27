@@ -13,13 +13,42 @@ import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 
 class DiscoveryMixTest {
+    @Test
+    fun `seed fusion replaces the whole unknown binding and preserves overlap evidence`() {
+        val unknown = DiscoveryRowItem("Shared", "shared", "unknown.jpg", null, "A", "Native A", 1.0, 7L, "/unknown")
+        val known = unknown.copy(
+            coverUrl = "known.jpg",
+            provider = "Native B",
+            sourceId = 8L,
+            sourceUrl = "/known",
+            genres = listOf("Romance"),
+            seedTitle = "B",
+            score = 0.7,
+        )
+        val result = mergeSeedResults(listOf(listOf(unknown), listOf(known))).single()
+        result.sourceId shouldBe 8L
+        result.sourceUrl shouldBe "/known"
+        result.coverUrl shouldBe "known.jpg"
+        result.genres shouldBe listOf("Romance")
+        result.score shouldBe 1.5
+        result.seedTitle shouldBe "A, B"
+    }
+
+    @Test
+    fun `per seed fusion quota counts distinct titles rather than duplicate raw occurrences`() {
+        val shared = DiscoveryRowItem("Shared", "shared", null, null, "A", "AniList", 1.0, genres = listOf("Action"))
+        val tail = shared.copy(title = "Tail", cleanTitle = "tail")
+        mergeSeedResults(listOf(List(16) { shared } + tail)).map { it.title } shouldBe listOf("Shared", "Tail")
+    }
 
     private fun item(
         type: DiscoveryRowType,
         title: String,
         score: Double = 1.0,
         seed: String? = null,
-    ) = DiscoveryRowItem(title, title.lowercase(), null, null, seed, "p", score)
+        reason: String? = null,
+        genres: List<String> = emptyList(),
+    ) = DiscoveryRowItem(title, title.lowercase(), null, reason, seed, "p", score, genres = genres)
 
     @Test
     fun `interleave respects quotas round-robin`() {
@@ -235,6 +264,49 @@ class DiscoveryMixTest {
     }
 
     @Test
+    fun `synonymous item genres contribute once to the taste score`() {
+        val profile = listOf("Экшен" to 2.0)
+
+        tasteScore(listOf("Action", "Экшен"), profile) shouldBe 2.0
+        matchedGenres(listOf("Action", "Экшен"), profile) shouldBe listOf("Экшен")
+    }
+
+    @Test
+    fun `known multilingual aliases score against the canonical taste profile`() {
+        val profile = listOf("Adventure" to 2.0)
+
+        tasteScore(listOf("Avventura"), profile) shouldBe 2.0
+        matchedGenres(listOf("Avventura"), profile) shouldBe listOf("Adventure")
+    }
+
+    @Test
+    fun `bilingual raw tags retain their taste score without synonym double counting`() {
+        tasteScore(listOf("Milf", "милфы"), listOf("Милфы" to 2.0)) shouldBe 2.0
+        tasteScore(listOf("Custom Tag"), listOf("Custom Tag" to 1.0)) shouldBe 1.0
+        tasteScore(listOf("Game System"), listOf("Game System" to 1.0)) shouldBe 1.0
+    }
+
+    @Test
+    fun `library metadata aliases share one weight and keep the original display spelling`() {
+        val now = 1_800_000_000_000L
+        val profile = buildTasteProfile(
+            listOf(
+                DiscoverySeedInput(
+                    entryId = 1L,
+                    title = "Action novel",
+                    genres = listOf("Экшен", "Action"),
+                    dateAdded = now,
+                ),
+            ),
+            nowMs = now,
+        )
+
+        profile.size shouldBe 1
+        tasteScore(listOf("Action"), profile) shouldBe 1.0
+        matchedGenres(listOf("Action"), profile) shouldBe listOf("Экшен")
+    }
+
+    @Test
     fun `taste matching works across russian profile and english item genres`() {
         val profile = listOf("Фэнтези" to 3.0, "Экшен" to 2.0)
         tasteScore(listOf("Fantasy", "Action", "Comedy"), profile) shouldBe 5.0
@@ -257,6 +329,35 @@ class DiscoveryMixTest {
             DiscoveryRowType.LIKE to "Solo Leveling",
             DiscoveryRowType.LIKE to "Unique Like",
         )
+    }
+
+    @Test
+    fun `dedupeCrossRow deduplicates items sharing same identityKey despite different cleanTitle`() {
+        val items = listOf(
+            dbSuggestion(DiscoveryRowType.LIKE, "Solo Leveling", identityKey = "anilist:105398"),
+            dbSuggestion(DiscoveryRowType.TREND, "Поднятие уровня в одиночку", identityKey = "anilist:105398"),
+        )
+        val out = dedupeCrossRow(items)
+        out.size shouldBe 1
+        out.first().title shouldBe "Solo Leveling"
+    }
+
+    @Test
+    fun `dedupeCrossRow deduplicates items matching trustedAliases`() {
+        val items = listOf(
+            dbSuggestion(
+                DiscoveryRowType.LIKE,
+                "Frieren",
+                trustedAliases = setOf("sousou no frieren", "frieren beyond journey s end"),
+            ),
+            dbSuggestion(
+                DiscoveryRowType.TASTE,
+                "Sousou no Frieren",
+            ),
+        )
+        val out = dedupeCrossRow(items)
+        out.size shouldBe 1
+        out.first().title shouldBe "Frieren"
     }
 
     @Test
@@ -323,9 +424,11 @@ class DiscoveryMixTest {
         row: DiscoveryRowType,
         title: String,
         position: Long = 0,
+        identityKey: String? = null,
+        trustedAliases: Set<String> = emptySet(),
     ) = tachiyomi.domain.discovery.model.DiscoverySuggestion(
         id = position,
-        mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
+        mediaType = DiscoveryMediaType.ANIME,
         rowType = row,
         title = title,
         cleanTitle = title.lowercase(),
@@ -336,6 +439,8 @@ class DiscoveryMixTest {
         score = 0.0,
         position = position,
         createdAt = 0L,
+        identityKey = identityKey,
+        trustedAliases = trustedAliases,
     )
 
     private fun itemWithGenres(title: String, genres: List<String>) =
@@ -350,8 +455,14 @@ class DiscoveryMixTest {
     @Test
     fun `blacklist checks genres column for any row type`() {
         val item = DiscoverySuggestion(
-            id = 1L, mediaType = DiscoveryMediaType.MANGA, rowType = DiscoveryRowType.TREND,
-            title = "t", cleanTitle = "t", coverUrl = null, reason = "next", seedTitle = null,
+            id = 1L,
+            mediaType = DiscoveryMediaType.MANGA,
+            rowType = DiscoveryRowType.TREND,
+            title = "t",
+            cleanTitle = "t",
+            coverUrl = null,
+            reason = "next",
+            seedTitle = null,
             provider = "anilist", score = 0.0, position = 0L, createdAt = 0L,
             genres = listOf("harem"),
         )
@@ -361,8 +472,14 @@ class DiscoveryMixTest {
     @Test
     fun `blacklist falls back to taste reason for legacy rows without genres`() {
         val legacy = DiscoverySuggestion(
-            id = 1L, mediaType = DiscoveryMediaType.MANGA, rowType = DiscoveryRowType.TASTE,
-            title = "t", cleanTitle = "t", coverUrl = null, reason = "harem, drama", seedTitle = null,
+            id = 1L,
+            mediaType = DiscoveryMediaType.MANGA,
+            rowType = DiscoveryRowType.TASTE,
+            title = "t",
+            cleanTitle = "t",
+            coverUrl = null,
+            reason = "harem, drama",
+            seedTitle = null,
             provider = "anilist", score = 0.0, position = 0L, createdAt = 0L,
         )
         isBlacklisted(legacy, expandGenreSet(listOf("harem"))).shouldBeTrue()
@@ -449,5 +566,57 @@ class DiscoveryMixTest {
         balanced.size shouldBe 20
         // Dominant source src1 should not exceed 30% of 20 = 6 items
         balanced.count { it.provider == "src1" } shouldBe 6
+    }
+
+    @Test
+    fun `filterGenreClustering inspects item genres when reason is absent`() {
+        val items = (1..6).map {
+            item(DiscoveryRowType.TASTE, "Action $it", score = 10.0 - it, genres = listOf("Action"))
+        } + (1..2).map {
+            item(DiscoveryRowType.TASTE, "Comedy $it", score = 4.0 - it, genres = listOf("Comedy"))
+        }
+        val clustered = filterGenreClustering(items, maxPerGenre = 3)
+        val front = clustered.take(5)
+        front.count { it.genres.firstOrNull() == "Action" } shouldBe 3
+        front.count { it.genres.firstOrNull() == "Comedy" } shouldBe 2
+    }
+
+    @Test
+    fun `interleaveMix prevents long consecutive runs of the same primary genre`() {
+        val rows = mapOf(
+            DiscoveryRowType.LIKE to (1..5).map {
+                item(DiscoveryRowType.LIKE, "Action L$it", score = 10.0 - it, genres = listOf("Action"))
+            },
+            DiscoveryRowType.TASTE to (1..5).map {
+                item(DiscoveryRowType.TASTE, "Action T$it", score = 10.0 - it, genres = listOf("Action"))
+            } + (1..5).map {
+                item(DiscoveryRowType.TASTE, "Comedy T$it", score = 8.0 - it, genres = listOf("Comedy"))
+            },
+        )
+        val mix = interleaveMix(rows, total = 10)
+        var maxConsecutiveAction = 0
+        var currentConsecutiveAction = 0
+        for (it in mix) {
+            if (it.genres.firstOrNull() == "Action") {
+                currentConsecutiveAction++
+                maxConsecutiveAction = maxOf(maxConsecutiveAction, currentConsecutiveAction)
+            } else {
+                currentConsecutiveAction = 0
+            }
+        }
+        (maxConsecutiveAction <= 2).shouldBeTrue()
+    }
+
+    @Test
+    fun `interleaveMix applies saturation dampening to overrepresented genres when diverse alternatives exist`() {
+        val rows = mapOf(
+            DiscoveryRowType.TASTE to (1..15).map {
+                item(DiscoveryRowType.TASTE, "Isekai $it", score = 20.0 - it, genres = listOf("Isekai"))
+            } + (1..5).map {
+                item(DiscoveryRowType.TASTE, "Romance $it", score = 10.0 - it, genres = listOf("Romance"))
+            },
+        )
+        val mix = interleaveMix(rows, total = 8)
+        mix.any { it.genres.contains("Romance") }.shouldBeTrue()
     }
 }

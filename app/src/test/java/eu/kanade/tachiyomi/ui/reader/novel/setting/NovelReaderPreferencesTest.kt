@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.novel.setting
 
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.ui.reader.novel.NovelQuoteCardStyle
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -514,7 +515,8 @@ class NovelReaderPreferencesTest {
         settings.bionicReading shouldBe true
         settings.selectedTextTranslationEnabled shouldBe false
         settings.selectedTextTranslationTargetLanguage shouldBe "English"
-        settings.geminiApiKey shouldBe "override-key"
+        settings.geminiApiKey shouldBe ""
+        settings.translationCredentialProviders shouldContain NovelTranslationProvider.GEMINI
         settings.geminiModel shouldBe "gemini-2.5-pro"
         settings.geminiBatchSize shouldBe 20
         settings.geminiConcurrency shouldBe 1
@@ -534,10 +536,12 @@ class NovelReaderPreferencesTest {
         settings.geminiPrefetchNextChapterTranslation shouldBe true
         settings.translationProvider shouldBe NovelTranslationProvider.GEMINI_PRIVATE
         settings.openRouterBaseUrl shouldBe "https://openrouter.ai/api/v1"
-        settings.openRouterApiKey shouldBe "openrouter-key"
+        settings.openRouterApiKey shouldBe ""
+        settings.translationCredentialProviders shouldContain NovelTranslationProvider.OPENROUTER
         settings.openRouterModel shouldBe "google/gemma-3-27b-it:free"
         settings.deepSeekBaseUrl shouldBe "https://api.deepseek.com"
-        settings.deepSeekApiKey shouldBe "deepseek-key"
+        settings.deepSeekApiKey shouldBe ""
+        settings.translationCredentialProviders shouldContain NovelTranslationProvider.DEEPSEEK
         settings.deepSeekModel shouldBe "deepseek-chat"
         settings.customThemes shouldBe listOf(
             NovelReaderColorTheme(backgroundColor = "#000000", textColor = "#ffffff"),

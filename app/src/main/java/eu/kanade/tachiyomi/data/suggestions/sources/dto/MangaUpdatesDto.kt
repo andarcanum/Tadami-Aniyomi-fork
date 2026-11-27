@@ -22,11 +22,19 @@ data class MuRecord(
 )
 
 @Serializable
+data class MuGenre(
+    val genre: String? = null,
+)
+
+@Serializable
 data class MuSeriesDetail(
     val type: String? = null,
     val adult: Boolean = false,
     val recommendations: List<MuRecommendation> = emptyList(),
     @SerialName("category_recommendations") val categoryRecommendations: List<MuRecommendation> = emptyList(),
+    val genres: List<MuGenre> = emptyList(),
+    val status: String? = null,
+    val completed: Boolean = false,
 )
 
 @Serializable

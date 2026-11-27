@@ -10,9 +10,10 @@ import tachiyomi.core.common.util.lang.withIOContext
 import java.io.IOException
 
 class OpenRouterModelsService(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val json: Json,
 ) {
+    private val client = client.translationSafeClient().newBuilder().cache(null).build()
 
     suspend fun fetchModels(
         baseUrl: String,
@@ -21,6 +22,7 @@ class OpenRouterModelsService(
         val normalizedBaseUrl = normalizeOpenRouterBaseUrl(baseUrl)
         if (normalizedBaseUrl.isBlank()) return emptyList()
         if (apiKey.isBlank()) return emptyList()
+        validateTranslationCredential(apiKey)
 
         val responseText = withIOContext {
             val response = client.newCall(
@@ -57,13 +59,5 @@ class OpenRouterModelsService(
     }
 }
 
-private fun normalizeOpenRouterBaseUrl(baseUrl: String): String {
-    val trimmed = baseUrl.trim().trimEnd('/')
-    if (trimmed.isBlank()) return ""
-    val lower = trimmed.lowercase()
-    return when {
-        lower.endsWith("/api/v1") -> trimmed
-        lower.endsWith("/v1") -> trimmed
-        else -> "$trimmed/api/v1"
-    }
-}
+internal fun normalizeOpenRouterBaseUrl(baseUrl: String): String =
+    normalizeOpenAiBaseUrlRoot(baseUrl, "/api/v1")

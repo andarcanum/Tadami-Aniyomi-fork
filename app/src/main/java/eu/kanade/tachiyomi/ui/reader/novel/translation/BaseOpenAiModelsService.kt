@@ -10,17 +10,19 @@ import tachiyomi.core.common.util.lang.withIOContext
 import java.io.IOException
 
 open class BaseOpenAiModelsService(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val json: Json,
 ) {
+    private val client = client.translationSafeClient().newBuilder().cache(null).build()
     protected suspend fun fetchModelIds(
         baseUrl: String,
         apiKey: String,
         extraHeaders: Map<String, String> = emptyMap(),
     ): List<String> {
-        val normalizedBaseUrl = baseUrl.trim().trimEnd('/')
+        val normalizedBaseUrl = normalizeOpenAiBaseUrlRoot(baseUrl)
         if (normalizedBaseUrl.isBlank()) return emptyList()
         if (apiKey.isBlank()) return emptyList()
+        validateTranslationCredential(apiKey)
 
         val responseText = withIOContext {
             val request = GET(

@@ -20,6 +20,7 @@ class UnlockableManagerTest {
         override fun getProfile(userId: String) = kotlinx.coroutines.flow.flowOf(UserProfile.createDefault())
         override suspend fun getProfileSync(userId: String) = UserProfile.createDefault()
         override suspend fun saveProfile(profile: UserProfile) {}
+        override suspend fun addXP(userId: String, amount: Int) = false
         override suspend fun updateXP(userId: String, totalXP: Int, currentXP: Int, level: Int, xpToNextLevel: Int) {}
         override suspend fun addTitle(userId: String, title: String) {}
         override suspend fun addBadge(userId: String, badge: String) {}

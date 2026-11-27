@@ -1,6 +1,8 @@
 package eu.kanade.presentation.series.manga
 
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
+import tachiyomi.domain.items.chapter.service.getChapterSort
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.series.manga.model.LibraryMangaSeries
 
@@ -12,7 +14,16 @@ data class MangaSeriesReadingTarget(
 fun resolveMangaSeriesReadingTarget(
     series: LibraryMangaSeries,
     chapters: List<Pair<LibraryManga, List<Chapter>>>,
+    resumeChapterId: Long? = null,
 ): MangaSeriesReadingTarget? {
+    if (resumeChapterId != null) {
+        for ((manga, mangaChapters) in chapters) {
+            if (series.entries.none { it.id == manga.id }) continue
+            val chapter = mangaChapters.firstOrNull { it.id == resumeChapterId } ?: continue
+            return MangaSeriesReadingTarget(manga, chapter)
+        }
+    }
+
     val activeManga = series.activeManga ?: return null
     val activeEntryIndex = chapters.indexOfFirst { it.first.manga.id == activeManga.id }
         .takeIf { it >= 0 }
@@ -20,7 +31,7 @@ fun resolveMangaSeriesReadingTarget(
 
     var fallbackTarget: MangaSeriesReadingTarget? = null
     for ((manga, mangaChapters) in chapters.drop(activeEntryIndex)) {
-        val chapter = resolveMangaResumeChapter(mangaChapters) ?: continue
+        val chapter = resolveMangaResumeChapter(manga.manga, mangaChapters) ?: continue
         val target = MangaSeriesReadingTarget(
             manga = manga,
             chapter = chapter,
@@ -38,17 +49,13 @@ fun resolveMangaSeriesReadingTarget(
     return fallbackTarget
 }
 
-internal val mangaChapterResumeComparator: Comparator<Chapter> =
-    compareBy<Chapter> { it.chapterNumber }
-        .thenBy { it.sourceOrder }
-        .thenBy { it.id }
-
 internal fun resolveMangaResumeChapter(
+    manga: Manga,
     chapters: List<Chapter>,
     fromChapterId: Long? = null,
 ): Chapter? {
     return resolveMangaResumeChapterFromSorted(
-        sortedChapters = chapters.sortedWith(mangaChapterResumeComparator),
+        sortedChapters = chapters.sortedWith(getChapterSort(manga, sortDescending = false)),
         fromChapterId = fromChapterId,
     )
 }

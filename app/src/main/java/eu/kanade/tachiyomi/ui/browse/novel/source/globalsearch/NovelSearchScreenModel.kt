@@ -17,8 +17,10 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.collectLatest
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.data.achievement.handler.AchievementHandler
@@ -54,6 +57,7 @@ abstract class NovelSearchScreenModel(
         // BRN-13/BGS-3: per-instance Executors.newFixedThreadPool(5) leaked 5 non-daemon threads
         // per screen visit - shared limited IO view instead (see the anime SM comment).
         private val searchDispatcher = Dispatchers.IO.limitedParallelism(5)
+        private const val SOURCE_SEARCH_TIMEOUT_MS = 30_000L
     }
 
     private val enabledLanguages = sourcePreferences.enabledLanguages().get()
@@ -63,11 +67,17 @@ abstract class NovelSearchScreenModel(
     private var lastQuery: String? = null
     private var lastSourceFilter: NovelSourceFilter? = null
 
-    private val sortComparator = { map: Map<NovelCatalogueSource, NovelSearchItemResult> ->
-        compareBy<NovelCatalogueSource>(
+    @Volatile
+    private var sourceOrder: Map<Long, Int> = emptyMap()
+
+    private fun sortComparator(
+        map: Map<NovelCatalogueSource, NovelSearchItemResult>,
+    ): Comparator<NovelCatalogueSource> {
+        val order = sourceOrder
+        return compareBy<NovelCatalogueSource>(
             { (map[it] as? NovelSearchItemResult.Success)?.isEmpty ?: true },
-            { "${it.id}" !in pinnedSources },
-            { "${it.name.lowercase()} (${it.lang})" },
+            { order[it.id] ?: Int.MAX_VALUE },
+            { it.id },
         )
     }
 
@@ -91,7 +101,7 @@ abstract class NovelSearchScreenModel(
 
     @Composable
     fun getNovel(initialNovel: Novel): androidx.compose.runtime.State<Novel> {
-        return produceState(initialValue = initialNovel) {
+        return produceState(initialValue = initialNovel, key1 = initialNovel.id) {
             getNovel.subscribe(initialNovel.url, initialNovel.source)
                 .filterNotNull()
                 .collectLatest { novel ->
@@ -164,6 +174,9 @@ abstract class NovelSearchScreenModel(
             getEnabledSources()
                 .filter { sourceFilter != NovelSourceFilter.PinnedOnly || "${it.id}" in pinnedSources }
         }
+        sourceOrder = HashMap<Long, Int>(sources.size).apply {
+            sources.forEachIndexed { index, source -> put(source.id, index) }
+        }
 
         if (sameQuery) {
             val existingResults = state.value.items
@@ -188,17 +201,30 @@ abstract class NovelSearchScreenModel(
                     }
                     try {
                         val page = withContext(searchDispatcher) {
-                            source.getSearchNovels(1, query, source.getFilterList())
+                            withTimeout(SOURCE_SEARCH_TIMEOUT_MS) {
+                                source.getSearchNovels(1, query, source.getFilterList())
+                            }
                         }
 
-                        val titles = page.novels.map {
-                            networkToLocalNovel.await(it.toDomainNovel(source.id))
-                        }
+                        val titles = networkToLocalNovel.await(
+                            page.novels.map { it.toDomainNovel(source.id) },
+                        )
 
                         if (isActive) {
                             updateItem(source, NovelSearchItemResult.Success(titles))
                         }
+                    } catch (e: TimeoutCancellationException) {
+                        if (isActive) {
+                            updateItem(source, NovelSearchItemResult.Error(e))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
+                        if (isActive) {
+                            updateItem(source, NovelSearchItemResult.Error(e))
+                        }
+                    } catch (e: LinkageError) {
+                        // Incompatible extension bytecode or missing ABI method should not crash global search
                         if (isActive) {
                             updateItem(source, NovelSearchItemResult.Error(e))
                         }

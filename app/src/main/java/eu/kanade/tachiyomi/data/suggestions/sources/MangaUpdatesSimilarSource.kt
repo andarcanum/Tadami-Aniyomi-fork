@@ -36,7 +36,11 @@ class MangaUpdatesSimilarSource(
     private val client by lazy { Injekt.get<NetworkHelper>().client }
     private val json by lazy { Injekt.get<Json>() }
 
-    private val allowedTypes = setOf("Manga", "Manhwa", "Manhua", "Comic", "Webtoon", "Novel")
+    private val allowedTypes = when (mediaType) {
+        SuggestionMediaType.NOVEL -> setOf("Novel")
+        SuggestionMediaType.MANGA, SuggestionMediaType.ANIME ->
+            setOf("Manga", "Manhwa", "Manhua", "Comic", "Webtoon")
+    }
 
     override suspend fun fetchSuggestions(seed: SuggestionSeed): List<SuggestionItem> = coroutineScope {
         // Enabled for both MANGA and NOVEL: MangaUpdates has a large light-novel
@@ -45,6 +49,7 @@ class MangaUpdatesSimilarSource(
             return@coroutineScope emptyList()
         }
 
+        val nsfwFilter = nsfwFilterProvider()
         val cacheKey = SuggestionCache.makeKey(
             name,
             seed.primaryTitle,
@@ -52,6 +57,7 @@ class MangaUpdatesSimilarSource(
             seed.candidateTitles,
             seed.description,
             seed.author,
+            extraKeys = listOf("nsfw=$nsfwFilter"),
         )
         SuggestionCache.get(cacheKey)?.let {
             logcat { "[MangaUpdates] CACHE HIT for '${seed.primaryTitle}' (${seed.candidateTitles.size} candidates)" }
@@ -97,7 +103,7 @@ class MangaUpdatesSimilarSource(
                 val titles = listOfNotNull(record.title, result.hitTitle)
                 val maxScore = titles.maxOfOrNull { t ->
                     seed.candidateTitles.maxOfOrNull { candidate ->
-                        SuggestionTitleResolver.scoreMatch(t, candidate)
+                        SuggestionTitleResolver.scoreBaseTitleMatch(t, candidate)
                     } ?: 0
                 } ?: 0
 
@@ -139,6 +145,13 @@ class MangaUpdatesSimilarSource(
                             .parseAs<MuSeriesDetail>(json)
 
                         if (recDetail.type in allowedTypes && !(nsfwFilterProvider() && recDetail.adult)) {
+                            val extractedGenres = recDetail.genres
+                                .mapNotNull { it.genre?.trim()?.takeIf(String::isNotEmpty) }
+                            val resolvedStatus = when {
+                                recDetail.completed -> "Completed"
+                                !recDetail.status.isNullOrBlank() -> recDetail.status
+                                else -> null
+                            }
                             SuggestionItem(
                                 title = rec.seriesName,
                                 searchQueries = listOf(rec.seriesName),
@@ -148,6 +161,8 @@ class MangaUpdatesSimilarSource(
                                 providerId = rec.seriesId.toString(),
                                 mediaType = mediaType,
                                 reason = SuggestionReason.EXTERNAL_MU,
+                                releaseStatus = resolvedStatus,
+                                genres = extractedGenres,
                             )
                         } else {
                             null

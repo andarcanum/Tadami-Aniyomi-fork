@@ -146,14 +146,20 @@ internal class NovelReaderChapterNavigator(
         setAutoScrollEndDwellRemainingSeconds(totalSeconds)
         setAutoScrollEndDwellActive(true)
 
-        for (sec in totalSeconds downTo 1) {
-            setAutoScrollEndDwellRemainingSeconds(sec)
-            delay(1000L)
-            if (!autoScrollEnabled() || showReaderUi() || !autoScrollEndDwellActive()) return
+        var completedDwell = false
+        try {
+            for (sec in totalSeconds downTo 1) {
+                setAutoScrollEndDwellRemainingSeconds(sec)
+                delay(1000L)
+                if (!autoScrollEnabled() || showReaderUi() || !autoScrollEndDwellActive()) return
+            }
+            completedDwell = true
+        } finally {
+            setAutoScrollEndDwellRemainingSeconds(0)
+            setAutoScrollEndDwellActive(false)
         }
-
-        setAutoScrollEndDwellRemainingSeconds(0)
-        setAutoScrollEndDwellActive(false)
-        handleAutoScrollChapterEnd()
+        if (completedDwell) {
+            handleAutoScrollChapterEnd()
+        }
     }
 }

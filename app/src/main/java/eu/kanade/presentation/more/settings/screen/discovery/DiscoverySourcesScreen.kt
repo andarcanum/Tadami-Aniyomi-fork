@@ -20,16 +20,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,6 +44,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -85,13 +89,19 @@ import eu.kanade.presentation.util.Screen as ParentScreen
  * (resolveAuroraTabContainerColor + rim-light): тонкие, округлые, прозрачные,
  * без сероватого frost-налёта. Единица списка — плагин (расширение), не языковой вариант.
  */
-class DiscoverySourcesScreen : ParentScreen() {
+class DiscoverySourcesScreen(
+    private val deferRefreshToParentSession: Boolean = false,
+) : ParentScreen() {
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
-        val model = rememberScreenModel { DiscoverySourcesScreenModel(context.applicationContext) }
+        val model = rememberScreenModel {
+            DiscoverySourcesScreenModel(context.applicationContext).apply {
+                setRefreshOnDispose(!deferRefreshToParentSession)
+            }
+        }
         val state by model.state.collectAsState()
         val colors = AuroraTheme.colors
 
@@ -161,18 +171,37 @@ class DiscoverySourcesScreen : ParentScreen() {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         item(key = "mode") {
-                            ModeTabs(mode = state.mode, onMode = model::setMode)
+                            Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                ModeTabs(mode = state.mode, onMode = model::setMode)
+                            }
                         }
                         if (state.mode == "auto") {
                             item(key = "auto_card") {
-                                AutoTopCard(state = state, model = model, colors = colors)
+                                Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                    AutoTopCard(state = state, model = model, colors = colors)
+                                }
                             }
-                            if (state.entries.isNotEmpty()) {
+                            if (state.entries.isEmpty() && state.hasInventoryError) {
+                                item(key = "inventory_error") {
+                                    InventoryStatusCard(
+                                        isError = true,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (state.entries.isEmpty() && state.isLoadingInventory) {
+                                item(key = "inventory_loading") {
+                                    InventoryStatusCard(
+                                        isError = false,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (state.entries.isNotEmpty()) {
                                 item(key = "auto_preview") {
-                                    Box(modifier = Modifier.alpha(0.38f)) {
+                                    Box(modifier = Modifier.padding(bottom = 10.dp).alpha(0.38f)) {
                                         SourceSectionCard(
                                             entries = state.entries.take(4),
                                             mediaType = state.mediaType,
@@ -187,44 +216,88 @@ class DiscoverySourcesScreen : ParentScreen() {
                             }
                         } else {
                             item(key = "search") {
-                                SearchRow(
-                                    state = state,
-                                    colors = colors,
-                                    onQuery = model::setQuery,
-                                    onSelectAll = model::selectAll,
-                                    onDeselectAll = model::deselectAll,
-                                )
-                            }
-                            if (isOverloadWarn(state.entries)) {
-                                item(key = "warn") { WarnStrip(colors = colors) }
-                            }
-                            if (filtered.isEmpty()) {
-                                item(key = "empty") {
-                                    Text(
-                                        text = stringResource(AYMR.strings.discovery_sources_search_empty),
-                                        fontSize = 11.5.sp,
-                                        color = colors.textSecondary,
-                                        fontStyle = FontStyle.Italic,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 18.dp),
-                                        textAlign = TextAlign.Center,
+                                Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                    SearchRow(
+                                        state = state,
+                                        colors = colors,
+                                        onQuery = model::setQuery,
+                                        onSelectAll = model::selectAll,
+                                        onDeselectAll = model::deselectAll,
                                     )
                                 }
+                            }
+                            if (isOverloadWarn(state.entries)) {
+                                item(key = "warn") {
+                                    Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                        WarnStrip(colors = colors)
+                                    }
+                                }
+                            }
+                            if (state.entries.isEmpty() && state.hasInventoryError) {
+                                item(key = "inventory_error") {
+                                    InventoryStatusCard(
+                                        isError = true,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (state.entries.isEmpty() && state.isLoadingInventory) {
+                                item(key = "inventory_loading") {
+                                    InventoryStatusCard(
+                                        isError = false,
+                                        colors = colors,
+                                        onRetry = model::retryInventoryLoad,
+                                    )
+                                }
+                            } else if (filtered.isEmpty()) {
+                                item(key = "empty") {
+                                    Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                        Text(
+                                            text = stringResource(AYMR.strings.discovery_sources_search_empty),
+                                            fontSize = 11.5.sp,
+                                            color = colors.textSecondary,
+                                            fontStyle = FontStyle.Italic,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 18.dp),
+                                            textAlign = TextAlign.Center,
+                                        )
+                                    }
+                                }
                             } else {
-                                item(key = "rows") {
-                                    SourceSectionCard(
-                                        entries = filtered,
+                                itemsIndexed(
+                                    items = filtered,
+                                    key = { _, entry -> "source_" + entry.pluginKey },
+                                ) { index, entry ->
+                                    val shape = when {
+                                        filtered.size == 1 -> RoundedCornerShape(20.dp)
+                                        index == 0 -> RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                                        index == filtered.lastIndex -> RoundedCornerShape(
+                                            bottomStart = 20.dp,
+                                            bottomEnd = 20.dp,
+                                        )
+                                        else -> RectangleShape
+                                    }
+                                    val bottomPad = if (index == filtered.lastIndex) 10.dp else 0.dp
+                                    SourcePickRowItem(
+                                        entry = entry,
                                         mediaType = state.mediaType,
                                         model = model,
                                         colors = colors,
                                         allowedCount = state.entries.count { !it.excluded },
                                         clickable = true,
-                                        onToggle = model::toggleSource,
+                                        shape = shape,
+                                        showDivider = index < filtered.lastIndex,
+                                        onToggle = { model.toggleSource(entry.pluginKey) },
+                                        modifier = Modifier.padding(bottom = bottomPad),
                                     )
                                 }
                             }
-                            item(key = "counter") { CounterCard(state = state, colors = colors) }
+                            item(key = "counter") {
+                                Box(modifier = Modifier.padding(bottom = 10.dp)) {
+                                    CounterCard(state = state, colors = colors)
+                                }
+                            }
                         }
                         item(key = "footer") {
                             Text(
@@ -252,6 +325,51 @@ private fun Modifier.sectionSurface(colors: AuroraColors, shape: Shape): Modifie
     .clip(shape)
     .background(resolveAuroraTabContainerColor(colors))
     .border(width = 1.dp, brush = auroraMenuRimLightBrush(colors), shape = shape)
+
+@Composable
+private fun InventoryStatusCard(
+    isError: Boolean,
+    colors: AuroraColors,
+    onRetry: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+            .sectionSurface(colors, RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (isError) {
+            Text(
+                text = stringResource(MR.strings.unknown_error),
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = onRetry) {
+                Text(
+                    text = stringResource(MR.strings.action_retry),
+                    color = colors.accent,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.5.dp,
+                color = colors.accent,
+            )
+            Text(
+                text = stringResource(MR.strings.loading),
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
 
 @Composable
 private fun DiscoveryMediaTabs(
@@ -487,6 +605,46 @@ private fun WarnStrip(colors: AuroraColors) {
 }
 
 // ── секция строк плагинов ──────────────────────────────────────────────────────
+
+/** Отдельная виртуализированная строка плагина в общем списке LazyColumn. */
+@Composable
+private fun SourcePickRowItem(
+    entry: SourcePickUi,
+    mediaType: DiscoveryMediaType,
+    model: DiscoverySourcesScreenModel,
+    colors: AuroraColors,
+    allowedCount: Int,
+    clickable: Boolean,
+    shape: Shape,
+    showDivider: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .sectionSurface(colors, shape),
+    ) {
+        SourcePickRow(
+            entry = entry,
+            mediaType = mediaType,
+            model = model,
+            colors = colors,
+            allowedCount = allowedCount,
+            clickable = clickable,
+            onClick = onToggle,
+        )
+        if (showDivider) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .height(1.dp)
+                    .background(colors.divider.copy(alpha = 0.5f)),
+            )
+        }
+    }
+}
 
 /** Групповая карточка-секция со строками плагинов (паттерн «grouped section cards»). */
 @Composable

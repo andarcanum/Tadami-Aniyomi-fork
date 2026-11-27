@@ -405,9 +405,6 @@
     <string name="pref_hardware_bitmap_threshold">Ambang bitmap perangkat keras kustom</string>
     <string name="pref_hardware_bitmap_threshold_default">Default (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">Jika pembaca memuat gambar putih kurangi ambang secara bertahap.\nTerpilih: %s</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_2">Gunakan decoder legacy untuk pembaca strip panjang</string>
-    <string name="pref_always_decode_long_strip_with_ssiv_summary">Mempengaruhi kinerja. Aktifkan hanya jika mengurangi ambang bitmap tidak memperbaiki gambar putih</string>
-    <string name="pref_display_profile">Profil tampilan kustom</string>
     <string name="pref_crop_borders">Pangkas tepi</string>
     <string name="pref_custom_brightness">Kecerahan kustom</string>
     <string name="pref_grayscale">Skala abu-abu</string>
@@ -907,8 +904,8 @@
     <string name="label_used">Digunakan</string>
     <string name="not_applicable">N/A</string>
     <string name="day_short">%dh</string>
-    <string name="hour_short">%jj</string>
-    <string name="minute_short">%mm</string>
+    <string name="hour_short">%1$dj</string>
+    <string name="minute_short">%1$dm</string>
     <string name="seconds_short">%dd</string>
 
     <!-- Downloads activity and service -->

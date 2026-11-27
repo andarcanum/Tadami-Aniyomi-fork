@@ -101,6 +101,12 @@ internal fun mainSettingsNavigationItems(): List<SettingsNavigationItem> = listO
         screen = SettingsNovelReaderScreen,
     ),
     SettingsNavigationItem(
+        key = "ai_translator",
+        titleRes = AYMR.strings.ai_translation_title,
+        icon = Icons.Outlined.AutoAwesome,
+        screen = eu.kanade.presentation.more.settings.translation.AiTranslationSettingsScreen(),
+    ),
+    SettingsNavigationItem(
         key = "player",
         titleRes = AYMR.strings.label_player,
         subtitleRes = AYMR.strings.pref_player_settings_summary,

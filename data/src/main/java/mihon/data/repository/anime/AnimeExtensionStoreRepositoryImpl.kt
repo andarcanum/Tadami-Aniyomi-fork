@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import mihon.data.extension.repository.extensionStoreMapper
+import mihon.data.extension.service.ExtensionStoreMedia
 import mihon.data.extension.service.ExtensionStoreService
 import mihon.data.repository.LegacyExtensionStorePortGuard
 import mihon.domain.extensionrepo.model.ExtensionRepo
@@ -25,7 +26,7 @@ class AnimeExtensionStoreRepositoryImpl(
     private val legacyPortGuard = LegacyExtensionStorePortGuard(preferenceStore, LEGACY_PORT_KEY)
 
     override suspend fun insert(indexUrl: String): Result<Unit> {
-        return service.fetch(indexUrl).mapCatching { upsert(it) }
+        return service.fetch(indexUrl, ExtensionStoreMedia.ANIME).mapCatching { upsert(it) }
     }
 
     override suspend fun insertFromPreference(indexUrl: String, name: String) {
@@ -49,7 +50,7 @@ class AnimeExtensionStoreRepositoryImpl(
             supervisorScope {
                 stores.map { store ->
                     async {
-                        service.fetch(store.indexUrl)
+                        service.fetch(store.indexUrl, ExtensionStoreMedia.ANIME)
                             .mapCatching { fetched ->
                                 handler.await(inTransaction = true) { db ->
                                     upsert(db, fetched)

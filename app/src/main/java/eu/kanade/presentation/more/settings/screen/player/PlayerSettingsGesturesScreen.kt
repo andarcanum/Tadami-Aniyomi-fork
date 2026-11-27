@@ -263,8 +263,9 @@ object PlayerSettingsGesturesScreen : SearchableSettings {
         onDismissRequest: () -> Unit,
         onValueChanged: (skipIntroLength: Int) -> Unit,
     ) {
-        val skipIntroLengthValue by rememberSaveable { mutableStateOf(initialSkipIntroLength) }
-        var newLength = 0
+        var newLength by rememberSaveable(initialSkipIntroLength) {
+            mutableStateOf(initialSkipIntroLength.coerceIn(0, 255))
+        }
         val dialogContent: @Composable () -> Unit = {
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -280,7 +281,7 @@ object PlayerSettingsGesturesScreen : SearchableSettings {
                         onSelectionChanged = {
                             newLength = it
                         },
-                        startIndex = skipIntroLengthValue,
+                        startIndex = newLength,
                     )
                 },
             )

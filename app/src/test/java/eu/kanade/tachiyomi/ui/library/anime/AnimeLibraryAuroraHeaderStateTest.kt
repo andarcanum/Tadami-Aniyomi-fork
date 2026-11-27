@@ -1,7 +1,10 @@
 package eu.kanade.tachiyomi.ui.library.anime
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.model.EInkProfile
+import eu.kanade.presentation.components.resolveAuroraTabHorizontalPaddingDp
+import eu.kanade.presentation.components.resolveAuroraTabInitialFontSizeSp
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
@@ -267,6 +270,63 @@ class AnimeLibraryAuroraHeaderStateTest {
         shouldShowLibraryBookImport(AnimeLibraryTab.Section.Novel) shouldBe true
         shouldShowLibraryBookImport(AnimeLibraryTab.Section.Anime) shouldBe false
         shouldShowLibraryBookImport(AnimeLibraryTab.Section.Manga) shouldBe false
+        shouldShowLibraryBookImport(AnimeLibraryTab.Section.Reels) shouldBe false
         shouldShowLibraryBookImport(null) shouldBe false
+    }
+
+    @Test
+    fun `reels library section is gated by installed source and user toggles`() {
+        shouldShowAuroraReelsLibrarySection(
+            hasReelsSources = true,
+            showReelsVideoFeed = true,
+            showReelsInLibrary = true,
+        ) shouldBe true
+
+        shouldShowAuroraReelsLibrarySection(
+            hasReelsSources = false,
+            showReelsVideoFeed = true,
+            showReelsInLibrary = true,
+        ) shouldBe false
+
+        shouldShowAuroraReelsLibrarySection(
+            hasReelsSources = true,
+            showReelsVideoFeed = false,
+            showReelsInLibrary = true,
+        ) shouldBe false
+
+        shouldShowAuroraReelsLibrarySection(
+            hasReelsSources = true,
+            showReelsVideoFeed = true,
+            showReelsInLibrary = false,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `fallback section prefers anime or first enabled section when reels is unavailable`() {
+        resolveFallbackAuroraLibrarySection(
+            listOf(AnimeLibraryTab.Section.Manga, AnimeLibraryTab.Section.Anime),
+        ) shouldBe AnimeLibraryTab.Section.Anime
+
+        resolveFallbackAuroraLibrarySection(
+            listOf(AnimeLibraryTab.Section.Manga, AnimeLibraryTab.Section.Novel),
+        ) shouldBe AnimeLibraryTab.Section.Manga
+    }
+
+    @Test
+    fun `reels section omits category tabs row and refresh header menu items`() {
+        shouldShowAuroraLibraryCategoryTabs(AnimeLibraryTab.Section.Reels) shouldBe false
+        auroraLibraryPinnedHeaderMenuItems(
+            includeImportEpub = false,
+            includeImportFolder = false,
+            includeRefresh = false,
+        ) shouldBe listOf(AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry)
+    }
+
+    @Test
+    fun `four non-scrollable aurora tabs tighten padding and initial font size to fit full labels`() {
+        resolveAuroraTabHorizontalPaddingDp(tabCount = 3, compact = false, scrollable = false) shouldBe 16.dp
+        resolveAuroraTabHorizontalPaddingDp(tabCount = 4, compact = false, scrollable = false) shouldBe 6.dp
+        resolveAuroraTabInitialFontSizeSp(tabCount = 3, compact = false, scrollable = false) shouldBe 14f
+        resolveAuroraTabInitialFontSizeSp(tabCount = 4, compact = false, scrollable = false) shouldBe 12.5f
     }
 }

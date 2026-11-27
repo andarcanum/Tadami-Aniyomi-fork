@@ -4,6 +4,9 @@ import android.app.Application
 import android.net.Uri
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.ui.reels.player.isHlsReelUrl
+import eu.kanade.tachiyomi.ui.reels.player.openCachedReelStreamIfComplete
+import eu.kanade.tachiyomi.ui.reels.player.reelsRequestHeaders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -54,23 +57,155 @@ class ReelsOfflineStoreImpl(
     }
 
     override suspend fun download(item: ShortVideoItem, sourceId: Long): ReelsOfflineStore.DownloadResult =
-        withContext(ioDispatcher) {
-            writeMutex.withLock { downloadLocked(item, sourceId) }
+        download(item, sourceId, emptyMap())
+
+    override suspend fun download(
+        item: ShortVideoItem,
+        sourceId: Long,
+        headers: Map<String, String>,
+    ): ReelsOfflineStore.DownloadResult = withContext(ioDispatcher) {
+        writeMutex.withLock { downloadLocked(item, sourceId, headers, null) }
+    }
+
+    override suspend fun downloadSelected(
+        snapshot: ReelsQualityDownloadSnapshot,
+    ): ReelsOfflineStore.DownloadResult = withContext(ioDispatcher) {
+        writeMutex.withLock {
+            downloadLocked(snapshot.item, snapshot.owner.sourceId, snapshot.headers, snapshot)
         }
+    }
+
+    override fun storedQuality(sourceId: Long, videoId: String): ReelsStoredVideoQuality? =
+        ReelsOfflineQualityMetadata.storedQuality(dir, sourceId, videoId)
 
     private suspend fun downloadLocked(
         item: ShortVideoItem,
         sourceId: Long,
+        headers: Map<String, String>,
+        qualitySnapshot: ReelsQualityDownloadSnapshot?,
     ): ReelsOfflineStore.DownloadResult {
         if (storedFile(sourceId, item.id) != null) return ReelsOfflineStore.DownloadResult.SAVED
-        // A manifest is not a standalone copy: saving just the playlist file would yield an
-        // "offline" item that cannot play in airplane mode.
-        if (isAdaptiveReelUrl(item.videoUrl)) return ReelsOfflineStore.DownloadResult.UNSUPPORTED
+        if (qualitySnapshot != null) {
+            ReelsOfflineQualityMetadata.delete(dir, sourceId, item.id)
+        }
+        // DASH (.mpd) manifests require multi-track muxing and remain unsupported.
+        if (isDashReelUrl(item.videoUrl)) return ReelsOfflineStore.DownloadResult.UNSUPPORTED
         dir.mkdirs()
         sweepStaleTransfers()
+
+        // Fast path 1: HLS (.m3u8) segment stitching into a standalone offline file.
+        if (isHlsReelUrl(item.videoUrl)) {
+            val reqHeaders = reelsRequestHeaders(headers, item.webUrl)
+            val playlist = ReelsHlsDownloader.resolveMediaPlaylist(client, item.videoUrl, reqHeaders)
+                ?: return ReelsOfflineStore.DownloadResult.UNSUPPORTED
+            val used = usedBytes()
+            val budget = (maxBytes - used).coerceAtLeast(0L)
+            val target = File(dir, fileNameFor(sourceId, item.id, playlist.fileExtension))
+            val part = File(dir, "${target.name}.${System.nanoTime()}.$PART_SUFFIX")
+            val written = try {
+                part.outputStream().use { output ->
+                    ReelsHlsDownloader.stitchSegments(
+                        client = client,
+                        playlist = playlist,
+                        headers = reqHeaders,
+                        output = output,
+                        maxBytes = budget,
+                    )
+                }
+            } catch (e: CancellationException) {
+                part.delete()
+                throw e
+            } catch (_: ReelsHlsDownloader.HlsQuotaExceededException) {
+                part.delete()
+                return ReelsOfflineStore.DownloadResult.QUOTA
+            } catch (_: Exception) {
+                part.delete()
+                return ReelsOfflineStore.DownloadResult.NETWORK
+            }
+            if (written <= 0L) {
+                part.delete()
+                return ReelsOfflineStore.DownloadResult.NETWORK
+            }
+            if (!publish(part, target)) return ReelsOfflineStore.DownloadResult.NETWORK
+            if (qualitySnapshot != null) {
+                ReelsOfflineQualityMetadata.write(
+                    dir,
+                    ReelsStoredVideoQuality(
+                        schemaVersion = ReelsOfflineQualityMetadata.SCHEMA_VERSION,
+                        sourceId = sourceId,
+                        itemId = item.id,
+                        fileName = target.name,
+                        byteLength = target.length(),
+                        lastModifiedMs = target.lastModified(),
+                        variant = qualitySnapshot.variant,
+                    ),
+                )
+            }
+            return ReelsOfflineStore.DownloadResult.SAVED
+        }
+
+        // Fast path 2: 100% cache hit in process-wide SimpleCache -> instant offline copy without network.
+        val cacheKeys = buildList<String> {
+            qualitySnapshot?.let { snap ->
+                add(ReelsQualityController.cacheKey(snap.owner, snap.item.id, snap.cacheIdentity))
+            }
+            add("$sourceId:${item.id}:hd")
+            add("$sourceId:${item.id}:sd")
+            add(item.videoUrl)
+        }
+        val cached = openCachedReelStreamIfComplete(app, cacheKeys)
+        if (cached != null) {
+            val used = usedBytes()
+            if (cached.contentLength > 0L && used + cached.contentLength > maxBytes) {
+                cached.inputStream.close()
+                return ReelsOfflineStore.DownloadResult.QUOTA
+            }
+            val extension = resolveExtension(item.videoUrl, null)
+            val target = File(dir, fileNameFor(sourceId, item.id, extension))
+            val part = File(dir, "${target.name}.${System.nanoTime()}.$PART_SUFFIX")
+            val budget = (maxBytes - used).coerceAtLeast(0L)
+            val copied = try {
+                cached.inputStream.use { input ->
+                    part.outputStream().use { output ->
+                        copyWithinBudget(input, output, budget)
+                    }
+                }
+            } catch (e: CancellationException) {
+                part.delete()
+                throw e
+            } catch (_: Exception) {
+                part.delete()
+                null
+            }
+            if (copied != null && copied > 0L && publish(part, target)) {
+                if (qualitySnapshot != null) {
+                    ReelsOfflineQualityMetadata.write(
+                        dir,
+                        ReelsStoredVideoQuality(
+                            schemaVersion = ReelsOfflineQualityMetadata.SCHEMA_VERSION,
+                            sourceId = sourceId,
+                            itemId = item.id,
+                            fileName = target.name,
+                            byteLength = target.length(),
+                            lastModifiedMs = target.lastModified(),
+                            variant = qualitySnapshot.variant,
+                        ),
+                    )
+                }
+                return ReelsOfflineStore.DownloadResult.SAVED
+            }
+            part.delete()
+        }
         val request = Request.Builder()
             .url(item.videoUrl)
-            .apply { sameOriginReferer(item.webUrl)?.let { header("Referer", it) } }
+            .apply {
+                headers.forEach { (name, value) ->
+                    if (name.isNotBlank()) header(name, value)
+                }
+                if (headers.keys.none { it.equals("Referer", ignoreCase = true) }) {
+                    sameOriginReferer(item.webUrl)?.let { header("Referer", it) }
+                }
+            }
             .build()
         val call = client.newCall(request)
         // A cancelled coroutine must abort the socket wait, not just return after it.
@@ -119,6 +254,20 @@ class ReelsOfflineStoreImpl(
                     return ReelsOfflineStore.DownloadResult.NETWORK
                 }
                 if (!publish(part, target)) return ReelsOfflineStore.DownloadResult.NETWORK
+                if (qualitySnapshot != null) {
+                    ReelsOfflineQualityMetadata.write(
+                        dir,
+                        ReelsStoredVideoQuality(
+                            schemaVersion = ReelsOfflineQualityMetadata.SCHEMA_VERSION,
+                            sourceId = sourceId,
+                            itemId = item.id,
+                            fileName = target.name,
+                            byteLength = target.length(),
+                            lastModifiedMs = target.lastModified(),
+                            variant = qualitySnapshot.variant,
+                        ),
+                    )
+                }
             }
         } catch (e: CancellationException) {
             // The caller went away: report cancellation as such, never as a network verdict.
@@ -142,28 +291,37 @@ class ReelsOfflineStoreImpl(
             val copies = dir.listFiles()
                 ?.filter { file -> parseName(file.name) == (sourceId to videoId) }
                 .orEmpty()
-            copies.all { it.delete() }
+            val mediaDeleted = copies.all { it.delete() }
+            ReelsOfflineQualityMetadata.delete(dir, sourceId, videoId)
+            mediaDeleted
         }
     }
 
-    override fun usedBytes(): Long = (dir.listFiles() ?: emptyArray()).sumOf { it.length() }
+    override fun usedBytes(): Long =
+        dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     override suspend fun deleteBySource(sourceId: Long): Int = withContext(ioDispatcher) {
         writeMutex.withLock {
             val prefix = "${sourceId}_"
-            (dir.listFiles() ?: emptyArray())
+            val mediaDeleted = (dir.listFiles() ?: emptyArray())
                 .filter { it.name.startsWith(prefix) }
                 .count { it.delete() }
+            ReelsOfflineQualityMetadata.deleteSource(dir, sourceId)
+            mediaDeleted
         }
     }
 
     override suspend fun clearAll(): Long = withContext(ioDispatcher) {
         writeMutex.withLock {
-            val files = dir.listFiles() ?: return@withLock 0L
-            files.sumOf { file ->
+            val files = dir.walkTopDown().filter { it.isFile }.toList()
+            val freed = files.sumOf { file ->
                 val size = file.length()
                 if (file.delete()) size else 0L
             }
+            dir.walkBottomUp()
+                .filter { it != dir && it.isDirectory }
+                .forEach { it.delete() }
+            freed
         }
     }
 
@@ -270,10 +428,10 @@ class ReelsOfflineStoreImpl(
         }
     }
 
-    private fun isAdaptiveReelUrl(url: String): Boolean =
+    private fun isDashReelUrl(url: String): Boolean =
         Uri.parse(url).lastPathSegment
             ?.substringAfterLast('.', "")
-            ?.lowercase() in ADAPTIVE_EXTENSIONS
+            ?.lowercase() in UNSUPPORTED_ADAPTIVE_EXTENSIONS
 
     private fun isAdaptiveContentType(contentType: MediaType?): Boolean {
         val mime = contentType?.let { "${it.type}/${it.subtype}".lowercase() } ?: return false
@@ -287,7 +445,7 @@ class ReelsOfflineStoreImpl(
         const val PART_SUFFIX = "part"
         const val STAGED_SUFFIX = "staged"
 
-        val ADAPTIVE_EXTENSIONS = setOf("m3u8", "mpd")
+        val UNSUPPORTED_ADAPTIVE_EXTENSIONS = setOf("mpd")
         val ADAPTIVE_CONTENT_TYPES = setOf(
             "application/vnd.apple.mpegurl",
             "application/x-mpegurl",
@@ -298,6 +456,7 @@ class ReelsOfflineStoreImpl(
         // else falls back to the response content type.
         val STORED_EXTENSIONS = setOf(
             "mp4",
+            "ts",
             "webm",
             "m4v",
             "mov",

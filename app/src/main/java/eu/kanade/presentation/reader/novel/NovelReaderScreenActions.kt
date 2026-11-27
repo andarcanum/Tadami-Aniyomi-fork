@@ -24,6 +24,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest
 data class NovelReaderScreenActions(
     val onBack: () -> Unit,
     val onReadingProgress: (
+        chapterId: Long,
         currentIndex: Int,
         totalItems: Int,
         persistedProgress: Long?,
@@ -33,6 +34,8 @@ data class NovelReaderScreenActions(
     val onToggleBookmark: () -> Unit = {},
     val onOpenDictionaryHistory: (() -> Unit)? = null,
     val onStartGeminiTranslation: () -> Unit = {},
+    val onStartGeminiTranslationForProfile: (profileId: String?, forceRetranslate: Boolean) -> Unit = { _, _ -> },
+    val onClearSuppressedGeminiCompletion: () -> Unit = {},
     val onStopGeminiTranslation: () -> Unit = {},
     val onToggleGeminiTranslationVisibility: () -> Unit = {},
     val onClearGeminiTranslation: () -> Unit = {},

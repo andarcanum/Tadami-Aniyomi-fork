@@ -22,6 +22,8 @@ import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -58,6 +60,7 @@ class NovelCoverFetcher(
     private val imageLoader: ImageLoader,
     private val pluginImageResolver: suspend (String) -> eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload? =
         NovelPluginImageResolver::resolve,
+    private val awaitSourceReady: suspend () -> Unit = {},
 ) : Fetcher {
 
     private lateinit var diskCacheKey: String
@@ -95,6 +98,7 @@ class NovelCoverFetcher(
             Type.URL -> httpLoader(rawUrl)
             Type.PLUGIN_IMAGE -> pluginImageLoader(rawUrl)
             Type.RELATIVE -> {
+                awaitSourceReady()
                 val siteUrl = sourceSiteUrlLazy.value?.trimEnd('/')
                 if (siteUrl != null) {
                     httpLoader("$siteUrl$rawUrl")
@@ -241,6 +245,7 @@ class NovelCoverFetcher(
     }
 
     private suspend fun executeNetworkRequest(url: String): Response {
+        awaitSourceReady()
         val client = callFactoryLazy.value
             .let { factory ->
                 if (factory is OkHttpClient) factory.withCoverTimeouts() else factory
@@ -254,7 +259,7 @@ class NovelCoverFetcher(
         repeat(COVER_NETWORK_ATTEMPTS) { attempt ->
             val pluginHeaders = pluginHeadersProvider()
             val response = try {
-                callFactoryLazy.value
+                client
                     .newCall(
                         buildNovelCoverRequest(
                             url = url,
@@ -419,6 +424,13 @@ class NovelCoverFetcher(
                 },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                awaitSourceReady = {
+                    if (!sourceManager.isInitialized.value) {
+                        withTimeoutOrNull(SOURCE_INIT_WAIT_MS) {
+                            sourceManager.isInitialized.first { it }
+                        }
+                    }
+                },
             )
         }
     }
@@ -449,6 +461,13 @@ class NovelCoverFetcher(
                 },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                awaitSourceReady = {
+                    if (!sourceManager.isInitialized.value) {
+                        withTimeoutOrNull(SOURCE_INIT_WAIT_MS) {
+                            sourceManager.isInitialized.first { it }
+                        }
+                    }
+                },
             )
         }
     }
@@ -479,6 +498,13 @@ class NovelCoverFetcher(
                 },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                awaitSourceReady = {
+                    if (!sourceManager.isInitialized.value) {
+                        withTimeoutOrNull(SOURCE_INIT_WAIT_MS) {
+                            sourceManager.isInitialized.first { it }
+                        }
+                    }
+                },
             )
         }
     }
@@ -491,6 +517,9 @@ class NovelCoverFetcher(
 
         /** Delay between the first failed attempt and the retry. */
         private const val COVER_NETWORK_RETRY_DELAY_MS = 500L
+
+        /** Bounded cold-start wait for extension sources before uncached network cover fetches. */
+        private const val SOURCE_INIT_WAIT_MS = 5_000L
     }
 }
 

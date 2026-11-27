@@ -57,7 +57,7 @@ class NvidiaTranslationServiceTest {
     }
 
     @Test
-    fun `falls back to plaintext response when nvidia omits xml tags`() = runTest {
+    fun `ambiguous multi-block plaintext requires granular recovery instead of guessed index mapping`() = runTest {
         server.enqueue(
             MockResponse().setBody(
                 """{"choices":[{"message":{"content":"Privet\n\nMir"}}]}""",
@@ -83,6 +83,6 @@ class NvidiaTranslationServiceTest {
             ),
         )
 
-        translated shouldBe listOf("Privet", "Mir")
+        translated shouldBe listOf(null, null)
     }
 }

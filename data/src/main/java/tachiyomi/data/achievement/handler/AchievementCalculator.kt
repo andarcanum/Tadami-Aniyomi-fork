@@ -1,8 +1,10 @@
 package tachiyomi.data.achievement.handler
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import logcat.LogPriority
 import logcat.logcat
+import tachiyomi.data.achievement.AchievementXp
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.data.achievement.UserProfileManager
 import tachiyomi.data.achievement.database.AchievementsDatabase
@@ -14,9 +16,11 @@ import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementProgress
 import tachiyomi.domain.achievement.model.AchievementType
+import tachiyomi.domain.achievement.model.RewardType
 import tachiyomi.domain.achievement.model.UserProfile
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.easteregg.crystal.CrystalMemorialIds
 import tachiyomi.domain.entries.anime.repository.AnimeRepository
 import tachiyomi.domain.entries.manga.repository.MangaRepository
 import tachiyomi.domain.entries.novel.repository.NovelRepository
@@ -43,7 +47,12 @@ class AchievementCalculator(
         private const val BATCH_SIZE = 50
     }
 
-    suspend fun calculateInitialProgress(): CalculationResult {
+    suspend fun calculateInitialProgress(): CalculationResult = achievementsDatabase.withProfileMutation {
+        AchievementXp.ensureProfile(achievementsDatabase, System.currentTimeMillis())
+        calculateLocked()
+    }
+
+    private suspend fun calculateLocked(): CalculationResult {
         val startTime = System.currentTimeMillis()
         var achievementsProcessed = 0
         var achievementsUnlocked = 0
@@ -111,7 +120,7 @@ class AchievementCalculator(
             // granted treasury rewards.
             val newlyUnlocked = allProgressUpdates.filter { progress ->
                 val wasUnlocked = existingProgress[progress.achievementId]?.isUnlocked == true
-                progress.isUnlocked && !wasUnlocked
+                progress.achievementId != CrystalMemorialIds.GRANT_KEY && progress.isUnlocked && !wasUnlocked
             }
             newlyUnlocked.forEach { progress ->
                 val achievement = achievementsById[progress.achievementId] ?: return@forEach
@@ -144,25 +153,15 @@ class AchievementCalculator(
                         achievement.points
                     }
                 }
-            val newLevel = pointsManager.calculateLevel(totalPoints)
-            val xpSpentForCurrentLevel = (1..newLevel).sumOf { UserProfile.getXPForLevel(it) }
-            val currentXP = (totalPoints - xpSpentForCurrentLevel).coerceAtLeast(0)
-            val xpToNextLevel = UserProfile.getXPForLevel(newLevel + 1)
-
-            achievementsDatabase.userProfileQueries.updateXP(
-                user_id = "default",
-                total_xp = totalPoints.toLong(),
-                current_xp = currentXP.toLong(),
-                level = newLevel.toLong(),
-                xp_to_next_level = xpToNextLevel.toLong(),
-                last_updated = System.currentTimeMillis(),
-            )
-            achievementsDatabase.userProfileQueries.updateAchievementCounts(
-                user_id = "default",
-                unlocked = achievementsUnlocked.toLong(),
-                total = allProgressUpdates.size.toLong(),
-                last_updated = System.currentTimeMillis(),
-            )
+            achievementsDatabase.transaction {
+                AchievementXp.setTotal(achievementsDatabase, totalPoints.toLong(), System.currentTimeMillis())
+                achievementsDatabase.userProfileQueries.updateAchievementCounts(
+                    user_id = "default",
+                    unlocked = achievementsUnlocked.toLong(),
+                    total = allProgressUpdates.size.toLong(),
+                    last_updated = System.currentTimeMillis(),
+                )
+            }
 
             populateActivityLog()
 
@@ -177,6 +176,8 @@ class AchievementCalculator(
                 achievementsUnlocked = achievementsUnlocked,
                 duration = duration,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) { "Achievement calculation failed: ${e.message}" }
             return CalculationResult(
@@ -191,6 +192,20 @@ class AchievementCalculator(
         progress: Int,
         existing: AchievementProgress?,
     ): AchievementProgress {
+        if (achievement.id == CrystalMemorialIds.GRANT_KEY) {
+            val receipt = achievementsDatabase.crystalMemorialQueries.getState(
+                CrystalMemorialIds.GRANT_KEY,
+            ).executeAsOneOrNull()
+            val granted = receipt?.granted_at != null && receipt.granted_xp == CrystalMemorialIds.XP.toLong()
+            return AchievementProgress(
+                achievementId = achievement.id,
+                progress = if (granted) 1 else 0,
+                maxProgress = 1,
+                isUnlocked = granted,
+                unlockedAt = if (granted) receipt.granted_at else null,
+                lastUpdated = System.currentTimeMillis(),
+            )
+        }
         val threshold = achievement.threshold ?: 1
         val isUnlocked = progress >= threshold
         val now = System.currentTimeMillis()
@@ -222,14 +237,7 @@ class AchievementCalculator(
         logcat(LogPriority.INFO) {
             "Replaying unlock side effects for ${achievement.id} (+${achievement.points} points)"
         }
-        try {
-            pointsManager.addPoints(achievement.points)
-            pointsManager.incrementUnlocked()
-        } catch (e: Exception) {
-            logcat(LogPriority.ERROR) {
-                "Failed to add points for retroactively unlocked achievement: ${achievement.id}, ${e.message}"
-            }
-        }
+        // XP and counters are committed once from the final aggregate, while the shared mutation lock is held.
         try {
             unlockableManager.unlockAchievementRewards(achievement)
         } catch (e: Exception) {
@@ -239,7 +247,7 @@ class AchievementCalculator(
         }
         if (achievement.hasRewards) {
             try {
-                userProfileManager.grantRewards(achievement.getAllRewards())
+                userProfileManager.grantRewards(achievement.getAllRewards().filter { it.type != RewardType.EXPERIENCE })
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) {
                     "Failed to grant profile rewards for retroactively unlocked achievement: ${achievement.id}, ${e.message}"

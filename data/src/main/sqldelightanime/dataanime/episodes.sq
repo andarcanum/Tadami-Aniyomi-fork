@@ -29,6 +29,9 @@ CREATE TABLE episodes(
 CREATE INDEX episodes_anime_id_index ON episodes(anime_id);
 CREATE INDEX episodes_unseen_by_anime_index ON episodes(anime_id, seen) WHERE seen = 0;
 CREATE INDEX episodes_url_index ON episodes(url);
+CREATE INDEX episodes_date_fetch_index ON episodes(date_fetch DESC);
+CREATE INDEX episodes_anime_id_date_fetch_index ON episodes(anime_id, date_fetch DESC);
+CREATE INDEX episodes_date_upload_index ON episodes(date_upload DESC);
 
 CREATE TRIGGER update_last_modified_at_episodes
 AFTER UPDATE ON episodes
@@ -92,7 +95,8 @@ getEpisodeByUrlAndAnimeId:
 SELECT *
 FROM episodes
 WHERE url = :episodeUrl
-AND anime_id = :animeId;
+AND anime_id = :animeId
+LIMIT 1;
 
 removeEpisodesWithIds:
 DELETE FROM episodes
@@ -133,4 +137,19 @@ SELECT last_insert_rowid();
 
 getAllEpisodesForBackup:
 SELECT *
-FROM episodes;
+FROM episodes
+WHERE anime_id IN (
+    SELECT _id
+    FROM animes
+    WHERE favorite = 1
+)
+OR anime_id IN (
+    SELECT DISTINCT ep_seen.anime_id
+    FROM episodes ep_seen
+    WHERE ep_seen.seen = 1 OR ep_seen.last_second_seen != 0
+)
+OR anime_id IN (
+    SELECT DISTINCT ep_hist.anime_id
+    FROM animehistory ah
+    JOIN episodes ep_hist ON ah.episode_id = ep_hist._id
+);

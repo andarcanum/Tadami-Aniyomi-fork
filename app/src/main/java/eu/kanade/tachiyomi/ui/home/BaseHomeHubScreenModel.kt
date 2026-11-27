@@ -70,6 +70,14 @@ internal abstract class BaseHomeHubScreenModel(
         discoveryController?.likeDiscoveryItem(item)
     }
 
+    open fun hideDiscoveryItem(item: HomeHubDiscoveryItem) {
+        discoveryController?.hideDiscoveryItem(item)
+    }
+
+    open fun markDiscoveryItemConsumed(item: HomeHubDiscoveryItem) {
+        discoveryController?.markDiscoveryItemConsumed(item)
+    }
+
     open fun restoreHiddenTeaserItem(item: HomeHubDiscoveryItem) {
         discoveryController?.restoreHiddenTeaserItem(item)
     }
@@ -207,4 +215,29 @@ internal fun pruneDismissedSessionTitles(
 ): Set<String> {
     if (titles.size <= maxLimit) return titles
     return titles.toList().takeLast(keepRecent).toSet()
+}
+
+/**
+ * Seeds frame-0 discovery flags from synchronous [DiscoveryPreferences] so cold-start
+ * skeletons match the user's configured hero/discovery layout before async flows emit.
+ */
+internal fun HomeHubUiState.withInitialDiscoveryPreferences(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    cachedDiscovery: List<CachedDiscoveryItem> = emptyList(),
+): HomeHubUiState {
+    val enabled = preferences.discoveryEnabled().get()
+    val lastGenAt = preferences.lastGenerationAt(mediaType).get().takeIf { it > 0L }
+    val restoredDiscovery = if (enabled) {
+        cachedDiscovery.map { it.toHomeHubDiscoveryItem(mediaType) }
+    } else {
+        emptyList()
+    }
+    return copy(
+        discovery = restoredDiscovery,
+        discoveryPool = restoredDiscovery,
+        discoveryEnabled = enabled,
+        isDiscoveryLoading = enabled && restoredDiscovery.isEmpty(),
+        discoveryLastUpdated = lastGenAt,
+    )
 }

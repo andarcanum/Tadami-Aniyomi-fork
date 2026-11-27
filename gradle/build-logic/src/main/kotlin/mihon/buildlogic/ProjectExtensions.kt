@@ -171,6 +171,11 @@ internal fun Project.configureCompose(commonExtension: ApplicationExtension) {
         if (enableReports) {
             rootBuildDir.resolve("compose-reports").resolve(relativePath).let(reportsDestination::set)
         }
+
+        val stabilityConfigFile = rootProject.layout.projectDirectory.file("compose_compiler_config.conf")
+        if (stabilityConfigFile.asFile.exists()) {
+            stabilityConfigurationFiles.add(stabilityConfigFile)
+        }
     }
 }
 
@@ -198,6 +203,11 @@ internal fun Project.configureCompose(commonExtension: LibraryExtension) {
 
         if (enableReports) {
             rootBuildDir.resolve("compose-reports").resolve(relativePath).let(reportsDestination::set)
+        }
+
+        val stabilityConfigFile = rootProject.layout.projectDirectory.file("compose_compiler_config.conf")
+        if (stabilityConfigFile.asFile.exists()) {
+            stabilityConfigurationFiles.add(stabilityConfigFile)
         }
     }
 }

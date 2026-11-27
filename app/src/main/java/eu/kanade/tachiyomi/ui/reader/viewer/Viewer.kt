@@ -22,6 +22,21 @@ interface Viewer {
     fun destroy() {}
 
     /**
+     * Releases non-essential cached resources when system memory is low.
+     */
+    fun trimMemory(level: Int) {}
+
+    /**
+     * Stops active auto-scroll immediately if running.
+     */
+    fun stopAutoScroll() {}
+
+    /**
+     * Returns whether [page] is currently attached to a live holder in this viewer.
+     */
+    fun isPageAttached(page: ReaderPage): Boolean = false
+
+    /**
      * Tells this viewer to set the given [chapters] as active.
      */
     fun setChapters(chapters: ViewerChapters)

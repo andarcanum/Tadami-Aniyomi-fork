@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reels
 
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.model.FeedCategory
 import kotlinx.collections.immutable.ImmutableList
@@ -37,7 +38,15 @@ class ReelsNichesScreenModel(
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val albumRepository: ReelsAlbumRepository = Injekt.get(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : StateScreenModel<ReelsNichesScreenModel.State>(ReelsNichesScreenModel.State()) {
+    private val sourcePreferences: SourcePreferences? = runCatching { Injekt.get<SourcePreferences>() }.getOrNull(),
+) : StateScreenModel<ReelsNichesScreenModel.State>(
+    ReelsNichesScreenModel.State(
+        sort = sourcePreferences?.reelsNichesSort()?.get()
+            ?.let(ReelsNichesSort::fromStored)
+            ?: ReelsNichesSort.Default,
+        savedOnly = sourcePreferences?.reelsNichesSavedOnly()?.get() ?: false,
+    ),
+) {
 
     data class State(
         val categories: ImmutableList<FeedCategory> = persistentListOf(),
@@ -54,21 +63,23 @@ class ReelsNichesScreenModel(
         val savedAlbumIds: Set<String> = emptySet(),
         // Local filter over the loaded directory (channel title or @username).
         val searchQuery: String = "",
+        val sort: ReelsNichesSort = ReelsNichesSort.Default,
+        val savedOnly: Boolean = false,
     ) {
         /**
-         * Categories matching [searchQuery]. The filter is local and instant: a feed source
-         * serves its whole directory in one page (hasNextPage = false), so this searches the
-         * full known catalog rather than the visible slice of the grid — and never falls back
-         * to a feed search request. Leading "@" is ignored so "@durov" and "durov" match.
+         * Categories matching [searchQuery], [savedOnly], and [sort]. Purely local and instant.
          */
         val visibleCategories: ImmutableList<FeedCategory>
-            get() {
-                val needle = searchQuery.trim().removePrefix("@").trim()
-                if (needle.isEmpty()) return categories
-                return categories
-                    .filter { it.name.contains(needle, ignoreCase = true) || it.id.contains(needle, ignoreCase = true) }
-                    .toImmutableList()
-            }
+            get() = applyNichesFilterAndSort(
+                categories = categories,
+                searchQuery = searchQuery,
+                sort = sort,
+                savedOnly = savedOnly,
+                savedAlbumIds = savedAlbumIds,
+            )
+
+        val hasItemCounts: Boolean
+            get() = categories.any { it.itemCount != null }
     }
 
     // Monotonic generation token (the same pattern as ReelsFeedScreenModel): every retry and
@@ -124,7 +135,7 @@ class ReelsNichesScreenModel(
         loadGeneration.incrementAndGet()
         loadJob?.cancel()
         loading = false
-        mutableState.update { State(searchQuery = it.searchQuery) }
+        mutableState.update { State(searchQuery = it.searchQuery, sort = it.sort, savedOnly = it.savedOnly) }
         loadMore()
     }
 
@@ -135,6 +146,19 @@ class ReelsNichesScreenModel(
      */
     fun onSearchQueryChange(query: String) {
         mutableState.update { it.copy(searchQuery = query) }
+    }
+
+    fun onSortChange(sort: ReelsNichesSort) {
+        sourcePreferences?.reelsNichesSort()?.set(sort.name)
+        mutableState.update { it.copy(sort = sort) }
+    }
+
+    fun onToggleSavedOnly() {
+        mutableState.update { current ->
+            val next = !current.savedOnly
+            sourcePreferences?.reelsNichesSavedOnly()?.set(next)
+            current.copy(savedOnly = next)
+        }
     }
 
     fun loadMore() {

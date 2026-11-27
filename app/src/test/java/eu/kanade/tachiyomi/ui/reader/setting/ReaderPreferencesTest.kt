@@ -19,6 +19,13 @@ class ReaderPreferencesTest {
     }
 
     @Test
+    fun `pause shaders on fling is disabled by default`() {
+        val prefs = ReaderPreferences(FakePreferenceStore())
+
+        prefs.pauseShadersOnFling().get() shouldBe false
+    }
+
+    @Test
     fun `chapter long page progress can be stored and loaded`() {
         val prefs = ReaderPreferences(FakePreferenceStore())
 

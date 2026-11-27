@@ -4,6 +4,8 @@ import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.service.DiscoveryMutationFence
 import tachiyomi.domain.history.anime.model.AnimeHistory
 import tachiyomi.domain.history.anime.model.AnimeHistoryUpdate
 import tachiyomi.domain.history.anime.model.AnimeHistoryWithRelations
@@ -42,7 +44,7 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun resetAnimeHistory(historyId: Long) {
         try {
-            handler.await { db -> db.animehistoryQueries.resetAnimeHistoryById(historyId) }
+            fenced { handler.await { db -> db.animehistoryQueries.resetAnimeHistoryById(historyId) } }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -50,7 +52,7 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun resetHistoryByAnimeId(animeId: Long) {
         try {
-            handler.await { db -> db.animehistoryQueries.resetHistoryByAnimeId(animeId) }
+            fenced { handler.await { db -> db.animehistoryQueries.resetHistoryByAnimeId(animeId) } }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
@@ -58,7 +60,7 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun deleteAllAnimeHistory(): Boolean {
         return try {
-            handler.await { db -> db.animehistoryQueries.removeAllHistory() }
+            fenced { handler.await { db -> db.animehistoryQueries.removeAllHistory() } }
             true
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
@@ -68,14 +70,19 @@ class AnimeHistoryRepositoryImpl(
 
     override suspend fun upsertAnimeHistory(historyUpdate: AnimeHistoryUpdate) {
         try {
-            handler.await { db ->
-                db.animehistoryQueries.upsert(
-                    historyUpdate.episodeId,
-                    historyUpdate.seenAt,
-                )
+            fenced {
+                handler.await { db ->
+                    db.animehistoryQueries.upsert(
+                        historyUpdate.episodeId,
+                        historyUpdate.seenAt,
+                    )
+                }
             }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, throwable = e)
         }
     }
+
+    private suspend fun <T> fenced(block: suspend () -> T): T =
+        DiscoveryMutationFence.withMutation(DiscoveryMediaType.ANIME, block)
 }

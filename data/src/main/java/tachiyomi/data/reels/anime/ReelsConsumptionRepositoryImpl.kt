@@ -93,12 +93,31 @@ class ReelsConsumptionRepositoryImpl(
         scope: String,
         sourceId: Long,
         itemIds: Collection<String>,
+    ): Set<String> = queryConsumedIds(sourceId, itemIds) { db, chunk ->
+        db.reels_consumptionQueries.consumedIds(scope, sourceId, chunk).executeAsList()
+    }
+
+    override suspend fun consumedIdsForSource(
+        sourceId: Long,
+        itemIds: Collection<String>,
+    ): Set<String> = queryConsumedIds(sourceId, itemIds) { db, chunk ->
+        db.reels_consumptionQueries.consumedIdsForSource(sourceId, chunk).executeAsList()
+    }
+
+    private suspend fun queryConsumedIds(
+        sourceId: Long,
+        itemIds: Collection<String>,
+        query: (AnimeDb, List<String>) -> List<String>,
     ): Set<String> {
         if (itemIds.isEmpty()) return emptySet()
         return try {
-            handler.awaitList { db ->
-                db.reels_consumptionQueries.consumedIds(scope, sourceId, itemIds)
-            }.toSet()
+            handler.await(inTransaction = true) { db ->
+                val result = HashSet<String>()
+                for (chunk in itemIds.chunked(SQLITE_IN_CHUNK_SIZE)) {
+                    result += query(db, chunk)
+                }
+                result
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: SQLiteException) {
@@ -143,8 +162,9 @@ class ReelsConsumptionRepositoryImpl(
         return try {
             handler.await(inTransaction = true) { db ->
                 db.reels_consumptionQueries.deleteForScope(scope)
-                db.reels_session_queueQueries.deleteForScope(scope)
-                db.reels_sessionQueries.deleteForScope(scope)
+                // The round-robin projection is derived state: drop it together with the session
+                // in the same transaction that bumps the generation.
+                ReelsRoundRobinStorage.clearScope(db, scope)
                 db.reels_for_you_stateQueries.bumpGeneration(scope, policyVersion.toLong())
                 db.reels_for_you_stateQueries.getGeneration(scope).executeAsOne()
             }
@@ -196,5 +216,9 @@ class ReelsConsumptionRepositoryImpl(
             policyVersion = row.policy_version.toInt(),
             historyGeneration = row.history_generation,
         )
+    }
+
+    private companion object {
+        const val SQLITE_IN_CHUNK_SIZE = 500
     }
 }

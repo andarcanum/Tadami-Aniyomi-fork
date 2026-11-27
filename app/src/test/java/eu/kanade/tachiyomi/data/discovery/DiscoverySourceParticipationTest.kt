@@ -125,4 +125,63 @@ class DiscoverySourceParticipationTest {
         )
         selected shouldBe 1L
     }
+
+    @Test
+    fun `reconcileKnownPlugins snapshots baseline on initial manual mode without excluding current plugins`() {
+        val result = reconcileKnownPlugins(
+            mode = "manual",
+            installedKeys = listOf("p1", "p2"),
+            excludedKeys = setOf("p2"),
+            knownKeys = emptySet(),
+        )
+        result shouldBe PluginKnownReconciliation(
+            excludedKeys = setOf("p2"),
+            knownKeys = setOf("p1", "p2"),
+            changedExcluded = false,
+            changedKnown = true,
+        )
+    }
+
+    @Test
+    fun `reconcileKnownPlugins auto excludes newly installed plugins in manual mode`() {
+        val result = reconcileKnownPlugins(
+            mode = "manual",
+            installedKeys = listOf("p1", "p2", "p3"),
+            excludedKeys = setOf("p2"),
+            knownKeys = setOf("p1", "p2"),
+        )
+        result shouldBe PluginKnownReconciliation(
+            excludedKeys = setOf("p2", "p3"),
+            knownKeys = setOf("p1", "p2", "p3"),
+            changedExcluded = true,
+            changedKnown = true,
+        )
+    }
+
+    @Test
+    fun `reconcileKnownPlugins leaves new plugins untouched in auto mode and ignores empty install list`() {
+        reconcileKnownPlugins(
+            mode = "auto",
+            installedKeys = listOf("p1", "p2", "p3"),
+            excludedKeys = setOf("p2"),
+            knownKeys = setOf("p1", "p2"),
+        ) shouldBe PluginKnownReconciliation(
+            excludedKeys = setOf("p2"),
+            knownKeys = setOf("p1", "p2"),
+            changedExcluded = false,
+            changedKnown = false,
+        )
+
+        reconcileKnownPlugins(
+            mode = "manual",
+            installedKeys = emptyList(),
+            excludedKeys = setOf("p2"),
+            knownKeys = setOf("p1", "p2"),
+        ) shouldBe PluginKnownReconciliation(
+            excludedKeys = setOf("p2"),
+            knownKeys = setOf("p1", "p2"),
+            changedExcluded = false,
+            changedKnown = false,
+        )
+    }
 }

@@ -767,7 +767,7 @@ class AnimeScreenModel(
             if (anime.fetchType != FetchType.Seasons) {
                 screenModelScope.launchIO {
                     val hasDownloads = downloadManager.getDownloadCount(anime) > 0 ||
-                        downloadManager.getQueuedDownloadOrNull(anime.id) != null
+                        downloadManager.queueState.value.any { it.anime.id == anime.id }
                     if (hasDownloads) {
                         val hydrated = rawEpisodes.toEpisodeListItems(anime)
                         updateSuccessState { current ->
@@ -791,8 +791,11 @@ class AnimeScreenModel(
                     }
             }
 
-            // Fetch suggestions asynchronously
-            if (!willLoadMetadata || hasCachedMetadata) {
+            // Defer below-the-fold suggestions until source refresh completes when opening an
+            // uninitialized/from-source title so primary info & episodes don't fight for sockets
+            // and suggestions get populated genres/metadata on the first attempt.
+            val deferSuggestionsUntilSourceRefresh = needRefreshInfo || needRefreshEpisode || needRefreshSeason
+            if (!deferSuggestionsUntilSourceRefresh && (!willLoadMetadata || hasCachedMetadata)) {
                 loadSuggestions(
                     buildSuggestionSeed(anime, cachedMetadata),
                     anime = anime,
@@ -813,6 +816,16 @@ class AnimeScreenModel(
                     async { if (needRefreshEpisode || needRefreshSeason) fetchEpisodesAndSeasonsFromSource() },
                 )
                 fetchFromSourceTasks.awaitAll()
+            }
+
+            if (deferSuggestionsUntilSourceRefresh && (!willLoadMetadata || hasCachedMetadata)) {
+                val refreshedAnime = successState?.anime ?: anime
+                val latestMetadata = successState?.animeMetadata ?: cachedMetadata
+                loadSuggestions(
+                    buildSuggestionSeed(refreshedAnime, latestMetadata),
+                    anime = refreshedAnime,
+                    source = refreshedAnime.toCatalogueSource(),
+                )
             }
 
             if (successState?.sourceRating == null) {
@@ -1332,8 +1345,9 @@ class AnimeScreenModel(
 
         // Display-only preview: the list becomes visible right after parse (before full sync cost).
         // Real episodes (with persisted ids) come via the DB flow later.
-        // Only for this screen's anime, never for season sub-fetches.
-        if (anime.id == animeId) {
+        // Only for this screen's anime and only while the DB episode list is still empty
+        // (mirrors MangaScreenModel DECISION-10 so manual refreshes do not overwrite seen/download states).
+        if (anime.id == animeId && successState?.episodes.isNullOrEmpty()) {
             val previewItems = episodes.mapIndexed { idx, sEp ->
                 val dummy = Episode(
                     id = -(1000000000L + idx),
@@ -1363,7 +1377,7 @@ class AnimeScreenModel(
                 )
             }
             updateSuccessState { current ->
-                if (current.anime.id == animeId) {
+                if (current.anime.id == animeId && current.episodes.isEmpty()) {
                     current.copy(episodeSourcePreview = previewItems)
                 } else {
                     current
@@ -2771,6 +2785,7 @@ class AnimeScreenModel(
 
     companion object {
         private const val FAST_CACHE_MAX_ITEMS = 24
+        private const val CACHE_WRITE_THROTTLE_MS = 2_000L
         private val stateCache = object : java.util.LinkedHashMap<Long, State.Success>(
             FAST_CACHE_MAX_ITEMS + 1,
             1f,
@@ -2780,6 +2795,7 @@ class AnimeScreenModel(
                 return size > FAST_CACHE_MAX_ITEMS
             }
         }
+        private val lastCacheWriteMs = HashMap<Long, Long>()
 
         @Synchronized
         private fun restoreStateFromCache(animeId: Long): State.Success? {
@@ -2789,6 +2805,10 @@ class AnimeScreenModel(
         @Synchronized
         private fun cacheState(state: State.Success?) {
             if (state == null) return
+            if (state.episodeSourcePreview != null) return
+            val now = System.currentTimeMillis()
+            if (now - (lastCacheWriteMs[state.anime.id] ?: 0L) < CACHE_WRITE_THROTTLE_MS) return
+            lastCacheWriteMs[state.anime.id] = now
             val unselectedEpisodes = if (state.episodes.any { it.selected }) {
                 state.episodes.map { if (it.selected) it.copy(selected = false) else it }
             } else {
@@ -2802,8 +2822,16 @@ class AnimeScreenModel(
         }
 
         @Synchronized
+        fun clearMemoryCaches() {
+            stateCache.clear()
+            lastCacheWriteMs.clear()
+            AnimeSuggestionsSessionCache.clear()
+        }
+
+        @Synchronized
         internal fun clearStateCacheForTest() {
             stateCache.clear()
+            lastCacheWriteMs.clear()
         }
 
         @Synchronized
@@ -2983,6 +3011,7 @@ internal fun shouldApplyDefaultSeasonFlags(anime: Anime): Boolean {
  */
 private object AnimeSuggestionsSessionCache {
     private const val TTL_MS = 12 * 60 * 60 * 1000L
+    private const val MAX_ENTRIES = 48
 
     private data class Entry(
         val seed: SuggestionSeed,
@@ -2990,8 +3019,13 @@ private object AnimeSuggestionsSessionCache {
         val cachedAt: Long,
     )
 
-    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+    private val entries = object : java.util.LinkedHashMap<Long, Entry>(MAX_ENTRIES + 1, 1f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Entry>?): Boolean {
+            return size > MAX_ENTRIES
+        }
+    }
 
+    @Synchronized
     fun get(animeId: Long, seed: SuggestionSeed? = null): SuggestionState.Success? {
         val entry = entries[animeId] ?: return null
         if (System.currentTimeMillis() - entry.cachedAt > TTL_MS) {
@@ -3002,7 +3036,13 @@ private object AnimeSuggestionsSessionCache {
         return entry.state
     }
 
+    @Synchronized
     fun put(animeId: Long, seed: SuggestionSeed, state: SuggestionState.Success) {
         entries[animeId] = Entry(seed, state, System.currentTimeMillis())
+    }
+
+    @Synchronized
+    fun clear() {
+        entries.clear()
     }
 }

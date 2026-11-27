@@ -36,6 +36,9 @@ class ReelsFollowsScreenModel(
         }
     }
 
+    fun creatorDisplayLabel(follow: ReelsFollow): String =
+        reelsCreatorLabel(sourceManager.get(follow.sourceId), follow.creator, "@${follow.creator}").orEmpty()
+
     fun removeFollow(follow: ReelsFollow) {
         screenModelScope.launch {
             repository.delete(follow.sourceId, follow.creator)

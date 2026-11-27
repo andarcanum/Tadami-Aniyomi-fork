@@ -30,6 +30,7 @@ import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
+import tachiyomi.domain.items.chapter.service.getChapterSort
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.series.manga.model.LibraryMangaSeries
 import tachiyomi.i18n.MR
@@ -55,16 +56,14 @@ fun resolveMangaSeriesInterstitialState(
 
     val currentEntry = chaptersByManga.firstOrNull { it.first.id == currentManga.id } ?: return null
     val currentChapters = currentEntry.second.sortedWith(
-        compareBy<Chapter> { it.chapterNumber }
-            .thenBy { it.sourceOrder }
-            .thenBy { it.id },
+        getChapterSort(currentManga, sortDescending = false),
     )
     if (currentChapters.lastOrNull()?.id != currentChapter.id) return null
 
     val nextManga = series.entries.getOrNull(currentIndex + 1)
     val nextChapter = nextManga?.let { nextEntry ->
         val nextChapters = chaptersByManga.firstOrNull { it.first.id == nextEntry.id }?.second.orEmpty()
-        resolveMangaResumeChapter(nextChapters)
+        resolveMangaResumeChapter(nextEntry.manga, nextChapters)
     }
 
     return MangaSeriesInterstitialState(

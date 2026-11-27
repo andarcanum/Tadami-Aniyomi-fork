@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +52,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
@@ -59,7 +63,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
+import eu.kanade.tachiyomi.ui.browse.anime.source.browse.SourceFilterAnimeDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
+import eu.kanade.tachiyomi.ui.reels.components.ReelsLocalFilterSheet
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
@@ -85,26 +91,72 @@ data class ReelsAlbumScreen(
         val state by screenModel.state.collectAsStateWithLifecycle()
         var query by remember { mutableStateOf("") }
         var showSearch by remember { mutableStateOf(false) }
+        var showFilterSheet by remember { mutableStateOf(false) }
+        var showSourceFilterDialog by remember { mutableStateOf(false) }
         var menuItem by remember { mutableStateOf<ShortVideoItem?>(null) }
 
-        val filtered = remember(state.items, query) {
-            if (query.isBlank()) {
-                state.items
-            } else {
-                state.items.filter { it.title.orEmpty().contains(query, ignoreCase = true) }
-            }
+        val availableTags = remember(state.items) {
+            extractAvailableTags(state.items)
         }
+        val filtered = remember(state.items, state.localFilter, query, state.watched, state.progress) {
+            applyReelsLocalFilter(
+                items = state.items,
+                filter = state.localFilter,
+                query = query,
+                watchedIds = state.watched,
+                progressMap = state.progress,
+            )
+        }
+        val hasLocalConstraint = query.isNotBlank() || state.localFilter.isActive
 
         val gridState = rememberLazyGridState()
-        // F03: local search must paginate in FILTERED coordinates. Auto-fill is capped per
-        // query; beyond the cap the user pulls more pages explicitly, so a miss cannot chain
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var isLifecycleStarted by remember(lifecycleOwner) {
+            mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+        }
+        androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                isLifecycleStarted = event.targetState.isAtLeast(Lifecycle.State.STARTED)
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        // F03: local search/filters must paginate in FILTERED coordinates. Auto-fill is capped per
+        // constraint; beyond the cap the user pulls more pages explicitly, so a miss cannot chain
         // request after request through the whole album.
-        var searchAutoPages by remember(query) { mutableIntStateOf(0) }
-        LaunchedEffect(gridState, state.items.size, filtered.size, query) {
+        var searchAutoPages by remember(query, state.localFilter) { mutableIntStateOf(0) }
+        var targetFilteredCount by remember(query, state.localFilter) {
+            mutableIntStateOf(ALBUM_FILTER_MIN_VISIBLE_ITEMS)
+        }
+        LaunchedEffect(
+            isLifecycleStarted,
+            hasLocalConstraint,
+            filtered.size,
+            state.items.size,
+            state.canLoadMore,
+            state.isLoading,
+            query,
+            state.localFilter,
+            targetFilteredCount,
+            searchAutoPages,
+        ) {
+            if (
+                isLifecycleStarted &&
+                hasLocalConstraint &&
+                filtered.size < targetFilteredCount &&
+                state.canLoadMore &&
+                !state.isLoading &&
+                searchAutoPages < ALBUM_SEARCH_AUTO_PAGES
+            ) {
+                searchAutoPages++
+                screenModel.loadMore()
+            }
+        }
+        LaunchedEffect(gridState, state.items.size, filtered.size, query, state.localFilter) {
             snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
                 .collect { lastVisible ->
                     if (lastVisible < filtered.size - 6) return@collect
-                    if (query.isBlank()) {
+                    if (!hasLocalConstraint) {
                         screenModel.loadMore()
                     } else if (
                         state.canLoadMore &&
@@ -159,6 +211,21 @@ data class ReelsAlbumScreen(
                             // Report fix: start the album as a reels feed from the first video.
                             IconButton(
                                 onClick = {
+                                    val seedItems = if (filtered.isNotEmpty()) filtered else state.items
+                                    if (seedItems.isNotEmpty()) {
+                                        ReelsAlbumFeedSeedStore.pending = ReelsAlbumFeedSeed(
+                                            albumId = albumId,
+                                            items = seedItems,
+                                            targetVideoId = null,
+                                            nextPage = state.nextPage,
+                                            nextCursor = state.nextCursor,
+                                            cursorMode = state.cursorMode,
+                                            canLoadMore = state.canLoadMore,
+                                            sourceId = sourceId,
+                                            rawItems = state.items,
+                                            localFilter = state.localFilter,
+                                        )
+                                    }
                                     navigator.push(
                                         ReelsFeedScreen(
                                             sourceId = sourceId,
@@ -172,6 +239,17 @@ data class ReelsAlbumScreen(
                                     imageVector = Icons.Filled.PlayArrow,
                                     contentDescription = stringResource(MR.strings.reels_album_play_as_feed),
                                     tint = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            IconButton(onClick = { showFilterSheet = true }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.FilterList,
+                                    contentDescription = stringResource(MR.strings.reels_filter_title),
+                                    tint = if (state.localFilter.isActive) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
                                 )
                             }
                             IconButton(onClick = { showSearch = !showSearch }) {
@@ -221,10 +299,18 @@ data class ReelsAlbumScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (query.isNotBlank()) {
+                    if (hasLocalConstraint) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
+                            val headerText = if (filtered.size != state.items.size) {
+                                "${filtered.size} / ${stringResource(
+                                    MR.strings.reels_album_search_loaded,
+                                    state.items.size,
+                                )}"
+                            } else {
+                                stringResource(MR.strings.reels_album_search_loaded, filtered.size)
+                            }
                             Text(
-                                text = stringResource(MR.strings.reels_album_search_loaded, state.items.size),
+                                text = headerText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -239,6 +325,18 @@ data class ReelsAlbumScreen(
                             progress = progress,
                             watched = watched,
                             onClick = {
+                                ReelsAlbumFeedSeedStore.pending = ReelsAlbumFeedSeed(
+                                    albumId = albumId,
+                                    items = filtered,
+                                    targetVideoId = item.id,
+                                    nextPage = state.nextPage,
+                                    nextCursor = state.nextCursor,
+                                    cursorMode = state.cursorMode,
+                                    canLoadMore = state.canLoadMore,
+                                    sourceId = sourceId,
+                                    rawItems = state.items,
+                                    localFilter = state.localFilter,
+                                )
                                 navigator.push(
                                     ReelsFeedScreen(
                                         sourceId = sourceId,
@@ -262,7 +360,7 @@ data class ReelsAlbumScreen(
                             ) { CircularProgressIndicator() }
                         }
                     }
-                    if (query.isNotBlank()) {
+                    if (hasLocalConstraint) {
                         if (filtered.isEmpty() && !state.isLoading) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Box(
@@ -282,7 +380,13 @@ data class ReelsAlbumScreen(
                                     modifier = Modifier.fillMaxWidth().padding(4.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    TextButton(onClick = screenModel::loadMore) {
+                                    TextButton(
+                                        onClick = {
+                                            targetFilteredCount = filtered.size + ALBUM_FILTER_MIN_VISIBLE_ITEMS
+                                            searchAutoPages = 0
+                                            screenModel.loadMore()
+                                        },
+                                    ) {
                                         Text(stringResource(MR.strings.reels_album_search_load_more))
                                     }
                                 }
@@ -327,6 +431,44 @@ data class ReelsAlbumScreen(
                 title = {
                     Text(text = item.title.orEmpty(), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 },
+            )
+        }
+
+        if (showFilterSheet) {
+            ReelsLocalFilterSheet(
+                currentFilter = state.localFilter,
+                availableTags = availableTags,
+                showWatchFilter = true,
+                showSourceFiltersAction = state.isCategoryOrderCapable,
+                onOpenSourceFilters = {
+                    showFilterSheet = false
+                    showSourceFilterDialog = true
+                },
+                onApply = { next ->
+                    screenModel.setLocalFilter(next)
+                    showFilterSheet = false
+                },
+                onReset = {
+                    screenModel.resetLocalFilter()
+                    showFilterSheet = false
+                },
+                onDismiss = { showFilterSheet = false },
+            )
+        }
+
+        if (showSourceFilterDialog) {
+            SourceFilterAnimeDialog(
+                onDismissRequest = { showSourceFilterDialog = false },
+                filters = state.sourceFilters,
+                onReset = {
+                    screenModel.resetSourceFilters()
+                    showSourceFilterDialog = false
+                },
+                onFilter = {
+                    screenModel.applySourceFilters()
+                    showSourceFilterDialog = false
+                },
+                onUpdate = screenModel::setSourceFilters,
             )
         }
     }
@@ -393,5 +535,6 @@ data class ReelsAlbumScreen(
     }
 }
 
-// F03: pages auto-appended per local-search query before the explicit "search more" action.
-private const val ALBUM_SEARCH_AUTO_PAGES = 2
+// F03: pages auto-appended per local-search/filter constraint before the explicit "load more" action.
+private const val ALBUM_SEARCH_AUTO_PAGES = 15
+private const val ALBUM_FILTER_MIN_VISIBLE_ITEMS = 21

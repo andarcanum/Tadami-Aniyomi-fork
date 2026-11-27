@@ -1,0 +1,59 @@
+-- Additive run identity and ownership. Keep every legacy queue row and status ordinal.
+ALTER TABLE translation_queue ADD COLUMN generation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_queue ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_queue ADD COLUMN source_fingerprint TEXT;
+ALTER TABLE translation_queue ADD COLUMN profile_fingerprint TEXT;
+ALTER TABLE translation_queue ADD COLUMN source_segment_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_queue ADD COLUMN force_retranslate INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_queue ADD COLUMN priority INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE translation_queue ADD COLUMN implicit_owner INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE translation_queue ADD COLUMN session_only INTEGER NOT NULL DEFAULT 0;
+
+UPDATE translation_queue
+SET implicit_owner = CASE WHEN trim(batch_token, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = '' THEN 1 ELSE 0 END;
+
+ALTER TABLE translation_batch_state ADD COLUMN base_completed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_batch_state ADD COLUMN base_failed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE translation_batch_state ADD COLUMN cancelled_count INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE translation_checkpoint (
+    queue_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    fragment_id INTEGER NOT NULL,
+    payload_json TEXT NOT NULL CHECK (length(payload_json) <= 65536),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (queue_id, generation, fragment_id)
+);
+
+CREATE TABLE translation_batch_membership (
+    batch_token TEXT NOT NULL,
+    queue_id INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    batch_order INTEGER NOT NULL,
+    outcome INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (batch_token, queue_id, generation)
+);
+
+CREATE INDEX translation_membership_run_index ON translation_batch_membership(queue_id, generation, outcome, batch_token);
+CREATE INDEX translation_queue_runnable_index ON translation_queue(status, next_attempt_at, priority, created_at);
+
+-- Missing legacy batch-state rows must not strand nonblank batch owners.
+INSERT OR IGNORE INTO translation_batch_state (
+    batch_token, novel_id, status, total, enqueued, skipped, completed, failed, created_at, updated_at
+)
+SELECT batch_token, MIN(novel_id), 0, COUNT(*), COUNT(*), 0,
+    SUM(CASE WHEN status = 2 THEN 1 ELSE 0 END),
+    SUM(CASE WHEN status = 3 THEN 1 ELSE 0 END), MIN(created_at), MAX(updated_at)
+FROM translation_queue WHERE implicit_owner = 0 GROUP BY batch_token;
+
+INSERT INTO translation_batch_membership (batch_token, queue_id, generation, chapter_id, batch_order, outcome)
+SELECT batch_token, _id, generation, chapter_id, batch_order,
+    CASE status WHEN 2 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 3 ELSE 0 END
+FROM translation_queue WHERE implicit_owner = 0;
+
+-- Historical counters can describe rows no longer in the queue. Preserve those as base offsets.
+UPDATE translation_batch_state
+SET base_completed = MAX(completed - (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = translation_batch_state.batch_token AND m.outcome = 1), 0),
+    base_failed = MAX(failed - (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = translation_batch_state.batch_token AND m.outcome = 2), 0),
+    cancelled_count = (SELECT COUNT(*) FROM translation_batch_membership m WHERE m.batch_token = translation_batch_state.batch_token AND m.outcome = 3);

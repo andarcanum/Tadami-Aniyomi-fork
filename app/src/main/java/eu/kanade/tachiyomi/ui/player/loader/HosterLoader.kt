@@ -7,16 +7,23 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.getChangedAt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import kotlin.coroutines.cancellation.CancellationException
 
 class HosterLoader {
     companion object {
+        internal const val MAX_CONCURRENT_HOSTER_LOADS = 4
+        internal const val DEFAULT_RESOLVE_TIMEOUT_MS = 15_000L
+
         /**
          * Check for the best video from the current hosterState.
          *
@@ -79,12 +86,15 @@ class HosterLoader {
          */
         suspend fun getBestVideo(source: AnimeSource, hosterList: List<Hoster>): Video? {
             val hosterStates = MutableList<HosterState>(hosterList.size) { HosterState.Idle("") }
+            val hosterLoadSemaphore = Semaphore(MAX_CONCURRENT_HOSTER_LOADS)
 
             return try {
                 withContext(Dispatchers.IO) {
                     hosterList.mapIndexed { hosterIdx, hoster ->
                         async {
-                            val hosterState = EpisodeLoader.loadHosterVideos(source, hoster)
+                            val hosterState = hosterLoadSemaphore.withPermit {
+                                EpisodeLoader.loadHosterVideos(source, hoster)
+                            }
                             hosterStates[hosterIdx] = hosterState
 
                             if (hosterState is HosterState.Ready) {
@@ -151,10 +161,21 @@ class HosterLoader {
             }
         }
 
-        suspend fun getResolvedVideo(source: AnimeSource?, video: Video): Video? {
+        suspend fun getResolvedVideo(
+            source: AnimeSource?,
+            video: Video,
+            timeoutMs: Long = DEFAULT_RESOLVE_TIMEOUT_MS,
+        ): Video? {
             val resolvedVideo = if (source is AnimeHttpSource && !video.initialized) {
                 try {
-                    source.resolveVideo(video)
+                    withTimeout(timeoutMs) {
+                        source.resolveVideo(video)
+                    }
+                } catch (_: TimeoutCancellationException) {
+                    logcat(LogPriority.WARN) {
+                        "getResolvedVideo: timed out after ${timeoutMs}ms title=${video.videoTitle}"
+                    }
+                    null
                 } catch (e: Exception) {
                     if (e is CancellationException) {
                         throw e

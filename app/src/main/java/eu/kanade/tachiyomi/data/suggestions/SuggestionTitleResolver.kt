@@ -68,7 +68,7 @@ object SuggestionTitleResolver {
             val normalized = normalizeMetadataSearchQuery(raw.trim())
             if (normalized != raw.trim()) listOf(raw.trim(), normalized) else listOf(raw.trim())
         }
-        .filter { it.isNotBlank() }
+        .filter { candidate -> candidate.isNotBlank() && candidate.count(Char::isLetterOrDigit) >= 2 }
         .distinct()
         .also { candidates ->
             logcat { "SuggestionTitleResolver: resolved ${candidates.size} candidates for '$title': $candidates" }
@@ -101,6 +101,55 @@ object SuggestionTitleResolver {
         val ratio = intersection.size.toDouble() / maxOf(cTokens.size, tTokens.size).toDouble()
         return (ratio * 50).toInt()
     }
+
+    /**
+     * Strict base-series matcher for external "Similar to <seed>" providers.
+     * Rejects accidental single-stopword / short-substring hits (e.g. "of", "the",
+     * "ice" inside "practice") so unrelated titles never get mislabeled as LIKE seeds.
+     */
+    fun scoreBaseTitleMatch(candidate: String, target: String): Int {
+        val cleanC = cleanTitle(candidate)
+        val cleanT = cleanTitle(target)
+        if (cleanC.isBlank() || cleanT.isBlank()) return 0
+        if (cleanC == cleanT) return 100
+
+        val cTokens = significantBaseTokens(cleanC)
+        val tTokens = significantBaseTokens(cleanT)
+        if (cTokens.isEmpty() || tTokens.isEmpty()) return 0
+
+        val (shorter, longer) = if (cleanC.length <= cleanT.length) cleanC to cleanT else cleanT to cleanC
+        val shorterTokens = if (cleanC.length <= cleanT.length) cTokens else tTokens
+        val isWordPrefix = longer.startsWith("$shorter ")
+        if (isWordPrefix && shorter.length >= 4 && (shorter.length * 2 >= longer.length || shorterTokens.size >= 2)) {
+            return 75
+        }
+        val wordContainment = Regex("""(?:^|\s)${Regex.escape(shorter)}(?:\s|$)""").containsMatchIn(longer)
+        if (wordContainment && shorterTokens.size >= 2 && shorter.length * 2 >= longer.length) {
+            return 55
+        }
+
+        val overlap = cTokens.intersect(tTokens).size
+        val maxTokens = maxOf(cTokens.size, tTokens.size)
+        val minTokens = minOf(cTokens.size, tTokens.size)
+        if (overlap == 0 || maxTokens <= 1) return 0
+        if (minTokens >= 2 && overlap < 2) return 0
+        val ratio = overlap.toDouble() / maxTokens.toDouble()
+        if (ratio < 0.5) return 0
+        return (ratio * 50).toInt().coerceAtLeast(25)
+    }
+
+    private fun significantBaseTokens(cleanTitle: String): Set<String> {
+        val raw = cleanTitle.split(Regex("\\s+")).filter { it.length >= 2 }
+        val filtered = raw.filterNot { it in BASE_MATCH_STOP_WORDS }
+        return (if (filtered.isNotEmpty()) filtered else raw).toSet()
+    }
+
+    private val BASE_MATCH_STOP_WORDS = setOf(
+        "the", "and", "for", "with", "from", "into", "that", "this", "of", "in", "to",
+        "on", "at", "by", "or", "as", "is", "an", "no", "wa", "ga", "wo", "ni", "de",
+        "na", "ka", "yo", "во", "на", "по", "из", "за", "от", "до", "не", "ни", "как",
+        "что", "это", "со", "ко", "про", "для", "над", "под", "при", "или",
+    )
 
     /**
      * Select the best query string from candidates to use as the primary search query

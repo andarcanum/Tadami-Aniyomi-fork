@@ -35,6 +35,19 @@ data class GenreFilterSpec(
     val unknownGenrePolicy: UnknownGenrePolicy = UnknownGenrePolicy.ALLOW_AS_INCOMPLETE,
 )
 
+internal fun effectiveGenreConstraints(values: Set<String>): Set<String> = values.mapNotNullTo(
+    LinkedHashSet(),
+) { value ->
+    val valid = GenreMatcher.normalizeRawConstraint(value) ?: return@mapNotNullTo null
+    valid
+}
+
+internal fun GenreFilterSpec.effective(): GenreFilterSpec = copy(
+    ignoredGenres = effectiveGenreConstraints(ignoredGenres),
+    requiredGenres = effectiveGenreConstraints(requiredGenres),
+    priorityGenres = effectiveGenreConstraints(priorityGenres),
+)
+
 /**
  * Причина отклонения кандидата политикой [DiscoveryCandidatePolicy].
  */
@@ -81,16 +94,21 @@ sealed interface CandidateVerdict {
  *   а не «доказанное соответствие».
  */
 class DiscoveryCandidatePolicy(
-    val blacklistedTags: Set<String> = emptySet(),
-    val ignoredGenres: Set<String> = emptySet(),
-    val requiredGenres: Set<String> = emptySet(),
-    val priorityGenres: Set<String> = emptySet(),
+    blacklistedTags: Set<String> = emptySet(),
+    ignoredGenres: Set<String> = emptySet(),
+    requiredGenres: Set<String> = emptySet(),
+    priorityGenres: Set<String> = emptySet(),
     val unknownGenrePolicy: UnknownGenrePolicy = UnknownGenrePolicy.ALLOW_AS_INCOMPLETE,
     val strictRequired: Boolean = false,
     val requiredMatchMode: RequiredMatchMode = RequiredMatchMode.ALL,
     val requiredEnforcement: RequiredEnforcement =
         if (strictRequired) RequiredEnforcement.STRICT else RequiredEnforcement.BEST_EFFORT,
 ) {
+    val blacklistedTags: Set<String> = effectiveGenreConstraints(blacklistedTags)
+    val ignoredGenres: Set<String> = effectiveGenreConstraints(ignoredGenres)
+    val requiredGenres: Set<String> = effectiveGenreConstraints(requiredGenres)
+    val priorityGenres: Set<String> = effectiveGenreConstraints(priorityGenres)
+
     constructor(
         spec: GenreFilterSpec,
         blacklistedTags: Set<String> = emptySet(),
@@ -108,11 +126,22 @@ class DiscoveryCandidatePolicy(
     val isStrictRequired: Boolean
         get() = strictRequired || requiredEnforcement == RequiredEnforcement.STRICT
 
-    // Предварительно развёрнутые множества жанров для быстрого сопоставления с учётом RU/EN переводов
-    private val expandedBlacklist: Set<String> = expandGenreSet(blacklistedTags.toList())
-    private val expandedIgnored: Set<String> = expandGenreSet(ignoredGenres.toList())
-    private val expandedRequired: Set<String> = expandGenreSet(requiredGenres.toList())
-    private val expandedPriority: Set<String> = expandGenreSet(priorityGenres.toList())
+    /** Combined hard-exclusion set (per-media blacklist + globally ignored genres). */
+    val hardExcludedGenres: Set<String>
+        get() = blacklistedTags + ignoredGenres
+
+    /** True when the user configured any genre/tag that must never appear in recommendations. */
+    val hasHardExclusions: Boolean
+        get() = blacklistedTags.isNotEmpty() || ignoredGenres.isNotEmpty()
+
+    private val compiledBlacklist = CompiledConstraintGroup.compile(expandGenreSet(this.blacklistedTags.toList()))
+    private val compiledIgnored = CompiledConstraintGroup.compile(expandGenreSet(this.ignoredGenres.toList()))
+    private val compiledRequiredByGenre: List<CompiledConstraintGroup> = this.requiredGenres.map {
+        CompiledConstraintGroup.compile(expandGenreSet(listOf(it)))
+    }
+    private val compiledPriorityByGenre: List<CompiledConstraintGroup> = this.priorityGenres.map {
+        CompiledConstraintGroup.compile(expandGenreSet(listOf(it)))
+    }
 
     /**
      * Возвращает true, если переданный список жанров содержит запрещённый (блэклист или глобальный игнор).
@@ -130,6 +159,15 @@ class DiscoveryCandidatePolicy(
             return isForbidden(item.genres)
         }
         return false
+    }
+
+    /**
+     * Возвращает true, если рекомендация [item] совпадает с приоритетными жанрами пользователя.
+     */
+    fun hasPriorityBoost(item: DiscoverySuggestion): Boolean {
+        if (priorityGenres.isEmpty()) return false
+        val verdict = evaluate(item.genres)
+        return verdict is CandidateVerdict.Admitted && verdict.hasPriorityBoost
     }
 
     /**
@@ -207,9 +245,9 @@ class DiscoveryCandidatePolicy(
      * Фильтрует список кандидатов ряда с учётом best-effort / strict семантики для requiredGenres:
      * - Запрещённые (блэклист и глобальный игнор) исключаются ВСЕГДА.
      * - Если заданы requiredGenres:
-     *     - Выбираются только кандидаты, матчащие requiredGenres (или с неполными метаданными при !isStrictRequired).
-     *     - Если таких нет и !isStrictRequired: ослабляется требование requiredGenres,
-     *       возвращаются все допущенные кандидаты (без блэклиста и игнора).
+     *     - Выбираются точные совпадения, а в best-effort при нехватке до [fillTarget] —
+     *       частичные совпадения, затем кандидаты с неизвестными жанрами и остальные допустимые.
+     *     - При [fillTarget] == null сохраняется строгая тиерная выборка без добора нижних тиеров.
      *     - Если isStrictRequired: возвращается пустой список (никогда не ослабляется).
      */
     fun <T> filterRowCandidates(
@@ -217,6 +255,7 @@ class DiscoveryCandidatePolicy(
         genresSelector: (T) -> List<String>,
         fallbackTagsSelector: (T) -> List<String> = { emptyList() },
         scoreSelector: ((T) -> Double)? = null,
+        fillTarget: Int? = null,
     ): List<T> {
         if (items.isEmpty()) return emptyList()
 
@@ -240,104 +279,196 @@ class DiscoveryCandidatePolicy(
 
         if (withoutForbidden.isEmpty()) return emptyList()
 
-        // 2. Проверяем required
-        val admittedCandidates = if (requiredGenres.isEmpty()) {
-            withoutForbidden
-        } else {
-            val withRequired = withoutForbidden.filter { (_, verdict) ->
-                if (verdict is CandidateVerdict.Admitted) {
-                    verdict.matchesRequired || (verdict.hasIncompleteMetadata && !isStrictRequired)
-                } else {
-                    false
-                }
-            }
-            if (withRequired.isNotEmpty()) {
-                withRequired
-            } else if (!isStrictRequired) {
-                // Best-effort ослабление: подходящих по requiredGenres тайтлов нет,
-                // возвращаем допущенные без блэклиста/игнора, чтобы лента не была пустой.
-                withoutForbidden
-            } else {
-                emptyList()
+        // 2. Без requiredGenres — ранжируем весь допустимый список единым образом
+        if (requiredGenres.isEmpty()) {
+            return rankCandidateTier(
+                candidates = withoutForbidden,
+                genresSelector = genresSelector,
+                fallbackTagsSelector = fallbackTagsSelector,
+                scoreSelector = scoreSelector,
+                orderByPartialRequired = false,
+            )
+        }
+
+        val exactRequired = withoutForbidden.filter { (_, verdict) ->
+            verdict is CandidateVerdict.Admitted && verdict.matchesRequired
+        }
+        if (isStrictRequired) {
+            return rankCandidateTier(
+                candidates = exactRequired,
+                genresSelector = genresSelector,
+                fallbackTagsSelector = fallbackTagsSelector,
+                scoreSelector = scoreSelector,
+                orderByPartialRequired = false,
+            )
+        }
+
+        val exactSet = exactRequired.mapTo(HashSet()) { it.first }
+        val nonExact = withoutForbidden.filterNot { it.first in exactSet }
+        val partialEntries = nonExact.mapNotNull { entry ->
+            val effectiveGenres = genresSelector(entry.first).ifEmpty { fallbackTagsSelector(entry.first) }
+            val matchCount = countRequiredMatches(effectiveGenres)
+            if (matchCount > 0) entry to matchCount else null
+        }
+        val partialSet = partialEntries.mapTo(HashSet()) { it.first.first }
+        val incompleteEntries = nonExact.filter { (item, verdict) ->
+            item !in partialSet &&
+                verdict is CandidateVerdict.Admitted &&
+                !verdict.matchesRequired &&
+                verdict.hasIncompleteMetadata
+        }
+        val incompleteSet = incompleteEntries.mapTo(HashSet()) { it.first }
+        val otherEntries = nonExact.filter { (item, _) -> item !in partialSet && item !in incompleteSet }
+
+        if (fillTarget == null) {
+            return when {
+                exactRequired.isNotEmpty() -> rankCandidateTier(
+                    exactRequired,
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = false,
+                )
+                partialEntries.isNotEmpty() -> rankCandidateTier(
+                    partialEntries.sortedByDescending { it.second }.map { it.first },
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = true,
+                )
+                incompleteEntries.isNotEmpty() -> rankCandidateTier(
+                    incompleteEntries,
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = false,
+                )
+                else -> rankCandidateTier(
+                    withoutForbidden,
+                    genresSelector,
+                    fallbackTagsSelector,
+                    scoreSelector,
+                    orderByPartialRequired = false,
+                )
             }
         }
 
-        if (admittedCandidates.isEmpty()) return emptyList()
+        // Best-effort добор до fillTarget с сохранением строгого приоритета тиеров:
+        // exact > partial (по числу совпавших required) > incomplete > прочие допустимые.
+        val target = fillTarget.coerceAtLeast(0)
+        val combined = ArrayList<T>(minOf(target, withoutForbidden.size))
+        fun appendTier(entries: List<Pair<T, CandidateVerdict>>, orderByPartial: Boolean) {
+            if (combined.size >= target || entries.isEmpty()) return
+            val ranked = rankCandidateTier(
+                entries,
+                genresSelector,
+                fallbackTagsSelector,
+                scoreSelector,
+                orderByPartialRequired = orderByPartial,
+            )
+            val need = target - combined.size
+            combined.addAll(if (ranked.size > need) ranked.take(need) else ranked)
+        }
+        appendTier(exactRequired, orderByPartial = false)
+        appendTier(partialEntries.sortedByDescending { it.second }.map { it.first }, orderByPartial = true)
+        appendTier(incompleteEntries, orderByPartial = false)
+        appendTier(otherEntries, orderByPartial = false)
+        return combined
+    }
 
-        // 3. Если нет priorityGenres и явный scoreSelector не передан, сохраняем оригинальный порядок
+    private fun <T> rankCandidateTier(
+        candidates: List<Pair<T, CandidateVerdict>>,
+        genresSelector: (T) -> List<String>,
+        fallbackTagsSelector: (T) -> List<String>,
+        scoreSelector: ((T) -> Double)?,
+        orderByPartialRequired: Boolean,
+    ): List<T> {
+        if (candidates.isEmpty()) return emptyList()
         if (priorityGenres.isEmpty() && scoreSelector == null) {
-            return admittedCandidates.map { it.first }
+            return candidates.map { it.first }
         }
 
-        // 4. Единый стабильный within-row ranker с независимым вкладом priority даже при 0 базовом score
         val extractScore: (T) -> Double = scoreSelector
             ?: { item -> (item as? DiscoveryRowItem)?.score ?: (item as? DiscoverySuggestion)?.score ?: 0.0 }
 
-        val scores = admittedCandidates.map { extractScore(it.first) }
+        val scores = candidates.map { extractScore(it.first) }
         val minScore = scores.minOrNull() ?: 0.0
         val maxScore = scores.maxOrNull() ?: 0.0
         val hasSpread = maxScore > minScore
 
-        return admittedCandidates
+        return candidates
             .map { (item, verdict) ->
-                val admitted = verdict as? CandidateVerdict.Admitted
-                val hasBoost = admitted?.hasPriorityBoost == true
+                val effectiveGenres = genresSelector(item).ifEmpty { fallbackTagsSelector(item) }
+                val priorityMatches = if (verdict is CandidateVerdict.Admitted && verdict.hasPriorityBoost) {
+                    countPriorityMatches(effectiveGenres).coerceAtLeast(1)
+                } else {
+                    0
+                }
+                val partialMatches = if (orderByPartialRequired) countRequiredMatches(effectiveGenres) else 0
                 val rawScore = extractScore(item)
                 val normalizedScore = if (hasSpread) (rawScore - minScore) / (maxScore - minScore) else 0.0
-                // priority даёт гарантированный независимый бонус (+1.0), работающий даже при базовом score = 0.0.
-                // Внутри группы boosted и non-boosted сохраняется исходное ранжирование по normalizedScore / исходному порядку.
-                val effectiveRank = (if (hasBoost) 1.0 else 0.0) + (normalizedScore * 0.5)
-                Triple(item, effectiveRank, hasBoost)
+                val effectiveRank = priorityMatches.toDouble() + (normalizedScore * 0.5)
+                Triple(item, partialMatches, effectiveRank)
             }
             .sortedWith(
-                compareByDescending { it.second },
+                if (orderByPartialRequired) {
+                    compareByDescending<Triple<T, Int, Double>> { it.second }
+                        .thenByDescending { it.third }
+                } else {
+                    compareByDescending { it.third }
+                },
             )
             .map { it.first }
     }
 
     private fun matchesBlacklist(itemGenres: List<String>): String? {
-        if (blacklistedTags.isEmpty() || itemGenres.isEmpty()) return null
+        if (compiledBlacklist.forms.isEmpty() || itemGenres.isEmpty()) return null
         return itemGenres.firstOrNull { genre ->
-            expandedBlacklist.any { tag -> GenreMatcher.matchesConstraint(tag, genre) }
+            compiledBlacklist.matches(GenreMatcher.compile(genre))
         }
     }
 
     private fun matchesIgnored(itemGenres: List<String>): String? {
-        if (ignoredGenres.isEmpty() || itemGenres.isEmpty()) return null
+        if (compiledIgnored.forms.isEmpty() || itemGenres.isEmpty()) return null
         return itemGenres.firstOrNull { genre ->
-            expandedIgnored.any { ignored -> GenreMatcher.matchesConstraint(ignored, genre) }
+            compiledIgnored.matches(GenreMatcher.compile(genre))
         }
     }
 
-    private fun matchesRequired(itemGenres: List<String>): Boolean {
+    internal fun matchesRequired(itemGenres: List<String>): Boolean {
         if (requiredGenres.isEmpty()) return true
         if (itemGenres.isEmpty()) return false
+        val matchCount = countRequiredMatches(itemGenres)
         return when (requiredMatchMode) {
-            RequiredMatchMode.ANY -> {
-                requiredGenres.any { req ->
-                    val expanded = expandGenreSet(listOf(req))
-                    itemGenres.any { itemG ->
-                        expanded.any { exp -> GenreMatcher.matchesConstraint(exp, itemG) }
-                    }
-                }
-            }
-            RequiredMatchMode.ALL -> {
-                requiredGenres.all { req ->
-                    val expanded = expandGenreSet(listOf(req))
-                    itemGenres.any { itemG ->
-                        expanded.any { exp -> GenreMatcher.matchesConstraint(exp, itemG) }
-                    }
-                }
-            }
+            RequiredMatchMode.ANY -> matchCount > 0
+            RequiredMatchMode.ALL -> matchCount == compiledRequiredByGenre.size
         }
     }
 
-    private fun matchesPriority(itemGenres: List<String>): Boolean {
-        if (priorityGenres.isEmpty() || itemGenres.isEmpty()) return false
-        return itemGenres.any { genre ->
-            expandedPriority.any { pri -> GenreMatcher.matchesConstraint(pri, genre) }
+    internal fun countRequiredMatchTier(itemGenres: List<String>): Int = countRequiredMatches(itemGenres)
+
+    private fun countRequiredMatches(itemGenres: List<String>): Int =
+        countGroupMatches(compiledRequiredByGenre, itemGenres)
+
+    private fun countPriorityMatches(itemGenres: List<String>): Int =
+        countGroupMatches(compiledPriorityByGenre, itemGenres)
+
+    private fun countGroupMatches(
+        groups: List<CompiledConstraintGroup>,
+        itemGenres: List<String>,
+    ): Int {
+        if (groups.isEmpty() || itemGenres.isEmpty()) return 0
+        return if (groups.size == 1 || itemGenres.size == 1) {
+            groups.count { group ->
+                itemGenres.any { group.matches(GenreMatcher.compile(it)) }
+            }
+        } else {
+            val compiledGenres = itemGenres.map { GenreMatcher.compile(it) }
+            groups.count { group -> compiledGenres.any { group.matches(it) } }
         }
     }
+
+    private fun matchesPriority(itemGenres: List<String>): Boolean = countPriorityMatches(itemGenres) > 0
 
     companion object {
         fun extractFallbackTags(reason: String?): List<String> {
@@ -346,6 +477,40 @@ class DiscoveryCandidatePolicy(
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .toList()
+        }
+    }
+}
+
+private class CompiledConstraintGroup(
+    val canonicals: Set<String>,
+    val forms: Set<String>,
+) {
+    fun matches(genre: GenreMatcher.CompiledGenre): Boolean = genre.pool.isNotEmpty() && (
+        GenreMatcher.setsOverlap(genre.canonicals, canonicals) ||
+            GenreMatcher.setsOverlap(genre.pool, forms)
+        )
+
+    companion object {
+        val EMPTY = CompiledConstraintGroup(emptySet(), emptySet())
+
+        fun compile(constraints: Collection<String>): CompiledConstraintGroup {
+            if (constraints.isEmpty()) return EMPTY
+            val canonicals = HashSet<String>()
+            val forms = HashSet<String>()
+            for (constraint in constraints) {
+                val compiled = GenreMatcher.compile(constraint)
+                if (compiled.pool.isEmpty()) continue
+                canonicals.addAll(compiled.canonicals)
+                forms.addAll(compiled.pool)
+            }
+            return if (forms.isEmpty()) {
+                EMPTY
+            } else {
+                CompiledConstraintGroup(
+                    canonicals = if (canonicals.isEmpty()) emptySet() else canonicals,
+                    forms = forms,
+                )
+            }
         }
     }
 }

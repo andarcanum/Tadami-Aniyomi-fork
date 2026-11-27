@@ -17,6 +17,7 @@
 
 package eu.kanade.tachiyomi.ui.player.controls.components.sheets
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreTime
 import androidx.compose.material.icons.filled.Palette
@@ -31,13 +33,17 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.player.PlayerViewModel.VideoTrack
 import kotlinx.collections.immutable.ImmutableList
 import tachiyomi.i18n.aniyomi.AYMR
@@ -122,29 +128,41 @@ fun SubtitleTrackRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isSelected = selected > -1
+    val accent = AuroraTheme.colors.accent
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = MaterialTheme.padding.small, vertical = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isSelected) accent.copy(alpha = 0.14f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(start = MaterialTheme.padding.small, end = MaterialTheme.padding.medium),
+            .padding(start = MaterialTheme.padding.extraSmall, end = MaterialTheme.padding.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
-            checked = selected > -1,
+            checked = isSelected,
             onCheckedChange = { _ -> onClick() },
         )
         Text(
             text = title,
-            fontStyle = if (selected > -1) FontStyle.Italic else FontStyle.Normal,
-            fontWeight = if (selected > -1) FontWeight.ExtraBold else FontWeight.Normal,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isSelected) accent else MaterialTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.weight(1f))
-        if (selected != -1) {
-            Text(
-                text = "#${selected + 1}",
-                fontStyle = if (selected > -1) FontStyle.Italic else FontStyle.Normal,
-                fontWeight = if (selected > -1) FontWeight.ExtraBold else FontWeight.Normal,
-            )
+        if (isSelected) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = accent.copy(alpha = 0.22f),
+            ) {
+                Text(
+                    text = "#${selected + 1}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }

@@ -32,10 +32,13 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
@@ -135,6 +138,7 @@ class MangaDownloadCache(
                     val atomicFile = AtomicFile(diskCacheFile)
                     if (diskCacheFile.exists() || File("${diskCacheFile.path}.bak").exists()) {
                         val restored = ProtoBuf.decodeFromByteArray<RootDirectory>(atomicFile.readFully())
+                        restored.sourceDirs.values.forEach { it.snapshot() }
                         rootDownloadsDirMutex.withLock {
                             synchronized(renewalLock) {
                                 if (storageGeneration.get() == restoreGeneration &&
@@ -217,11 +221,13 @@ class MangaDownloadCache(
      * suffix. Exact names keep priority.
      */
     private fun mangaDirsFor(sourceDir: SourceDirectory, mangaTitle: String, mangaId: Long?): List<MangaDirectory> {
+        val snapshot = sourceDir.snapshot()
         return cachedMangaDirectories(
-            directories = sourceDir.mangaDirs,
+            directories = snapshot.byName,
             scopedName = mangaId?.let { provider.getMangaDirName(mangaTitle, it) },
             legacyName = provider.getLegacyMangaDirName(mangaTitle),
             mangaId = mangaId,
+            byIdIndex = snapshot.byId,
         )
     }
 
@@ -299,15 +305,15 @@ class MangaDownloadCache(
 
             // Retrieve the cached manga directory or cache a new one
             val mangaDirName = provider.getMangaDirName(manga.title, manga.id)
-            var mangaDir = sourceDir.mangaDirs[mangaDirName]
-            if (mangaDir == null) {
-                mangaDir = MangaDirectory(mangaUniFile)
-                sourceDir.mangaDirs += mangaDirName to mangaDir
+            val existingMangaDir = sourceDir.snapshot().byName[mangaDirName]
+            if (existingMangaDir == null) {
+                val newMangaDir = MangaDirectory(mangaUniFile, mutableSetOf(chapterDirName))
+                sourceDir.addMangaDir(mangaDirName, newMangaDir)
+            } else {
+                // Save the chapter directory (C-M6: copy-on-write - readers iterate the set without
+                // the mutex, so it must never be mutated in place)
+                existingMangaDir.chapterDirs = (existingMangaDir.chapterDirs + chapterDirName).toMutableSet()
             }
-
-            // Save the chapter directory (C-M6: copy-on-write - readers iterate the set without
-            // the mutex, so it must never be mutated in place)
-            mangaDir.chapterDirs = (mangaDir.chapterDirs + chapterDirName).toMutableSet()
         }
 
         notifyChanges()
@@ -342,16 +348,17 @@ class MangaDownloadCache(
      * @param manga the manga of the chapter.
      */
     suspend fun removeChapters(chapters: List<Chapter>, manga: Manga) {
+        if (chapters.isEmpty()) return
         restoreFinished.await()
+        val namesToRemove = HashSet<String>(chapters.size * 2)
+        for (chapter in chapters) {
+            namesToRemove.addAll(provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.id))
+        }
         rootDownloadsDirMutex.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             mangaDirsFor(sourceDir, manga.title, manga.id).forEach { mangaDir ->
-                chapters.forEach { chapter ->
-                    provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.id).forEach {
-                        if (it in mangaDir.chapterDirs) {
-                            mangaDir.chapterDirs = (mangaDir.chapterDirs - it).toMutableSet()
-                        }
-                    }
+                if (mangaDir.chapterDirs.any { it in namesToRemove }) {
+                    mangaDir.chapterDirs = (mangaDir.chapterDirs - namesToRemove).toMutableSet()
                 }
             }
         }
@@ -368,14 +375,11 @@ class MangaDownloadCache(
         restoreFinished.await()
         rootDownloadsDirMutex.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
-            listOfNotNull(
+            val names = listOfNotNull(
                 provider.getMangaDirName(manga.title, manga.id),
                 provider.getLegacyMangaDirName(manga.title),
-            ).distinct().forEach { name ->
-                if (sourceDir.mangaDirs.containsKey(name)) {
-                    sourceDir.mangaDirs -= name
-                }
-            }
+            ).distinct()
+            sourceDir.removeMangaDirs(names)
         }
 
         notifyChanges()
@@ -446,6 +450,7 @@ class MangaDownloadCache(
                     }
 
                     val sourceMap = sources.associate { provider.getSourceDirName(it).lowercase() to it.id }
+                    val scanSemaphore = Semaphore(MAX_CONCURRENT_SOURCE_SCANS)
 
                     rootDownloadsDirMutex.withLock {
                         val updatedRootDir = RootDirectory(downloadsDirNow)
@@ -460,40 +465,43 @@ class MangaDownloadCache(
 
                         updatedRootDir.sourceDirs.values.map { sourceDir ->
                             async {
-                                sourceDir.mangaDirs = sourceDir.dir?.listFiles().orEmpty()
-                                    .filter { it.isDirectory && !it.name.isNullOrBlank() }
-                                    .associate { it.name!! to MangaDirectory(it) }
-                                sourceDir.mangaDirs.values.forEach { mangaDir ->
-                                    val chapterDirs = mangaDir.dir?.listFiles().orEmpty()
-                                        .mapNotNull {
-                                            when {
-                                                // Ignore incomplete downloads; C-M4: reap STALE ones.
-                                                // Crashed/errored downloads left "_tmp" dirs and
-                                                // ".cbz_tmp" files with no cleaner anywhere. Active
-                                                // downloads keep touching their files, so the 24h
-                                                // last-modified guard never hits a live download.
-                                                it.name?.endsWith(MangaDownloader.TMP_DIR_SUFFIX) == true -> {
-                                                    val lastModified = runCatching {
-                                                        it.lastModified()
-                                                    }.getOrDefault(0L)
-                                                    if (lastModified > 0L &&
-                                                        System.currentTimeMillis() - lastModified > STALE_TMP_MILLIS
-                                                    ) {
-                                                        runCatching { it.delete() }
+                                scanSemaphore.withPermit {
+                                    val mangaDirs = sourceDir.dir?.listFiles().orEmpty()
+                                        .filter { it.isDirectory && !it.name.isNullOrBlank() }
+                                        .associate { it.name!! to MangaDirectory(it) }
+                                    mangaDirs.values.forEach { mangaDir ->
+                                        val chapterDirs = mangaDir.dir?.listFiles().orEmpty()
+                                            .mapNotNull {
+                                                when {
+                                                    // Ignore incomplete downloads; C-M4: reap STALE ones.
+                                                    // Crashed/errored downloads left "_tmp" dirs and
+                                                    // ".cbz_tmp" files with no cleaner anywhere. Active
+                                                    // downloads keep touching their files, so the 24h
+                                                    // last-modified guard never hits a live download.
+                                                    it.name?.endsWith(MangaDownloader.TMP_DIR_SUFFIX) == true -> {
+                                                        val lastModified = runCatching {
+                                                            it.lastModified()
+                                                        }.getOrDefault(0L)
+                                                        if (lastModified > 0L &&
+                                                            System.currentTimeMillis() - lastModified > STALE_TMP_MILLIS
+                                                        ) {
+                                                            runCatching { it.delete() }
+                                                        }
+                                                        null
                                                     }
-                                                    null
+                                                    // Folder of images
+                                                    it.isDirectory -> it.name
+                                                    // CBZ files
+                                                    it.isFile && it.extension == "cbz" -> it.nameWithoutExtension
+                                                    // Anything else is irrelevant
+                                                    else -> null
                                                 }
-                                                // Folder of images
-                                                it.isDirectory -> it.name
-                                                // CBZ files
-                                                it.isFile && it.extension == "cbz" -> it.nameWithoutExtension
-                                                // Anything else is irrelevant
-                                                else -> null
                                             }
-                                        }
-                                        .toMutableSet()
+                                            .toMutableSet()
 
-                                    mangaDir.chapterDirs = chapterDirs
+                                        mangaDir.chapterDirs = chapterDirs
+                                    }
+                                    sourceDir.replaceMangaDirs(mangaDirs)
                                 }
                             }
                         }
@@ -594,6 +602,17 @@ internal class RootDirectory(
 /** C-M4: incomplete-download artifacts older than this are reaped during cache renewal. */
 private const val STALE_TMP_MILLIS = 24L * 60 * 60 * 1000
 
+/** Bounds concurrent SAF/storage source walks during full cache renewal. */
+private const val MAX_CONCURRENT_SOURCE_SCANS = 4
+
+/**
+ * Immutable pair of directory lookup maps published atomically for lock-free readers (C-M6).
+ */
+internal class MangaDirSnapshot(
+    val byName: Map<String, MangaDirectory>,
+    val byId: Map<Long, List<MangaDirectory>>,
+)
+
 /**
  * Class to store the files under a source directory.
  */
@@ -602,7 +621,97 @@ internal class SourceDirectory(
     @Serializable(with = UniFileAsStringSerializer::class)
     val dir: UniFile?,
     @Volatile var mangaDirs: Map<String, MangaDirectory> = mapOf(),
-)
+) {
+    @Transient
+    @Volatile
+    private var cachedSnapshot: MangaDirSnapshot? = null
+
+    fun snapshot(): MangaDirSnapshot {
+        val dirs = mangaDirs
+        val current = cachedSnapshot
+        if (current != null && current.byName === dirs) {
+            return current
+        }
+        val built = buildMangaDirSnapshot(dirs)
+        if (mangaDirs === dirs) {
+            cachedSnapshot = built
+        }
+        return built
+    }
+
+    fun replaceMangaDirs(updated: Map<String, MangaDirectory>) {
+        val next = buildMangaDirSnapshot(updated)
+        cachedSnapshot = next
+        mangaDirs = updated
+    }
+
+    fun addMangaDir(name: String, mangaDir: MangaDirectory) {
+        val current = snapshot()
+        val previous = current.byName[name]
+        val updatedByName = current.byName + (name to mangaDir)
+        val id = extractMangaDirId(name)
+        val updatedById = if (id != null) {
+            val existing = current.byId[id]
+            val base = if (previous != null && existing != null) {
+                existing.filterNot { it === previous }
+            } else {
+                existing
+            }
+            val updatedList = if (base.isNullOrEmpty()) listOf(mangaDir) else base + mangaDir
+            current.byId + (id to updatedList)
+        } else {
+            current.byId
+        }
+        val next = MangaDirSnapshot(updatedByName, updatedById)
+        cachedSnapshot = next
+        mangaDirs = updatedByName
+    }
+
+    fun removeMangaDirs(names: Collection<String>) {
+        val current = snapshot()
+        val removed = names.mapNotNull { name -> current.byName[name]?.let { name to it } }
+        if (removed.isEmpty()) return
+
+        val updatedByName = current.byName - names
+        var updatedById = current.byId
+        for ((name, dir) in removed) {
+            val id = extractMangaDirId(name) ?: continue
+            val existing = updatedById[id] ?: continue
+            val remaining = existing.filterNot { it === dir }
+            updatedById = if (remaining.isEmpty()) {
+                updatedById - id
+            } else {
+                updatedById + (id to remaining)
+            }
+        }
+        val next = MangaDirSnapshot(updatedByName, updatedById)
+        cachedSnapshot = next
+        mangaDirs = updatedByName
+    }
+}
+
+internal fun extractMangaDirId(name: String): Long? {
+    if (!name.endsWith("]")) return null
+    val openBracket = name.lastIndexOf(" [")
+    if (openBracket < 0) return null
+    val rawId = name.substring(openBracket + 2, name.length - 1)
+    val id = rawId.toLongOrNull() ?: return null
+    // Match endsWith(" [$id]") semantics exactly (reject e.g. "[05]" or "[+5]").
+    return if (id.toString() == rawId) id else null
+}
+
+internal fun buildMangaDirSnapshot(mangaDirs: Map<String, MangaDirectory>): MangaDirSnapshot {
+    if (mangaDirs.isEmpty()) {
+        return MangaDirSnapshot(mangaDirs, emptyMap())
+    }
+    var index: HashMap<Long, MutableList<MangaDirectory>>? = null
+    for ((name, mangaDir) in mangaDirs) {
+        val id = extractMangaDirId(name) ?: continue
+        val map = index ?: HashMap<Long, MutableList<MangaDirectory>>().also { index = it }
+        map.getOrPut(id) { ArrayList(1) }.add(mangaDir)
+    }
+    return MangaDirSnapshot(mangaDirs, index ?: emptyMap())
+}
 
 /**
  * Class to store the files under a manga directory.
@@ -640,16 +749,45 @@ internal fun <T : Any> cachedMangaDirectories(
     scopedName: String?,
     legacyName: String,
     mangaId: Long?,
+    byIdIndex: Map<Long, List<T>>? = null,
 ): List<T> {
-    val names = buildSet {
-        scopedName?.let(::add)
-        add(legacyName)
-        mangaId?.let { id ->
-            val suffix = " [$id]"
-            directories.keys.filterTo(this) { it.endsWith(suffix) }
+    val scoped = scopedName?.let { directories[it] }
+    val legacy = directories[legacyName]
+    val byId = if (mangaId != null) {
+        if (byIdIndex != null) {
+            byIdIndex[mangaId]
+        } else {
+            val suffix = " [$mangaId]"
+            directories.entries.mapNotNull { (key, value) ->
+                if (key.endsWith(suffix)) value else null
+            }
         }
+    } else {
+        null
     }
-    return names.mapNotNull { directories[it] }
+
+    if (scoped == null && legacy == null && byId.isNullOrEmpty()) return emptyList()
+    if (scoped != null &&
+        (legacy == null || legacy == scoped) &&
+        (byId.isNullOrEmpty() || (byId.size == 1 && byId[0] == scoped))
+    ) {
+        return byId?.takeIf { it.size == 1 && it[0] == scoped } ?: listOf(scoped)
+    }
+    if (scoped == null &&
+        legacy != null &&
+        (byId.isNullOrEmpty() || (byId.size == 1 && byId[0] == legacy))
+    ) {
+        return byId?.takeIf { it.size == 1 && it[0] == legacy } ?: listOf(legacy)
+    }
+    if (scoped == null && legacy == null && byId != null && byId.size == 1) {
+        return byId
+    }
+
+    val result = LinkedHashSet<T>(4)
+    if (scoped != null) result.add(scoped)
+    if (legacy != null) result.add(legacy)
+    if (byId != null) result.addAll(byId)
+    return result.toList()
 }
 
 /** Call under rootDownloadsDirMutex; the encoder must never walk the live tree. */

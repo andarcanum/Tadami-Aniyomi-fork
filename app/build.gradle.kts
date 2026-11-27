@@ -1,4 +1,5 @@
-﻿import mihon.buildlogic.Config
+import mihon.buildlogic.Config
+import mihon.buildlogic.GenerateShortcutsTask
 import mihon.buildlogic.generatedBuildDir
 import mihon.buildlogic.getBuildTime
 import mihon.buildlogic.getCommitCount
@@ -18,9 +19,9 @@ android {
 
     defaultConfig {
         applicationId = "com.tadami.aurora"
-        versionCode = 219
+        versionCode = 221
 
-        versionName = "0.63.2"
+        versionName = "0.70-Crystal"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
@@ -172,6 +173,22 @@ android {
     }
 }
 
+androidComponents {
+    onVariants { variant ->
+        val variantName = variant.name.replaceFirstChar { it.uppercaseChar() }
+        val generateShortcutsTask = tasks.register<GenerateShortcutsTask>(
+            "generate${variantName}Shortcuts",
+        ) {
+            templateFile.set(layout.projectDirectory.file("shortcuts.xml"))
+            applicationId.set(variant.applicationId)
+        }
+        variant.sources.res?.addGeneratedSourceDirectory(
+            generateShortcutsTask,
+            GenerateShortcutsTask::outputDir,
+        )
+    }
+}
+
 val localesConfigTask = getLocalesConfigTask(
     generatedBuildDir.resolve("android/res"),
     listOf(
@@ -216,6 +233,7 @@ dependencies {
     implementation(projects.i18nAniyomi)
     implementation(projects.core.archive)
     implementation(projects.core.common)
+    implementation(projects.core.subscaleview)
     implementation(projects.coreMetadata)
     implementation(projects.sourceApi)
     implementation(projects.sourceLocal)
@@ -306,9 +324,6 @@ dependencies {
     // Image loading
     implementation(platform(libs.coil.bom))
     implementation(libs.bundles.coil)
-    implementation(libs.subsamplingscaleimageview) {
-        exclude(module = "image-decoder")
-    }
     implementation(libs.image.decoder)
 
     // UI libraries

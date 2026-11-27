@@ -2,14 +2,40 @@ CREATE TABLE discovery_hidden (
     media_type TEXT NOT NULL,
     clean_title TEXT NOT NULL,
     hidden_at INTEGER NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    changed_at INTEGER NOT NULL DEFAULT 0,
+    primary_clean_title TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (media_type, clean_title)
 );
 
 selectAllByMedia:
+SELECT * FROM discovery_hidden WHERE media_type = ? AND active = 1;
+
+selectAllByMediaIncludingInactive:
 SELECT * FROM discovery_hidden WHERE media_type = ?;
 
 insertOrIgnore:
-INSERT OR IGNORE INTO discovery_hidden(media_type, clean_title, hidden_at) VALUES (?, ?, ?);
+INSERT OR IGNORE INTO discovery_hidden(media_type, clean_title, hidden_at, active, changed_at, primary_clean_title)
+VALUES (?, ?, ?, 1, ?, ?);
+
+upsertActive:
+INSERT INTO discovery_hidden(media_type, clean_title, hidden_at, active, changed_at, primary_clean_title)
+VALUES (?, ?, ?, 1, ?, ?)
+ON CONFLICT(media_type, clean_title) DO UPDATE SET
+    hidden_at = excluded.hidden_at,
+    active = 1,
+    changed_at = excluded.changed_at,
+    primary_clean_title = excluded.primary_clean_title
+WHERE excluded.changed_at >= discovery_hidden.changed_at;
+
+upsertTombstone:
+INSERT INTO discovery_hidden(media_type, clean_title, hidden_at, active, changed_at, primary_clean_title)
+VALUES (?, ?, ?, 0, ?, ?)
+ON CONFLICT(media_type, clean_title) DO UPDATE SET
+    active = 0,
+    changed_at = excluded.changed_at,
+    primary_clean_title = excluded.primary_clean_title
+WHERE excluded.changed_at >= discovery_hidden.changed_at;
 
 delete:
 DELETE FROM discovery_hidden WHERE media_type = ? AND clean_title = ?;

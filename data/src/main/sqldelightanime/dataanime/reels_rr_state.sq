@@ -1,0 +1,81 @@
+-- Host-owned round-robin projection header. Revision is the optimistic fence for every mutation;
+-- frames are JSON List<ReelsRoundRobinFrame> and never carry candidate payloads.
+CREATE TABLE reels_rr_state (
+    account_scope_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    context_key TEXT NOT NULL,
+    state_version INTEGER NOT NULL,
+    revision INTEGER NOT NULL,
+    unseen_only INTEGER NOT NULL,
+    bootstrap_complete INTEGER NOT NULL,
+    catalog_revision TEXT,
+    frames_json TEXT NOT NULL,
+    anchor_round INTEGER,
+    anchor_source_key TEXT,
+    anchor_item_id TEXT,
+    legacy_head_id TEXT,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (account_scope_id, source_id)
+);
+
+get:
+SELECT *
+FROM reels_rr_state
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+upsert:
+INSERT INTO reels_rr_state(
+    account_scope_id, source_id, context_key, state_version, revision, unseen_only,
+    bootstrap_complete, catalog_revision, frames_json, anchor_round, anchor_source_key,
+    anchor_item_id, legacy_head_id, updated_at_ms
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(account_scope_id, source_id)
+DO UPDATE SET
+    context_key = excluded.context_key,
+    state_version = excluded.state_version,
+    revision = excluded.revision,
+    unseen_only = excluded.unseen_only,
+    bootstrap_complete = excluded.bootstrap_complete,
+    catalog_revision = excluded.catalog_revision,
+    frames_json = excluded.frames_json,
+    anchor_round = excluded.anchor_round,
+    anchor_source_key = excluded.anchor_source_key,
+    anchor_item_id = excluded.anchor_item_id,
+    legacy_head_id = excluded.legacy_head_id,
+    updated_at_ms = excluded.updated_at_ms;
+
+updateCas:
+UPDATE reels_rr_state
+SET context_key = :context_key,
+    state_version = :state_version,
+    revision = :revision,
+    unseen_only = :unseen_only,
+    bootstrap_complete = :bootstrap_complete,
+    catalog_revision = :catalog_revision,
+    frames_json = :frames_json,
+    anchor_round = :anchor_round,
+    anchor_source_key = :anchor_source_key,
+    anchor_item_id = :anchor_item_id,
+    updated_at_ms = :updated_at_ms
+WHERE account_scope_id = :scope
+  AND source_id = :sourceId
+  AND revision = :expectedRevision;
+
+changes:
+SELECT changes();
+
+deleteForScope:
+DELETE FROM reels_rr_state
+WHERE account_scope_id = :scope;
+
+deleteForSource:
+DELETE FROM reels_rr_state
+WHERE account_scope_id = :scope AND source_id = :sourceId;
+
+eligibilityStamp:
+SELECT
+    (SELECT COUNT(*) FROM reels_consumption
+     WHERE account_scope_id = :scope AND source_id = :sourceId) AS consumption_count,
+    (SELECT COUNT(*) FROM reels_hidden
+     WHERE source_id = :sourceId) AS hidden_count;

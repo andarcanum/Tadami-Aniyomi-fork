@@ -20,6 +20,8 @@ import eu.kanade.domain.track.novel.MapNovelTrackStatusToLibrary
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
+import eu.kanade.tachiyomi.data.library.LibraryUpdateConcurrency
+import eu.kanade.tachiyomi.data.library.LibraryUpdateEntryIds
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
 import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
@@ -127,7 +129,9 @@ class NovelLibraryUpdateJob(
             }
         }
 
-        libraryPreferences.lastUpdatedTimestamp().set(System.currentTimeMillis())
+        if (!LibraryUpdateEntryIds.hasTargetedEntryIds(inputData)) {
+            libraryPreferences.lastUpdatedTimestamp().set(System.currentTimeMillis())
+        }
 
         val categoryId = if (inputData.keyValueMap.containsKey(KEY_CATEGORY)) {
             inputData.getLong(KEY_CATEGORY, -1L)
@@ -254,9 +258,7 @@ class NovelLibraryUpdateJob(
                 }
                 .also { fullCategoryIdsByNovelId = it }
         }
-        val targetEntryIds = inputData.getLongArray(KEY_ENTRY_IDS)
-            ?.takeIf { it.isNotEmpty() }
-            ?.toSet()
+        val targetEntryIds = LibraryUpdateEntryIds.consumeEntryIds(inputData, context.cacheDir)
 
         val listToUpdate = if (targetEntryIds != null) {
             libraryNovels
@@ -299,15 +301,18 @@ class NovelLibraryUpdateJob(
                         }
 
                         val excludedNovelIds = if (categoriesToExclude.isNotEmpty()) {
-                            libraryNovels
+                            libraryNovels.asSequence()
                                 .filter { isLibraryNovelInAnyCategory(it, categoriesToExclude, membership) }
-                                .map { it.novel.id }
+                                .mapTo(HashSet()) { it.novel.id }
                         } else {
-                            emptyList()
+                            emptySet()
                         }
 
-                        includedNovels
-                            .filterNot { it.novel.id in excludedNovelIds }
+                        if (excludedNovelIds.isEmpty()) {
+                            includedNovels
+                        } else {
+                            includedNovels.filterNot { it.novel.id in excludedNovelIds }
+                        }
                     }
                 }
             }
@@ -385,7 +390,7 @@ class NovelLibraryUpdateJob(
     }
 
     private suspend fun updateChapterList(isManualRun: Boolean) {
-        val semaphore = Semaphore(5)
+        val semaphore = Semaphore(LibraryUpdateConcurrency.maxConcurrentSources(context))
         val progressCount = AtomicInteger(0)
         val updatedCount = AtomicInteger(0)
         val failedCount = AtomicInteger(0)
@@ -630,7 +635,6 @@ class NovelLibraryUpdateJob(
         private const val WORK_NAME_AUTO = "NovelLibraryUpdate-auto"
         private const val WORK_NAME_MANUAL = "NovelLibraryUpdate-manual"
         private const val KEY_CATEGORY = "category"
-        private const val KEY_ENTRY_IDS = "entryIds"
         private const val GRACE_PERIOD_DAYS = 1L
         private const val ERROR_LOG_HELP_URL = "https://t.me/TadamiSupport"
 
@@ -655,7 +659,16 @@ class NovelLibraryUpdateJob(
         suspend fun startNow(context: Context, entryIds: LongArray): Boolean =
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 if (entryIds.isEmpty()) return@withContext false
-                enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
+                val inputData = LibraryUpdateEntryIds.buildInputData(
+                    cacheDir = context.cacheDir,
+                    mediaTag = TAG,
+                    entryIds = entryIds,
+                )
+                val enqueued = enqueueManualUpdate(context, inputData)
+                if (!enqueued) {
+                    LibraryUpdateEntryIds.cleanupSpillFile(inputData, context.cacheDir)
+                }
+                enqueued
             }
 
         private fun enqueueManualUpdate(context: Context, inputData: Data): Boolean {

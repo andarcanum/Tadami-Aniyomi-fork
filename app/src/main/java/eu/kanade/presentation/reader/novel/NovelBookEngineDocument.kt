@@ -265,6 +265,38 @@ internal fun buildNovelBookEngineDocumentHtml(
               setImportant(content, 'opacity', '1');
               setImportant(content, 'filter', 'none');
             };
+            let settledAnchor = null;
+            let lastResizeAnchor = null;
+            let settledViewportWidth = viewport ? (viewport.clientWidth || 0) : 0;
+            let settledViewportHeight = viewport ? (viewport.clientHeight || 0) : 0;
+            let settledScrollFraction = 0;
+            let suppressAnchorCapture = false;
+            let suppressScrollAnchorUntil = 0;
+            let suppressScrollAnchorTop = null;
+            let resizeCycleId = 0;
+            const isValidViewportBox = function() {
+              return !!viewport && (viewport.clientWidth || 0) > 1 && (viewport.clientHeight || 0) > 1;
+            };
+            const hasPendingViewportResize = function() {
+              if (!isValidViewportBox()) return true;
+              return settledViewportWidth > 1 && settledViewportHeight > 1 &&
+                (viewport.clientWidth !== settledViewportWidth ||
+                  viewport.clientHeight !== settledViewportHeight);
+            };
+            const prepareNavigationViewport = function() {
+              if (!isValidViewportBox()) return;
+              if (isPaginated && hasPendingViewportResize()) applyPagedGeometry();
+              settledViewportWidth = viewport.clientWidth;
+              settledViewportHeight = viewport.clientHeight;
+            };
+            const beginNavigation = function() {
+              // A newer seek/page/scroll owns the position even if a resize frame is still queued.
+              lastResizeAnchor = null;
+              resizeCycleId += 1;
+              suppressScrollAnchorUntil = 0;
+              suppressScrollAnchorTop = null;
+              prepareNavigationViewport();
+            };
             const goToPage = function(page, styleName) {
               const target = Math.max(0, Math.min(page, pageCount() - 1));
               const style = String(styleName || 'SLIDE').toLowerCase();
@@ -289,11 +321,22 @@ internal fun buildNovelBookEngineDocumentHtml(
               // Drop any paper copied onto the column by a previous Book Flip.
               setImportant(content, 'background-color', '');
               setImportant(content, 'background-image', '');
+              setImportant(content, 'background-repeat', '');
+              setImportant(content, 'background-size', '');
+              setImportant(content, 'background-position', '');
               pageOffsetCache = {
                 page: target,
                 section: sectionIndexOf(sectionNodeAtPage(target)),
                 offset: measurePageOffset(target)
               };
+              if (!suppressAnchorCapture && isValidViewportBox() && !hasPendingViewportResize()) {
+                if (pageOffsetCache.section >= 0) {
+                  settledAnchor = {
+                    sectionIndex: pageOffsetCache.section,
+                    charOffset: Math.max(0, pageOffsetCache.offset || 0)
+                  };
+                }
+              }
               const flipOriginX = flipOriginXPx(startPage, forward);
               setImportant(content, 'transform-origin', turnOrigin(style, flipOriginX));
               if (style === 'instant' || startPage === target) {
@@ -319,21 +362,49 @@ internal fun buildNovelBookEngineDocumentHtml(
               setImportant(content, 'transform', turnTransform(style, startX, forward, flipOriginX));
               if (style === 'book_flip') {
                 // Paper does not fade while flipping; a light shade sells the lift instead.
-                // The underlay itself is painted on html/body and content stays transparent by
-                // design, so a tilting sheet would expose bare text over the static backdrop.
-                // Copy the body's painted background onto the sheet, phase-shifted to the page
-                // being lifted, so it carries its own paper mid-air and hands it back on land.
-                const bodyStyle = getComputedStyle(document.body);
+                // html#an-book-root and body stay transparent while theme paper lives on :root
+                // (--an-reader-bg) and html atmosphere CSS, so read root/css variable first.
+                const rootStyle = typeof getComputedStyle === 'function'
+                  ? getComputedStyle(document.documentElement)
+                  : null;
+                const bodyStyle = typeof getComputedStyle === 'function'
+                  ? getComputedStyle(document.body)
+                  : null;
+                const cssVarBg = rootStyle && typeof rootStyle.getPropertyValue === 'function'
+                  ? String(rootStyle.getPropertyValue('--an-reader-bg') || '').trim()
+                  : '';
+                const isSolidBg = function(val) {
+                  return !!val && val !== 'none' && val !== 'transparent' &&
+                    val !== 'rgba(0, 0, 0, 0)' && val !== 'rgba(0,0,0,0)';
+                };
+                const paperBgColor = (rootStyle && isSolidBg(rootStyle.backgroundColor))
+                  ? rootStyle.backgroundColor
+                  : (bodyStyle && isSolidBg(bodyStyle.backgroundColor))
+                  ? bodyStyle.backgroundColor
+                  : isSolidBg(cssVarBg)
+                  ? cssVarBg
+                  : '';
                 const paperShiftX = Math.round(startPage * pagePitch);
-                setImportant(content, 'background-color', bodyStyle.backgroundColor);
-                if (bodyStyle.backgroundImage && bodyStyle.backgroundImage !== 'none') {
-                  setImportant(content, 'background-image', bodyStyle.backgroundImage);
-                  setImportant(content, 'background-repeat', bodyStyle.backgroundRepeat);
-                  setImportant(content, 'background-size', bodyStyle.backgroundSize);
+                if (paperBgColor) {
+                  setImportant(content, 'background-color', paperBgColor);
+                }
+                const bgSource = (rootStyle && rootStyle.backgroundImage && rootStyle.backgroundImage !== 'none')
+                  ? rootStyle
+                  : ((bodyStyle && bodyStyle.backgroundImage && bodyStyle.backgroundImage !== 'none') ? bodyStyle : null);
+                if (bgSource) {
+                  const vpW = Math.max(1, viewport ? (viewport.clientWidth || 0) : (window.innerWidth || 1));
+                  const vpH = Math.max(1, viewport ? (viewport.clientHeight || 0) : (window.innerHeight || 1));
+                  const rawSize = bgSource.backgroundSize || '';
+                  const resolvedSize = (rawSize === '100% 100%' || rawSize === 'cover')
+                    ? (vpW + 'px ' + vpH + 'px')
+                    : (rawSize || (vpW + 'px ' + vpH + 'px'));
+                  setImportant(content, 'background-image', bgSource.backgroundImage);
+                  setImportant(content, 'background-repeat', bgSource.backgroundRepeat);
+                  setImportant(content, 'background-size', resolvedSize);
                   setImportant(
                     content,
                     'background-position',
-                    (-paperShiftX) + 'px ' + (bodyStyle.backgroundPositionY || '0px'),
+                    paperShiftX + 'px ' + (bgSource.backgroundPositionY || '0px'),
                   );
                 }
                 setImportant(content, 'opacity', '1');
@@ -591,7 +662,16 @@ internal fun buildNovelBookEngineDocumentHtml(
               return locationAtViewportStart().charOffset;
             };
             const relocate = function() {
-              const position = locationAtViewportStart();
+              const position = (settledAnchor && !suppressAnchorCapture && hasPendingViewportResize())
+                ? settledAnchor
+                : locationAtViewportStart();
+              if (!suppressAnchorCapture && isValidViewportBox() && !hasPendingViewportResize() &&
+                position && position.sectionIndex >= 0) {
+                settledAnchor = {
+                  sectionIndex: position.sectionIndex,
+                  charOffset: Math.max(0, position.charOffset || 0)
+                };
+              }
               return JSON.stringify({
                 kind: 'moved',
                 sectionIndex: position.sectionIndex,
@@ -770,6 +850,28 @@ internal fun buildNovelBookEngineDocumentHtml(
               }
             };
             viewport.addEventListener('scroll', function() {
+              // Only the engine's own restored top is an echo. A different top is newer reading
+              // input, not a reason to suppress the user's position for the rest of the interval.
+              const isReflowEcho = Date.now() < suppressScrollAnchorUntil &&
+                viewport.scrollTop === suppressScrollAnchorTop;
+              if (suppressAnchorCapture || isReflowEcho || hasPendingViewportResize()) return;
+              suppressScrollAnchorUntil = 0;
+              suppressScrollAnchorTop = null;
+              lastResizeAnchor = null;
+              resizeCycleId += 1;
+              if (!isPaginated && isValidViewportBox()) {
+                const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+                settledScrollFraction = maxScroll > 0
+                  ? Math.max(0, Math.min(1, viewport.scrollTop / maxScroll))
+                  : 0;
+                const currentSection = currentSectionNode();
+                if (currentSection) {
+                  settledAnchor = {
+                    sectionIndex: sectionIndexOf(currentSection),
+                    charOffset: cheapCharOffsetAtViewportStart(),
+                  };
+                }
+              }
               pushBookFrameWork();
               // While the finger is moving, only the cheap throttled report runs. Once the
               // viewport stays still for a moment, the exact caret-based position is resolved and
@@ -783,14 +885,73 @@ internal fun buildNovelBookEngineDocumentHtml(
                 reportRelocated();
               }, SCROLL_END_SETTLE_MILLIS);
             }, { passive: true });
+            const applyViewportResizeAnchor = function(anchor, cycleId) {
+              if (resizeCycleId !== cycleId || !isValidViewportBox()) return;
+              const prevSuppress = suppressAnchorCapture;
+              suppressAnchorCapture = true;
+              suppressScrollAnchorUntil = Date.now() + 120;
+              try {
+                if (isPaginated) {
+                  invalidatePagedCaches();
+                  applyPagedGeometry();
+                  const node = anchor && anchor.sectionIndex >= 0
+                    ? resolveSectionNode(anchor.sectionIndex)
+                    : null;
+                  if (node) {
+                    scrollToOffsetIn(node, Math.max(0, anchor.charOffset || 0));
+                  } else {
+                    goToPage(pageIndex, 'INSTANT');
+                  }
+                } else {
+                  const node = anchor && anchor.sectionIndex >= 0
+                    ? resolveSectionNode(anchor.sectionIndex)
+                    : null;
+                  if (node) {
+                    scrollToOffsetIn(node, Math.max(0, anchor.charOffset || 0));
+                  } else if (settledScrollFraction > 0) {
+                    const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+                    viewport.scrollTop = Math.round(maxScroll * settledScrollFraction);
+                  }
+                }
+                settledViewportWidth = viewport.clientWidth;
+                settledViewportHeight = viewport.clientHeight;
+                suppressScrollAnchorTop = viewport.scrollTop;
+                pushStitchRequests();
+                pushRelocated();
+              } finally {
+                suppressAnchorCapture = prevSuppress;
+              }
+            };
+            // CSS and resize are one reflow: the viewport/page-start report is not a newer locator.
+            // Keep the original text anchor until an actual navigation supersedes this cycle.
+            const reflowViewport = function(anchor) {
+              if (anchor && anchor.sectionIndex >= 0) {
+                lastResizeAnchor = {
+                  sectionIndex: anchor.sectionIndex,
+                  charOffset: Math.max(0, anchor.charOffset || 0),
+                };
+                settledAnchor = lastResizeAnchor;
+              }
+              resizeCycleId += 1;
+              const cycleId = resizeCycleId;
+              applyViewportResizeAnchor(lastResizeAnchor, cycleId);
+              if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(function() {
+                  if (resizeCycleId !== cycleId || !isValidViewportBox()) return;
+                  if (isPaginated ||
+                      viewport.clientWidth !== settledViewportWidth ||
+                      viewport.clientHeight !== settledViewportHeight) {
+                    applyViewportResizeAnchor(lastResizeAnchor, cycleId);
+                  }
+                });
+              }
+            };
             // The geometry has to survive orientation changes, reader-chrome padding changes and
-            // font reflows, so it is reapplied and the current page re-clamped on every resize.
+            // font reflows, so it is reapplied and anchored to text offset on every resize.
             applyPagedGeometry();
             window.addEventListener('resize', function() {
-              if (!isPaginated) return;
-              applyPagedGeometry();
-              goToPage(pageIndex, 'INSTANT');
-              pushRelocated();
+              if (!isValidViewportBox()) return;
+              reflowViewport(lastResizeAnchor || settledAnchor || locationAtViewportStart());
             });
             const scrollToOffsetIn = function(sectionNode, charOffset) {
               const nodes = textNodesIn(sectionNode);
@@ -808,6 +969,7 @@ internal fun buildNovelBookEngineDocumentHtml(
             const goToCharOffset = function(charOffset, sectionIndex) {
               const node = resolveSectionNode(sectionIndex);
               if (!node) return relocate();
+              beginNavigation();
               return scrollToOffsetIn(node, charOffset);
             };
             // Reopening the book restores by fraction: the stored position was a fraction of an
@@ -817,6 +979,7 @@ internal fun buildNovelBookEngineDocumentHtml(
               if (!node) return relocate();
               const total = totalCharCount(textNodesIn(node));
               const safe = Math.max(0, Math.min(Number(fraction) || 0, 1));
+              beginNavigation();
               return scrollToOffsetIn(node, Math.round(safe * Math.max(0, total - 1)));
             };
             const buildSectionNode = function(sectionIndex, chapterId, html) {
@@ -984,6 +1147,19 @@ internal fun buildNovelBookEngineDocumentHtml(
               })
               .then(function() {
                 applyPagedGeometry();
+                if (isValidViewportBox()) {
+                  settledViewportWidth = viewport.clientWidth;
+                  settledViewportHeight = viewport.clientHeight;
+                  if (!settledAnchor) {
+                    const readySection = currentSectionNode();
+                    if (readySection) {
+                      settledAnchor = {
+                        sectionIndex: sectionIndexOf(readySection),
+                        charOffset: cheapCharOffsetAtViewportStart(),
+                      };
+                    }
+                  }
+                }
                 // Ask for the neighbouring chapters immediately: a chapter shorter than the prefetch
                 // margin must not wait for a scroll event to become continuous.
                 pushStitchRequests();
@@ -1146,6 +1322,7 @@ internal fun buildNovelBookEngineDocumentHtml(
               removeSection: removeSection,
               next: function(styleName) {
                 if (isPaginated) {
+                  prepareNavigationViewport();
                   const targetPage = currentPage() + 1;
                   if (targetPage >= pageCount()) {
                     // Ask for the next chapter before reporting the end, so the engine can stitch it
@@ -1153,27 +1330,32 @@ internal fun buildNovelBookEngineDocumentHtml(
                     pushStitchRequests();
                     return JSON.stringify({ kind: 'end' });
                   }
+                  beginNavigation();
                   goToPage(targetPage, styleName);
                   pushStitchRequests();
                   return relocate();
                 }
                 const maximum = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
                 if (viewport.scrollTop >= maximum - 1) return JSON.stringify({ kind: 'end' });
+                beginNavigation();
                 viewport.scrollTop = Math.min(maximum, viewport.scrollTop + viewport.clientHeight * 0.9);
                 return relocate();
               },
               previous: function(styleName) {
                 if (isPaginated) {
+                  prepareNavigationViewport();
                   const targetPage = currentPage() - 1;
                   if (targetPage < 0) {
                     pushStitchRequests();
                     return JSON.stringify({ kind: 'start' });
                   }
+                  beginNavigation();
                   goToPage(targetPage, styleName);
                   pushStitchRequests();
                   return relocate();
                 }
                 if (viewport.scrollTop <= 1) return JSON.stringify({ kind: 'start' });
+                beginNavigation();
                 viewport.scrollTop = Math.max(0, viewport.scrollTop - viewport.clientHeight * 0.9);
                 return relocate();
               },
@@ -1186,7 +1368,17 @@ internal fun buildNovelBookEngineDocumentHtml(
                 if (isPaginated || !viewport || !px) return 0;
                 const before = viewport.scrollTop;
                 const maximum = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
-                viewport.scrollTop = Math.max(0, Math.min(maximum, before + px));
+                const target = Math.max(0, Math.min(maximum, before + px));
+                if (target === before) return 0;
+                beginNavigation();
+                viewport.scrollTop = target;
+                const section = currentSectionNode();
+                if (section) {
+                  settledAnchor = {
+                    sectionIndex: sectionIndexOf(section),
+                    charOffset: cheapCharOffsetAtViewportStart(),
+                  };
+                }
                 // The scroll event listener coalesces the stitch check and the position report
                 // into one rAF, so this stays cheap even when called every frame.
                 pushBookFrameWork();
@@ -1201,15 +1393,17 @@ internal fun buildNovelBookEngineDocumentHtml(
               // one style element keeps the document alive; the position is then re-resolved from
               // the locator, because new type metrics mean new columns and new scroll offsets.
               applyReaderCss: function(css, sectionIndex, charOffset) {
+                // Reader flushes a relocated page-start before forwarding CSS. During reflow that
+                // report may be 0 while the original text lies partway into the new first page.
+                // Capture before changing CSS, and do not replace the preserved locator with it.
+                const anchor = lastResizeAnchor ||
+                  (hasPendingViewportResize() ? settledAnchor : null) ||
+                  (sectionIndex >= 0
+                    ? { sectionIndex: sectionIndex, charOffset: Math.max(0, charOffset || 0) }
+                    : settledAnchor || locationAtViewportStart());
                 const element = document.getElementById('an-book-reader-css');
                 if (element) element.textContent = typeof css === 'string' ? css : '';
-                if (isPaginated) {
-                  invalidatePagedCaches();
-                  applyPagedGeometry();
-                }
-                const node = resolveSectionNode(sectionIndex);
-                if (node) scrollToOffsetIn(node, Math.max(0, charOffset || 0));
-                pushStitchRequests();
+                reflowViewport(anchor);
                 return relocate();
               }
             });

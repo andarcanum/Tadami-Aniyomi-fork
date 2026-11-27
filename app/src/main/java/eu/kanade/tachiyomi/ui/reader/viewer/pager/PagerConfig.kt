@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerConfig
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
+import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.AutoScrollControlLogic
 import eu.kanade.tachiyomi.ui.reader.viewer.navigation.DisabledNavigation
 import eu.kanade.tachiyomi.ui.reader.viewer.navigation.EdgeNavigation
 import eu.kanade.tachiyomi.ui.reader.viewer.navigation.GridNavigation
@@ -53,6 +54,19 @@ class PagerConfig(
         private set
 
     var shiftDoublePages = false
+        private set
+
+    var zoomLockEnabled = false
+        private set
+
+    var dualPageSmartGutter = true
+        private set
+
+    var hardwareTilesEnabled = true
+        private set
+    var doubleTapZoomScale = 2f
+        private set
+    var guidedPanelMode = false
         private set
 
     init {
@@ -136,6 +150,33 @@ class PagerConfig(
             .register(
                 { shiftDoublePages = it },
                 { spreadPropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.zoomLockEnabled()
+            .register(
+                {
+                    zoomLockEnabled = it
+                    if (!it) viewer.lockedZoomRatio = null
+                },
+                { imagePropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.dualPageSmartGutter()
+            .register({ dualPageSmartGutter = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.hardwareTilesEnabled()
+            .register({ hardwareTilesEnabled = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.doubleTapZoomScalePercent()
+            .register(
+                { doubleTapZoomScale = AutoScrollControlLogic.doubleTapZoomMultiplier(it) },
+                { imagePropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.guidedPanelMode()
+            .register(
+                { guidedPanelMode = it },
+                { imagePropertyChangedListener?.invoke() },
             )
     }
 

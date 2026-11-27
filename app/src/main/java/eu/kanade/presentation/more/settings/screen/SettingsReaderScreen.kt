@@ -223,6 +223,31 @@ object SettingsReaderScreen : SearchableSettings {
                         true
                     },
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.hardwareTilesEnabled(),
+                    title = stringResource(AYMR.strings.pref_reader_hardware_tiles),
+                    subtitle = stringResource(AYMR.strings.pref_reader_hardware_tiles_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.rgb565ForGrayscale(),
+                    title = stringResource(AYMR.strings.pref_reader_rgb565_tiles),
+                    subtitle = stringResource(AYMR.strings.pref_reader_rgb565_tiles_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.pauseShadersOnFling(),
+                    title = stringResource(AYMR.strings.pref_reader_pause_shaders_on_fling),
+                    subtitle = stringResource(AYMR.strings.pref_reader_pause_shaders_on_fling_summary),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = readerPreferences.decoderThreadCount(),
+                    entries = persistentMapOf(
+                        0 to stringResource(AYMR.strings.pref_reader_decoder_threads_auto),
+                        2 to stringResource(AYMR.strings.pref_reader_decoder_threads_count, 2),
+                        4 to stringResource(AYMR.strings.pref_reader_decoder_threads_count, 4),
+                        6 to stringResource(AYMR.strings.pref_reader_decoder_threads_count, 6),
+                    ),
+                    title = stringResource(AYMR.strings.pref_reader_decoder_threads),
+                ),
             ),
         )
     }

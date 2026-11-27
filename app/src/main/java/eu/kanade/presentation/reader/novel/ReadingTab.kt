@@ -413,6 +413,18 @@ fun ReadingTab(
                     update(align, { o, v -> o.copy(textAlign = v) }, { preferences.textAlign().set(it) })
                 },
             )
+            AuroraToggleRow(
+                label = stringResource(AYMR.strings.novel_reader_hyphenation),
+                subtitle = stringResource(AYMR.strings.novel_reader_hyphenation_summary),
+                checked = settings.hyphenationEnabled,
+                onClick = {
+                    update(
+                        !settings.hyphenationEnabled,
+                        { o, v -> o.copy(hyphenationEnabled = v) },
+                        { preferences.hyphenationEnabled().set(it) },
+                    )
+                },
+            )
         }
 
         AuroraGlassSection(title = stringResource(AYMR.strings.novel_reader_section_style)) {

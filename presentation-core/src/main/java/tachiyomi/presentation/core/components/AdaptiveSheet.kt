@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
@@ -185,7 +186,9 @@ private fun PhoneAdaptiveSheet(
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val configuration = LocalConfiguration.current
+    val currentConfigScreenHeightDp = configuration.screenHeightDp
+    val screenHeight = currentConfigScreenHeightDp.dp
     val maxHeight = screenHeight * 0.95f
     var scrimTargetAlpha by remember { mutableFloatStateOf(0f) }
     var sheetShown by remember { mutableStateOf(false) }
@@ -193,6 +196,7 @@ private fun PhoneAdaptiveSheet(
     var dismissRequestedByDrag by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
     var sheetHeight by remember { mutableStateOf(-1) }
+    var lastSheetConfigScreenHeightDp by remember { mutableStateOf(currentConfigScreenHeightDp) }
     // 1 when fully open, 0 when fully dragged off-screen. Start at 0 (closed) so callers
     // do not flash full-screen blur/dim before the open animation begins.
     var sheetReveal by remember { mutableFloatStateOf(0f) }
@@ -226,7 +230,7 @@ private fun PhoneAdaptiveSheet(
         }
             .map { (offset, max) ->
                 when {
-                    !max.isFinite() || max <= 0f || !offset.isFinite() -> 1f
+                    !max.isFinite() || max <= 0f || !offset.isFinite() -> 0f
                     else -> (1f - offset / max).coerceIn(0f, 1f)
                 }
             }
@@ -253,18 +257,20 @@ private fun PhoneAdaptiveSheet(
             bottomEnd = ZeroCornerSize,
             bottomStart = ZeroCornerSize,
         )
+        val initialOffscreenOffsetPx = with(density) { screenHeight.roundToPx() }
         // CRITICAL modifier order: offset/drag must WRAP border+fill.
         // If border/clip sit outside offset, the top rim stays fixed while the panel
         // slides — exactly the "phantom top edge" ghost during dismiss/open.
         Surface(
             modifier = Modifier
+                .alpha(if (sheetHeight > 0 && anchoredDraggableState.offset.isFinite()) 1f else 0f)
                 .offset {
                     IntOffset(
                         0,
                         anchoredDraggableState.offset
                             .takeIf { it.isFinite() }
                             ?.roundToInt()
-                            ?: 0,
+                            ?: initialOffscreenOffsetPx,
                     )
                 }
                 .then(
@@ -295,11 +301,20 @@ private fun PhoneAdaptiveSheet(
                 )
                 .onSizeChanged {
                     val newHeight = it.height
-                    if (newHeight <= 0 || newHeight == sheetHeight) return@onSizeChanged
-                    // Re-anchoring mid-drag or on content-height flicker resets the gesture
-                    // ("have to yank several times"). Freeze while dragging; never shrink once open.
+                    if (newHeight <= 0) return@onSizeChanged
                     if (isDragging) return@onSizeChanged
-                    if (sheetShown && sheetHeight > 0 && newHeight < sheetHeight) return@onSizeChanged
+                    val viewportHeightShrank = currentConfigScreenHeightDp < lastSheetConfigScreenHeightDp
+                    if (newHeight == sheetHeight) {
+                        lastSheetConfigScreenHeightDp = currentConfigScreenHeightDp
+                        return@onSizeChanged
+                    }
+                    // Re-anchoring mid-drag or on content-height flicker resets the gesture
+                    // ("have to yank several times"). Freeze while dragging; never shrink within
+                    // the same viewport height, but allow shrinking when rotation reduces height.
+                    if (sheetShown && sheetHeight > 0 && newHeight < sheetHeight && !viewportHeightShrank) {
+                        return@onSizeChanged
+                    }
+                    lastSheetConfigScreenHeightDp = currentConfigScreenHeightDp
                     sheetHeight = newHeight
                     anchoredDraggableState.updateAnchors(
                         DraggableAnchors {
@@ -331,16 +346,17 @@ private fun PhoneAdaptiveSheet(
         LaunchedEffect(dismissRequested) {
             if (dismissRequested) {
                 scrimTargetAlpha = 0f
-                if (!dismissRequestedByDrag) {
+                if (!dismissRequestedByDrag && sheetHeight > 0) {
                     anchoredDraggableState.animateTo(1)
-                } else {
+                } else if (dismissRequestedByDrag) {
                     val remainingOffset = anchoredDraggableState.anchors.maxPosition() - anchoredDraggableState.offset
-                    if (remainingOffset != 0f) {
+                    if (remainingOffset.isFinite() && remainingOffset != 0f) {
                         anchoredDraggableState.dispatchRawDelta(remainingOffset)
                     }
                 }
                 onDismissRequest()
             } else {
+                snapshotFlow { sheetHeight > 0 }.first { it }
                 scrimTargetAlpha = scrimAlpha
                 anchoredDraggableState.animateTo(0)
                 sheetShown = true

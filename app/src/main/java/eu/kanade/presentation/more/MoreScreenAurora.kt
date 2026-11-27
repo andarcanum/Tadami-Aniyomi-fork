@@ -94,6 +94,7 @@ fun MoreScreenAurora(
     onReelsClick: () -> Unit = {},
     visibleEntryIds: List<MoreEntryId> = MoreEntryId.entries.toList(),
     onCustomizeMenuClick: () -> Unit = {},
+    onDebugCrystalClick: () -> Unit = {},
 ) {
     val colors = AuroraTheme.colors
     val hostScaffoldContentPadding = LocalHostScaffoldContentPadding.current
@@ -203,6 +204,15 @@ fun MoreScreenAurora(
                 id = MoreEntryId.DEBUG_FORCE_BREACH,
                 subtitle = stringResource(AYMR.strings.debug_force_lattice_breach_summary),
                 onClick = onDebugForceLatticeBreachClick,
+            )
+        } else {
+            null
+        },
+        if (BuildConfig.DEBUG) {
+            MoreEntry(
+                id = MoreEntryId.DEBUG_CRYSTAL,
+                subtitle = stringResource(AYMR.strings.crystal_debug_description),
+                onClick = onDebugCrystalClick,
             )
         } else {
             null

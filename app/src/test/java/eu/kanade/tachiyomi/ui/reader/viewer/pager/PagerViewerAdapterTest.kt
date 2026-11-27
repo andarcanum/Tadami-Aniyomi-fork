@@ -1,11 +1,14 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
+import android.view.ViewGroup
 import eu.kanade.tachiyomi.data.database.models.manga.ChapterImpl
 import eu.kanade.tachiyomi.ui.reader.model.JoinedReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.Test
 
 class PagerViewerAdapterTest {
@@ -132,5 +135,20 @@ class PagerViewerAdapterTest {
         secondGroup.secondPage shouldBe pages[2]
 
         result[2] shouldBe pages[3]
+    }
+
+    @Test
+    fun `destroyView recycles pager and joined page holders`() {
+        val viewer = mockk<PagerViewer>(relaxed = true)
+        val adapter = PagerViewerAdapter(viewer)
+        val container = mockk<ViewGroup>(relaxed = true)
+        val singleHolder = mockk<PagerPageHolder>(relaxed = true)
+        val joinedHolder = mockk<JoinedPagerPageHolder>(relaxed = true)
+
+        adapter.destroyItem(container, 0, singleHolder)
+        adapter.destroyItem(container, 1, joinedHolder)
+
+        verify(exactly = 1) { singleHolder.recycle() }
+        verify(exactly = 1) { joinedHolder.recycle() }
     }
 }

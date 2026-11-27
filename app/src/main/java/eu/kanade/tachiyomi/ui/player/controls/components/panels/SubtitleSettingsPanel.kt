@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
@@ -36,6 +38,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -50,10 +54,15 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
+import eu.kanade.presentation.player.components.SubtitleStylePreviewAndPresets
 import eu.kanade.tachiyomi.ui.player.controls.CARDS_MAX_WIDTH
+import eu.kanade.tachiyomi.ui.player.controls.panelCardsColors
+import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Composable
 fun SubtitleSettingsPanel(
@@ -63,24 +72,39 @@ fun SubtitleSettingsPanel(
     BackHandler(onBack = onDismissRequest)
     val orientation = LocalConfiguration.current.orientation
 
+    val subtitlePreferences = remember { Injekt.get<SubtitlePreferences>() }
     ConstraintLayout(modifier = modifier.fillMaxSize()) {
         val subSettingsCards = createRef()
         val cards: @Composable (Int, Modifier) -> Unit = { value, cardsModifier ->
             when (value) {
-                0 -> SubtitleSettingsTypographyCard(cardsModifier)
-                1 -> SubtitleSettingsColorsCard(cardsModifier)
-                2 -> SubtitlesMiscellaneousCard(cardsModifier)
+                0 -> {
+                    Card(
+                        colors = panelCardsColors(),
+                        modifier = cardsModifier,
+                    ) {
+                        SubtitleStylePreviewAndPresets(
+                            subtitlePreferences = subtitlePreferences,
+                            applyLiveToMpv = true,
+                            modifier = Modifier.padding(MaterialTheme.padding.medium),
+                        )
+                    }
+                }
+                1 -> SubtitleSettingsTypographyCard(cardsModifier)
+                2 -> SubtitleSettingsColorsCard(cardsModifier)
+                3 -> SubtitlesMiscellaneousCard(cardsModifier)
                 else -> {}
             }
         }
 
-        val pagerState = rememberPagerState { 3 }
+        val pagerState = rememberPagerState { 4 }
         if (orientation == ORIENTATION_PORTRAIT) {
             Column(
-                modifier = Modifier.constrainAs(subSettingsCards) {
-                    top.linkTo(parent.top, 32.dp)
-                    start.linkTo(parent.start)
-                },
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .constrainAs(subSettingsCards) {
+                        top.linkTo(parent.top)
+                        start.linkTo(parent.start)
+                    },
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
             ) {
                 TopAppBar(
@@ -135,7 +159,7 @@ fun SubtitleSettingsPanel(
                         Icon(imageVector = Icons.Default.Close, contentDescription = null)
                     }
                 }
-                repeat(3) { cards(it, Modifier) }
+                repeat(4) { cards(it, Modifier.width(CARDS_MAX_WIDTH)) }
                 Spacer(Modifier.height(16.dp))
             }
         }

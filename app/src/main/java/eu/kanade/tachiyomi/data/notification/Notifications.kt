@@ -52,10 +52,12 @@ object Notifications {
     const val ID_DOWNLOAD_CHAPTER_PROGRESS = -201
     const val ID_DOWNLOAD_EPISODE_PROGRESS = -203
     const val ID_DOWNLOAD_NOVEL_PROGRESS = -205
+    const val ID_DOWNLOAD_REELS_PROGRESS = -207
     const val CHANNEL_DOWNLOADER_ERROR = "downloader_error_channel"
     const val ID_DOWNLOAD_CHAPTER_ERROR = -202
     const val ID_DOWNLOAD_EPISODE_ERROR = -204
     const val ID_DOWNLOAD_NOVEL_ERROR = -206
+    const val ID_DOWNLOAD_REELS_ERROR = -208
 
     /**
      * Notification channel and ids used by the library updater.
@@ -150,6 +152,7 @@ object Notifications {
     const val ID_UPDATES_TO_ANIME_EXTS = -405
     const val ID_EXTENSION_INSTALLER = -402
     const val ID_EXTENSION_INSTALLER_PENDING = -404
+    const val ID_EXTENSION_BATCH_UPDATE_PROGRESS = -406
 
     private val deprecatedChannels = listOf(
         "downloader_channel",

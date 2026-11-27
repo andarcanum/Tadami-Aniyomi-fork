@@ -5,9 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -52,6 +55,7 @@ import eu.kanade.presentation.reader.novel.resolveReaderBackgroundSelection
 import eu.kanade.presentation.reader.novel.resolveReaderKeepScreenOn
 import eu.kanade.presentation.reader.novel.resolveReaderSystemUiFlag
 import eu.kanade.presentation.reader.novel.safeEnum
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
@@ -75,10 +79,12 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackService
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.util.system.isNightMode
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -108,6 +114,8 @@ class NovelReaderScreen(
                 chapterId = chapterId,
                 seriesId = seriesId,
                 autoStartGeminiTranslation = autoStartGeminiTranslation,
+                translationProfiles =
+                eu.kanade.tachiyomi.data.translation.profile.TranslationProfileServices.repository,
             )
         }
         val state by screenModel.state.collectAsStateWithLifecycle()
@@ -118,15 +126,26 @@ class NovelReaderScreen(
         val lifecycleOwner = LocalLifecycleOwner.current
         DisposableEffect(lifecycleOwner, screenModel) {
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP) {
-                    screenModel.flushBookModeProgress()
-                    // Per-chapter progress has the same debounce tail: a reader recreated after the
-                    // process is killed restores from the last flushed row, so an unflushed tail
-                    // shows up as a jump back, a jump to the chapter start, or a resume on the
-                    // previous chapter (its history snapshot was flushed, the current one was not).
-                    coroutineScope.launch {
-                        screenModel.persistCurrentChapterExitState()
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> {
+                        screenModel.flushBookModeProgress()
+                        // Bank elapsed reading duration synchronously before launching async
+                        // exit persistence so a quick ON_RESUME cannot reset the timer first.
+                        screenModel.captureCurrentChapterReadDuration()
+                        // Per-chapter progress has the same debounce tail: a reader recreated after the
+                        // process is killed restores from the last flushed row, so an unflushed tail
+                        // shows up as a jump back, a jump to the chapter start, or a resume on the
+                        // previous chapter (its history snapshot was flushed, the current one was not).
+                        coroutineScope.launch {
+                            screenModel.persistCurrentChapterExitState()
+                        }
                     }
+                    Lifecycle.Event.ON_RESUME -> {
+                        // Discard time spent stopped/backgrounded so returning later does not
+                        // inflate novel reading duration statistics.
+                        screenModel.resetSessionReadTimer()
+                    }
+                    else -> Unit
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
@@ -223,16 +242,59 @@ class NovelReaderScreen(
                 loadingReaderSettings?.let { settings ->
                     NovelReaderLoadingBackdrop(
                         settings = settings,
+                        fallbackBackdropColor = loadingBackdropColor,
                     )
                 }
                 LoadingScreen()
             }
             is NovelReaderScreenModel.State.Error -> {
                 val message = currentState.message ?: stringResource(MR.strings.unknown_error)
-                EmptyScreen(message = message)
+                EmptyScreen(
+                    message = message,
+                    actions = persistentListOf(
+                        EmptyScreenAction(
+                            stringRes = MR.strings.action_retry,
+                            icon = Icons.Outlined.Refresh,
+                            onClick = screenModel::retryCurrentChapter,
+                        ),
+                    ),
+                )
             }
             is NovelReaderScreenModel.State.Success -> {
                 val successState = currentState
+                var isExiting by remember { mutableStateOf(false) }
+                val exitReader: () -> Unit = {
+                    if (!isExiting) {
+                        isExiting = true
+                        coroutineScope.launch {
+                            var completedNormally = false
+                            try {
+                                // Leaving the reader is a flush point: the debounced book position
+                                // is written through before this screen goes away.
+                                screenModel.flushBookModeProgress()
+                                screenModel.persistCurrentChapterExitState()
+                                // A true exit (unlike an internal chapter replace) ends playback:
+                                // the session goes IDLE, which is the emission the foreground
+                                // service self-stops on. Without it the service, media session
+                                // and an ongoing "playing" notification outlive the dead engine.
+                                screenModel.stopTtsPlaybackAndAwait()
+                                completedNormally = true
+                            } finally {
+                                isExiting = false
+                            }
+                            if (completedNormally) {
+                                navigator.pop()
+                            }
+                        }
+                    }
+                }
+                BackHandler {
+                    if (showReaderUi) {
+                        showReaderUi = false
+                    } else {
+                        exitReader()
+                    }
+                }
                 DisposableEffect(successState.chapter.id, successState.readerSettings.ttsEnabled) {
                     var isBound = false
                     val connection = object : ServiceConnection {
@@ -273,6 +335,8 @@ class NovelReaderScreen(
                         ContextCompat.startForegroundService(context, serviceIntent)
                     } else {
                         context.stopService(serviceIntent)
+                        androidx.core.app.NotificationManagerCompat.from(context)
+                            .cancel(eu.kanade.tachiyomi.data.notification.Notifications.ID_NOVEL_TTS_PLAYBACK)
                     }
                     onDispose { }
                 }
@@ -308,25 +372,14 @@ class NovelReaderScreen(
                             nativeBookBlocksForSection = screenModel::nativeBookBlocksForSection,
                             onSetShowReaderUi = { showReaderUi = it },
                             onOpenBottomSheet = screenModel::loadFullChapterOrderList,
-                            onBack = {
-                                coroutineScope.launch {
-                                    // Leaving the reader is a flush point: the debounced book position
-                                    // is written through before this screen goes away.
-                                    screenModel.flushBookModeProgress()
-                                    screenModel.persistCurrentChapterExitState()
-                                    // A true exit (unlike an internal chapter replace) ends playback:
-                                    // the session goes IDLE, which is the emission the foreground
-                                    // service self-stops on. Without it the service, media session
-                                    // and an ongoing "playing" notification outlive the dead engine.
-                                    screenModel.stopTtsPlayback()
-                                    navigator.pop()
-                                }
-                            },
-                            onReadingProgress = screenModel::updateReadingProgress,
+                            onBack = exitReader,
+                            onReadingProgress = screenModel::updateReadingProgressForChapter,
                             onSeekBookModeProgress = screenModel::seekBookModeToProgress,
                             onToggleBookmark = screenModel::toggleChapterBookmark,
                             onOpenDictionaryHistory = { navigator.push(NovelDictionaryHistoryScreen()) },
                             onStartGeminiTranslation = screenModel::startGeminiTranslation,
+                            onStartGeminiTranslationForProfile = screenModel::startGeminiTranslationForProfile,
+                            onClearSuppressedGeminiCompletion = screenModel::clearSuppressedGeminiCompletion,
                             onStopGeminiTranslation = screenModel::stopGeminiTranslation,
                             onToggleGeminiTranslationVisibility = screenModel::toggleGeminiTranslationVisibility,
                             onClearGeminiTranslation = screenModel::clearGeminiTranslation,
@@ -438,6 +491,9 @@ class NovelReaderScreen(
                                 ) {
                                     return@NovelReaderScreenActions
                                 }
+                                if (screenModel.isSeamlessChapterSwitchInProgress()) {
+                                    return@NovelReaderScreenActions
+                                }
                                 // A seamless in-place switch keeps this screen and its live document
                                 // alive, so the reader never shows the chapter loading screen.
                                 NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
@@ -470,6 +526,9 @@ class NovelReaderScreen(
                                 ) {
                                     return@NovelReaderScreenActions
                                 }
+                                if (screenModel.isSeamlessChapterSwitchInProgress()) {
+                                    return@NovelReaderScreenActions
+                                }
                                 NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
                                     NovelReaderPageReaderHandoffTarget.START,
                                 )
@@ -496,6 +555,11 @@ class NovelReaderScreen(
                                 // chapter only moves the reading position instead of reloading the screen.
                                 if (successState.bookMode.isEnabled &&
                                     screenModel.onBookModeChapterSelected(chapterId)
+                                ) {
+                                    return@NovelReaderScreenActions
+                                }
+                                if (chapterId == successState.chapter.id ||
+                                    screenModel.isSeamlessChapterSwitchInProgress()
                                 ) {
                                     return@NovelReaderScreenActions
                                 }
@@ -534,10 +598,7 @@ class NovelReaderScreen(
                         reducedMotion = eu.kanade.presentation.theme.AuroraTheme.colors.isEInk,
                         onBackToNovel = {
                             screenModel.clearFinale()
-                            // Same reader-exit semantics as onBack: end TTS so the foreground
-                            // service self-stops on the IDLE emission.
-                            screenModel.stopTtsPlayback()
-                            navigator.pop()
+                            exitReader()
                         },
                         onStay = screenModel::clearFinale,
                     )
@@ -568,12 +629,8 @@ class NovelReaderScreen(
                         SeriesInterstitialOverlay(
                             state = seriesInterstitialState,
                             onBackToSeries = {
-                                coroutineScope.launch {
-                                    screenModel.persistCurrentChapterExitState()
-                                    screenModel.clearSeriesInterstitial()
-                                    screenModel.stopTtsPlayback()
-                                    navigator.pop()
-                                }
+                                screenModel.clearSeriesInterstitial()
+                                exitReader()
                             },
                             onContinue = continueAction,
                             onDismissRequest = screenModel::clearSeriesInterstitial,
@@ -588,6 +645,7 @@ class NovelReaderScreen(
 @Composable
 private fun NovelReaderLoadingBackdrop(
     settings: eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings,
+    fallbackBackdropColor: Color,
 ) {
     val safeSettings = remember(settings) {
         settings.copy(
@@ -608,7 +666,34 @@ private fun NovelReaderLoadingBackdrop(
             ttsHighlightMode = safeEnum(settings.ttsHighlightMode, NovelTtsHighlightMode.AUTO),
         )
     }
-    if (safeSettings.appearanceMode != NovelReaderAppearanceMode.BACKGROUND) return
+    val isEInkMode = AuroraTheme.colors.isEInk
+    val isBackgroundMode = safeSettings.appearanceMode == NovelReaderAppearanceMode.BACKGROUND
+
+    if (!isBackgroundMode) {
+        val themeBackground = if (isEInkMode) AuroraTheme.colors.background else fallbackBackdropColor
+        val activeTexture = if (isEInkMode) NovelReaderBackgroundTexture.NONE else safeSettings.backgroundTexture
+        val activeOled = !isEInkMode && safeSettings.oledEdgeGradient == true
+        val isDark = if (isEInkMode) {
+            AuroraTheme.colors.isDark
+        } else {
+            when (safeSettings.theme) {
+                NovelReaderTheme.SYSTEM -> MaterialTheme.colorScheme.background.luminance() < 0.5f
+                NovelReaderTheme.DARK -> true
+                NovelReaderTheme.LIGHT -> false
+            }
+        }
+        NovelAtmosphereBackground(
+            backgroundColor = themeBackground,
+            backgroundTexture = activeTexture,
+            nativeTextureStrengthPercent = safeSettings.nativeTextureStrengthPercent,
+            oledEdgeGradient = activeOled,
+            isDarkTheme = isDark,
+            pageEdgeShadow = safeSettings.pageEdgeShadow,
+            pageEdgeShadowAlpha = safeSettings.pageEdgeShadowAlpha,
+            backgroundImageModel = null,
+        )
+        return
+    }
 
     val context = LocalContext.current
     val customBackgroundItems = remember(context) {
@@ -643,11 +728,19 @@ private fun NovelReaderLoadingBackdrop(
             customBackgroundExists = customBackgroundExists,
         )
     }
-    val backgroundColor = remember(backgroundSelection) {
-        resolveReaderBackgroundBackdropColor(backgroundSelection)
+    val backgroundColor = if (isEInkMode) {
+        AuroraTheme.colors.background
+    } else {
+        remember(backgroundSelection) {
+            resolveReaderBackgroundBackdropColor(backgroundSelection)
+        }
     }
-    val backgroundImageModel = remember(backgroundSelection) {
-        resolveReaderBackgroundImageModel(backgroundSelection)
+    val backgroundImageModel = if (isEInkMode) {
+        null
+    } else {
+        remember(backgroundSelection) {
+            resolveReaderBackgroundImageModel(backgroundSelection)
+        }
     }
 
     NovelAtmosphereBackground(
@@ -656,8 +749,8 @@ private fun NovelReaderLoadingBackdrop(
         nativeTextureStrengthPercent = safeSettings.nativeTextureStrengthPercent,
         oledEdgeGradient = false,
         isDarkTheme = backgroundColor.luminance() < 0.5f,
-        pageEdgeShadow = false,
-        pageEdgeShadowAlpha = 0f,
+        pageEdgeShadow = safeSettings.pageEdgeShadow,
+        pageEdgeShadowAlpha = safeSettings.pageEdgeShadowAlpha,
         backgroundImageModel = backgroundImageModel,
     )
 }

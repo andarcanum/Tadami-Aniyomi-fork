@@ -17,6 +17,9 @@ class FakeReelsSessionRepository : ReelsSessionRepository {
     val checkpoints = mutableListOf<ReelsActiveCheckpoint>()
     var currentHandle: ReelsSessionHandle? = null
     var appendCount = 0
+    var persistedContextKey: String? = null
+
+    override suspend fun persistedContext(scope: String, sourceId: Long): String? = persistedContextKey
 
     override suspend fun open(
         key: ReelsSessionKey,
@@ -29,6 +32,7 @@ class FakeReelsSessionRepository : ReelsSessionRepository {
             queued.clear()
             activeCheckpoint = null
         }
+        persistedContextKey = key.contextKey
         val handle = ReelsSessionHandle(key, sessionId, ownerNonce, historyGeneration)
         currentHandle = handle
         return handle

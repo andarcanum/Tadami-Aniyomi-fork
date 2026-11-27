@@ -67,6 +67,10 @@ data class DiscoverySuggestion(
     val sourceId: Long? = null,
     val sourceUrl: String? = null,
     val genres: List<String> = emptyList(),
+    val identityKey: String? = null,
+    val trustedAliases: Set<String> = emptySet(),
+    val releaseStatus: DiscoveryReleaseStatus? = null,
+    val metadataVerifiedAt: Long? = null,
 )
 
 /** Строка `discovery_hidden` для backup (негативный сигнал пользователя). */

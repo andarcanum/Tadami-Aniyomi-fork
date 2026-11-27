@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.graphics.PointF
+import android.os.Build
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -12,6 +13,7 @@ import androidx.core.view.isVisible
 import androidx.viewpager.widget.ViewPager
 import com.tadami.aurora.R
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
+import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderPreloadManager
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
@@ -19,9 +21,14 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.JoinedReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderEdgeGuard
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderRenderEffects
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation.NavigationRegion
+import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.AutoScrollControlLogic
 import eu.kanade.tachiyomi.ui.reader.viewer.autoscroll.PagerAutoScrollManager
+import eu.kanade.tachiyomi.ui.reader.viewer.floorFrameContentVelocityForArr
+import eu.kanade.tachiyomi.widget.ViewPagerAdapter
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import tachiyomi.core.common.util.system.logcat
@@ -52,7 +59,13 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     /**
      * Auto-scroll manager for automatic page advancement.
      */
-    val autoScrollManager by lazy { PagerAutoScrollManager(this) }
+    val autoScrollManager by lazy {
+        PagerAutoScrollManager(this).apply {
+            onReachedEnd = {
+                activity.viewModel.pauseAutoScroll()
+            }
+        }
+    }
 
     /**
      * Adapter of the pager.
@@ -63,6 +76,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Currently active item. It can be a chapter page or a chapter transition.
      */
     private var currentPage: Any? = null
+    private var currentPageIndex: Int = 0
 
     /**
      * Viewer chapters to set when the pager enters idle mode. Otherwise, if the view was settling
@@ -78,6 +92,11 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     private var pendingConfigRefresh = false
     private val pendingPageSplits = mutableListOf<Pair<ReaderPage, InsertPage>>()
     private var pendingCleanupPageSplit = false
+
+    /**
+     * Normalized zoom factor (`scale / minScale`) preserved across page turns when Zoom Lock is enabled.
+     */
+    internal var lockedZoomRatio: Float? = null
 
     /**
      * Whether the view pager is currently in idle mode. It sets the awaiting chapters if setting
@@ -132,6 +151,23 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 }
 
                 override fun onPageScrollStateChanged(state: Int) {
+                    ReaderRenderEffects.setFlingPaused(
+                        paused = config.pauseShadersOnFling && state == ViewPager.SCROLL_STATE_SETTLING,
+                        root = pager,
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                        when (state) {
+                            ViewPager.SCROLL_STATE_DRAGGING,
+                            ViewPager.SCROLL_STATE_SETTLING,
+                            -> pager.setFrameContentVelocity(
+                                floorFrameContentVelocityForArr(
+                                    pixelsPerSecond = 1f,
+                                    density = pager.resources.displayMetrics.density,
+                                ),
+                            )
+                            ViewPager.SCROLL_STATE_IDLE -> pager.setFrameContentVelocity(0f)
+                        }
+                    }
                     when (state) {
                         ViewPager.SCROLL_STATE_DRAGGING -> {
                             // Record if user starts dragging when already at the reading end
@@ -152,9 +188,29 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 }
             },
         )
-        pager.tapListener = { event ->
+        pager.onTouchDownListener = {
+            setAutoScrollCooldown(2000L)
+        }
+        pager.tapListener = tap@{ event ->
             val viewPosition = IntArray(2)
             pager.getLocationOnScreen(viewPosition)
+            val guardPx = ReaderEdgeGuard.computeGuardPx(
+                guardDp = config.edgeTapGuardDp,
+                density = pager.resources.displayMetrics.density,
+            )
+            if (
+                ReaderEdgeGuard.isInDeadZone(
+                    rawX = event.rawX,
+                    rawY = event.rawY,
+                    viewLeft = viewPosition[0],
+                    viewTop = viewPosition[1],
+                    viewWidth = pager.width,
+                    viewHeight = pager.height,
+                    guardPx = guardPx,
+                )
+            ) {
+                return@tap
+            }
             // rawX/rawY are screen coordinates: subtracting the on-screen position already gives
             // view-relative points. The old "+ locationInWindow" term double-counted the window
             // offset whenever the pager was not flush with the window origin.
@@ -179,11 +235,16 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 NavigationRegion.NONE -> Unit
             }
         }
-        pager.longTapListener = f@{
+        pager.longTapListener = f@{ ev ->
             if (activity.viewModel.state.value.menuVisible || config.longTapEnabled) {
                 val item = adapter.items.getOrNull(pager.currentItem)
-                if (item is ReaderPage) {
-                    activity.onPageLongTap(item)
+                val targetPage = when (item) {
+                    is JoinedReaderPage -> if (ev.x < pager.width / 2f) item.firstPage else item.secondPage
+                    is ReaderPage -> item
+                    else -> null
+                }
+                if (targetPage != null) {
+                    activity.onPageLongTap(targetPage)
                     return@f true
                 }
             }
@@ -220,8 +281,48 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
 
     override fun destroy() {
         super.destroy()
+        ReaderRenderEffects.setFlingPaused(paused = false, root = pager)
         autoScrollManager.destroy()
+        pager.adapter = null
+        activity.setWindowHdrEnabled(false)
         scope.cancel()
+    }
+
+    override fun isPageAttached(page: ReaderPage): Boolean {
+        return pager.children.any { child ->
+            when (child) {
+                is PagerPageHolder -> child.page === page
+                is JoinedPagerPageHolder -> child.page.firstPage === page || child.page.secondPage === page
+                else -> false
+            }
+        }
+    }
+
+    override fun trimMemory(level: Int) {
+        pager.children.forEach { child ->
+            when (child) {
+                is PagerPageHolder -> child.trimMemory(level)
+                is JoinedPagerPageHolder -> child.trimMemory(level)
+            }
+        }
+    }
+
+    internal fun updateWindowHdrState() {
+        val active = currentPage
+        val childHdr = pager.children.firstOrNull { (it as? ViewPagerAdapter.PositionableView)?.item === active }
+            ?.let { child ->
+                when (child) {
+                    is PagerPageHolder -> child.isHdr
+                    is JoinedPagerPageHolder -> child.isHdr
+                    else -> false
+                }
+            }
+        val activeHdr = childHdr ?: when (active) {
+            is ReaderPage -> active.isHdr
+            is JoinedReaderPage -> active.firstPage.isHdr || active.secondPage.isHdr
+            else -> false
+        }
+        activity.setWindowHdrEnabled(activeHdr)
     }
 
     /**
@@ -236,7 +337,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     /**
      * Stops auto-scroll completely.
      */
-    fun stopAutoScroll() {
+    override fun stopAutoScroll() {
         autoScrollManager.stop()
     }
 
@@ -255,6 +356,15 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
     }
 
     /**
+     * Sets the auto-scroll speed.
+     *
+     * @param speed The new scroll speed (1-100).
+     */
+    fun setAutoScrollSpeed(speed: Int) {
+        autoScrollManager.setSpeed(speed)
+    }
+
+    /**
      * Sets a cooldown period during which auto-scroll pauses.
      * Used after touch events so the user can interact without scroll interference.
      *
@@ -262,6 +372,34 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      */
     fun setAutoScrollCooldown(delayMs: Long) {
         autoScrollManager.setCooldown(delayMs)
+    }
+
+    /**
+     * Whether the currently displayed page has finished loading (or errored) so auto-scroll does
+     * not advance past a loading spinner.
+     */
+    internal open fun isCurrentPageReady(): Boolean {
+        return when (val item = currentPage) {
+            is JoinedReaderPage -> {
+                val firstSettled = item.firstPage.status == Page.State.READY ||
+                    item.firstPage.status == Page.State.ERROR
+                val secondSettled = item.secondPage.status == Page.State.READY ||
+                    item.secondPage.status == Page.State.ERROR
+                firstSettled && secondSettled
+            }
+            is ReaderPage -> item.status == Page.State.READY || item.status == Page.State.ERROR
+            else -> true
+        }
+    }
+
+    /**
+     * Whether auto-scroll has reached the final readable position with no next chapter available.
+     */
+    internal open fun isAtAutoScrollEnd(): Boolean {
+        if (adapter.count == 0) return true
+        val item = currentPage
+        if (item is ChapterTransition.Next && item.to == null) return true
+        return isAtReadingEnd(pager.currentItem) && adapter.nextTransition?.to == null
     }
 
     /**
@@ -296,6 +434,10 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Called when a new page (either a [ReaderPage] or [ChapterTransition]) is marked as active
      */
     private fun onPageChange(position: Int) {
+        if (position in adapter.items.indices) {
+            currentPageIndex = position
+            updateChildViewportVisibility()
+        }
         val page = adapter.items.getOrNull(position)
         if (page != null && currentPage != page) {
             val allowPreload = checkAllowPreload(page as? ReaderPage)
@@ -314,9 +456,35 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 else -> true
             }
             currentPage = page
+            updateDecodePriorities()
+            updateWindowHdrState()
             when (page) {
                 is ReaderPage -> onReaderPageSelected(page, allowPreload, forward)
                 is ChapterTransition -> onTransitionSelected(page)
+            }
+        }
+    }
+
+    internal fun isCurrentItem(item: Any): Boolean = currentPage == null || currentPage === item
+
+    internal fun isCurrentPosition(position: Int): Boolean = position == pager.currentItem
+
+    private fun updateDecodePriorities() {
+        val active = currentPage
+        pager.children.forEach { child ->
+            when (child) {
+                is PagerPageHolder -> child.setDecodePriorityBoost(active == null || child.item === active)
+                is JoinedPagerPageHolder -> child.setDecodePriorityBoost(active == null || child.item === active)
+            }
+        }
+    }
+
+    private fun updateChildViewportVisibility() {
+        val activeItem = adapter.items.getOrNull(currentPageIndex)
+        pager.children.forEach { child ->
+            when (child) {
+                is PagerPageHolder -> child.setViewportVisible(activeItem != null && child.item === activeItem)
+                is JoinedPagerPageHolder -> child.setViewportVisible(activeItem != null && child.item === activeItem)
             }
         }
     }
@@ -362,7 +530,14 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         activity.onPageSelected(page)
 
         // Notify holder of page change
-        getPageHolder(page)?.onPageSelected(forward)
+        if (page is JoinedReaderPage) {
+            pager.children
+                .filterIsInstance<JoinedPagerPageHolder>()
+                .firstOrNull { it.item === page }
+                ?.onPageSelected(forward)
+        } else {
+            getPageHolder(page)?.onPageSelected(forward)
+        }
 
         // Skip preload on inserts it causes unwanted page jumping
         if (page is InsertPage) {
@@ -492,10 +667,19 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         moveLeft()
     }
 
+    protected open val isRtlReading: Boolean = false
+
+    private fun tryStepGuidedPanel(forward: Boolean): Boolean {
+        if (!config.guidedPanelMode) return false
+        val holder = (currentPage as? ReaderPage)?.let(::getPageHolder) ?: return false
+        return holder.stepGuidedPanel(forward = forward)
+    }
+
     /**
      * Moves to the page at the right.
      */
     protected open fun moveRight() {
+        if (tryStepGuidedPanel(forward = !isRtlReading)) return
         if (pager.currentItem != adapter.count - 1) {
             val holder = (currentPage as? ReaderPage)?.let(::getPageHolder)
             if (holder != null && config.navigateToPan && holder.canPanRight()) {
@@ -512,6 +696,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Moves to the page at the left.
      */
     protected open fun moveLeft() {
+        if (tryStepGuidedPanel(forward = isRtlReading)) return
         if (pager.currentItem != 0) {
             val holder = (currentPage as? ReaderPage)?.let(::getPageHolder)
             if (holder != null && config.navigateToPan && holder.canPanLeft()) {
@@ -592,6 +777,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         adapter.forceRecreateAll = true
         adapter.notifyDataSetChanged()
         adapter.forceRecreateAll = false
+        updateChildViewportVisibility()
     }
 
     /**
@@ -602,16 +788,47 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         val isUp = event.action == KeyEvent.ACTION_UP
         val ctrlPressed = event.metaState.and(KeyEvent.META_CTRL_ON) > 0
 
+        val readerState = activity.viewModel.state.value
+        val canNudgeAutoScroll = config.volumeKeysAdjustAutoScroll &&
+            readerState.autoScrollEnabled &&
+            !readerState.menuVisible
+
         when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (!config.volumeKeysEnabled || activity.viewModel.state.value.menuVisible) {
+                if (canNudgeAutoScroll) {
+                    if (isUp) {
+                        val delta = if (config.volumeKeysInverted) {
+                            AutoScrollControlLogic.DEFAULT_STEP
+                        } else {
+                            -AutoScrollControlLogic.DEFAULT_STEP
+                        }
+                        activity.viewModel.setAutoScrollSpeed(
+                            AutoScrollControlLogic.stepSpeed(readerState.autoScrollSpeed, delta),
+                        )
+                    }
+                    return true
+                }
+                if (!config.volumeKeysEnabled || readerState.menuVisible) {
                     return false
                 } else if (isUp) {
                     if (!config.volumeKeysInverted) moveDown() else moveUp()
                 }
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                if (!config.volumeKeysEnabled || activity.viewModel.state.value.menuVisible) {
+                if (canNudgeAutoScroll) {
+                    if (isUp) {
+                        val delta = if (config.volumeKeysInverted) {
+                            -AutoScrollControlLogic.DEFAULT_STEP
+                        } else {
+                            AutoScrollControlLogic.DEFAULT_STEP
+                        }
+                        activity.viewModel.setAutoScrollSpeed(
+                            AutoScrollControlLogic.stepSpeed(readerState.autoScrollSpeed, delta),
+                        )
+                    }
+                    return true
+                }
+                if (!config.volumeKeysEnabled || readerState.menuVisible) {
                     return false
                 } else if (isUp) {
                     if (!config.volumeKeysInverted) moveUp() else moveDown()

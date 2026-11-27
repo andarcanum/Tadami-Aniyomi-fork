@@ -32,6 +32,7 @@ data class NovelSelectionAnchor(
     val blockIndex: Int,
     val charStart: Int,
     val charEndExclusive: Int,
+    val selectedText: String? = null,
 )
 
 data class NovelSelectedTextSelection(
@@ -42,6 +43,8 @@ data class NovelSelectedTextSelection(
     val triggerAction: SelectedTextAction? = null,
     /** Persistent block address of the selection, when the renderer could capture one. */
     val selectionAnchor: NovelSelectionAnchor? = null,
+    /** Multi-block addresses when a selection spans contiguous paragraphs on one page. */
+    val selectionAnchors: List<NovelSelectionAnchor> = emptyList(),
 ) {
     val normalizedText: String = normalizeNovelSelectedText(text)
 
